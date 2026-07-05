@@ -1,0 +1,226 @@
+{
+  "created_at_utc": "2026-07-05T22:09:31Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "files_deleted": false,
+    "full_model_downloaded": false,
+    "new_sota": false,
+    "reason": "Latest refresh found DFlash safetensors draft/speculator artifacts and an asidaddy repo with one native-size GGUF matching the accepted model size plus safetensors shards, but no new vendor-loadable DeepSeek4 GGUF with hard-bound above 10 tok/s. DFlash remains closed because it is not vendor-loadable today and target verifier sublinear speedup is insufficient under the prior oracle probe.",
+    "runtime_source_edit_allowed": false,
+    "strict_cold_benchmark_allowed": false
+  },
+  "dflash_bound_summary": {
+    "baseline_tok_s": 4.4,
+    "best_independence_prefix_tokens_per_verify_estimate": 2.5646120303409123,
+    "best_optimistic_tokens_per_verify_upper_bound": 3.908110037516333,
+    "best_required_cverify_x_one_token_independence_zero_draft": 1.1284292933500015,
+    "best_required_cverify_x_one_token_optimistic_zero_draft": 1.7195684165071867,
+    "interpretation": "Even with the best metadata DFlash checkpoint and zero draft/hidden-state overhead, current target verification would need a much stronger sublinear verifier than measured. Existing oracle W=2/4/8 speedup peaked near 1.013x, below the >=1.128x independence gate and far below practical overhead needs.",
+    "measured_best_oracle_window_speedup_vs_w1": 1.0129849812265332,
+    "measured_oracle_is_below_independence_gate": true,
+    "required_speedup_from_baseline": 2.2727272727272725,
+    "target_tok_s": 10.0
+  },
+  "dflash_candidates": [
+    {
+      "architecture": [
+        "DFlashDraftModel"
+      ],
+      "aux_hidden_state_layer_ids": [
+        3,
+        13,
+        23,
+        32,
+        42
+      ],
+      "draft_vocab_size": 32000,
+      "format": "safetensors_dflash_draft_not_gguf",
+      "full_acc_epoch": 0.41588552218285346,
+      "independence_prefix_tokens_per_verify_estimate": 2.5646120303409123,
+      "max_cverify_x_one_token_independence_zero_draft": 1.1284292933500015,
+      "max_cverify_x_one_token_optimistic_zero_draft": 1.7195684165071867,
+      "model_safetensors_size_bytes": 3607596760,
+      "optimistic_tokens_per_verify_upper_bound": 3.908110037516333,
+      "position_acc_epoch": [
+        0.7878868554365931,
+        0.5875753957980987,
+        0.4541761259979246,
+        0.35903399619091536,
+        0.28966203790287387,
+        0.23638368573594648,
+        0.19339194045398048
+      ],
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "speculative_tokens": 7,
+      "target_hidden_size": null,
+      "vendor_loadable_now": false
+    },
+    {
+      "architecture": [
+        "DFlashDraftModel"
+      ],
+      "aux_hidden_state_layer_ids": [
+        3,
+        13,
+        23,
+        32,
+        42
+      ],
+      "draft_vocab_size": 32000,
+      "format": "safetensors_dflash_draft_not_gguf",
+      "full_acc_epoch": 0.34524488632366185,
+      "independence_prefix_tokens_per_verify_estimate": 2.3071306123126094,
+      "max_cverify_x_one_token_independence_zero_draft": 1.0151374694175481,
+      "max_cverify_x_one_token_optimistic_zero_draft": 1.5022222304273007,
+      "model_safetensors_size_bytes": 3607596760,
+      "optimistic_tokens_per_verify_upper_bound": 3.41414143278932,
+      "position_acc_epoch": [
+        0.7402216216821698,
+        0.5120305788364243,
+        0.3688530732868651,
+        0.27457541005825,
+        0.21206550450555678,
+        0.16907155031120671,
+        0.13732369410884726
+      ],
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "speculative_tokens": 7,
+      "target_hidden_size": null,
+      "vendor_loadable_now": false
+    },
+    {
+      "architecture": [
+        "DFlashDraftModel"
+      ],
+      "aux_hidden_state_layer_ids": [
+        3,
+        13,
+        23,
+        32,
+        42
+      ],
+      "draft_vocab_size": 32000,
+      "format": "safetensors_dflash_draft_not_gguf",
+      "full_acc_epoch": 0.41588552218285346,
+      "independence_prefix_tokens_per_verify_estimate": 2.5646120303409123,
+      "max_cverify_x_one_token_independence_zero_draft": 1.1284292933500015,
+      "max_cverify_x_one_token_optimistic_zero_draft": 1.7195684165071867,
+      "model_safetensors_size_bytes": 3607596760,
+      "optimistic_tokens_per_verify_upper_bound": 3.908110037516333,
+      "position_acc_epoch": [
+        0.7878868554365931,
+        0.5875753957980987,
+        0.4541761259979246,
+        0.35903399619091536,
+        0.28966203790287387,
+        0.23638368573594648,
+        0.19339194045398048
+      ],
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k",
+      "speculative_tokens": 7,
+      "target_hidden_size": null,
+      "vendor_loadable_now": false
+    },
+    {
+      "architecture": [
+        "DFlashDraftModel"
+      ],
+      "aux_hidden_state_layer_ids": [
+        3,
+        13,
+        23,
+        32,
+        42
+      ],
+      "draft_vocab_size": 32000,
+      "format": "safetensors_dflash_draft_not_gguf",
+      "full_acc_epoch": 0.2619039549111808,
+      "independence_prefix_tokens_per_verify_estimate": 1.9866136606439408,
+      "max_cverify_x_one_token_independence_zero_draft": 0.8741100106833339,
+      "max_cverify_x_one_token_optimistic_zero_draft": 1.2456666674187726,
+      "model_safetensors_size_bytes": 3607596760,
+      "optimistic_tokens_per_verify_upper_bound": 2.8310606077699374,
+      "position_acc_epoch": [
+        0.6441248222065631,
+        0.4037021829431497,
+        0.2621508523645705,
+        0.18186784882497625,
+        0.1359353530541281,
+        0.11023094297048387,
+        0.0930486054060662
+      ],
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k",
+      "speculative_tokens": 7,
+      "target_hidden_size": 16384,
+      "vendor_loadable_now": false
+    },
+    {
+      "architecture": [
+        "DFlashDraftModel"
+      ],
+      "aux_hidden_state_layer_ids": [
+        3,
+        13,
+        23,
+        32,
+        42
+      ],
+      "draft_vocab_size": 32000,
+      "format": "safetensors_dflash_draft_not_gguf",
+      "full_acc_epoch": 0.341137161491009,
+      "independence_prefix_tokens_per_verify_estimate": 2.2967893725705033,
+      "max_cverify_x_one_token_independence_zero_draft": 1.0105873239310215,
+      "max_cverify_x_one_token_optimistic_zero_draft": 1.489566801358361,
+      "model_safetensors_size_bytes": 3607596760,
+      "optimistic_tokens_per_verify_upper_bound": 3.3853790939962747,
+      "position_acc_epoch": [
+        0.7385031087523112,
+        0.5086574449831235,
+        0.3641908019519414,
+        0.2690193028701722,
+        0.20686022798748413,
+        0.1642471382852877,
+        0.13390106916595462
+      ],
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k",
+      "speculative_tokens": 7,
+      "target_hidden_size": 16384,
+      "vendor_loadable_now": false
+    }
+  ],
+  "dflash_small_metadata_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/dflash-speculator-small-metadata-20260706-latest.json",
+  "metadata_refresh_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-refresh-20260706-latest-continuation.json",
+  "non_gguf_new_base_repo_summary": {
+    "accepted_native_gguf_size_bytes": 156148189760,
+    "decision": "contains one native-size DeepSeek-V4-Flash-native.gguf matching the accepted model size, plus safetensors shards; not a compact/new representation and no metadata-only performance upside over current SOTA",
+    "file_count": 66,
+    "gguf_count": 1,
+    "gguf_files": [
+      {
+        "blob": "94aeb5d038538c2c4f7e4af00f645ecb27a0a868",
+        "name": "DeepSeek-V4-Flash-native.gguf",
+        "size": 156148189760
+      }
+    ],
+    "lastModified": "2026-05-04T10:58:59.000Z",
+    "repo": "asidaddy/Deepseek-V4-Flash-GGUF",
+    "safetensors_count": 46,
+    "total_listed_file_bytes": 315777120753
+  },
+  "previous_oracle_verifier_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json",
+  "purpose": "Evaluate latest metadata-only HF refresh for new vendor-loadable GGUF or speculative/DFlash candidates without downloading full weights.",
+  "refresh_summary": {
+    "new_or_changed_file_count_vs_previous": 149,
+    "new_repo_count_vs_previous": 5,
+    "new_repos": [
+      "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k",
+      "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k",
+      "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k"
+    ],
+    "note": "Some new/changed entries are due to broader search terms versus the previous artifact, not necessarily files modified after the previous refresh. Full model weights were not downloaded.",
+    "repo_count": 50
+  },
+  "source_head_before_audit": "4689703227e6a3f2a7161626a9ac2a3489b60f36"
+}

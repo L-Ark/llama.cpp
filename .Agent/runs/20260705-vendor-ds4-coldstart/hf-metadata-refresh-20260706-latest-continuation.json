@@ -1,0 +1,5213 @@
+{
+  "created_at_utc": "2026-07-05T22:05:33Z",
+  "errors": [],
+  "files_deleted": false,
+  "full_model_downloaded": false,
+  "method": "Hugging Face metadata-only refresh via /api/models search and ?blobs=true details; no full weights downloaded.",
+  "new_or_changed_file_count_vs_previous": 149,
+  "new_or_changed_files": [
+    {
+      "file": {
+        "blob": "64b6229dc7d5a991990f9c2e7807400e53e836f0",
+        "name": "README.md",
+        "size": 2190
+      },
+      "previous": null,
+      "repo": "bartowski/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "8b59d5bdffa9911729e8ca602fa85ede87fb7177",
+        "name": "README.md",
+        "size": 8211
+      },
+      "previous": null,
+      "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF"
+    },
+    {
+      "file": {
+        "blob": "e6fcda791e0376be8d2e37795fadc0ddc2897070",
+        "name": "scripts/convert-to-gguf.sh",
+        "size": 1879
+      },
+      "previous": null,
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "49fd132922623a74741a72d3d4236237dd80ee6b",
+        "name": "README.md",
+        "size": 1350
+      },
+      "previous": null,
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "5554f70a70d885842b60a2df715eac485ae31314",
+        "name": "README.md",
+        "size": 8771
+      },
+      "previous": null,
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "2ad851433819b5fddb38826fc0c82e086a0e6a45",
+        "name": "README.md",
+        "size": 11669
+      },
+      "previous": null,
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "ed54e2f257879a81b3f2d3fc86b417243eb7af11",
+        "name": "README.md",
+        "size": 4029
+      },
+      "previous": null,
+      "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF"
+    },
+    {
+      "file": {
+        "blob": "c59fd640a5b1a592363e115dce68ad0dc8c669b1",
+        "name": "README.md",
+        "size": 8715
+      },
+      "previous": null,
+      "repo": "cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF"
+    },
+    {
+      "file": {
+        "blob": "4b0674d8ede5b54233e223d82538563254125834",
+        "name": "README.md",
+        "size": 10341
+      },
+      "previous": null,
+      "repo": "audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF"
+    },
+    {
+      "file": {
+        "blob": "b665dc79ecdc0d436cc872ffc3d2fa5b375297cd",
+        "name": "README.md",
+        "size": 4174
+      },
+      "previous": null,
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF"
+    },
+    {
+      "file": {
+        "blob": "12181711e0e137161c95ebfe98d1bf1f85872c89",
+        "name": "validation/20260528T160633Z/summary.json",
+        "size": 1828
+      },
+      "previous": null,
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF"
+    },
+    {
+      "file": {
+        "blob": "e46bf5b991400423941499ab82f6f64b13b15f96",
+        "name": "validation/20260528T160633Z/SUMMARY.md",
+        "size": 1798
+      },
+      "previous": null,
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF"
+    },
+    {
+      "file": {
+        "blob": "9806c8fe0d3726e520e336ce12cf01326eded741",
+        "name": "validation/framework-halo-strix/DeepSeek-V4-Flash-Spark-Mini-Q2/20260528T211908Z/api/models.json",
+        "size": 465
+      },
+      "previous": null,
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF"
+    },
+    {
+      "file": {
+        "blob": "9ebf095307ad3b1d2febd305b8dac4b5d8468a5d",
+        "name": "validation/framework-halo-strix/DeepSeek-V4-Flash-Spark-Mini-Q2/20260528T211908Z/api/api-bench-summary-20260529T001105.json",
+        "size": 407
+      },
+      "previous": null,
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF"
+    },
+    {
+      "file": {
+        "blob": "6fd0e4c1c01e40a0b05881f0cfee5e57cd866acf",
+        "name": "README.md",
+        "size": 5256
+      },
+      "previous": null,
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "4d9db8b1cf629a58aa1f6c4868e8092f53f517c0",
+        "name": "kld/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf.kld.txt",
+        "size": 74748
+      },
+      "previous": null,
+      "repo": "sokann/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "2792e75c841b4c32fa4d36fdca7aec907e16bb6c",
+        "name": "kld/DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf.kld.txt",
+        "size": 74747
+      },
+      "previous": null,
+      "repo": "sokann/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "02f763f72b140768bb4cc2c9622032473e854fd9",
+        "name": "README.md",
+        "size": 5972
+      },
+      "previous": null,
+      "repo": "sokann/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "15505483fb57d7a6d0ed0af3ea40cd42d5d624af",
+        "name": "README.md",
+        "size": 4900
+      },
+      "previous": null,
+      "repo": "batiai/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "ef026e034525cc429957c9a1b686a5ba7ca7a9a9",
+        "name": "README.md",
+        "size": 7029
+      },
+      "previous": null,
+      "repo": "mradermacher/Qwen3.5-9B-DeepSeek-V4-Flash-i1-GGUF"
+    },
+    {
+      "file": {
+        "blob": "9c2762791f1de8ec785b8c2cdc49865635c32425",
+        "name": "README.md",
+        "size": 1102
+      },
+      "previous": null,
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF"
+    },
+    {
+      "file": {
+        "blob": "eb8eaad3faf8b6af440bc2e36e66ec9c326bd3b1",
+        "name": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf.reap_plan.json",
+        "size": 670234
+      },
+      "previous": null,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF"
+    },
+    {
+      "file": {
+        "blob": "616ac0900fb21925759bad77b8c7f5c08e526893",
+        "name": "README.md",
+        "size": 4072
+      },
+      "previous": null,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF"
+    },
+    {
+      "file": {
+        "blob": "f0b519ea385d61c334db452b8b57b9ca9414b7b8",
+        "name": "DeepSeek-V4-Flash-REAP-K128.gguf.reap_plan.json",
+        "size": 670205
+      },
+      "previous": null,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF"
+    },
+    {
+      "file": {
+        "blob": "a773a5ddde5f611f3d0cfbe0d4a0beece970e25b",
+        "name": "README.md",
+        "size": 3596
+      },
+      "previous": null,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF"
+    },
+    {
+      "file": {
+        "blob": "74bba513ccc916bdc2feb697d20b62d02377c4ce",
+        "name": "README.md",
+        "size": 2432
+      },
+      "previous": null,
+      "repo": "nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF"
+    },
+    {
+      "file": {
+        "blob": "ec6bee7c568a386906a59a7150ef02953d522b13",
+        "name": "README.md",
+        "size": 329
+      },
+      "previous": null,
+      "repo": "lovedheart/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "d124ee737189001713ba8170ca46018f3578b950",
+        "name": "README.md",
+        "size": 1615
+      },
+      "previous": null,
+      "repo": "Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF"
+    },
+    {
+      "file": {
+        "blob": "41dd4479d42463be55e7b6eda049df285b642884",
+        "name": "README.md",
+        "size": 1182
+      },
+      "previous": null,
+      "repo": "Preyazz/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "36d23fcae2c412ec8ba83b7f7aca5a7adcbe5f85",
+        "name": "README.md",
+        "size": 4500
+      },
+      "previous": null,
+      "repo": "mradermacher/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "135055550811701da337c11bdf70cac0aaa721dd",
+        "name": "model-00004-of-00046.safetensors",
+        "size": 3596229272
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "a0f1c273995d97e4bb812abd10b22126b8450dca",
+        "name": "model-00046-of-00046.safetensors",
+        "size": 3593956092
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "9892dd3b1f6b5bdfc8cfecc1e281b318ef1b03a9",
+        "name": "model-00012-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "0a122c47d2a14971474f607854067b1ec358b1a1",
+        "name": "model-00014-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "7c25f25c679c6a9590eb99783b0e04a4728e9650",
+        "name": "model-00016-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "3b34ac470e6eb74f611a0ca944f74b7c8edebf83",
+        "name": "model-00018-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "00f9d4f4b66fe67bad6bea089ea7a3a01f79711f",
+        "name": "model-00020-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "735644b481fd4a262297a09ba39a203913383f35",
+        "name": "model-00022-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "632316da5767df8c6fa146919ef8106a3ff05cfd",
+        "name": "model-00024-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "e64399aecb1bdf9dd153823550233624aaa67efb",
+        "name": "model-00026-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "b49b9892cd613f8ad7cc7b14298fa2b9dfb2fd97",
+        "name": "model-00028-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "d72fe3c0c49db8a24fb590a8298e78b2127bb607",
+        "name": "model-00030-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "4ffb3fc4ab6d9dd30a0714156f87005c595a6c77",
+        "name": "model-00032-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "f5cf0253df9972eba6688068f4e899520bd305e0",
+        "name": "model-00034-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "03cd995147b483e984d7e20e9b4d5bcafda89621",
+        "name": "model-00036-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "49cffc20e8902a196aff2418dc9efce6a4aac37d",
+        "name": "model-00038-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "a71855bfce6785ac61ff4c74ad0597e4cc31063f",
+        "name": "model-00040-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "ac90b2b2e38923a761d92a489ab029d7c95cdf29",
+        "name": "model-00042-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "4f3caadde662137880173ceab34ff8d711831f75",
+        "name": "model-00044-of-00046.safetensors",
+        "size": 3590026352
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "428c41ab402ff8b4802b1e1a45faa85b374407bc",
+        "name": "model-00006-of-00046.safetensors",
+        "size": 3590024776
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "7fb6f81d5ee9e87563ec98a480b78ed7da06c342",
+        "name": "model-00008-of-00046.safetensors",
+        "size": 3590024776
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "0fe89edcadf5389beeeafa20f0d7f0211afc5d44",
+        "name": "model-00010-of-00046.safetensors",
+        "size": 3590024776
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "6d27bc755f31fa90f33802d4ff7ad6bb7b875dd6",
+        "name": "model-00013-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "09098758d2710dfa034433c01d4030677f7d0add",
+        "name": "model-00015-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "74ff9e3b9c331e31d4037c73c51fc78a04029614",
+        "name": "model-00017-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "33e5f8632e2053f87c4d57fe54caab2c9d3fe9b1",
+        "name": "model-00019-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "cb46318fc257182629b57a53e74d3050b239b041",
+        "name": "model-00021-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "03530c04a93cec2e9bed36b760d431de82b1a307",
+        "name": "model-00023-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "b00541db9362b0bce72c53da237e83f204feeb72",
+        "name": "model-00025-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "e78ec7f9db81d100d51ea76e66900211407e9da7",
+        "name": "model-00027-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "1c42a5b1f757a79321f13a6427f1462d494ce0be",
+        "name": "model-00029-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "be6c49637ff7a672b1462643465d5edae539287e",
+        "name": "model-00031-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "956609517311870928f3c37b6bd38123a123b5df",
+        "name": "model-00033-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "4a1835ce95031cf60bd05cd767cece17df422203",
+        "name": "model-00035-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "8d6bae8ade5355c16c1346638c03bf1aff97dc4d",
+        "name": "model-00037-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "2d0b25fc316ee5f8a913322e3e41cded023b26bb",
+        "name": "model-00039-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "23106ad6ea416faabae6cc20b210add9814e4a04",
+        "name": "model-00041-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "b6529ba3e232e59dc7c2ad42636a281d9f00b9e6",
+        "name": "model-00043-of-00046.safetensors",
+        "size": 3568770544
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "2764e161921fe02e98a8b2c3f65f898430e27aa3",
+        "name": "model-00005-of-00046.safetensors",
+        "size": 3568768976
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "e2dcb719ae6871c68c4f2610819cf865da6e96e7",
+        "name": "model-00007-of-00046.safetensors",
+        "size": 3568768976
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "e456885bf31de392d22c3161dfa866e1116b15e9",
+        "name": "model-00009-of-00046.safetensors",
+        "size": 3568768976
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "1824e5f0aeaf507a98df83c292fc868d12393b50",
+        "name": "model-00011-of-00046.safetensors",
+        "size": 3568768976
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "3d38853346a9d7b86f4906d76a8143b15a68933a",
+        "name": "model-00002-of-00046.safetensors",
+        "size": 3566321192
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "7921afdf3a47d5d93075b2bbb8d0b9ac5e993609",
+        "name": "model-00003-of-00046.safetensors",
+        "size": 3566321192
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "44037efb3407904b92136eaaba578d227d3d45d2",
+        "name": "model-00045-of-00046.safetensors",
+        "size": 1059332516
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "0083e12687c1f6347c87378658fc068100330135",
+        "name": "model-00001-of-00046.safetensors",
+        "size": 1059061856
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "628e3364caad11bdf9e67cea06eae7878122811d",
+        "name": "tokenizer.json",
+        "size": 6367146
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "84692cbe7af556a01e2e5353341100079c387aee",
+        "name": "model.safetensors.index.json",
+        "size": 5371381
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "87521b09505a221a44d8bfa824c848b00d9cfcf0",
+        "name": "README.md",
+        "size": 13193
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "f9bf68d953bb81a1532b52c3663d390ac1409bc8",
+        "name": "encoding/README.md",
+        "size": 8118
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "10034844edfc33b954ae530f35590132cdf4a342",
+        "name": "encoding/tests/test_input_3.json",
+        "size": 4546
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "d423b221fa88153a826f7724cc938e0703858c21",
+        "name": "encoding/tests/test_input_1.json",
+        "size": 2748
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "d5e0791dd6997a2007f3aa917919a680521bcd51",
+        "name": "encoding/tests/test_input_4.json",
+        "size": 2730
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "0d53c3bc58bc308e6b810b8eb9e1f80891b762fa",
+        "name": "config.json",
+        "size": 1724
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "9bf870e00800b838217a97bd3769b3b649011f5c",
+        "name": "inference/config_test_no_mtp.json",
+        "size": 1172
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "707423f70a64640cec8b3e61c7bd74cb105ee26f",
+        "name": "inference/config_100k.json",
+        "size": 1153
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "f5c95c2f133085eda4a6f639f7711263d0c9a4ee",
+        "name": "inference/config_4k_batch1.json",
+        "size": 1151
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "29b5b07fac2944671131efaf4f289834737b92b4",
+        "name": "inference/config_4k_topk128.json",
+        "size": 1151
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "2e80d52adbf7ad833394b0dda7d34195798cc49b",
+        "name": "inference/config_4k_topk256.json",
+        "size": 1151
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "4c47650baf4aca6ae64262e20a933fb40bba3533",
+        "name": "inference/config_4k_topk64.json",
+        "size": 1150
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "692cf97a8f714caf20cd30e5113212d83035e043",
+        "name": "inference/config.json",
+        "size": 991
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "e11577229e5e5b6f82f687f7ed755096b3edd8d6",
+        "name": "inference/README.md",
+        "size": 951
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "f3dad388a2bbfd6a8605bd02754acd86d9ca5112",
+        "name": "tokenizer_config.json",
+        "size": 801
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "13b3454a902deecafe75644b41cd6b3e4a0e5354",
+        "name": "encoding/tests/test_input_2.json",
+        "size": 526
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "c56a8c5bf06ff7740b6a33ee67b38b6237a230b1",
+        "name": "generation_config.json",
+        "size": 170
+      },
+      "previous": null,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "5554f70a70d885842b60a2df715eac485ae31314",
+        "name": "README.md",
+        "size": 8771
+      },
+      "previous": null,
+      "repo": "firedancer/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "5ca6d0c60cfd174200e7bcc5d0c04c72d3ca1675",
+        "name": "README.md",
+        "size": 5442
+      },
+      "previous": null,
+      "repo": "ssweens/DeepSeek-V4-Flash-GGUF-YMMV"
+    },
+    {
+      "file": {
+        "blob": "5bc90ef0bd4929990618076c68552859f8243e4a",
+        "name": "README.md",
+        "size": 4215
+      },
+      "previous": null,
+      "repo": "setar007/DeepSeek-V4-Flash-Q8xQ5-GGUF"
+    },
+    {
+      "file": {
+        "blob": "ec0b1ff5924210c47e34d90dd74601ba056ea211",
+        "name": "README.md",
+        "size": 10888
+      },
+      "previous": null,
+      "repo": "jorge-erdb/Qwen3.5-9B-DeepSeek-V4-Flash-4bit-GGUF"
+    },
+    {
+      "file": {
+        "blob": "5ef0e1b7fad9f761a9dc4a448c7e51dfeabf8e60",
+        "name": "README.md",
+        "size": 2807
+      },
+      "previous": null,
+      "repo": "Volko76/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "c59fd640a5b1a592363e115dce68ad0dc8c669b1",
+        "name": "README.md",
+        "size": 8715
+      },
+      "previous": null,
+      "repo": "CCSSNE/cyberneurova-CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF"
+    },
+    {
+      "file": {
+        "blob": "c59fd640a5b1a592363e115dce68ad0dc8c669b1",
+        "name": "README.md",
+        "size": 8715
+      },
+      "previous": null,
+      "repo": "rbinrs/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF"
+    },
+    {
+      "file": {
+        "blob": "c23c15aa46a1a7405184718a477e6798b5bdbe16",
+        "name": "README.md",
+        "size": 3563
+      },
+      "previous": null,
+      "repo": "6ms/DeepSeek-V4-Flash-MXFP4-GGUF"
+    },
+    {
+      "file": {
+        "blob": "96d8fcffee4071b6504ea778e69f026acdbef897",
+        "name": "README.md",
+        "size": 8041
+      },
+      "previous": null,
+      "repo": "persadian/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "94e4ae7a3cfa1668b6b31cfe964aefcee057acff",
+        "name": "README.md",
+        "size": 2234
+      },
+      "previous": null,
+      "repo": "tamerbaydag/Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M-GGUF"
+    },
+    {
+      "file": {
+        "blob": "c59fd640a5b1a592363e115dce68ad0dc8c669b1",
+        "name": "README.md",
+        "size": 8715
+      },
+      "previous": null,
+      "repo": "brentin/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF"
+    },
+    {
+      "file": {
+        "blob": "cb8204c51c1224395df7578d857bee4cc1333c9d",
+        "name": "artifacts/eval_summaries/kmmlu300_summary.json",
+        "size": 14987
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "052ae369727cba6e7a6dddaa9a13ba0b803a52ad",
+        "name": "artifacts/eval_summaries/kmmlu100_summary.json",
+        "size": 12571
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "55672dff9153fc26d4468c29927c5ac33027dfbc",
+        "name": "artifacts/manifests/l10_full256_source_hf_fp4.json",
+        "size": 6579
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "3a4f631b33651376331b4636153b82b0a4cd7d77",
+        "name": "artifacts/plans/l10_full256_source_hf_fp4_sidecar_plan.json",
+        "size": 4281
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "99dad5e9f86bb90bbdf31c04db7955e2f771f2e2",
+        "name": "artifacts/manifests/l10_think_priority_top128_source_hf_fp4.json",
+        "size": 3619
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "e53efe8abb240edce7a796a926152b85d813ca97",
+        "name": "artifacts/plans/l10_think_priority_top128_source_hf_fp4_sidecar_plan.json",
+        "size": 2694
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "1a2d2f328603220eed6d65e654938786ae3fc58e",
+        "name": "artifacts/eval_summaries/longv2_summary.json",
+        "size": 2507
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "30d16fb2b0a5b18dd2a8bf034e28a75f74028dbc",
+        "name": "artifacts/manifests/l10_think_priority_top64_source_hf_fp4.json",
+        "size": 2139
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "99ba1c61f114a1029110125072cfdf5c85082a51",
+        "name": "artifacts/eval_summaries/thinkmax30_summary.json",
+        "size": 1944
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "9afd01dbb36388ca2ec391f103af9ae9520eb5db",
+        "name": "README.md",
+        "size": 1917
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "fec0ba31bdad7ab0801370d7f45590b7c44457b1",
+        "name": "artifacts/plans/l10_think_priority_top64_source_hf_fp4_sidecar_plan.json",
+        "size": 1887
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "60f9f3eccdd163e00196d8eeec38038803255a31",
+        "name": "artifacts/eval_summaries/project_eval_summary.json",
+        "size": 1736
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "39c9898867f25d1fa3ac4946b7f06ece9e8abc2d",
+        "name": "artifacts/summaries/thinktop128_l10_hf_fp4.summary.json",
+        "size": 821
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "bd16544226f0003d51aac8d12231d836ff20ca0e",
+        "name": "artifacts/summaries/thinktop64_l10_hf_fp4.summary.json",
+        "size": 814
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "2dc929dcf1db17204ba4923492f58bde5ade15d3",
+        "name": "artifacts/summaries/full256_l10_hf_fp4.summary.json",
+        "size": 803
+      },
+      "previous": null,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blob": "d124ee737189001713ba8170ca46018f3578b950",
+        "name": "README.md",
+        "size": 1615
+      },
+      "previous": null,
+      "repo": "huiyanxinxi/DeepSeek-V4-Flash-Q8_0-GGUF"
+    },
+    {
+      "file": {
+        "blob": "d0b848b85c4eaff93948c052ed49f0016e6caae3",
+        "name": "README.md",
+        "size": 4238
+      },
+      "previous": null,
+      "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF"
+    },
+    {
+      "file": {
+        "blob": "1bc7140186af5e22a288570bdceef358e9d43cb2",
+        "name": "validation/20260528T160633Z/SUMMARY.md",
+        "size": 2103
+      },
+      "previous": null,
+      "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF"
+    },
+    {
+      "file": {
+        "blob": "30d9a90673a80092b4605b12b35b82f9d4ff7e05",
+        "name": "validation/20260528T160633Z/summary.json",
+        "size": 1806
+      },
+      "previous": null,
+      "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF"
+    },
+    {
+      "file": {
+        "blob": "e31fd37b9fed3a28c9ba409b019426154df842fa",
+        "name": "README.md",
+        "size": 7445
+      },
+      "previous": null,
+      "repo": "Keepser/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF"
+    },
+    {
+      "file": {
+        "blob": "e0ad705bd77c455eea25a2f9e7bf8c8662e6b21c",
+        "name": "README.md",
+        "size": 6913
+      },
+      "previous": null,
+      "repo": "pinklily69/DeepSeek-V4-Flash-IQ3_S-GGUF"
+    },
+    {
+      "file": {
+        "blob": "cedfa0cbe1c59c40383885b096968c127dd0226a",
+        "name": "README.md",
+        "size": 405
+      },
+      "previous": null,
+      "repo": "cPilotGod/deepseek-deepseek-v4-284b-flash-gguf"
+    },
+    {
+      "file": {
+        "blob": "8b59d5bdffa9911729e8ca602fa85ede87fb7177",
+        "name": "README.md",
+        "size": 8211
+      },
+      "previous": null,
+      "repo": "rbinrs/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF"
+    },
+    {
+      "file": {
+        "blob": "d14adb5eaef1cbc931851e1dd1db4a70a94ab7cd",
+        "name": "README.md",
+        "size": 16896
+      },
+      "previous": null,
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF"
+    },
+    {
+      "file": {
+        "blob": "8b59d5bdffa9911729e8ca602fa85ede87fb7177",
+        "name": "README.md",
+        "size": 8211
+      },
+      "previous": null,
+      "repo": "eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF"
+    },
+    {
+      "file": {
+        "blob": "a1bdef5eca00440fcd7e158ac75858c283ed13b6",
+        "name": "README.md",
+        "size": 64
+      },
+      "previous": null,
+      "repo": "ilintar/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "file": {
+        "blob": "77101baa60582c98f5ac6ae81d69d4158d7aba58",
+        "name": "model.safetensors",
+        "size": 3607596760
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k"
+    },
+    {
+      "file": {
+        "blob": "f71077fd8c9f7f0a9f8acb2b42513def9d483c60",
+        "name": "config.json",
+        "size": 1817
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k"
+    },
+    {
+      "file": {
+        "blob": "cd2671b46eb1170dfd74762c70304c66a9e8015d",
+        "name": "README.md",
+        "size": 1427
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k"
+    },
+    {
+      "file": {
+        "blob": "7113a1a91134771f109e680ec8e93983f238580d",
+        "name": "val_metrics.json",
+        "size": 381
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k"
+    },
+    {
+      "file": {
+        "blob": "7ad962eaf656325bfa91f1c4ad5d5a6857bbccab",
+        "name": "model.safetensors",
+        "size": 3607596760
+      },
+      "previous": null,
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash"
+    },
+    {
+      "file": {
+        "blob": "0e68fd20764f3396594fe833b85fe9459eef9d9d",
+        "name": "README.md",
+        "size": 3109
+      },
+      "previous": null,
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash"
+    },
+    {
+      "file": {
+        "blob": "0ed924fea2c75464186568d0ae3caf7e2406f0c0",
+        "name": "config.json",
+        "size": 1816
+      },
+      "previous": null,
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash"
+    },
+    {
+      "file": {
+        "blob": "75569313b59f492979e621db4bc5ae4debdd8550",
+        "name": "val_metrics.json",
+        "size": 385
+      },
+      "previous": null,
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash"
+    },
+    {
+      "file": {
+        "blob": "858e87c712c438395794ff6b3831a83b25404ddc",
+        "name": "model.safetensors",
+        "size": 3607596760
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k"
+    },
+    {
+      "file": {
+        "blob": "23c8f2c817b60e9ef1bd47251cee816aae0ae4a9",
+        "name": "config.json",
+        "size": 1590
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k"
+    },
+    {
+      "file": {
+        "blob": "6e81be9d37062f442c1f76e536fd1e65b2324abf",
+        "name": "val_metrics.json",
+        "size": 382
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k"
+    },
+    {
+      "file": {
+        "blob": "410584738bfbd0d77114d72a4ad361e330cc4b6d",
+        "name": "model.safetensors",
+        "size": 3607596760
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k"
+    },
+    {
+      "file": {
+        "blob": "4a677c4ccc881b67d3701d0f63a5f7a18ea10d3b",
+        "name": "config.json",
+        "size": 1812
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k"
+    },
+    {
+      "file": {
+        "blob": "15220b979861b2d0f3df8297c61d67000e228b23",
+        "name": "val_metrics.json",
+        "size": 381
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k"
+    },
+    {
+      "file": {
+        "blob": "7ad962eaf656325bfa91f1c4ad5d5a6857bbccab",
+        "name": "model.safetensors",
+        "size": 3607596760
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k"
+    },
+    {
+      "file": {
+        "blob": "e53effb20a1b591966c646351b87ac3451abe7af",
+        "name": "config.json",
+        "size": 1855
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k"
+    },
+    {
+      "file": {
+        "blob": "75569313b59f492979e621db4bc5ae4debdd8550",
+        "name": "val_metrics.json",
+        "size": 385
+      },
+      "previous": null,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k"
+    }
+  ],
+  "new_repo_count_vs_previous": 5,
+  "new_repos": [
+    {
+      "downloads": 11,
+      "error": null,
+      "file_count": 4,
+      "files": [
+        {
+          "blob": "7ad962eaf656325bfa91f1c4ad5d5a6857bbccab",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "0e68fd20764f3396594fe833b85fe9459eef9d9d",
+          "name": "README.md",
+          "size": 3109
+        },
+        {
+          "blob": "0ed924fea2c75464186568d0ae3caf7e2406f0c0",
+          "name": "config.json",
+          "size": 1816
+        },
+        {
+          "blob": "75569313b59f492979e621db4bc5ae4debdd8550",
+          "name": "val_metrics.json",
+          "size": 385
+        }
+      ],
+      "lastModified": "2026-07-02T12:34:53.000Z",
+      "likes": 1,
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "search_terms": [
+        "DeepSeek V4 Flash speculator",
+        "DeepSeek-V4-Flash dflash"
+      ],
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "custom_code",
+        "arxiv:2602.06036",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 3607602070
+    },
+    {
+      "downloads": 124,
+      "error": null,
+      "file_count": 4,
+      "files": [
+        {
+          "blob": "77101baa60582c98f5ac6ae81d69d4158d7aba58",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "f71077fd8c9f7f0a9f8acb2b42513def9d483c60",
+          "name": "config.json",
+          "size": 1817
+        },
+        {
+          "blob": "cd2671b46eb1170dfd74762c70304c66a9e8015d",
+          "name": "README.md",
+          "size": 1427
+        },
+        {
+          "blob": "7113a1a91134771f109e680ec8e93983f238580d",
+          "name": "val_metrics.json",
+          "size": 381
+        }
+      ],
+      "lastModified": "2026-06-27T18:15:48.000Z",
+      "likes": 1,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "search_terms": [
+        "DeepSeek V4 Flash speculator",
+        "DeepSeek-V4-Flash dflash"
+      ],
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "deepseek-v4-flash",
+        "draft-model",
+        "custom_code",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 3607600385
+    },
+    {
+      "downloads": 19,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "7ad962eaf656325bfa91f1c4ad5d5a6857bbccab",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "e53effb20a1b591966c646351b87ac3451abe7af",
+          "name": "config.json",
+          "size": 1855
+        },
+        {
+          "blob": "75569313b59f492979e621db4bc5ae4debdd8550",
+          "name": "val_metrics.json",
+          "size": 385
+        }
+      ],
+      "lastModified": "2026-07-02T06:05:47.000Z",
+      "likes": 0,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k",
+      "search_terms": [
+        "DeepSeek V4 Flash speculator",
+        "DeepSeek-V4-Flash dflash"
+      ],
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 3607599000
+    },
+    {
+      "downloads": 1219,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "858e87c712c438395794ff6b3831a83b25404ddc",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "23c8f2c817b60e9ef1bd47251cee816aae0ae4a9",
+          "name": "config.json",
+          "size": 1590
+        },
+        {
+          "blob": "6e81be9d37062f442c1f76e536fd1e65b2324abf",
+          "name": "val_metrics.json",
+          "size": 382
+        }
+      ],
+      "lastModified": "2026-05-29T13:58:52.000Z",
+      "likes": 0,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k",
+      "search_terms": [
+        "DeepSeek V4 Flash speculator",
+        "DeepSeek-V4-Flash dflash"
+      ],
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 3607598732
+    },
+    {
+      "downloads": 157,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "410584738bfbd0d77114d72a4ad361e330cc4b6d",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "4a677c4ccc881b67d3701d0f63a5f7a18ea10d3b",
+          "name": "config.json",
+          "size": 1812
+        },
+        {
+          "blob": "15220b979861b2d0f3df8297c61d67000e228b23",
+          "name": "val_metrics.json",
+          "size": 381
+        }
+      ],
+      "lastModified": "2026-06-27T18:25:36.000Z",
+      "likes": 0,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k",
+      "search_terms": [
+        "DeepSeek V4 Flash speculator",
+        "DeepSeek-V4-Flash dflash"
+      ],
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 3607598953
+    }
+  ],
+  "previous_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-refresh-20260706-current-continuation.json",
+  "previous_read_error": null,
+  "repo_count": 50,
+  "repos": [
+    {
+      "downloads": 0,
+      "error": null,
+      "file_count": 1,
+      "files": [
+        {
+          "blob": "a1bdef5eca00440fcd7e158ac75858c283ed13b6",
+          "name": "README.md",
+          "size": 64
+        }
+      ],
+      "lastModified": "2026-07-05T18:13:51.000Z",
+      "likes": 0,
+      "repo": "ilintar/DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 64
+    },
+    {
+      "downloads": 0,
+      "error": null,
+      "file_count": 5,
+      "files": [
+        {
+          "blob": "f4a47c11ae7ade594a01169336399bf563baf3c8",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+          "size": 164633502304
+        },
+        {
+          "blob": "354edeb930d6069f5d680e1617f065fb73dc1c6c",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+          "size": 99705676384
+        },
+        {
+          "blob": "d71f8c8320a874e97d26d5d53eeb596c96917ab9",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+          "size": 86720111200
+        },
+        {
+          "blob": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "name": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400
+        },
+        {
+          "blob": "8b59d5bdffa9911729e8ca602fa85ede87fb7177",
+          "name": "README.md",
+          "size": 8211
+        }
+      ],
+      "lastModified": "2026-07-05T01:45:53.000Z",
+      "likes": 0,
+      "repo": "eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf",
+        "ds4 flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "GGUF",
+        "quantized",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "moe",
+        "mixture-of-experts",
+        "2-bit",
+        "4-bit",
+        "iq2_xxs",
+        "q2_k",
+        "q4_k",
+        "ds4",
+        "apple-silicon",
+        "metal",
+        "llama.cpp",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 354866900499
+    },
+    {
+      "downloads": 181436,
+      "error": null,
+      "file_count": 7,
+      "files": [
+        {
+          "blob": "f53051d9a8fe60afc30577c2899b67998b862060",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q8_0.gguf",
+          "size": 9527497984
+        },
+        {
+          "blob": "c9e07698fcb6afdaf09e77d2ec2e895fe4cf794f",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q6_K.gguf",
+          "size": 7359255808
+        },
+        {
+          "blob": "1366342b3afad0c9ceef0ddfd286874d56668043",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_M.gguf",
+          "size": 6467966208
+        },
+        {
+          "blob": "f712486e78fb21dbc3b87aa553f420e846d8cbcf",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": 5629105408
+        },
+        {
+          "blob": "733ad2f736a30d0e8a67f4bf3257e1cdacdfe673",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "size": 4623521024
+        },
+        {
+          "blob": "b0cf949b869b54858e259ff5392b3579c46a0330",
+          "name": "mmproj.gguf",
+          "size": 921705376
+        },
+        {
+          "blob": "5554f70a70d885842b60a2df715eac485ae31314",
+          "name": "README.md",
+          "size": 8771
+        }
+      ],
+      "lastModified": "2026-07-04T07:28:18.000Z",
+      "likes": 254,
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "gguf",
+        "text-generation-inference",
+        "unsloth",
+        "qwen3_5",
+        "reasoning",
+        "distillation",
+        "deepseek",
+        "deepseek-v4",
+        "sft",
+        "long-cot",
+        "chain-of-thought",
+        "efficient-inference",
+        "agent",
+        "multilingual",
+        "image-text-to-text",
+        "en",
+        "zh",
+        "ko",
+        "ja",
+        "es",
+        "ru",
+        "dataset:Jackrong/DeepSeek-V4-Distill-8000x",
+        "arxiv:2604.06628",
+        "base_model:unsloth/Qwen3.5-9B",
+        "base_model:quantized:unsloth/Qwen3.5-9B",
+        "license:apache-2.0",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 34529060579
+    },
+    {
+      "downloads": 2165,
+      "error": null,
+      "file_count": 4,
+      "files": [
+        {
+          "blob": "ac96ff5589c0bed92f231f1dc941a381065326f6",
+          "name": "DeepSeek-V4-Flash.gguf",
+          "size": 156378344544
+        },
+        {
+          "blob": "4d9db8b1cf629a58aa1f6c4868e8092f53f517c0",
+          "name": "kld/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf.kld.txt",
+          "size": 74748
+        },
+        {
+          "blob": "2792e75c841b4c32fa4d36fdca7aec907e16bb6c",
+          "name": "kld/DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf.kld.txt",
+          "size": 74747
+        },
+        {
+          "blob": "02f763f72b140768bb4cc2c9622032473e854fd9",
+          "name": "README.md",
+          "size": 5972
+        }
+      ],
+      "lastModified": "2026-07-03T23:03:24.000Z",
+      "likes": 3,
+      "repo": "sokann/DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek_v4",
+        "conversational",
+        "ik_llama.cpp",
+        "llama.cpp",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 156378500011
+    },
+    {
+      "downloads": 341,
+      "error": null,
+      "file_count": 2,
+      "files": [
+        {
+          "blob": "71b2507baa48e49c5bb07822531a4708a60be3c6",
+          "name": "ggml-model-Q3_K_S.gguf",
+          "size": 122467948864
+        },
+        {
+          "blob": "ed54e2f257879a81b3f2d3fc86b417243eb7af11",
+          "name": "README.md",
+          "size": 4029
+        }
+      ],
+      "lastModified": "2026-07-03T12:52:45.000Z",
+      "likes": 6,
+      "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "GGUF",
+        "huihui",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 122467952893
+    },
+    {
+      "downloads": 7799,
+      "error": null,
+      "file_count": 7,
+      "files": [
+        {
+          "blob": "c571f7b836bd5b311125de077033742daac68ead",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf",
+          "size": 302251447616
+        },
+        {
+          "blob": "799f85f59f3120092acdf4c7173a584be2257343",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf",
+          "size": 164633497632
+        },
+        {
+          "blob": "b69c328ee8532f5e8a8becae85559ee06b19720d",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+          "size": 98810926400
+        },
+        {
+          "blob": "4d0785c59c68ec50fb007c58cb96dd6281c6b5f9",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Layers37-42Q4KExperts-mixed.gguf",
+          "size": 97591742496
+        },
+        {
+          "blob": "d0004dc5583f7855733cc8f20187f15439c4b257",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-aligned.gguf",
+          "size": 86721392640
+        },
+        {
+          "blob": "9adf2ff6ac15e37107b128f475a1b5796b9452ee",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+          "size": 86720106528
+        },
+        {
+          "blob": "4b0674d8ede5b54233e223d82538563254125834",
+          "name": "README.md",
+          "size": 10341
+        }
+      ],
+      "lastModified": "2026-07-03T08:04:56.000Z",
+      "likes": 12,
+      "repo": "audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "deepseek",
+        "llama.cpp",
+        "moe",
+        "research",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix"
+      ],
+      "total_listed_file_bytes": 836729123653
+    },
+    {
+      "downloads": 1586,
+      "error": null,
+      "file_count": 8,
+      "files": [
+        {
+          "blob": "ac96ff5589c0bed92f231f1dc941a381065326f6",
+          "name": "DeepSeek-V4-Flash.Q8_0.gguf",
+          "size": 156378344544
+        },
+        {
+          "blob": "0c28c598e574f1b4814a7e1ed49704f511f52d24",
+          "name": "DeepSeek-V4-Flash.IQ4_XS.gguf",
+          "size": 155095231840
+        },
+        {
+          "blob": "38ae7fc1d82252c0713925d1ffae5cd762055afa",
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-L39.gguf",
+          "size": 151270026592
+        },
+        {
+          "blob": "e5361e37e22a1cd16dcdb0e46f408f8fd607c3dc",
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-L21.gguf",
+          "size": 134056602976
+        },
+        {
+          "blob": "fc4972a592d08844e6ed5bc194c79714d1d667d7",
+          "name": "DeepSeek-V4-Flash.IQ3_XXS.gguf",
+          "size": 113974275424
+        },
+        {
+          "blob": "8edbbd8c582b4cf14f18feeb19033a1179beb5c2",
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-AS.gguf",
+          "size": 102431550816
+        },
+        {
+          "blob": "83b7096cec12367bd29141ca3d6a6f0de5eb5288",
+          "name": "DeepSeek-V4-Flash.IQ2_S.gguf",
+          "size": 88019539296
+        },
+        {
+          "blob": "6fd0e4c1c01e40a0b05881f0cfee5e57cd866acf",
+          "name": "README.md",
+          "size": 5256
+        }
+      ],
+      "lastModified": "2026-07-02T18:41:52.000Z",
+      "likes": 3,
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 901225576744
+    },
+    {
+      "downloads": 11,
+      "error": null,
+      "file_count": 4,
+      "files": [
+        {
+          "blob": "7ad962eaf656325bfa91f1c4ad5d5a6857bbccab",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "0e68fd20764f3396594fe833b85fe9459eef9d9d",
+          "name": "README.md",
+          "size": 3109
+        },
+        {
+          "blob": "0ed924fea2c75464186568d0ae3caf7e2406f0c0",
+          "name": "config.json",
+          "size": 1816
+        },
+        {
+          "blob": "75569313b59f492979e621db4bc5ae4debdd8550",
+          "name": "val_metrics.json",
+          "size": 385
+        }
+      ],
+      "lastModified": "2026-07-02T12:34:53.000Z",
+      "likes": 1,
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "search_terms": [
+        "DeepSeek V4 Flash speculator",
+        "DeepSeek-V4-Flash dflash"
+      ],
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "custom_code",
+        "arxiv:2602.06036",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 3607602070
+    },
+    {
+      "downloads": 19,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "7ad962eaf656325bfa91f1c4ad5d5a6857bbccab",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "e53effb20a1b591966c646351b87ac3451abe7af",
+          "name": "config.json",
+          "size": 1855
+        },
+        {
+          "blob": "75569313b59f492979e621db4bc5ae4debdd8550",
+          "name": "val_metrics.json",
+          "size": 385
+        }
+      ],
+      "lastModified": "2026-07-02T06:05:47.000Z",
+      "likes": 0,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k",
+      "search_terms": [
+        "DeepSeek V4 Flash speculator",
+        "DeepSeek-V4-Flash dflash"
+      ],
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 3607599000
+    },
+    {
+      "downloads": 3297,
+      "error": null,
+      "file_count": 19,
+      "files": [
+        {
+          "blob": "0dad3a7f61b3fc923fbcb6f98027b64f11d44d60",
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00003-of-00004.gguf",
+          "size": 49994259008
+        },
+        {
+          "blob": "57f6800285e32cf76747360d91b6291684f6f863",
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00002-of-00004.gguf",
+          "size": 49983378752
+        },
+        {
+          "blob": "196857b825e49e3207754956c3dd8f2b8f562c8f",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K-00002-of-00003.gguf",
+          "size": 49310047712
+        },
+        {
+          "blob": "4d9fea3acf4fa64b435a386ba410cf8f7ddd0e14",
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00003-of-00004.gguf",
+          "size": 49196411616
+        },
+        {
+          "blob": "a1f20aef7ccc4e4af0490e389460128f9d915997",
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00002-of-00004.gguf",
+          "size": 49179918240
+        },
+        {
+          "blob": "5d19c598947478e7e8e2b6ce8b0bb8668cfd92db",
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00005.gguf",
+          "size": 49065891232
+        },
+        {
+          "blob": "e049b0768fdae42f21ae944a20f26fc92837eda8",
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00005.gguf",
+          "size": 49056582912
+        },
+        {
+          "blob": "378a023032c4a9a4c4ed154fa1ea737ad822c599",
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00005.gguf",
+          "size": 49056582912
+        },
+        {
+          "blob": "b0dcb1a965ff20f15ca2de98afd36704c2deaabc",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K-00003-of-00003.gguf",
+          "size": 47646863008
+        },
+        {
+          "blob": "19cb7f9e30fe318847fa2d2315ba8399d6137c57",
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00004-of-00004.gguf",
+          "size": 25912511712
+        },
+        {
+          "blob": "bd3c93703ccc106d5b72edb45af6090ebc7ef34f",
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00004-of-00004.gguf",
+          "size": 12932559648
+        },
+        {
+          "blob": "2df4716f7ed0023867c3c70a16959f91f2a7a3b7",
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00005-of-00005.gguf",
+          "size": 9194039648
+        },
+        {
+          "blob": "19492df187fe7581e8c0202b38b3c21c9c759bd6",
+          "name": "imatrix.gguf",
+          "size": 470338784
+        },
+        {
+          "blob": "dba4e47695258ca212f99de6979ca13bb091f27b",
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00001-of-00004.gguf",
+          "size": 5248448
+        },
+        {
+          "blob": "ee1acb8504c13d159271dcf0044724af81784d31",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K-00001-of-00003.gguf",
+          "size": 5248448
+        },
+        {
+          "blob": "dba4e47695258ca212f99de6979ca13bb091f27b",
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00001-of-00004.gguf",
+          "size": 5248448
+        },
+        {
+          "blob": "ae9a61c4e1013e26b97d215a5fa00a1f60296a32",
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00005.gguf",
+          "size": 5248156
+        },
+        {
+          "blob": "e6fcda791e0376be8d2e37795fadc0ddc2897070",
+          "name": "scripts/convert-to-gguf.sh",
+          "size": 1879
+        },
+        {
+          "blob": "49fd132922623a74741a72d3d4236237dd80ee6b",
+          "name": "README.md",
+          "size": 1350
+        }
+      ],
+      "lastModified": "2026-07-02T05:07:00.000Z",
+      "likes": 15,
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "imatrix",
+        "conversational",
+        "deepseek",
+        "llama.cpp",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 491020381913
+    },
+    {
+      "downloads": 904,
+      "error": null,
+      "file_count": 2,
+      "files": [
+        {
+          "blob": "c5d6c67d6bce924456e1819ec60561a356f9a7b0",
+          "name": "ds4flash-4expert.gguf",
+          "size": 164465760544
+        },
+        {
+          "blob": "d14adb5eaef1cbc931851e1dd1db4a70a94ab7cd",
+          "name": "README.md",
+          "size": 16896
+        }
+      ],
+      "lastModified": "2026-07-01T09:30:47.000Z",
+      "likes": 0,
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf",
+        "DeepSeek-V4-Flash 4Expert GGUF"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "quantized",
+        "moe",
+        "4bit",
+        "q4_k",
+        "text-generation",
+        "en",
+        "zh",
+        "dataset:cloudyu/DeepSeek-V4-Flash-4Expert",
+        "license:apache-2.0",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 164465777440
+    },
+    {
+      "downloads": 236134,
+      "error": null,
+      "file_count": 5,
+      "files": [
+        {
+          "blob": "fb4d9c13a95fc14f9b149715c2e7e45cd9781937",
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00004.gguf",
+          "size": 39630611872
+        },
+        {
+          "blob": "1c879c98897454066893cf836ff0660f67486731",
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00004.gguf",
+          "size": 39628788224
+        },
+        {
+          "blob": "8f8d17af80097a0e63dcce21301365fc6ace7f54",
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00004.gguf",
+          "size": 39546993120
+        },
+        {
+          "blob": "54c60d7a3990a410499a7e774d03490945e99a28",
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00004.gguf",
+          "size": 37198265248
+        },
+        {
+          "blob": "64b6229dc7d5a991990f9c2e7807400e53e836f0",
+          "name": "README.md",
+          "size": 2190
+        }
+      ],
+      "lastModified": "2026-06-30T03:17:40.000Z",
+      "likes": 32,
+      "repo": "bartowski/DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 156004660654
+    },
+    {
+      "downloads": 157,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "410584738bfbd0d77114d72a4ad361e330cc4b6d",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "4a677c4ccc881b67d3701d0f63a5f7a18ea10d3b",
+          "name": "config.json",
+          "size": 1812
+        },
+        {
+          "blob": "15220b979861b2d0f3df8297c61d67000e228b23",
+          "name": "val_metrics.json",
+          "size": 381
+        }
+      ],
+      "lastModified": "2026-06-27T18:25:36.000Z",
+      "likes": 0,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k",
+      "search_terms": [
+        "DeepSeek V4 Flash speculator",
+        "DeepSeek-V4-Flash dflash"
+      ],
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 3607598953
+    },
+    {
+      "downloads": 124,
+      "error": null,
+      "file_count": 4,
+      "files": [
+        {
+          "blob": "77101baa60582c98f5ac6ae81d69d4158d7aba58",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "f71077fd8c9f7f0a9f8acb2b42513def9d483c60",
+          "name": "config.json",
+          "size": 1817
+        },
+        {
+          "blob": "cd2671b46eb1170dfd74762c70304c66a9e8015d",
+          "name": "README.md",
+          "size": 1427
+        },
+        {
+          "blob": "7113a1a91134771f109e680ec8e93983f238580d",
+          "name": "val_metrics.json",
+          "size": 381
+        }
+      ],
+      "lastModified": "2026-06-27T18:15:48.000Z",
+      "likes": 1,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "search_terms": [
+        "DeepSeek V4 Flash speculator",
+        "DeepSeek-V4-Flash dflash"
+      ],
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "deepseek-v4-flash",
+        "draft-model",
+        "custom_code",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 3607600385
+    },
+    {
+      "downloads": 828,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "cd524e77a0d915cbde6975e3362d8c4961539716",
+          "name": "DeepSeek-V4-Flash-REAP-K128.gguf",
+          "size": 55875180192
+        },
+        {
+          "blob": "f0b519ea385d61c334db452b8b57b9ca9414b7b8",
+          "name": "DeepSeek-V4-Flash-REAP-K128.gguf.reap_plan.json",
+          "size": 670205
+        },
+        {
+          "blob": "a773a5ddde5f611f3d0cfbe0d4a0beece970e25b",
+          "name": "README.md",
+          "size": 3596
+        }
+      ],
+      "lastModified": "2026-06-19T16:06:20.000Z",
+      "likes": 1,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf",
+        "DeepSeek V4 Flash REAP GGUF",
+        "DeepSeek V4 Flash Q2 GGUF"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "ds4",
+        "experimental",
+        "dgx-spark",
+        "text-generation",
+        "arxiv:2510.13999",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 55875853993
+    },
+    {
+      "downloads": 1740,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "fbc6873277a8e7f5d2f0d09ba24f8b31934db5ab",
+          "name": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+          "size": 50439361920
+        },
+        {
+          "blob": "eb8eaad3faf8b6af440bc2e36e66ec9c326bd3b1",
+          "name": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf.reap_plan.json",
+          "size": 670234
+        },
+        {
+          "blob": "616ac0900fb21925759bad77b8c7f5c08e526893",
+          "name": "README.md",
+          "size": 4072
+        }
+      ],
+      "lastModified": "2026-06-19T15:56:40.000Z",
+      "likes": 3,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf",
+        "DeepSeek V4 Flash REAP GGUF",
+        "DeepSeek V4 Flash Q2 GGUF"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "ds4",
+        "experimental",
+        "dgx-spark",
+        "text-generation",
+        "arxiv:2510.13999",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 50440036226
+    },
+    {
+      "downloads": 962,
+      "error": null,
+      "file_count": 6,
+      "files": [
+        {
+          "blob": "f4a47c11ae7ade594a01169336399bf563baf3c8",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+          "size": 164633502304
+        },
+        {
+          "blob": "354edeb930d6069f5d680e1617f065fb73dc1c6c",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+          "size": 99705676384
+        },
+        {
+          "blob": "d71f8c8320a874e97d26d5d53eeb596c96917ab9",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+          "size": 86720111200
+        },
+        {
+          "blob": "115acaba478e9a291d05bfbdbfb9b0cfe9a9130f",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-IQ2_XXS.gguf",
+          "size": 80227328608
+        },
+        {
+          "blob": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "name": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400
+        },
+        {
+          "blob": "8b59d5bdffa9911729e8ca602fa85ede87fb7177",
+          "name": "README.md",
+          "size": 8211
+        }
+      ],
+      "lastModified": "2026-06-14T21:29:41.000Z",
+      "likes": 0,
+      "repo": "rbinrs/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf",
+        "ds4 flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "GGUF",
+        "quantized",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "moe",
+        "mixture-of-experts",
+        "2-bit",
+        "4-bit",
+        "iq2_xxs",
+        "q2_k",
+        "q4_k",
+        "ds4",
+        "apple-silicon",
+        "metal",
+        "llama.cpp",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 435094229107
+    },
+    {
+      "downloads": 575754,
+      "error": null,
+      "file_count": 5,
+      "files": [
+        {
+          "blob": "f4a47c11ae7ade594a01169336399bf563baf3c8",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+          "size": 164633502304
+        },
+        {
+          "blob": "354edeb930d6069f5d680e1617f065fb73dc1c6c",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+          "size": 99705676384
+        },
+        {
+          "blob": "d71f8c8320a874e97d26d5d53eeb596c96917ab9",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+          "size": 86720111200
+        },
+        {
+          "blob": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "name": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400
+        },
+        {
+          "blob": "8b59d5bdffa9911729e8ca602fa85ede87fb7177",
+          "name": "README.md",
+          "size": 8211
+        }
+      ],
+      "lastModified": "2026-06-06T23:43:01.000Z",
+      "likes": 90,
+      "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf",
+        "ds4 flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "GGUF",
+        "quantized",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "moe",
+        "mixture-of-experts",
+        "2-bit",
+        "4-bit",
+        "iq2_xxs",
+        "q2_k",
+        "q4_k",
+        "ds4",
+        "apple-silicon",
+        "metal",
+        "llama.cpp",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 354866900499
+    },
+    {
+      "downloads": 0,
+      "error": null,
+      "file_count": 1,
+      "files": [
+        {
+          "blob": "cedfa0cbe1c59c40383885b096968c127dd0226a",
+          "name": "README.md",
+          "size": 405
+        }
+      ],
+      "lastModified": "2026-06-02T14:20:26.000Z",
+      "likes": 0,
+      "repo": "cPilotGod/deepseek-deepseek-v4-284b-flash-gguf",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "region:us"
+      ],
+      "total_listed_file_bytes": 405
+    },
+    {
+      "downloads": 992,
+      "error": null,
+      "file_count": 2,
+      "files": [
+        {
+          "blob": "a448c554f2e948faeddec6c93778f03b5087db48",
+          "name": "V4-Flash-IQ3_S.gguf",
+          "size": 122684154528
+        },
+        {
+          "blob": "e0ad705bd77c455eea25a2f9e7bf8c8662e6b21c",
+          "name": "README.md",
+          "size": 6913
+        }
+      ],
+      "lastModified": "2026-06-01T22:01:14.000Z",
+      "likes": 2,
+      "repo": "pinklily69/DeepSeek-V4-Flash-IQ3_S-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "llama.cpp",
+        "iq3_s",
+        "quantized",
+        "moe",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 122684161441
+    },
+    {
+      "downloads": 1068,
+      "error": null,
+      "file_count": 6,
+      "files": [
+        {
+          "blob": "f4a47c11ae7ade594a01169336399bf563baf3c8",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+          "size": 164633502304
+        },
+        {
+          "blob": "354edeb930d6069f5d680e1617f065fb73dc1c6c",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+          "size": 99705676384
+        },
+        {
+          "blob": "d71f8c8320a874e97d26d5d53eeb596c96917ab9",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+          "size": 86720111200
+        },
+        {
+          "blob": "115acaba478e9a291d05bfbdbfb9b0cfe9a9130f",
+          "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-IQ2_XXS.gguf",
+          "size": 80227328608
+        },
+        {
+          "blob": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "name": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400
+        },
+        {
+          "blob": "e31fd37b9fed3a28c9ba409b019426154df842fa",
+          "name": "README.md",
+          "size": 7445
+        }
+      ],
+      "lastModified": "2026-05-31T01:40:41.000Z",
+      "likes": 1,
+      "repo": "Keepser/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf",
+        "ds4 flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "GGUF",
+        "quantized",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "moe",
+        "mixture-of-experts",
+        "2-bit",
+        "4-bit",
+        "iq2_xxs",
+        "q2_k",
+        "q4_k",
+        "ds4",
+        "apple-silicon",
+        "metal",
+        "llama.cpp",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 435094228341
+    },
+    {
+      "downloads": 2409,
+      "error": null,
+      "file_count": 2,
+      "files": [
+        {
+          "blob": "a60dba1e83338a452ccec0d41c764aef42386216",
+          "name": "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf",
+          "size": 82382923360
+        },
+        {
+          "blob": "5b2834b062c3249a9448f5834b915afa6595c9a6",
+          "name": "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf.sha256",
+          "size": 138
+        }
+      ],
+      "lastModified": "2026-05-30T18:25:58.000Z",
+      "likes": 10,
+      "repo": "0xSero/DeepSeek-V4-Flash-Spark-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 82382923498
+    },
+    {
+      "downloads": 906,
+      "error": null,
+      "file_count": 2,
+      "files": [
+        {
+          "blob": "448612986bfe7e6e149147473ec7b510a0413518",
+          "name": "DeepSeek-V4-Flash-Spark-Mini-Q3-Dynamic-REAP-ds4.gguf",
+          "size": 75016281184
+        },
+        {
+          "blob": "d159d0196449ff54de76304895523e23898e2c08",
+          "name": "DeepSeek-V4-Flash-Spark-Mini-Q3-Dynamic-REAP-ds4.gguf.sha256",
+          "size": 143
+        }
+      ],
+      "lastModified": "2026-05-30T18:03:36.000Z",
+      "likes": 6,
+      "repo": "0xSero/DeepSeek-V4-Flash-Spark-Mini-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 75016281327
+    },
+    {
+      "downloads": 15949,
+      "error": null,
+      "file_count": 7,
+      "files": [
+        {
+          "blob": "17b48b7e57282f33ea586cd3fddfde46d6df9aa7",
+          "name": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+          "size": 52593532000
+        },
+        {
+          "blob": "b665dc79ecdc0d436cc872ffc3d2fa5b375297cd",
+          "name": "README.md",
+          "size": 4174
+        },
+        {
+          "blob": "12181711e0e137161c95ebfe98d1bf1f85872c89",
+          "name": "validation/20260528T160633Z/summary.json",
+          "size": 1828
+        },
+        {
+          "blob": "e46bf5b991400423941499ab82f6f64b13b15f96",
+          "name": "validation/20260528T160633Z/SUMMARY.md",
+          "size": 1798
+        },
+        {
+          "blob": "9806c8fe0d3726e520e336ce12cf01326eded741",
+          "name": "validation/framework-halo-strix/DeepSeek-V4-Flash-Spark-Mini-Q2/20260528T211908Z/api/models.json",
+          "size": 465
+        },
+        {
+          "blob": "9ebf095307ad3b1d2febd305b8dac4b5d8468a5d",
+          "name": "validation/framework-halo-strix/DeepSeek-V4-Flash-Spark-Mini-Q2/20260528T211908Z/api/api-bench-summary-20260529T001105.json",
+          "size": 407
+        },
+        {
+          "blob": "673114528c753bffb3dfcc6ceeef5bd816809f85",
+          "name": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf.sha256",
+          "size": 145
+        }
+      ],
+      "lastModified": "2026-05-30T10:14:15.000Z",
+      "likes": 25,
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "dgx-spark",
+        "ds4",
+        "dwarfstar",
+        "reap",
+        "text-generation",
+        "arxiv:2510.13999",
+        "base_model:0xSero/DeepSeek-V4-Flash-162B",
+        "base_model:quantized:0xSero/DeepSeek-V4-Flash-162B",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 52593540817
+    },
+    {
+      "downloads": 2046,
+      "error": null,
+      "file_count": 5,
+      "files": [
+        {
+          "blob": "53cd89763e86270c09578b17d95e255a7ec06997",
+          "name": "DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf",
+          "size": 57468757600
+        },
+        {
+          "blob": "d0b848b85c4eaff93948c052ed49f0016e6caae3",
+          "name": "README.md",
+          "size": 4238
+        },
+        {
+          "blob": "1bc7140186af5e22a288570bdceef358e9d43cb2",
+          "name": "validation/20260528T160633Z/SUMMARY.md",
+          "size": 2103
+        },
+        {
+          "blob": "30d9a90673a80092b4605b12b35b82f9d4ff7e05",
+          "name": "validation/20260528T160633Z/summary.json",
+          "size": 1806
+        },
+        {
+          "blob": "ab9d64edfe92f39e751764cbef6172fb742869fd",
+          "name": "DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf.sha256",
+          "size": 140
+        }
+      ],
+      "lastModified": "2026-05-30T10:14:13.000Z",
+      "likes": 11,
+      "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "dgx-spark",
+        "ds4",
+        "dwarfstar",
+        "reap",
+        "text-generation",
+        "arxiv:2510.13999",
+        "base_model:0xSero/DeepSeek-V4-Flash-180B",
+        "base_model:quantized:0xSero/DeepSeek-V4-Flash-180B",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 57468765887
+    },
+    {
+      "downloads": 1219,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "858e87c712c438395794ff6b3831a83b25404ddc",
+          "name": "model.safetensors",
+          "size": 3607596760
+        },
+        {
+          "blob": "23c8f2c817b60e9ef1bd47251cee816aae0ae4a9",
+          "name": "config.json",
+          "size": 1590
+        },
+        {
+          "blob": "6e81be9d37062f442c1f76e536fd1e65b2324abf",
+          "name": "val_metrics.json",
+          "size": 382
+        }
+      ],
+      "lastModified": "2026-05-29T13:58:52.000Z",
+      "likes": 0,
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k",
+      "search_terms": [
+        "DeepSeek V4 Flash speculator",
+        "DeepSeek-V4-Flash dflash"
+      ],
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 3607598732
+    },
+    {
+      "downloads": 60,
+      "error": null,
+      "file_count": 2,
+      "files": [
+        {
+          "blob": "d39b913d63b34e189e7886db554fdb460857daad",
+          "name": "DeepSeek-V4-Flash-Q8_0.gguf",
+          "size": 302355139168
+        },
+        {
+          "blob": "d124ee737189001713ba8170ca46018f3578b950",
+          "name": "README.md",
+          "size": 1615
+        }
+      ],
+      "lastModified": "2026-05-25T02:04:49.000Z",
+      "likes": 0,
+      "repo": "huiyanxinxi/DeepSeek-V4-Flash-Q8_0-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "moe",
+        "q8_0",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 302355140783
+    },
+    {
+      "downloads": 31,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "a72ae1e53824b4d79a64472aa8177636c01c99fe",
+          "name": "DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+          "size": 49952658368
+        },
+        {
+          "blob": "e5a23e4ddfbcc8661314d1331bfdc2b261ef7967",
+          "name": "DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+          "size": 11588146976
+        },
+        {
+          "blob": "96d8fcffee4071b6504ea778e69f026acdbef897",
+          "name": "README.md",
+          "size": 8041
+        }
+      ],
+      "lastModified": "2026-05-22T21:10:02.000Z",
+      "likes": 0,
+      "repo": "persadian/DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "llama.cpp",
+        "gguf",
+        "deepseek",
+        "quantized",
+        "moe",
+        "mixture-of-experts",
+        "iq1_s",
+        "284b",
+        "text-generation",
+        "conversational",
+        "llama-cpp",
+        "ollama",
+        "docker",
+        "mit",
+        "13b-active",
+        "1m-context",
+        "long-context",
+        "persadian",
+        "en",
+        "dataset:openwebtext",
+        "dataset:c4",
+        "dataset:common_crawl",
+        "dataset:pile",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "doi:10.57967/hf/8828",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix"
+      ],
+      "total_listed_file_bytes": 61540813385
+    },
+    {
+      "downloads": 12852,
+      "error": null,
+      "file_count": 13,
+      "files": [
+        {
+          "blob": "eef5ce6eca552b68ca3635ff4ef984fcbd6f6be7",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-BF16.gguf",
+          "size": 18407318272
+        },
+        {
+          "blob": "664235757835f56506d43ebd96401f8007f29218",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q8_0.gguf",
+          "size": 9786057472
+        },
+        {
+          "blob": "9683e130d24256d8eeff7317ca4ab1c655d00367",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q6_K.gguf",
+          "size": 7558898432
+        },
+        {
+          "blob": "57fb957c97a5e09db207c2d8e7992c570e60aace",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_M.gguf",
+          "size": 6642541312
+        },
+        {
+          "blob": "49f5839f743037f34be4e3e85e2e12670a0ea4e4",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_S.gguf",
+          "size": 6472639232
+        },
+        {
+          "blob": "137e8357ce7a96ecf4c2d44978e57f2c1ce5eeab",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_M.gguf",
+          "size": 5780087552
+        },
+        {
+          "blob": "60d5d02b112fa8aa9bb68b2f363876abd41fd007",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_S.gguf",
+          "size": 5488550656
+        },
+        {
+          "blob": "bc4e9f10c8e6964c18a61657f6c9ec3bd7f556bd",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf",
+          "size": 5357871872
+        },
+        {
+          "blob": "298df264cb9b854ffaf260394d2fefa25d7cdeea",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf",
+          "size": 5048509184
+        },
+        {
+          "blob": "4bafe1226f2c24b8b6e85291bcbd910b95385758",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf",
+          "size": 4737606400
+        },
+        {
+          "blob": "8e1cee4b56cdeed6c373a2f06d8aaa3b6878fd15",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf",
+          "size": 4364018432
+        },
+        {
+          "blob": "4ec41cbc0e5ca444a082cfbd4f01a8aba995cda9",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf",
+          "size": 3914965760
+        },
+        {
+          "blob": "9c2762791f1de8ec785b8c2cdc49865635c32425",
+          "name": "README.md",
+          "size": 1102
+        }
+      ],
+      "lastModified": "2026-05-22T10:25:05.000Z",
+      "likes": 28,
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf",
+        "DeepSeek V4 Flash MTP GGUF"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 83559065678
+    },
+    {
+      "downloads": 1,
+      "error": null,
+      "file_count": 18,
+      "files": [
+        {
+          "blob": "4bb67eaf7ab638660fabaec149de7a097b4021b3",
+          "name": "DeepSeek-V4-Flash-KR-Full256-L10-HF-FP4.sidecar.gguf",
+          "size": 3623880352
+        },
+        {
+          "blob": "ba9a91da1df3d391d28f60b858c070732f0c0f44",
+          "name": "DeepSeek-V4-Flash-KR-ThinkTop128-L10-HF-FP4.sidecar.gguf",
+          "size": 1811940512
+        },
+        {
+          "blob": "7c7de858772e4ed0c74fde191be675e6d44e2e6f",
+          "name": "DeepSeek-V4-Flash-KR-ThinkTop64-L10-HF-FP4.sidecar.gguf",
+          "size": 905970592
+        },
+        {
+          "blob": "cb8204c51c1224395df7578d857bee4cc1333c9d",
+          "name": "artifacts/eval_summaries/kmmlu300_summary.json",
+          "size": 14987
+        },
+        {
+          "blob": "052ae369727cba6e7a6dddaa9a13ba0b803a52ad",
+          "name": "artifacts/eval_summaries/kmmlu100_summary.json",
+          "size": 12571
+        },
+        {
+          "blob": "55672dff9153fc26d4468c29927c5ac33027dfbc",
+          "name": "artifacts/manifests/l10_full256_source_hf_fp4.json",
+          "size": 6579
+        },
+        {
+          "blob": "3a4f631b33651376331b4636153b82b0a4cd7d77",
+          "name": "artifacts/plans/l10_full256_source_hf_fp4_sidecar_plan.json",
+          "size": 4281
+        },
+        {
+          "blob": "99dad5e9f86bb90bbdf31c04db7955e2f771f2e2",
+          "name": "artifacts/manifests/l10_think_priority_top128_source_hf_fp4.json",
+          "size": 3619
+        },
+        {
+          "blob": "e53efe8abb240edce7a796a926152b85d813ca97",
+          "name": "artifacts/plans/l10_think_priority_top128_source_hf_fp4_sidecar_plan.json",
+          "size": 2694
+        },
+        {
+          "blob": "1a2d2f328603220eed6d65e654938786ae3fc58e",
+          "name": "artifacts/eval_summaries/longv2_summary.json",
+          "size": 2507
+        },
+        {
+          "blob": "30d16fb2b0a5b18dd2a8bf034e28a75f74028dbc",
+          "name": "artifacts/manifests/l10_think_priority_top64_source_hf_fp4.json",
+          "size": 2139
+        },
+        {
+          "blob": "99ba1c61f114a1029110125072cfdf5c85082a51",
+          "name": "artifacts/eval_summaries/thinkmax30_summary.json",
+          "size": 1944
+        },
+        {
+          "blob": "9afd01dbb36388ca2ec391f103af9ae9520eb5db",
+          "name": "README.md",
+          "size": 1917
+        },
+        {
+          "blob": "fec0ba31bdad7ab0801370d7f45590b7c44457b1",
+          "name": "artifacts/plans/l10_think_priority_top64_source_hf_fp4_sidecar_plan.json",
+          "size": 1887
+        },
+        {
+          "blob": "60f9f3eccdd163e00196d8eeec38038803255a31",
+          "name": "artifacts/eval_summaries/project_eval_summary.json",
+          "size": 1736
+        },
+        {
+          "blob": "39c9898867f25d1fa3ac4946b7f06ece9e8abc2d",
+          "name": "artifacts/summaries/thinktop128_l10_hf_fp4.summary.json",
+          "size": 821
+        },
+        {
+          "blob": "bd16544226f0003d51aac8d12231d836ff20ca0e",
+          "name": "artifacts/summaries/thinktop64_l10_hf_fp4.summary.json",
+          "size": 814
+        },
+        {
+          "blob": "2dc929dcf1db17204ba4923492f58bde5ade15d3",
+          "name": "artifacts/summaries/full256_l10_hf_fp4.summary.json",
+          "size": 803
+        }
+      ],
+      "lastModified": "2026-05-20T14:06:22.000Z",
+      "likes": 0,
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek-v4",
+        "ds4",
+        "sidecar",
+        "korean",
+        "private",
+        "license:other",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 6341850755
+    },
+    {
+      "downloads": 30856,
+      "error": null,
+      "file_count": 25,
+      "files": [
+        {
+          "blob": "9ed7fff543aa040d23b1b3d893c3e8139eca8823",
+          "name": "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-00002-of-00004.gguf",
+          "size": 49997467360
+        },
+        {
+          "blob": "1c45e5cacf59363a7e91214c99c06bb78fdb3648",
+          "name": "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-00003-of-00004.gguf",
+          "size": 49982492960
+        },
+        {
+          "blob": "a72ae1e53824b4d79a64472aa8177636c01c99fe",
+          "name": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+          "size": 49952658368
+        },
+        {
+          "blob": "4c9087168cac3a98666099fe349227680958f4ae",
+          "name": "IQ1_M-XL/DeepSeek-V4-Flash-IQ1_M-XL-00001-of-00002.gguf",
+          "size": 49946104256
+        },
+        {
+          "blob": "f3fa4427c9c5e4af265a91d44198190e973ff2cd",
+          "name": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+          "size": 49882725408
+        },
+        {
+          "blob": "c7b68a6cc74d601a0bda2022c81b662faab5a6e3",
+          "name": "IQ2_XXS-XL/DeepSeek-V4-Flash-IQ2_XXS-XL-00001-of-00002.gguf",
+          "size": 49859758944
+        },
+        {
+          "blob": "97f1f749b0fb9c48baf5ff1b58e3b6c9d29a68a8",
+          "name": "IQ2_XS-XL/DeepSeek-V4-Flash-IQ2_XS-XL-00001-of-00002.gguf",
+          "size": 49732551680
+        },
+        {
+          "blob": "181d1887fc44963d01252d0d4324e622646bb3db",
+          "name": "Q2_K-XL/DeepSeek-V4-Flash-Q2_K-XL-00001-of-00003.gguf",
+          "size": 49455415584
+        },
+        {
+          "blob": "678f60fb13650652e5c886d35c9228e4690c8722",
+          "name": "Q2_K-XL/DeepSeek-V4-Flash-Q2_K-XL-00002-of-00003.gguf",
+          "size": 49445772800
+        },
+        {
+          "blob": "387fd0af63a490be9a99cd36692bc1d65de987ca",
+          "name": "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-00001-of-00004.gguf",
+          "size": 49022350688
+        },
+        {
+          "blob": "296f860df2f2d4ef242845ea3fc70a9b5587d0d0",
+          "name": "Q8_0/DeepSeek-V4-Flash-Q8_0-00001-of-00007.gguf",
+          "size": 47930286720
+        },
+        {
+          "blob": "8a6a073da2ec0faa4ec5f6c9219cc5bf16a74aa9",
+          "name": "Q8_0/DeepSeek-V4-Flash-Q8_0-00003-of-00007.gguf",
+          "size": 47915730592
+        },
+        {
+          "blob": "c87e5638a3c0265b3cbb655423ce38157b805762",
+          "name": "Q8_0/DeepSeek-V4-Flash-Q8_0-00004-of-00007.gguf",
+          "size": 47915730592
+        },
+        {
+          "blob": "733e28ec77b81cb2198bfe7bd8bbfc35c69c353a",
+          "name": "Q8_0/DeepSeek-V4-Flash-Q8_0-00005-of-00007.gguf",
+          "size": 47915730592
+        },
+        {
+          "blob": "32fcbd9e62b451df237697265e38c00f400abe72",
+          "name": "Q8_0/DeepSeek-V4-Flash-Q8_0-00006-of-00007.gguf",
+          "size": 47915730592
+        },
+        {
+          "blob": "e47f31abdabde204c550973dce91be0e546d4dc2",
+          "name": "Q8_0/DeepSeek-V4-Flash-Q8_0-00002-of-00007.gguf",
+          "size": 47915730560
+        },
+        {
+          "blob": "a5be29b6758e27ce48509fe40668792a1d55c386",
+          "name": "IQ2_XS-XL/DeepSeek-V4-Flash-IQ2_XS-XL-00002-of-00002.gguf",
+          "size": 37275281120
+        },
+        {
+          "blob": "5976eaa5b5013e12cca6272383e2b799538f21bc",
+          "name": "IQ2_XXS-XL/DeepSeek-V4-Flash-IQ2_XXS-XL-00002-of-00002.gguf",
+          "size": 28659064736
+        },
+        {
+          "blob": "c633e878d2c36d208a75a5696f3e00704120a53b",
+          "name": "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-00004-of-00004.gguf",
+          "size": 25867409024
+        },
+        {
+          "blob": "aac7012141cfa1b428a1ef6b9002740eb4adaf34",
+          "name": "IQ1_M-XL/DeepSeek-V4-Flash-IQ1_M-XL-00002-of-00002.gguf",
+          "size": 17961457952
+        },
+        {
+          "blob": "00850c9c6889a4b2bfd9185abd040fa631a43308",
+          "name": "Q8_0/DeepSeek-V4-Flash-Q8_0-00007-of-00007.gguf",
+          "size": 14758684800
+        },
+        {
+          "blob": "96af774e8357f744dae087620779d2198c193aea",
+          "name": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00002-of-00002.gguf",
+          "size": 14625321280
+        },
+        {
+          "blob": "e5a23e4ddfbcc8661314d1331bfdc2b261ef7967",
+          "name": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+          "size": 11588146976
+        },
+        {
+          "blob": "e9f8e19066000d09c20f82a1ec065ea8b7be92aa",
+          "name": "Q2_K-XL/DeepSeek-V4-Flash-Q2_K-XL-00003-of-00003.gguf",
+          "size": 8133004384
+        },
+        {
+          "blob": "2ad851433819b5fddb38826fc0c82e086a0e6a45",
+          "name": "README.md",
+          "size": 11669
+        }
+      ],
+      "lastModified": "2026-05-19T19:14:44.000Z",
+      "likes": 26,
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "llama.cpp",
+        "deepseek-v4",
+        "moe",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 943654619637
+    },
+    {
+      "downloads": 331,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "c571f7b836bd5b311125de077033742daac68ead",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf",
+          "size": 302251447616
+        },
+        {
+          "blob": "b69c328ee8532f5e8a8becae85559ee06b19720d",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+          "size": 98810926400
+        },
+        {
+          "blob": "c59fd640a5b1a592363e115dce68ad0dc8c669b1",
+          "name": "README.md",
+          "size": 8715
+        }
+      ],
+      "lastModified": "2026-05-19T09:56:43.000Z",
+      "likes": 2,
+      "repo": "brentin/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "deepseek",
+        "llama.cpp",
+        "moe",
+        "research",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 401062382731
+    },
+    {
+      "downloads": 693,
+      "error": null,
+      "file_count": 2,
+      "files": [
+        {
+          "blob": "c4c6ff916af91cba4c0a90cdd79e4cc54a3bcb63",
+          "name": "qwen3.5-9b-deepseek-v4-flash-q4_k_m.gguf",
+          "size": 5629105952
+        },
+        {
+          "blob": "94e4ae7a3cfa1668b6b31cfe964aefcee057acff",
+          "name": "README.md",
+          "size": 2234
+        }
+      ],
+      "lastModified": "2026-05-18T20:05:31.000Z",
+      "likes": 2,
+      "repo": "tamerbaydag/Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "gguf",
+        "text-generation-inference",
+        "unsloth",
+        "qwen3_5",
+        "reasoning",
+        "distillation",
+        "deepseek",
+        "deepseek-v4",
+        "sft",
+        "long-cot",
+        "chain-of-thought",
+        "efficient-inference",
+        "agent",
+        "multilingual",
+        "llama-cpp",
+        "gguf-my-repo",
+        "image-text-to-text",
+        "en",
+        "zh",
+        "ko",
+        "ja",
+        "es",
+        "ru",
+        "dataset:Jackrong/DeepSeek-V4-Distill-8000x",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:apache-2.0",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 5629108186
+    },
+    {
+      "downloads": 472,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "36763f14466f00f96cdd6dea5ce705073faccf06",
+          "name": "DeepSeek-V4-Flash-MXFP4-F16-Q8Compat.gguf",
+          "size": 158082013056
+        },
+        {
+          "blob": "9ea5d9f068ed04ba1a398ac87bef065c08b44b31",
+          "name": "DeepSeek-V4-Flash-MXFP4-FP8-BF16.gguf",
+          "size": 156057123584
+        },
+        {
+          "blob": "c23c15aa46a1a7405184718a477e6798b5bdbe16",
+          "name": "README.md",
+          "size": 3563
+        }
+      ],
+      "lastModified": "2026-05-14T01:12:09.000Z",
+      "likes": 1,
+      "repo": "6ms/DeepSeek-V4-Flash-MXFP4-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "quantized",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "mxfp4",
+        "fp8",
+        "bf16",
+        "q8_0",
+        "source-dtype",
+        "apple-silicon",
+        "metal",
+        "conversational",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 314139140203
+    },
+    {
+      "downloads": 1906,
+      "error": null,
+      "file_count": 8,
+      "files": [
+        {
+          "blob": "dc0060195260d336eee0adb18e5f4f03356b6b7f",
+          "name": "deepseek-ai__DeepSeek-V4-Flash-bf16.gguf",
+          "size": 161799012416
+        },
+        {
+          "blob": "3372de252c0e43e6c85a04d55fb32aa0cb6fa50e",
+          "name": "deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf",
+          "size": 67505962560
+        },
+        {
+          "blob": "cd056237645f59a780c3d73ebb4f41040b3d412c",
+          "name": "deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS-00002-of-00003.gguf",
+          "size": 49979559168
+        },
+        {
+          "blob": "821472429d7097fc6403ee16df46b91612eff5f8",
+          "name": "deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS-00001-of-00003.gguf",
+          "size": 49837684288
+        },
+        {
+          "blob": "a4c41c46aa895e4c26ce957afebd503907c1b1ef",
+          "name": "deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-00001-of-00002.gguf",
+          "size": 49491736416
+        },
+        {
+          "blob": "76b1f3efe3862bbad5ca0e1e92d77f5d7e3adc44",
+          "name": "deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-00002-of-00002.gguf",
+          "size": 28416100256
+        },
+        {
+          "blob": "58c0ffc226c84af178d1a076966cce66215b660d",
+          "name": "deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS-00003-of-00003.gguf",
+          "size": 12017572832
+        },
+        {
+          "blob": "5ca6d0c60cfd174200e7bcc5d0c04c72d3ca1675",
+          "name": "README.md",
+          "size": 5442
+        }
+      ],
+      "lastModified": "2026-05-12T05:48:50.000Z",
+      "likes": 8,
+      "repo": "ssweens/DeepSeek-V4-Flash-GGUF-YMMV",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "llama.cpp",
+        "gguf",
+        "deepseek_v4",
+        "text-generation",
+        "conversational",
+        "en",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "ds4"
+      ],
+      "total_listed_file_bytes": 419047633378
+    },
+    {
+      "downloads": 600,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "c571f7b836bd5b311125de077033742daac68ead",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf",
+          "size": 302251447616
+        },
+        {
+          "blob": "b69c328ee8532f5e8a8becae85559ee06b19720d",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+          "size": 98810926400
+        },
+        {
+          "blob": "c59fd640a5b1a592363e115dce68ad0dc8c669b1",
+          "name": "README.md",
+          "size": 8715
+        }
+      ],
+      "lastModified": "2026-05-09T09:35:29.000Z",
+      "likes": 1,
+      "repo": "rbinrs/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "deepseek",
+        "llama.cpp",
+        "moe",
+        "research",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 401062382731
+    },
+    {
+      "downloads": 470,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "c571f7b836bd5b311125de077033742daac68ead",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf",
+          "size": 302251447616
+        },
+        {
+          "blob": "b69c328ee8532f5e8a8becae85559ee06b19720d",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+          "size": 98810926400
+        },
+        {
+          "blob": "c59fd640a5b1a592363e115dce68ad0dc8c669b1",
+          "name": "README.md",
+          "size": 8715
+        }
+      ],
+      "lastModified": "2026-05-09T09:31:23.000Z",
+      "likes": 1,
+      "repo": "CCSSNE/cyberneurova-CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "deepseek",
+        "llama.cpp",
+        "moe",
+        "research",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 401062382731
+    },
+    {
+      "downloads": 80,
+      "error": null,
+      "file_count": 12,
+      "files": [
+        {
+          "blob": "c2082722f742f330098fef7f7a1df312fa077cf9",
+          "name": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00004-of-00011.gguf",
+          "size": 18348279392
+        },
+        {
+          "blob": "55fea1b35eef4b2ee1ff25979e06b726e83d0a6c",
+          "name": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00005-of-00011.gguf",
+          "size": 18348279392
+        },
+        {
+          "blob": "ab220c8065dabc3ba2a53fafbd40b2e859044862",
+          "name": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00006-of-00011.gguf",
+          "size": 18348279392
+        },
+        {
+          "blob": "c8c5176fb8642df07c44241e6653fcd586c26080",
+          "name": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00007-of-00011.gguf",
+          "size": 18348279392
+        },
+        {
+          "blob": "6759460edb2a87edd660c58f51ccf35c5ae87927",
+          "name": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00008-of-00011.gguf",
+          "size": 18348279392
+        },
+        {
+          "blob": "ebb58a4ce81b653f627f62f4920e291ea751aba8",
+          "name": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00009-of-00011.gguf",
+          "size": 18348279392
+        },
+        {
+          "blob": "e81734a2e7458c834f8d16cbf8a670deccba4325",
+          "name": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00010-of-00011.gguf",
+          "size": 18348279392
+        },
+        {
+          "blob": "98c4387030a2deb964bf48fa56c149afb206a509",
+          "name": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00003-of-00011.gguf",
+          "size": 18348279328
+        },
+        {
+          "blob": "30f439f934c7769a00b7f408c3a42572fe6be61e",
+          "name": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00002-of-00011.gguf",
+          "size": 18348279264
+        },
+        {
+          "blob": "5e1266d8593dfc4ff6aa71d295f48f59ab818041",
+          "name": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00001-of-00011.gguf",
+          "size": 17977152768
+        },
+        {
+          "blob": "89ba2ddd7a1e6c8c4274f091bb5b9173895f3721",
+          "name": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00011-of-00011.gguf",
+          "size": 15255260256
+        },
+        {
+          "blob": "5bc90ef0bd4929990618076c68552859f8243e4a",
+          "name": "README.md",
+          "size": 4215
+        }
+      ],
+      "lastModified": "2026-05-07T18:52:23.000Z",
+      "likes": 2,
+      "repo": "setar007/DeepSeek-V4-Flash-Q8xQ5-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "moe",
+        "mixed-precision",
+        "q8xq5",
+        "q5_k",
+        "apple-silicon",
+        "en",
+        "zh",
+        "ru",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 198366931575
+    },
+    {
+      "downloads": 1561,
+      "error": null,
+      "file_count": 26,
+      "files": [
+        {
+          "blob": "359aa9f8aec999e543095f90030efadd96e950f4",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q6_K.gguf",
+          "size": 7359257120
+        },
+        {
+          "blob": "11a2d19c4116c067c9cdffd45ee4b42900ce9269",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q5_K_M.gguf",
+          "size": 6467967520
+        },
+        {
+          "blob": "a475c253a857881b6cb63555d904a0bcbd2eee3a",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q5_K_S.gguf",
+          "size": 6305307168
+        },
+        {
+          "blob": "f4bf633435015f533c44ba551804cadbf5323af7",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_1.gguf",
+          "size": 5809330720
+        },
+        {
+          "blob": "ec1c9849b647435fdc67d8b509de228a23c3db24",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_K_M.gguf",
+          "size": 5629106720
+        },
+        {
+          "blob": "9b457247c6a125bc3e00dbcfb3f2d9afca6a634e",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ4_NL.gguf",
+          "size": 5418211872
+        },
+        {
+          "blob": "0e1f2a5150037b6510976a9ae620d165f16c0110",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_K_S.gguf",
+          "size": 5351627296
+        },
+        {
+          "blob": "9afe5f490453c60fb59570cb4bda1d4f1c18bf00",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_0.gguf",
+          "size": 5325937184
+        },
+        {
+          "blob": "263f338659479f9d1496a043ac64b9beb8785b2d",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ4_XS.gguf",
+          "size": 5196438048
+        },
+        {
+          "blob": "c2d8795f2716a53f0f3eb626964125efa0ab3bd1",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_L.gguf",
+          "size": 4925512224
+        },
+        {
+          "blob": "85c0e89f5e313a0b47dfb7bcaad1815298f6009f",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_M.gguf",
+          "size": 4623522336
+        },
+        {
+          "blob": "a383fb83be3ccb61c02d12a2dc6c8a6faff6ac74",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_M.gguf",
+          "size": 4415380000
+        },
+        {
+          "blob": "2765b1217ddd5aaa2825ab85d920afe65b8e4368",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_S.gguf",
+          "size": 4370815520
+        },
+        {
+          "blob": "be03779e3c205bd3728f3fdc7b5635ce57e665f0",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_S.gguf",
+          "size": 4259404320
+        },
+        {
+          "blob": "d6cc45ade4e8fc159a8ec8b99a10967efd931041",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_XS.gguf",
+          "size": 4243413536
+        },
+        {
+          "blob": "90c4517a3b3ea51fb6aa90d5b36d08b33be0e402",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_XXS.gguf",
+          "size": 3938163232
+        },
+        {
+          "blob": "895be6477d813ee840d5197b15f98b9b6a3d3b25",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q2_K.gguf",
+          "size": 3827259936
+        },
+        {
+          "blob": "dc5b20e3b2030674e63a7aa4a24a12586b5a3354",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q2_K_S.gguf",
+          "size": 3697236512
+        },
+        {
+          "blob": "8e9d23ff4d75c271587c77fc7ebffe552051cd06",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_M.gguf",
+          "size": 3607468576
+        },
+        {
+          "blob": "0a0f9564c016da1709e9f63529a6932cfed8a187",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_S.gguf",
+          "size": 3427965472
+        },
+        {
+          "blob": "e9255970db369da9cf6a45781f346dd8f4809d70",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_XS.gguf",
+          "size": 3285342752
+        },
+        {
+          "blob": "0b9b349060f0fbf3319f29d4d9d4228b4823e7aa",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_XXS.gguf",
+          "size": 3101645344
+        },
+        {
+          "blob": "d6fb132b1455944a3385478ba1cdf57e8dafdda4",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ1_M.gguf",
+          "size": 2877266464
+        },
+        {
+          "blob": "3e870680cdd939329a8eff556569a728cbd715ee",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ1_S.gguf",
+          "size": 2742639136
+        },
+        {
+          "blob": "f82f5c43d235cf33c69142dc06b84bda61958d74",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.imatrix.gguf",
+          "size": 5150176
+        },
+        {
+          "blob": "ef026e034525cc429957c9a1b686a5ba7ca7a9a9",
+          "name": "README.md",
+          "size": 7029
+        }
+      ],
+      "lastModified": "2026-05-07T13:00:10.000Z",
+      "likes": 5,
+      "repo": "mradermacher/Qwen3.5-9B-DeepSeek-V4-Flash-i1-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "gguf",
+        "text-generation-inference",
+        "unsloth",
+        "qwen3_5",
+        "reasoning",
+        "distillation",
+        "deepseek",
+        "deepseek-v4",
+        "sft",
+        "long-cot",
+        "chain-of-thought",
+        "efficient-inference",
+        "agent",
+        "multilingual",
+        "en",
+        "zh",
+        "ko",
+        "ja",
+        "es",
+        "ru",
+        "dataset:Jackrong/DeepSeek-V4-Distill-8000x",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:apache-2.0",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 110211376213
+    },
+    {
+      "downloads": 2493,
+      "error": null,
+      "file_count": 15,
+      "files": [
+        {
+          "blob": "5312cd1ba92adabd413f41f6ebb6ee873a01d231",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.f16.gguf",
+          "size": 17920694528
+        },
+        {
+          "blob": "c3af69d87cb0256d9b858fdb6579a436a263d376",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.Q8_0.gguf",
+          "size": 9527499008
+        },
+        {
+          "blob": "b4287bdefba76f102808ef38ff51b77ebd7448b1",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.Q6_K.gguf",
+          "size": 7359256832
+        },
+        {
+          "blob": "8a0a6f30d266b470fea625508b8b9cb2b63a90be",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.Q5_K_M.gguf",
+          "size": 6467967232
+        },
+        {
+          "blob": "27877c430dec03659e883d3eb66ec37163725149",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.Q5_K_S.gguf",
+          "size": 6305306880
+        },
+        {
+          "blob": "90528e5f2ba02c928ddcf7835757f9cdb28a7846",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.Q4_K_M.gguf",
+          "size": 5629106432
+        },
+        {
+          "blob": "26ac6109b94ccf568425c183213cb781e037c9fd",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.Q4_K_S.gguf",
+          "size": 5351627008
+        },
+        {
+          "blob": "c39116ea609ea480cece8aefaa1b8929324bd665",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.IQ4_XS.gguf",
+          "size": 5227895040
+        },
+        {
+          "blob": "c7474e7942ceed35daee46445861a44df1d2cfee",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_L.gguf",
+          "size": 4925511936
+        },
+        {
+          "blob": "8f2899a6eba7d76ccf5600623860075059b16519",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_M.gguf",
+          "size": 4623522048
+        },
+        {
+          "blob": "58936e0b3769e9be24a6a8935d246a9ba31d1f45",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_S.gguf",
+          "size": 4259404032
+        },
+        {
+          "blob": "6215b1f95cd8d0ba393e59f904d83b806e02330f",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.Q2_K.gguf",
+          "size": 3827259648
+        },
+        {
+          "blob": "1f0c5559906af567b6096a2c7dcd947e2e6cbbe4",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.mmproj-f16.gguf",
+          "size": 918166560
+        },
+        {
+          "blob": "9c695cc6cacfea30aba9eeba6d359c6a6c1db9a2",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash.mmproj-Q8_0.gguf",
+          "size": 624230304
+        },
+        {
+          "blob": "36d23fcae2c412ec8ba83b7f7aca5a7adcbe5f85",
+          "name": "README.md",
+          "size": 4500
+        }
+      ],
+      "lastModified": "2026-05-07T12:56:20.000Z",
+      "likes": 10,
+      "repo": "mradermacher/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "gguf",
+        "text-generation-inference",
+        "unsloth",
+        "qwen3_5",
+        "reasoning",
+        "distillation",
+        "deepseek",
+        "deepseek-v4",
+        "sft",
+        "long-cot",
+        "chain-of-thought",
+        "efficient-inference",
+        "agent",
+        "multilingual",
+        "en",
+        "zh",
+        "ko",
+        "ja",
+        "es",
+        "ru",
+        "dataset:Jackrong/DeepSeek-V4-Distill-8000x",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:apache-2.0",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 82967451988
+    },
+    {
+      "downloads": 160,
+      "error": null,
+      "file_count": 2,
+      "files": [
+        {
+          "blob": "3f2b56247d1420aad456b698a4469def66bd09b9",
+          "name": "DeepSeek-V4-Flash-Q2_K.gguf",
+          "size": 152972316800
+        },
+        {
+          "blob": "5ef0e1b7fad9f761a9dc4a448c7e51dfeabf8e60",
+          "name": "README.md",
+          "size": 2807
+        }
+      ],
+      "lastModified": "2026-05-07T02:33:09.000Z",
+      "likes": 1,
+      "repo": "Volko76/DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "llama.cpp",
+        "gguf",
+        "deepseek_v4",
+        "text-generation",
+        "conversational",
+        "en",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash"
+      ],
+      "total_listed_file_bytes": 152972319607
+    },
+    {
+      "downloads": 350,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "aa1f19b88096783c90f67b4b0dec4bdda1eae532",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-D-IQ4_NL.gguf",
+          "size": 6138713344
+        },
+        {
+          "blob": "f712486e78fb21dbc3b87aa553f420e846d8cbcf",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": 5629105408
+        },
+        {
+          "blob": "ec0b1ff5924210c47e34d90dd74601ba056ea211",
+          "name": "README.md",
+          "size": 10888
+        }
+      ],
+      "lastModified": "2026-05-06T18:34:38.000Z",
+      "likes": 0,
+      "repo": "jorge-erdb/Qwen3.5-9B-DeepSeek-V4-Flash-4bit-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "gguf",
+        "text-generation-inference",
+        "unsloth",
+        "qwen3_5",
+        "reasoning",
+        "distillation",
+        "deepseek",
+        "deepseek-v4",
+        "sft",
+        "long-cot",
+        "chain-of-thought",
+        "efficient-inference",
+        "agent",
+        "multilingual",
+        "4bit",
+        "image-text-to-text",
+        "en",
+        "zh",
+        "ko",
+        "ja",
+        "es",
+        "ru",
+        "dataset:Jackrong/DeepSeek-V4-Distill-8000x",
+        "arxiv:2604.06628",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:apache-2.0",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 11767829640
+    },
+    {
+      "downloads": 23821,
+      "error": null,
+      "file_count": 3,
+      "files": [
+        {
+          "blob": "c571f7b836bd5b311125de077033742daac68ead",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf",
+          "size": 302251447616
+        },
+        {
+          "blob": "b69c328ee8532f5e8a8becae85559ee06b19720d",
+          "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+          "size": 98810926400
+        },
+        {
+          "blob": "c59fd640a5b1a592363e115dce68ad0dc8c669b1",
+          "name": "README.md",
+          "size": 8715
+        }
+      ],
+      "lastModified": "2026-05-06T16:14:55.000Z",
+      "likes": 55,
+      "repo": "cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "deepseek",
+        "llama.cpp",
+        "moe",
+        "research",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 401062382731
+    },
+    {
+      "downloads": 274,
+      "error": null,
+      "file_count": 66,
+      "files": [
+        {
+          "blob": "94aeb5d038538c2c4f7e4af00f645ecb27a0a868",
+          "name": "DeepSeek-V4-Flash-native.gguf",
+          "size": 156148189760
+        },
+        {
+          "blob": "135055550811701da337c11bdf70cac0aaa721dd",
+          "name": "model-00004-of-00046.safetensors",
+          "size": 3596229272
+        },
+        {
+          "blob": "a0f1c273995d97e4bb812abd10b22126b8450dca",
+          "name": "model-00046-of-00046.safetensors",
+          "size": 3593956092
+        },
+        {
+          "blob": "9892dd3b1f6b5bdfc8cfecc1e281b318ef1b03a9",
+          "name": "model-00012-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "0a122c47d2a14971474f607854067b1ec358b1a1",
+          "name": "model-00014-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "7c25f25c679c6a9590eb99783b0e04a4728e9650",
+          "name": "model-00016-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "3b34ac470e6eb74f611a0ca944f74b7c8edebf83",
+          "name": "model-00018-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "00f9d4f4b66fe67bad6bea089ea7a3a01f79711f",
+          "name": "model-00020-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "735644b481fd4a262297a09ba39a203913383f35",
+          "name": "model-00022-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "632316da5767df8c6fa146919ef8106a3ff05cfd",
+          "name": "model-00024-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "e64399aecb1bdf9dd153823550233624aaa67efb",
+          "name": "model-00026-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "b49b9892cd613f8ad7cc7b14298fa2b9dfb2fd97",
+          "name": "model-00028-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "d72fe3c0c49db8a24fb590a8298e78b2127bb607",
+          "name": "model-00030-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "4ffb3fc4ab6d9dd30a0714156f87005c595a6c77",
+          "name": "model-00032-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "f5cf0253df9972eba6688068f4e899520bd305e0",
+          "name": "model-00034-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "03cd995147b483e984d7e20e9b4d5bcafda89621",
+          "name": "model-00036-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "49cffc20e8902a196aff2418dc9efce6a4aac37d",
+          "name": "model-00038-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "a71855bfce6785ac61ff4c74ad0597e4cc31063f",
+          "name": "model-00040-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "ac90b2b2e38923a761d92a489ab029d7c95cdf29",
+          "name": "model-00042-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "4f3caadde662137880173ceab34ff8d711831f75",
+          "name": "model-00044-of-00046.safetensors",
+          "size": 3590026352
+        },
+        {
+          "blob": "428c41ab402ff8b4802b1e1a45faa85b374407bc",
+          "name": "model-00006-of-00046.safetensors",
+          "size": 3590024776
+        },
+        {
+          "blob": "7fb6f81d5ee9e87563ec98a480b78ed7da06c342",
+          "name": "model-00008-of-00046.safetensors",
+          "size": 3590024776
+        },
+        {
+          "blob": "0fe89edcadf5389beeeafa20f0d7f0211afc5d44",
+          "name": "model-00010-of-00046.safetensors",
+          "size": 3590024776
+        },
+        {
+          "blob": "6d27bc755f31fa90f33802d4ff7ad6bb7b875dd6",
+          "name": "model-00013-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "09098758d2710dfa034433c01d4030677f7d0add",
+          "name": "model-00015-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "74ff9e3b9c331e31d4037c73c51fc78a04029614",
+          "name": "model-00017-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "33e5f8632e2053f87c4d57fe54caab2c9d3fe9b1",
+          "name": "model-00019-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "cb46318fc257182629b57a53e74d3050b239b041",
+          "name": "model-00021-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "03530c04a93cec2e9bed36b760d431de82b1a307",
+          "name": "model-00023-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "b00541db9362b0bce72c53da237e83f204feeb72",
+          "name": "model-00025-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "e78ec7f9db81d100d51ea76e66900211407e9da7",
+          "name": "model-00027-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "1c42a5b1f757a79321f13a6427f1462d494ce0be",
+          "name": "model-00029-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "be6c49637ff7a672b1462643465d5edae539287e",
+          "name": "model-00031-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "956609517311870928f3c37b6bd38123a123b5df",
+          "name": "model-00033-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "4a1835ce95031cf60bd05cd767cece17df422203",
+          "name": "model-00035-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "8d6bae8ade5355c16c1346638c03bf1aff97dc4d",
+          "name": "model-00037-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "2d0b25fc316ee5f8a913322e3e41cded023b26bb",
+          "name": "model-00039-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "23106ad6ea416faabae6cc20b210add9814e4a04",
+          "name": "model-00041-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "b6529ba3e232e59dc7c2ad42636a281d9f00b9e6",
+          "name": "model-00043-of-00046.safetensors",
+          "size": 3568770544
+        },
+        {
+          "blob": "2764e161921fe02e98a8b2c3f65f898430e27aa3",
+          "name": "model-00005-of-00046.safetensors",
+          "size": 3568768976
+        },
+        {
+          "blob": "e2dcb719ae6871c68c4f2610819cf865da6e96e7",
+          "name": "model-00007-of-00046.safetensors",
+          "size": 3568768976
+        },
+        {
+          "blob": "e456885bf31de392d22c3161dfa866e1116b15e9",
+          "name": "model-00009-of-00046.safetensors",
+          "size": 3568768976
+        },
+        {
+          "blob": "1824e5f0aeaf507a98df83c292fc868d12393b50",
+          "name": "model-00011-of-00046.safetensors",
+          "size": 3568768976
+        },
+        {
+          "blob": "3d38853346a9d7b86f4906d76a8143b15a68933a",
+          "name": "model-00002-of-00046.safetensors",
+          "size": 3566321192
+        },
+        {
+          "blob": "7921afdf3a47d5d93075b2bbb8d0b9ac5e993609",
+          "name": "model-00003-of-00046.safetensors",
+          "size": 3566321192
+        },
+        {
+          "blob": "44037efb3407904b92136eaaba578d227d3d45d2",
+          "name": "model-00045-of-00046.safetensors",
+          "size": 1059332516
+        },
+        {
+          "blob": "0083e12687c1f6347c87378658fc068100330135",
+          "name": "model-00001-of-00046.safetensors",
+          "size": 1059061856
+        },
+        {
+          "blob": "628e3364caad11bdf9e67cea06eae7878122811d",
+          "name": "tokenizer.json",
+          "size": 6367146
+        },
+        {
+          "blob": "84692cbe7af556a01e2e5353341100079c387aee",
+          "name": "model.safetensors.index.json",
+          "size": 5371381
+        },
+        {
+          "blob": "87521b09505a221a44d8bfa824c848b00d9cfcf0",
+          "name": "README.md",
+          "size": 13193
+        },
+        {
+          "blob": "f9bf68d953bb81a1532b52c3663d390ac1409bc8",
+          "name": "encoding/README.md",
+          "size": 8118
+        },
+        {
+          "blob": "10034844edfc33b954ae530f35590132cdf4a342",
+          "name": "encoding/tests/test_input_3.json",
+          "size": 4546
+        },
+        {
+          "blob": "d423b221fa88153a826f7724cc938e0703858c21",
+          "name": "encoding/tests/test_input_1.json",
+          "size": 2748
+        },
+        {
+          "blob": "d5e0791dd6997a2007f3aa917919a680521bcd51",
+          "name": "encoding/tests/test_input_4.json",
+          "size": 2730
+        },
+        {
+          "blob": "0d53c3bc58bc308e6b810b8eb9e1f80891b762fa",
+          "name": "config.json",
+          "size": 1724
+        },
+        {
+          "blob": "9bf870e00800b838217a97bd3769b3b649011f5c",
+          "name": "inference/config_test_no_mtp.json",
+          "size": 1172
+        },
+        {
+          "blob": "707423f70a64640cec8b3e61c7bd74cb105ee26f",
+          "name": "inference/config_100k.json",
+          "size": 1153
+        },
+        {
+          "blob": "f5c95c2f133085eda4a6f639f7711263d0c9a4ee",
+          "name": "inference/config_4k_batch1.json",
+          "size": 1151
+        },
+        {
+          "blob": "29b5b07fac2944671131efaf4f289834737b92b4",
+          "name": "inference/config_4k_topk128.json",
+          "size": 1151
+        },
+        {
+          "blob": "2e80d52adbf7ad833394b0dda7d34195798cc49b",
+          "name": "inference/config_4k_topk256.json",
+          "size": 1151
+        },
+        {
+          "blob": "4c47650baf4aca6ae64262e20a933fb40bba3533",
+          "name": "inference/config_4k_topk64.json",
+          "size": 1150
+        },
+        {
+          "blob": "692cf97a8f714caf20cd30e5113212d83035e043",
+          "name": "inference/config.json",
+          "size": 991
+        },
+        {
+          "blob": "e11577229e5e5b6f82f687f7ed755096b3edd8d6",
+          "name": "inference/README.md",
+          "size": 951
+        },
+        {
+          "blob": "f3dad388a2bbfd6a8605bd02754acd86d9ca5112",
+          "name": "tokenizer_config.json",
+          "size": 801
+        },
+        {
+          "blob": "13b3454a902deecafe75644b41cd6b3e4a0e5354",
+          "name": "encoding/tests/test_input_2.json",
+          "size": 526
+        },
+        {
+          "blob": "c56a8c5bf06ff7740b6a33ee67b38b6237a230b1",
+          "name": "generation_config.json",
+          "size": 170
+        }
+      ],
+      "lastModified": "2026-05-04T10:58:59.000Z",
+      "likes": 0,
+      "repo": "asidaddy/Deepseek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "safetensors",
+        "gguf",
+        "deepseek_v4",
+        "text-generation",
+        "license:mit",
+        "endpoints_compatible",
+        "8-bit",
+        "fp8",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 315777120753
+    },
+    {
+      "downloads": 2175,
+      "error": null,
+      "file_count": 25,
+      "files": [
+        {
+          "blob": "af34958875a2237adb13faf546d0dbe03400bf47",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-00002-of-00004.gguf",
+          "size": 47995913440
+        },
+        {
+          "blob": "5687f7209aabfead4ca395e0c16d5dcc33c37d6d",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-00003-of-00004.gguf",
+          "size": 47968312416
+        },
+        {
+          "blob": "b937722fad96a1d0e6860fbf0855d6d2b0049c83",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00002-of-00005.gguf",
+          "size": 47955888704
+        },
+        {
+          "blob": "31e2451adbb4c632dd42e7d2aeb292e4a6b4abf8",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00001-of-00007.gguf",
+          "size": 47930281888
+        },
+        {
+          "blob": "c301049d861d54121449dcb65b479caeebd28cbe",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-00001-of-00004.gguf",
+          "size": 47924743904
+        },
+        {
+          "blob": "2416b5ea819fcb372d521a3bc6d21c2bfde6f6de",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00001-of-00005.gguf",
+          "size": 47922656864
+        },
+        {
+          "blob": "8a6a073da2ec0faa4ec5f6c9219cc5bf16a74aa9",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00003-of-00007.gguf",
+          "size": 47915730592
+        },
+        {
+          "blob": "c87e5638a3c0265b3cbb655423ce38157b805762",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00004-of-00007.gguf",
+          "size": 47915730592
+        },
+        {
+          "blob": "733e28ec77b81cb2198bfe7bd8bbfc35c69c353a",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00005-of-00007.gguf",
+          "size": 47915730592
+        },
+        {
+          "blob": "32fcbd9e62b451df237697265e38c00f400abe72",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00006-of-00007.gguf",
+          "size": 47915730592
+        },
+        {
+          "blob": "e47f31abdabde204c550973dce91be0e546d4dc2",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00002-of-00007.gguf",
+          "size": 47915730560
+        },
+        {
+          "blob": "b7abaadbef238914f3dfa6f8b5a297e8adbc2071",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q3_K_M-00002-of-00003.gguf",
+          "size": 47791841664
+        },
+        {
+          "blob": "f9e287d4e15a876db1d7d382c41b78e2fd84e231",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00001-of-00005.gguf",
+          "size": 47761499936
+        },
+        {
+          "blob": "a764ddd3361276353c056e406d3287a9f5d76bf2",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00003-of-00005.gguf",
+          "size": 47673772736
+        },
+        {
+          "blob": "3c24f1eb88786a821135036d14c74ca7f8034a98",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q3_K_M-00001-of-00003.gguf",
+          "size": 47091441152
+        },
+        {
+          "blob": "dbb2bcbb5614eade123e01c1bc1a3c961e207c72",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00004-of-00005.gguf",
+          "size": 47046379968
+        },
+        {
+          "blob": "d167367c958aa0f34cb8dda6caca03f2ab43808b",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00002-of-00005.gguf",
+          "size": 46899185184
+        },
+        {
+          "blob": "1b0961fe7c11c35143b5b69376c38b035d3bbac7",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00003-of-00005.gguf",
+          "size": 46897967840
+        },
+        {
+          "blob": "751386024d6833114ced3ffc5ef9914951fb74d1",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00004-of-00005.gguf",
+          "size": 46802674400
+        },
+        {
+          "blob": "1992a0b455c6764e54d4a487b88c63a5fe27d185",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00005-of-00005.gguf",
+          "size": 45039438656
+        },
+        {
+          "blob": "d1cdfd79ce5125b8d975cc72200ab999eff002d6",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q3_K_M-00003-of-00003.gguf",
+          "size": 40525861984
+        },
+        {
+          "blob": "3391feedf02e81e4fbf63fcbea25f0f4254db099",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-00004-of-00004.gguf",
+          "size": 28027680064
+        },
+        {
+          "blob": "cdefa832e856a9484ae1c4adcb75ce6015d89ec7",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00007-of-00007.gguf",
+          "size": 14742513792
+        },
+        {
+          "blob": "a93184e50fea47837111ee751099d0cfeca42b32",
+          "name": "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00005-of-00005.gguf",
+          "size": 11128431936
+        },
+        {
+          "blob": "15505483fb57d7a6d0ed0af3ea40cd42d5d624af",
+          "name": "README.md",
+          "size": 4900
+        }
+      ],
+      "lastModified": "2026-05-03T22:22:54.000Z",
+      "likes": 11,
+      "repo": "batiai/DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "bati.cpp",
+        "gguf",
+        "deepseek",
+        "quantized",
+        "batiai",
+        "284b",
+        "moe",
+        "frontier",
+        "early-access",
+        "text-generation",
+        "en",
+        "zh",
+        "ko",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "total_listed_file_bytes": 1044705144356
+    },
+    {
+      "downloads": 572,
+      "error": null,
+      "file_count": 14,
+      "files": [
+        {
+          "blob": "7108ad451299eb5e155631d1d043a3bb31f2e2d0",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-BF16.gguf",
+          "size": 17920693504
+        },
+        {
+          "blob": "f53051d9a8fe60afc30577c2899b67998b862060",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q8_0.gguf",
+          "size": 9527497984
+        },
+        {
+          "blob": "c9e07698fcb6afdaf09e77d2ec2e895fe4cf794f",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q6_K.gguf",
+          "size": 7359255808
+        },
+        {
+          "blob": "1366342b3afad0c9ceef0ddfd286874d56668043",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_M.gguf",
+          "size": 6467966208
+        },
+        {
+          "blob": "37639e2f39b01d74f7942bcac7c04aed6a0bf5dc",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_S.gguf",
+          "size": 6305305856
+        },
+        {
+          "blob": "f712486e78fb21dbc3b87aa553f420e846d8cbcf",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": 5629105408
+        },
+        {
+          "blob": "b3ee73a375acb358525e851c3788db12109bc99a",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_S.gguf",
+          "size": 5351625984
+        },
+        {
+          "blob": "6a1546628483f04eb9d9ae2bdefd6137f09a55a5",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-IQ4_XS.gguf",
+          "size": 5227894016
+        },
+        {
+          "blob": "d02446c6303f97e660889c2b8641a4b11b3c32ef",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_L.gguf",
+          "size": 4925510912
+        },
+        {
+          "blob": "733ad2f736a30d0e8a67f4bf3257e1cdacdfe673",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "size": 4623521024
+        },
+        {
+          "blob": "a87767884ed5cb569672fafcf348b42db2bf6a44",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_S.gguf",
+          "size": 4259403008
+        },
+        {
+          "blob": "6ccd20c73bc1a057208f806e7b901fe444f04487",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q2_K.gguf",
+          "size": 3827258624
+        },
+        {
+          "blob": "b0cf949b869b54858e259ff5392b3579c46a0330",
+          "name": "mmproj.gguf",
+          "size": 921705376
+        },
+        {
+          "blob": "5554f70a70d885842b60a2df715eac485ae31314",
+          "name": "README.md",
+          "size": 8771
+        }
+      ],
+      "lastModified": "2026-05-02T22:12:02.000Z",
+      "likes": 0,
+      "repo": "firedancer/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "transformers",
+        "gguf",
+        "text-generation-inference",
+        "unsloth",
+        "qwen3_5",
+        "reasoning",
+        "distillation",
+        "deepseek",
+        "deepseek-v4",
+        "sft",
+        "long-cot",
+        "chain-of-thought",
+        "efficient-inference",
+        "agent",
+        "multilingual",
+        "image-text-to-text",
+        "en",
+        "zh",
+        "ko",
+        "ja",
+        "es",
+        "ru",
+        "dataset:Jackrong/DeepSeek-V4-Distill-8000x",
+        "arxiv:2604.06628",
+        "base_model:unsloth/Qwen3.5-9B",
+        "base_model:quantized:unsloth/Qwen3.5-9B",
+        "license:apache-2.0",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 82346752483
+    },
+    {
+      "downloads": 4626,
+      "error": null,
+      "file_count": 4,
+      "files": [
+        {
+          "blob": "a87df8cebbbb4755adde5530af9044bdcfdf393b",
+          "name": "DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": 172037991008
+        },
+        {
+          "blob": "9239aee9c105577e9c9eff12a73e9844e24d68a3",
+          "name": "DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "size": 135535174240
+        },
+        {
+          "blob": "1aa9d3b3b667186e51e1c88fafc5cf42f9f6f008",
+          "name": "DeepSeek-V4-Flash-Q2_K.gguf",
+          "size": 103283751520
+        },
+        {
+          "blob": "41dd4479d42463be55e7b6eda049df285b642884",
+          "name": "README.md",
+          "size": 1182
+        }
+      ],
+      "lastModified": "2026-04-28T11:31:46.000Z",
+      "likes": 3,
+      "repo": "Preyazz/DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "moe",
+        "quantized",
+        "base_model:Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF",
+        "base_model:quantized:Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 410856917950
+    },
+    {
+      "downloads": 3953,
+      "error": null,
+      "file_count": 2,
+      "files": [
+        {
+          "blob": "d39b913d63b34e189e7886db554fdb460857daad",
+          "name": "DeepSeek-V4-Flash-Q8_0.gguf",
+          "size": 302355139168
+        },
+        {
+          "blob": "d124ee737189001713ba8170ca46018f3578b950",
+          "name": "README.md",
+          "size": 1615
+        }
+      ],
+      "lastModified": "2026-04-27T22:01:38.000Z",
+      "likes": 1,
+      "repo": "Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "moe",
+        "q8_0",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 302355140783
+    },
+    {
+      "downloads": 6891,
+      "error": null,
+      "file_count": 25,
+      "files": [
+        {
+          "blob": "b3f1529179a135e0c5b0195259fbc8452b209782",
+          "name": "DeepSeek-V4-Flash-MXFP4_MOE.gguf",
+          "size": 150225324672
+        },
+        {
+          "blob": "f079e097fe853fc741bfc797e42254ca1b8a0cf2",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00002-of-00023.gguf",
+          "size": 4479736224
+        },
+        {
+          "blob": "c5b26202d51fe39bb942740b3669013b66a32c84",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00006-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "69a524cc4987615516723c10c39676a8604b8d3e",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00007-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "dc3e17888fe9fe4b042efc1fd190c97aadd3b4e6",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00008-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "b82877a648430bb85fa8b00abbd1e8748044ce8f",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00009-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "b1c3c287f49f71e373d9c89456a9a70a49237cce",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00010-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "c91563dff072b43308a3ca8d215dc8989f991700",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00011-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "14d0b3a9d7dfb5ad4f09b041b87cd8508d5af658",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00012-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "4d22f162a47f4be76e578368a6d663e3416a76cb",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00013-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "157eda403009e423ec5f79ace90bbacf93a3ebb4",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00014-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "211b5a281fefd3b1c6b1edae32ef5a689fe94870",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00015-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "b892c9a5f2cf571a9c7ddd89a8558a2af9996d9c",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00016-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "5995029bb965268d98c310cb57d0206e4cc4b69f",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00017-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "99a116aeec8296b28a377c64ed1a92844db16756",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00018-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "e88ec336b73439e09d3d6d0e93bca1a6359529f4",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00019-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "119a3a70ed1dbb445d22e4b5cb0fa26a3b5895e1",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00020-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "b98dab49a85885ea40b0e9f0fe4321b61828ecaf",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00021-of-00023.gguf",
+          "size": 4473531808
+        },
+        {
+          "blob": "51b7ed9da3dbdbf1f00edcc2c3c725e800cec1e8",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00003-of-00023.gguf",
+          "size": 4473531744
+        },
+        {
+          "blob": "3fa43da437b1f0e338f9ad54ae0d51ec3541dcdf",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00004-of-00023.gguf",
+          "size": 4473531744
+        },
+        {
+          "blob": "5dbb1906b1d73fb7f3494c8daf1adb4cd1c55fa0",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00005-of-00023.gguf",
+          "size": 4473531744
+        },
+        {
+          "blob": "8d60ab615519d81763dbf01319693711c70f4fe0",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+          "size": 4422407072
+        },
+        {
+          "blob": "796d4623efd4ec95d664507fc2ac14f9b71782c2",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00022-of-00023.gguf",
+          "size": 4104744384
+        },
+        {
+          "blob": "03754f02a13da56991833a8187a11107c4af9ba1",
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00023-of-00023.gguf",
+          "size": 2447529952
+        },
+        {
+          "blob": "ec6bee7c568a386906a59a7150ef02953d522b13",
+          "name": "README.md",
+          "size": 329
+        }
+      ],
+      "lastModified": "2026-04-26T21:44:33.000Z",
+      "likes": 6,
+      "repo": "lovedheart/DeepSeek-V4-Flash-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 250676846793
+    },
+    {
+      "downloads": 11878,
+      "error": null,
+      "file_count": 2,
+      "files": [
+        {
+          "blob": "b0bd8334e48d75b7a42cf10f5f8b64001684e3c2",
+          "name": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+          "size": 156148189760
+        },
+        {
+          "blob": "74bba513ccc916bdc2feb697d20b62d02377c4ce",
+          "name": "README.md",
+          "size": 2432
+        }
+      ],
+      "lastModified": "2026-04-26T18:47:41.000Z",
+      "likes": 14,
+      "repo": "nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash GGUF",
+        "DeepSeek-V4-Flash-GGUF",
+        "deepseek-v4-flash gguf"
+      ],
+      "tags": [
+        "gguf",
+        "llama.cpp",
+        "deepseek",
+        "deepseek-v4",
+        "fp4",
+        "fp8",
+        "mxfp4",
+        "moe",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 156148192192
+    }
+  ],
+  "terms": [
+    "DeepSeek V4 Flash GGUF",
+    "DeepSeek-V4-Flash-GGUF",
+    "deepseek-v4-flash gguf",
+    "ds4 flash gguf",
+    "DeepSeek-V4-Flash 4Expert GGUF",
+    "DeepSeek V4 Flash REAP GGUF",
+    "DeepSeek V4 Flash IQ2 GGUF",
+    "DeepSeek V4 Flash Q2 GGUF",
+    "DeepSeek V4 Flash speculator",
+    "DeepSeek V4 Flash MTP GGUF",
+    "DeepSeek-V4-Flash dflash"
+  ]
+}

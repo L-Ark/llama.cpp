@@ -1,0 +1,532 @@
+{
+  "created_at_utc": "2026-07-05T22:07:00Z",
+  "files_deleted": false,
+  "full_model_downloaded": false,
+  "method": "Small metadata files only; no safetensors weights downloaded.",
+  "repos": [
+    {
+      "files": {
+        "README.md": {
+          "json": null,
+          "ok": true,
+          "text_prefix": "---\nlibrary_name: speculators\nbase_model:\n- deepseek-ai/DeepSeek-V4-Flash\ntags:\n- speculative-decoding\n- dflash\n- speculators\n---\n\n# RedHatAI/DeepSeek-V4-Flash-speculator.dflash\n\nThis is a DFlash speculator model for [deepseek-ai/DeepSeek-V4-Flash](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash).\n\nThe draft is a 5-layer **all-sliding-window** DFlash model (every layer uses sliding-window\nattention with a window of 2048) trained with the **Muon** optimizer. It consumes multi-stream\nhidden states from the base model (`hc_mult=4`) and predicts up to 7 speculative tokens.\n\n## Training Details\n\nThis model was trained using the [Speculators](https://github.com/vllm-project/speculators)\nlibrary on a subset of\n[Magpie-Align/Magpie-Llama-3.1-Pro-300K-Filtered](https://huggingface.co/datasets/Magpie-Align/Magpie-Llama-3.1-Pro-300K-Filtered)\nand the `train_sft` split of\n[HuggingFaceH4/ultrachat_200k](https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k)\n(~500K samples total). Hidden states were generated **online** by a live vLLM server serving\nDeepSeek-V4-Flash (data-parallel + expert-parallel), rather than pre-generated offline.\n\n<details>\n  <summary>Configuration</summary>\n\n  Using the [Speculators](https://github.com/vllm-project/speculators) library.\n\n  Key hyperparameters:\n\n  | | |\n  |---|---|\n  | Draft architecture | DFlash (llama-style transformer), 5 layers |\n  | Attention | all sliding-window, `sliding_window=2048` |\n  | Optimizer | Muon (`muon_lr=0.02`, `lr=6e-4`) |\n  | Aux hidden-state layer IDs | `3 13 23 32 42` |\n  | `hc_mult` | 4 (target hidden width `4 x 4096 = 16384`) |\n  | Draft vocab size | 32000 |\n  | Block size | 8 |\n  | Max anchors | 3072 |\n  | Sequence length | 8192 |\n  | Speculative tokens | 7 |\n\n</details>\n\n## Model Specifications\n\n| | |\n|---|---|\n| **Base Model** | deepseek-ai/DeepSeek-V4-Flash |\n| **Chat Template** | deepseek-ai/DeepSeek-V4-Flash (use `/chat/completions` endpoint) |\n| **Draft Layers** | 5 (all sliding-window, window 204"
+        },
+        "config.json": {
+          "json": {
+            "architectures": [
+              "DFlashDraftModel"
+            ],
+            "auto_map": {
+              "": "config.DFlashSpeculatorConfig"
+            },
+            "aux_hidden_state_layer_ids": [
+              3,
+              13,
+              23,
+              32,
+              42
+            ],
+            "block_size": 8,
+            "draft_vocab_size": 32000,
+            "dtype": "bfloat16",
+            "mask_token_id": 1,
+            "max_anchors": 3072,
+            "sliding_window_non_causal": false,
+            "speculators_config": {
+              "algorithm": "dflash",
+              "default_proposal_method": "greedy",
+              "proposal_methods": [
+                {
+                  "accept_tolerance": 0.0,
+                  "proposal_type": "greedy",
+                  "speculative_tokens": 7,
+                  "verifier_accept_k": 1
+                }
+              ],
+              "verifier": {
+                "architectures": [],
+                "name_or_path": "deepseek-ai/DeepSeek-V4-Flash"
+              }
+            },
+            "speculators_model_type": "dflash",
+            "speculators_version": "0.5.0.dev163",
+            "target_hidden_size": null,
+            "tie_word_embeddings": false,
+            "transformer_layer_config": {
+              "attention_bias": false,
+              "attention_dropout": 0.0,
+              "bos_token_id": 1,
+              "eos_token_id": 2,
+              "hc_mult": 4,
+              "head_dim": 256,
+              "hidden_act": "silu",
+              "hidden_size": 4096,
+              "initializer_range": 0.02,
+              "intermediate_size": 2048,
+              "layer_types": [
+                "sliding_attention",
+                "sliding_attention",
+                "sliding_attention",
+                "sliding_attention",
+                "sliding_attention"
+              ],
+              "max_position_embeddings": 1048576,
+              "mlp_bias": false,
+              "model_type": "llama",
+              "num_attention_heads": 64,
+              "num_hidden_layers": 5,
+              "num_key_value_heads": 1,
+              "pad_token_id": null,
+              "pretraining_tp": 1,
+              "rms_norm_eps": 1e-06,
+              "rope_parameters": {
+                "rope_theta": 10000,
+                "rope_type": "default"
+              },
+              "sliding_window": 2048,
+              "tie_word_embeddings": false,
+              "use_cache": true,
+              "vocab_size": 129280
+            },
+            "transformers_version": "5.10.2"
+          },
+          "ok": true,
+          "text_prefix": "{\n  \"architectures\": [\n    \"DFlashDraftModel\"\n  ],\n  \"auto_map\": {\n    \"\": \"config.DFlashSpeculatorConfig\"\n  },\n  \"aux_hidden_state_layer_ids\": [\n    3,\n    13,\n    23,\n    32,\n    42\n  ],\n  \"block_size\": 8,\n  \"draft_vocab_size\": 32000,\n  \"dtype\": \"bfloat16\",\n  \"mask_token_id\": 1,\n  \"max_anchors\": 3072,\n  \"sliding_window_non_causal\": false,\n  \"speculators_config\": {\n    \"algorithm\": \"dflash\",\n    \"default_proposal_method\": \"greedy\",\n    \"proposal_methods\": [\n      {\n        \"accept_tolerance\": 0.0,\n        \"proposal_type\": \"greedy\",\n        \"speculative_tokens\": 7,\n        \"verifier_accept_k\": 1\n      }\n    ],\n    \"verifier\": {\n      \"architectures\": [],\n      \"name_or_path\": \"deepseek-ai/DeepSeek-V4-Flash\"\n    }\n  },\n  \"speculators_model_type\": \"dflash\",\n  \"speculators_version\": \"0.5.0.dev163\",\n  \"target_hidden_size\": null,\n  \"tie_word_embeddings\": false,\n  \"transformer_layer_config\": {\n    \"attention_bias\": false,\n    \"attention_dropout\": 0.0,\n    \"bos_token_id\": 1,\n    \"eos_token_id\": 2,\n    \"hc_mult\": 4,\n    \"head_dim\": 256,\n    \"hidden_act\": \"silu\",\n    \"hidden_size\": 4096,\n    \"initializer_range\": 0.02,\n    \"intermediate_size\": 2048,\n    \"layer_types\": [\n      \"sliding_attention\",\n      \"sliding_attention\",\n      \"sliding_attention\",\n      \"sliding_attention\",\n      \"sliding_attention\"\n    ],\n    \"max_position_embeddings\": 1048576,\n    \"mlp_bias\": false,\n    \"model_type\": \"llama\",\n    \"num_attention_heads\": 64,\n    \"num_hidden_layers\": 5,\n    \"num_key_value_heads\": 1,\n    \"pad_token_id\": null,\n    \"pretraining_tp\": 1,\n    \"rms_norm_eps\": 1e-06,\n    \"rope_parameters\": {\n      \"rope_theta\": 10000,\n      \"rope_type\": \"default\"\n    },\n    \"sliding_window\": 2048,\n    \"tie_word_embeddings\": false,\n    \"use_cache\": true,\n    \"vocab_size\": 129280\n  },\n  \"transformers_version\": \"5.10.2\"\n}"
+        },
+        "val_metrics.json": {
+          "json": {
+            "full_acc_epoch": 0.41588552218285346,
+            "loss_epoch": 1.0930506713554988,
+            "position_1_acc_epoch": 0.7878868554365931,
+            "position_2_acc_epoch": 0.5875753957980987,
+            "position_3_acc_epoch": 0.4541761259979246,
+            "position_4_acc_epoch": 0.35903399619091536,
+            "position_5_acc_epoch": 0.28966203790287387,
+            "position_6_acc_epoch": 0.23638368573594648,
+            "position_7_acc_epoch": 0.19339194045398048
+          },
+          "ok": true,
+          "text_prefix": "{\"loss_epoch\": 1.0930506713554988, \"full_acc_epoch\": 0.41588552218285346, \"position_1_acc_epoch\": 0.7878868554365931, \"position_2_acc_epoch\": 0.5875753957980987, \"position_3_acc_epoch\": 0.4541761259979246, \"position_4_acc_epoch\": 0.35903399619091536, \"position_5_acc_epoch\": 0.28966203790287387, \"position_6_acc_epoch\": 0.23638368573594648, \"position_7_acc_epoch\": 0.19339194045398048}"
+        }
+      },
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash"
+    },
+    {
+      "files": {
+        "README.md": {
+          "json": null,
+          "ok": true,
+          "text_prefix": "---\nlibrary_name: speculators\ntags:\n- speculative-decoding\n- dflash\n- deepseek-v4-flash\n- draft-model\nbase_model: deepseek-ai/DeepSeek-V4-Flash\n---\n\n# DFlash Speculator for DeepSeek-V4-Flash (all-SWA, Muon, 50k)\n\nA [DFlash](https://github.com/neuralmagic/speculators) draft (speculator) model trained\nfor speculative decoding with **DeepSeek-V4-Flash** as the verifier.\n\nThis is the **best checkpoint** selected by validation loss from a 50k-sample training run.\n\n## Key characteristics\n\n- **Algorithm:** DFlash\n- **Verifier / target:** `deepseek-ai/DeepSeek-V4-Flash`\n- **Attention:** Sliding-window attention (SWA) on **all** draft layers (`sliding_window=2048`)\n- **Optimizer:** Muon\n- **Training data:** 50k samples\n- **Draft layers:** 5 (`hidden_size=4096`, `head_dim=256`, `hc_mult=4`)\n- **Speculative tokens:** 7 (block_size 8)\n- **Aux hidden-state layers:** `[3, 13, 23, 32, 42]`\n- **dtype:** bfloat16\n\n## Validation metrics (best checkpoint)\n\n| Metric | Value |\n|---|---|\n| Loss | 1.2559 |\n| Full-sequence acceptance | 0.3452 |\n| Position 1 acc | 0.7402 |\n| Position 2 acc | 0.5120 |\n| Position 3 acc | 0.3689 |\n| Position 4 acc | 0.2746 |\n| Position 5 acc | 0.2121 |\n| Position 6 acc | 0.1691 |\n| Position 7 acc | 0.1373 |\n\n## Files\n\n- `config.json` / `config.py` \u2014 speculator config and model definition\n- `model.safetensors` \u2014 draft model weights\n- `val_metrics.json` \u2014 validation metrics for this checkpoint\n"
+        },
+        "config.json": {
+          "json": {
+            "architectures": [
+              "DFlashDraftModel"
+            ],
+            "auto_map": {
+              "": "config.DFlashSpeculatorConfig"
+            },
+            "aux_hidden_state_layer_ids": [
+              3,
+              13,
+              23,
+              32,
+              42
+            ],
+            "block_size": 8,
+            "draft_vocab_size": 32000,
+            "dtype": "bfloat16",
+            "mask_token_id": 1,
+            "max_anchors": 3072,
+            "sliding_window_non_causal": false,
+            "speculators_config": {
+              "algorithm": "dflash",
+              "default_proposal_method": "greedy",
+              "proposal_methods": [
+                {
+                  "accept_tolerance": 0.0,
+                  "proposal_type": "greedy",
+                  "speculative_tokens": 7,
+                  "verifier_accept_k": 1
+                }
+              ],
+              "verifier": {
+                "architectures": [],
+                "name_or_path": "deepseek-ai/DeepSeek-V4-Flash"
+              }
+            },
+            "speculators_model_type": "dflash",
+            "speculators_version": "0.5.0.dev163",
+            "target_hidden_size": null,
+            "tie_word_embeddings": false,
+            "transformer_layer_config": {
+              "attention_bias": false,
+              "attention_dropout": 0.0,
+              "bos_token_id": 1,
+              "eos_token_id": 2,
+              "hc_mult": 4,
+              "head_dim": 256,
+              "hidden_act": "silu",
+              "hidden_size": 4096,
+              "initializer_range": 0.02,
+              "intermediate_size": 2048,
+              "layer_types": [
+                "sliding_attention",
+                "sliding_attention",
+                "sliding_attention",
+                "sliding_attention",
+                "sliding_attention"
+              ],
+              "max_position_embeddings": 1048576,
+              "mlp_bias": false,
+              "model_type": "llama",
+              "num_attention_heads": 64,
+              "num_hidden_layers": 5,
+              "num_key_value_heads": 1,
+              "pad_token_id": null,
+              "pretraining_tp": 1,
+              "rms_norm_eps": 1e-06,
+              "rope_parameters": {
+                "rope_theta": 10000,
+                "rope_type": "default"
+              },
+              "sliding_window": 2048,
+              "tie_word_embeddings": false,
+              "use_cache": true,
+              "vocab_size": 129280
+            },
+            "transformers_version": "5.10.2"
+          },
+          "ok": true,
+          "text_prefix": "{\n  \"architectures\": [\n    \"DFlashDraftModel\"\n  ],\n  \"auto_map\": {\n    \"\": \"config.DFlashSpeculatorConfig\"\n  },\n  \"aux_hidden_state_layer_ids\": [\n    3,\n    13,\n    23,\n    32,\n    42\n  ],\n  \"block_size\": 8,\n  \"draft_vocab_size\": 32000,\n  \"dtype\": \"bfloat16\",\n  \"mask_token_id\": 1,\n  \"max_anchors\": 3072,\n  \"sliding_window_non_causal\": false,\n  \"speculators_config\": {\n    \"algorithm\": \"dflash\",\n    \"default_proposal_method\": \"greedy\",\n    \"proposal_methods\": [\n      {\n        \"accept_tolerance\": 0.0,\n        \"proposal_type\": \"greedy\",\n        \"speculative_tokens\": 7,\n        \"verifier_accept_k\": 1\n      }\n    ],\n    \"verifier\": {\n      \"architectures\": [],\n      \"name_or_path\": \"deepseek-ai/DeepSeek-V4-Flash\"\n    }\n  },\n  \"speculators_model_type\": \"dflash\",\n  \"speculators_version\": \"0.5.0.dev163\",\n  \"target_hidden_size\": null,\n  \"tie_word_embeddings\": false,\n  \"transformer_layer_config\": {\n    \"attention_bias\": false,\n    \"attention_dropout\": 0.0,\n    \"bos_token_id\": 1,\n    \"eos_token_id\": 2,\n    \"hc_mult\": 4,\n    \"head_dim\": 256,\n    \"hidden_act\": \"silu\",\n    \"hidden_size\": 4096,\n    \"initializer_range\": 0.02,\n    \"intermediate_size\": 2048,\n    \"layer_types\": [\n      \"sliding_attention\",\n      \"sliding_attention\",\n      \"sliding_attention\",\n      \"sliding_attention\",\n      \"sliding_attention\"\n    ],\n    \"max_position_embeddings\": 1048576,\n    \"mlp_bias\": false,\n    \"model_type\": \"llama\",\n    \"num_attention_heads\": 64,\n    \"num_hidden_layers\": 5,\n    \"num_key_value_heads\": 1,\n    \"pad_token_id\": null,\n    \"pretraining_tp\": 1,\n    \"rms_norm_eps\": 1e-06,\n    \"rope_parameters\": {\n      \"rope_theta\": 10000,\n      \"rope_type\": \"default\"\n    },\n    \"sliding_window\": 2048,\n    \"tie_word_embeddings\": false,\n    \"use_cache\": true,\n    \"vocab_size\": 129280\n  },\n  \"transformers_version\": \"5.10.2\"\n}\n"
+        },
+        "val_metrics.json": {
+          "json": {
+            "full_acc_epoch": 0.34524488632366185,
+            "loss_epoch": 1.255922379032258,
+            "position_1_acc_epoch": 0.7402216216821698,
+            "position_2_acc_epoch": 0.5120305788364243,
+            "position_3_acc_epoch": 0.3688530732868651,
+            "position_4_acc_epoch": 0.27457541005825,
+            "position_5_acc_epoch": 0.21206550450555678,
+            "position_6_acc_epoch": 0.16907155031120671,
+            "position_7_acc_epoch": 0.13732369410884726
+          },
+          "ok": true,
+          "text_prefix": "{\"loss_epoch\": 1.255922379032258, \"full_acc_epoch\": 0.34524488632366185, \"position_1_acc_epoch\": 0.7402216216821698, \"position_2_acc_epoch\": 0.5120305788364243, \"position_3_acc_epoch\": 0.3688530732868651, \"position_4_acc_epoch\": 0.27457541005825, \"position_5_acc_epoch\": 0.21206550450555678, \"position_6_acc_epoch\": 0.16907155031120671, \"position_7_acc_epoch\": 0.13732369410884726}"
+        }
+      },
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k"
+    },
+    {
+      "files": {
+        "README.md": {
+          "error": "<HTTPError 404: 'Not Found'>",
+          "ok": false
+        },
+        "config.json": {
+          "json": {
+            "architectures": [
+              "DFlashDraftModel"
+            ],
+            "auto_map": {
+              "": "config.DFlashSpeculatorConfig"
+            },
+            "aux_hidden_state_layer_ids": [
+              3,
+              13,
+              23,
+              32,
+              42
+            ],
+            "block_size": 8,
+            "draft_vocab_size": 32000,
+            "dtype": "bfloat16",
+            "mask_token_id": 1,
+            "max_anchors": 3072,
+            "sliding_window_non_causal": false,
+            "speculators_config": {
+              "algorithm": "dflash",
+              "default_proposal_method": "greedy",
+              "proposal_methods": [
+                {
+                  "accept_tolerance": 0.0,
+                  "proposal_type": "greedy",
+                  "speculative_tokens": 7,
+                  "verifier_accept_k": 1
+                }
+              ],
+              "verifier": {
+                "architectures": [],
+                "name_or_path": "deepseek-ai/DeepSeek-V4-Flash"
+              }
+            },
+            "speculators_model_type": "dflash",
+            "speculators_version": "0.5.0.dev163",
+            "target_hidden_size": null,
+            "tie_word_embeddings": false,
+            "transformer_layer_config": {
+              "attention_bias": false,
+              "attention_dropout": 0.0,
+              "bos_token_id": 1,
+              "eos_token_id": 2,
+              "hc_mult": 4,
+              "head_dim": 256,
+              "hidden_act": "silu",
+              "hidden_size": 4096,
+              "initializer_range": 0.02,
+              "intermediate_size": 2048,
+              "layer_types": [
+                "sliding_attention",
+                "sliding_attention",
+                "sliding_attention",
+                "sliding_attention",
+                "sliding_attention"
+              ],
+              "max_position_embeddings": 1048576,
+              "mlp_bias": false,
+              "model_type": "llama",
+              "num_attention_heads": 64,
+              "num_hidden_layers": 5,
+              "num_key_value_heads": 1,
+              "pad_token_id": null,
+              "pretraining_tp": 1,
+              "rms_norm_eps": 1e-06,
+              "rope_parameters": {
+                "partial_rotary_factor": 0.125,
+                "rope_theta": 10000,
+                "rope_type": "default"
+              },
+              "sliding_window": 2048,
+              "tie_word_embeddings": false,
+              "use_cache": true,
+              "vocab_size": 129280
+            },
+            "transformers_version": "5.10.2"
+          },
+          "ok": true,
+          "text_prefix": "{\n  \"architectures\": [\n    \"DFlashDraftModel\"\n  ],\n  \"auto_map\": {\n    \"\": \"config.DFlashSpeculatorConfig\"\n  },\n  \"aux_hidden_state_layer_ids\": [\n    3,\n    13,\n    23,\n    32,\n    42\n  ],\n  \"block_size\": 8,\n  \"draft_vocab_size\": 32000,\n  \"dtype\": \"bfloat16\",\n  \"mask_token_id\": 1,\n  \"max_anchors\": 3072,\n  \"sliding_window_non_causal\": false,\n  \"speculators_config\": {\n    \"algorithm\": \"dflash\",\n    \"default_proposal_method\": \"greedy\",\n    \"proposal_methods\": [\n      {\n        \"accept_tolerance\": 0.0,\n        \"proposal_type\": \"greedy\",\n        \"speculative_tokens\": 7,\n        \"verifier_accept_k\": 1\n      }\n    ],\n    \"verifier\": {\n      \"architectures\": [],\n      \"name_or_path\": \"deepseek-ai/DeepSeek-V4-Flash\"\n    }\n  },\n  \"speculators_model_type\": \"dflash\",\n  \"speculators_version\": \"0.5.0.dev163\",\n  \"target_hidden_size\": null,\n  \"tie_word_embeddings\": false,\n  \"transformer_layer_config\": {\n    \"attention_bias\": false,\n    \"attention_dropout\": 0.0,\n    \"bos_token_id\": 1,\n    \"eos_token_id\": 2,\n    \"hc_mult\": 4,\n    \"head_dim\": 256,\n    \"hidden_act\": \"silu\",\n    \"hidden_size\": 4096,\n    \"initializer_range\": 0.02,\n    \"intermediate_size\": 2048,\n    \"layer_types\": [\n      \"sliding_attention\",\n      \"sliding_attention\",\n      \"sliding_attention\",\n      \"sliding_attention\",\n      \"sliding_attention\"\n    ],\n    \"max_position_embeddings\": 1048576,\n    \"mlp_bias\": false,\n    \"model_type\": \"llama\",\n    \"num_attention_heads\": 64,\n    \"num_hidden_layers\": 5,\n    \"num_key_value_heads\": 1,\n    \"pad_token_id\": null,\n    \"pretraining_tp\": 1,\n    \"rms_norm_eps\": 1e-06,\n    \"rope_parameters\": {\n      \"partial_rotary_factor\": 0.125,\n      \"rope_theta\": 10000,\n      \"rope_type\": \"default\"\n    },\n    \"sliding_window\": 2048,\n    \"tie_word_embeddings\": false,\n    \"use_cache\": true,\n    \"vocab_size\": 129280\n  },\n  \"transformers_version\": \"5.10.2\"\n}\n"
+        },
+        "val_metrics.json": {
+          "json": {
+            "full_acc_epoch": 0.41588552218285346,
+            "loss_epoch": 1.0930506713554988,
+            "position_1_acc_epoch": 0.7878868554365931,
+            "position_2_acc_epoch": 0.5875753957980987,
+            "position_3_acc_epoch": 0.4541761259979246,
+            "position_4_acc_epoch": 0.35903399619091536,
+            "position_5_acc_epoch": 0.28966203790287387,
+            "position_6_acc_epoch": 0.23638368573594648,
+            "position_7_acc_epoch": 0.19339194045398048
+          },
+          "ok": true,
+          "text_prefix": "{\"loss_epoch\": 1.0930506713554988, \"full_acc_epoch\": 0.41588552218285346, \"position_1_acc_epoch\": 0.7878868554365931, \"position_2_acc_epoch\": 0.5875753957980987, \"position_3_acc_epoch\": 0.4541761259979246, \"position_4_acc_epoch\": 0.35903399619091536, \"position_5_acc_epoch\": 0.28966203790287387, \"position_6_acc_epoch\": 0.23638368573594648, \"position_7_acc_epoch\": 0.19339194045398048}"
+        }
+      },
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k"
+    },
+    {
+      "files": {
+        "README.md": {
+          "error": "<HTTPError 404: 'Not Found'>",
+          "ok": false
+        },
+        "config.json": {
+          "json": {
+            "architectures": [
+              "DFlashDraftModel"
+            ],
+            "auto_map": {
+              "": "config.DFlashSpeculatorConfig"
+            },
+            "aux_hidden_state_layer_ids": [
+              3,
+              13,
+              23,
+              32,
+              42
+            ],
+            "block_size": 8,
+            "draft_vocab_size": 32000,
+            "dtype": "bfloat16",
+            "mask_token_id": 1,
+            "max_anchors": 3072,
+            "speculators_config": {
+              "algorithm": "dflash",
+              "default_proposal_method": "greedy",
+              "proposal_methods": [
+                {
+                  "accept_tolerance": 0.0,
+                  "proposal_type": "greedy",
+                  "speculative_tokens": 7,
+                  "verifier_accept_k": 1
+                }
+              ],
+              "verifier": {
+                "architectures": [],
+                "name_or_path": "deepseek-ai/DeepSeek-V4-Flash"
+              }
+            },
+            "speculators_model_type": "dflash",
+            "speculators_version": "0.5.0.dev115",
+            "target_hidden_size": 16384,
+            "tie_word_embeddings": false,
+            "transformer_layer_config": {
+              "attention_bias": false,
+              "attention_dropout": 0.0,
+              "bos_token_id": 1,
+              "eos_token_id": 2,
+              "hc_mult": 4,
+              "head_dim": 256,
+              "hidden_act": "silu",
+              "hidden_size": 4096,
+              "initializer_range": 0.02,
+              "intermediate_size": 2048,
+              "max_position_embeddings": 1048576,
+              "mlp_bias": false,
+              "model_type": "llama",
+              "num_attention_heads": 64,
+              "num_hidden_layers": 5,
+              "num_key_value_heads": 1,
+              "pad_token_id": null,
+              "pretraining_tp": 1,
+              "rms_norm_eps": 1e-06,
+              "rope_parameters": {
+                "rope_theta": 10000.0,
+                "rope_type": "default"
+              },
+              "tie_word_embeddings": false,
+              "use_cache": true,
+              "vocab_size": 129280
+            },
+            "transformers_version": "5.8.0"
+          },
+          "ok": true,
+          "text_prefix": "{\n  \"architectures\": [\n    \"DFlashDraftModel\"\n  ],\n  \"auto_map\": {\n    \"\": \"config.DFlashSpeculatorConfig\"\n  },\n  \"aux_hidden_state_layer_ids\": [\n    3,\n    13,\n    23,\n    32,\n    42\n  ],\n  \"block_size\": 8,\n  \"draft_vocab_size\": 32000,\n  \"dtype\": \"bfloat16\",\n  \"mask_token_id\": 1,\n  \"max_anchors\": 3072,\n  \"speculators_config\": {\n    \"algorithm\": \"dflash\",\n    \"default_proposal_method\": \"greedy\",\n    \"proposal_methods\": [\n      {\n        \"accept_tolerance\": 0.0,\n        \"proposal_type\": \"greedy\",\n        \"speculative_tokens\": 7,\n        \"verifier_accept_k\": 1\n      }\n    ],\n    \"verifier\": {\n      \"architectures\": [],\n      \"name_or_path\": \"deepseek-ai/DeepSeek-V4-Flash\"\n    }\n  },\n  \"speculators_model_type\": \"dflash\",\n  \"speculators_version\": \"0.5.0.dev115\",\n  \"target_hidden_size\": 16384,\n  \"tie_word_embeddings\": false,\n  \"transformer_layer_config\": {\n    \"attention_bias\": false,\n    \"attention_dropout\": 0.0,\n    \"bos_token_id\": 1,\n    \"eos_token_id\": 2,\n    \"hc_mult\": 4,\n    \"head_dim\": 256,\n    \"hidden_act\": \"silu\",\n    \"hidden_size\": 4096,\n    \"initializer_range\": 0.02,\n    \"intermediate_size\": 2048,\n    \"max_position_embeddings\": 1048576,\n    \"mlp_bias\": false,\n    \"model_type\": \"llama\",\n    \"num_attention_heads\": 64,\n    \"num_hidden_layers\": 5,\n    \"num_key_value_heads\": 1,\n    \"pad_token_id\": null,\n    \"pretraining_tp\": 1,\n    \"rms_norm_eps\": 1e-06,\n    \"rope_parameters\": {\n      \"rope_theta\": 10000.0,\n      \"rope_type\": \"default\"\n    },\n    \"tie_word_embeddings\": false,\n    \"use_cache\": true,\n    \"vocab_size\": 129280\n  },\n  \"transformers_version\": \"5.8.0\"\n}"
+        },
+        "val_metrics.json": {
+          "json": {
+            "full_acc_epoch": 0.2619039549111808,
+            "loss_epoch": 1.8514364919354838,
+            "position_1_acc_epoch": 0.6441248222065631,
+            "position_2_acc_epoch": 0.4037021829431497,
+            "position_3_acc_epoch": 0.2621508523645705,
+            "position_4_acc_epoch": 0.18186784882497625,
+            "position_5_acc_epoch": 0.1359353530541281,
+            "position_6_acc_epoch": 0.11023094297048387,
+            "position_7_acc_epoch": 0.0930486054060662
+          },
+          "ok": true,
+          "text_prefix": "{\"loss_epoch\": 1.8514364919354838, \"full_acc_epoch\": 0.2619039549111808, \"position_1_acc_epoch\": 0.6441248222065631, \"position_2_acc_epoch\": 0.4037021829431497, \"position_3_acc_epoch\": 0.2621508523645705, \"position_4_acc_epoch\": 0.18186784882497625, \"position_5_acc_epoch\": 0.1359353530541281, \"position_6_acc_epoch\": 0.11023094297048387, \"position_7_acc_epoch\": 0.0930486054060662}"
+        }
+      },
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k"
+    },
+    {
+      "files": {
+        "README.md": {
+          "error": "<HTTPError 404: 'Not Found'>",
+          "ok": false
+        },
+        "config.json": {
+          "json": {
+            "architectures": [
+              "DFlashDraftModel"
+            ],
+            "auto_map": {
+              "": "config.DFlashSpeculatorConfig"
+            },
+            "aux_hidden_state_layer_ids": [
+              3,
+              13,
+              23,
+              32,
+              42
+            ],
+            "block_size": 8,
+            "draft_vocab_size": 32000,
+            "dtype": "bfloat16",
+            "mask_token_id": 1,
+            "max_anchors": 3072,
+            "sliding_window_non_causal": false,
+            "speculators_config": {
+              "algorithm": "dflash",
+              "default_proposal_method": "greedy",
+              "proposal_methods": [
+                {
+                  "accept_tolerance": 0.0,
+                  "proposal_type": "greedy",
+                  "speculative_tokens": 7,
+                  "verifier_accept_k": 1
+                }
+              ],
+              "verifier": {
+                "architectures": [],
+                "name_or_path": "deepseek-ai/DeepSeek-V4-Flash"
+              }
+            },
+            "speculators_model_type": "dflash",
+            "speculators_version": "0.5.0.dev163",
+            "target_hidden_size": 16384,
+            "tie_word_embeddings": false,
+            "transformer_layer_config": {
+              "attention_bias": false,
+              "attention_dropout": 0.0,
+              "bos_token_id": 1,
+              "eos_token_id": 2,
+              "hc_mult": 4,
+              "head_dim": 256,
+              "hidden_act": "silu",
+              "hidden_size": 4096,
+              "initializer_range": 0.02,
+              "intermediate_size": 2048,
+              "layer_types": [
+                "sliding_attention",
+                "full_attention",
+                "sliding_attention",
+                "full_attention",
+                "sliding_attention"
+              ],
+              "max_position_embeddings": 1048576,
+              "mlp_bias": false,
+              "model_type": "llama",
+              "num_attention_heads": 64,
+              "num_hidden_layers": 5,
+              "num_key_value_heads": 1,
+              "pad_token_id": null,
+              "pretraining_tp": 1,
+              "rms_norm_eps": 1e-06,
+              "rope_parameters": {
+                "rope_theta": 10000,
+                "rope_type": "default"
+              },
+              "sliding_window": 2048,
+              "tie_word_embeddings": false,
+              "use_cache": true,
+              "vocab_size": 129280
+            },
+            "transformers_version": "5.10.2"
+          },
+          "ok": true,
+          "text_prefix": "{\n  \"architectures\": [\n    \"DFlashDraftModel\"\n  ],\n  \"auto_map\": {\n    \"\": \"config.DFlashSpeculatorConfig\"\n  },\n  \"aux_hidden_state_layer_ids\": [\n    3,\n    13,\n    23,\n    32,\n    42\n  ],\n  \"block_size\": 8,\n  \"draft_vocab_size\": 32000,\n  \"dtype\": \"bfloat16\",\n  \"mask_token_id\": 1,\n  \"max_anchors\": 3072,\n  \"sliding_window_non_causal\": false,\n  \"speculators_config\": {\n    \"algorithm\": \"dflash\",\n    \"default_proposal_method\": \"greedy\",\n    \"proposal_methods\": [\n      {\n        \"accept_tolerance\": 0.0,\n        \"proposal_type\": \"greedy\",\n        \"speculative_tokens\": 7,\n        \"verifier_accept_k\": 1\n      }\n    ],\n    \"verifier\": {\n      \"architectures\": [],\n      \"name_or_path\": \"deepseek-ai/DeepSeek-V4-Flash\"\n    }\n  },\n  \"speculators_model_type\": \"dflash\",\n  \"speculators_version\": \"0.5.0.dev163\",\n  \"target_hidden_size\": 16384,\n  \"tie_word_embeddings\": false,\n  \"transformer_layer_config\": {\n    \"attention_bias\": false,\n    \"attention_dropout\": 0.0,\n    \"bos_token_id\": 1,\n    \"eos_token_id\": 2,\n    \"hc_mult\": 4,\n    \"head_dim\": 256,\n    \"hidden_act\": \"silu\",\n    \"hidden_size\": 4096,\n    \"initializer_range\": 0.02,\n    \"intermediate_size\": 2048,\n    \"layer_types\": [\n      \"sliding_attention\",\n      \"full_attention\",\n      \"sliding_attention\",\n      \"full_attention\",\n      \"sliding_attention\"\n    ],\n    \"max_position_embeddings\": 1048576,\n    \"mlp_bias\": false,\n    \"model_type\": \"llama\",\n    \"num_attention_heads\": 64,\n    \"num_hidden_layers\": 5,\n    \"num_key_value_heads\": 1,\n    \"pad_token_id\": null,\n    \"pretraining_tp\": 1,\n    \"rms_norm_eps\": 1e-06,\n    \"rope_parameters\": {\n      \"rope_theta\": 10000,\n      \"rope_type\": \"default\"\n    },\n    \"sliding_window\": 2048,\n    \"tie_word_embeddings\": false,\n    \"use_cache\": true,\n    \"vocab_size\": 129280\n  },\n  \"transformers_version\": \"5.10.2\"\n}\n"
+        },
+        "val_metrics.json": {
+          "json": {
+            "full_acc_epoch": 0.341137161491009,
+            "loss_epoch": 1.2667590725806452,
+            "position_1_acc_epoch": 0.7385031087523112,
+            "position_2_acc_epoch": 0.5086574449831235,
+            "position_3_acc_epoch": 0.3641908019519414,
+            "position_4_acc_epoch": 0.2690193028701722,
+            "position_5_acc_epoch": 0.20686022798748413,
+            "position_6_acc_epoch": 0.1642471382852877,
+            "position_7_acc_epoch": 0.13390106916595462
+          },
+          "ok": true,
+          "text_prefix": "{\"loss_epoch\": 1.2667590725806452, \"full_acc_epoch\": 0.341137161491009, \"position_1_acc_epoch\": 0.7385031087523112, \"position_2_acc_epoch\": 0.5086574449831235, \"position_3_acc_epoch\": 0.3641908019519414, \"position_4_acc_epoch\": 0.2690193028701722, \"position_5_acc_epoch\": 0.20686022798748413, \"position_6_acc_epoch\": 0.1642471382852877, \"position_7_acc_epoch\": 0.13390106916595462}"
+        }
+      },
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k"
+    }
+  ]
+}
