@@ -71213,3 +71213,100 @@ Reproducibility:
 
 - Record generation log, output pack path/size, exact run directory, metrics,
   output text, stderr counters, and disk free space.
+
+### Phase 7LS result
+
+Timestamp: 2026-07-06 00:18:00 CST.
+
+Status: rejected; generated overlay deleted after rejection.
+
+Source/tooling:
+
+- `89cd0f0b3 tools: add trace overlay pack builder`
+
+Generation:
+
+- output pack:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7ls-firstuse-trace-overlay.expert-pack`
+- generation log:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7ls-firstuse-trace-overlay.log`
+- generated entries `13556`;
+- generated size `75681923072` bytes (`71G` by `ls -lh`);
+- copied bytes `75679858688`;
+- disk after generation: `18G` free;
+- disk after deletion: `88G` free.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-074945Z-phase7ls-firstuse-overlay-n32`
+
+Runtime activation:
+
+- loaded main pack entries `30831`;
+- loaded regular overlay entries `768`;
+- loaded first-use overlay-extra entries `13556`;
+- stderr:
+  `expert pack: replaced 13556 duplicate keys with later pack sources`;
+- total entries after replacement `31599`;
+- sources `3`.
+
+Result:
+
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- TTFT `72470.33 ms`;
+- decode `24150.53 ms / 31`, `1.28 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- expert-pack iouring bytes `126391910400`;
+- expert-pack iouring wait `21377567 us`;
+- iouring wait calls `15403`;
+- iouring inflight avg `3.61`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Comparison:
+
+- 7LO/7LP default diagnostic n32: `~1.37 tok/s`, iouring wait `~19.45-19.49 s`.
+- 7LM clean n32: `1.53 tok/s`, iouring wait `16.44 s`.
+- 7LS first-use overlay: `1.28 tok/s`, iouring wait `21.38 s`.
+
+Interpretation:
+
+- The overlay-extra replacement path works and is reproducible.
+- Layout-only repacking does not improve token rate. It regresses endpoint
+  decode and increases iouring wait.
+- The 7LR locality simulation reduced `span/read` and `gap/read`, but current
+  runtime still issues one O_DIRECT read per expert job into per-expert pinned
+  staging slots. It does not coalesce adjacent physical entries into a single
+  read. Therefore improved physical adjacency alone is not enough.
+- Because prior broad coalescing/combined-staging attempts regressed, a future
+  pack-layout optimization must first implement a narrow coalesced-span staging
+  design that preserves overlap and copies slices from one larger staging buffer
+  into the per-expert GPU slots.
+
+Decision:
+
+- Reject 7LS as a performance optimization.
+- Delete the generated 71G overlay pack; keep only the generation log and run
+  directory for reproducibility.
+- Keep `scripts/kimi-build-trace-overlay-pack.py` as a diagnostic/repro tool; it
+  is default-inactive and useful for future pack-layout experiments.
+- Do not use first-use overlay-extra in production.
+
+Next direction:
+
+- Do not continue cache split, layout-only repack, combined staging, or Q4_0 GPU
+  routing.
+- The remaining viable movement path requires a new coalesced-span staging
+  design with a hard upper bound from 7LR:
+  - runtime_load wait `18.03 s`;
+  - first-use layout adjacency `42.27%`;
+  - but implementation must avoid increasing read bytes, host RAM, pinned
+    pressure, or delaying up compute.
+- Before writing such a source patch, the plan must define the staging buffer
+  size, slice-copy sequence, overlap model, and correctness gates.
