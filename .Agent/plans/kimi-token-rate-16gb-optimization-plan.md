@@ -81207,3 +81207,130 @@ Reproducibility:
 
 - Commit and push this 7NQ plan before running the audit.
 - Commit and push the 7NQ result before any follow-up source or asset work.
+
+### Phase 7NQ result
+
+Timestamp: 2026-07-06 03:58 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-192841Z-phase7nq-asset-format-delta`
+
+Plan commit before execution:
+
+- `d100f34c7` (`docs: plan current asset delta audit`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `disk_and_local_assets.txt`
+- `hf_queries.jsonl`
+- `hf_model_metadata.jsonl`
+- `candidate_matrix.tsv`
+- `decision.md`
+- `phase7nq_asset_audit.py`
+- `audit_stdout.txt`
+
+Execution notes:
+
+- Metadata-only Hugging Face API queries were used.
+- No source code was changed.
+- No model inference was run.
+- No large model file was downloaded.
+- No local asset was deleted.
+- The first script attempt failed while writing `candidate_matrix.tsv` because
+  empty numeric fields were formatted as floats. The script was fixed and rerun
+  in the same run directory; the final artifacts above are from the fixed run.
+- SSH printed the recurring local `8080` forwarding warning during inspection,
+  but remote commands completed normally.
+
+Server capacity:
+
+- Free disk on `/root/lfz`: `87.819 GiB`.
+- Current local references remain:
+  - `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S`;
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets`.
+
+Blocked direct model/format candidates:
+
+| candidate | format | size GiB | decision |
+|---|---|---:|---|
+| `decart-ai/Kimi-K2.7-Code-NVFP4` | NVFP4 safetensors | `554.310` | blocked by disk/runtime |
+| `amd/Kimi-K2.7-Code-MXFP4` | MXFP4 safetensors | `514.869` | blocked by disk/runtime |
+| `cyberneurova/CyberNeurova-Kimi-K2.7-Code-GGUF` | GGUF | `296.135` | blocked by disk |
+| `Edmon02/Kimi-K2.7-Code-GGUF` | GGUF | `544.510` | blocked by disk |
+| `AesSedai/Kimi-K2.7-Code-GGUF` | GGUF | `1961.274` | blocked by disk |
+| `Chen2921/Kimi-K2.7-Code-GGUF` | GGUF | `1961.274` | blocked by disk |
+| `DevQuasar/moonshotai.Kimi-K2.7-Code-GGUF` | GGUF | `2444.355` | blocked by disk |
+| `freakyskittle/kimi-k2.7-code-GGUF` | GGUF | `3957.634` | blocked by disk |
+| `unsloth/Kimi-K2.7-Code-GGUF` | GGUF | `4007.133` | blocked by disk |
+| `NullVoider/Kimi-K2.7-Code-GGUF` | GGUF | `4007.133` | blocked by disk |
+| `SergeyKlevan/Kimi-K2.7-Code-GGUF` | GGUF | `4007.133` | blocked by disk |
+| `eadx/Kimi-K2.7-Code-GGUF` | GGUF | `4358.130` | blocked by disk |
+
+Blocked draft/speculative candidates:
+
+| candidate | format | size GiB | decision |
+|---|---|---:|---|
+| `freakyskittle/Kimi-K2.7-Code-Dflash` | DFlash draft GGUF | `8.422` | blocked by runtime/verifier economics |
+| `cm00cm/Kimi-K2.7-Code-DFlash` | DFlash draft safetensors | `6.481` | blocked by runtime/verifier economics |
+| `OpenYourMind/Kimi-K2.7-coder-DFLASH-preview` | DFlash draft safetensors | `5.496` | blocked by runtime/verifier economics |
+| `OpenYourMind/kimi-k2.7-code-dflash-v2-ckpts` | DFlash draft safetensors | `25.431` | blocked by runtime/verifier economics |
+| `AQ-MedAI/Kimi-K2.7-Code-eagle3` | EAGLE draft safetensors | `3.074` | blocked by missing vendor EAGLE verifier |
+| `cm00cm/Kimi-K2.7-Code-EAGLE3` | EAGLE draft safetensors | `2.697` | blocked by missing vendor EAGLE verifier |
+| `novita/kimi-k2.7-code-eagle3-mla` | EAGLE draft safetensors | `3.430` | blocked by missing vendor EAGLE verifier |
+
+Small GGUF review candidates:
+
+- `mradermacher/Kimi-K2.7-Code-GGUF` initially appeared disk-feasible:
+  - total metadata size `1.486 GiB`;
+  - raw metadata files:
+    - `Kimi-K2.7-Code.mmproj-Q8_0.gguf`;
+    - `Kimi-K2.7-Code.mmproj-f16.gguf`.
+  - Decision: not a target model. These are `mmproj` auxiliary GGUF files and
+    cannot replace the Kimi target model.
+- `mradermacher/Kimi-K2.7-Code-i1-GGUF` initially appeared disk-feasible:
+  - total metadata size `1.427 GiB`;
+  - raw metadata file:
+    - `Kimi-K2.7-Code.imatrix.gguf`.
+  - Decision: not a target model. This is an imatrix artifact and cannot be run
+    as the target model.
+
+Interpretation:
+
+- The current public metadata does not expose a disk-feasible, drop-in target
+  GGUF/NVFP4/MXFP4 candidate that can be tested under the strict 16GB host RAM
+  gate on this server.
+- The small GGUF hits are auxiliary assets, not runnable Kimi target models.
+- The draft assets fit disk, but they are still blocked by the same runtime and
+  verifier economics found in 7NA/7NB:
+  - DFlash requires hidden-state draft integration;
+  - EAGLE3 is not implemented/exposed in this vendor tree;
+  - the measured target block verifier path is far too slow for the `>=3.68x`
+    accepted-token multiplier requirement.
+
+Decision:
+
+- Accept 7NQ as a reproducible current asset/format audit.
+- Do not download any candidate from this phase.
+- Do not start a source implementation from this phase.
+- Current SOTA remains unchanged.
+- The next optimization cannot be justified from current public assets alone.
+  A future implementation path needs one of:
+  - externally prepared disk-feasible target/expert-pack assets;
+  - a typed expert-pack format with a much larger byte-reduction bound than
+    7NO/7NP found;
+  - a speculative verifier design that avoids the 7NB target-verification
+    failure.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-192841Z-phase7nq-asset-format-delta
+python3 "$RUN/phase7nq_asset_audit.py"
+cat "$RUN/candidate_matrix.tsv"
+cat "$RUN/hf_model_metadata.jsonl" | grep mradermacher
+cat "$RUN/decision.md"
+```
