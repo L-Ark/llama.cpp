@@ -61620,3 +61620,352 @@ Decision:
 - Do not implement `GGML_MOE_IO_COALESCE_GAP_RATIO`.
 - Next target should be foreground wait hiding for up/gate misses or another
   bottleneck with a multi-second theoretical upper bound.
+
+## Phase 7JR: foreground runtime-load wait attribution by tensor kind
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IP/7JQ leave `runtime_load` wait as the largest measured bucket:
+  `9465.256 ms` on n32.
+- `current_down_overlap` already hides part of down movement, but `runtime_load`
+  still includes:
+  - up expert misses;
+  - gate expert misses;
+  - down expert misses not covered by current-down overlap;
+  - possible overlay/l1/l2 outliers.
+
+Hypothesis:
+
+- If up/gate accounts for most `runtime_load` wait, the next implementation
+  should target up/gate foreground wait hiding or staging overlap.
+- If remaining `runtime_load` wait is mostly down, the next target should
+  extend the accepted down overlap path rather than adding up/gate machinery.
+
+Experiment:
+
+- Use the existing 7IP `io-batch-profile.csv`.
+- Classify rows by `first_tensor`:
+  - `ffn_up_exps` -> `up`;
+  - `ffn_gate_exps` -> `gate`;
+  - `ffn_down_exps` -> `down`;
+  - other -> `other`.
+- Compute rows, read jobs, wait, wall, average wait per row, and share of total
+  measured wait for:
+  - all ops;
+  - `runtime_load` only;
+  - `current_down_overlap` only.
+
+Decision rule:
+
+- If up+gate foreground wait is above `3 s` on n32, plan a default-off
+  up/gate lookahead or overlap probe with a theoretical upper bound based on
+  that wait bucket.
+- If down dominates, target down overlap completeness or first-use down outlier
+  handling.
+- If the bucket is split and no single direction has `> 2 s` upper bound, run a
+  lower-level graph/scheduler profile before changing runtime behavior.
+
+### 7JR result
+
+Timestamp: 2026-07-05.
+
+Source data:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile/io-batch-profile.csv`.
+
+Reproduction command:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile
+python3 - <<'PY'
+import csv, os, collections
+path = os.path.join("/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile", "io-batch-profile.csv")
+def fl(r, k):
+    try: return float(r.get(k, 0) or 0)
+    except Exception: return 0.0
+def kind(t):
+    if "ffn_up_exps" in t: return "up"
+    if "ffn_gate_exps" in t: return "gate"
+    if "ffn_down_exps" in t: return "down"
+    return "other"
+agg = collections.defaultdict(lambda: collections.Counter())
+for r in csv.DictReader(open(path)):
+    op = r.get("op", "")
+    k = kind(r.get("first_tensor", "") or r.get("last_tensor", ""))
+    for key in [("all", k), (op, k), (op, "ALL"), ("all", "ALL")]:
+        c = agg[key]
+        c["rows"] += 1
+        for m in ["jobs", "read_jobs", "wait_ms", "wall_ms", "enqueue_ms", "slot_wait_ms", "submit_ms", "wait_calls", "cqes"]:
+            c[m] += fl(r, m)
+for key in [("all", "ALL"), ("runtime_load", "ALL"), ("runtime_load", "up"), ("runtime_load", "gate"), ("runtime_load", "down"), ("current_down_overlap", "ALL")]:
+    print(key, dict(agg[key]))
+PY
+```
+
+Results:
+
+- Total iouring batch rows: `3280`.
+- All measured iouring wait:
+  - wait `12191.528 ms`;
+  - wall `12617.963 ms`;
+  - enqueue `220.513 ms`;
+  - slot wait `33.599 ms`.
+- `runtime_load`:
+  - rows `2420`;
+  - read jobs `11315`;
+  - wait `9465.256 ms`;
+  - wall `9786.217 ms`;
+  - enqueue `176.130 ms`;
+  - slot wait `22.658 ms`.
+- `runtime_load` by tensor kind:
+  - up:
+    - rows `843`;
+    - read jobs `3940`;
+    - wait `3371.810 ms`;
+    - wall `3534.976 ms`;
+    - share of runtime wait `35.6%`;
+  - gate:
+    - rows `843`;
+    - read jobs `3941`;
+    - wait `3351.541 ms`;
+    - wall `3434.657 ms`;
+    - share of runtime wait `35.4%`;
+  - down:
+    - rows `734`;
+    - read jobs `3434`;
+    - wait `2741.905 ms`;
+    - wall `2816.583 ms`;
+    - share of runtime wait `29.0%`.
+- `current_down_overlap`:
+  - rows `860`;
+  - read jobs `3504`;
+  - wait `2726.272 ms`;
+  - wall `2831.747 ms`.
+
+Decision:
+
+- Up+gate foreground wait is the next high-value target:
+  - combined wait `6723.351 ms` on n32;
+  - theoretical upper bound is `23.1%` of n32 decode
+    (`6723.351 / 29082.91`).
+- Remaining down foreground wait is also meaningful (`2741.905 ms`), but down
+  already has the accepted current-down overlap path and a separate
+  `current_down_overlap` worker bucket.
+- Next implementation phase should focus on hiding up/gate foreground IO wait
+  without changing semantics:
+  - default-off probe first;
+  - no broad trace prefetch;
+  - no host RAM tier increase;
+  - preserve strict 16GB and TTFT gates.
+
+## Phase 7JS: up/gate miss concentration profile
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7JR attributes `6723.351 ms` of n32 foreground `runtime_load` wait to up+gate.
+- Existing up/gate staging is already parallel, and previous combined staging
+  variants reduced iouring wait but lost useful overlap.
+- The remaining plausible cache-side optimization is selective protection or
+  admission for a small set of recurrent up/gate keys, but only if the miss/wait
+  distribution is concentrated.
+
+Hypothesis:
+
+- If a small set of up/gate keys accounts for a large share of misses or
+  evictions, an exact-key up/gate protection/admission probe may be worthwhile.
+- If up/gate misses are broad, exact-key pinning will mirror 7JA: it will move
+  the cold/miss cost to other keys and reduce effective cache capacity.
+
+Experiment:
+
+- Run strict cold-start n32 with profiling enabled:
+  - `MIN_PROFILE=0` so route profile and route trace are emitted;
+  - `GGML_MOE_CACHE_EVICT_PROFILE_OUT=$RUN/cache-evict-profile.csv`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+- Keep production runtime knobs:
+  - default `UPGATE_PCT=62`;
+  - `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`;
+  - `VRAM_MIB=15000`;
+  - `PINNED_SLOTS=12`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`.
+
+Analysis:
+
+- From `route-profile.csv`, compute up/gate cumulative concentration:
+  - top 16/32/64/128 keys by count;
+  - cumulative bytes and count share.
+- From `cache-evict-profile.csv`, compute up/gate victim concentration:
+  - repeated victim keys;
+  - victim profile counts if available;
+  - whether high-count up/gate keys are evicted before reuse.
+- From `io-batch-profile.csv`, keep the 7JR tensor-kind wait split for this
+  profiled run.
+
+Decision rule:
+
+- If top `<= 128` up/gate keys explain a large share of misses/evictions and
+  their total size fits in under `750 MiB`, design a default-off exact up/gate
+  admission/protection probe.
+- If top-key concentration is low or protected size would be multi-GB, reject
+  exact up/gate pinning before implementation.
+- Profile overhead means this run cannot be used as SOTA token-rate evidence.
+
+### 7JS result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `9a9fbf152` (`docs: reject narrow io coalescing`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 9a9fbf152
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CACHE_EVICT_PROFILE_OUT=$RUN/cache-evict-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `79077.11 ms`;
+- decode `30277.16 ms / 31`, `1.02 tok/s`;
+- memory peak `15899996160`;
+- memory final `15073918976`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Profile overhead note:
+
+- `MIN_PROFILE=0` and eviction/route CSVs add overhead, so decode is diagnostic
+  only and must not be compared as SOTA token-rate evidence.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `14819`, bytes `85991915520`, wait `12303046 us`;
+- iouring batches `3280`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`;
+- route profile rows `13996`;
+- route trace events `42928`;
+- cache eviction rows `20968`.
+
+Route concentration:
+
+- Up:
+  - rows `4856`;
+  - total count `14888`;
+  - top 16 count share `3.24%`, size `71.75 MiB`;
+  - top 32 count share `6.11%`, size `144.38 MiB`;
+  - top 64 count share `11.08%`, size `289.63 MiB`;
+  - top 128 count share `18.65%`, size `595.00 MiB`;
+  - top 256 count share `29.08%`, size `1195.25 MiB`;
+  - top 512 count share `42.91%`, size `2386.13 MiB`.
+- Gate:
+  - rows `4856`;
+  - total count `14888`;
+  - top 16 count share `3.24%`, size `84.88 MiB`;
+  - top 32 count share `6.11%`, size `168.00 MiB`;
+  - top 64 count share `11.08%`, size `328.13 MiB`;
+  - top 128 count share `18.65%`, size `646.63 MiB`;
+  - top 256 count share `29.08%`, size `1288.00 MiB`;
+  - top 512 count share `42.91%`, size `2583.00 MiB`.
+- Down, for comparison:
+  - top 128 count share `20.60%`, size `815.50 MiB`;
+  - top 512 count share `45.89%`, size `3257.73 MiB`.
+
+Eviction concentration:
+
+- Total eviction rows `20968`.
+- Victim kind rows:
+  - up `7287`;
+  - gate `7285`;
+  - down `6396`.
+- Victim-key concentration:
+  - top 16 only `0.46%`;
+  - top 32 only `0.88%`;
+  - top 64 only `1.65%`;
+  - top 128 only `3.17%`;
+  - top 256 only `5.93%`.
+- Incoming-key concentration:
+  - top 16 only `0.44%`;
+  - top 32 only `0.82%`;
+  - top 64 only `1.58%`;
+  - top 128 only `3.11%`;
+  - top 256 only `5.67%`.
+- Up/gate victim `profile_count` is `0` for all `14572` up/gate victim rows in
+  this run, so the current profile-count policy has no useful signal for these
+  evictions.
+
+IO wait split in this profiled run:
+
+- `runtime_load` total:
+  - rows `2420`;
+  - read jobs `11315`;
+  - wait `9657.754 ms`;
+  - wall `10003.018 ms`.
+- `runtime_load` up:
+  - wait `3443.062 ms`;
+  - wall `3606.886 ms`.
+- `runtime_load` gate:
+  - wait `3420.548 ms`;
+  - wall `3519.199 ms`.
+- `runtime_load` down:
+  - wait `2794.145 ms`;
+  - wall `2876.934 ms`.
+- `current_down_overlap`:
+  - wait `2651.077 ms`;
+  - wall `2760.055 ms`.
+
+Decision:
+
+- Reject exact up/gate pinning/admission before implementation.
+- Reason:
+  - route concentration is too broad: top 128 up+gate keys consume about
+    `1241.63 MiB` but cover only `18.65%` of up/gate route count;
+  - top 256 up+gate keys consume about `2483.25 MiB` but still cover only
+    `29.08%`;
+  - eviction concentration is even flatter: top 128 victim keys cover only
+    `3.17%` of evictions;
+  - this would likely repeat 7JA's behavior, moving misses to other keys while
+    reducing effective cache capacity.
+- Do not implement exact up/gate pinning.
+- Next viable target should not rely on a small static hot-key set. It should
+  either reduce per-miss cost broadly or remove CPU fallback/unsupported decode
+  work that appears as a separate multi-second bucket.
