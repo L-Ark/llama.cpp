@@ -78401,7 +78401,7 @@ Next direction:
 
 Timestamp: 2026-07-06 00:42:00 CST.
 
-Status: planned.
+Status: complete; diagnostic accepted; no source change and no SOTA promotion.
 
 Goal:
 
@@ -78472,3 +78472,100 @@ Reproducibility:
 - Commit and push this plan before running the audit.
 - Record all parsing commands and raw source/runs used.
 - Commit and push the audit result into this plan.
+
+Result:
+
+- Plan commit before execution:
+  `d21c63013 docs: plan fallback attribution audit`.
+- Server run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-162912Z-phase7nd-fallback-attribution`.
+- Server repo state during audit:
+  `d21c63013af4a300f91873650051fec621c1120e7`.
+- No source code was changed.
+- No model run was launched; this phase parsed existing strict 7NB and 7MY
+  artifacts and inspected source control flow.
+
+Recorded artifacts:
+
+- `commands.log`;
+- `repo_state.txt`;
+- `fallback_by_phase_type.tsv`;
+- `decode_fallback_top_tensors.tsv`;
+- `cpu_fallback_pack_mmap.txt`;
+- `source_handoff_notes.md`;
+- `decision.md`.
+
+Fallback attribution:
+
+| run | prompt fallback | decode fallback | decode type |
+|---|---:|---:|---|
+| 7NB strict n32 baseline | `67331.179 ms` | `2495.240 ms` | `type=2 / Q4_0` |
+| 7MY full-profile n32 | `66269.662 ms` | `2075.960 ms` | `type=2 / Q4_0` |
+
+7NB phase/type detail:
+
+- `decode,type=2`: `1736` rows/calls, `2495.240 ms`, `4.399 GiB`;
+- `prompt,type=22`: `20239.212 ms`, `21.384 GiB`;
+- `prompt,type=11`: `19609.803 ms`, `17.812 GiB`;
+- `prompt,type=18`: `17498.976 ms`, `19.988 GiB`;
+- `prompt,type=23`: `6597.294 ms`, `6.297 GiB`;
+- `prompt,type=2`: `3385.894 ms`, `3.476 GiB`.
+
+7MY phase/type detail:
+
+- `decode,type=2`: `1736` rows/calls, `2075.960 ms`, `4.399 GiB`;
+- `prompt,type=11`: `19342.171 ms`, `17.812 GiB`;
+- `prompt,type=22`: `19314.339 ms`, `21.384 GiB`;
+- `prompt,type=18`: `17411.707 ms`, `19.988 GiB`;
+- `prompt,type=23`: `6783.842 ms`, `6.297 GiB`;
+- `prompt,type=2`: `3417.603 ms`, `3.476 GiB`.
+
+Decode fallback top tensors:
+
+- 7NB:
+  - `blk.10.ffn_down_exps.weight`: `387.984 ms`;
+  - `blk.6.ffn_down_exps.weight`: `382.952 ms`;
+  - `blk.18.ffn_down_exps.weight`: `381.840 ms`;
+  - `blk.8.ffn_down_exps.weight`: `361.056 ms`;
+  - `blk.7.ffn_down_exps.weight`: `356.320 ms`;
+  - `blk.9.ffn_down_exps.weight`: `327.112 ms`;
+  - `blk.15.ffn_down_exps.weight`: `297.976 ms`.
+- 7MY:
+  - `blk.10.ffn_down_exps.weight`: `368.960 ms`;
+  - `blk.9.ffn_down_exps.weight`: `322.256 ms`;
+  - `blk.7.ffn_down_exps.weight`: `309.248 ms`;
+  - `blk.6.ffn_down_exps.weight`: `289.888 ms`;
+  - `blk.18.ffn_down_exps.weight`: `276.880 ms`;
+  - `blk.8.ffn_down_exps.weight`: `274.000 ms`;
+  - `blk.15.ffn_down_exps.weight`: `234.728 ms`.
+
+CPU fallback pack mmap:
+
+- 7NB and 7MY both report:
+  `[kimi_cpu_fallback_pack_mmap] enabled=1 hits=1727 misses=9 bytes=14260764672 fallback_gguf=9`.
+- Therefore most decode Q4_0 CPU fallback already reads from the expert-pack mmap
+  path rather than refaulting GGUF expert pages.
+
+Source handoff finding:
+
+- In `ggml/src/ggml-cpu/ggml-cpu.c`, successful
+  `ggml_cuda_moe_stream_batch(...)` calls clear `matrix_row_counts`.
+- The CPU fallback loop only processes experts whose `matrix_row_counts[cur_a]`
+  remains nonzero.
+- `ggml_kimi_cpu_fallback_pack_mmap_prepare(...)` only prepares fallback pack
+  pointers for remaining decode rows and is disabled for prompt phase.
+- This confirms accepted custom CUDA rows are not also recomputed by CPU
+  fallback; the observed decode fallback is declined/unsupported Q4_0 work.
+
+Decision:
+
+- Keep Q4_0 decode fallback closed for now.
+- Do not retry broad Q4_0 GPU/cache/pinned paths without a new first-principles
+  design that explains why prior Q4 attempts regressed despite removing the
+  fallback bucket.
+- Do not treat `fallback_t0=36.175 ms/call` as a decode token-rate bucket; it
+  is dominated by prompt-side fallback attribution.
+- The next valid token-rate direction remains:
+  - read-volume/effective-token reduction; or
+  - a deeper runtime redesign with a hard bound above the local micro-patch
+    ceiling.
