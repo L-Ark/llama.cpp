@@ -74480,3 +74480,172 @@ Next direction:
     capacity;
   - partial-row Q4 down split only if it can keep CPU fallback correctness and
     avoid all-or-nothing Q4 residency.
+
+## Phase 7MM - async adjacent-span coalescing design
+
+Timestamp: 2026-07-06 21:05:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Revisit the only movement direction that still has a large measured hard
+  bound after 7ML: adjacent expert-pack span coalescing.
+- Fix the specific execution-model failure from 7LT:
+  - do not use blocking `pread`;
+  - do not serialize span reads before H2D;
+  - do not force the current up/gate/down overlap to wait on a tiny blocking
+    coalesce slot pool.
+
+Why this is not a repeat of rejected work:
+
+- 7LS layout-only overlay was rejected because the runtime still issued one
+  read per expert job.
+- 7LT blocking coalescing was rejected because it reduced `iouring_wait_us` but
+  moved read and coalesce-slot waits onto the critical path:
+  - iouring wait fell to `8142670 us`;
+  - endpoint still regressed to `24632.61 ms / 31`, `1.26 tok/s`;
+  - coalesce slot waits were high with only two 32 MiB slots.
+- The remaining untested mechanism is async span reads in the same io_uring
+  completion pipeline used by the accepted path.
+
+Current bottleneck evidence:
+
+- 7MK current default profile:
+  - decode `23654.05 ms / 31`;
+  - expert-pack iouring wait `20673296 us`;
+  - type `(22,22)` up/gate wait-dominated wall `3532.742 ms`;
+  - type `(18,18)` compute bucket `2680.071 ms`.
+- 7ML proved broad cache reallocation is wrong:
+  - down hit improved `73.4% -> 76.1%`;
+  - upgate hit regressed `45.2% -> 34.5%`;
+  - decode regressed to `25102.18 ms / 31`.
+- 7LR physical-layout simulation remains the largest hard bound:
+  - runtime_load current `span/read=24.1267`;
+  - first-use `span/read=6.9127`;
+  - first-use adjacent/read_jobs `0.4227`.
+
+Theory:
+
+- With the first-use trace overlay active, adjacent jobs can be grouped into
+  larger physical spans.
+- If span reads are submitted through io_uring and completed asynchronously,
+  the implementation can reduce read completions/wait cycles while preserving:
+  - current batch boundaries;
+  - current CUDA streams;
+  - current early-up compute ordering;
+  - current cache and expert-selection behavior.
+- The previous 7LT endpoint regression should disappear only if the new path
+  keeps span reads in flight and avoids blocking on span-slot reuse.
+
+Hard upper bound:
+
+- 7LR profiled IO wait:
+  - runtime_load wait `18026.121 ms`;
+  - current_down_overlap wait `2666.982 ms`;
+  - total profiled IO wait `20693.103 ms`.
+- First-use adjacency is about `42%` of read jobs.
+- Optimistic n32 ceiling is still about `8 s` of wait compression, but this is
+  not an acceptance target.
+- Practical acceptance target:
+  - beat the current clean n32 band first;
+  - repeat n32;
+  - then beat current n96 default band before promotion.
+
+Implementation plan:
+
+1. Reuse the 7LT adjacency grouping logic only for group selection and
+   diagnostics.
+2. Add a default-off async path:
+   - `GGML_MOE_IO_COALESCE_ADJACENT_ASYNC=1`;
+   - optional `GGML_MOE_IO_COALESCE_MAX_BYTES`, default `16777216`;
+   - optional `GGML_MOE_IO_COALESCE_SLOTS`, default `8`.
+3. Extend the io_uring pending record so one completion can represent either:
+   - a normal single expert read; or
+   - a coalesced span read with `group_start`, `group_jobs`, and a span slot.
+4. Submit coalesced spans into the same io_uring ring as normal jobs:
+   - no blocking `pread`;
+   - no separate synchronous read loop.
+5. On a span CQE:
+   - enqueue one `cudaMemcpyAsync` per expert slice from the completed span
+     slot into each job's existing destination;
+   - record one CUDA event on the span slot after all slice H2Ds;
+   - mark all jobs complete for the batch.
+6. Reuse span slots only after their CUDA event completes.
+7. Fallback behavior:
+   - if slot allocation fails, preconditions fail, or a group cannot be
+     represented safely, leave those jobs on the existing single-read path;
+   - if any io_uring or H2D error occurs, return `false` and let existing
+     fallback handling reject the path.
+
+Correctness constraints:
+
+- Copy exact byte ranges from expert-pack entries.
+- No quantization, routing, cache-policy, or math changes.
+- Preserve existing CUDA streams and final synchronization.
+- Default behavior is identical when
+  `GGML_MOE_IO_COALESCE_ADJACENT_ASYNC` is unset.
+- The France prompt must remain semantically correct and coherent.
+
+Experiment preparation:
+
+- Regenerate the trace-only first-use overlay temporarily from the 7LR trace:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+TRACE=/root/lfz/runs/vendor-kimi-token-rate/20260705-073750Z-phase7lr-io-locality-n32/io-read-trace.csv
+OUT=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7mm-firstuse-trace-overlay.expert-pack
+python3 scripts/kimi-build-trace-overlay-pack.py \
+  --trace "$TRACE" \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  --out "$OUT" \
+  > /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7mm-firstuse-trace-overlay.log
+```
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j"$(nproc)"
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mm-async-coalesce-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7mm-firstuse-trace-overlay.expert-pack GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1 GGML_MOE_IO_COALESCE_ADJACENT_ASYNC=1 GGML_MOE_IO_COALESCE_MAX_BYTES=16777216 GGML_MOE_IO_COALESCE_SLOTS=8" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- plan committed and pushed before source edit;
+- source committed and pushed before running;
+- generated overlay exists during the run and is deleted if rejected;
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr shows async coalesce counters and duplicate replacement.
+
+Decision rule:
+
+- Hard reject if n32 decode is worse than current default references or quality
+  fails.
+- If n32 improves with credible counters, repeat n32.
+- If repeat passes, run n96 before promotion.
+- If rejected, delete the temporary 71G overlay and either revert the source or
+  keep the path default-off only if it is useful as a diagnostic and cannot
+  affect default behavior.
+
+Reproducibility:
+
+- Record source commit, build command, overlay generation command/log, overlay
+  size, run directory, metrics, output text, memory files, stderr coalesce
+  counters, and disk free before/after cleanup.
