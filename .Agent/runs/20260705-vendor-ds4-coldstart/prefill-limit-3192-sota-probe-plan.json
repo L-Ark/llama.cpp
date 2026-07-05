@@ -1,0 +1,88 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: strict cold no-source prefill limit 3192 probe",
+  "status": "planned",
+  "purpose": "Try the only low-risk current-route parameter change after DFlash closure: use the full existing gate-cache slot capacity by raising GGML_MOE_STREAM_ONE_PREFILL_LIMIT from 3000 to 3192 without increasing VRAM cache size.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "ttft_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "current_cache_evidence": {
+    "cache_mib": 13568,
+    "slots": 3192,
+    "slot_bytes": 4456448,
+    "prefill_limit": 3000,
+    "prefill_inserted": 3000,
+    "prefill_bytes": 13369344000,
+    "prefill_elapsed_ms": 4092.052,
+    "vram_min_free_mib_observed": 237,
+    "vram_max_used_mib_observed": 31873,
+    "cache_hits": 33265,
+    "cache_misses": 1886,
+    "hit_rate_pct": 94.6,
+    "expert_pack_direct_reads": 4886,
+    "expert_pack_direct_bytes": 21774204928
+  },
+  "profile_bound": {
+    "profile": ".Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "profile_entries": 3313,
+    "profile_total_count_ge2": 33865,
+    "covered_by_top3000": 33239,
+    "covered_by_top3192": 33623,
+    "additional_profile_calls_top3000_to_top3192": 384,
+    "additional_profile_call_pct_of_ge2": 1.1339140705743394,
+    "additional_prefill_entries": 192,
+    "additional_prefill_bytes": 855638016,
+    "estimated_additional_prefill_ms_from_current_prefill_throughput": 261.7764822199729,
+    "estimated_decode_direct_bytes_moved_if_profile_repeats": 1711263744,
+    "estimated_decode_io_ms_saved_at_1p85_gib_s": 862.0515891891892,
+    "rough_net_decode_saving_ms_before_overheads": 862.0515891891892,
+    "rough_ttft_after_extra_prefill_ms": 32349.51477421997,
+    "ttft_gate_margin_after_estimate_ms": 1268.1739697800267
+  },
+  "experiment": {
+    "source_changes": "none",
+    "env_changes": {
+      "GGML_MOE_STREAM_ONE_PREFILL_LIMIT": "3192",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568"
+    },
+    "constant_config": [
+      "vendor framework",
+      "native DeepSeek V4 Flash GGUF",
+      "cpu_moe=40",
+      "vram_cache=0",
+      "accepted France gate-miss O_DIRECT pack",
+      "strict cold drop_caches",
+      "MemoryMax=16000000000",
+      "MemorySwapMax=0",
+      "France prompt, deterministic greedy output"
+    ]
+  },
+  "acceptance": {
+    "accepted_if": [
+      "eval_tok_s > 4.4",
+      "TTFT <= 33617.688744 ms",
+      "memory_peak_bytes <= 16000000000 including file page cache",
+      "no OOM and no swap",
+      "France answer is semantic and coherent",
+      "full run metadata recorded",
+      "commit and push immediately, then clean pushed-source reproduction"
+    ],
+    "rejected_if": [
+      "eval_tok_s <= 4.4",
+      "TTFT exceeds gate",
+      "RAM/page-cache or OOM violation",
+      "correctness failure"
+    ]
+  },
+  "notes": [
+    "This is expected to be a small improvement at best; it cannot reach 10 tok/s by itself.",
+    "It is still aligned because any compliant current-route SOTA must be committed immediately and can serve as a stronger baseline while larger routes remain blocked.",
+    "No cache size increase is used because accepted SOTA already observed only about 237 MiB minimum free VRAM."
+  ]
+}
