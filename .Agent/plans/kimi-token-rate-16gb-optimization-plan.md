@@ -62967,3 +62967,483 @@ Decision:
 
 - Runner promotion is accepted.
 - Commit and push the script-default promotion and final 7JY result records.
+
+## Phase 7JZ - post-7JY SOTA sub-bucket refresh
+
+Timestamp: 2026-07-05.
+
+Status: planned.
+
+Source baseline:
+
+- `662d886bd` (`scripts: enable mixed upgate parallel staging`).
+- Runner default includes `GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1`.
+- Current strict n96 SOTA:
+  - decode `57169.16 ms / 77`, `1.35 tok/s`;
+  - TTFT `73810.16 ms`;
+  - quality pass;
+  - RAM peak `15899996160`;
+  - `read_failures=0`, `iouring_fallbacks=0`.
+
+Bottleneck hypothesis after 7JY:
+
+- 7JY overlapped mixed up/gate staging/compute and improved n96 decode by
+  `19.5%`.
+- The run counters show iouring work increased because up and gate are now
+  issued concurrently:
+  - n96 iouring reads `56535`;
+  - iouring wait `51025982 us`;
+  - batches `12722`;
+  - inflight avg `3.36`, max `8`.
+- The next bottleneck is likely not CUDA compute or D2H:
+  - previous 7JX showed down kernel+D2H+scatter was small;
+  - mixed up/gate parallel should reduce serial up/gate wall, but may expose
+    shared IO queue and pinned staging contention.
+
+Experiment:
+
+- Run strict cold-start n32 with current default runner and diagnostic profiles:
+  - no `EXTRA_RUNTIME_ENV` needed for the accepted mixed parallel path;
+  - `GGML_KIMI_CPU_MOE_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`;
+  - `GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=32`;
+  - `GGML_MOE_BATCH_PROFILE=1`;
+  - `GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv`;
+  - `GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+
+Why this can lead to further improvement:
+
+- 7JY changed the scheduling topology, so old 7JX bottleneck attribution is no
+  longer enough.
+- The next runtime candidate must target the largest measured post-7JY
+  compressible bucket:
+  - up/gate parallel wait imbalance;
+  - iouring wait / batch granularity;
+  - down accepted stage;
+  - CPU fallback bucket;
+  - or cache split if the mixed path changed effective contention.
+- Theoretical upper bound will be computed from measured post-7JY profile, not
+  from pre-7JY measurements.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 662d886bd
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7jz-post-mixed-sota-subprofile-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_KIMI_CPU_MOE_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE=1
+GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=32
+GGML_MOE_BATCH_PROFILE=1
+GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv
+GGML_MOE_DOWN_BATCH_PROFILE_OUT=$RUN/down-batch-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- This diagnostic is not a SOTA candidate unless it unexpectedly improves
+  decode while passing all gates.
+- Use it to choose the next candidate and compute a hard upper bound.
+- Strict gates still apply:
+  - exit `0`;
+  - host RAM peak `< 16 GB`, including page cache;
+  - swap max `0`;
+  - semantic quality pass on the France prompt;
+  - TTFT `<= 106331.72 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+
+### 7JZ result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7jz-post-mixed-sota-subprofile-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `76873.74 ms`;
+- decode `23845.77 ms / 31`, `1.30 tok/s`;
+- memory peak `15899996160`;
+- memory final `15101255680`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Post-7JY profile:
+
+- Up/gate:
+  - rows `869`;
+  - wall `6254.713 ms`;
+  - kernel window `6182.700 ms`;
+  - up `4776.342 ms`;
+  - gate `1361.438 ms`;
+  - up wait `3228.463 ms`;
+  - gate wait `3391.786 ms`;
+  - up compute `109.623 ms`;
+  - gate compute `64.689 ms`;
+  - D2H `5.800 ms`;
+  - scatter `11.195 ms`;
+  - up misses `4054`;
+  - gate misses `4055`;
+  - `parallel_up_gate=558`, `parallel_stage=558`.
+- Down accepted batch:
+  - rows `1644`;
+  - wall `4323.886 ms`;
+  - stage `4032.474 ms`;
+  - kernel `191.160 ms`;
+  - D2H `20.333 ms`;
+  - scatter `22.549 ms`;
+  - hits `9631`;
+  - misses/staged `3521`.
+- IO profile:
+  - `runtime_load`: rows `4318`, jobs `19143`, wait `18589.233 ms`,
+    wall `19037.975 ms`;
+  - `current_down_overlap`: rows `860`, jobs `3504`, wait `2658.309 ms`,
+    wall `2732.956 ms`.
+- CPU aggregate:
+  - up_gate calls `1861`, total `8.345 ms/call`, cuda_batch
+    `8.258 ms/call`;
+  - down calls `2038`, total `39.360 ms/call`, cuda_batch
+    `2.242 ms/call`, fallback `37.068 ms/call`.
+
+Interpretation:
+
+- 7JY reduced the exposed up_gate CPU wrapper total from about `11.1 ms/call`
+  to `8.3 ms/call`, validating mixed parallel staging.
+- The dominant remaining measured pressure is movement/wait:
+  - runtime iouring wait is now `18.6 s` on n32;
+  - accepted down stage is `4.0 s`;
+  - current-down overlap itself adds `2.66 s` of iouring wait.
+- Q4_0 down fallback remains real but bounded and historically unsafe to move
+  wholesale to GPU/cache; do not retry broad Q4_0 paths here.
+
+## Phase 7KA - post-mixed down-prefetch depth-1 probe
+
+Timestamp: 2026-07-05.
+
+Status: planned.
+
+Goal:
+
+- Test whether `MOE_PREFETCH_DOWN_DEPTH=1` is beneficial after the accepted
+  mixed up/gate parallel path increased concurrent up/gate IO pressure.
+- Keep this env-only unless strict n32 and n96 prove a reproducible improvement.
+
+Why this is worth re-testing:
+
+- Older depth-1 probes were before 7JY.
+- 7JY changed the IO topology:
+  - up and gate are now staged concurrently;
+  - n32 iouring bytes rose to `126.39 GB`;
+  - runtime iouring wait in 7JZ is `18.6 s`.
+- Down overlap depth `2` may now compete with the critical mixed up/gate
+  runtime loads. Reducing to depth `1` could lower contention even if it hides
+  less future down movement.
+
+Theory and upper bound:
+
+- This cannot reduce total work; it can only reduce critical-path contention.
+- The hard optimistic upper bound is the exposed part of current-down overlap
+  iouring wait, `2.66 s` on 7JZ n32, but most of that may already overlap.
+- A realistic n32 target is small: beat the script-default 7JY n32
+  `22667.39 ms / 31` while preserving all gates.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 662d886bd
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7ka-post-mixed-prefetch-depth1-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- If n32 is slower than `22667.39 ms / 31` or any gate fails, reject depth `1`
+  for the post-7JY SOTA and keep depth `2`.
+- If n32 improves and passes all gates, run strict n96.
+- Promote only if n96 improves over 7JY n96 `57169.16 ms / 77` and passes all
+  gates.
+
+### 7KA result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ka-post-mixed-prefetch-depth1-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75948.42 ms`;
+- decode `23589.61 ms / 31`, `1.31 tok/s`;
+- memory peak `15899996160`;
+- memory final `15025463296`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- `GGML_MOE_PREFETCH_DOWN_DEPTH=1` verified in `env.txt`;
+- mixed up/gate parallel activated;
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`, bytes `126391910400`, wait `20671804 us`;
+- iouring batches `5178`, wait calls `18281`;
+- current-down overlap worker time `3256532 us`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`.
+
+Comparison:
+
+- 7JY script-default n32: decode `22667.39 ms / 31`, `1.37 tok/s`.
+- 7KA depth1 n32: decode `23589.61 ms / 31`, `1.31 tok/s`.
+- Depth1 is `922.22 ms` slower.
+
+Decision:
+
+- Reject `MOE_PREFETCH_DOWN_DEPTH=1` for post-7JY SOTA.
+- Do not run n96.
+- Keep production default `MOE_PREFETCH_DOWN_DEPTH=2`.
+
+## Phase 7KB - post-mixed upgate cache split probe
+
+Timestamp: 2026-07-05.
+
+Status: planned.
+
+Goal:
+
+- Test whether the accepted mixed up/gate parallel path benefits from a larger
+  upgate share of the split VRAM cache.
+- Keep this env-only unless strict n32 and n96 prove a reproducible improvement.
+
+Why this is worth re-testing:
+
+- Current default is `UPGATE_PCT=62`.
+- 7JZ shows movement pressure is dominated by runtime_load:
+  - upgate hit rate remains only `45.2%`;
+  - upgate misses are much larger than down misses;
+  - runtime iouring wait is `18.6 s` on n32.
+- 7JY made up/gate more critical by overlapping up and gate streams. A larger
+  upgate pool may reduce critical up/gate misses enough to offset fewer down
+  slots.
+
+Theory and upper bound:
+
+- Increasing `UPGATE_PCT` cannot improve compute kernels; it only changes cache
+  hit/miss distribution.
+- The optimistic upper bound is bounded by reduced upgate runtime-load staging,
+  but down stage can regress if down hit rate falls.
+- Because previous larger upgate splits were rejected on older topologies, this
+  must be revalidated under current mixed-parallel SOTA.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 662d886bd
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kb-post-mixed-upgate-pct65-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=65 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- If n32 is slower than `22667.39 ms / 31` or any gate fails, reject pct65.
+- If n32 improves and passes all gates, run strict n96.
+- Promote only if n96 improves over 7JY n96 `57169.16 ms / 77` and passes all
+  gates.
+
+### 7KB result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kb-post-mixed-upgate-pct65-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75848.55 ms`;
+- decode `23719.72 ms / 31`, `1.31 tok/s`;
+- memory peak `15899996160`;
+- memory final `15101829120`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- `UPGATE_PCT=65` verified;
+- upgate slots `1819`, hit rate `45.3%`;
+- down slots `705`, hit rate `71.3%`;
+- expert pack hits `25691`, misses `192`;
+- iouring reads `23268`, bytes `130568962048`, wait `20975487 us`;
+- current-down overlap planned jobs `4062`, worker `3475561 us`.
+
+Comparison:
+
+- 7JY script-default n32: decode `22667.39 ms / 31`, `1.37 tok/s`.
+- 7KB pct65 n32: decode `23719.72 ms / 31`, `1.31 tok/s`.
+- pct65 is `1052.33 ms` slower.
+
+Decision:
+
+- Reject `UPGATE_PCT=65` for post-7JY SOTA.
+- Do not run n96.
+- Keep production default `UPGATE_PCT=62`.
+- Interpretation:
+  - the added upgate slots do not materially improve upgate hit rate;
+  - they reduce down slots and increase down/current-overlap pressure.
+
+## Phase 7KC - post-mixed down-favoring cache split probe
+
+Timestamp: 2026-07-05.
+
+Status: planned.
+
+Goal:
+
+- Test whether lowering `UPGATE_PCT` to `60` improves post-7JY decode by giving
+  the down cache more slots.
+- Keep this env-only unless strict n32 and n96 prove a reproducible improvement.
+
+Why this follows 7KB:
+
+- pct65 added upgate slots but did not improve upgate hit rate.
+- pct65 reduced down hit rate and slowed decode.
+- Therefore the next cache-split hypothesis is the opposite direction:
+  allocate slightly more VRAM to down and accept a small upgate capacity
+  reduction.
+
+Theory and upper bound:
+
+- The potential gain is bounded by reducing accepted-down stage and
+  current-down-overlap contention.
+- If upgate misses rise materially, the change will regress.
+- Because 7JY made upgate critical, this is a narrow probe only; n32 must beat
+  `22667.39 ms / 31` before n96.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 662d886bd
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kc-post-mixed-upgate-pct60-n32
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=60 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Decision rule:
+
+- If n32 is slower than `22667.39 ms / 31` or any gate fails, reject pct60.
+- If n32 improves and passes all gates, run strict n96.
+- Promote only if n96 improves over 7JY n96 `57169.16 ms / 77` and passes all
+  gates.
+
+### 7KC result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kc-post-mixed-upgate-pct60-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `77933.13 ms`;
+- decode `23837.06 ms / 31`, `1.30 tok/s`;
+- memory peak `15899996160`;
+- memory final `15104069632`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- `UPGATE_PCT=60` verified;
+- upgate slots `1679`, hit rate `43.7%`;
+- down slots `806`, hit rate `73.6%`;
+- expert pack hits `25458`, misses `192`;
+- iouring reads `23044`, bytes `128385417216`, wait `21874941 us`;
+- current-down overlap planned jobs `3664`, worker `3353776 us`.
+
+Comparison:
+
+- 7JY script-default n32: decode `22667.39 ms / 31`, `1.37 tok/s`.
+- 7KC pct60 n32: decode `23837.06 ms / 31`, `1.30 tok/s`.
+- pct60 is `1169.67 ms` slower.
+
+Decision:
+
+- Reject `UPGATE_PCT=60` for post-7JY SOTA.
+- Do not run n96.
+- Keep production default `UPGATE_PCT=62`.
+- Cache split sweep around the current default is closed for now:
+  - pct65 did not improve upgate hit rate enough and hurt down;
+  - pct60 improved down slightly but hurt upgate more;
+  - pct62 remains the best observed balance under mixed parallel.
