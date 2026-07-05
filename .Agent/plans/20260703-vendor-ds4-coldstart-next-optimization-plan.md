@@ -4,6 +4,29 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Test Full-Pack mmap Pointer-Key No-Prefill
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。`/dev/null` no-prefill 已失败；新的窄实验只测试一个源码差异：旧 `88de4bb09` 没有 `ONE_PREFILL_PROFILE`/named-key 逻辑，cache key 使用 `src0_data` pointer。当前要完全不设置 `GGML_MOE_STREAM_ONE_PREFILL_PROFILE`，而不是用 `/dev/null`。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+
+Experiment plan:
+
+- Plan artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/full-pack-mmap-pointer-key-no-prefill-plan-20260706.json`
+- Source audit finding: `88de4bb09:ggml/src/ggml-cuda/moe_stream.cu` has no `ONE_PREFILL`, `one_prefill_key_mode_enabled`, or `one_cache_key_for`; old cache keys are pointer-based. Current `/dev/null` no-prefill disabled prefill but still used named key mode, and reached only `3.9 tok/s`.
+- Method: run strict cold full native expert-pack mmap with `build-ds4-moe-stream-batch-probe/bin/llama-cli`, remove both `GGML_MOE_STREAM_ONE_PREFILL_PROFILE` and `GGML_MOE_STREAM_ONE_PREFILL_LIMIT`, keep `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE` and full-pack mmap env.
+- Expected signal: if old `5.1 tok/s` depended on pointer-key cache behavior, this run should move toward old counters (`memory_file_bytes` near `12.7GB`, low `memory_max_events`, `fallback_t0` around `1.17 ms/call`) and exceed `4.4 tok/s`.
+- Reject if file-cache pressure stays near `15GB`, fallback stays around `1.5 ms/call`, token rate is `<=4.4`, or any TTFT/RAM/correctness gate fails.
+
+Promotion rule remains unchanged:
+
+1. Accept as candidate only if `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, and correct/coherent France output all pass.
+2. If it passes, immediately record full reproduction metadata, commit and push source/artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then run clean pushed-source reproduction before accepted SOTA promotion.
+3. If it fails, record as rejected and continue the `88de4bb09 -> current` source regression audit. Do not repeatedly sample the same env.
+
 ### 2026-07-06 Latest Active Plan: No-Prefill Full-Pack Rejected, Audit 88de4bb09 Regression
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。full-pack mmap + `/dev/null` gate prefill 已经严格 cold 测试失败，不能进入 pushed-source SOTA reproduction。

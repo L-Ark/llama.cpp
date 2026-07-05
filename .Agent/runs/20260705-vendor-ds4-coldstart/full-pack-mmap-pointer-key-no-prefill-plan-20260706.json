@@ -1,0 +1,46 @@
+{
+  "created_at_utc": "2026-07-05T23:36:00Z",
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/full-pack-mmap-pointer-key-no-prefill-plan-20260706.json",
+  "status": "planned_before_run",
+  "objective": "Emulate the old 88de4bb09 full-pack mmap cache-key behavior more closely by disabling GGML_MOE_STREAM_ONE_PREFILL_PROFILE entirely, not by pointing it at /dev/null.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "ttft_gate_ms": 33617.688744,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "why_this_diff_matters": {
+    "old_88de_code": "No ONE_PREFILL_PROFILE, one_prefill_key_mode_enabled, or one_cache_key_for code exists in ggml/src/ggml-cuda/moe_stream.cu at 88de4bb09. Cache keys are pointer-based src0_data values.",
+    "current_devnull_rejection": "The /dev/null no-prefill run disabled prefill but kept one_prefill_key_mode_enabled() true, so cache keys were named tensor/expert hashes, not pointer keys. It reached only 3.9 tok/s.",
+    "hypothesis": "If the old 5.1 diagnostic depended on pointer-key cache behavior rather than just absence of prefill, omitting GGML_MOE_STREAM_ONE_PREFILL_PROFILE entirely should move current-source counters and token rate closer to the old diagnostic."
+  },
+  "method": {
+    "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-probe/bin/llama-cli",
+    "base_env": "same as full-pack mmap no-prefill rejected run",
+    "env_change": {
+      "remove": [
+        "GGML_MOE_STREAM_ONE_PREFILL_PROFILE",
+        "GGML_MOE_STREAM_ONE_PREFILL_LIMIT"
+      ],
+      "keep": {
+        "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+        "GGML_MOE_EXPERT_PACK": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+        "GGML_MOE_CPU_FALLBACK_PACK_MMAP": "1"
+      }
+    },
+    "strict_runner": ".Agent/run-tools/strict_ds4_runner.py",
+    "run_name": "20260706_full_pack_mmap_pointer_key_no_prefill"
+  },
+  "theoretical_bound": {
+    "upper_signal": "The old diagnostic with binary b14646-88de4bb09 reached 5.1 tok/s.",
+    "expected_best_case": "Pointer-key no-prefill current source approaches the old 5.1 result while keeping RAM and TTFT valid.",
+    "expected_failure": "If file-cache pressure remains near 15GB and fallback_t0 stays around 1.5 ms/call, token rate will remain <=4.4 and this route is rejected."
+  },
+  "acceptance": {
+    "token_rate": "eval_tok_s > 4.4",
+    "ttft": "ttft_ms <= 33617.688744",
+    "ram": "memory_peak_bytes <= 16000000000 including page cache, MemorySwapMax=0, no OOM or ram_limit_killed",
+    "correctness": "France output must be semantically correct and coherent",
+    "promotion": "If it passes, record a SOTA-candidate artifact, commit/push immediately, then run clean pushed-source reproduction before accepted SOTA promotion."
+  },
+  "rejection": "If eval_tok_s <=4.4 or any gate fails, record as rejected and continue the 88de regression audit rather than resampling."
+}
