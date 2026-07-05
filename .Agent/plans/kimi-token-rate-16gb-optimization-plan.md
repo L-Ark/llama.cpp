@@ -71818,3 +71818,180 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record exact run directory, source commit, command, metrics, output, memory,
   stderr layer summary, and decision.
+
+### Phase 7LW result
+
+Timestamp: 2026-07-06 01:29:00 CST.
+
+Status: accepted diagnostic result; no SOTA promotion.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-082230Z-phase7lw-upgate-layer-current-n32`
+
+Source:
+
+- `f832208d6`
+
+Gates:
+
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- manual semantic quality `pass`;
+- TTFT `76146.94 ms`;
+- decode `22962.85 ms / 31`, `1.35 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- expert-pack iouring bytes `126391910400`;
+- expert-pack iouring wait `19769217 us`;
+- current-down overlap worker `3174039 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Layer/type profile:
+
+- layer records `869`;
+- aggregate up/gate:
+  - calls `869`;
+  - wall `6.847 ms/call`, about `5950 ms` total;
+  - up wait `3.462 ms/call`;
+  - gate wait `3.656 ms/call`;
+  - wall gap `0.037 ms/call`;
+  - combined stage-job histogram has `460/869` calls in the `9-16` bucket.
+- type `(18,18)`:
+  - calls `311`;
+  - wall `8.528 ms/call`, about `2652 ms` total;
+  - wait counters `0`;
+  - kernel/compute dominated.
+- type `(22,22)`:
+  - calls `558`;
+  - wall `5.910 ms/call`, about `3298 ms` total;
+  - up wait `5.391 ms/call`;
+  - gate wait `5.694 ms/call`;
+  - wait counters overlap by design, so their sum is not additive wall time.
+
+Top rows:
+
+- top wall row:
+  - `blk.60.ffn_up_exps.weight` / `blk.60.ffn_gate_exps.weight`;
+  - type `(18,18)`;
+  - wall `423.938 ms`;
+  - kernel `407.405 ms`;
+  - wait `0`.
+- top type `(22,22)` row:
+  - `blk.1.ffn_up_exps.weight` / `blk.1.ffn_gate_exps.weight`;
+  - wall `299.806 ms`;
+  - up wait `273.193 ms`;
+  - gate wait `292.840 ms`.
+- next type `(22,22)` rows are broad, around `156-197 ms` wall each.
+
+Interpretation:
+
+- No single layer or small layer group exceeds the planned source threshold.
+- Single-layer special casing remains rejected.
+- Type18/IQ3 compute remains broad and already closed by Phase 7LV.
+- The remaining actionable bucket is broad type `(22,22)` foreground movement:
+  about `3.3 s` n32 wall with heavy overlapping up/gate IO waits.
+- The current implementation preserves useful overlap by:
+  - copying up and gate in separate CPU threads/rings;
+  - joining up first;
+  - launching up compute before waiting for gate.
+- Previously rejected combined staging reduced some IO counters but waited for
+  both up and gate before launching up compute, losing this overlap.
+
+Decision:
+
+- Do not implement single-layer work.
+- Do not retry broad combined staging, split staging, refill-only, or depth-only
+  knobs.
+- The next source candidate must preserve early-up behavior while changing only
+  the type `(22,22)` IO scheduling shape.
+
+## Phase 7LX - type22 shared IO with early-up completion design
+
+Timestamp: 2026-07-06 01:36:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test a default-off source path for same-type `IQ2_S/IQ2_S` up/gate rows that
+  reduces duplicate IO wait/submit overhead without losing the accepted early
+  up-compute overlap.
+
+Theory:
+
+- Current type `(22,22)` path starts two CPU threads:
+  - up thread copies `up_jobs` through one pinned/iouring ring;
+  - gate thread copies `gate_jobs` through another pinned/iouring ring;
+  - the main thread joins up first and launches up compute before joining gate.
+- This preserves overlap, but each row has two independent io_uring wait loops
+  over the same selected expert ids and similar read counts.
+- Prior combined staging was too coarse because it waited for combined up+gate
+  completion before up compute.
+- A better candidate is a shared scheduler that:
+  1. submits both up and gate jobs into one coordinated IO loop;
+  2. prioritizes/submits up jobs first;
+  3. returns control as soon as all up jobs have completed H2D enqueue;
+  4. allows gate jobs to keep completing on the gate stream;
+  5. launches up compute immediately after up completion;
+  6. joins gate completion only before gate compute.
+
+Hard upper bound:
+
+- 7LW type `(22,22)` wall is about `3298 ms` n32.
+- The candidate cannot remove all of it because storage/H2D still happens.
+- The first expected win is only reduced duplicated wait/submit and better
+  prioritization:
+  - target n32 gain `0.5-1.0 s`;
+  - target n96 gain `1.2-2.5 s`;
+  - no TTFT increase above 20%.
+
+Implementation constraints:
+
+- Default off behind `GGML_MOE_UP_GATE_SHARED_IO_EARLY_UP=1`.
+- Only activate when:
+  - `src0_type == GGML_TYPE_IQ2_S`;
+  - `gate_type == GGML_TYPE_IQ2_S`;
+  - same-type parallel up/gate path is active;
+  - all up/gate jobs are expert-pack entries with uniform bytes;
+  - pinned staging and io_uring backend are active.
+- If any precondition fails, fall back to the current path.
+- Preserve output math exactly:
+  - same destination buffers;
+  - same CUDA streams for up and gate H2D;
+  - same launch order and final synchronization.
+- No activation during prompt or mixed `(18,22)` rows.
+
+Acceptance gates:
+
+- Build succeeds.
+- n32 strict cold-start run passes:
+  - host RAM peak `<= 15899996160`;
+  - swap max `0`;
+  - output quality `pass`;
+  - manual France semantic pass;
+  - TTFT `<127598.064 ms`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+- n32 decode must improve versus the current-head diagnostic/default band:
+  - hard reject if decode is worse than `22962.85 ms / 31`;
+  - promote only if a clean no-heavy-profile run improves over the accepted
+    default references and is reproducible.
+- If n32 passes and improves, run n96 before promotion.
+
+Rollback:
+
+- If quality fails, TTFT fails, memory fails, fallbacks appear, or decode
+  regresses, revert the source commit and record the rejected run.
+
+Reproducibility:
+
+- Commit and push this plan before editing source.
+- Commit the source patch separately.
+- Record source commit, build command, run directory, metrics, stderr activation
+  line, and exact env for every run.
