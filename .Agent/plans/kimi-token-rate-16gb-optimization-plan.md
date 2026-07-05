@@ -75017,3 +75017,152 @@ Reproducibility:
 - Commit and push this diagnostic plan before running.
 - Record exact run directory, source commit, command, output text, all metrics,
   generated CSV file list, aggregation commands, summaries, and next decision.
+
+### Phase 7MO result
+
+Timestamp: 2026-07-06 22:05:00 CST.
+
+Status: accepted diagnostic result; no SOTA promotion.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-112658Z-phase7mo-current-full-profile-n32`
+
+Source:
+
+- `14b3c8991`.
+
+Generated files:
+
+- `fallback-profile.csv` (`841K`);
+- `down-batch-profile.csv` (`157K`);
+- `up-gate-profile.csv` (`177K`);
+- `route-profile.csv` (`848K`);
+- `route-trace.csv` (`2.0M`);
+- `ttft-trace.csv` (`3.8M`).
+
+Gates:
+
+- exit `0`;
+- quality `pass`;
+- answer:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- manual semantic quality `pass`;
+- TTFT `75922.22 ms`, below `127598.064 ms`;
+- decode `25416.60 ms / 31`, `1.22 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- async coalesce activation absent.
+
+Runtime counters:
+
+- expert-pack:
+  - iouring reads `22647`;
+  - bytes `126391910400`;
+  - wait `22221114 us`;
+  - submit `106257 us`;
+  - wait calls `18236`;
+  - CQEs `22647`;
+  - inflight avg `3.35`.
+- pinned staging:
+  - main host stage `1778.357 ms`, H2D `3604.338 ms`;
+  - gate host stage `792.114 ms`, H2D `1352.952 ms`.
+- current-down overlap:
+  - planned/completed jobs `3673`;
+  - worker `3464819 us`.
+- cache:
+  - down slots `766`, hit rate `73.4%`;
+  - upgate slots `1735`, hit rate `45.2%`.
+
+CPU fallback summary:
+
+- prompt,type=22: `21663.466 ms`, `40.500 GiB`;
+- prompt,type=11: `20996.874 ms`, `31.958 GiB`;
+- prompt,type=18: `18146.372 ms`, `35.590 GiB`;
+- prompt,type=23: `7739.236 ms`, `11.854 GiB`;
+- prompt,type=2: `3592.001 ms`, `7.321 GiB`;
+- decode,type=2: `2562.016 ms`, `13.351 GiB`.
+
+Decode Q4 fallback by tensor:
+
+- `blk.10.ffn_down_exps.weight`: `449.560 ms`;
+- `blk.7.ffn_down_exps.weight`: `420.272 ms`;
+- `blk.9.ffn_down_exps.weight`: `397.352 ms`;
+- `blk.6.ffn_down_exps.weight`: `387.800 ms`;
+- `blk.8.ffn_down_exps.weight`: `320.072 ms`;
+- `blk.15.ffn_down_exps.weight`: `299.096 ms`;
+- `blk.18.ffn_down_exps.weight`: `287.864 ms`.
+
+Up/gate summary:
+
+- type `(22,22)`:
+  - rows `558`;
+  - wall `3722.125 ms`;
+  - up wait `3442.953 ms`;
+  - gate wait `3593.508 ms`;
+  - up compute `103.448 ms`;
+  - gate compute `66.120 ms`;
+  - kernel `3664.773 ms`;
+  - staged jobs `2552/2553`.
+- type `(18,18)`:
+  - rows `311`;
+  - wall `2982.227 ms`;
+  - wait `0`;
+  - kernel `2926.144 ms`;
+  - staged jobs `1502/1502`.
+
+Down batch summary:
+
+- type `23`:
+  - rows `372`;
+  - wall `2348.698 ms`;
+  - stage `2265.481 ms`;
+  - kernel `32.270 ms`;
+  - misses/staged `1707`.
+- type `11`:
+  - rows `1272`;
+  - wall `2324.586 ms`;
+  - stage `2064.652 ms`;
+  - kernel `164.540 ms`;
+  - misses/staged `1814`.
+
+Current buckets above `1 s`:
+
+| bucket | n32 size | status |
+| --- | ---: | --- |
+| type22 up/gate movement/wait | `3.72 s` | closed by split/cache/shared-IO/coalescing evidence |
+| type18 IQ3 compute | `2.98 s` | closed by 7LV audit and IQ3/VDR/MMQ/Q8_K rejected probes |
+| down type23/type11 staging | `4.33 s stage` | closed by current-down completeness, prefetch-depth, staging-shape probes |
+| Q4_0 decode CPU fallback | `2.56 s` | closed by Q4 parity/single/split/hit-only/partial upper-bound evidence |
+| prompt fallback/page cache | large TTFT-only | not token-rate target; page-cache drops already implemented |
+
+Interpretation:
+
+- The current default path is bottlenecked by several known buckets, but every
+  local CUDA/IO mechanism with a direct implementation route has already been
+  tested and rejected or bounded below usefulness.
+- Continuing to mutate:
+  - cache split/admission,
+  - first-use overlay/coalescing,
+  - broad/shared IO scheduling,
+  - same-type IQ3 parallelism,
+  - Q4 down production,
+  - current-down completeness,
+  is no longer justified by 7MO.
+- A next improvement needs a broader design that changes the model/runtime
+  economics rather than another local staging variant.
+
+Decision:
+
+- Do not start another narrow CUDA/IO source patch from 7MO.
+- Next plan must be algorithmic or model-format level, for example:
+  - a smaller/faster quantized expert representation with quality validation;
+  - a true speculative/MTP path that parallelizes accepted tokens rather than
+    adding serial verification overhead;
+  - a model-pack layout/runtime format that supports coalesced reads without
+    reducing inflight or increasing span-slot waits.
+- Any such plan must still preserve the strict gates:
+  16GB host RAM, cold start, semantic France output, TTFT within 20%, and
+  immediate commit/push only for reproducible compliant gains.
