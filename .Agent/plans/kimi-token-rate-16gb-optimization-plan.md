@@ -65018,3 +65018,127 @@ Decision:
   - `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`.
 - Do not revisit dense retention without a decode-only page-fault trace proving
   dense pages are on the critical path.
+
+## Phase 7KL - current SOTA perf record hotspot refresh
+
+Timestamp: 2026-07-05 12:22:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Refresh CPU/kernel hotspot evidence under the current accepted post-7JY SOTA.
+- Determine whether the next source plan should target:
+  - file-backed page faults / memcg reclaim;
+  - CPU fallback mmap path;
+  - libgomp/threadpool waiting or imbalance;
+  - io_uring/SQPOLL kernel polling;
+  - CUDA runtime/launch overhead;
+  - or no CPU-side source change.
+- This is diagnostic only; perf-wrapped timing cannot become SOTA.
+
+Why this is needed:
+
+- 7KI shows very high process CPU time:
+  - task-clock `3184 s`;
+  - sys time `2360.695 s`;
+  - `20.612` CPUs utilized.
+- 7KJ proves SQPOLL-off is slower, so the high sys CPU is not enough by itself
+  to remove SQPOLL.
+- 7KK proves keeping dense mmap pages is slower, so broad dense page-cache
+  retention is not the answer.
+- The old perf phase 7BJ showed page-fault/memcg and libgomp wait issues, but
+  it predates the accepted post-7JY SOTA. Current evidence must be refreshed
+  before writing source code.
+
+Experiment:
+
+- Run one strict cold-start n32 with `perf record`.
+- Use current SOTA runtime knobs exactly:
+  - `N=32`;
+  - `VRAM_MIB=15000`;
+  - `THREADS=32`;
+  - `PINNED_SLOTS=12`;
+  - default `UPGATE_PCT=62`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MIN_PROFILE=1`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`.
+- Sampling rate is `49 Hz` to limit overhead.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard a38193341
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kl-perf-record-n32
+rm -rf "$RUN"
+mkdir -p "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      bash -lc 'perf record -F 49 --call-graph fp -o "$RUN/perf.data" -- scripts/kimi-phase7fb-min-profile-repro.sh'
+
+perf report -i "$RUN/perf.data" --stdio --no-children \
+  --sort dso,symbol > "$RUN/perf-report-nochildren.txt"
+perf report -i "$RUN/perf.data" --stdio --children \
+  --sort dso,symbol > "$RUN/perf-report-children.txt"
+perf report -i "$RUN/perf.data" --stdio --no-children \
+  --sort comm,dso,symbol > "$RUN/perf-report-comm-nochildren.txt"
+perf report -i "$RUN/perf.data" --stdio --children \
+  --sort comm,dso,symbol > "$RUN/perf-report-comm-children.txt"
+perf script -i "$RUN/perf.data" --header > "$RUN/perf-script-header.txt"
+```
+
+Required gates:
+
+- cold start through the runner's cache-drop path;
+- host RAM peak below `15,900,000,000` bytes including page cache;
+- swap max `0`;
+- exit `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- TTFT `<= 106331.72 ms`;
+- quality `pass`;
+- manual semantic quality `pass` for:
+  `Please introduce France in a short paragraph.`;
+- run directory must contain:
+  - `perf.data`;
+  - `perf-report-nochildren.txt`;
+  - `perf-report-children.txt`;
+  - `perf-report-comm-nochildren.txt`;
+  - `perf-report-comm-children.txt`;
+  - `perf-script-header.txt`.
+
+Analysis:
+
+- Extract top self-time and children-time symbols.
+- Specifically check for:
+  - `__pv_queued_spin_lock_slowpath`;
+  - `filemap_fault`, `filemap_add_folio`, `do_user_addr_fault`;
+  - `try_to_free_mem_cgroup_pages`;
+  - `io_sq_thread`;
+  - libgomp worker/wait symbols;
+  - CUDA runtime/driver symbols;
+  - `ggml_vec_dot_*` self time.
+- If perf report includes useful timestamp data, derive a decode-window report
+  using TTFT as the boundary. If not, record that full-run sampling is prompt
+  contaminated and plan a narrower decode-only sampler.
+
+Decision rule:
+
+- If page-fault/memcg dominates current decode evidence, next phase should
+  design a narrow way to reduce file-backed CPU fallback faults without
+  immediate `MADV_DONTNEED` or broad dense retention.
+- If libgomp wait dominates decode, next phase should inspect CPU fallback
+  thread scheduling and active row distribution before changing thread count.
+- If io_uring/SQPOLL dominates but SQPOLL-off is slower, do not remove SQPOLL;
+  look for reducing submitted read batches/bytes instead.
+- If no new source-actionable hotspot appears, reject CPU-side changes and
+  return to movement-byte reduction or model-format changes.
+- Record all metrics, perf findings, and reproduction method, then push.
