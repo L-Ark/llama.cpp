@@ -1,0 +1,278 @@
+{
+  "accepted_sota": {
+    "correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15099523072,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.8,
+    "ram_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_ms": 32087.738292
+  },
+  "accepted_sota_unchanged": true,
+  "created_at_utc": "2026-07-05T20:46:14Z",
+  "decision": {
+    "new_sota": false,
+    "next_action_requires_user_approval": "Approve freeing or relocating at least 60GB for the best Q2 REAP candidate, 90-100GB for native-topology low-bit candidates, and preferably >=180GB for cloudyu 4Expert plus hash/run artifacts. Preserve native DS4 GGUF, accepted France gate pack, accepted SOTA run, current source branch, profiles, and pushed-source reproduction artifacts.",
+    "reason": "Current metadata refresh found no new usable GGUF weights beyond candidates already bounded below 10 tok/s or requiring full download/correctness. No local complete alternate GGUF exists, and root disk has insufficient free space for the required full-download/hash/run artifacts without deleting or relocating files.",
+    "source_edit_allowed_now": false,
+    "strict_cold_benchmark_run": false
+  },
+  "hf_current_refresh": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-refresh-20260706-current-continuation.json",
+    "new_or_changed_file_count_vs_previous": 0,
+    "new_repo_count_vs_previous": 1,
+    "new_repos": [
+      {
+        "file_count": 0,
+        "lastModified": "2026-06-02T14:20:26.000Z",
+        "repo": "cPilotGod/deepseek-deepseek-v4-284b-flash-gguf",
+        "total_listed_file_bytes": 0
+      }
+    ],
+    "recent_repos": [
+      {
+        "file_count": 0,
+        "files": [],
+        "lastModified": "2026-07-05T18:13:51.000Z",
+        "repo": "ilintar/DeepSeek-V4-Flash-GGUF",
+        "total_listed_file_bytes": 0
+      },
+      {
+        "file_count": 4,
+        "files": [
+          {
+            "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+            "size": 164633502304
+          },
+          {
+            "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+            "size": 99705676384
+          },
+          {
+            "name": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+            "size": 86720111200
+          },
+          {
+            "name": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+            "size": 3807602400
+          }
+        ],
+        "lastModified": "2026-07-05T01:45:53.000Z",
+        "repo": "eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+        "total_listed_file_bytes": 354866892288
+      },
+      {
+        "file_count": 6,
+        "files": [
+          {
+            "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q8_0.gguf",
+            "size": 9527497984
+          },
+          {
+            "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q6_K.gguf",
+            "size": 7359255808
+          },
+          {
+            "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_M.gguf",
+            "size": 6467966208
+          },
+          {
+            "name": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+            "size": 5629105408
+          }
+        ],
+        "lastModified": "2026-07-04T07:28:18.000Z",
+        "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+        "total_listed_file_bytes": 34529051808
+      },
+      {
+        "file_count": 1,
+        "files": [
+          {
+            "name": "DeepSeek-V4-Flash.gguf",
+            "size": 156378344544
+          }
+        ],
+        "lastModified": "2026-07-03T23:03:24.000Z",
+        "repo": "sokann/DeepSeek-V4-Flash-GGUF",
+        "total_listed_file_bytes": 156378344544
+      },
+      {
+        "file_count": 1,
+        "files": [
+          {
+            "name": "ggml-model-Q3_K_S.gguf",
+            "size": 122467948864
+          }
+        ],
+        "lastModified": "2026-07-03T12:52:45.000Z",
+        "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF",
+        "total_listed_file_bytes": 122467948864
+      },
+      {
+        "file_count": 6,
+        "files": [
+          {
+            "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf",
+            "size": 302251447616
+          },
+          {
+            "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf",
+            "size": 164633497632
+          },
+          {
+            "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+            "size": 98810926400
+          },
+          {
+            "name": "cyberneurova-DeepSeek-V4-Flash-abliterated-Layers37-42Q4KExperts-mixed.gguf",
+            "size": 97591742496
+          }
+        ],
+        "lastModified": "2026-07-03T08:04:56.000Z",
+        "repo": "audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+        "total_listed_file_bytes": 836729113312
+      },
+      {
+        "file_count": 7,
+        "files": [
+          {
+            "name": "DeepSeek-V4-Flash.Q8_0.gguf",
+            "size": 156378344544
+          },
+          {
+            "name": "DeepSeek-V4-Flash.IQ4_XS.gguf",
+            "size": 155095231840
+          },
+          {
+            "name": "DeepSeek-V4-Flash.IQ3_XXS-L39.gguf",
+            "size": 151270026592
+          },
+          {
+            "name": "DeepSeek-V4-Flash.IQ3_XXS-L21.gguf",
+            "size": 134056602976
+          }
+        ],
+        "lastModified": "2026-07-02T18:41:52.000Z",
+        "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+        "total_listed_file_bytes": 901225571488
+      },
+      {
+        "file_count": 17,
+        "files": [
+          {
+            "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00003-of-00004.gguf",
+            "size": 49994259008
+          },
+          {
+            "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00002-of-00004.gguf",
+            "size": 49983378752
+          },
+          {
+            "name": "Q2_K/DeepSeek-V4-Flash-Q2_K-00002-of-00003.gguf",
+            "size": 49310047712
+          },
+          {
+            "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00003-of-00004.gguf",
+            "size": 49196411616
+          }
+        ],
+        "lastModified": "2026-07-02T05:07:00.000Z",
+        "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+        "total_listed_file_bytes": 491020378684
+      },
+      {
+        "file_count": 1,
+        "files": [
+          {
+            "name": "ds4flash-4expert.gguf",
+            "size": 164465760544
+          }
+        ],
+        "lastModified": "2026-07-01T09:30:47.000Z",
+        "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+        "total_listed_file_bytes": 164465760544
+      },
+      {
+        "file_count": 4,
+        "files": [
+          {
+            "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00004.gguf",
+            "size": 39630611872
+          },
+          {
+            "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00004.gguf",
+            "size": 39628788224
+          },
+          {
+            "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00004.gguf",
+            "size": 39546993120
+          },
+          {
+            "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00004.gguf",
+            "size": 37198265248
+          }
+        ],
+        "lastModified": "2026-06-30T03:17:40.000Z",
+        "repo": "bartowski/DeepSeek-V4-Flash-GGUF",
+        "total_listed_file_bytes": 156004658464
+      }
+    ],
+    "repo_count": 53
+  },
+  "notable_prior_header_bounds": [
+    {
+      "content_range": "bytes 0-67108863/86720111200",
+      "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+      "file": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+      "repo": "eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "tok_s_bound": 6.944680456822453
+    },
+    {
+      "content_range": "bytes 0-67108863/99705676384",
+      "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+      "file": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+      "repo": "eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "tok_s_bound": 6.341957503321757
+    },
+    {
+      "content_range": "bytes 0-67108863/164633502304",
+      "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+      "file": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+      "repo": "eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "tok_s_bound": 4.422731736625969
+    },
+    {
+      "content_range": "bytes 0-67108863/50439361920",
+      "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "tok_s_bound": 9.435899652555262
+    },
+    {
+      "content_range": "bytes 0-67108863/50439362272",
+      "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+      "file": "DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+      "tok_s_bound": 9.435899652555262
+    },
+    {
+      "content_range": "bytes 0-67108863/164465760544",
+      "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+      "file": "ds4flash-4expert.gguf",
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "tok_s_bound": 5.5532873115893935
+    }
+  ],
+  "purpose": "Continuation audit after exact up/down fallback closure: check whether any no-delete/no-full-download path can advance toward 10 tok/s.",
+  "source_head": "06f3a4cc99d54a94e5db641cc0c466356193e54a",
+  "storage_state": {
+    "disk_cleanup_requires_explicit_user_approval": true,
+    "files_deleted": false,
+    "root_available_bytes": 1892950016,
+    "root_available_gib": 1.763,
+    "root_total_bytes": 1065418129408,
+    "tmpfs_note": "/dev/shm and /run are tmpfs, RAM-backed, and are not acceptable model-storage substitutes for the 16GB host-RAM target."
+  }
+}
