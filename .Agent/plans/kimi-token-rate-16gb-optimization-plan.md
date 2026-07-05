@@ -80164,3 +80164,115 @@ Artifacts:
 - `group_summary.tsv`
 - `policy_results.tsv`
 - `bound.md`
+
+## Phase 7NM - CLI CPU poll wait-policy probe
+
+Status: planned.
+
+Timestamp: 2026-07-06 02:18 CST.
+
+Reason:
+
+- Phase 7NJ found no remaining production runtime switch that was both
+  untested and likely to improve token rate.
+- Phase 7NK/7NL found cache-policy and previous-token route-predictor
+  headroom, but no implementable policy that beats the current LRU behavior.
+- The current strict n32/n96 runs are still dominated by exposed expert-pack
+  transfer/wait time:
+  - 7MY n32 profile `iouring_wait_us=20984633`;
+  - 7MU n96 `iouring_wait_us=50085670`.
+- Earlier thread-count and SQPOLL/refill/depth sweeps were rejected, but the
+  ggml worker wait policy itself has not been isolated on current head.
+- `llama-completion --help` exposes `--poll` and `--poll-batch`, both defaulting
+  to `50`. A lower polling value may reduce CPU busy-wait pressure, kernel
+  contention, and interference with staging/copy work during decode.
+
+Hypothesis:
+
+- If ggml worker busy polling is competing with io/staging and CUDA submission
+  work, then `--poll 0 --poll-batch 0` can lower exposed wait time without
+  changing model math, cache policy, quantization, VRAM budget, or quality.
+- The likely upper bound is small. In 7MY, decode is `26045.71 ms` and exposed
+  io wait is `20984.633 ms`. If poll tuning only removes `5-10%` of this wait,
+  the n32 endpoint would improve by roughly `1.0-2.1 s`, which corresponds to
+  about `1.24-1.29 tok/s` on the profiled n32 run. If it removes `15%`, the
+  upper endpoint is roughly `1.35 tok/s`. This phase is therefore a probe, not
+  a guaranteed SOTA path.
+
+Strict constraints:
+
+- Host RAM remains strictly capped with:
+  `MemoryMax=15900000000` and `MemorySwapMax=0`.
+- Run must be a cold start under `systemd-run --wait --collect --same-dir`.
+- VRAM policy remains current accepted settings:
+  `VRAM_MIB=15000`, `PINNED_SLOTS=12`, `UPGATE_PCT=62`.
+- Prompt remains:
+  `Please introduce France in a short paragraph.`
+- Output must be semantically correct and coherent.
+- TTFT must stay below `127598.064 ms`.
+- `memory.peak` must be `<= 15899996160`.
+- `memory.swap.peak` must be `0`.
+- `read_failures=0` and `iouring_fallbacks=0`.
+
+Method:
+
+1. Create a run directory:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nm-cpu-poll-n32`.
+2. Copy `scripts/kimi-phase7fb-min-profile-repro.sh` into the run directory as
+   `kimi-phase7nm-poll0-repro.sh`.
+3. Patch only the copied run artifact, not the repo script, to append:
+   `--poll 0 --poll-batch 0`
+   to the generated `LLAMA_ARGS`.
+4. Save the copied script diff in the run directory.
+5. Run strict n32:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      "$RUN/kimi-phase7nm-poll0-repro.sh"
+```
+
+Required activation:
+
+- `command.txt` in the run directory must include:
+  `--poll 0 --poll-batch 0`.
+
+Comparison:
+
+- Primary comparison is the current accepted n32 head baseline:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-045134Z-phase7kx-current-head-n32`
+  with decode `22601.57 ms / 31 = 1.37 tok/s`, TTFT `78182.34 ms`.
+- Secondary comparison is the current n32 full-profile run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile`
+  with decode `26045.71 ms / 31 = 1.19 tok/s`.
+
+Acceptance:
+
+- If n32 improves materially versus the accepted n32 baseline while satisfying
+  all strict gates, update this plan and run an n96 validation before accepting
+  the change as SOTA.
+- If n32 is flat/slower, quality fails, TTFT rises by more than `20%`, memory
+  exceeds the cap, or required activation is missing, reject the poll change.
+- Do not test additional affinity variants in the same practice step unless
+  this plan is updated first with a specific bottleneck and expected bound.
+
+Result recording:
+
+- Record:
+  - exact command;
+  - copied script diff;
+  - output text;
+  - TTFT;
+  - decode timing and token rate;
+  - memory peak and swap peak;
+  - expert-pack counters;
+  - decision and next step.
+
+Reproducibility:
+
+- This plan must be committed and pushed before the n32 probe.
+- The result must be committed and pushed before any follow-up experiment or
+  source implementation.
