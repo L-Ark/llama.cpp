@@ -10613,3 +10613,74 @@ Decision:
 - Keep this verifier fix. It is required before any future exact Q8_0/direct-pool compute candidate can be safely tested.
 - Future logit-changing candidates must produce a baseline `result.gguf`, run `--check --top1-report --top1-fail-on-mismatch`, and pass `same_top1 == n_tokens` before any long France benchmark or SOTA promotion.
 - Current accepted SOTA remains `4.4 tok/s`.
+
+### 2026-07-05 Latest Plan Update: Q4_K Top4 Combo Closure Before More Source Work
+
+Current accepted SOTA remains:
+
+- Token rate: `eval_tok_s=4.4`
+- Prompt rate: `prompt_tok_s=1.8`
+- TTFT guard run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Prior accepted pushed repro: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Current-head guard metrics: `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Promotion TTFT gate: `TTFT <= 33617.688744 ms`
+- Accepted model: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`
+- Accepted model size: `156148189760 bytes` (`145.42 GiB`)
+- Accepted SOTA source/record state is pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+
+Promotion protocol, still mandatory:
+
+1. A candidate must beat `4.4 tok/s`, not merely tie it.
+2. The run must be strict cold-start vendor DeepSeek under `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`, and page cache charged inside the same cgroup.
+3. France output for `Please introduce France in a short paragraph.` must be semantically correct and coherent. Any logit-changing path must first pass the `llama-results` top1 verifier with `same_top1 == n_tokens`.
+4. TTFT must be `<=33617.688744 ms` for accepted promotion. TTFT-over-gate results may be recorded and pushed only as rejected diagnostics.
+5. Record exact run path, source head, diff summary, env/CLI, build command, binary hashes, model/profile/pack hashes, stdout answer, token rates, TTFT, elapsed time, cgroup `memory.peak`, `memory.stat`, `memory.events`, pack/cache counters, and comparison to the accepted SOTA.
+6. When a compliant new SOTA appears, immediately commit and push source plus records to `ssd/vendor/deepseek-token-rate-16gb` using `L-Ark <fliangae@connect.ust.hk>`, then reproduce once from pushed source before marking it accepted.
+7. If the pushed-source reproduction fails, keep the failed result as rejected, revert runtime source to the last accepted SOTA behavior, update this plan, commit/push the rejection record, and keep accepted SOTA unchanged.
+
+Recent closure status:
+
+- Thread-count sweep is closed for the current accepted route. Results are in `.Agent/runs/20260705-vendor-ds4-coldstart/thread-count-sweep-result.json`. `-t/-tb 24` tied `4.4 tok/s`; `32`, `40`, and `60` regressed, with `60` also missing TTFT.
+- External artifact refresh is closed for direct source work now. Results are in `.Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-refresh-4expert-ssd-dflash.json`. No external artifact is source-ready for immediate vendor SOTA promotion.
+- CUDA graph is not part of the accepted SOTA route; current accepted env keeps `GGML_CUDA_DISABLE_GRAPHS=1`. Any future graph attempt must be default-off, correctness-verified, and compared under the same cold-start gate.
+- The main remaining bottleneck is still CPU fallback and source/page movement for routed expert up/down work after the gate-only cache. Gate cache hit behavior is not the limiting factor in the rejected thread sweep.
+
+Current hard-bound focus:
+
+- The only still-plausible combination from the external refresh is `4Expert/top_k=4 + Q4_K routed experts + source/page elimination + faster CPU fallback`.
+- Current native active expert payload uses `expert_used_count=6`, routed expert role size `4.25 MiB` per layer/expert, and about `148.916016 GiB` hot fallback payload in the accepted decode model.
+- The 4Expert Q4_K candidate uses `expert_used_count=4`, routed expert role size `4.5 MiB`, so the active payload ratio is `(4/6) * (4.5/4.25) = 0.7058823529411764`.
+- Estimated top4 Q4_K hot payload is `105.11718776470589 GiB`.
+- After perfect source/page elimination, the remaining hot fallback time allowed for `10 tok/s` is only `1642.8865524000012 ms`.
+- Therefore Q4_K CPU dot bandwidth must exceed `63.983 GiB/s` with zero integration overhead, and exceed `91.978 GiB/s` with only `500 ms` of routing/stream/cache/full-model overhead.
+- Rule: reopen this route only if both DS4-like Q4_K shapes exceed `91.978 GiB/s` with margin. If either shape is below `63.983 GiB/s`, reject the route. A value between `63.983` and `91.978 GiB/s` is not source-ready.
+
+Immediate execution plan:
+
+1. Do not run another long France benchmark until the design step produces a hard-bound pass or a logit-changing candidate passes top1 correctness.
+2. Fix the Q4_K dot microprobe validity first. The first harness run produced zero-output results (`sink` equal to the epsilon-only value), so those throughput numbers are invalid and must not be used.
+3. Add diagnostic checks to `.Agent/run-tools/q4k_dot_harness.cpp`:
+   - print nonzero evidence for Q4_K and Q8_K block fields (`d`, `dmin`, scales, `qs`, `bsums`);
+   - print a float reference dot for row 0;
+   - print the corresponding Q4_K x Q8_K dot output;
+   - fail fast if warmup absolute output sum is zero.
+4. Rerun the microprobe only after nonzero correctness evidence exists. Required shapes are:
+   - up/gate-like: `k=4096`, `rows=2048`
+   - down-like: `k=2048`, `rows=4096`
+   - thread counts: `1`, `8`, `20`, `24`, `32`
+5. Compare valid `q4_src_gib_s` against the `63.983` and `91.978 GiB/s` gates above. Record the result in `.Agent/runs/20260705-vendor-ds4-coldstart/`.
+6. If Q4_K fails the hard-bound gate, close the 4Expert/Q4_K combo route and do not download the full 4Expert GGUF or implement Q4_K stream/cache support.
+7. If Q4_K passes with margin, write a new source implementation plan before editing runtime code. That plan must explicitly cover:
+   - 4Expert GGUF disk-space/repro policy;
+   - routing tensor alias compatibility for `ffn_gate_tid2eid.weight`;
+   - Q4_K one-stream/cache/pack support;
+   - strict top1 verifier before benchmark;
+   - France and five-prompt correctness;
+   - 16GB cgroup/page-cache accounting;
+   - TTFT gate and pushed-source reproduction.
+
+SOTA status for this update:
+
+- This is a planning update only.
+- Current accepted SOTA remains `4.4 tok/s`.
+- The invalid zero-output Q4_K harness measurements are not accepted performance evidence.
