@@ -68722,3 +68722,141 @@ Reproducibility:
 - Every run directory must contain enough artifacts to rerun from the recorded
   commit, command, env, cgroup, cold-start method, model path, expert packs,
   prompt, seed, and output.
+
+### 7LE result
+
+Timestamp: 2026-07-05.
+
+Status: rejected; source rollback required.
+
+Source commit:
+
+- `d012a8c24` (`cuda: add iq2 upgate shared io dual fence`).
+
+Build:
+
+- Server build command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j
+```
+
+- Build succeeded with existing warnings.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-055055Z-phase7le-iq2-shared-io-dual-fence-n32`.
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-055055Z-phase7le-iq2-shared-io-dual-fence-n32 \
+      N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=GGML_MOE_STREAM_UP_GATE_SHARED_IO_DUAL_FENCE=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Activation:
+
+- `env.txt` contains `GGML_MOE_STREAM_UP_GATE_SHARED_IO_DUAL_FENCE=1`.
+- stderr contains:
+  - `IQ2_S parallel up/gate streams active`;
+  - `up/gate parallel CPU staging active`;
+  - `up/gate shared IO dual-fence active`.
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `76853.49 ms`;
+- decode `23345.77 ms / 31`, `1.33 tok/s`;
+- memory peak `15899996160`;
+- memory final `15100518400`;
+- final memory.stat:
+  - `anon=462848`;
+  - `file=14860591104`;
+  - `inactive_file=5572739072`;
+  - `active_file=9287393280`;
+  - `kernel=236331008`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- cgroup events:
+  - `oom=0`;
+  - `oom_kill=0`.
+
+Mechanism counters:
+
+- expert pack:
+  - hits `25055`, misses `186`;
+  - iouring reads `22666`;
+  - iouring bytes `126449942528`;
+  - iouring submit `40160 us`;
+  - iouring wait `17653452 us`;
+  - iouring H2D enqueues `22666`.
+- iouring detail:
+  - batches `4640`;
+  - submit calls `5567`;
+  - wait calls `17596`;
+  - cqes `22666`;
+  - inflight avg `3.77`;
+  - inflight max `8`;
+  - batch hist `1:162,2-4:2235,5-8:1969,9-16:274,17-32:0,gt32:0`.
+- pinned staging:
+  - main copies `19244`, waits `19208`, slot `7.44 MiB`;
+  - main iouring batches `3688`, jobs `18739`, inflight avg `3.87`,
+    batch hist `1:118,2-4:1690,5-8:1606,9-16:274`;
+  - gate copies `4099`, waits `4075`, slot `5.36 MiB`;
+  - gate iouring batches `952`, jobs `3927`, inflight avg `3.29`.
+- current-down overlap:
+  - calls `992`;
+  - planned/completed `3672/3672`;
+  - worker `3132764 us`;
+  - failed batches `0`.
+
+Comparison:
+
+- 7KX current-head n32 baseline:
+  - decode `22601.57 ms / 31`, `1.37 tok/s`;
+  - iouring wait `19756301 us`;
+  - inflight avg `3.32`;
+  - batch hist had no `9-16` bucket.
+- 7LE:
+  - decode `23345.77 ms / 31`, `1.33 tok/s`;
+  - iouring wait `17653452 us`;
+  - inflight avg `3.77`;
+  - batch hist includes `9-16:274`.
+
+Interpretation:
+
+- The mechanism worked locally:
+  - it increased effective iouring inflight;
+  - it created larger shared batches;
+  - it reduced total iouring wait by about `2.10 s` versus 7KX.
+- Endpoint performance still regressed by `744.20 ms` versus 7KX.
+- The likely gap is the cost of the dual-fence worker and shared-ring stream
+  handoff:
+  - submit calls increased (`5567` versus 7KX `5178`);
+  - the main ring absorbed more jobs and waits (`19244` copies), while the gate
+    ring still remained active for non-IQ2 work;
+  - preserving up-read priority while filling with gate reads improved IO
+    occupancy but did not reduce the exposed CUDA/H2D/synchronization wall.
+- This matches the broader pattern from 7KW and 7AY: local IO wait can improve
+  while endpoint decode worsens when the existing overlap structure is
+  disturbed.
+
+Decision:
+
+- Reject 7LE.
+- Do not run repeat n32 or n96.
+- Revert `d012a8c24` before continuing.
+- Do not retry shared-IO dual-fence unless a future profile proves that the
+  additional handoff/synchronization cost can be removed.
