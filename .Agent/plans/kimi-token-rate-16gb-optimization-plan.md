@@ -84593,3 +84593,209 @@ Reproducibility:
   - `priority-preflight.txt`;
   - exact systemd command used.
 - Commit and push the 7OG result before any follow-up experiment.
+
+### Phase 7OG result
+
+Timestamp: 2026-07-06 07:58 CST.
+
+Plan commit before execution:
+
+- `03c597dbd` (`docs: plan launch priority jitter probe`)
+
+Server state:
+
+- Server reset to:
+  `03c597dbd052426e9660bd822601722d23f60a4f`.
+- No source code was changed.
+- No model, GGUF, or expert-pack asset was changed.
+- No model asset was downloaded, converted, or deleted.
+
+System audit:
+
+- Kernel:
+  `Linux ubuntu 6.8.0-124-generic`.
+- Root filesystem:
+  `/dev/vda1`, ext4, mounted at `/`, options include `discard`.
+- Block device:
+  `vda`, `1T`, scheduler `none`, `nr_requests=256`.
+- System pressure before the plan:
+  - IO PSI was nonzero, `avg300` about `2.14`;
+  - memory PSI was nonzero, `avg300` about `3.02`;
+  - no large obvious foreground IO contender was visible in `ps`.
+
+Preflight:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-225146Z-phase7og-priority-preflight`
+- Command:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  -p IOAccounting=yes -p IOWeight=10000 \
+  -p CPUWeight=10000 -p Nice=-10 \
+  -p IOSchedulingClass=realtime -p IOSchedulingPriority=0 \
+  /bin/true
+```
+
+- Result:
+  pass, exit `0`. All properties were accepted by systemd.
+
+n96 priority candidate:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-225213Z-phase7og-priority-n96`
+- Launch properties:
+
+```text
+MemoryMax=15900000000
+MemorySwapMax=0
+IOAccounting=yes
+IOWeight=10000
+CPUWeight=10000
+Nice=-10
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+```
+
+- Runtime env/shape unchanged from accepted production:
+  `N=96`, `VRAM_MIB=15000`, `THREADS=32`, `PINNED_SLOTS=12`,
+  `UPGATE_PCT=62`, `IQ2_UPGATE_PARALLEL=1`, `MIN_PROFILE=1`,
+  `MOE_IO_DEPTH=8`, `MOE_IO_REFILL_BATCH=4`,
+  `MOE_PREFETCH_DOWN_DEPTH=2`.
+- Exit:
+  `0`.
+- Quality:
+  pass.
+- Exact output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT:
+  `73374.81 ms`.
+- Decode:
+  `55528.61 ms / 77`, `1.39 tok/s`.
+- Comparison to 7MU:
+  faster by `1168.36 ms` (`2.06%`).
+- Host RAM:
+  - `memory.peak=15899996160`;
+  - `memory.current.final=15089692672`;
+  - `file=14836756480`;
+  - `inactive_file=2238550016`;
+  - `active_file=12597669888`;
+  - `oom=0`, `oom_kill=0`.
+- Expert-pack:
+  - `iouring_bytes=315379728384`;
+  - `iouring_wait_us=48512831`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - inflight avg `3.37`, max `8`;
+  - batch hist `1:437,2-4:6446,5-8:5839,9-16:0,17-32:0,gt32:0`.
+- VRAM cache:
+  - down hit rate `73.0%`;
+  - upgate hit rate `44.1%`.
+
+n96 priority repeat:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-225520Z-phase7og-priority-n96-repeat`
+- Same launch properties and runtime env as candidate.
+- Exit:
+  `0`.
+- Quality:
+  pass.
+- Exact output:
+
+```text
+France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]
+```
+
+- TTFT:
+  `78178.99 ms`.
+- Decode:
+  `55755.91 ms / 77`, `1.38 tok/s`.
+- Comparison to 7MU:
+  faster by `941.06 ms` (`1.66%`).
+- Host RAM:
+  - `memory.peak=15899996160`;
+  - `memory.current.final=15091613696`;
+  - `file=14838185984`;
+  - `inactive_file=2424369152`;
+  - `active_file=12413218816`;
+  - `oom=0`, `oom_kill=0`.
+- Expert-pack:
+  - `iouring_bytes=315379728384`;
+  - `iouring_wait_us=49489276`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`;
+  - inflight avg `3.38`, max `8`;
+  - batch hist `1:437,2-4:6446,5-8:5839,9-16:0,17-32:0,gt32:0`.
+- VRAM cache:
+  - down hit rate `73.0%`;
+  - upgate hit rate `44.1%`.
+
+Comparison:
+
+| run | decode ms / 77 | token rate | iouring wait | decision |
+|---|---:|---:|---:|---|
+| 7MU reference | `56696.97` | `1.36` | `50.086 s` | old reference |
+| 7OF A | `54779.05` | `1.41` | `47.043 s` | not repeated |
+| 7OF B | `58391.17` | `1.32` | `52.875 s` | not promotion |
+| 7OG priority A | `55528.61` | `1.39` | `48.513 s` | pass |
+| 7OG priority B | `55755.91` | `1.38` | `49.489 s` | repeat pass |
+
+- 7OG two-run average:
+  `55642.26 ms / 77`, about `1.38 tok/s`.
+- 7OG improves over 7MU by `1054.71 ms` average (`1.86%`).
+- Counters remain otherwise unchanged:
+  - iouring bytes unchanged at `315379728384`;
+  - VRAM hit rates unchanged;
+  - batch histograms unchanged.
+- The benefit is consistent with the theory: this recipe does not reduce bytes
+  or compute, but slightly reduces exposed IO wait/jitter.
+
+Decision:
+
+- Accept 7OG as a reproducible production launch recipe improvement.
+- This is not a source/runtime kernel improvement and does not change the
+  5 tok/s feasibility analysis.
+- The conservative accepted n96 reference for this launch recipe is the repeat:
+  `55755.91 ms / 77`, `1.38 tok/s`.
+- The two-run average is:
+  `55642.26 ms / 77`, about `1.38 tok/s`.
+- Commit and push this result immediately, per the improvement rule.
+- Future benchmarks should include the 7OG launch properties when comparing
+  production token rate, unless a phase explicitly measures default launch
+  behavior.
+- Current bottleneck remains expert-pack movement and exposed IO wait.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 03c597dbd
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-225213Z-phase7og-priority-n96
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  -p IOAccounting=yes -p IOWeight=10000 \
+  -p CPUWeight=10000 -p Nice=-10 \
+  -p IOSchedulingClass=realtime -p IOSchedulingPriority=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-225520Z-phase7og-priority-n96-repeat
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  -p IOAccounting=yes -p IOWeight=10000 \
+  -p CPUWeight=10000 -p Nice=-10 \
+  -p IOSchedulingClass=realtime -p IOSchedulingPriority=0 \
+  env RUN="$RUN" N=96 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
