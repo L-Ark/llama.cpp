@@ -1,0 +1,53 @@
+{
+  "date": "2026-07-05",
+  "plan_name": "dflash-oracle-verifier-window-probe",
+  "status": "planned",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "current_head_guard_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "source_head_before_plan_update": "02b173c82",
+  "push_target": {
+    "remote": "https://github.com/wici-ai/ssd-llama.git",
+    "branch": "vendor/deepseek-token-rate-16gb",
+    "git_identity": "L-Ark <fliangae@connect.ust.hk>"
+  },
+  "promotion_gate": {
+    "min_eval_tok_s": ">4.4",
+    "max_ttft_ms": 33617.688744,
+    "memory_max_bytes": 16000000000,
+    "swap": "disabled",
+    "required_correctness": "France answer must be semantic and coherent",
+    "required_repro": "commit and push source plus artifacts immediately, then clean pushed-source reproduction"
+  },
+  "hypothesis": "DFlash can only become useful if current vendor target verification can verify multiple known-correct future tokens sublinearly enough to offset draft, tap, KV, memory, and integration overhead.",
+  "hard_bounds": {
+    "accepted_decode_ms_per_token": 227.272727,
+    "redhat_dflash_optimistic_tokens_per_verify": 3.908110,
+    "max_target_verify_cost_x_one_token_optimistic": 1.719568,
+    "independence_style_tokens_per_verify": 2.564612,
+    "max_target_verify_cost_x_one_token_independence_style": 1.128429,
+    "minimum_slack_ms_to_reopen_loader": 500
+  },
+  "next_executable_steps": [
+    "Reuse llama-results before adding runtime source: W=1 with --sequential-logits, W=2/4/8 with -b W -ub W.",
+    "Run each case with accepted SOTA env/config, strict cold drop_caches, systemd MemoryMax=16000000000, MemorySwapMax=0.",
+    "Collect stdout, stderr, /usr/bin/time -v, top1 report, memory.current, memory.peak, memory.stat, memory.events, elapsed seconds, and exact run path.",
+    "Write results to .Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json.",
+    "Only add a default-off diagnostic tool if llama-results cannot isolate verifier cost precisely enough.",
+    "Reopen full DFlash loader/verifier work only if W=4 or W=8 passes the sublinear cost threshold, exact top1, strict memory accounting, and overhead slack gate."
+  ],
+  "explicitly_not_allowed_yet": [
+    "full DFlash safetensors download",
+    "DFlash loader/runtime code",
+    "SOTA promotion from fixed-text oracle results",
+    "warm page-cache or steady-state SOTA claims",
+    "deleting accepted SOTA reproduction assets"
+  ],
+  "result_artifact_planned": ".Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json"
+}

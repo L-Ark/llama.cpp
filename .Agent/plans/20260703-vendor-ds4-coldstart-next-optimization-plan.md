@@ -4,9 +4,54 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
-### 2026-07-05 Latest Plan: External Artifact Refresh After Thread-Count Closure
+### 2026-07-05 Latest Plan: DFlash Oracle Verifier Window Probe
 
-本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续优化继续围绕 strict cold-start vendor DeepSeek，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama 或非 vendor 结果提升为 SOTA。本次更新完成 thread-count closure 之后的 external artifact refresh：当前公开 artifact、现有 runtime route、CPU microprobe、线程数参数、4Expert/Q4K GGUF、SSD Flash-MoE sidecar、DFlash/EAGLE draft 和磁盘状态都没有给出可直接实施的 10 tok/s source patch。
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续优化仍然只承认 vendor strict cold-start 结果，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama 或非 vendor 结果提升为 SOTA。
+
+Current accepted strict cold SOTA 仍然是 `4.4 tok/s`：
+
+- Accepted SOTA pushed-source repro: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Current-head no-trace guard: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Guard metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Current source/artifact head before this plan update: `02b173c82` (`vendor-ds4: plan dflash oracle verifier gate`)
+- Push target for all future source/artifact updates: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+- Git identity for future commits/pushes: `L-Ark <fliangae@connect.ust.hk>`
+
+Promotion gate remains strict:
+
+- A new accepted SOTA requires `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and a France answer that is semantically correct and coherent.
+- Any result with improved token rate but TTFT above the gate may be committed and pushed only as a rejected diagnostic, never as accepted SOTA.
+- When a compliant new SOTA appears, immediately record full reproduction metadata, commit, and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`; then perform a clean pushed-source reproduction before treating it as accepted.
+- Required SOTA metadata: source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison to the previous `4.4 tok/s` SOTA.
+
+Current bottleneck framing:
+
+- The only still-plausible external candidate after the artifact refresh is DFlash-style verified drafting, because RedHat DFlash reports up to 7 speculative tokens and an optimistic `1 + sum(position_acc) = 3.908110 tokens/target-verify`.
+- This is only a design candidate. Current vendor has no DFlash safetensors loader, no DFlash graph, no hidden-state taps for `[3,13,23,32,42]`, and no DeepSeek4 multi-token verifier runtime.
+- Accepted decode cost is `227.272727 ms/token`. The optimistic DFlash upper bound permits target verification cost at most `1.719568x` one current token decode with zero draft overhead. A more realistic independence-style prefix estimate permits only `1.128429x`.
+- Existing forced-batch fixed-text diagnostic was too coarse and showed no useful speedup: sequential `107.623408161 s`, batch16 `107.597260262 s`, speedup `1.000243x`.
+- Therefore the next step is not a full DFlash implementation. The next step is an oracle target-verifier cost probe that answers whether current vendor target evaluation can verify multiple known-correct future tokens sublinearly.
+
+Next executable plan:
+
+1. Prefer no runtime source change. First reuse `llama-results` as an oracle verifier proxy on the fixed France text: W=1 with `--sequential-logits`, and W=2/4/8 with `-b W -ub W` without `--sequential-logits`.
+2. Use the accepted SOTA env/config for every case: native DeepSeek GGUF, `cpu_moe=40`, `vram_cache=0`, accepted France gate-miss O_DIRECT pack, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, prefill top3000 profile, `GGML_CUDA_DISABLE_GRAPHS=1`, and the existing topk env (`GGML_MOE_KEEP_TOPK_UPDOWN=4`, layer range `10-39`, layer value `3`).
+3. Run every window under strict `systemd-run --collect --wait -p MemoryMax=16000000000 -p MemorySwapMax=0` with cold `drop_caches` before each case. Record stdout/stderr, `/usr/bin/time -v`, top1 report, `memory.current`, `memory.peak`, `memory.stat`, and `memory.events`.
+4. Result artifact path: `.Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json`; run root should be under `/root/lfz/runs/vendor-ds4-16gb/` with the timestamp and `dflash-oracle-verifier-window-probe` in the name.
+5. If `llama-results` cannot isolate the verifier cost precisely enough, add only a default-off diagnostic tool or script. It must not change default logits or accepted SOTA behavior.
+6. Reopen full DFlash loader/verifier work only if W=4 or W=8 proves sublinear target verification below the DFlash threshold, preserves exact fixed-text top1, passes strict 16GB/no-swap accounting, and leaves at least `500 ms` aggregate overhead slack.
+7. If the probe fails that gate, close DFlash as a `10 tok/s` route for the current vendor target path and return to hard-bound screening. Do not download the 3.6GB DFlash artifact or write loader/runtime code without this verifier proof.
+8. The probe itself is diagnostic only. It cannot be promoted as SOTA because it uses known-correct fixed text, not a generated France answer. A new SOTA still requires a strict cold `llama-cli` generation run and full correctness/RAM/TTFT validation.
+
+Disk and preservation policy:
+
+- `/root` is effectively full and no large artifact download is allowed without explicit cleanup approval.
+- Preserve the accepted native GGUF, accepted France gate-miss expert pack, accepted SOTA run, current-head guard run, profiles, and reproduction artifacts.
+- Disk cleanup is not an optimization result and cannot be used as SOTA evidence.
+
+### 2026-07-05 Historical Plan: External Artifact Refresh After Thread-Count Closure
+
+本节已被上方 `2026-07-05 Latest Plan: DFlash Oracle Verifier Window Probe` 覆盖；内容只作为历史实验记录保留。本次历史更新完成 thread-count closure 之后的 external artifact refresh：当前公开 artifact、现有 runtime route、CPU microprobe、线程数参数、4Expert/Q4K GGUF、SSD Flash-MoE sidecar、DFlash/EAGLE draft 和磁盘状态都没有给出可直接实施的 10 tok/s source patch。
 
 Current accepted strict cold SOTA 仍然是 `4.4 tok/s`：
 
