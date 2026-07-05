@@ -79958,3 +79958,118 @@ Artifacts:
 - `phase7nk_cache_oracle.py`
 - `policy_results.tsv`
 - `bound.md`
+
+## Phase 7NL - previous-token route predictor prefetch upper-bound
+
+Timestamp: 2026-07-06 02:25:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Evaluate one remaining algorithmic route signal that does not require future
+  knowledge: use the previous generated token's same-layer active experts to
+  predict the next token's same-layer expert accesses.
+- Do not edit source code in this phase.
+- Do not run the model unless existing traces are insufficient. Prefer existing
+  strict n32 route traces.
+- Do not promote SOTA in this phase.
+
+Why this is not a repeat of rejected work:
+
+- 7KN/7NK Belady showed future route knowledge has theoretical value, but it is
+  not implementable directly.
+- 7KO rejected prompt-independent local cache policies such as `admit2_lru`,
+  `lru2`, `slru`, and `twoq`.
+- 7JS/7NK rejected static hot-key pinning because the hot set is broad.
+- 7IT/7IU/7IV rejected full trace prefetch / future-use prefetch because those
+  require a stored future trace and/or add low-value reads.
+- This phase tests a different online signal: previous-token same-layer routes
+  are known during decode and could be used without a prompt-specific future
+  oracle.
+
+Hypothesis:
+
+- If same-layer expert choices persist across adjacent generated tokens, a
+  previous-token route predictor could prefetch likely up/gate/down experts
+  before the current layer reaches the foreground staging point.
+- If the overlap signal is weak, false positives would add expert-pack reads
+  and cache pollution, repeating 7IT's failure mode.
+- The phase must quantify:
+  - predictor precision/recall by tensor family;
+  - how many current LRU misses would be converted into predicted hits;
+  - how many extra false-positive reads would be introduced;
+  - whether the net miss-byte / wait bound exceeds the implementation threshold.
+
+Inputs:
+
+- Prefer current strict full-profile trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile/route-trace.csv`
+- Cross-check if useful against:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7js-upgate-concentration-profile/route-trace.csv`
+- Use current accepted slot counts for the main simulation:
+  - down slots: `766`;
+  - upgate slots: `1735`.
+- Use current measured baseline values:
+  - 7MU/7KZ/7LN n96 band: `~1.33-1.36 tok/s`;
+  - 7MY n32 profile decode: `26045.71 ms / 31`;
+  - 7MY `iouring_wait_us`: `20984633`.
+
+Offline method:
+
+1. Reconstruct contiguous tensor-family route groups from `route-trace.csv`.
+2. Infer decode token boundaries from layer-order resets.
+3. For each `(token, layer, family)` group, compare its expert set with the
+   same `(layer, family)` group from the previous token.
+4. Compute signal quality:
+   - exact overlap count;
+   - predicted entries;
+   - true positives;
+   - false positives;
+   - false negatives;
+   - precision/recall;
+   - bytes for each category.
+5. Simulate current per-family LRU using the existing slot counts.
+6. Simulate a realistic previous-token prefetch policy:
+   - before each current group, prefetch keys predicted from the previous
+     token only if absent from the relevant cache;
+   - insert prefetches into the same LRU cache, so false positives can evict
+     useful entries;
+   - count demand hits/misses, prefetch reads, useful prefetch hits, false
+     prefetch reads, and net miss bytes.
+7. Also compute an optimistic "perfect previous-token intersection" bound:
+   - only keys that are both predicted and actually used are prefetched;
+   - no false positives.
+   This is not implementable, but it shows the maximum value of the
+   previous-token signal.
+
+Acceptance to proceed to source implementation:
+
+- A realistic previous-token policy must show at least one of:
+  - projected strict n96 token rate `>= 1.55 tok/s`; or
+  - net exposed read/wait reduction `>= 20%`; or
+  - n32 optimistic endpoint gain `>= 2 s` after charging false-positive reads.
+- It must not require extra host RAM beyond small route history metadata.
+- It must not depend on a stored future trace.
+- It must not reduce current VRAM slot counts.
+- If only the perfect-intersection bound passes but the realistic predictor
+  fails, reject source work and record that the signal is not actionable.
+
+Result recording:
+
+- Create:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nl-prev-token-route`
+- Store:
+  - `commands.log`;
+  - `repo_state.txt`;
+  - `phase7nl_prev_route.py`;
+  - `group_summary.tsv`;
+  - `policy_results.tsv`;
+  - `bound.md`.
+- Record whether no model run was needed. If a diagnostic model run becomes
+  necessary, write a separate plan before running it.
+
+Reproducibility:
+
+- Commit and push this plan before any trace simulation.
+- Commit and push the result before any source implementation plan.
