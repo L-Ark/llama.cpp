@@ -77474,3 +77474,128 @@ Decision:
 - Because no local draft GGUF or smaller compliant expert asset is currently
   available, the next phase should be an asset/speculative preflight rather than
   a source patch.
+
+## Phase 7MZ - asset and speculative preflight
+
+Timestamp: 2026-07-05 22:43:17 CST.
+
+Status: planned.
+
+Goal:
+
+- Continue after 7MY by checking whether the required read-volume or
+  effective-token reduction can be pursued with currently available assets.
+- Do not edit source code in this phase.
+- Do not download large weight files in this phase.
+- Do not delete existing local models, expert packs, overlays, run artifacts, or
+  caches without explicit approval.
+- Produce a reproducible metadata audit for:
+  - local Kimi assets and available disk;
+  - public FP4/NVFP4/MXFP4 Kimi assets and their sizes/formats;
+  - public/local draft, MTP, EAGLE, DFlash, or speculative assets;
+  - whether any candidate can plausibly satisfy the strict 16 GB host RAM gate.
+
+Why this is the next valid step:
+
+- 7MY measured n32 full-profile exposed expert-pack reads of `117.71 GiB`, or
+  `3.80 GiB/token`, with iouring wait `20.984633 s`.
+- A `5 tok/s` target needs about `0.21 GiB/token` of exposed reads at the
+  measured `5.61 GiB/s` effective throughput, or an equivalent accepted-token
+  multiplier around `3.68x` over the current strict n96 SOTA.
+- Local IO/kernel micro-optimizations have upper bounds far below that target:
+  - 25% iouring wait reduction: `1.49 tok/s`;
+  - 25% up/gate wall reduction: `1.27 tok/s`;
+  - 25% down wall reduction: `1.24 tok/s`.
+- Therefore the next useful work is not a small patch. It must establish
+  whether a smaller model format or speculative path exists and is runnable.
+
+Audit inputs:
+
+- Current repo:
+  `/root/lfz/llama.cpp-vendor-kimi`
+- Local models:
+  `/root/lfz/models`
+- Local Kimi assets:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets`
+- Historical speculative/MTP runs:
+  `/root/lfz/runs/ik_llama`
+- Current disk state:
+  `df -h / /root/lfz`
+- Public primary metadata:
+  - Hugging Face model APIs/pages for Kimi FP4/NVFP4/MXFP4 assets;
+  - Hugging Face model APIs/pages for Kimi-compatible draft/speculative assets.
+
+Implementation:
+
+- Create an audit directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7mz-asset-spec-preflight`
+- Record:
+  - `commands.log`;
+  - `repo_state.txt`;
+  - `disk_and_local_assets.txt`;
+  - `local_speculative_assets.txt`;
+  - `hf_model_metadata.jsonl`;
+  - `candidate_matrix.tsv`;
+  - `decision.md`.
+- Use metadata-only commands:
+  - `df`, bounded `du`, bounded `find`;
+  - Hugging Face API calls for model metadata and sibling sizes;
+  - optional `git ls-remote`/API metadata for draft implementations.
+- Do not run converters, do not clone huge model repos, and do not download
+  weight shards.
+
+Candidate matrix fields:
+
+- `candidate`;
+- `source_url`;
+- `format`;
+- `reported_size_gib`;
+- `local_available`;
+- `requires_download_gib`;
+- `requires_conversion`;
+- `requires_new_runtime_support`;
+- `expected_read_volume_factor`;
+- `can_fit_current_disk`;
+- `can_fit_16gb_host_ram_path`;
+- `draft_acceptance_requirement`;
+- `decision`;
+- `blocker_or_next_step`.
+
+Hard-bound calculations:
+
+- For smaller expert formats:
+  - estimate read-volume factor versus current IQ3 exposed reads;
+  - compute upper-bound token rate if exposed iouring wait scales linearly with
+    bytes;
+  - require an estimated `>= 94%` exposed-read reduction for a direct `5 tok/s`
+    path without speculation.
+- For speculative/draft paths:
+  - require an expected accepted-token multiplier of at least `3.68x` before
+    draft overhead;
+  - prefer candidates that can be tested on the France prompt with exact output
+    quality and strict host RAM gates;
+  - reject metadata-only candidates that lack a runnable local draft model or
+    implementation path.
+- For conversion/download feasibility:
+  - compare reported size and likely intermediates to current `df -h`;
+  - reject current-server conversion if it cannot fit without deleting existing
+    assets.
+
+Decision rule:
+
+- If a candidate is local and runnable without new source support, append a new
+  execution phase with a strict cold-start command.
+- If a candidate requires source/runtime work, append a new design phase with
+  theory, hard upper bound, activation signal, and validation command before
+  coding.
+- If a candidate requires large external asset preparation, record exact asset
+  requirements and mark it as externally blocked rather than attempting a
+  partial download.
+- If no candidate is feasible under current disk/RAM/assets, record the no-go
+  and preserve the current SOTA.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Store all audit commands and raw metadata in the run directory.
+- Commit and push the result into this plan.
