@@ -66294,3 +66294,155 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record exact run directory, metrics, perf stat summary, and next-source
   decision.
+
+### 7KR result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `14759e2f3` (`docs: record baseline and plan perf stat`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-035522Z-phase7kr-perf-stat-n32`.
+
+Metrics:
+
+- exit `0`;
+- output quality `pass`;
+- TTFT `93591.96 ms`;
+- decode `28143.13 ms / 31`, `1.10 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `iouring_reads=22647`;
+- `iouring_bytes=126391910400`;
+- `iouring_wait_us=22640986`;
+- `iouring_submit_us=59788`;
+- current-down overlap `worker_us=3715947`;
+- current-down overlap planned/completed jobs `3673/3673`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Perf stat:
+
+```text
+3254839.15 msec task-clock # 20.723 CPUs utilized
+1079646 context-switches
+2713923 page-faults
+5477196660782 cycles
+1206799628718 instructions # 0.22 insn per cycle
+157.064117449 seconds time elapsed
+747.737769000 seconds user
+2431.410132000 seconds sys
+```
+
+Interpretation:
+
+- Perf adds overhead and cannot be promoted.
+- The diagnostic shape matches 7KI/7KL:
+  - very high system CPU time;
+  - millions of page faults;
+  - low IPC;
+  - high context-switch count;
+  - file/page-cache/memcg pressure remains a dominant runtime signature.
+- This does not support prioritizing CUDA graph or small kernel-launch
+  optimization first: the measured dominant cost is outside CUDA launch
+  overhead.
+- Broad page-cache/fallback-cache/mmap-advice paths remain rejected by earlier
+  phases. The remaining actionable runtime bucket must be narrower than
+  "make page faults cheaper".
+
+Decision:
+
+- Do not implement CUDA graph or generic kernel-launch optimization from this
+  evidence.
+- Do not change global threads or SQPOLL; both were already rejected and perf
+  stat does not contradict those decisions.
+- Next narrow candidate: current-down overlap completeness. 7KQ/7KR still show
+  current-down overlap `missing_tensor=93`, `missing_pack=36`, and worker time
+  around `3.3-3.7 s`. Before changing source or pack layout, collect the
+  existing per-tensor current-down missing/overlap profiles and calculate the
+  hard upper bound.
+
+## Phase 7KS - current-down overlap completeness diagnostic
+
+Timestamp: 2026-07-05 14:33:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Determine whether current-down overlap misses are large enough to justify a
+  source or expert-pack-overlay change.
+- Use existing default-off instrumentation:
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT`;
+  - `GGML_MOE_CURRENT_DOWN_MISSING_PROFILE_OUT`.
+- Keep the runtime path otherwise identical to accepted SOTA.
+
+Why this is needed:
+
+- Current-down overlap is one of the few remaining narrow runtime buckets:
+  - 7KQ worker time `3296803 us`;
+  - 7KR worker time `3715947 us`;
+  - planned/completed jobs `3673`;
+  - cache hits `3519`;
+  - missing tensor `93`;
+  - missing pack `36`.
+- If missing entries are concentrated in a few tensors/experts and the hard
+  upper bound exceeds `1 s`, a small overlay or tensor-registration fix may be
+  worthwhile.
+- If the missing jobs are tiny and diffuse, reject this path and move on.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 14759e2f3
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ks-current-down-missing-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv
+GGML_MOE_CURRENT_DOWN_MISSING_PROFILE_OUT=$RUN/current-down-missing-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Collect:
+
+- `metrics.txt`;
+- `current-down-overlap-profile.csv`;
+- `current-down-missing-profile.csv`;
+- top tensors by:
+  - planned jobs;
+  - missing tensor;
+  - missing pack;
+  - cache hits.
+
+Upper-bound calculation:
+
+- Missing-pack upper bound:
+  `missing_pack_jobs * down_slot_bytes / effective_iouring_bandwidth`.
+- Missing-tensor upper bound:
+  use profile rows to decide whether missing tensors are true absent registered
+  down tensors or unsupported size/cache-class gaps.
+- If the computed n32 hard upper bound is below `1000 ms`, reject source/pack
+  changes.
+
+Decision rule:
+
+- If gates fail, reject diagnostic and do not act on the CSVs.
+- If missing-pack is concentrated and the overlay is incomplete, plan a pack
+  overlay rebuild before source changes.
+- If missing-tensor is a registration/tensor-name issue with `> 1 s` hard
+  bound, plan a source fix.
+- If total bound is below `1 s`, reject current-down completeness work.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record command, run directory, profile summaries, metrics, and decision.
