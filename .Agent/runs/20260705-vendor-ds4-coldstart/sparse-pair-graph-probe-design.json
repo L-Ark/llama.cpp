@@ -1,0 +1,123 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-graph-probe-design.json",
+  "created_utc": "2026-07-05T05:40:00Z",
+  "purpose": "Define the next allowed default-off graph/dataflow probe after the sparse top64 up/down pair profile. This is a plan/design artifact only, not a SOTA result.",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32892.55329,
+    "ttft_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "branch": "ssd/vendor/deepseek-token-rate-16gb",
+    "required_push_author": "L-Ark <fliangae@connect.ust.hk>"
+  },
+  "input_sparse_pair_profile": {
+    "summary": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-top64-profile-summary.json",
+    "tsv": ".Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.tsv",
+    "manifest": ".Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.offset_manifest.csv",
+    "profile_json": ".Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.profile.json",
+    "pairs": 64,
+    "entries": 128,
+    "payload_bytes": 570425344,
+    "payload_mib": 544,
+    "active_layers": 33,
+    "max_pairs_per_layer": 4,
+    "complete_pairs_available": 2627,
+    "hot_ms_sum": 855.5970000000001,
+    "sha256": {
+      "tsv": "5e3e11252c0c6449a73f98c19f4e4737dec081444138e5adfd7419acae2e717b",
+      "manifest": "8dca529d273726838e4915ff552a881062b0a1abbc6158bb562c0f66eeaa8188",
+      "profile_json": "9ff95c307c771b05cb90c19ef10814133270c622a8beac50ecee7dadbe280cc6"
+    }
+  },
+  "hard_bound_references": {
+    "bound_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-fused-transfer-hard-bound.json",
+    "cpu_backend_fused_best": {
+      "status": "rejected",
+      "best_pair_count": 48,
+      "tok_s": 9.979932268981278,
+      "reason": "Even after removing up-output D2H and down-input H2D, CPU-backend fused skip/write remains below 10 tok/s before further integration overhead."
+    },
+    "graph_zero_transfer_paper_bound": {
+      "status": "paper_upper_bound_only",
+      "pair_count": 64,
+      "tok_s": 10.013888843633731,
+      "decode_ms": 13641.929489845314,
+      "margin_ms": 18.947062554683725,
+      "required_assumptions": [
+        "up/down hot pair kernels run at measured MMVQ speed",
+        "no intermediate H2D/D2H between gate/up/down",
+        "no extra gate recompute",
+        "current gate cache impact already accounts for the 544 MiB up/down payload"
+      ]
+    },
+    "gate_recompute": {
+      "status": "rejected",
+      "pair_count": 64,
+      "tok_s": 9.861,
+      "reason": "Recomputing gate consumes the only margin and worsens gate-cache pressure."
+    },
+    "existing_ds4_hot_manager": {
+      "status": "rejected_for_sparse_pair_route",
+      "ideal_sparse_updown_payload_mib": 544,
+      "inflated_payload_updown_only_if_supported_mib": 2507.5,
+      "inflated_payload_current_gate_up_down_manager_mib": 3761.25,
+      "estimated_gate_penalty_ms_range": [
+        1093.6877531468963,
+        1997.9258486793958
+      ],
+      "reason": "Per-layer dummy slots inflate payload far beyond the 18.947 ms graph-bound margin."
+    }
+  },
+  "current_blocker": {
+    "description": "The accepted gate stream is a CPU-backend helper. It computes chunks on GPU but copies gate output back to CPU dst and scatters on CPU, so it does not currently provide a reusable graph-level gate GPU tensor.",
+    "evidence": "Current one_trace.csv includes d2h_ms/scatter_ms fields for gate stream rows; source code path writes CPU dst after CUDA work.",
+    "impact": "The 10.014 tok/s graph zero-transfer result is not an implementable runtime path until a probe proves gate output or an equivalent hidden tensor can stay on GPU through sparse up/down."
+  },
+  "next_allowed_source_edit": {
+    "type": "default_off_instrumentation_or_probe_only",
+    "proposed_env": {
+      "DS4_SPARSE_PAIR_GRAPH_PROBE": "1",
+      "DS4_SPARSE_PAIR_PROFILE_JSON": ".Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.profile.json"
+    },
+    "must_not_change": [
+      "default accepted path",
+      "logits",
+      "CPU fallback counts",
+      "current accepted 4.4 tok/s SOTA behavior"
+    ],
+    "must_prove_before_performance_run": [
+      "only selected top64 sparse up/down pairs are resident or staged as declared",
+      "payload is 544 MiB plus documented minimal metadata/workspace, with no per-layer dummy slots",
+      "no gate recompute",
+      "no hidden CPU-backend H2D/D2H between gate/up/down",
+      "gate output is a real GPU tensor or an equivalent retained GPU buffer",
+      "16GB cgroup includes file page cache and swap remains disabled"
+    ],
+    "reject_immediately_if": [
+      "requires gate recompute",
+      "uses existing per-layer dummy slot hot manager payload shape",
+      "uses CPU-backend D2H/H2D round trips in the hot branch",
+      "cannot prove gate GPU reuse or equivalent retained hidden activation",
+      "changes logits before fixed-text top1 correctness passes"
+    ]
+  },
+  "correctness_and_promotion_gates": {
+    "before_logit_write": [
+      "fixed-text top1 same_top1 == n_tokens",
+      "France prompt output is semantically correct and coherent",
+      "op-level compare/tolerance documented if MMVQ output replaces CPU fallback",
+      "no OOM, no swap, memory.max=16000000000 including page cache"
+    ],
+    "before_sota_promotion": [
+      "eval_tok_s > 4.4",
+      "TTFT <= 33617.688744 ms for an accepted result",
+      "strict cold drop_caches run inside 16GB cgroup including page cache",
+      "source plus artifacts committed and pushed to ssd/vendor/deepseek-token-rate-16gb",
+      "clean pushed-source reproduction passes the same metrics"
+    ]
+  },
+  "next_required_artifact_if_probe_passes": "A separate hard-bound artifact with expected decode saving, kernel time, launch/sync overhead, remaining transfers, VRAM/RAM including page cache, TTFT impact, rollback rule, exact env/command, and correctness evidence."
+}

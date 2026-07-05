@@ -15,7 +15,7 @@
 - Accepted constraints: vendor DeepSeek, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, `cpu_moe=40`, `GGML_MOE_VRAM_CACHE_GB=0`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, gate-only one-stream O_DIRECT pack, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, CLI `-c 256 -b 16 -ub 16 -t 20 -tb 20`
 - Promotion gate remains: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, 16GB host RAM including file page cache, no swap, coherent/semantically correct France output, source+artifacts committed and pushed, then clean pushed-source reproduction
 - Model file: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, size `156148189760` bytes (`145.42 GiB`)
-- Latest pushed head before this document update: `942763e2b` (`vendor-ds4: add transposed prefill probe`) on `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, author `L-Ark <fliangae@connect.ust.hk>`
+- Latest pushed head before this document update: `e6075cc9a` (`vendor-ds4: bound sparse fused pair manager overhead`) on `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`, author `L-Ark <fliangae@connect.ust.hk>`
 
 Current measured bottleneck:
 
@@ -98,6 +98,19 @@ MMVQ fused/no-transfer hard-bound:
 - Gate recompute is rejected: `pair_count=64` with gate recompute projects `9.861 tok/s`, and adding gate payload worsens gate-cache pressure. Any future graph probe must reuse the existing gate result or otherwise prove an equivalent zero-transfer gate source.
 - Existing full DS4 hot dispatch remains a different, already rejected design because it allocates per-layer K hot experts. A new source edit, if attempted, must be a sparse global-pair graph/probe or equivalent proof that only the selected hot up/down pairs are resident and that the hot branch stays on GPU end-to-end.
 - Existing DS4 hot manager cannot directly implement the top64 pair bound: the ideal sparse up/down payload is `544 MiB`, but current manager dummy slots across the 33 active layers inflate it to `2507.5 MiB` for up/down-only if that mode existed, or `3761.25 MiB` for current gate/up/down manager behavior. The estimated gate-cache penalty is about `1093.688-1997.926 ms`, far above the `18.947 ms` graph zero-transfer margin.
+
+Sparse pair top64 profile and next graph-probe plan:
+
+- Profile helper: `.Agent/run-tools/create_ds4_sparse_pair_profile.py`.
+- Generated artifacts: `.Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.tsv`, `.Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.offset_manifest.csv`, `.Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.profile.json`, and `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-top64-profile-summary.json`.
+- The profile selects `64` complete `(layer, expert)` up/down pairs from the current accepted SOTA fallback profile, with `128` tensor entries, `544 MiB` exact up/down payload, `33` active layers, and at most `4` pairs in any one layer. It is an input profile only; it is not a runtime path and does not change the accepted `4.4 tok/s` SOTA.
+- Profile hashes for reproduction: TSV `5e3e11252c0c6449a73f98c19f4e4737dec081444138e5adfd7419acae2e717b`, offset manifest `8dca529d273726838e4915ff552a881062b0a1abbc6158bb562c0f66eeaa8188`, profile JSON `9ff95c307c771b05cb90c19ef10814133270c622a8beac50ecee7dadbe280cc6`.
+- The first selected pair is `blk.37` expert `162`, with up offset `136714572032`, down offset `134432870656`, and `20.594 ms` summed hot fallback time in the source profile. This confirms the profile uses exact GGUF offsets rather than inferred tensor names only.
+- Important correction to the paper bound: the current accepted gate stream is a CPU-backend helper. It computes gate chunks on GPU, then copies the result back to CPU `dst` and scatters there; it does not currently expose a graph-level reusable gate GPU tensor. Therefore the `10.014 tok/s` graph zero-transfer result remains a hard upper bound, not an implementable route, until a default-off graph/dataflow probe proves that gate output or an equivalent hidden tensor is retained on GPU through sparse up/down.
+- Next source edit scope is restricted to a default-off sparse graph/dataflow probe, proposed env shape `DS4_SPARSE_PAIR_GRAPH_PROBE=1` plus `DS4_SPARSE_PAIR_PROFILE_JSON=.Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.profile.json`. It must not change default accepted behavior, logits, fallback counts, or SOTA benchmarks.
+- The probe must first prove placement and transfer shape: exactly the `544 MiB` selected sparse up/down payload resident or staged as declared, no per-layer dummy slots, no gate recompute, no hidden CPU-backend H2D/D2H between gate/up/down, and a real GPU buffer for gate output or an equivalent retained hidden activation. If it needs gate recompute, per-layer dummy payloads, CPU-backend round trips, or cannot prove gate GPU reuse, reject it before any performance run.
+- Correctness gate before any logit-writing path: fixed-text top1 `same_top1 == n_tokens`, coherent France answer, op-level compare/tolerance documented if MMVQ writes replace CPU fallback, strict 16GB cgroup including page cache, `MemorySwapMax=0`, no OOM/no swap, and TTFT within the accepted gate for any promotable SOTA.
+- If and only if the graph/dataflow probe proves zero-transfer feasibility, write a separate hard-bound artifact before implementation of a logit-changing path. The bound must include expected decode saving, kernel time, launch/sync, remaining transfers, VRAM/RAM footprint including page cache, TTFT impact, and rollback criteria. A strict cold SOTA benchmark is not allowed from the profile alone.
 
 Latest closed decisions:
 
