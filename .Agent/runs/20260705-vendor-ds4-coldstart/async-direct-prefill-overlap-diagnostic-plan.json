@@ -1,0 +1,45 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: default-off async direct prefill overlap diagnostic for top768",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "basis": {
+    "top768_recheck": ".Agent/runs/20260705-vendor-ds4-coldstart/top768-source-hidden-hard-bound-recheck.json",
+    "current_serial_direct_prefill_ms": 1745.225,
+    "accepted_ttft_slack_ms": 725.135454,
+    "minimum_direct_prefill_hide_fraction": 0.584503,
+    "current_gate_prefill_ms_in_combined_short_diag": 3573.37
+  },
+  "candidate": {
+    "type": "diagnostic only",
+    "default_off_env": "GGML_MOE_STREAM_ONE_DIRECT_PREFILL_ASYNC=1",
+    "goal": "Start top768 direct hot-pool prefill asynchronously so it can overlap with gate prefill or other prompt-side cold work.",
+    "must_not_change_logits": true,
+    "must_not_change_default_behavior": true
+  },
+  "implementation_constraints": [
+    "Do not change accepted default path unless GGML_MOE_STREAM_ONE_DIRECT_PREFILL_ASYNC=1 is set.",
+    "The async worker must complete or be safely joined before any direct hot-pool entry can be used for compute.",
+    "The diagnostic may run before compute integration; misses-before-ready must be counted rather than silently using unready entries.",
+    "All validation runs must use MemoryMax=16000000000 and MemorySwapMax=0.",
+    "If stdout/model output is generated, it must be checked for coherence; pure prefill diagnostics can use short prompt and stderr counters only."
+  ],
+  "measurement_required": [
+    "direct_prefill_elapsed_ms",
+    "gate_prefill_elapsed_ms",
+    "wall time of combined short diagnostic",
+    "whether direct prefill overlaps gate prefill or remains serialized",
+    "cgroup memory peak and swap",
+    "VRAM free/used sample if available",
+    "direct read failures/copy failures"
+  ],
+  "acceptance_for_continuing_to_compute_design": {
+    "ttft_bound": "The measured added prompt/TTFT cost attributable to top768 direct prefill must be <=725.135454 ms, preferably with margin.",
+    "source_ready_bound": "Most selected entries must be ready before decode; otherwise miss-before-ready penalty must be included in the next hard-bound.",
+    "stability": "No OOM, no swap, no direct read/copy failures."
+  },
+  "rejection_rule": "If async direct prefill cannot hide at least 58.5% of the measured 1745.225 ms source cost under the 16GB cgroup, reject cpu_moe=41 + top768 as a 10 tok/s route before implementing batched/fused exact compute."
+}

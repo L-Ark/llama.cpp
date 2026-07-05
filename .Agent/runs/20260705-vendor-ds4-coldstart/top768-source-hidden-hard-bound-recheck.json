@@ -1,0 +1,106 @@
+{
+  "date": "2026-07-05",
+  "title": "Hard bound recheck: cpu_moe=41 plus top768 source-hidden exact hot residual",
+  "result": "conditional_only_current_serial_source_and_per_call_compute_rejected",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "inputs": {
+    "plan": ".Agent/runs/20260705-vendor-ds4-coldstart/top768-source-hidden-recheck-plan.json",
+    "prior_design": ".Agent/runs/20260704-vendor-ds4-coldstart/cpu41-top768-q80-hot-residual-design.json",
+    "dual_pool_fit": ".Agent/runs/20260705-vendor-ds4-coldstart/cpu41-dualpool-fit-diagnostic.json",
+    "direct_prefill_timing": ".Agent/runs/20260705-vendor-ds4-coldstart/full-direct-prefill768-timing.json",
+    "q80_overhead_profile": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-upskip-overhead-profile-validation.json",
+    "top768_manifest": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.offset_manifest.csv"
+  },
+  "prior_positive_bound": {
+    "decoded_tokens_estimate": 136.608765524,
+    "target_decode_ms_for_10_tok_s": 13660.8765524,
+    "source_only_overlap_decode_ms": 15191.28071,
+    "top768_hot_residual_save_ms": 2048.86,
+    "extra_cpu41_layer_cost_if_source_hidden_ms": 72.041,
+    "extra_cpu41_layer_cost_if_not_source_hidden_ms": 397.887,
+    "top768_source_hidden_decode_ms_zero_overhead": 13214.463,
+    "top768_source_hidden_tok_s_zero_overhead": 10.338,
+    "top768_source_hidden_slack_ms": 446.414,
+    "top768_not_source_hidden_decode_ms_zero_overhead": 13540.308,
+    "top768_not_source_hidden_tok_s_zero_overhead": 10.089,
+    "top768_not_source_hidden_slack_ms": 120.569
+  },
+  "combined_prefill_diagnostic": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T001759Z-top768-source-hidden-recheck/combined-prefill-short",
+    "systemd_unit": "vendor-ds4-top768-combined-001759.service",
+    "result": "success",
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "n_cpu_moe": 41,
+    "gate_cache_mib": 13568,
+    "direct_pool_mib": 3264,
+    "direct_prefill_entries": 768,
+    "direct_prefill_bytes": 3422552064,
+    "direct_prefill_elapsed_ms": 1745.225,
+    "gate_prefill_entries": 3000,
+    "gate_prefill_bytes": 13369344000,
+    "gate_prefill_elapsed_ms": 3573.37,
+    "observed_order": "direct hot pool prefill is logged before gate VRAM cache prefill; current implementation is serial, not hidden",
+    "vram_breakdown_mib": {
+      "total": 32109,
+      "free": 244,
+      "self": 14096,
+      "model": 14075,
+      "context": 18,
+      "compute": 2,
+      "unaccounted": 17768
+    },
+    "max_rss_kb": 15514856,
+    "swaps": 0,
+    "hashes": {
+      "stderr_sha256": "9365374a60ec8f00769982d538495276d1bd0c2f42ddd7e6a3c39763a7655b7f",
+      "run_sh_sha256": "ec4b38316642729c5fb58b494b8bf38f5f3803d21f847e9cc076d811051d9cf5",
+      "environment_sha256": "f8ca9cb30d05bf48be80cd20d25a9bd6baabe482d7817aaa8a828854a92881e7"
+    }
+  },
+  "ttft_source_hide_requirement": {
+    "accepted_ttft_slack_ms_from_prior_timing": 725.135454,
+    "current_serial_direct_prefill_ms": 1745.225,
+    "serial_over_slack_ms": 1020.09,
+    "minimum_direct_prefill_fraction_to_hide": 0.584503,
+    "decision": "The current serial direct prefill form is TTFT-rejected. A promotable top768 path requires default-off async/overlapped direct prefill and must hide at least about 58.5% of the measured direct prefill cost."
+  },
+  "decode_compute_overhead_budget": {
+    "zero_overhead_decode_ms": 13214.463,
+    "slack_to_10_tok_s_ms": 446.414,
+    "top768_calls_covered_from_prior_topn_bound": 19410,
+    "average_overhead_budget_per_covered_call_us": 22.999,
+    "tok_s_if_overhead_0_ms": 10.338,
+    "tok_s_if_overhead_100_ms": 10.26,
+    "tok_s_if_overhead_200_ms": 10.184,
+    "tok_s_if_overhead_300_ms": 10.108,
+    "tok_s_if_overhead_400_ms": 10.034,
+    "tok_s_if_overhead_500_ms": 9.961,
+    "current_per_call_q80_cuda": {
+      "avg_total_us": 3140.36,
+      "avg_kernel_sync_us": 1088.488,
+      "calls_attempted": 18688,
+      "total_ms": 58687.042,
+      "kernel_sync_ms": 20341.664,
+      "host_src0_ms": 28106.781,
+      "h2d_ms": 6062.462,
+      "cuda_alloc_plus_free_ms": 3796.468
+    },
+    "decision": "The existing per-call Q8_0 CUDA path is orders of magnitude too slow. A 10 tok/s top768 route requires resident source plus batched/fused exact compute with no per-call synchronization; persistent buffers or source residency alone are insufficient."
+  },
+  "decision": {
+    "current_serial_source_path": "rejected_for_accepted_ttft",
+    "current_per_call_compute_path": "rejected_for_decode_overhead",
+    "top768_10_tok_s_route": "conditional_only",
+    "conditions_to_continue": [
+      "A default-off async direct prefill diagnostic must show the top768 direct source cost can be hidden enough to keep TTFT within the accepted gate.",
+      "A separate batched/fused exact top768 compute design must fit under roughly 446 ms decode overhead and pass fixed-text llama-results top1 before performance benchmarking."
+    ],
+    "next_step": "Implement or design only the default-off async direct prefill overlap diagnostic first, because it does not change logits. If it cannot satisfy the TTFT hide requirement, reject top768 as a 10 tok/s route before writing compute kernels."
+  }
+}
