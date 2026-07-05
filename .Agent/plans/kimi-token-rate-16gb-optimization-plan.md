@@ -81334,3 +81334,103 @@ cat "$RUN/candidate_matrix.tsv"
 cat "$RUN/hf_model_metadata.jsonl" | grep mradermacher
 cat "$RUN/decision.md"
 ```
+
+## Phase 7NR - target block verifier prompt-mode root-cause audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 04:08 CST.
+
+Reason:
+
+- Phase 7NQ found no current public disk-feasible drop-in target asset.
+- The remaining viable future path is therefore either:
+  - externally prepared target/expert-pack assets; or
+  - a speculative/verifier runtime that avoids evaluating the expensive Kimi
+    MoE path once per accepted token.
+- Phase 7NB rejected the current target block verification benchmark:
+  - `B=4` verify cost `18555.800 ms`, far above the `0.800 s` envelope;
+  - `B=8` verify cost `33609.700 ms`, far above the `1.600 s` envelope;
+  - `B=16` verify cost `51832.100 ms`, far above the `3.200 s` envelope.
+- However 7NB also showed the verifier path has a different runtime shape from
+  steady decode:
+  - for `B>=2`, upgate/down cache hit rates collapse to `0.0%`;
+  - expert-pack iouring bytes fall to only `140378112` bytes;
+  - verify wall time grows anyway, implying a prompt/multirow CPU or
+    unsupported-GPU path rather than the accepted decode streaming path.
+- Before rejecting all speculative work permanently or writing a new verifier
+  implementation, identify the exact source-level reason for this path change.
+
+Goal:
+
+- Use existing 7NB artifacts and source inspection to explain why same-sequence
+  target verification with `B>=2` is slow.
+- Decide whether a future verifier implementation has a hard, plausible path to
+  reuse the accepted decode hot path, VRAM cache, and expert-pack streaming.
+- Do not run model inference.
+- Do not edit source.
+- Do not download assets.
+
+Inputs:
+
+- 7NB target verification run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-160200Z-phase7nb-target-verify-bench`
+- Current source:
+  `/root/lfz/llama.cpp-vendor-kimi`
+
+Audit method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nr-target-verifier-rootcause`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `phase7nr_verify_rootcause.py`;
+   - `verify_profile_summary.tsv`;
+   - `stderr_signal_summary.tsv`;
+   - `source_condition_notes.md`;
+   - `decision.md`.
+3. Parse for each 7NB run (`baseline-n32`, `verify-B1`, `verify-B2`,
+   `verify-B4`, `verify-B8`, `verify-B16`):
+   - `metrics.txt`;
+   - `up-gate-profile.csv`;
+   - `down-batch-profile.csv`;
+   - `fallback-profile.csv`;
+   - `stderr.txt`.
+4. Summarize:
+   - verify wall time and token-equivalent time;
+   - up/gate and down CUDA batch acceptance/decline where present;
+   - CPU fallback by phase/type;
+   - whether the runtime treats the operation as prompt (`ids->ne[1] > 1`) or
+     decode;
+   - whether CPU fallback pack mmap is disabled because `prompt_phase` is true;
+   - whether current custom CUDA MoE supports multirow/multi-token matrix row
+     counts in the needed verifier shape.
+5. Inspect and quote only short source snippets/line references around:
+   - `ids->ne[1] > 1` prompt-phase checks in
+     `ggml/src/ggml-cpu/ggml-cpu.c`;
+   - `ggml_kimi_cpu_fallback_pack_mmap_prepare(...)` prompt disable;
+   - `ggml_cuda_moe_stream_batch(...)` and
+     `ggml_cuda_moe_stream_up_gate_batch(...)` multirow conditions in
+     `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+   - `tools/kimi-verify-bench/kimi-verify-bench.cpp` batch construction.
+
+Decision rule:
+
+- Reject immediate DFlash/EAGLE verifier implementation if the audit confirms:
+  - `B>=2` enters prompt/multirow semantics;
+  - accepted decode VRAM cache/expert-pack streaming is not used for the same
+    shape;
+  - fixing it requires broad multi-token MoE streaming kernels or serial target
+    decode steps with no accepted-token work reduction.
+- Only write a source implementation plan if the audit finds a narrow default-
+  off verifier path with a hard upper bound:
+  - target verification for `B=4` plausibly below `0.800 s`;
+  - or `B=8` below `1.600 s`;
+  - while preserving strict 16GB host RAM, TTFT cap, and France semantic quality.
+- This phase cannot promote SOTA.
+
+Reproducibility:
+
+- Commit and push this 7NR plan before running the audit.
+- Commit and push the 7NR result before any follow-up source or asset work.
