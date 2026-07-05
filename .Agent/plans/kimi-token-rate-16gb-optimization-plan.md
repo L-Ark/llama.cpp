@@ -75578,3 +75578,146 @@ Overall model-format conclusion:
 - After such an asset exists, the next plan must be a strict cold-start n32
   smoke followed by repeat n96 quality/TTFT/token-rate validation before any
   SOTA promotion.
+
+## Phase 7MR - external Kimi asset availability audit
+
+Timestamp: 2026-07-05 20:00:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Continue the 7MQ conclusion by checking whether a valid external asset now
+  exists for the next strict benchmark cycle.
+- Search for assets that can change Kimi runtime economics without violating the
+  existing gates:
+  - prebuilt Kimi K2.7 Code `MXFP4_MOE` GGUF;
+  - prebuilt Kimi K2.7 Code `NVFP4` GGUF;
+  - prebuilt Kimi K2.7 Code `F8_E4M3_MXFP4` GGUF;
+  - BF16/F16 Kimi K2.7 Code source shards suitable for offline conversion;
+  - compatible draft/MTP assets suitable for true speculative verification.
+
+Why this is the next bottleneck:
+
+- 7MO closed local CUDA/IO scheduler variants.
+- 7MP closed currently executable algorithmic paths because no draft/MTP asset
+  exists and lookahead is much slower.
+- 7MQ showed local quantization support exists for MXFP4-family formats, but the
+  server lacks a non-lossy source model and disk budget. It also showed NVFP4 is
+  load/kernel-supported but not exposed as a local `llama-quantize` target.
+- Therefore the bottleneck is asset availability, not source code.
+
+Search method:
+
+- Use public metadata only; do not download full model shards in this phase.
+- Prefer primary sources and reproducible APIs:
+  - Hugging Face model search API;
+  - repository file lists through the Hugging Face API;
+  - direct model card URLs when found.
+- Record the exact query strings, response timestamps, repository IDs, file
+  names, sizes if available, and whether files are public or gated.
+- Save all raw JSON/HTML snippets used for the decision in the run directory.
+
+Run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 12a69d526
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mr-external-asset-audit
+mkdir -p "$RUN"
+
+python3 - "$RUN" <<'PY'
+import json
+import pathlib
+import time
+import urllib.parse
+import urllib.request
+
+run = pathlib.Path(__import__("sys").argv[1])
+queries = [
+    "Kimi-K2.7-Code GGUF MXFP4",
+    "Kimi-K2.7-Code GGUF NVFP4",
+    "Kimi-K2.7-Code GGUF F8_E4M3_MXFP4",
+    "Kimi-K2.7-Code BF16",
+    "Kimi-K2.7-Code F16",
+    "Kimi-K2.7-Code draft",
+    "Kimi-K2.7-Code MTP",
+]
+
+base = "https://huggingface.co/api/models"
+summary = []
+for q in queries:
+    url = base + "?" + urllib.parse.urlencode({
+        "search": q,
+        "limit": 20,
+        "full": "true",
+    })
+    req = urllib.request.Request(url, headers={"User-Agent": "kimi-asset-audit"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except Exception as exc:
+        data = {"error": repr(exc)}
+    name = q.lower().replace(" ", "_").replace("/", "_")
+    (run / f"hf-search-{name}.json").write_text(
+        json.dumps(data, indent=2, sort_keys=True) + "\n"
+    )
+    repos = []
+    if isinstance(data, list):
+        for item in data:
+            mid = item.get("modelId") or item.get("id")
+            if mid:
+                repos.append(mid)
+    summary.append({"query": q, "url": url, "repos": repos})
+    time.sleep(0.5)
+
+(run / "hf-search-summary.json").write_text(
+    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+)
+PY
+```
+
+Follow-up metadata expansion:
+
+- For any candidate repository whose name or tags suggest Kimi K2.7 Code and
+  one of the target formats, query:
+
+```bash
+curl -L "https://huggingface.co/api/models/<repo-id>" \
+  > "$RUN/hf-model-<safe-repo-id>.json"
+```
+
+- Extract:
+  - repo ID;
+  - tags and library name;
+  - siblings/file names;
+  - file sizes when available;
+  - gated/private status;
+  - whether the tokenizer/model family appears compatible with the current
+    Kimi GGUF.
+
+Acceptance criteria for proceeding to a download/smoke phase:
+
+- A candidate is actionable only if:
+  - it is a Kimi K2.7 Code compatible asset, not a different Kimi family;
+  - it is public or accessible without manual approval in the current
+    environment;
+  - it is either a prebuilt GGUF in a target format or a non-lossy BF16/F16
+    source suitable for conversion;
+  - total size and disk needs are compatible with a documented staging plan;
+  - it can plausibly generate the same expert-pack manifest coverage used by the
+    current vendor runtime;
+  - expected format has GPU paths for the needed MoE tensors.
+- If the only candidates are IQ3/IQ2/Q4 already-lossy GGUFs, record them but do
+  not proceed.
+- If no candidate exists, record this as the second consecutive asset blocker
+  but keep the goal active unless the same blocker repeats again in the next
+  goal continuation.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Record raw API outputs, parsed summary, search time, source commit, and the
+  final candidate decision in the plan.
