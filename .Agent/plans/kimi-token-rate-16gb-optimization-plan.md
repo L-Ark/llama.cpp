@@ -74166,3 +74166,71 @@ Next direction:
 - Candidate: use existing 7MA profile data to look for non-Q4 decode buckets
   where work can be removed without extra IO, because IO/H2D and Q4 production
   directions are now closed by repeat evidence.
+
+## Phase 7MK - Current non-Q4 full-profile refresh
+
+Timestamp: 2026-07-06 20:08:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-profile the current default production path after closing Q4 production.
+- Identify the largest remaining non-Q4 decode bucket with current code and
+  current cold-start behavior.
+
+Reason:
+
+- Q4 directions are now closed by 7MG, 7MH, and 7MJ:
+  - Q4 math parity is good;
+  - broad/single Q4 production regresses;
+  - split Q4 pool fixes geometry but not endpoint;
+  - hit-only top-65 removes Q4 misses but still regresses.
+- Several earlier IO/H2D scheduler ideas are already rejected.
+- Before another source patch, the plan requires a fresh bottleneck breakdown.
+
+Selected diagnostic:
+
+- Run current default n32 with `MIN_PROFILE=0`.
+- This enables:
+  - CPU MoE eligibility/profile CSV;
+  - fallback profile CSV;
+  - down-batch profile CSV;
+  - up-gate profile CSV;
+  - route/copy profile outputs from the runner.
+- No source changes.
+
+Run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mk-current-full-profile-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=0 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required analysis:
+
+- Confirm quality and memory gates.
+- Summarize:
+  - token rate and TTFT;
+  - CPU fallback by type/stage;
+  - up/gate wall, stage, wait, compute, fuse, D2H;
+  - down-batch wall, stage, kernel, D2H, scatter;
+  - copy/io profile if present;
+  - current-down overlap counters;
+  - expert-pack iouring wait and inflight.
+- Compare against 7MD default and 7MA endpoint-overlap diagnostic.
+
+Decision rule:
+
+- If the largest bucket is still IO/H2D and matches already rejected patterns,
+  do not retry scheduler variants without a new mechanism.
+- If a compute bucket dominates and has not been recently rejected, plan a
+  targeted compute probe.
+- If profiling overhead makes endpoint incomparable, use subcomponent totals
+  only and run a no-profile confirmation before any source patch.
