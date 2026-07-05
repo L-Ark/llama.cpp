@@ -61345,3 +61345,128 @@ Required gates:
 - quality `pass`;
 - manual semantic quality `pass` for
   `Please introduce France in a short paragraph.`
+
+### 7IP result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `a8d58d4fd` (`scripts: enable down single-ring staging`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile`.
+
+Reproduction command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard a8d58d4fd
+cmake --build build-cuda-batch -j$(nproc) --target llama-completion
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile
+rm -rf "$RUN"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv
+GGML_MOE_STAGE_GRANULARITY_PROFILE=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `78878.44 ms`;
+- decode `29082.91 ms / 31`, `1.07 tok/s`;
+- memory peak `15899996160`;
+- memory final `15068397568`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `14819`, bytes `85991915520`, wait `12185720 us`;
+- iouring batches `3280`, wait calls `11588`, inflight average `3.43`,
+  max `8`;
+- iouring batch histogram:
+  `1:94,2-4:1587,5-8:1599,9-16:0,17-32:0,gt32:0`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`;
+- current down overlap worker time `3487386 us`.
+
+Locality profile:
+
+- `io-locality-profile.csv` rows: `3280`;
+- `runtime_load`:
+  - rows `2420`;
+  - read jobs `11315`;
+  - read bytes `63889244160`;
+  - span bytes `1528056578048`;
+  - gap bytes `1464167333888`;
+  - adjacent pairs `267`;
+  - rows with adjacent pairs `261`;
+  - rows with `gap/read < 0.25`: `57`;
+  - aggregate `gap/read = 22.92`;
+  - aggregate `span/read = 23.92`;
+- `current_down_overlap`:
+  - rows `860`;
+  - read jobs `3504`;
+  - read bytes `22102671360`;
+  - span bytes `536601640960`;
+  - gap bytes `514498969600`;
+  - adjacent pairs `76`;
+  - rows with adjacent pairs `72`;
+  - rows with `gap/read < 0.25`: `41`;
+  - aggregate `gap/read = 23.28`;
+  - aggregate `span/read = 24.28`;
+- all profiled batches are effectively same-source and same-tensor, so source
+  switching is not the bottleneck.
+
+Batch profile:
+
+- rows `3280`;
+- `runtime_load`:
+  - rows `2420`;
+  - jobs/read jobs `11315`;
+  - wait `9465.256 ms`;
+  - enqueue `176.130 ms`;
+  - slot wait `22.658 ms`;
+  - wall `9786.217 ms`;
+- `current_down_overlap`:
+  - rows `860`;
+  - jobs/read jobs `3504`;
+  - wait `2726.272 ms`;
+  - enqueue `44.383 ms`;
+  - slot wait `10.941 ms`;
+  - wall `2831.747 ms`.
+
+Decision:
+
+- Reject direct same-source span coalescing as the next implementation.
+- Reason:
+  - the current production runner already uses `GGML_MOE_IO_SORT_OFFSET=1`;
+  - batches are usually one tensor and one source, but selected expert offsets
+    are physically far apart inside the pack;
+  - reading the whole span would amplify IO by about `24x` on aggregate, which
+    is far above the allowed coalescing budget and would likely reduce token
+    rate.
+- Keep `GGML_MOE_IO_LOCALITY_PROFILE_OUT` as a default-off diagnostic.
+- The next design should target reducing exposed random-read waits without
+  reading large gaps. Plausible directions are:
+  - route-aware physical expert-pack layout for only the active profile window;
+  - narrower pread coalescing only for the small subset with `gap/read < 0.25`;
+  - foreground wait hiding for up/gate misses, because IO wait remains much
+    larger than enqueue or slot wait.
