@@ -79620,3 +79620,99 @@ Decision:
 - Do not run n32 repeat or n96 validation.
 - Do not enable `GGML_SCHED_MOE_CACHE_*` in the runner.
 - Current SOTA remains unchanged.
+
+## Phase 7NJ - remaining runtime switch and candidate closure audit
+
+Timestamp: 2026-07-06 03:18:00 CST.
+
+Status: planned.
+
+Goal:
+
+- After 7NI rejected the last newly found scheduler-cache path, systematically
+  audit the remaining current-source runtime switches that have not appeared in
+  this plan.
+- Classify whether any remaining switch is a legitimate next optimization
+  candidate under the strict 16 GB cold-start Kimi path.
+- Do not edit source code.
+- Do not run the model in this phase.
+- Do not promote SOTA in this phase.
+
+Why this is the next valid step:
+
+- The current strict bottleneck is still exposed expert-pack movement, but most
+  local mechanisms targeting it have been closed:
+  - RAM tier;
+  - host prefetch;
+  - io_uring depth/refill/SQPOLL/fixed buffers;
+  - adjacent/span coalescing and trace-order layout;
+  - Q4 down GPU;
+  - MMQ/dynamic-X MMQ;
+  - CUDA graph;
+  - broad VRAM split and higher VRAM cache budget;
+  - current-down early overlap;
+  - scheduler MoE cache.
+- Direct smaller-format and speculative assets are blocked by 7NF/7NH.
+- Before spending another cold-start run, the remaining default-off switches
+  should be classified against source semantics and prior plan evidence to avoid
+  repeating low-bound or unsafe experiments.
+
+Audit method:
+
+- Create:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nj-runtime-switch-audit`
+- Record:
+  - `commands.log`;
+  - `repo_state.txt`;
+  - `all_runtime_switches.tsv`;
+  - `unseen_runtime_switches.tsv`;
+  - `classification.tsv`;
+  - `decision.md`;
+  - `audit_runtime_switches.py`.
+- Extract runtime switch names from:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - `ggml/src/ggml-backend.cpp`;
+  - `ggml/src/ggml-cpu/ggml-cpu.c`;
+  - `src/llama-model.cpp`;
+  - `scripts/kimi-phase7fb-min-profile-repro.sh`.
+- For each switch, record:
+  - source file and line;
+  - whether it already appears in this plan;
+  - nearby source context;
+  - likely category:
+    `production_candidate`, `diagnostic_only`, `correctness_risk`,
+    `disable_path`, `already_covered_alias`, `capacity_retry_only`,
+    `prompt_only`, `rejected_family`, or `unknown`.
+- Cross-check historical plan evidence for specific families:
+  - `VRAM_MIB`/VRAM safety/alloc retry;
+  - down prefetch depth;
+  - CPU fallback pack mmap advice/release/direct reads;
+  - host prefetch and trace prefetch;
+  - up/gate stage split/combined/parallel;
+  - GPU handoff;
+  - Q8K/Q4 diagnostics;
+  - scheduler MoE cache.
+
+Hard-bound decision rules:
+
+- Do not plan a cold-start n32 run for a switch if any of these hold:
+  - it is a pure trace/debug/dump/profile switch;
+  - it disables the accepted expert-pack or streaming path;
+  - it intentionally skips nonresident expert data and can change semantics;
+  - it is an alias for an already rejected switch;
+  - it applies only to prompt/exact-prompt paths and cannot improve decode
+    token rate;
+  - it has already been rejected in a closely matching current-source phase;
+  - its optimistic upper bound is below the noise band or negative from source
+    semantics.
+- If exactly one switch remains as a plausible `production_candidate`, write a
+  separate strict n32 plan before running it.
+- If no switch remains, record an explicit current-source no-candidate decision
+  and continue only with a new algorithmic/model-format/external-asset plan.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Store the extraction/classification script and raw TSV outputs in the run
+  directory.
+- Commit and push the result before any follow-up benchmark or source change.
