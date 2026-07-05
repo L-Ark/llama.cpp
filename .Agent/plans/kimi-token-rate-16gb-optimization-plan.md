@@ -81434,3 +81434,107 @@ Reproducibility:
 
 - Commit and push this 7NR plan before running the audit.
 - Commit and push the 7NR result before any follow-up source or asset work.
+
+### Phase 7NR result
+
+Timestamp: 2026-07-06 04:20 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-193928Z-phase7nr-target-verifier-rootcause`
+
+Plan commit before execution:
+
+- `e9ea16f53` (`docs: plan verifier rootcause audit`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `phase7nr_verify_rootcause.py`
+- `verify_profile_summary.tsv`
+- `fallback_phase_type.tsv`
+- `stderr_signal_summary.tsv`
+- `source_condition_notes.md`
+- `decision.md`
+- `audit_stdout.txt`
+
+Execution notes:
+
+- No model inference was run.
+- No source code was changed.
+- No asset was downloaded or deleted.
+- The first 7NR script run omitted iouring/hit-rate fields because 7NB metrics
+  store them in compound `expert_pack_0=...` and `vram_*_0=...` lines.
+  The script was fixed to parse those compound fields and rerun in the same
+  directory.
+
+Key profile summary:
+
+| run | B | verify ms | ms/token equiv | iouring bytes | fallback ms | prompt fallback ms | decode fallback ms |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `baseline-n32` | - | `21878.07` | - | `126391910400` | `69826.419` | `67331.179` | `2495.240` |
+| `verify-B1` | `1` | `1670.54` | `1670.540` | `7576518656` | `64904.031` | `64580.959` | `323.072` |
+| `verify-B2` | `2` | `11238.70` | `5619.350` | `140378112` | `85929.280` | `85929.280` | `0.000` |
+| `verify-B4` | `4` | `18555.80` | `4638.950` | `140378112` | `84576.329` | `84576.329` | `0.000` |
+| `verify-B8` | `8` | `33609.70` | `4201.212` | `140378112` | `97804.477` | `97804.477` | `0.000` |
+| `verify-B16` | `16` | `51832.10` | `3239.506` | `140378112` | `111574.510` | `111574.510` | `0.000` |
+
+Source findings:
+
+- `tools/kimi-verify-bench/kimi-verify-bench.cpp` constructs one
+  `llama_batch` containing `B` continuation tokens at consecutive positions in
+  the same sequence and calls `llama_decode(ctx, verify_batch)`.
+- `ggml/src/ggml-cpu/ggml-cpu.c` uses `ids->ne[1] > 1` as the prompt-phase
+  signal in MoE profiling/fallback paths.
+- `ggml_kimi_cpu_fallback_pack_mmap_prepare(...)` returns early when
+  `prompt_phase` is true, so the decode-only fallback-pack mmap optimization is
+  not available for the multi-token verifier batch.
+- `ggml/src/ggml-cuda/moe_stream_batch.cu` has explicit multirow/prompt-mode
+  conditions, including a `matrix_row_counts[e] > 1` path that requires
+  prompt-mode handling and excludes several decode-only optimizations:
+  - GPU handoff is gated by `!prompt_mode`;
+  - fused MMQ is gated by `!prompt_mode`;
+  - serial staged batch is gated by `!prompt_mode`;
+  - current-down overlap is gated by `!prompt_mode`.
+
+Interpretation:
+
+- 7NB's slow `B>=2` verification is not a slow variant of the accepted decode
+  hot path. It is prompt/multirow work with different cache and fallback
+  behavior.
+- This explains the observed combination:
+  - near-zero VRAM cache hit rates for `B>=2`;
+  - only `140378112` bytes of expert-pack iouring traffic;
+  - very high prompt fallback time;
+  - `0` decode fallback time;
+  - multi-second per-token-equivalent verification cost.
+- Serializing target verification back to one-token decode would preserve the
+  current hot path but would still perform one expensive Kimi target step per
+  accepted token, so it cannot meet the required `>=3.68x` effective
+  accepted-token multiplier.
+
+Decision:
+
+- Accept 7NR as a reproducible root-cause audit.
+- Reject immediate DFlash/EAGLE verifier implementation on the current
+  `llama_decode` multi-token verifier shape.
+- Do not implement a draft runtime that relies on the existing multi-token
+  target verifier path.
+- A future speculative path needs a new default-off verifier design that either:
+  - implements true multi-token MoE streaming GPU verification with
+    VRAM/expert-pack cache support; or
+  - avoids target block verification and proves accepted-token reduction through
+    another mechanism.
+- Current SOTA remains unchanged.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-193928Z-phase7nr-target-verifier-rootcause
+python3 "$RUN/phase7nr_verify_rootcause.py"
+cat "$RUN/verify_profile_summary.tsv"
+cat "$RUN/source_condition_notes.md"
+cat "$RUN/decision.md"
+```
