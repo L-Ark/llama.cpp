@@ -1,0 +1,47 @@
+{
+  "artifact": "compact-fused-mmvq-source-audit-after-top48",
+  "created_utc": "2026-07-05T16:55:00Z",
+  "source_head_before_artifact": "4c360ad47",
+  "inputs": {
+    "next_plan": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-fused-compact-sparse-next-plan-after-topk-close.json",
+    "top48_profile": ".Agent/profiles/vendor-ds4/current_sota_sparse_pair_top48_after_topk_close_updown.profile.json",
+    "deepseek4_graph": "src/models/deepseek4.cpp::build_expert_mix",
+    "hot_manager": "src/llama-deepseek4-hot.cpp / src/llama-deepseek4-hot.h",
+    "one_stream_probe": "ggml/src/ggml-cuda/moe_stream.cu DS4_SPARSE_PAIR_GRAPH_PROBE"
+  },
+  "source_audit": {
+    "deepseek4_default_path": "build_expert_mix receives cur_ffn, selected_experts, weights, then builds separate gate/up/down mul_mat_id graph nodes and sums expert outputs. It does not pass a retained GPU gate tensor into a later hot branch.",
+    "existing_ds4_hot_dispatch": "DS4_HOT_DISPATCH is the closest graph-level mechanism, but its layer_hot_state allocates K + P + 1 hot tensor rows per active layer and uses dummy rows to avoid mul_mat_id dedup issues. For sparse top48/top64 profiles this is the wrong payload class.",
+    "existing_sparse_retained_probe": "deepseek4_sparse_retained_graph_probe_write records graph facts and already hardcodes graph_gate_output_input_available=false for the current build_expert_mix inputs.",
+    "one_stream_sparse_graph_probe": "The one-stream probe in moe_stream.cu records CPU-backend helper transfers. Prior validation showed it returns through CPU memory and has no zero-transfer retained GPU output.",
+    "json_loader_reuse": "src/llama-deepseek4-hot.cpp already uses nlohmann/json and can serve as style reference for a compact sparse profile loader, but its allocation/remap shape must not be reused directly."
+  },
+  "minimum_next_source_step": {
+    "allowed": true,
+    "kind": "default-off placement/proof skeleton before any logit-writing path",
+    "reason": "The refreshed hard-bound is above 10 tok/s, but implementation risk is dataflow/payload, not arithmetic alone. A proof skeleton can validate compact top48 profile loading and per-layer pair selection without changing logits.",
+    "env": [
+      "DS4_SPARSE_FUSED_MMVQ_PROBE=1",
+      "DS4_SPARSE_FUSED_MMVQ_PROFILE=.Agent/profiles/vendor-ds4/current_sota_sparse_pair_top48_after_topk_close_updown.profile.json",
+      "DS4_SPARSE_FUSED_MMVQ_MODE=placement"
+    ],
+    "required_output": "CSV/JSON with per layer selected pairs, compact payload bytes, whether selected_experts contains each pair, whether gate output is available as retained GPU tensor, estimated gate-output H2D or gate recompute path, and whether current graph would fall back to CPU-backend transfers.",
+    "must_not_do": [
+      "Do not enable DS4_HOT_DISPATCH as the implementation path.",
+      "Do not allocate K+P+1 dummy rows per active layer.",
+      "Do not write logits or clear CPU fallback counts.",
+      "Do not run a strict cold SOTA benchmark from placement proof alone."
+    ]
+  },
+  "followup_after_skeleton": {
+    "if_defaultoff_top1_passes": "Add a compare-only MMVQ fused hot-pair kernel/probe that runs after authoritative CPU fallback and records op-level error and timing.",
+    "if_payload_or_gate_reuse_fails": "Reject this route or fall back to a corrected CPU-backend bound with selected gate-output H2D/recompute explicitly measured.",
+    "before_write_skip": "A write/skip mode requires fixed-text llama-results same_top1 == n_tokens under strict 16GB/no-swap cgroup before any France performance run."
+  },
+  "decision": {
+    "sota_changed": false,
+    "runtime_source_edit_allowed_next": true,
+    "strict_cold_benchmark_allowed": false,
+    "next_edit": "Implement only the default-off compact sparse fused MMVQ placement/proof skeleton."
+  }
+}
