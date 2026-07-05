@@ -79765,3 +79765,115 @@ Artifacts:
 - `classification.tsv`
 - `source_context.txt`
 - `decision.md`
+
+## Phase 7NK - layer-aware VRAM cache oracle and pool-bound analysis
+
+Timestamp: 2026-07-06 01:55:00 CST.
+
+Status: planned.
+
+Goal:
+
+- After 7NJ found no remaining production runtime switch, evaluate whether a
+  new algorithmic VRAM cache policy can materially reduce expert-pack movement.
+- Do not edit source code in this phase.
+- First use existing strict cold-start run artifacts. Run a new diagnostic n32
+  only if existing artifacts do not contain enough per-expert/per-tensor access
+  order to simulate cache policies.
+- Do not promote SOTA in this phase.
+
+Hypothesis:
+
+- Current accepted decode is dominated by exposed expert-pack movement.
+- Current global per-size LRU cache may waste slots across layers/tensor groups
+  whose reuse is mostly local to a layer or a narrow layer band.
+- A layer-aware pool, hot-set pinning policy, or admission policy could improve
+  hit rate without adding host RAM, but only if an oracle simulation shows a
+  large enough miss-byte reduction.
+
+Required constraints:
+
+- Any model run in this phase must be strict cold start:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0`.
+- Host RAM peak must remain below the 16 GB cgroup limit, including page cache.
+- Swap must remain disabled through `MemorySwapMax=0`.
+- The validation prompt remains:
+  `Please introduce France in a short paragraph.`
+- The answer must be semantically correct and coherent.
+- TTFT must remain below `127598.064 ms`.
+- Use the accepted VRAM budget/split unless the analysis is explicitly only an
+  offline simulation:
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=62`;
+  - `PINNED_SLOTS=12`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`.
+
+Design method:
+
+1. Inventory existing strict run artifacts:
+   - 7MU n96 refresh:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260705-130454Z-phase7mu-current-iq3-n96-refresh`
+   - 7MY n32 full-profile:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile`
+   - Any later strict run with `route-trace`, `io-read-trace`,
+     `cache-evict-profile`, or copy/profile CSVs.
+2. If existing artifacts contain enough access-order data, run an offline
+   simulator only. It must not touch the model process.
+3. If access-order data is insufficient, write and run a single strict
+   diagnostic n32 trace run with profiling/tracing enabled. This run is not a
+   performance candidate because tracing overhead may reduce token rate.
+4. Build `phase7nk_cache_oracle.py` in the run directory. The simulator should
+   reconstruct cache events as closely as the traces allow and compare:
+   - current global LRU with current down/upgate slot counts;
+   - per-layer quota LRU;
+   - tensor-family pools: down vs up/gate;
+   - static hot-set pinning by prefix/profile count;
+   - oracle Belady upper bound for the same slot counts, if enough event order
+     is available.
+5. Estimate the hard speed ceiling:
+   - baseline decode wall from 7MU/7MY;
+   - baseline `iouring_wait_us` and `iouring_bytes`;
+   - simulated miss-byte reduction;
+   - optimistic bound if all reduced bytes directly remove exposed wait;
+   - conservative bound if only the measured exposed wait fraction improves.
+
+Acceptance to proceed to source implementation:
+
+- The oracle or a realistic implementable policy must show at least one of:
+  - projected strict n96 token rate `>= 1.55 tok/s`; or
+  - projected exposed read/wait reduction `>= 20%`;
+  - without increasing host RAM and without reducing cache slots below current
+    accepted values.
+- A pure oracle-only result is not sufficient to implement; it must identify an
+  implementable policy using only data available before or during decode.
+- If the best realistic policy is below the threshold, reject this family and do
+  not run model benchmarks for it.
+
+Result recording:
+
+- Create:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nk-cache-oracle`
+- Store:
+  - `commands.log`;
+  - `repo_state.txt`;
+  - `trace_inventory.tsv`;
+  - `phase7nk_cache_oracle.py`;
+  - `policy_results.tsv`;
+  - `bound.md`;
+  - any diagnostic n32 run directory, if one is required.
+- Record whether no model run was needed, or if a diagnostic n32 was run:
+  - exact command;
+  - output text;
+  - TTFT;
+  - decode time/token rate;
+  - `memory.peak`;
+  - `oom`/`oom_kill`;
+  - expert-pack counters.
+
+Reproducibility:
+
+- Commit and push this plan before any inventory, trace simulation, or model
+  run.
+- Commit and push the result before any source implementation plan.
