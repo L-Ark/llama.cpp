@@ -51,6 +51,16 @@ Current-head trace result:
 - Hot fallback compute after pages are touched is only `2882.262 ms`; removing hot compute alone has zero-overhead bound `4.850 tok/s`, too small. Chunk tail gap is only `2329.894 ms`, zero-overhead bound `4.757 tok/s`; scheduler/tail-only remains closed. Gate one-stream excluding seq0 is `3572.092 ms`; gate-only remains closed.
 - Next runtime source edit must target exact decode up/down fallback removal or a combined source/page + hot-compute path with total overhead below about `1.64-1.73s`. Do not implement another synchronous page-touch, broad/dedup `madvise`, packmmap/packdirect, gate-only, scheduler-only, or top768 resident-source variant without a new hard-bound that exceeds the current one.
 
+Current-head candidate screen:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-exact-decode-updown-candidate-screen.json`; helper: `.Agent/run-tools/analyze_current_head_candidate_screen.py`.
+- Source/page-only remains rejected: zero-overhead `9.221 tok/s`.
+- Source/page plus best existing CPU microprobe remains rejected: zero-overhead `9.810 tok/s` using `74.719 GiB/s`.
+- Source/page plus persistent MXFP4 repack hot compute remains rejected: zero-overhead `9.824 tok/s`, before persistent-repack memory/page-cache costs.
+- Full fallback removal remains a theoretical upper bound only: `11.449 tok/s` with `1728.829 ms` margin, but no current exact implementation fits the source/VRAM/RAM constraints.
+- Closest mixed paper route is source/page elimination + remaining CPU at microprobe speed + top128 hot residual exact kernel. Even after estimated gate penalty, it allows only `179.257 ms` for the top128 kernel/integration over `44.152 GiB` call-weighted source, requiring about `246.305 GiB/s`. Existing raw/transposed exact GPU probes are only `72-75 GiB/s`, so this is not implementable by wrapping the current kernel.
+- Therefore no immediate runtime patch is allowed. The only next source edit that may be planned is a default-off kernel microprobe with a new memory-access design and a hard-bound explaining how it can exceed the top128 `~246 GiB/s` threshold while preserving fixed-text top1. Otherwise continue looking for a new exact algorithmic source; do not repeat cache-size, source-only, prefetch, or existing hot-batch kernel variants.
+
 Latest closed decisions:
 
 - Current serial top768 direct prefill is not promotable: combined short diagnostic under `cpu_moe=41`, gate cache `13568 MiB`, direct pool `3264 MiB` succeeded under 16GB/no-swap, but ran direct prefill before gate prefill. Direct top768 prefill was `1745.225 ms`, exceeding accepted TTFT slack by about `1020.09 ms`; at least `58.45%` of that prefill cost must be hidden before top768 can remain viable.

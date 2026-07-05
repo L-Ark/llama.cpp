@@ -1,0 +1,302 @@
+{
+  "candidate_rows": {
+    "source_page_only": {
+      "decode_ms": 14814.309709999996,
+      "margin_to_10tok_ms": -1153.4331575999986,
+      "tok_s": 9.221406072790955
+    },
+    "source_page_plus_all_cpu_microprobe_best": {
+      "decode_ms": 13925.061744248313,
+      "margin_to_10tok_ms": -264.1851918483153,
+      "tok_s": 9.810280775266627
+    },
+    "source_page_plus_full_fallback_removed": {
+      "decode_ms": 11932.047709999995,
+      "margin_to_10tok_ms": 1728.828842400002,
+      "tok_s": 11.448895348407891
+    },
+    "source_page_plus_persistent_repack_hot_compute": {
+      "decode_ms": 13905.524439047427,
+      "margin_to_10tok_ms": -244.6478866474299,
+      "tok_s": 9.824064250348986
+    }
+  },
+  "experiment": "current-head-exact-decode-updown-candidate-screen",
+  "inputs": {
+    "bottleneck": ".Agent/runs/20260705-vendor-ds4-coldstart/fresh-sota44-current-head-bottleneck-analysis.json",
+    "full_component_case": "/root/lfz/runs/vendor-ds4-16gb/20260705T032634Z-20260705_current_head_sota44_component_trace_absbin/france-trace-cpu40-vram0gb",
+    "gate_profile": ".Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "touch_split_case": "/root/lfz/runs/vendor-ds4-16gb/20260705T033155Z-20260705_current_head_sota44_touch_split/france-touch-cpu40-vram0gb"
+  },
+  "requirements": {
+    "accepted_decode_ms": 31047.446709999997,
+    "best_cpu_microprobe_gib_s": 74.719,
+    "cuda_free_mib_reference": 238.0,
+    "decoded_tokens_estimate": 136.60876552399998,
+    "gate_miss_cost_ms": 1.024052203321064,
+    "hot_compute_ms_after_touch": 2882.262,
+    "raw_warp_gpu_gib_s": 74.59,
+    "required_saving_ms": 17386.5701576,
+    "source_page_delta_ms_estimate": 16233.137,
+    "target_decode_ms_for_10tok": 13660.876552399997,
+    "total_decode_call_weighted_gib": 148.916015625,
+    "transposed_warp_gpu_gib_s": 72.434
+  },
+  "screening_decision": {
+    "immediate_runtime_patch_allowed": false,
+    "only_reopen_conditions": [
+      "Prove a new exact top128/top256 hot-residual kernel above the required GiB/s threshold with fixed-text top1 stability.",
+      "Recover enough VRAM for at least top128 payload without material gate-cache penalty, or include the measured gate penalty in the bound.",
+      "Prove an exact source/page elimination or overlap mechanism that does not repeat the closed synchronous prefetch/page-touch/packmmap/direct families.",
+      "Keep total integration overhead inside the remaining 10 tok/s margin."
+    ],
+    "reason": "No candidate has enough measured evidence to satisfy the 10 tok/s hard bound. Source/page-only reaches only 9.22 tok/s. Source plus best existing CPU microprobe or persistent repack remains below 10. The closest mixed topN path requires a new exact top128-class kernel around 245 GiB/s plus source/page elimination and CPU microprobe-level remaining compute; existing raw/transposed exact GPU probes are only about 72-75 GiB/s.",
+    "sota_changed": false
+  },
+  "source": {
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "head": "b81be0f896688ccd48f6993060a6b2233ead33c7",
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "status": "?? .Agent/run-tools/analyze_current_head_candidate_screen.py"
+  },
+  "topn_hot_residual_rows": [
+    {
+      "allowed_top_kernel_ms_for_10tok": 90.70382476353552,
+      "call_weighted_gib": 27.7412109375,
+      "gate_penalty": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 34.0,
+        "gate_penalty_ms_est": 16.384835253137023,
+        "gate_slots_stolen_est": 8,
+        "lost_gate_score_est": 16,
+        "payload_mib": 272.0
+      },
+      "hot_save_ms_zero_kernel": 529.8379999999999,
+      "ideal_zero_top_kernel": {
+        "decode_ms": 13570.172727636462,
+        "margin_to_10tok_ms": 90.70382476353552,
+        "tok_s": 10.066840582344845
+      },
+      "payload_mib": 272.0,
+      "raw_warp_gpu_kernel_ms_at_74_590_gib_s": 371.9159530433034,
+      "raw_warp_gpu_path": {
+        "decode_ms": 13942.088680679764,
+        "margin_to_10tok_ms": -281.21212827976706,
+        "tok_s": 9.798299856843217
+      },
+      "remaining_cpu_microprobe_ms": 1621.7401823833297,
+      "required_top_kernel_gib_s": 305.84389368167456,
+      "top_n": 64,
+      "transposed_warp_gpu_kernel_ms_at_72_434_gib_s": 382.9860416033907,
+      "transposed_warp_gpu_path": {
+        "decode_ms": 13953.158769239852,
+        "margin_to_10tok_ms": -292.2822168398543,
+        "tok_s": 9.790526129836493
+      }
+    },
+    {
+      "allowed_top_kernel_ms_for_10tok": 179.25662243236002,
+      "call_weighted_gib": 44.15185546875,
+      "gate_penalty": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 306.0,
+        "gate_penalty_ms_est": 147.4635172782332,
+        "gate_slots_stolen_est": 72,
+        "lost_gate_score_est": 144,
+        "payload_mib": 544.0
+      },
+      "hot_save_ms_zero_kernel": 855.7039999999998,
+      "ideal_zero_top_kernel": {
+        "decode_ms": 13481.619929967637,
+        "margin_to_10tok_ms": 179.25662243236002,
+        "tok_s": 10.132963711604049
+      },
+      "payload_mib": 544.0,
+      "raw_warp_gpu_kernel_ms_at_74_590_gib_s": 591.9272753552755,
+      "raw_warp_gpu_path": {
+        "decode_ms": 14073.547205322913,
+        "margin_to_10tok_ms": -412.6706529229159,
+        "tok_s": 9.706775664370646
+      },
+      "remaining_cpu_microprobe_ms": 1402.1087026894097,
+      "required_top_kernel_gib_s": 246.30529611484835,
+      "top_n": 128,
+      "transposed_warp_gpu_kernel_ms_at_72_434_gib_s": 609.5460069684127,
+      "transposed_warp_gpu_path": {
+        "decode_ms": 14091.16593693605,
+        "margin_to_10tok_ms": -430.28938453605224,
+        "tok_s": 9.694638906062295
+      }
+    },
+    {
+      "allowed_top_kernel_ms_for_10tok": 158.06065416168713,
+      "call_weighted_gib": 62.15625,
+      "gate_penalty": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 850.0,
+        "gate_penalty_ms_est": 409.6208813284256,
+        "gate_slots_stolen_est": 200,
+        "lost_gate_score_est": 400,
+        "payload_mib": 1088.0
+      },
+      "hot_save_ms_zero_kernel": 1215.129,
+      "ideal_zero_top_kernel": {
+        "decode_ms": 13502.81589823831,
+        "margin_to_10tok_ms": 158.06065416168713,
+        "tok_s": 10.117057549590312
+      },
+      "payload_mib": 1088.0,
+      "raw_warp_gpu_kernel_ms_at_74_590_gib_s": 833.3054028690173,
+      "raw_warp_gpu_path": {
+        "decode_ms": 14336.121301107327,
+        "margin_to_10tok_ms": -675.2447487073296,
+        "tok_s": 9.528990628270442
+      },
+      "remaining_cpu_microprobe_ms": 1161.1473069098893,
+      "required_top_kernel_gib_s": 393.2430264170466,
+      "top_n": 256,
+      "transposed_warp_gpu_kernel_ms_at_72_434_gib_s": 858.1087610790513,
+      "transposed_warp_gpu_path": {
+        "decode_ms": 14360.924659317361,
+        "margin_to_10tok_ms": -700.0481069173638,
+        "tok_s": 9.512532706963842
+      }
+    },
+    {
+      "allowed_top_kernel_ms_for_10tok": 44.60168948949649,
+      "call_weighted_gib": 73.266845703125,
+      "gate_penalty": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 1394.0,
+        "gate_penalty_ms_est": 671.778245378618,
+        "gate_slots_stolen_est": 328,
+        "lost_gate_score_est": 656,
+        "payload_mib": 1632.0
+      },
+      "hot_save_ms_zero_kernel": 1436.8120000000006,
+      "ideal_zero_top_kernel": {
+        "decode_ms": 13616.2748629105,
+        "margin_to_10tok_ms": 44.60168948949649,
+        "tok_s": 10.032756161239803
+      },
+      "payload_mib": 1632.0,
+      "raw_warp_gpu_kernel_ms_at_74_590_gib_s": 982.2609693407293,
+      "raw_warp_gpu_path": {
+        "decode_ms": 14598.53583225123,
+        "margin_to_10tok_ms": -937.659279851232,
+        "tok_s": 9.357703203509118
+      },
+      "remaining_cpu_microprobe_ms": 1012.4489075318863,
+      "required_top_kernel_gib_s": 1642.6921612549909,
+      "top_n": 384,
+      "transposed_warp_gpu_kernel_ms_at_72_434_gib_s": 1011.4979940790927,
+      "transposed_warp_gpu_path": {
+        "decode_ms": 14627.772856989593,
+        "margin_to_10tok_ms": -966.8963045895962,
+        "tok_s": 9.338999645371452
+      }
+    },
+    {
+      "allowed_top_kernel_ms_for_10tok": -102.18526906644365,
+      "call_weighted_gib": 81.88720703125,
+      "gate_penalty": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 1938.0,
+        "gate_penalty_ms_est": 933.9356094288103,
+        "gate_slots_stolen_est": 456,
+        "lost_gate_score_est": 912,
+        "payload_mib": 2176.0
+      },
+      "hot_save_ms_zero_kernel": 1605.9369999999992,
+      "ideal_zero_top_kernel": {
+        "decode_ms": 13763.061821466441,
+        "margin_to_10tok_ms": -102.18526906644365,
+        "tok_s": 9.92575397074286
+      },
+      "payload_mib": 2176.0,
+      "raw_warp_gpu_kernel_ms_at_74_590_gib_s": 1097.8309026846762,
+      "raw_warp_gpu_path": {
+        "decode_ms": 14860.892724151117,
+        "margin_to_10tok_ms": -1200.01617175112,
+        "tok_s": 9.192500616197224
+      },
+      "remaining_cpu_microprobe_ms": 897.0785020376344,
+      "required_top_kernel_gib_s": null,
+      "top_n": 512,
+      "transposed_warp_gpu_kernel_ms_at_72_434_gib_s": 1130.507869664108,
+      "transposed_warp_gpu_path": {
+        "decode_ms": 14893.56969113055,
+        "margin_to_10tok_ms": -1232.6931387305522,
+        "tok_s": 9.172331976621663
+      }
+    },
+    {
+      "allowed_top_kernel_ms_for_10tok": -636.9826027700965,
+      "call_weighted_gib": 94.57080078125,
+      "gate_penalty": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 3026.0,
+        "gate_penalty_ms_est": 1638.4835253137023,
+        "gate_slots_stolen_est": 712,
+        "lost_gate_score_est": 1600,
+        "payload_mib": 3264.0
+      },
+      "hot_save_ms_zero_kernel": 1855.1259999999982,
+      "ideal_zero_top_kernel": {
+        "decode_ms": 14297.859155170094,
+        "margin_to_10tok_ms": -636.9826027700965,
+        "tok_s": 9.554490923531189
+      },
+      "payload_mib": 3264.0,
+      "raw_warp_gpu_kernel_ms_at_74_590_gib_s": 1267.8750607487598,
+      "raw_warp_gpu_path": {
+        "decode_ms": 15565.734215918854,
+        "margin_to_10tok_ms": -1904.8576635188565,
+        "tok_s": 8.776249396850947
+      },
+      "remaining_cpu_microprobe_ms": 727.3279198563953,
+      "required_top_kernel_gib_s": null,
+      "top_n": 768,
+      "transposed_warp_gpu_kernel_ms_at_72_434_gib_s": 1305.613396764641,
+      "transposed_warp_gpu_path": {
+        "decode_ms": 15603.472551934734,
+        "margin_to_10tok_ms": -1942.5959995347366,
+        "tok_s": 8.75502328531743
+      }
+    },
+    {
+      "allowed_top_kernel_ms_for_10tok": -1296.9194114753627,
+      "call_weighted_gib": 104.025390625,
+      "gate_penalty": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 4114.0,
+        "gate_penalty_ms_est": 2424.9556174642794,
+        "gate_slots_stolen_est": 968,
+        "lost_gate_score_est": 2368,
+        "payload_mib": 4352.0
+      },
+      "hot_save_ms_zero_kernel": 2042.242999999998,
+      "ideal_zero_top_kernel": {
+        "decode_ms": 14957.79596387536,
+        "margin_to_10tok_ms": -1296.9194114753627,
+        "tok_s": 9.132947518065123
+      },
+      "payload_mib": 4352.0,
+      "raw_warp_gpu_kernel_ms_at_74_590_gib_s": 1394.629181190508,
+      "raw_warp_gpu_path": {
+        "decode_ms": 16352.425145065868,
+        "margin_to_10tok_ms": -2691.548592665871,
+        "tok_s": 8.354037050291582
+      },
+      "remaining_cpu_microprobe_ms": 600.792636411087,
+      "required_top_kernel_gib_s": null,
+      "top_n": 1024,
+      "transposed_warp_gpu_kernel_ms_at_72_434_gib_s": 1436.1403570836899,
+      "transposed_warp_gpu_path": {
+        "decode_ms": 16393.93632095905,
+        "margin_to_10tok_ms": -2733.059768559051,
+        "tok_s": 8.332883747349356
+      }
+    }
+  ]
+}
