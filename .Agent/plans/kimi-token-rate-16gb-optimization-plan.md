@@ -64402,3 +64402,69 @@ Reproducibility and gates:
 - Record the script output here and commit/push the plan result.
 - No SOTA promotion is possible from this phase because it is offline
   analysis only.
+
+### 7KH result
+
+Timestamp: 2026-07-05.
+
+Source data:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kf-post-mixed-io-wait-n32`.
+- Source commit for the trace:
+  `83a6e479980f7577bd1475708aace3b2e9eccc3b`.
+- No runtime source changes.
+
+Offline simulation output:
+
+```text
+rows 3584
+adjacent_pairs 1792
+pair_wait_ms 14651.578
+optimistic_first_cqe_bound_ms 3660.731
+optimistic_total_wait_bound_ms 7206.01
+```
+
+Top pair classes by expert bytes:
+
+| up bytes | gate bytes | pairs | pair wait ms | optimistic first-CQE bound ms | optimistic total-wait bound ms |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| `4702208` | `5619712` | `843` | `7191.727` | `1741.004` | `3533.413` |
+| `4702208` | `4702208` | `538` | `4593.786` | `1137.280` | `2269.486` |
+| `5619712` | `5619712` | `305` | `1856.256` | `535.059` | `906.237` |
+| `5619712` | `4702208` | `106` | `1009.809` | `247.387` | `496.873` |
+
+Interpretation:
+
+- The raw adjacent-pair upper bound looks meaningful, but the largest component
+  comes from mixed-size up/gate pairs:
+  - `4702208 -> 5619712`: first-CQE bound `1741.004 ms`;
+  - `5619712 -> 4702208`: first-CQE bound `247.387 ms`;
+  - mixed-size total first-CQE bound `1988.391 ms`.
+- That is the same scheduling shape already targeted by accepted Phase 7JY
+  mixed up/gate parallel staging. It is not a new implementation opportunity.
+- The remaining same-size pairs have a combined first-CQE bound:
+  - `4702208 -> 4702208`: `1137.280 ms`;
+  - `5619712 -> 5619712`: `535.059 ms`;
+  - same-size total `1672.339 ms`.
+- This is below the `2 s` n32 implementation threshold.
+- Same-size IQ3/IQ3 parallel staging and compute-only probes were already
+  implemented and rejected in 7KD/7KE:
+  - 7KD increased movement contention and slowed n32 by `431.06 ms`;
+  - 7KE added stream/sync overhead and slowed n32 by `2221.46 ms`.
+
+Decision:
+
+- Reject a new up/gate first-CQE scheduling implementation at this point.
+- Reason:
+  - the only above-threshold opportunity is already represented by 7JY;
+  - the remaining new same-size opportunity is below threshold and has direct
+    rejected source experiments;
+  - another scheduler change would likely move wait into IO contention or stream
+    synchronization rather than improving wall time.
+- Keep current accepted SOTA unchanged:
+  - mixed up/gate parallel staging remains enabled;
+  - same-type IQ3 parallel staging/compute remains rejected;
+  - no new host RAM, trace prefetch, or cache pinning path is added.
+- Next optimization must find a different bottleneck family with a measured
+  n32 wall-time upper bound above `2 s`; do not revisit up/gate scheduling
+  without new evidence.
