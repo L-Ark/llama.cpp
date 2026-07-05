@@ -85027,3 +85027,106 @@ systemd-run --wait --collect --same-dir \
       EXTRA_RUNTIME_ENV="$EXTRA_RUNTIME_ENV" \
       scripts/kimi-phase7fb-min-profile-repro.sh
 ```
+
+## Phase 7OI - priority-launch reproduction wrapper and n96 confirmation
+
+Status: planned.
+
+Timestamp: 2026-07-06 08:32 CST.
+
+Reason:
+
+- Phase 7OG accepted the launch-level priority recipe as the current production
+  recipe:
+  - n96 A: `55528.61 ms / 77`, `1.39 tok/s`;
+  - n96 B: `55755.91 ms / 77`, `1.38 tok/s`;
+  - both passed cold-start, quality, TTFT, RAM, read-failure, and reproducibility
+    gates.
+- The accepted recipe is currently written as repeated inline `systemd-run`
+  commands. That is enough for the recorded 7OG runs, but it is error-prone for
+  future experiments because omitting one launch property silently falls back to
+  the slower/default launch shape.
+- Phase 7OH showed the remaining bottleneck is still expert-pack bytes/token
+  and exposed `io_uring` wait. There is no evidence to justify another same-layer
+  IO queue-depth/source patch before improving reproducibility of the current
+  accepted production path.
+
+Selected change:
+
+- Add a first-class wrapper:
+
+```text
+scripts/kimi-phase7og-priority-repro.sh
+```
+
+- The wrapper must:
+  - create a timestamped run directory when `RUN` is not provided;
+  - record the exact wrapper command and git state;
+  - run `scripts/kimi-phase7fb-min-profile-repro.sh` under:
+    - `MemoryMax=15900000000`;
+    - `MemorySwapMax=0`;
+    - `IOAccounting=yes`;
+    - `IOWeight=10000`;
+    - `CPUWeight=10000`;
+    - `Nice=-10`;
+    - `IOSchedulingClass=realtime`;
+    - `IOSchedulingPriority=0`;
+  - preserve the accepted runtime defaults:
+    - `N=96`;
+    - `VRAM_MIB=15000`;
+    - `THREADS=32`;
+    - `PINNED_SLOTS=12`;
+    - `UPGATE_PCT=62`;
+    - `IQ2_UPGATE_PARALLEL=1`;
+    - `MIN_PROFILE=1`;
+    - `MOE_IO_DEPTH=8`;
+    - `MOE_IO_REFILL_BATCH=4`;
+    - `MOE_PREFETCH_DOWN_DEPTH=2`;
+  - allow explicit env overrides for diagnostic runs, while recording them in
+    `command.txt`, `env.txt`, and wrapper metadata.
+
+Theoretical bound:
+
+- This wrapper cannot exceed the already measured 7OG launch improvement because
+  it does not change model math, expert layout, VRAM cache, staging, or kernel
+  code.
+- Best expected result is to reproduce the 7OG n96 band:
+  - conservative repeat: `55755.91 ms / 77`, `1.38 tok/s`;
+  - average: `55642.26 ms / 77`, about `1.38 tok/s`;
+  - about `1.86%` faster than the 7MU reference `56696.97 ms / 77`.
+- If the wrapper produces a faster single run but the repeat does not reproduce
+  it, the faster run is diagnostic only.
+
+Acceptance:
+
+1. Commit and push this plan before writing the wrapper.
+2. Add the wrapper and pass `bash -n`.
+3. Run strict cold-start n96 with the wrapper.
+4. If the first run is within the accepted 7OG production band and passes all
+   gates, run one n96 repeat from a fresh run directory.
+5. Accept the wrapper only if both runs pass:
+   - exit `0`;
+   - France answer coherent and semantically correct;
+   - `memory.peak <= 15899996160`, `MemorySwapMax=0`, `oom=0`, `oom_kill=0`;
+   - TTFT <= `127598.064 ms`;
+   - `read_failures=0`;
+   - `iouring_fallbacks=0`;
+   - decode time is not worse than the current non-priority accepted 7MU
+     reference (`56696.97 ms / 77`) by more than normal jitter.
+6. If wrapper output fails or performance regresses materially, do not promote
+   it as the production entrypoint; either fix the wrapper or revert the wrapper
+   commit before continuing.
+7. If accepted, commit and push the wrapper result documentation immediately.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <phase-7oi-wrapper-commit>
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7oi-priority-wrapper-n96 \
+  scripts/kimi-phase7og-priority-repro.sh
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7oi-priority-wrapper-n96-repeat \
+  scripts/kimi-phase7og-priority-repro.sh
+```
