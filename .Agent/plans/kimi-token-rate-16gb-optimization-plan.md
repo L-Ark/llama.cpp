@@ -72855,3 +72855,112 @@ Reproducibility:
 - Commit and push this invalid result/retry plan before rerunning.
 - Record run directory, metrics, activation absence, and whether the invalid
   attempt repeats.
+
+### Phase 7MC-B result
+
+Timestamp: 2026-07-06 03:31:00 CST.
+
+Status: valid gates, but performance outside recent default band; no source
+promotion.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-091700Z-phase7mc-b-post-h2d-batch-revert-n32`
+
+Source:
+
+- `bec1002d3`, H2D batch source reverted.
+
+Gates:
+
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- manual semantic quality `pass`;
+- TTFT `73711.67 ms`;
+- decode `24177.58 ms / 31`, `1.28 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- H2D batch activation match count `0`.
+
+Counters:
+
+- expert-pack iouring bytes `126391910400`;
+- iouring wait `21916334 us`;
+- iouring batches `5178`;
+- iouring inflight avg `3.34`;
+- current-down worker `3394680 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+Interpretation:
+
+- Source rollback is clean and H2D batch activation is gone.
+- The invalid attempt A did not repeat as a hang.
+- However, endpoint performance is outside the recent default band:
+  - recent default n32 guards ranged roughly `1.33-1.39 tok/s`;
+  - 7MC-B is `1.28 tok/s`;
+  - iouring wait is also higher than nearby default runs.
+- This should be treated as runtime/environment variance or storage-pressure
+  evidence, not as a source regression from reverted code.
+
+Decision:
+
+- Keep the H2D batch revert.
+- Do not start another source optimization until a clean default repeat confirms
+  the baseline is back in range or identifies a persistent environment issue.
+
+## Phase 7MD - current default variance repeat
+
+Timestamp: 2026-07-06 03:35:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Repeat the current default n32 path after 7MC-B's slow but valid result.
+- Determine whether the slow decode was transient storage/runtime variance or a
+  persistent issue that must be debugged before more source work.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard <latest-plan-commit>
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7md-current-default-repeat-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- no H2D batch activation.
+
+Decision rule:
+
+- If 7MD returns to `~1.33-1.39 tok/s`, continue source optimization from the
+  clean default path.
+- If 7MD remains near `1.28 tok/s` or hangs, stop source work and inspect
+  storage/device/system pressure.
+
+Reproducibility:
+
+- Commit and push this result/repeat plan before running.
+- Record run directory, metrics, activation absence, and comparison with 7MC-B.
