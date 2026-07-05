@@ -80651,7 +80651,7 @@ cat io-summary.md
 
 ## Phase 7NO - selective down requantization and typed-pack feasibility audit
 
-Status: planned.
+Status: completed; down requantization implementation rejected for now.
 
 Timestamp: 2026-07-06 02:58 CST.
 
@@ -80789,3 +80789,141 @@ Reproducibility:
 
 - Commit and push this plan before running dry-runs.
 - Commit and push the audit result before any source implementation plan.
+
+Result:
+
+- Timestamp: 2026-07-06 02:59 CST.
+- Plan commit before execution:
+  `20c8af66e` (`docs: plan down requant audit`).
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-185342Z-phase7no-down-requant-audit`
+- Source files were not changed.
+- Model inference was not run.
+- No quantized GGUF output was created.
+
+Artifacts:
+
+- `repo_state.txt`;
+- `disk.txt`;
+- `quantize-help.txt`;
+- `commands.log`;
+- `dry-run-q3k.txt`;
+- `dry-run-iq3xxs.txt`;
+- `dry-run-iq2s.txt`;
+- `dry-run-q3k.pipe.txt`;
+- `dry-run-iq3xxs.pipe.txt`;
+- `dry-run-iq2s.pipe.txt`;
+- `typed-pack-scope.md`;
+- `down-requant-summary.md`.
+
+Dry-run execution:
+
+- The planned non-`--pipe` `systemd-run --wait --collect` dry-runs all exited
+  `0`, but service stdout/stderr did not appear in the redirected files. This
+  is a capture issue, not a quantize failure.
+- Supplemental `systemd-run --wait --collect --pipe` commands were run with the
+  same arguments and the same `MemoryMax=15900000000`, `MemorySwapMax=0`
+  properties to capture the actual `llama-quantize` output.
+- Pipe dry-run exits:
+  - `Q3_K`: `0`;
+  - `IQ3_XXS`: `0`;
+  - `IQ2_S`: `0`.
+
+Key dry-run finding:
+
+- With default type `COPY`, the planned
+  `--tensor-type ffn_down_exps=<target>` option was a no-op for all three
+  targets.
+- All three dry-runs reported:
+  - model size `386605.41 MiB`;
+  - quant size `386605.41 MiB`.
+- Therefore the stock `llama-quantize` command, in this shape, cannot produce
+  a selective "copy everything but requantize down experts" estimate or output.
+
+Disk constraint:
+
+- `df -h` reports the root filesystem at:
+  - size `993G`;
+  - used `905G`;
+  - available `88G`.
+- A full split GGUF output would require roughly the model size,
+  `386605.41 MiB` (`~377.5 GiB`) plus safety margin.
+- Full-GGUF selective requantization is therefore not an immediate path on this
+  server.
+
+Current down inventory:
+
+- Parsed from the dry-run output:
+  - down expert tensors: `60`;
+  - `q3_K`: `41` tensors, `94710.0 MiB`;
+  - `iq4_xs`: `12` tensors, `34272.0 MiB`;
+  - `q4_0`: `7` tensors, `21168.0 MiB`.
+- This corrects the earlier rough assumption that the current down path was
+  primarily Q4_0. Most down tensors are already `q3_K` or `iq4_xs`.
+
+7NN down read bytes by current type:
+
+- `q3_K`: `33349550080` bytes (`31.059 GiB`);
+- `iq4_xs`: `12875792384` bytes (`11.992 GiB`);
+- `q4_0`: `0` bytes in the 7NN io_uring down path.
+
+Projected n32 down-read savings if all current down reads used a smaller target
+type:
+
+- All down to `Q3_K`:
+  - new down read estimate `40.758 GiB`;
+  - save `2.292 GiB`;
+  - save `5.33%` of down reads.
+- All down to `IQ3_XXS`:
+  - new down read estimate `36.312 GiB`;
+  - save `6.739 GiB`;
+  - save `15.65%` of down reads.
+- All down to `IQ2_S`:
+  - new down read estimate `30.383 GiB`;
+  - save `12.667 GiB`;
+  - save `29.42%` of down reads.
+- At the 7NN wait-side throughput `5.854 GiB/s`, aggregate wait upper bounds
+  are only:
+  - `Q3_K`: `~0.39 s`;
+  - `IQ3_XXS`: `~1.15 s`;
+  - `IQ2_S`: `~2.16 s`.
+- Endpoint gain would be lower because 7NN showed wait is partially overlapped.
+
+Typed expert-pack feasibility:
+
+- `GGMLMOEPACKv1` entries do not store a quantized type.
+- Current runtime lookup is keyed by `(tensor, expert, nbytes)`, where `nbytes`
+  comes from the GGUF tensor type.
+- A smaller expert-pack-only down entry would not be found by current lookup.
+  If forced, it would be interpreted with the wrong GGUF-derived type and slot
+  size.
+- A real typed-pack implementation would need:
+  - typed sidecar or v2 pack entries;
+  - cache lookup by explicit pack type and byte size;
+  - VRAM cache pools sized by the pack-entry type;
+  - down kernel launch using pack-entry type instead of GGUF `src0_type`;
+  - strict quality validation because the most meaningful target, `IQ2_S`,
+    is high risk.
+
+Decision:
+
+- Reject immediate down requantization implementation.
+- Do not generate a full quantized GGUF on this server.
+- Do not start typed expert-pack source work without either:
+  - a quality-preserving external asset; or
+  - a larger byte-reduction target than down-only requantization provides.
+- Current SOTA remains unchanged.
+- The next optimization plan should not target Q4_0 down bytes, because the
+  strict 7NN io_uring down path read `0` Q4_0 bytes.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-185342Z-phase7no-down-requant-audit
+cat "$RUN/commands.log"
+cat "$RUN/down-requant-summary.md"
+cat "$RUN/dry-run-q3k.pipe.txt" | tail
+cat "$RUN/dry-run-iq3xxs.pipe.txt" | tail
+cat "$RUN/dry-run-iq2s.pipe.txt" | tail
+```
