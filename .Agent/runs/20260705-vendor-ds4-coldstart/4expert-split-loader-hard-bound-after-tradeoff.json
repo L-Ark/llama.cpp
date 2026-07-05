@@ -1,0 +1,462 @@
+{
+  "accepted_sota": {
+    "correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15099523072,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.8,
+    "ram_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_ms": 32087.738292
+  },
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/4expert-split-loader-hard-bound-after-tradeoff.json",
+  "comparison": {
+    "common_tensor_names": 690,
+    "dim_diff_count": 0,
+    "dim_diff_sample": [],
+    "metadata_diffs": [
+      {
+        "four_expert": 65536,
+        "key": "deepseek4.context_length",
+        "native": 1048576
+      },
+      {
+        "four_expert": 4,
+        "key": "deepseek4.expert_used_count",
+        "native": 6
+      },
+      {
+        "four_expert": 3,
+        "key": "deepseek4.hash_layer_count",
+        "native": null
+      },
+      {
+        "four_expert": null,
+        "key": "general.file_type",
+        "native": 41
+      },
+      {
+        "four_expert": "DeepSeek V4 Flash 4Expert",
+        "key": "general.name",
+        "native": "DeepSeek V4 Flash"
+      },
+      {
+        "four_expert": "bpe",
+        "key": "tokenizer.ggml.model",
+        "native": "gpt2"
+      }
+    ],
+    "nbytes_diff_count": 495,
+    "only_4expert_count": 638,
+    "only_4expert_sample": [
+      "blk.0.attn_kv.weight",
+      "blk.0.attn_sinks.weight",
+      "blk.0.ffn_gate_tid2eid.weight",
+      "blk.0.hc_attn_base.weight",
+      "blk.0.hc_attn_fn.weight",
+      "blk.0.hc_attn_scale.weight",
+      "blk.0.hc_ffn_base.weight",
+      "blk.0.hc_ffn_fn.weight",
+      "blk.0.hc_ffn_scale.weight",
+      "blk.1.attn_kv.weight",
+      "blk.1.attn_sinks.weight",
+      "blk.1.ffn_gate_tid2eid.weight",
+      "blk.1.hc_attn_base.weight",
+      "blk.1.hc_attn_fn.weight",
+      "blk.1.hc_attn_scale.weight",
+      "blk.1.hc_ffn_base.weight",
+      "blk.1.hc_ffn_fn.weight",
+      "blk.1.hc_ffn_scale.weight",
+      "blk.10.attn_compressor_ape.weight",
+      "blk.10.attn_compressor_gate.weight"
+    ],
+    "only_native_count": 638,
+    "only_native_sample": [
+      "blk.0.attn_kv_latent.weight",
+      "blk.0.attn_sinks",
+      "blk.0.ffn_gate_tid2eid",
+      "blk.0.hc_attn_base",
+      "blk.0.hc_attn_fn",
+      "blk.0.hc_attn_scale",
+      "blk.0.hc_ffn_base",
+      "blk.0.hc_ffn_fn",
+      "blk.0.hc_ffn_scale",
+      "blk.1.attn_kv_latent.weight",
+      "blk.1.attn_sinks",
+      "blk.1.ffn_gate_tid2eid",
+      "blk.1.hc_attn_base",
+      "blk.1.hc_attn_fn",
+      "blk.1.hc_attn_scale",
+      "blk.1.hc_ffn_base",
+      "blk.1.hc_ffn_fn",
+      "blk.1.hc_ffn_scale",
+      "blk.10.attn_compress_ape",
+      "blk.10.attn_compress_gate.weight"
+    ],
+    "type_diff_count": 517,
+    "type_diff_sample": [
+      {
+        "dims_four": [
+          4096,
+          8192
+        ],
+        "dims_native": [
+          4096,
+          8192
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.0.attn_output_a.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          8192,
+          4096
+        ],
+        "dims_native": [
+          8192,
+          4096
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.0.attn_output_b.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          4096,
+          1024
+        ],
+        "dims_native": [
+          4096,
+          1024
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.0.attn_q_a.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          1024,
+          32768
+        ],
+        "dims_native": [
+          1024,
+          32768
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.0.attn_q_b.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          2048,
+          4096,
+          256
+        ],
+        "dims_native": [
+          2048,
+          4096,
+          256
+        ],
+        "four_type": "Q4_K",
+        "name": "blk.0.ffn_down_exps.weight",
+        "native_type": "MXFP4"
+      },
+      {
+        "dims_four": [
+          2048,
+          4096
+        ],
+        "dims_native": [
+          2048,
+          4096
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.0.ffn_down_shexp.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          4096,
+          2048,
+          256
+        ],
+        "dims_native": [
+          4096,
+          2048,
+          256
+        ],
+        "four_type": "Q4_K",
+        "name": "blk.0.ffn_gate_exps.weight",
+        "native_type": "MXFP4"
+      },
+      {
+        "dims_four": [
+          4096,
+          256
+        ],
+        "dims_native": [
+          4096,
+          256
+        ],
+        "four_type": "F16",
+        "name": "blk.0.ffn_gate_inp.weight",
+        "native_type": "F32"
+      },
+      {
+        "dims_four": [
+          4096,
+          2048
+        ],
+        "dims_native": [
+          4096,
+          2048
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.0.ffn_gate_shexp.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          4096,
+          2048,
+          256
+        ],
+        "dims_native": [
+          4096,
+          2048,
+          256
+        ],
+        "four_type": "Q4_K",
+        "name": "blk.0.ffn_up_exps.weight",
+        "native_type": "MXFP4"
+      },
+      {
+        "dims_four": [
+          4096,
+          2048
+        ],
+        "dims_native": [
+          4096,
+          2048
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.0.ffn_up_shexp.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          4096,
+          8192
+        ],
+        "dims_native": [
+          4096,
+          8192
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.1.attn_output_a.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          8192,
+          4096
+        ],
+        "dims_native": [
+          8192,
+          4096
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.1.attn_output_b.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          4096,
+          1024
+        ],
+        "dims_native": [
+          4096,
+          1024
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.1.attn_q_a.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          1024,
+          32768
+        ],
+        "dims_native": [
+          1024,
+          32768
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.1.attn_q_b.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          2048,
+          4096,
+          256
+        ],
+        "dims_native": [
+          2048,
+          4096,
+          256
+        ],
+        "four_type": "Q4_K",
+        "name": "blk.1.ffn_down_exps.weight",
+        "native_type": "MXFP4"
+      },
+      {
+        "dims_four": [
+          2048,
+          4096
+        ],
+        "dims_native": [
+          2048,
+          4096
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.1.ffn_down_shexp.weight",
+        "native_type": "F8_E4M3_B128"
+      },
+      {
+        "dims_four": [
+          4096,
+          2048,
+          256
+        ],
+        "dims_native": [
+          4096,
+          2048,
+          256
+        ],
+        "four_type": "Q4_K",
+        "name": "blk.1.ffn_gate_exps.weight",
+        "native_type": "MXFP4"
+      },
+      {
+        "dims_four": [
+          4096,
+          256
+        ],
+        "dims_native": [
+          4096,
+          256
+        ],
+        "four_type": "F16",
+        "name": "blk.1.ffn_gate_inp.weight",
+        "native_type": "F32"
+      },
+      {
+        "dims_four": [
+          4096,
+          2048
+        ],
+        "dims_native": [
+          4096,
+          2048
+        ],
+        "four_type": "Q8_0",
+        "name": "blk.1.ffn_gate_shexp.weight",
+        "native_type": "F8_E4M3_B128"
+      }
+    ]
+  },
+  "created_at_utc": "2026-07-05T18:34:32Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "next_allowed_work": "Full 4Expert GGUF empirical test remains the clean path after explicit disk cleanup approval; otherwise continue only with a stronger hard-bound/proof that supplies all tensor bytes deterministically under 16GB RAM and TTFT gates.",
+    "runtime_source_edit_allowed_next": false,
+    "strict_cold_benchmark_allowed": false,
+    "summary": "A split-loader/overlay cannot be promoted or coded from current evidence. Header metadata proves shape/type/hparam changes, but not byte equality of non-expert tensors or correctness. A real overlay would still need new multi-source tensor storage plus full correctness gates, and diskless remote range fetching would be non-deterministic and likely TTFT-hostile."
+  },
+  "models": {
+    "cloudyu_4expert": {
+      "data_start": 5845216,
+      "direct_manifest_payload_bytes": 155826782208,
+      "direct_manifest_payload_gib": 145.125,
+      "direct_manifest_rows": 33024,
+      "expert_bytes": 155826782208,
+      "expert_gib": 145.125,
+      "expert_tensor_count": 129,
+      "metadata": {
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 65536,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_used_count": 4,
+        "deepseek4.hash_layer_count": 3,
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.name": "DeepSeek V4 Flash 4Expert",
+        "tokenizer.ggml.model": "bpe"
+      },
+      "nonexpert_bytes_est": 8638978336,
+      "nonexpert_gib_est": 8.045675545930862,
+      "path_header": "/root/lfz/models/_gguf_header_probe/cloudyu-4expert/ds4flash-4expert.header64m.gguf.part",
+      "remote_file": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf",
+      "size_bytes": 164465760544,
+      "tensor_info_end": 5845209,
+      "type_counts": {
+        "F16": 338,
+        "F32": 492,
+        "I32": 3,
+        "Q4_K": 129,
+        "Q8_0": 366
+      }
+    },
+    "native": {
+      "data_start": 5325312,
+      "expert_bytes": 147169738752,
+      "expert_gib": 137.0625,
+      "expert_tensor_count": 129,
+      "metadata": {
+        "deepseek4.block_count": 43,
+        "deepseek4.context_length": 1048576,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_feed_forward_length": 2048,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.vocab_size": 129280,
+        "general.architecture": "deepseek4",
+        "general.file_type": 41,
+        "general.name": "DeepSeek V4 Flash",
+        "tokenizer.ggml.model": "gpt2"
+      },
+      "nonexpert_bytes_est": 8978451008,
+      "nonexpert_gib_est": 8.361834108829498,
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "size_bytes": 156148189760,
+      "tensor_info_end": 5325308,
+      "type_counts": {
+        "BF16": 147,
+        "F32": 684,
+        "F8_E4M3_B128": 365,
+        "I32": 3,
+        "MXFP4": 129
+      }
+    }
+  },
+  "source": {
+    "head": "15eb60abed8bf7ffb88a25320c7041cc6739db24",
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "status": ""
+  },
+  "split_loader_requirements_before_code": [
+    "A model metadata overlay for deepseek4.expert_used_count=4 and ffn_gate_tid2eid.weight dims [4,129280], not just a small expert pack.",
+    "A tensor resolver that can source tensors from at least two deterministic local byte providers, preserving GGUF alignment, tensor metadata, mmap/direct-read semantics, and cgroup page-cache accounting.",
+    "Proof that any reused native non-expert tensor bytes are identical or an explicit correctness policy that treats the result as a new hybrid model and validates it before performance.",
+    "All expert tensors or a deterministic complete fallback source for any expert selected during generation; prompt-derived native hotsets are not safe because 4Expert routing differs from native top4 override.",
+    "A strict top1/France/five-prompt correctness sequence before any token-rate benchmark, plus TTFT accounting for any remote/range or on-demand fetch path."
+  ],
+  "why_not_diskless_remote_range_now": [
+    "The full 4Expert expert payload is about 145.125 GiB; fetching it on demand over network would move the disk bottleneck to network and make TTFT/reproducibility worse.",
+    "The non-expert payload is still about 8.046 GiB, larger than current free disk, and header-only metadata cannot prove it can be replaced by native bytes.",
+    "A sparse or partial GGUF with missing tensor bytes would either read zeros or fail when an unfilled tensor is selected; previous sparse/header-only validation was already rejected as not proving correctness.",
+    "Current vendor loader does not expose a multi-source GGUF overlay path; adding one is a loader feature, not a small performance optimization, and needs a separate correctness-first design."
+  ]
+}
