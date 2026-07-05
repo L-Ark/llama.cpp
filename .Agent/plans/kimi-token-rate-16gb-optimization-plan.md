@@ -64754,3 +64754,80 @@ Decision rule:
 - If promoted, change the reproducible script default away from forced SQPOLL,
   commit the script/plan update immediately, and push.
 - If rejected, keep the current script default `GGML_MOE_IO_SQPOLL=1`.
+
+### 7KJ result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kj-sqpoll-off-n32`.
+
+Source:
+
+- commit `d901f3ab85db55e688324d6e2b69c39ac1c47248`.
+- No runtime source changes.
+- Env override verified in `env.txt`:
+  - script default still writes `GGML_MOE_IO_SQPOLL=1`;
+  - later override writes `GGML_MOE_IO_SQPOLL=0`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `77187.01 ms`;
+- decode `23903.75 ms / 31`, `1.30 tok/s`;
+- memory peak `15899996160`;
+- memory final `15103352832`;
+- swap max `0`;
+- anon `458752`;
+- file `14864957440`;
+- kernel `234541056`;
+- inactive_file `3383353344`;
+- active_file `11481030656`;
+- `pgmajfault=961723`;
+- `pgfault=2885513`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`, bytes `126391910400`;
+- iouring submit `6471961 us`;
+- iouring wait `14529360 us`;
+- iouring batches `5178`, wait calls `17251`;
+- current-down overlap planned jobs `3673`, worker `3376120 us`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`.
+
+Comparison:
+
+- Current accepted script-default n32:
+  `22667.39 ms / 31`, `1.37 tok/s`.
+- 7KJ SQPOLL-off n32:
+  `23903.75 ms / 31`, `1.30 tok/s`.
+- SQPOLL-off is `1236.36 ms` slower on n32.
+
+Interpretation:
+
+- Disabling SQPOLL greatly increases submit accounting:
+  - 7KI SQPOLL-on diagnostic submit `61562 us`;
+  - 7KJ SQPOLL-off submit `6471961 us`.
+- SQPOLL-off lowers reported iouring wait versus the perf-stat run, but wall
+  time still regresses relative to the accepted n32 baseline.
+- The high sys CPU observed in 7KI is therefore the cost of a tradeoff that is
+  still wall-time beneficial under the current post-7JY runtime.
+
+Decision:
+
+- Reject SQPOLL-off.
+- Do not run n96.
+- Keep the current script default:
+  `GGML_MOE_IO_SQPOLL=1`.
+- Do not target SQPOLL removal unless a later source change materially changes
+  the IO submission topology again.
