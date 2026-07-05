@@ -1,0 +1,390 @@
+{
+  "candidate_gguf_files": [
+    {
+      "file": {
+        "blob": "4ec41cbc0e5ca444a082cfbd4f01a8aba995cda9",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf",
+        "size": 3914965760
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "file": {
+        "blob": "8e1cee4b56cdeed6c373a2f06d8aaa3b6878fd15",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf",
+        "size": 4364018432
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "file": {
+        "blob": "4bafe1226f2c24b8b6e85291bcbd910b95385758",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf",
+        "size": 4737606400
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "file": {
+        "blob": "298df264cb9b854ffaf260394d2fefa25d7cdeea",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf",
+        "size": 5048509184
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "file": {
+        "blob": "bc4e9f10c8e6964c18a61657f6c9ec3bd7f556bd",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf",
+        "size": 5357871872
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "file": {
+        "blob": "60d5d02b112fa8aa9bb68b2f363876abd41fd007",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_S.gguf",
+        "size": 5488550656
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "file": {
+        "blob": "137e8357ce7a96ecf4c2d44978e57f2c1ce5eeab",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_M.gguf",
+        "size": 5780087552
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "file": {
+        "blob": "49f5839f743037f34be4e3e85e2e12670a0ea4e4",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_S.gguf",
+        "size": 6472639232
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "file": {
+        "blob": "57fb957c97a5e09db207c2d8e7992c570e60aace",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_M.gguf",
+        "size": 6642541312
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "file": {
+        "blob": "9683e130d24256d8eeff7317ca4ab1c655d00367",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q6_K.gguf",
+        "size": 7558898432
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "file": {
+        "blob": "664235757835f56506d43ebd96401f8007f29218",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q8_0.gguf",
+        "size": 9786057472
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    },
+    {
+      "file": {
+        "blob": "eef5ce6eca552b68ca3635ff4ef984fcbd6f6be7",
+        "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-BF16.gguf",
+        "size": 18407318272
+      },
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "repo_lastModified": "2026-05-22T10:25:05.000Z",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ]
+    }
+  ],
+  "created_at_utc": "2026-07-05T22:22:14Z",
+  "errors": [],
+  "files_deleted": false,
+  "full_model_downloaded": false,
+  "method": "Hugging Face metadata-only narrow MTP/NextN/speculative GGUF search; no full weights downloaded.",
+  "repo_count": 1,
+  "repos": [
+    {
+      "downloads": 12852,
+      "error": null,
+      "file_count": 13,
+      "files": [
+        {
+          "blob": "eef5ce6eca552b68ca3635ff4ef984fcbd6f6be7",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-BF16.gguf",
+          "size": 18407318272
+        },
+        {
+          "blob": "664235757835f56506d43ebd96401f8007f29218",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q8_0.gguf",
+          "size": 9786057472
+        },
+        {
+          "blob": "9683e130d24256d8eeff7317ca4ab1c655d00367",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q6_K.gguf",
+          "size": 7558898432
+        },
+        {
+          "blob": "57fb957c97a5e09db207c2d8e7992c570e60aace",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_M.gguf",
+          "size": 6642541312
+        },
+        {
+          "blob": "49f5839f743037f34be4e3e85e2e12670a0ea4e4",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_S.gguf",
+          "size": 6472639232
+        },
+        {
+          "blob": "137e8357ce7a96ecf4c2d44978e57f2c1ce5eeab",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_M.gguf",
+          "size": 5780087552
+        },
+        {
+          "blob": "60d5d02b112fa8aa9bb68b2f363876abd41fd007",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_S.gguf",
+          "size": 5488550656
+        },
+        {
+          "blob": "bc4e9f10c8e6964c18a61657f6c9ec3bd7f556bd",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf",
+          "size": 5357871872
+        },
+        {
+          "blob": "298df264cb9b854ffaf260394d2fefa25d7cdeea",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf",
+          "size": 5048509184
+        },
+        {
+          "blob": "4bafe1226f2c24b8b6e85291bcbd910b95385758",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf",
+          "size": 4737606400
+        },
+        {
+          "blob": "8e1cee4b56cdeed6c373a2f06d8aaa3b6878fd15",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf",
+          "size": 4364018432
+        },
+        {
+          "blob": "4ec41cbc0e5ca444a082cfbd4f01a8aba995cda9",
+          "name": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf",
+          "size": 3914965760
+        },
+        {
+          "blob": "9c2762791f1de8ec785b8c2cdc49865635c32425",
+          "name": "README.md",
+          "size": 1102
+        }
+      ],
+      "lastModified": "2026-05-22T10:25:05.000Z",
+      "likes": 28,
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "search_terms": [
+        "DeepSeek V4 Flash MTP GGUF",
+        "DeepSeek-V4-Flash-MTP-GGUF",
+        "deepseek-v4-flash mtp gguf"
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_listed_file_bytes": 83559065678
+    }
+  ],
+  "terms": [
+    "DeepSeek V4 Flash MTP GGUF",
+    "DeepSeek-V4-Flash-MTP-GGUF",
+    "DeepSeek V4 Flash MTP sidecar",
+    "deepseek-v4-flash mtp gguf",
+    "deepseek4 mtp gguf",
+    "DeepSeek V4 Flash NextN GGUF",
+    "DeepSeek-V4-Flash nextn",
+    "deepseek-v4-flash speculative gguf",
+    "DeepSeek V4 Flash draft GGUF",
+    "DeepSeek V4 Flash model_mtp GGUF"
+  ]
+}
