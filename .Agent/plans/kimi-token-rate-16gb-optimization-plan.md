@@ -78396,3 +78396,79 @@ Next direction:
   - find why `fallback_t0` remains large in down profile;
   - inspect whether the accepted GPU handoff/down path still forces CPU backend
     graph work after custom CUDA has produced the output.
+
+## Phase 7ND - down `fallback_t0` attribution audit
+
+Timestamp: 2026-07-06 00:42:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Implement the next step from 7NC without editing source: determine whether the
+  large down-profile `fallback_t0` number is a decode bottleneck that can still
+  be optimized, or whether it is mostly prompt-side fallback/profiling
+  attribution.
+- Avoid repeating the already rejected Q4_0 down-on-GPU/cache paths unless this
+  audit proves a new, materially different decode bucket.
+- Preserve current SOTA; this phase cannot promote performance.
+
+Why this is the next valid step:
+
+- 7NC showed active-expert parallel CUDA scheduling regressed endpoint speed.
+- The remaining apparent down-profile bucket was
+  `fallback_t0=36.175 ms/call`, but that counter is measured around the CPU
+  fallback section after custom CUDA work and may include prompt-heavy fallback
+  attribution rather than decode endpoint time.
+- Earlier phases already closed broad Q4_0 down GPU/cache attempts, so the next
+  implementation must first prove that the exposed fallback bucket is both
+  decode-side and not already covered by the existing CPU fallback pack mmap.
+
+Inputs:
+
+- 7NB strict n32 baseline:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-160200Z-phase7nb-target-verify-bench/baseline-n32`
+- 7MY strict n32 full profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-142819Z-phase7my-current-bottleneck-n32-profile`
+- Current clean vendor source:
+  `/root/lfz/llama.cpp-vendor-kimi`
+
+Audit method:
+
+- Parse `fallback-profile.csv` by `phase` and `type` for both 7NB and 7MY.
+- Cross-check stderr CPU fallback pack mmap counters:
+  `enabled`, `hits`, `misses`, `bytes`, and `fallback_gguf`.
+- Inspect the current CPU down fallback handoff in source to confirm whether a
+  successful custom CUDA down batch zeros row counts and skips CPU fallback for
+  accepted rows.
+- Record exact commands and summaries in a new run directory.
+
+Required artifacts:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7nd-fallback-attribution`
+- Files:
+  - `commands.log`;
+  - `repo_state.txt`;
+  - `fallback_by_phase_type.tsv`;
+  - `cpu_fallback_pack_mmap.txt`;
+  - `source_handoff_notes.md`;
+  - `decision.md`.
+
+Decision rule:
+
+- If decode fallback is mostly Q4_0 and small relative to iouring wait, keep the
+  Q4_0 path closed and do not write another Q4 GPU/cache source patch.
+- If `fallback_t0` is mostly prompt-side attribution, do not treat it as a
+  token-rate bottleneck; focus next on expert-pack movement/read-volume or a
+  deeper algorithmic/model-format change.
+- If a new decode-side fallback bucket appears and is not covered by prior
+  rejected work, write a separate implementation phase with theory, hard upper
+  bound, activation signal, exact cold-start command, and revert criteria before
+  coding.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Record all parsing commands and raw source/runs used.
+- Commit and push the audit result into this plan.
