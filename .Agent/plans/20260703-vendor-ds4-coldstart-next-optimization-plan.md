@@ -56,6 +56,14 @@ Current-head non-duplicate screening result:
 - Predictive source overlap: no existing mechanism. Existing backend MoE cache/prefetch and same-op source staging do not remove enough decode CPU up/down fallback; source-only overlap remains below the `10 tok/s` ceiling under strict cold 16GB including page cache.
 - Decision: runtime patches are frozen until a new hard-bound artifact is written. The next viable 10 tok/s route must be either a compatible DeepSeek draft/MTP artifact plus verifier integration, or a new exact compact representation design with measured source bytes, compute bandwidth, VRAM, host RAM/page-cache, TTFT, and fixed-text top1 proof.
 
+External DSpark/MTP current audit:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-dspark-mtp-current-audit.json`.
+- Official `deepseek-ai/DeepSeek-V4-Flash-DSpark` exists and was last modified `2026-07-04T03:15:12.000Z`, but it is a safetensors + custom Python/PyTorch inference path, not a current vendor GGUF cold-start path. Its config has `num_nextn_predict_layers=1`, `dspark_block_size=5`, `dspark_target_layer_ids=[40,41,42]`, and `dspark_markov_rank=256`.
+- `antirez/deepseek-v4-gguf` contains `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf`, size `3807602400` bytes. A 16 MiB range parse of the GGUF header showed `general.architecture=deepseek4_mtp_support`, `tensor_count=32`, `deepseek4.mtp_layer_count=1`, `deepseek4.nextn_predict_layers=1`, and `deepseek4.expert_count=256`.
+- Current vendor source has no support for `general.architecture=deepseek4_mtp_support`, `deepseek4.mtp_layer_count`, or `mtp.0.*` tensor runtime handling. Therefore this MTP file is not directly loadable or benchmarkable as a compliant SOTA candidate.
+- Decision: external MTP is now the most concrete future 10 tok/s candidate class, but no runtime patch/download/benchmark is allowed yet. Next required artifact is `.Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-loader-verifier-hard-bound-plan.json`, covering loader scope, verifier semantics, expected accepted-token speedup, 3.807 GB file/page-cache impact under the 16GB cgroup, VRAM/gate-cache preservation, TTFT, and fixed-text top1/France correctness gates.
+
 ### 2026-07-05 Latest Plan: Current Head After Full Up/Down Bound
 
 本节是当前最新生效计划，覆盖下面所有旧的 `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续执行必须先更新本计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下的实验 artifact，再做 runtime 改动或长跑。

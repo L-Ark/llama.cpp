@@ -1,0 +1,123 @@
+{
+  "artifact": "external-dspark-mtp-current-audit",
+  "created_utc": "2026-07-05T08:49:26Z",
+  "source_head": "7ce788204594f60158279117bb5a028c3e26015e",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "runtime_source_modified": false,
+  "model_run_performed": false,
+  "full_model_download_performed": false,
+  "purpose": "Re-check whether newly visible external DeepSeek DSpark/MTP artifacts can be used as the next 10 tok/s route for the current vendor DeepSeek4 strict-cold SOTA path.",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "ttft_ms_guard": 32087.738292,
+    "ttft_limit_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "official_dspark_observation": {
+    "model_url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-DSpark",
+    "api_model_id": "deepseek-ai/DeepSeek-V4-Flash-DSpark",
+    "api_sha": "62af8fffb2f7030cac4de2f0169f5b8d1101b646",
+    "api_last_modified": "2026-07-04T03:15:12.000Z",
+    "repo_files_observed": 74,
+    "weight_format": "48 safetensors shards plus Hugging Face config/tokenizer and custom inference code",
+    "config_observed": {
+      "architectures": [
+        "DeepseekV4ForCausalLM"
+      ],
+      "model_type": "deepseek_v4",
+      "num_hidden_layers": 43,
+      "num_nextn_predict_layers": 1,
+      "dspark_block_size": 5,
+      "dspark_target_layer_ids": [
+        40,
+        41,
+        42
+      ],
+      "dspark_markov_rank": 256,
+      "expert_dtype": "fp4",
+      "quantization_config": "fp8"
+    },
+    "inference_readme_observed": "The official inference path asks users to convert Hugging Face checkpoints with convert.py and run torchrun with model-parallel workers. This is not a GGUF/vendor llama.cpp path.",
+    "decision": "not_directly_runnable_in_current_vendor_sota_path",
+    "reason": "The official artifact is safetensors plus custom Python/PyTorch inference, not a GGUF file accepted by the current vendor runner. Porting DSpark would be a new runtime/model-loading project and must first prove tokenizer/weight compatibility, target verification semantics, RAM/page-cache fit, VRAM footprint, and TTFT impact."
+  },
+  "antirez_mtp_gguf_observation": {
+    "model_url": "https://huggingface.co/antirez/deepseek-v4-gguf",
+    "api_model_id": "antirez/deepseek-v4-gguf",
+    "api_sha": "9170bf42beb77f38006e016503ecace31f2bd9a0",
+    "api_last_modified": "2026-05-31T11:28:43.000Z",
+    "file": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+    "head_request": {
+      "x_repo_commit": "9170bf42beb77f38006e016503ecace31f2bd9a0",
+      "content_length_bytes": 3807602400,
+      "x_linked_size_bytes": 3807602400,
+      "etag": "b5f0214286c2c07ad6a751eb3a7f99bc60ce0df5b5ad57a0562ae22cb7f30fd6"
+    },
+    "partial_header_parse": {
+      "bytes_requested": 16777216,
+      "magic": "GGUF",
+      "version": 3,
+      "tensor_count": 32,
+      "kv_count": 5,
+      "general.architecture": "deepseek4_mtp_support",
+      "deepseek4.nextn_predict_layers": 1,
+      "deepseek4.mtp_layer_count": 1,
+      "deepseek4.expert_count": 256
+    },
+    "partial_strings_observed": [
+      "mtp.0.hc_head_base.weight",
+      "mtp.0.hc_head_fn.weight",
+      "mtp.0.hc_head_scale.weight",
+      "mtp.0.attn_q_a.weight",
+      "mtp.0.attn_q_b.weight",
+      "mtp.0.attn_kv.weight",
+      "mtp.0.ffn_gate_exps.weight",
+      "mtp.0.ffn_up_exps.weight",
+      "mtp.0.ffn_down_exps.weight",
+      "mtp.0.e_proj.weight",
+      "mtp.0.h_proj.weight"
+    ],
+    "current_vendor_source_support": {
+      "architecture_string_supported": false,
+      "grep_result": "No source hit for deepseek4_mtp_support, mtp_layer_count, or mtp.0 tensor handling outside generic nextn_predict_layers references.",
+      "nextn_status": "Generic loader/model paths preserve or skip NextN/MTP tensors for some architectures, but DeepSeek4 MTP target verification/runtime is not implemented."
+    },
+    "decision": "not_downloaded_not_benchmarked_not_sota_candidate_now",
+    "reason": "This 3.807 GB GGUF is a one-layer MTP-support artifact, not the accepted target model and not a current vendor architecture. It may become useful only after a new DeepSeek4 MTP loader/runtime/verifier design with a hard-bound."
+  },
+  "hard_bound_status": {
+    "hard_bound_above_10_tok_s_available_now": false,
+    "why_no_runtime_patch_now": [
+      "No current source path can load general.architecture=deepseek4_mtp_support.",
+      "No target-verification semantics exist for using MTP outputs to skip target decode tokens.",
+      "Correctness impact is unknown and must be proven with fixed-text top1 and generated-output checks before performance.",
+      "A 3.807 GB additional GGUF must be accounted for under strict 16GB cgroup including target model page cache and MemorySwapMax=0.",
+      "TTFT impact of loading or memory-mapping the MTP artifact must stay within the 20% gate or be recorded as rejected if it exceeds the gate.",
+      "Speculative acceptance rate for the France prompt and a small prompt set is unknown."
+    ],
+    "next_required_artifact_before_coding": ".Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-loader-verifier-hard-bound-plan.json",
+    "required_contents_for_next_artifact": [
+      "Exact target/draft tokenizer and vocab compatibility plan.",
+      "Loader changes needed for general.architecture=deepseek4_mtp_support and mtp.0 tensors.",
+      "Verification algorithm: how many candidate tokens are drafted, how target logits verify them, and how KV/cache state remains correct.",
+      "Memory accounting: 3.807 GB MTP file mapping, anonymous allocations, page cache pressure, and current 16GB cgroup peak.",
+      "VRAM accounting: MTP tensors, target gate cache preservation, CUDA workspaces, and fallback behavior.",
+      "TTFT estimate and rejection threshold.",
+      "Theoretical token-rate upper bound as a function of accepted draft tokens per target pass.",
+      "Correctness gates: fixed-text top1, France answer, and small prompt-set semantic checks before any SOTA benchmark."
+    ]
+  },
+  "decision": {
+    "external_candidate_found": true,
+    "candidate_type": "DeepSeek4 one-layer MTP GGUF plus official DSpark safetensors reference",
+    "runtime_patch_allowed_now": false,
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4,
+    "next_step": "Write a DeepSeek4 MTP loader/verifier hard-bound plan before any download, code change, or benchmark."
+  }
+}
