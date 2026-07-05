@@ -1,0 +1,1083 @@
+{
+  "decision": {
+    "best_cpu_backend_fused_existing_gate_output": {
+      "decode_ms": 13688.377479929824,
+      "margin_to_10tok_ms": -27.500927529827095,
+      "pair_count": 48,
+      "tok_s": 9.979909286129676
+    },
+    "best_graph_zero_transfer_existing_gate_output": {
+      "decode_ms": 13641.929489845314,
+      "margin_to_10tok_ms": 18.947062554683725,
+      "pair_count": 64,
+      "tok_s": 10.013888843633731
+    },
+    "next_allowed_source_edit": "Only a default-off graph/probe that proves hot-path gate/up/down can stay on GPU without intermediate H2D/D2H and without sacrificing the accepted gate cache. No standalone CPU-backend MMVQ skip/write benchmark is allowed from this artifact alone.",
+    "reason": "This is a hard-bound screen only. A CPU-backend fused skip/write still pays measured H2D/D2H and cannot be promoted unless it exceeds 10 tok/s with correctness. A graph-level zero-transfer route is only allowed if it can reuse existing gate output on GPU; recomputing gate or adding gate payload must be separately bounded.",
+    "sota_changed": false,
+    "strict_cold_benchmark_allowed": false
+  },
+  "experiment": "mmvq-fused-transfer-hard-bound",
+  "inputs": {
+    "bottleneck": ".Agent/runs/20260705-vendor-ds4-coldstart/fresh-sota44-current-head-bottleneck-analysis.json",
+    "gate_profile": ".Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv",
+    "mmvq_validation": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-resident-compare-probe-validation.json",
+    "touch_split_case": "/root/lfz/runs/vendor-ds4-16gb/20260705T033155Z-20260705_current_head_sota44_touch_split/france-touch-cpu40-vram0gb"
+  },
+  "pair_rows": [
+    {
+      "allowed_fused_ms_for_10tok_zero_transfer": -54.3299236936291,
+      "call_weighted_gib_gate_recompute_extra": 7.840087890625,
+      "call_weighted_gib_updown": 15.68017578125,
+      "complete_pairs_available": 2627,
+      "cpu_backend_fused_existing_gate_output": {
+        "decode_ms": 13789.295593952012,
+        "margin_to_10tok_ms": -128.4190415520152,
+        "tok_s": 9.906870484661784
+      },
+      "cpu_backend_fused_transfer_bytes": {
+        "d2h": 15474688,
+        "h2d": 15474688
+      },
+      "cpu_backend_fused_transfer_ms_at_probe_rates": 17.329165477432497,
+      "cpu_backend_standalone_transfer_bytes": {
+        "d2h": 46424064,
+        "h2d": 46424064
+      },
+      "cpu_backend_standalone_transfer_ms_at_probe_rates": 51.98749643229749,
+      "gate_penalty_gate_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 0.0,
+        "gate_penalty_ms_est": 0.0,
+        "gate_slots_stolen_est": 0,
+        "lost_gate_score_est": 0,
+        "payload_mib": 204.0
+      },
+      "gate_penalty_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 0.0,
+        "gate_penalty_ms_est": 0.0,
+        "gate_slots_stolen_est": 0,
+        "lost_gate_score_est": 0,
+        "payload_mib": 136.0
+      },
+      "graph_zero_transfer_existing_gate_output": {
+        "decode_ms": 13771.96642847458,
+        "margin_to_10tok_ms": -111.08987607458221,
+        "tok_s": 9.919336227944257
+      },
+      "graph_zero_transfer_gate_recompute": {
+        "decode_ms": 13800.346404665055,
+        "margin_to_10tok_ms": -139.46985226505785,
+        "tok_s": 9.898937426514228
+      },
+      "hot_save_ms_zero_kernel": 292.28400000000005,
+      "kernel_ms": {
+        "gate_updown_recompute_at_mmvq_probe_bandwidth": 85.13992857142856,
+        "updown_at_mmvq_probe_bandwidth": 56.75995238095238
+      },
+      "pair_count": 16,
+      "payload_mib_gate_updown": 204.0,
+      "payload_mib_updown": 136.0,
+      "remaining_cpu_microprobe_ms": 1783.158766093631,
+      "top_pairs_preview": [
+        {
+          "call_weighted_gib_gate_recompute": 0.55615234375,
+          "call_weighted_gib_updown": 1.1123046875,
+          "cpu_backend_fused_d2h_bytes": 1097728,
+          "cpu_backend_fused_h2d_bytes": 1097728,
+          "down_calls": 134,
+          "down_hot_ms": 10.053,
+          "expert": 162,
+          "fused_calls": 134,
+          "hot_ms": 20.594,
+          "layer": 37,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3293184,
+          "standalone_h2d_bytes": 3293184,
+          "up_calls": 134,
+          "up_hot_ms": 10.541
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.899,
+          "expert": 135,
+          "fused_calls": 128,
+          "hot_ms": 20.412,
+          "layer": 25,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.513
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.914,
+          "expert": 124,
+          "fused_calls": 128,
+          "hot_ms": 20.019,
+          "layer": 32,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.105
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.527099609375,
+          "call_weighted_gib_updown": 1.05419921875,
+          "cpu_backend_fused_d2h_bytes": 1040384,
+          "cpu_backend_fused_h2d_bytes": 1040384,
+          "down_calls": 127,
+          "down_hot_ms": 9.081,
+          "expert": 24,
+          "fused_calls": 127,
+          "hot_ms": 18.914,
+          "layer": 27,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3121152,
+          "standalone_h2d_bytes": 3121152,
+          "up_calls": 127,
+          "up_hot_ms": 9.833
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.477294921875,
+          "call_weighted_gib_updown": 0.95458984375,
+          "cpu_backend_fused_d2h_bytes": 942080,
+          "cpu_backend_fused_h2d_bytes": 942080,
+          "down_calls": 115,
+          "down_hot_ms": 8.99,
+          "expert": 120,
+          "fused_calls": 115,
+          "hot_ms": 18.858,
+          "layer": 33,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 2826240,
+          "standalone_h2d_bytes": 2826240,
+          "up_calls": 115,
+          "up_hot_ms": 9.868
+        }
+      ]
+    },
+    {
+      "allowed_fused_ms_for_10tok_zero_transfer": 91.14819801531848,
+      "call_weighted_gib_gate_recompute_extra": 13.88720703125,
+      "call_weighted_gib_updown": 27.7744140625,
+      "complete_pairs_available": 2627,
+      "cpu_backend_fused_existing_gate_output": {
+        "decode_ms": 13700.96296971245,
+        "margin_to_10tok_ms": -40.086417312451886,
+        "tok_s": 9.970741897922746
+      },
+      "cpu_backend_fused_transfer_bytes": {
+        "d2h": 27410432,
+        "h2d": 27410432
+      },
+      "cpu_backend_fused_transfer_ms_at_probe_rates": 30.695281994435753,
+      "cpu_backend_standalone_transfer_bytes": {
+        "d2h": 82231296,
+        "h2d": 82231296
+      },
+      "cpu_backend_standalone_transfer_ms_at_probe_rates": 92.08584598330725,
+      "gate_penalty_gate_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 170.0,
+        "gate_penalty_ms_est": 81.92417626568512,
+        "gate_slots_stolen_est": 40,
+        "lost_gate_score_est": 80,
+        "payload_mib": 408.0
+      },
+      "gate_penalty_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 34.0,
+        "gate_penalty_ms_est": 16.384835253137023,
+        "gate_slots_stolen_est": 8,
+        "lost_gate_score_est": 16,
+        "payload_mib": 272.0
+      },
+      "graph_zero_transfer_existing_gate_output": {
+        "decode_ms": 13670.267687718013,
+        "margin_to_10tok_ms": -9.391135318015586,
+        "tok_s": 9.993130247678724
+      },
+      "graph_zero_transfer_gate_recompute": {
+        "decode_ms": 13786.076695397227,
+        "margin_to_10tok_ms": -125.2001429972297,
+        "tok_s": 9.909183630873727
+      },
+      "hot_save_ms_zero_kernel": 529.5120000000001,
+      "kernel_ms": {
+        "gate_updown_recompute_at_mmvq_probe_bandwidth": 150.809,
+        "updown_at_mmvq_probe_bandwidth": 100.53933333333333
+      },
+      "pair_count": 32,
+      "payload_mib_gate_updown": 408.0,
+      "payload_mib_updown": 272.0,
+      "remaining_cpu_microprobe_ms": 1621.2958091315463,
+      "top_pairs_preview": [
+        {
+          "call_weighted_gib_gate_recompute": 0.55615234375,
+          "call_weighted_gib_updown": 1.1123046875,
+          "cpu_backend_fused_d2h_bytes": 1097728,
+          "cpu_backend_fused_h2d_bytes": 1097728,
+          "down_calls": 134,
+          "down_hot_ms": 10.053,
+          "expert": 162,
+          "fused_calls": 134,
+          "hot_ms": 20.594,
+          "layer": 37,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3293184,
+          "standalone_h2d_bytes": 3293184,
+          "up_calls": 134,
+          "up_hot_ms": 10.541
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.899,
+          "expert": 135,
+          "fused_calls": 128,
+          "hot_ms": 20.412,
+          "layer": 25,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.513
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.914,
+          "expert": 124,
+          "fused_calls": 128,
+          "hot_ms": 20.019,
+          "layer": 32,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.105
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.527099609375,
+          "call_weighted_gib_updown": 1.05419921875,
+          "cpu_backend_fused_d2h_bytes": 1040384,
+          "cpu_backend_fused_h2d_bytes": 1040384,
+          "down_calls": 127,
+          "down_hot_ms": 9.081,
+          "expert": 24,
+          "fused_calls": 127,
+          "hot_ms": 18.914,
+          "layer": 27,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3121152,
+          "standalone_h2d_bytes": 3121152,
+          "up_calls": 127,
+          "up_hot_ms": 9.833
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.477294921875,
+          "call_weighted_gib_updown": 0.95458984375,
+          "cpu_backend_fused_d2h_bytes": 942080,
+          "cpu_backend_fused_h2d_bytes": 942080,
+          "down_calls": 115,
+          "down_hot_ms": 8.99,
+          "expert": 120,
+          "fused_calls": 115,
+          "hot_ms": 18.858,
+          "layer": 33,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 2826240,
+          "standalone_h2d_bytes": 2826240,
+          "up_calls": 115,
+          "up_hot_ms": 9.868
+        }
+      ]
+    },
+    {
+      "allowed_fused_ms_for_10tok_zero_transfer": 146.3672881748953,
+      "call_weighted_gib_gate_recompute_extra": 18.398681640625,
+      "call_weighted_gib_updown": 36.79736328125,
+      "complete_pairs_available": 2627,
+      "cpu_backend_fused_existing_gate_output": {
+        "decode_ms": 13688.377479929824,
+        "margin_to_10tok_ms": -27.500927529827095,
+        "tok_s": 9.979909286129676
+      },
+      "cpu_backend_fused_transfer_bytes": {
+        "d2h": 36315136,
+        "h2d": 36315136
+      },
+      "cpu_backend_fused_transfer_ms_at_probe_rates": 40.667120466626926,
+      "cpu_backend_standalone_transfer_bytes": {
+        "d2h": 108945408,
+        "h2d": 108945408
+      },
+      "cpu_backend_standalone_transfer_ms_at_probe_rates": 122.00136139988076,
+      "gate_penalty_gate_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 374.0,
+        "gate_penalty_ms_est": 180.23318778450727,
+        "gate_slots_stolen_est": 88,
+        "lost_gate_score_est": 176,
+        "payload_mib": 612.0
+      },
+      "gate_penalty_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 170.0,
+        "gate_penalty_ms_est": 81.92417626568512,
+        "gate_slots_stolen_est": 40,
+        "lost_gate_score_est": 80,
+        "payload_mib": 408.0
+      },
+      "graph_zero_transfer_existing_gate_output": {
+        "decode_ms": 13647.710359463197,
+        "margin_to_10tok_ms": 13.166192936800144,
+        "tok_s": 10.009647180801776
+      },
+      "graph_zero_transfer_gate_recompute": {
+        "decode_ms": 13812.619918601067,
+        "margin_to_10tok_ms": -151.74336620106988,
+        "tok_s": 9.890141503136041
+      },
+      "hot_save_ms_zero_kernel": 708.9619999999999,
+      "kernel_ms": {
+        "gate_updown_recompute_at_mmvq_probe_bandwidth": 199.80164285714287,
+        "updown_at_mmvq_probe_bandwidth": 133.20109523809523
+      },
+      "pair_count": 48,
+      "payload_mib_gate_updown": 612.0,
+      "payload_mib_updown": 408.0,
+      "remaining_cpu_microprobe_ms": 1500.5373779594213,
+      "top_pairs_preview": [
+        {
+          "call_weighted_gib_gate_recompute": 0.55615234375,
+          "call_weighted_gib_updown": 1.1123046875,
+          "cpu_backend_fused_d2h_bytes": 1097728,
+          "cpu_backend_fused_h2d_bytes": 1097728,
+          "down_calls": 134,
+          "down_hot_ms": 10.053,
+          "expert": 162,
+          "fused_calls": 134,
+          "hot_ms": 20.594,
+          "layer": 37,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3293184,
+          "standalone_h2d_bytes": 3293184,
+          "up_calls": 134,
+          "up_hot_ms": 10.541
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.899,
+          "expert": 135,
+          "fused_calls": 128,
+          "hot_ms": 20.412,
+          "layer": 25,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.513
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.914,
+          "expert": 124,
+          "fused_calls": 128,
+          "hot_ms": 20.019,
+          "layer": 32,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.105
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.527099609375,
+          "call_weighted_gib_updown": 1.05419921875,
+          "cpu_backend_fused_d2h_bytes": 1040384,
+          "cpu_backend_fused_h2d_bytes": 1040384,
+          "down_calls": 127,
+          "down_hot_ms": 9.081,
+          "expert": 24,
+          "fused_calls": 127,
+          "hot_ms": 18.914,
+          "layer": 27,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3121152,
+          "standalone_h2d_bytes": 3121152,
+          "up_calls": 127,
+          "up_hot_ms": 9.833
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.477294921875,
+          "call_weighted_gib_updown": 0.95458984375,
+          "cpu_backend_fused_d2h_bytes": 942080,
+          "cpu_backend_fused_h2d_bytes": 942080,
+          "down_calls": 115,
+          "down_hot_ms": 8.99,
+          "expert": 120,
+          "fused_calls": 115,
+          "hot_ms": 18.858,
+          "layer": 33,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 2826240,
+          "standalone_h2d_bytes": 2826240,
+          "up_calls": 115,
+          "up_hot_ms": 9.868
+        }
+      ]
+    },
+    {
+      "allowed_fused_ms_for_10tok_zero_transfer": 178.59006255468375,
+      "call_weighted_gib_gate_recompute_extra": 22.051025390625,
+      "call_weighted_gib_updown": 44.10205078125,
+      "complete_pairs_available": 2627,
+      "cpu_backend_fused_existing_gate_output": {
+        "decode_ms": 13690.669487823927,
+        "margin_to_10tok_ms": -29.79293542392952,
+        "tok_s": 9.97823851094322
+      },
+      "cpu_backend_fused_transfer_bytes": {
+        "d2h": 43524096,
+        "h2d": 43524096
+      },
+      "cpu_backend_fused_transfer_ms_at_probe_rates": 48.73999797861241,
+      "cpu_backend_standalone_transfer_bytes": {
+        "d2h": 130572288,
+        "h2d": 130572288
+      },
+      "cpu_backend_standalone_transfer_ms_at_probe_rates": 146.21999393583724,
+      "gate_penalty_gate_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 578.0,
+        "gate_penalty_ms_est": 278.54219930332937,
+        "gate_slots_stolen_est": 136,
+        "lost_gate_score_est": 272,
+        "payload_mib": 816.0
+      },
+      "gate_penalty_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 306.0,
+        "gate_penalty_ms_est": 147.4635172782332,
+        "gate_slots_stolen_est": 72,
+        "lost_gate_score_est": 144,
+        "payload_mib": 544.0
+      },
+      "graph_zero_transfer_existing_gate_output": {
+        "decode_ms": 13641.929489845314,
+        "margin_to_10tok_ms": 18.947062554683725,
+        "tok_s": 10.013888843633731
+      },
+      "graph_zero_transfer_gate_recompute": {
+        "decode_ms": 13852.82967187041,
+        "margin_to_10tok_ms": -191.95311947041228,
+        "tok_s": 9.861434000116096
+      },
+      "hot_save_ms_zero_kernel": 855.5970000000001,
+      "kernel_ms": {
+        "gate_updown_recompute_at_mmvq_probe_bandwidth": 239.4645,
+        "updown_at_mmvq_probe_bandwidth": 159.64299999999997
+      },
+      "pair_count": 64,
+      "payload_mib_gate_updown": 816.0,
+      "payload_mib_updown": 544.0,
+      "remaining_cpu_microprobe_ms": 1402.7752625670848,
+      "top_pairs_preview": [
+        {
+          "call_weighted_gib_gate_recompute": 0.55615234375,
+          "call_weighted_gib_updown": 1.1123046875,
+          "cpu_backend_fused_d2h_bytes": 1097728,
+          "cpu_backend_fused_h2d_bytes": 1097728,
+          "down_calls": 134,
+          "down_hot_ms": 10.053,
+          "expert": 162,
+          "fused_calls": 134,
+          "hot_ms": 20.594,
+          "layer": 37,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3293184,
+          "standalone_h2d_bytes": 3293184,
+          "up_calls": 134,
+          "up_hot_ms": 10.541
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.899,
+          "expert": 135,
+          "fused_calls": 128,
+          "hot_ms": 20.412,
+          "layer": 25,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.513
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.914,
+          "expert": 124,
+          "fused_calls": 128,
+          "hot_ms": 20.019,
+          "layer": 32,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.105
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.527099609375,
+          "call_weighted_gib_updown": 1.05419921875,
+          "cpu_backend_fused_d2h_bytes": 1040384,
+          "cpu_backend_fused_h2d_bytes": 1040384,
+          "down_calls": 127,
+          "down_hot_ms": 9.081,
+          "expert": 24,
+          "fused_calls": 127,
+          "hot_ms": 18.914,
+          "layer": 27,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3121152,
+          "standalone_h2d_bytes": 3121152,
+          "up_calls": 127,
+          "up_hot_ms": 9.833
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.477294921875,
+          "call_weighted_gib_updown": 0.95458984375,
+          "cpu_backend_fused_d2h_bytes": 942080,
+          "cpu_backend_fused_h2d_bytes": 942080,
+          "down_calls": 115,
+          "down_hot_ms": 8.99,
+          "expert": 120,
+          "fused_calls": 115,
+          "hot_ms": 18.858,
+          "layer": 33,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 2826240,
+          "standalone_h2d_bytes": 2826240,
+          "up_calls": 115,
+          "up_hot_ms": 9.868
+        }
+      ]
+    },
+    {
+      "allowed_fused_ms_for_10tok_zero_transfer": 189.81620078770902,
+      "call_weighted_gib_gate_recompute_extra": 24.9189453125,
+      "call_weighted_gib_updown": 49.837890625,
+      "complete_pairs_available": 2627,
+      "cpu_backend_fused_existing_gate_output": {
+        "decode_ms": 13706.545297944604,
+        "margin_to_10tok_ms": -45.66874554460628,
+        "tok_s": 9.966681067656447
+      },
+      "cpu_backend_fused_transfer_bytes": {
+        "d2h": 49184768,
+        "h2d": 49184768
+      },
+      "cpu_backend_fused_transfer_ms_at_probe_rates": 55.07904157041011,
+      "cpu_backend_standalone_transfer_bytes": {
+        "d2h": 147554304,
+        "h2d": 147554304
+      },
+      "cpu_backend_standalone_transfer_ms_at_probe_rates": 165.23712471123036,
+      "gate_penalty_gate_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 782.0,
+        "gate_penalty_ms_est": 376.85121082215153,
+        "gate_slots_stolen_est": 184,
+        "lost_gate_score_est": 368,
+        "payload_mib": 1020.0
+      },
+      "gate_penalty_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 442.0,
+        "gate_penalty_ms_est": 213.0028582907813,
+        "gate_slots_stolen_est": 104,
+        "lost_gate_score_est": 208,
+        "payload_mib": 680.0
+      },
+      "graph_zero_transfer_existing_gate_output": {
+        "decode_ms": 13651.466256374193,
+        "margin_to_10tok_ms": 9.4102960258042,
+        "tok_s": 10.006893249303099
+      },
+      "graph_zero_transfer_gate_recompute": {
+        "decode_ms": 13905.517561286515,
+        "margin_to_10tok_ms": -244.64100888651774,
+        "tok_s": 9.82406910939611
+      },
+      "hot_save_ms_zero_kernel": 968.9120000000001,
+      "kernel_ms": {
+        "gate_updown_recompute_at_mmvq_probe_bandwidth": 270.6088571428572,
+        "updown_at_mmvq_probe_bandwidth": 180.40590476190474
+      },
+      "pair_count": 80,
+      "payload_mib_gate_updown": 1020.0,
+      "payload_mib_updown": 680.0,
+      "remaining_cpu_microprobe_ms": 1326.0097833215113,
+      "top_pairs_preview": [
+        {
+          "call_weighted_gib_gate_recompute": 0.55615234375,
+          "call_weighted_gib_updown": 1.1123046875,
+          "cpu_backend_fused_d2h_bytes": 1097728,
+          "cpu_backend_fused_h2d_bytes": 1097728,
+          "down_calls": 134,
+          "down_hot_ms": 10.053,
+          "expert": 162,
+          "fused_calls": 134,
+          "hot_ms": 20.594,
+          "layer": 37,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3293184,
+          "standalone_h2d_bytes": 3293184,
+          "up_calls": 134,
+          "up_hot_ms": 10.541
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.899,
+          "expert": 135,
+          "fused_calls": 128,
+          "hot_ms": 20.412,
+          "layer": 25,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.513
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.914,
+          "expert": 124,
+          "fused_calls": 128,
+          "hot_ms": 20.019,
+          "layer": 32,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.105
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.527099609375,
+          "call_weighted_gib_updown": 1.05419921875,
+          "cpu_backend_fused_d2h_bytes": 1040384,
+          "cpu_backend_fused_h2d_bytes": 1040384,
+          "down_calls": 127,
+          "down_hot_ms": 9.081,
+          "expert": 24,
+          "fused_calls": 127,
+          "hot_ms": 18.914,
+          "layer": 27,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3121152,
+          "standalone_h2d_bytes": 3121152,
+          "up_calls": 127,
+          "up_hot_ms": 9.833
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.477294921875,
+          "call_weighted_gib_updown": 0.95458984375,
+          "cpu_backend_fused_d2h_bytes": 942080,
+          "cpu_backend_fused_h2d_bytes": 942080,
+          "down_calls": 115,
+          "down_hot_ms": 8.99,
+          "expert": 120,
+          "fused_calls": 115,
+          "hot_ms": 18.858,
+          "layer": 33,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 2826240,
+          "standalone_h2d_bytes": 2826240,
+          "up_calls": 115,
+          "up_hot_ms": 9.868
+        }
+      ]
+    },
+    {
+      "allowed_fused_ms_for_10tok_zero_transfer": 188.0444214060717,
+      "call_weighted_gib_gate_recompute_extra": 27.30126953125,
+      "call_weighted_gib_updown": 54.6025390625,
+      "complete_pairs_available": 2627,
+      "cpu_backend_fused_existing_gate_output": {
+        "decode_ms": 13730.830128491254,
+        "margin_to_10tok_ms": -69.95357609125676,
+        "tok_s": 9.949053643926376
+      },
+      "cpu_backend_fused_transfer_bytes": {
+        "d2h": 53886976,
+        "h2d": 53886976
+      },
+      "cpu_backend_fused_transfer_ms_at_probe_rates": 60.34475940209156,
+      "cpu_backend_standalone_transfer_bytes": {
+        "d2h": 161660928,
+        "h2d": 161660928
+      },
+      "cpu_backend_standalone_transfer_ms_at_probe_rates": 181.03427820627468,
+      "gate_penalty_gate_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 986.0,
+        "gate_penalty_ms_est": 475.1602223409737,
+        "gate_slots_stolen_est": 232,
+        "lost_gate_score_est": 464,
+        "payload_mib": 1224.0
+      },
+      "gate_penalty_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 578.0,
+        "gate_penalty_ms_est": 278.54219930332937,
+        "gate_slots_stolen_est": 136,
+        "lost_gate_score_est": 272,
+        "payload_mib": 816.0
+      },
+      "graph_zero_transfer_existing_gate_output": {
+        "decode_ms": 13670.485369089163,
+        "margin_to_10tok_ms": -9.608816689165906,
+        "tok_s": 9.992971122509744
+      },
+      "graph_zero_transfer_gate_recompute": {
+        "decode_ms": 13965.930011174427,
+        "margin_to_10tok_ms": -305.0534587744296,
+        "tok_s": 9.78157311505188
+      },
+      "hot_save_ms_zero_kernel": 1063.6270000000002,
+      "kernel_ms": {
+        "gate_updown_recompute_at_mmvq_probe_bandwidth": 296.47985714285716,
+        "updown_at_mmvq_probe_bandwidth": 197.65323809523807
+      },
+      "pair_count": 96,
+      "payload_mib_gate_updown": 1224.0,
+      "payload_mib_updown": 816.0,
+      "remaining_cpu_microprobe_ms": 1262.242221690601,
+      "top_pairs_preview": [
+        {
+          "call_weighted_gib_gate_recompute": 0.55615234375,
+          "call_weighted_gib_updown": 1.1123046875,
+          "cpu_backend_fused_d2h_bytes": 1097728,
+          "cpu_backend_fused_h2d_bytes": 1097728,
+          "down_calls": 134,
+          "down_hot_ms": 10.053,
+          "expert": 162,
+          "fused_calls": 134,
+          "hot_ms": 20.594,
+          "layer": 37,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3293184,
+          "standalone_h2d_bytes": 3293184,
+          "up_calls": 134,
+          "up_hot_ms": 10.541
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.899,
+          "expert": 135,
+          "fused_calls": 128,
+          "hot_ms": 20.412,
+          "layer": 25,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.513
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.914,
+          "expert": 124,
+          "fused_calls": 128,
+          "hot_ms": 20.019,
+          "layer": 32,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.105
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.527099609375,
+          "call_weighted_gib_updown": 1.05419921875,
+          "cpu_backend_fused_d2h_bytes": 1040384,
+          "cpu_backend_fused_h2d_bytes": 1040384,
+          "down_calls": 127,
+          "down_hot_ms": 9.081,
+          "expert": 24,
+          "fused_calls": 127,
+          "hot_ms": 18.914,
+          "layer": 27,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3121152,
+          "standalone_h2d_bytes": 3121152,
+          "up_calls": 127,
+          "up_hot_ms": 9.833
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.477294921875,
+          "call_weighted_gib_updown": 0.95458984375,
+          "cpu_backend_fused_d2h_bytes": 942080,
+          "cpu_backend_fused_h2d_bytes": 942080,
+          "down_calls": 115,
+          "down_hot_ms": 8.99,
+          "expert": 120,
+          "fused_calls": 115,
+          "hot_ms": 18.858,
+          "layer": 33,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 2826240,
+          "standalone_h2d_bytes": 2826240,
+          "up_calls": 115,
+          "up_hot_ms": 9.868
+        }
+      ]
+    },
+    {
+      "allowed_fused_ms_for_10tok_zero_transfer": 158.28284078758043,
+      "call_weighted_gib_gate_recompute_extra": 31.08642578125,
+      "call_weighted_gib_updown": 62.1728515625,
+      "complete_pairs_available": 2627,
+      "cpu_backend_fused_existing_gate_output": {
+        "decode_ms": 13796.361574375414,
+        "margin_to_10tok_ms": -135.4850219754171,
+        "tok_s": 9.901796556110085
+      },
+      "cpu_backend_fused_transfer_bytes": {
+        "d2h": 61358080,
+        "h2d": 61358080
+      },
+      "cpu_backend_fused_transfer_ms_at_probe_rates": 68.71119609633107,
+      "cpu_backend_standalone_transfer_bytes": {
+        "d2h": 184074240,
+        "h2d": 184074240
+      },
+      "cpu_backend_standalone_transfer_ms_at_probe_rates": 206.13358828899322,
+      "gate_penalty_gate_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 1394.0,
+        "gate_penalty_ms_est": 671.778245378618,
+        "gate_slots_stolen_est": 328,
+        "lost_gate_score_est": 656,
+        "payload_mib": 1632.0
+      },
+      "gate_penalty_updown_payload": {
+        "cuda_free_mib_reference": 238.0,
+        "extra_mib_needed": 850.0,
+        "gate_penalty_ms_est": 409.6208813284256,
+        "gate_slots_stolen_est": 200,
+        "lost_gate_score_est": 400,
+        "payload_mib": 1088.0
+      },
+      "graph_zero_transfer_existing_gate_output": {
+        "decode_ms": 13727.650378279084,
+        "margin_to_10tok_ms": -66.77382587908687,
+        "tok_s": 9.951358153770625
+      },
+      "graph_zero_transfer_gate_recompute": {
+        "decode_ms": 14102.33607566261,
+        "margin_to_10tok_ms": -441.4595232626125,
+        "tok_s": 9.686960003722739
+      },
+      "hot_save_ms_zero_kernel": 1214.7320000000004,
+      "kernel_ms": {
+        "gate_updown_recompute_at_mmvq_probe_bandwidth": 337.585,
+        "updown_at_mmvq_probe_bandwidth": 225.05666666666664
+      },
+      "pair_count": 128,
+      "payload_mib_gate_updown": 1632.0,
+      "payload_mib_updown": 1088.0,
+      "remaining_cpu_microprobe_ms": 1160.9251202839973,
+      "top_pairs_preview": [
+        {
+          "call_weighted_gib_gate_recompute": 0.55615234375,
+          "call_weighted_gib_updown": 1.1123046875,
+          "cpu_backend_fused_d2h_bytes": 1097728,
+          "cpu_backend_fused_h2d_bytes": 1097728,
+          "down_calls": 134,
+          "down_hot_ms": 10.053,
+          "expert": 162,
+          "fused_calls": 134,
+          "hot_ms": 20.594,
+          "layer": 37,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3293184,
+          "standalone_h2d_bytes": 3293184,
+          "up_calls": 134,
+          "up_hot_ms": 10.541
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.899,
+          "expert": 135,
+          "fused_calls": 128,
+          "hot_ms": 20.412,
+          "layer": 25,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.513
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.53125,
+          "call_weighted_gib_updown": 1.0625,
+          "cpu_backend_fused_d2h_bytes": 1048576,
+          "cpu_backend_fused_h2d_bytes": 1048576,
+          "down_calls": 128,
+          "down_hot_ms": 9.914,
+          "expert": 124,
+          "fused_calls": 128,
+          "hot_ms": 20.019,
+          "layer": 32,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3145728,
+          "standalone_h2d_bytes": 3145728,
+          "up_calls": 128,
+          "up_hot_ms": 10.105
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.527099609375,
+          "call_weighted_gib_updown": 1.05419921875,
+          "cpu_backend_fused_d2h_bytes": 1040384,
+          "cpu_backend_fused_h2d_bytes": 1040384,
+          "down_calls": 127,
+          "down_hot_ms": 9.081,
+          "expert": 24,
+          "fused_calls": 127,
+          "hot_ms": 18.914,
+          "layer": 27,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 3121152,
+          "standalone_h2d_bytes": 3121152,
+          "up_calls": 127,
+          "up_hot_ms": 9.833
+        },
+        {
+          "call_weighted_gib_gate_recompute": 0.477294921875,
+          "call_weighted_gib_updown": 0.95458984375,
+          "cpu_backend_fused_d2h_bytes": 942080,
+          "cpu_backend_fused_h2d_bytes": 942080,
+          "down_calls": 115,
+          "down_hot_ms": 8.99,
+          "expert": 120,
+          "fused_calls": 115,
+          "hot_ms": 18.858,
+          "layer": 33,
+          "payload_mib_gate_updown": 12.75,
+          "payload_mib_updown": 8.5,
+          "standalone_d2h_bytes": 2826240,
+          "standalone_h2d_bytes": 2826240,
+          "up_calls": 115,
+          "up_hot_ms": 9.868
+        }
+      ]
+    }
+  ],
+  "requirements": {
+    "accepted_decode_ms": 31047.446709999997,
+    "best_cpu_microprobe_gib_s": 74.719,
+    "decoded_tokens_estimate": 136.60876552399998,
+    "hot_compute_ms_after_touch": 2882.262,
+    "mmvq_probe_kernel_gib_s": 276.25420958795564,
+    "probe_d2h_bytes_per_ms": 1821156.9471624265,
+    "probe_h2d_bytes_per_ms": 1752117.6914371937,
+    "source_page_delta_ms_estimate": 16233.137,
+    "target_decode_ms_for_10tok": 13660.876552399997,
+    "total_decode_call_weighted_gib": 148.916015625
+  },
+  "source": {
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "head": "4414db1f6830b27f0f22be387a099670f48e74b8",
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "status": "?? .Agent/run-tools/analyze_mmvq_fused_transfer_bound.py"
+  }
+}

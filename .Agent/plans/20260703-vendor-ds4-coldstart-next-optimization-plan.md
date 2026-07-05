@@ -89,6 +89,15 @@ MMVQ hot-resident compare result:
 - Performance: kernel-only speed is the first probe to cross the top128 threshold: compare512 measured `276.254 GiB/s`, projecting top128 kernel time to `159.823 ms` versus the `179.257 ms` budget. But projected F32 H2D plus output D2H adds about `146.544 ms`, so the minimal standalone H2D+kernel+D2H path is about `306.367 ms` before scatter/scheduling. Therefore standalone MMVQ hot-resident skip/write is rejected for 10 tok/s.
 - Next allowed design must be a fused/no-intermediate-transfer path that keeps at least the up/gate intermediate on GPU or otherwise removes most of the H2D/D2H transfer cost. Do not run strict cold SOTA benchmarks for standalone MMVQ hot-resident until that transfer bound is solved.
 
+MMVQ fused/no-transfer hard-bound:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mmvq-fused-transfer-hard-bound.json`; helper: `.Agent/run-tools/analyze_mmvq_fused_transfer_bound.py`.
+- The analysis pairs decode `ffn_up_exps` and `ffn_down_exps` rows by `(layer, expert)` before selecting hot residuals. This is stricter than the earlier individual top128 screen and is the right unit for any fused up/gate/down route.
+- CPU-backend fused skip/write remains rejected: even after removing up-output D2H and down-input H2D, the best measured-transfer bound is only `9.980 tok/s` (`pair_count=48`, `decode_ms=13688.377`, `27.501 ms` short of 10). Do not run a CPU-backend fused strict cold benchmark.
+- Graph-level zero-transfer is only barely viable on paper if it reuses existing gate GPU output: best bound is `10.014 tok/s` at `pair_count=64`, with only `18.947 ms` margin. This assumes up/down hot pair kernels at the measured MMVQ speed, no intermediate H2D/D2H, no extra gate recompute, and gate cache impact already counted through the 544 MiB up/down payload.
+- Gate recompute is rejected: `pair_count=64` with gate recompute projects `9.861 tok/s`, and adding gate payload worsens gate-cache pressure. Any future graph probe must reuse the existing gate result or otherwise prove an equivalent zero-transfer gate source.
+- Existing full DS4 hot dispatch remains a different, already rejected design because it allocates per-layer K hot experts. A new source edit, if attempted, must be a sparse global-pair graph/probe or equivalent proof that only the selected hot up/down pairs are resident and that the hot branch stays on GPU end-to-end.
+
 Latest closed decisions:
 
 - Current serial top768 direct prefill is not promotable: combined short diagnostic under `cpu_moe=41`, gate cache `13568 MiB`, direct pool `3264 MiB` succeeded under 16GB/no-swap, but ran direct prefill before gate prefill. Direct top768 prefill was `1745.225 ms`, exceeding accepted TTFT slack by about `1020.09 ms`; at least `58.45%` of that prefill cost must be hidden before top768 can remain viable.
