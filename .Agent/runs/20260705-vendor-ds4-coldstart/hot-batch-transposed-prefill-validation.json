@@ -1,0 +1,168 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/hot-batch-transposed-prefill-validation.json",
+  "date": "2026-07-05",
+  "title": "Validation: default-off transposed direct hot-pool prefill timing",
+  "framework": "vendor",
+  "model": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "status": "prefill_timing_gate_passed_compare_kernel_next",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329,
+    "ttft_accept_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "correctness_ok": true
+  },
+  "source_change": {
+    "file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "default_off": true,
+    "new_env": "GGML_MOE_STREAM_ONE_DIRECT_TRANSPOSE",
+    "behavior": "When enabled with the direct hot pool, read each raw expert payload into pinned host memory, copy it to one slot-sized device staging buffer, GPU-transpose MXFP4 block order into the final direct pool slot, and record read/H2D/transform timing. Default env unset keeps raw direct pool behavior.",
+    "layout": "For each expert, final slot stores block_mxfp4 as block-major/output-contiguous: dst[ib * ne01 + col] = raw[col * nb + ib]. Bytes are only reordered, not dequantized or modified.",
+    "vram": "Final pool remains 3264 MiB for top768; no full raw+transposed duplicate is stored. Extra diagnostic workspace is one slot, 4456448 bytes."
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j 8",
+    "passed": true,
+    "notes": "Only existing warnings were observed."
+  },
+  "runs": {
+    "transposed_hot_hi": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T024826Z-transposed-prefill/transposed-hi",
+      "exit_status": 0,
+      "systemd_result": "success",
+      "service_runtime_s": 10.918,
+      "direct_pool": {
+        "attempted": 768,
+        "inserted": 768,
+        "bytes": 3422552064,
+        "elapsed_ms": 2046.715,
+        "read_ms": 1842.282,
+        "h2d_ms": 131.694,
+        "transform_ms": 34.739,
+        "transposed": true,
+        "read_failures": 0,
+        "copy_failures": 0,
+        "transform_failures": 0
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0,
+        "memory_peak_bytes": 815071232,
+        "oom": 0,
+        "oom_kill": 0,
+        "swaps": 0
+      }
+    },
+    "raw_hot_hi_control": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T025019Z-transposed-prefill/raw-hi",
+      "exit_status": 0,
+      "systemd_result": "success",
+      "service_runtime_s": 10.782,
+      "direct_pool": {
+        "attempted": 768,
+        "inserted": 768,
+        "bytes": 3422552064,
+        "elapsed_ms": 1893.154,
+        "read_ms": 1732.025,
+        "h2d_ms": 143.002,
+        "transform_ms": 0,
+        "transposed": false,
+        "read_failures": 0,
+        "copy_failures": 0,
+        "transform_failures": 0
+      }
+    },
+    "raw_cold_hi_control": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T025156Z-transposed-prefill-cold/raw-hi",
+      "exit_status": 0,
+      "systemd_result": "success",
+      "service_runtime_s": 29.481,
+      "direct_pool": {
+        "attempted": 768,
+        "inserted": 768,
+        "bytes": 3422552064,
+        "elapsed_ms": 1969.548,
+        "read_ms": 1810.884,
+        "h2d_ms": 141.331,
+        "transform_ms": 0,
+        "transposed": false,
+        "read_failures": 0,
+        "copy_failures": 0,
+        "transform_failures": 0
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0,
+        "memory_peak_bytes": 16000000000,
+        "oom": 0,
+        "oom_kill": 0,
+        "swaps": 0
+      }
+    },
+    "transposed_cold_hi": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T025156Z-transposed-prefill-cold/transposed-hi",
+      "exit_status": 0,
+      "systemd_result": "success",
+      "service_runtime_s": 28.719,
+      "direct_pool": {
+        "attempted": 768,
+        "inserted": 768,
+        "bytes": 3422552064,
+        "elapsed_ms": 1811.267,
+        "read_ms": 1608.676,
+        "h2d_ms": 132.894,
+        "transform_ms": 33.928,
+        "transposed": true,
+        "read_failures": 0,
+        "copy_failures": 0,
+        "transform_failures": 0
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0,
+        "memory_peak_bytes": 16000000000,
+        "oom": 0,
+        "oom_kill": 0,
+        "swaps": 0
+      }
+    },
+    "default_off_top1": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T025528Z-transposed-prefill/defaultoff-top1-check",
+      "exit_status": 0,
+      "top1": {
+        "n_tokens": 145,
+        "same_top1": 145,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0
+      },
+      "memory": {
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0,
+        "memory_peak_bytes": 16000000000,
+        "oom": 0,
+        "oom_kill": 0,
+        "swaps": 0
+      },
+      "hashes": {
+        "top1_check_json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9",
+        "check_stdout": "32978891d859d0d369c774270dd2026c2d7d7263c236a4cc0310567996710194",
+        "check_stderr": "e906dba032a2cb553b3e9029a822243dea7776d2df8148e77b0d5f1096e281af"
+      }
+    }
+  },
+  "interpretation": {
+    "prefill_insert_gate": "passed: transposed direct pool inserted 768/768 with zero read/copy/transform failures",
+    "transform_cost_gate": "passed as diagnostic: transform_ms was 33.928-34.739 ms, below the preferred 50 ms transform target and below the remaining 78.135 ms TTFT margin when isolated from read noise",
+    "service_runtime_note": "Cold total service runtime was dominated by model/page behavior and noisy; transposed cold run was 28.719 s vs raw cold 29.481 s in this pair, so service runtime does not contradict the transform gate.",
+    "memory_gate": "passed for diagnostic: 16GB cgroup/no swap/no OOM; memory.peak hit 16000000000 like prior accepted diagnostics, so future accepted SOTA still needs full strict cold page-cache proof."
+  },
+  "decision": {
+    "prefill_timing": "passed_for_next_diagnostic",
+    "strict_cold_performance_allowed": false,
+    "sota_changed": false,
+    "next_step": "Implement only a default-off transposed warp compare probe after CPU fallback. Do not enable skip/write or strict cold performance until fixed-text top1 and op-level compare pass and projected raw kernel <=250 ms."
+  }
+}
