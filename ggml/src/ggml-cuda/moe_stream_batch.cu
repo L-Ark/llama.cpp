@@ -4343,7 +4343,6 @@ static bool expert_pack_iouring_copy_jobs(
     }
 
     struct pending_job {
-        size_t pending_idx = 0;
         size_t job_idx = 0;
         size_t slot_idx = 0;
         size_t bytes = 0;
@@ -4440,7 +4439,6 @@ static bool expert_pack_iouring_copy_jobs(
         io_uring_sqe *sqe = io_uring_get_sqe(ring_io);
         if (!sqe) return false;
         pending[pending_idx] = {
-            pending_idx,
             job_idx,
             slot_idx,
             read_sz,
