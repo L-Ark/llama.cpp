@@ -74080,3 +74080,89 @@ Rollback:
 
 - If build fails, quality fails, memory exceeds the limit, TTFT fails, or repeat
   decode regresses, revert the hit-only source and keep only the diagnostics.
+
+7MJ result:
+
+Timestamp: 2026-07-06 19:58:00 CST.
+
+Status: rejected and source reverted.
+
+Implementation tested:
+
+- Reintroduced a third `q4_down` VRAM pool.
+- Added `GGML_MOE_Q4_DOWN_HIT_ONLY_TENSOR`.
+- Added `GGML_MOE_Q4_DOWN_PRELOAD_EXPERTS`.
+- Preloaded the 65 experts from 7MI into the q4_down pool.
+- During decode, accepted a Q4 call only if all active experts were already
+  resident; otherwise returned `false` to CPU fallback.
+- No Q4 miss staging occurred during decode.
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+Build result: passed.
+
+Run:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-103146Z-phase7mj-q4-hitonly-blk6-n32`
+- Result:
+  - exit `0`;
+  - quality `pass`;
+  - answer:
+    `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+  - TTFT `73533.15 ms`;
+  - decode `24540.53 ms / 31`, `1.26 tok/s`;
+  - memory.peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+
+Counters:
+
+```text
+q4_down: slots=65 slot=7.88 MiB hits=196 misses=0 preloads=65 hit_rate=100.0%
+q4 hit-only: calls=31 accepted_calls=20 declined_calls=11 accepted_rows=160 missed_rows=88 preloaded=65 preload_failed=0
+```
+
+Comparison:
+
+- Default n32 repeat:
+  - decode `22659.98 ms`, `1.37 tok/s`;
+  - CPU fallback mmap bytes `14260764672`.
+- 7MJ:
+  - decode `24540.53 ms`, `1.26 tok/s`;
+  - CPU fallback mmap bytes `12931301376`;
+  - q4 accepted calls `20/31`;
+  - no q4_down misses.
+
+Interpretation:
+
+- Hit-only correctly removed Q4 miss staging.
+- Static top-65 preload was effective for cache residency, but the endpoint is
+  still slower.
+- The remaining overhead is not cache misses; it is the cost of preloading 65 Q4
+  experts plus Q4 GPU down execution for accepted calls.
+- Since only `20/31` calls can use the compact all-active Q4 path, the saved CPU
+  fallback work is too small to pay for the preload/compute overhead.
+- This closes Q4 down production under the current compact all-or-nothing
+  implementation.
+
+Decision:
+
+- Revert 7MJ source.
+- Keep only the default-off parity and route-profile diagnostics.
+- Do not continue Q4 production unless a future design supports partial-row
+  GPU/CPU split or preloads outside TTFT/decode critical path without violating
+  cold-start constraints.
+
+Next direction:
+
+- Return to non-Q4 bottlenecks.
+- Candidate: use existing 7MA profile data to look for non-Q4 decode buckets
+  where work can be removed without extra IO, because IO/H2D and Q4 production
+  directions are now closed by repeat evidence.
