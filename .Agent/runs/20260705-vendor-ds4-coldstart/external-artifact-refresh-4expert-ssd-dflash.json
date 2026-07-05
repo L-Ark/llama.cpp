@@ -1,0 +1,299 @@
+{
+  "date": "2026-07-05",
+  "title": "External artifact refresh after thread-count closure: 4Expert GGUF, SSD sidecar, DFlash/EAGLE drafts",
+  "result": "no_external_artifact_source_patch_allowed_now",
+  "promoted_to_sota": false,
+  "runtime_source_modified": false,
+  "full_model_download_performed": false,
+  "files_deleted": false,
+  "source": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head": "c9db532bcffa9cfd5e5e009d5ccbc5b7590b8421",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "pushed_branch": "https://github.com/wici-ai/ssd-llama.git vendor/deepseek-token-rate-16gb"
+  },
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "ttft_accept_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "search_method": {
+    "hf_model_search": "https://huggingface.co/api/models?search=DeepSeek-V4-Flash&sort=lastModified&direction=-1&limit=80&full=true",
+    "hf_model_api": "?blobs=true on selected repos",
+    "readme_fetch": "README.md via Hugging Face resolve URLs",
+    "partial_header_probe": "64 MiB HTTP range for cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf; 64 MiB dd header of local accepted native GGUF",
+    "no_full_download_reason": "/root has about 2.0 GiB free; smallest relevant full candidate is far larger and no hard-bound cleared 10 tok/s"
+  },
+  "current_native_header_summary": {
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "size_bytes": 156148189760,
+    "general_architecture": "deepseek4",
+    "block_count": 43,
+    "expert_count": 256,
+    "expert_used_count": 6,
+    "quant_counts": {
+      "BF16": 147,
+      "F32": 684,
+      "F8_E4M3_B128": 365,
+      "I32": 3,
+      "MXFP4": 129
+    },
+    "role_gib": {
+      "gate_exps": 45.6875,
+      "up_exps": 45.6875,
+      "down_exps": 45.6875,
+      "attn": 5.035571,
+      "shared_ffn": 1.015686,
+      "other_ffn": 0.240286,
+      "other": 2.065329
+    },
+    "expert_role_mib_per_layer_per_expert": 4.25
+  },
+  "candidate_groups": [
+    {
+      "group": "top4_4expert_q4k_gguf",
+      "repos": [
+        {
+          "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+          "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+          "lastModified": "2026-07-01T09:30:47.000Z",
+          "file": "ds4flash-4expert.gguf",
+          "size_bytes": 164465760544,
+          "readme_claims": [
+            "top_k=4",
+            "Q4_K routed experts",
+            "requires antirez/ds4 4Expert PR; upstream ds4 defaults to 6 active experts and cannot load this GGUF"
+          ],
+          "partial_header": {
+            "general_architecture": "deepseek4",
+            "block_count": 43,
+            "expert_count": 256,
+            "expert_used_count": 4,
+            "quant_counts": {
+              "F16": 338,
+              "F32": 492,
+              "I32": 3,
+              "Q4_K": 129,
+              "Q8_0": 366
+            },
+            "role_gib": {
+              "gate_exps": 48.375,
+              "up_exps": 48.375,
+              "down_exps": 48.375,
+              "attn": 5.244685,
+              "shared_ffn": 1.070801,
+              "other_ffn": 0.121918,
+              "other": 1.602826
+            },
+            "expert_role_mib_per_layer_per_expert": 4.5,
+            "routing_tensor_name": "blk.*.ffn_gate_tid2eid.weight"
+          }
+        },
+        {
+          "repo": "teto3/DeepSeek-V4-Flash-Base-Q4KExperts",
+          "url": "https://huggingface.co/teto3/DeepSeek-V4-Flash-Base-Q4KExperts",
+          "lastModified": "2026-06-28T00:13:40.000Z",
+          "file": "DeepSeek-V4-Flash-Base-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out.gguf",
+          "size_bytes": 164633497248,
+          "classification": "same Q4KExperts size class as cloudyu; no full download"
+        }
+      ],
+      "current_vendor_loadability": {
+        "status": "not_source_ready",
+        "routing_name_gap": "Current vendor maps LLM_TENSOR_FFN_GATE_TID2EID to blk.%d.ffn_gate_tid2eid and probes tn(LLM_TENSOR_FFN_GATE_TID2EID, i); cloudyu header uses blk.*.ffn_gate_tid2eid.weight.",
+        "q4k_stream_gap": "ggml_cuda_moe_stream_one only allows IQ3_XXS by default, or MXFP4/F8_E4M3_B128 with GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4. Q4_K routed experts would not use the accepted gate stream/cache path.",
+        "disk_gap": "/root has about 2.0 GiB free; the GGUF is 164.47 GB."
+      },
+      "hard_bound": {
+        "top4_payload_ratio_vs_current_active_updown": 0.7058823529411764,
+        "derivation": "(4 active experts / 6 active experts) * (4.5 MiB Q4_K expert role / 4.25 MiB native MXFP4 expert role)",
+        "accepted_decode_window_ms": 31047.44671,
+        "decoded_tokens_for_rate_model": 136.608765524,
+        "non_fallback_decode_ms": 12017.99,
+        "source_page_exposed_saving_ms": 15856.166,
+        "hot_fallback_after_source_touch_ms": 3173.291,
+        "target_10_tok_s_decode_window_ms": 13660.8765524,
+        "top4_no_source_elimination_decode_ms": 25450.54788235294,
+        "top4_no_source_elimination_tok_s": 5.36761590184558,
+        "top4_plus_perfect_source_elimination_decode_ms": 14257.960117647059,
+        "top4_plus_perfect_source_elimination_tok_s": 9.581227917373644,
+        "shortfall_after_top4_plus_perfect_source_ms": 597.0835652470578,
+        "interpretation": "Even granting a source patch that fixes routing tensor naming, adds Q4_K gate stream/pack support, and perfectly eliminates source/page stalls, the top4 Q4_K route is still below 10 tok/s before any integration overhead. Real Q4_K CPU fallback may also be slower than the current MXFP4 x Q8_0 path."
+      },
+      "decision": "Do not download or implement 4Expert/Q4K runtime support now. Reopen only with a stronger top4/low-bit artifact whose hard-bound clears 10 tok/s with integration margin, or with measured vendor correctness and a source/page+CPU compute proof above the current threshold."
+    },
+    {
+      "group": "ssd_flash_moe_sidecar",
+      "repos": [
+        {
+          "repo": "servantofares/DeepSeek-V4-Flash-FP4-FP8-SSD",
+          "url": "https://huggingface.co/servantofares/DeepSeek-V4-Flash-FP4-FP8-SSD",
+          "lastModified": "2026-06-07T06:09:47.000Z",
+          "files": {
+            "dense/model-dense.gguf": 8978441472,
+            "sidecar/layer_000.bin..layer_042.bin": "43 files * 3422552064 bytes",
+            "sidecar/manifest.json": 99653
+          },
+          "sidecar_total_bytes": 147169738752,
+          "readme_claims": [
+            "dense GGUF plus routed expert sidecar",
+            "MXFP4 routed expert tensors in layer-major binary banks",
+            "requires Flash-MoE aware llama.cpp build with --moe-mode slot-bank and --moe-sidecar"
+          ]
+        },
+        {
+          "repo": "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+          "url": "https://huggingface.co/shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+          "files": {
+            "dense/model-dense.gguf": 8767239936,
+            "layer_000.bin..layer_042.bin": "43 files * 1019215872 bytes",
+            "manifest.json": 111257
+          },
+          "classification": "same REAP/162B family as prior 0xSero hard-bound; prompt-quality and vendor slot-bank compatibility unproven"
+        }
+      ],
+      "current_vendor_loadability": {
+        "status": "not_source_ready",
+        "missing_cli_runtime": "Current vendor does not expose --moe-mode slot-bank / --moe-sidecar / Flash-MoE sidecar loading in the accepted path.",
+        "disk_gap": "The servantofares dense+sidecar package totals about the same 145+ GiB routed-expert payload as the native model and cannot be downloaded with 2 GiB free."
+      },
+      "hard_bound": {
+        "native_source_page_only_upper_bound_tok_s": 8.99257709234659,
+        "native_perfect_source_elimination_decode_ms": 15191.281,
+        "target_10_tok_s_decode_window_ms": 13660.8765524,
+        "shortfall_ms": 1530.404447599999,
+        "interpretation": "A perfect native SSD sidecar/slot-bank implementation that only eliminates source/page stalls is still below 10 tok/s. It would need the already-rejected CPU fallback compute breakthrough or a stronger representation reduction."
+      },
+      "decision": "Do not implement slot-bank sidecar now as a standalone 10 tok/s route. It may be useful only if paired with an independently proven compute/representation reduction that clears the remaining shortfall."
+    },
+    {
+      "group": "new_draft_or_speculator_artifacts",
+      "repos": [
+        {
+          "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+          "url": "https://huggingface.co/RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+          "lastModified": "2026-07-02T12:34:53.000Z",
+          "file": "model.safetensors",
+          "size_bytes": 3607596760,
+          "readme_claims": [
+            "DFlash speculator",
+            "5 layers",
+            "predicts up to 7 speculative tokens",
+            "requires vLLM DeepSeek-V4-Flash DFlash support"
+          ],
+          "val_metrics": {
+            "full_acc_epoch": 0.41588552218285346,
+            "position_1_acc_epoch": 0.7878868554365931,
+            "position_2_acc_epoch": 0.5875753957980987,
+            "position_3_acc_epoch": 0.4541761259979246,
+            "position_4_acc_epoch": 0.35903399619091536,
+            "position_5_acc_epoch": 0.28966203790287387,
+            "position_6_acc_epoch": 0.23638368573594648,
+            "position_7_acc_epoch": 0.19339194045398048
+          }
+        },
+        {
+          "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+          "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+          "file": "model.safetensors",
+          "size_bytes": 3607596760,
+          "val_metrics": {
+            "full_acc_epoch": 0.34524488632366185,
+            "position_1_acc_epoch": 0.7402216216821698,
+            "position_7_acc_epoch": 0.13732369410884726
+          }
+        },
+        {
+          "repo": "ManiacLabs/DeepSeek-V4-Flash-EAGLE3.1",
+          "url": "https://huggingface.co/ManiacLabs/DeepSeek-V4-Flash-EAGLE3.1",
+          "file": "pytorch_model.bin",
+          "size_bytes": 1858526016,
+          "benchmark": {
+            "gpu": "B200:4",
+            "baseline_tok_per_s": 15.619405951323843,
+            "spec_tok_per_s": 41.10993617236299,
+            "speedup": 2.6319782135426646,
+            "num_speculative_tokens": 3,
+            "acceptance_rate": 0.11038394415357766,
+            "mean_accept_len": 1.331151832460733,
+            "note": "Requires patched vLLM overlay; README says no llama.cpp support in this release."
+          }
+        }
+      ],
+      "current_vendor_loadability": {
+        "status": "not_vendor_loadable",
+        "reason": "Artifacts are safetensors or PyTorch draft/speculator weights requiring custom vLLM overlays or Speculators support. Current vendor has no DFlash/EAGLE loader, hidden-state capture, verifier scheduling, or tokenizer/vocab adapter for these drafts."
+      },
+      "hard_bound": {
+        "forced_batch_target_verifier_speedup_observed": 1.000243,
+        "mtp_source_union_w8_extreme_tok_s": 10.512,
+        "interpretation": "DFlash/EAGLE could reopen verifier/draft work only with a concrete vendor verifier path and sublinear target verification. The current vendor fixed-text target path did not show sublinear batch verification, and these artifacts are not standalone GGUF drafts for llama-speculative."
+      },
+      "decision": "Do not implement DFlash/EAGLE in vendor now. Reopen only with a vendor-loadable draft/verifier design proving acceptance, verifier cost, RAM/page-cache, VRAM, TTFT, fixed-text top1, and France correctness before coding."
+    },
+    {
+      "group": "recent_low_bit_or_abliterated_gguf_candidates",
+      "repos": [
+        {
+          "repo": "eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+          "url": "https://huggingface.co/eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+          "lastModified": "2026-07-05T01:45:53.000Z",
+          "files": {
+            "Q2": 86720111200,
+            "Q2_K": 99705676384,
+            "Q4_K": 164633502304,
+            "MTP": 3807602400
+          },
+          "classification": "same size/type class as previously bounded antirez/huihui low-bit and MTP artifacts; MTP is optional sidecar, not standalone"
+        },
+        {
+          "repo": "audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+          "url": "https://huggingface.co/audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+          "files": {
+            "IQ2XXS": 86720106528,
+            "Q2_K": 98810926400,
+            "Layers37-42Q4KExperts": 97591742496,
+            "Q4KExperts": 164633497632
+          },
+          "classification": "same low-bit size class; correctness drift risk from abliterated model; no hard-bound above prior 0xSero 52.6GB candidate"
+        },
+        {
+          "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+          "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF",
+          "files": {
+            "IQ2_S": 88019539296,
+            "IQ3_XXS": 113974275424,
+            "IQ4_XS": 155095231840,
+            "Q8_0": 156378344544
+          },
+          "classification": "larger than prior 0xSero 52.6GB and not a 10 tok/s hard-bound candidate on the current 32GB GPU"
+        },
+        {
+          "repo": "lvyufeng/DeepSeek-V4-Flash-IQ1_M",
+          "url": "https://huggingface.co/lvyufeng/DeepSeek-V4-Flash-IQ1_M",
+          "files": {
+            "part-00": 45000000000,
+            "part-01": 25815310688,
+            "total": 70815310688
+          },
+          "classification": "smaller than 86GB IQ2 but still larger than 0xSero 52.6GB; no prompt-quality or vendor loadability proof here"
+        }
+      ],
+      "decision": "No recent low-bit GGUF beats the previously strongest 0xSero 52.6GB REAP hard-bound, which was already below 10 tok/s on the current 32GB GPU with required CPU MoE fallback."
+    }
+  ],
+  "decision": {
+    "new_source_patch_allowed": false,
+    "new_download_allowed": false,
+    "accepted_sota_unchanged": true,
+    "next_reopen_conditions": [
+      "A vendor-loadable draft/verifier artifact with hard-bound acceptance and sublinear target verification sufficient for 10 tok/s",
+      "A top4/low-bit GGUF or sidecar representation whose VRAM placement and CPU fallback bound exceeds 10 tok/s with integration margin on the current 32GB RTX 5090",
+      "An exact source/page plus CPU compute proof that beats the measured 90.643 GiB/s zero-overhead and integration-overhead thresholds"
+    ]
+  }
+}
