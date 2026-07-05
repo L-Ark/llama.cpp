@@ -1,0 +1,105 @@
+{
+  "accepted_sota_unchanged": true,
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-planner-probe.json",
+  "conditions_for_next_probe": [
+    "gate output is reused from an existing retained CUDA tensor; no gate recompute and no gate weight payload",
+    "hot picks are compacted so cold picks do not require P dummy experts per active layer",
+    "hot/cold combine is either copy-free or the single unavoidable output copy is proven below the remaining margin including scheduler overhead",
+    "all placement/copy facts are verified before any logit-changing benchmark"
+  ],
+  "hard_bound": {
+    "decoded_tokens_est": 136.60876552399998,
+    "gate_recompute_margin_ms": -191.95311947041228,
+    "gate_recompute_tok_s": 9.861434000116096,
+    "graph_existing_gate_margin_ms": 18.947062554683725,
+    "graph_existing_gate_tok_s": 10.013888843633731
+  },
+  "hot_cold_combine_copy_lower_bound": {
+    "bytes_per_active_layer_per_decode_token": 98304,
+    "copy_ms_at_gib_s": {
+      "24.0": 17.196995782058714,
+      "50.0": 8.254557975388183
+    },
+    "decode_bytes": 443163207,
+    "decode_gib": 0.41272789876940913,
+    "margin_left_after_copy_ms": {
+      "24.0": 1.7500667726250114,
+      "50.0": 10.692504579295543
+    },
+    "margin_ms": 18.947062554683725,
+    "note": "This is a lower bound for one backend crossing of the [n_embd, P, T] hot/cold expert output. It excludes scheduler split, launch, event, allocation, and cache effects."
+  },
+  "inputs": {
+    "bound_json": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-fused-transfer-hard-bound.json",
+    "manifest_csv": ".Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.offset_manifest.csv",
+    "profile_json": ".Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.profile.json"
+  },
+  "model_shape_inferred": {
+    "down_expert_bytes": 4456448,
+    "gate_expert_bytes_assumed": 4456448,
+    "n_embd": 4096,
+    "n_picks": 6,
+    "up_expert_bytes": 4456448
+  },
+  "next_allowed_source_edit": "Only a default-off DS4 compact sparse-hot placement probe/new op skeleton that proves compact hot picks, gate-output reuse, and hot/cold combine copy count. Do not use current DS4_HOT rectangular dummy shape.",
+  "payloads": {
+    "ideal_gate_updown_bytes": 855638016,
+    "ideal_gate_updown_mib": 816.0,
+    "ideal_updown_bytes": 570425344,
+    "ideal_updown_extra_mib_vs_238_mib_free": 306.0,
+    "ideal_updown_mib": 544.0,
+    "rectangular_dummy_padding_entries": 231,
+    "rectangular_entries": 295,
+    "rectangular_gate_updown_bytes": 3943956480,
+    "rectangular_gate_updown_mib": 3761.25,
+    "rectangular_real_entries": 64,
+    "rectangular_updown_bytes": 2629304320,
+    "rectangular_updown_extra_mib_vs_238_mib_free": 2269.5,
+    "rectangular_updown_mib": 2507.5
+  },
+  "rejects_current_shapes": [
+    "current rectangular DS4_HOT-style IDs require per-layer dummy/padding experts and inflate payload above the 544 MiB sparse bound",
+    "gate recompute remains below 10 tok/s in the hard-bound artifact"
+  ],
+  "sparse_profile": {
+    "active_layers": 33,
+    "max_pairs_per_layer": 4,
+    "pair_count": 64,
+    "per_layer_pair_counts": {
+      "11": 3,
+      "12": 2,
+      "13": 2,
+      "14": 2,
+      "15": 2,
+      "16": 4,
+      "17": 2,
+      "18": 2,
+      "20": 2,
+      "22": 1,
+      "23": 2,
+      "24": 2,
+      "25": 1,
+      "26": 3,
+      "27": 2,
+      "28": 2,
+      "29": 2,
+      "3": 1,
+      "30": 2,
+      "31": 2,
+      "32": 2,
+      "33": 2,
+      "34": 1,
+      "35": 1,
+      "36": 2,
+      "37": 1,
+      "38": 2,
+      "39": 1,
+      "4": 1,
+      "5": 1,
+      "6": 2,
+      "7": 3,
+      "8": 4
+    }
+  },
+  "status": "planner_rejects_current_graph_shapes"
+}

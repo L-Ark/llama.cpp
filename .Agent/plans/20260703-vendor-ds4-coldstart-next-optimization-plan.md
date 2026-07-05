@@ -130,6 +130,15 @@ Next retained-GPU sparse path design:
 - The next allowed source work is a default-off DS4 graph-level sparse retained-hot branch design/probe. It must use the global top64 pair profile, avoid per-layer dummy inflation, keep hot gate/up/swiglu/down on CUDA tensors or equivalent retained CUDA buffers, and prove scheduler-copy count for the final hot/cold combine before any logit-changing benchmark.
 - The first pass must be a placement/payload/copy-count probe, not a strict cold SOTA run. Reject immediately if it introduces gate recompute, CPU-backend D2H/H2D/scatter, current DS4_HOT dense per-layer payload, or any unbounded scheduler copy that consumes the `18.947 ms` graph-bound margin.
 
+Sparse retained planner probe result:
+
+- Planner helper: `.Agent/run-tools/analyze_sparse_retained_planner.py`; result artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-planner-probe.json`.
+- Dry-run status: `planner_rejects_current_graph_shapes`; this is a planning/proof artifact only and does not change runtime behavior or SOTA.
+- Payload facts: ideal top64 up/down sparse payload is `544.0 MiB`; adding gate payload would be `816.0 MiB`. The current DS4_HOT-style rectangular `[P,T]` ID shape would require `295` retained entries for the same profile: `64` real pair entries plus `231` dummy/padding entries. That inflates up/down-only payload to `2507.5 MiB` and gate/up/down payload to `3761.25 MiB`.
+- Gate recompute remains rejected by the hard-bound: `9.861 tok/s`, `-191.953 ms` margin to 10 tok/s. Therefore the only possible graph route still requires real gate-output reuse, not recomputation or extra gate weights.
+- Hot/cold final combine is now a measured lower-bound risk: with `n_embd=4096`, `P=6`, `33` active sparse layers, and `136.609` decoded-token estimate, one backend crossing of `[n_embd, P, T]` output is about `0.413 GiB`. At `24 GiB/s` that costs `17.197 ms`, leaving only `1.750 ms` of the `18.947 ms` graph margin before scheduler split/event/launch overhead. Even at `50 GiB/s`, it costs `8.255 ms`, leaving `10.693 ms`.
+- Next allowed source edit is narrowed further: implement only a default-off compact hot-pick placement/new-op skeleton that proves no rectangular dummy payload, no gate recompute, and exact hot/cold combine copy count. Do not adapt current `DS4_HOT_DISPATCH` by merely feeding it the top64 sparse profile.
+
 Latest closed decisions:
 
 - Current serial top768 direct prefill is not promotable: combined short diagnostic under `cpu_moe=41`, gate cache `13568 MiB`, direct pool `3264 MiB` succeeded under 16GB/no-swap, but ran direct prefill before gate prefill. Direct top768 prefill was `1745.225 ms`, exceeding accepted TTFT slack by about `1020.09 ms`; at least `58.45%` of that prefill cost must be hidden before top768 can remain viable.
