@@ -68054,3 +68054,128 @@ Decision:
 - Keep production default `VRAM_MIB=15000`.
 - Treat narrow total VRAM budget increase as closed unless a future trace shows
   a much larger cache-capacity bound.
+
+## Phase 7LB - current-head low-overhead residual bottleneck audit
+
+Timestamp: 2026-07-05 18:48:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-locate the current decode bottleneck after 7KW/7KY/7LA were rejected,
+  without changing runtime defaults or trying another cache/RAM-tier knob.
+- Produce reproducible evidence for the next implementation candidate. This
+  phase is diagnostic only and cannot promote SOTA because additional profiling
+  output may perturb timing.
+
+Current accepted baseline:
+
+- n32 reference:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-045134Z-phase7kx-current-head-n32`
+  - decode `22601.57 ms / 31`, `1.37 tok/s`;
+  - TTFT `78182.34 ms`;
+  - memory peak `15899996160`;
+  - iouring wait `19756301 us`;
+  - current-down worker `3167865 us`;
+  - upgate hit `45.2%`, down hit `73.4%`.
+- n96 guard:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-050646Z-phase7kz-current-head-n96`
+  - decode `56777.55 ms / 77`, `1.36 tok/s`;
+  - TTFT `78143.95 ms`;
+  - memory peak `15899996160`;
+  - iouring wait `50680085 us`;
+  - current-down worker `8071453 us`.
+
+Closed/rejected axes that must not be retried in this phase:
+
+- total VRAM cache increase (`VRAM_MIB=15256`) because 7LA improved hit rate
+  but regressed decode;
+- immediate iouring refill because 7KY did not increase effective inflight and
+  regressed endpoint time;
+- mixed up/gate combined IO batch because 7KW reduced IO wait but lost endpoint
+  overlap;
+- RAM tier/hot expert expansion, broad prefetch, Q4_0 down GPU enablement,
+  cache-policy swaps, dense retention, SQPOLL-off, pinned-slot growth, and
+  down prefetch depth changes.
+
+Diagnostic method:
+
+- Run the unchanged current head with `N=32`, cold start, strict 16GB cgroup,
+  and accepted runtime defaults.
+- Keep `MIN_PROFILE=1` so the heavy fallback/route CSVs are still omitted.
+- Add only targeted profile files through `EXTRA_RUNTIME_ENV`:
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`
+  - `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`
+  - `GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv`
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv`
+  - `GGML_MOE_UP_GATE_LAYER_PROFILE_TOP=32`
+- Do not enable `GGML_MOE_COPY_PROFILE_H2D=1` in the first pass because that
+  would add CUDA event timing on every copy and make the timing less comparable.
+
+Theory and upper bounds to extract:
+
+- If `io-batch-profile.csv` still shows most wall time in small foreground
+  `runtime_load` batches with low inflight, then the remaining upper bound is
+  the portion of iouring wait not hidden by up/gate/down compute. Candidate
+  implementation would need to reshape call boundaries, not just queue depth.
+- If `copy-profile.csv` shows large slot wait or host copy time, then the upper
+  bound is the summed slot/host time for pack misses. Candidate implementation
+  would target staging reuse or pinned buffer contention, not expert selection.
+- If `current-down-overlap-profile.csv` identifies layers/tensors with repeated
+  `missing_tensor`/`missing_pack`, then the upper bound is the current-down
+  worker wait plus residual foreground down wait for those tensors. Candidate
+  implementation would target only those tensors, not broad down prefetch.
+- If the up/gate layer summary shows one or two tensor pairs dominating
+  `wall_total`, then the upper bound is their `wall_gap_total` or wait total.
+  Candidate implementation would be layer/type-specific and must not repeat the
+  rejected broad same-type or mixed-size batching paths.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard e79772c58
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lb-residual-audit-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=$'GGML_MOE_IO_BATCH_PROFILE_OUT='"$RUN"'/io-batch-profile.csv\nGGML_MOE_IO_WAIT_TRACE_OUT='"$RUN"'/io-wait-trace.csv\nGGML_MOE_COPY_PROFILE_OUT='"$RUN"'/copy-profile.csv\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT='"$RUN"'/current-down-overlap-profile.csv\nGGML_MOE_UP_GATE_LAYER_PROFILE_TOP=32' \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If the run fails any hard gate, reject the diagnostic and do not use it to
+  select implementation work.
+- If the run passes, summarize:
+  - top IO batch/wait contributors by op and batch size;
+  - foreground runtime-load wait versus current-down overlap wait;
+  - slot wait/host copy/IO wait from copy profile;
+  - top up/gate layer records and their wait/compute/wall-gap totals;
+  - exact next implementation candidate plus a hard upper bound.
+- Before implementing that candidate, append the candidate-specific plan section
+  with theory, upper bound, expected gain, acceptance gates, rollback criteria,
+  and reproduction commands.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Keep the run directory self-contained with `script.sh`, `command.txt`,
+  `env.txt`, `stdout.txt`, `stderr.txt`, `metrics.txt`, memory files, and the
+  four targeted profile CSVs.
