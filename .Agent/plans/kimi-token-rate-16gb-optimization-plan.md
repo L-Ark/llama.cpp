@@ -73707,3 +73707,99 @@ Rollback:
 
 - If the split pool changes default behavior, fails build, fails quality, exceeds
   memory, or still regresses repeat decode, revert the split-pool source.
+
+7MH result:
+
+Timestamp: 2026-07-06 18:58:00 CST.
+
+Status: rejected and source reverted.
+
+Implementation tested:
+
+- Added optional third VRAM cache pool:
+  - `cid=0`: down;
+  - `cid=1`: upgate;
+  - `cid=2`: q4_down.
+- Reintroduced narrow production enable:
+  `GGML_MOE_Q4_DOWN_ENABLE_TENSOR=blk.6.ffn_down_exps.weight`.
+- Routed selected Q4 production tensor to `cid=2` only when:
+  `GGML_MOE_Q4_DOWN_CACHE_SPLIT=1`.
+- Skipped profile preload for the split Q4 path so the Q4 tensor would not
+  rebuild the original down pool.
+
+Build:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+cmake --build build-cuda-batch -j 32 --target llama-completion
+```
+
+Build result: passed.
+
+Run:
+
+- Run dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-101010Z-phase7mh-q4-split-blk6-n32`
+- Result:
+  - activation present:
+    `q4_down_enable active tensor=blk.6.ffn_down_exps.weight cache_split=1`;
+  - quality `pass`;
+  - TTFT `75473.01 ms`;
+  - decode `23704.49 ms / 31`, `1.31 tok/s`;
+  - memory.peak `15899996160`;
+  - swap max `0`;
+  - `read_failures=0`;
+  - `iouring_fallbacks=0`.
+
+Cache geometry:
+
+```text
+down:    slots=766 slot=7.44 MiB hits=9656 misses=3464 hit_rate=73.6%
+upgate:  slots=1735 slot=5.36 MiB hits=13437 misses=16339 hit_rate=45.1%
+q4_down: slots=65 slot=7.88 MiB hits=163 misses=85 hit_rate=65.7%
+```
+
+Comparison:
+
+- 7MG repeat without split:
+  - decode `24004.21 ms`;
+  - down pool rebuilt to `7.88 MiB`, `723 slots`;
+  - down hit rate `70.7%`;
+  - current-down planned jobs `4052`;
+  - iouring wait `21566985 us`.
+- 7MH with split:
+  - decode `23704.49 ms`;
+  - down pool preserved at `7.44 MiB`, `766 slots`;
+  - down hit rate `73.6%`;
+  - current-down planned jobs `3687`;
+  - iouring wait `20723981 us`.
+- Default reference:
+  - decode `22659.98 ms`;
+  - down pool `7.44 MiB`, `766 slots`;
+  - current-down planned jobs `3673`;
+  - iouring wait `20476147 us`.
+
+Interpretation:
+
+- The split pool fixed the cache-geometry regression.
+- It did not produce an endpoint speedup because the selected Q4 GPU path still
+  adds extra q4_down staging/H2D/compute work on the critical path.
+- Q4 CPU fallback bytes are lower, but the GPU replacement is not faster enough
+  to beat the added staging.
+- This closes single-layer Q4 production unless a cache-hit-only or fully
+  overlapped Q4 path can avoid staging misses on the critical path.
+
+Decision:
+
+- Revert 7MH source.
+- Keep only the committed default-off parity diagnostic.
+- Do not commit/push split-pool source.
+
+Next direction:
+
+- Avoid Q4 miss staging entirely:
+  - either a cache-hit-only Q4 production path that returns `false` on misses;
+  - or prefetch Q4 into the isolated pool early enough to guarantee hits without
+    adding decode critical-path IO.
+- Before implementing either, profile whether `blk.6` q4_down misses occur on
+  repeated experts that could be preloaded from the existing route profile.
