@@ -66547,3 +66547,81 @@ Decision:
   - historical `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1` was rejected.
 - Remaining evidence does not identify a new `> 2 s` safe source
   implementation under the strict 16GB/cold-start constraints.
+
+## Phase 7KT - current-head upgate CUDA scheduler dryrun
+
+Timestamp: 2026-07-05 14:55:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-check the scheduler/backend feasibility of moving or bypassing the
+  CPU-assigned MoE split under the current post-7JY SOTA source.
+- Use existing default-off dryrun instrumentation:
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE=1`;
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=32`;
+  - `GGML_KIMI_MOE_UPGATE_CUDA_DRYRUN=1`;
+  - `GGML_KIMI_MOE_UPGATE_CUDA_DRYRUN_LIMIT=32`.
+- Do not change runtime behavior in this phase.
+
+Why this is needed:
+
+- 7JU showed the MoE swiglu/down split is CPU-assigned, but that was before
+  later analysis closed cache policy, byte-size, Q4_0 current-down, fallback,
+  and CUDA graph directions.
+- 7JY changed the accepted runtime topology by adding mixed up/gate parallel
+  staging.
+- Before claiming no safe implementation remains, current-head dryrun evidence
+  should confirm whether:
+  - CUDA backend support for `MOE_FUSED_UP_GATE` is still absent;
+  - down remains CUDA-supported but chained behind CPU upgate output;
+  - the helper still needs CPU rowmap / CPU-mapped weights;
+  - a scheduler bypass would need deeper graph/backend surgery rather than a
+    small safe change.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 9dd151d8e
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7kt-upgate-cuda-dryrun-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="LLAMA_KIMI_GRAPH_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE=1
+GGML_KIMI_SPLIT_PROFILE_TOP=32
+GGML_KIMI_MOE_UPGATE_CUDA_DRYRUN=1
+GGML_KIMI_MOE_UPGATE_CUDA_DRYRUN_LIMIT=32" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Collect:
+
+- `metrics.txt`;
+- dryrun lines from `stderr.txt`:
+  - `[kimi_upgate_cuda_dryrun]`;
+  - split backend;
+  - CUDA backend support flags;
+  - tensor buffer names;
+  - `helper_needs_cpu_rowmap`;
+  - down CUDA support flags.
+
+Decision rule:
+
+- If `MOE_FUSED_UP_GATE` is still `cuda_support=0` and helper still needs CPU
+  rowmap / CPU-mapped weights, reject a small scheduler-bypass implementation.
+- If dryrun shows a new CUDA-supported path, write a narrow source plan before
+  implementation.
+- If gates fail, reject the diagnostic and do not use the dryrun evidence.
+- This phase cannot promote SOTA.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record run directory, gates, representative dryrun lines, split wall summary,
+  and decision.
