@@ -75930,3 +75930,51 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record exact command, source commit, repo IDs, commit/hash metadata, output
   estimates, and all dry-run logs in the plan.
+
+### Phase 7MS execution adjustment before AMD retry
+
+Timestamp: 2026-07-05 20:30:00 CST.
+
+Status: planned.
+
+Reason:
+
+- The first `decart-ai/Kimi-K2.7-Code-NVFP4` remote dry-run reached
+  `Exporting model...` and then ran for more than 17 minutes without writing
+  GGUF output or full safetensors shards.
+- cgroup memory stayed below the 16 GB limit, but the converter did not emit a
+  split plan or output size estimate.
+- To keep the phase reproducible and bounded, the remaining
+  `amd/Kimi-K2.7-Code-MXFP4` candidate must be run as a separate timed
+  experiment instead of waiting behind the decart process.
+
+AMD bounded retry command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 5364ef4aa
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ms-amd-mxfp4-dryrun-timeout
+mkdir -p "$RUN"
+
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" /tmp/run_phase7ms_amd_timeout.sh
+```
+
+Required timeout wrapper behavior:
+
+- Use `/usr/bin/timeout 600s python3 convert_hf_to_gguf.py --remote --outtype native --dry-run ... amd/Kimi-K2.7-Code-MXFP4`.
+- Record exit code. Exit `124` means timeout and is an expected rejected
+  diagnostic, not a valid optimization.
+- Record cgroup `memory.current`, `memory.peak`, `memory.events`, run dir size,
+  Hugging Face cache size, and any full `.safetensors` or `.gguf` files.
+- If AMD also fails to emit a split plan within 600 seconds, stop the FP4
+  converter path for now and move to a metadata-only sizing or runtime-side
+  decode optimization phase.
+
+Decision:
+
+- No SOTA promotion can occur from this phase.
+- Any full conversion or download still requires a new plan after the dry-run
+  result is recorded.
