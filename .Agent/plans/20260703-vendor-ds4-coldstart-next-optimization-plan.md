@@ -24,7 +24,7 @@ Latest closed findings:
 - Gate recompute remains rejected: the hard bound is `9.861 tok/s`, below the 10 tok/s target. The only still-viable graph route must reuse an existing gate result or equivalent retained hidden tensor, not recompute gate.
 - Hot/cold final combine is a tight lower-bound risk. One backend crossing of `[n_embd, P, T]` for `n_embd=4096`, `P=6`, `33` active sparse layers, and `136.609` decoded-token estimate is about `0.413 GiB`; at `24 GiB/s` this costs `17.197 ms`, leaving only `1.750 ms` of the `18.947 ms` graph margin.
 
-Immediate next work:
+Immediate next work before this probe:
 
 1. Do not run a strict cold performance/SOTA benchmark from the sparse profile alone.
 2. Implement only a default-off DS4 graph placement/payload/copy-count probe in `src/models/deepseek4.cpp::build_expert_mix`. Proposed envs: `DS4_SPARSE_RETAINED_GRAPH_PROBE_OUT=<csv>` and, if needed, `DS4_SPARSE_PAIR_PROFILE_JSON=.Agent/profiles/vendor-ds4/current_sota_sparse_pair_top64_updown.profile.json`.
@@ -33,6 +33,34 @@ Immediate next work:
 5. Reject the route immediately if the probe shows any of: gate recompute, CPU-backend gate/up/down H2D-D2H-scatter round trip, current rectangular dummy payload, unbounded scheduler copy, or combine-copy cost that consumes the `18.947 ms` graph margin.
 6. If the probe proves compact placement is feasible, write a separate hard-bound artifact before any logit-changing implementation. That bound must include expected fallback saving, kernel time, launch/sync, final combine copies, VRAM footprint, host RAM/page-cache footprint, TTFT impact, correctness gate, rollback criteria, and exact reproduction commands.
 7. If compact placement is not feasible, close this sparse retained route and start a fresh bottleneck search from the accepted `4.4 tok/s` SOTA. Do not return to source-only prefetch, direct top768 Q8_0, raw/transposed hot-batch kernels, CUDA graph wrapping, or current `DS4_HOT_DISPATCH` rectangular shapes without a new hard-bound that exceeds the current one.
+
+Sparse retained graph placement probe result:
+
+- Source change: added a default-off CSV probe in `src/models/deepseek4.cpp::build_expert_mix`, gated only by `DS4_SPARSE_RETAINED_GRAPH_PROBE_OUT=<csv>`.
+- Validated pushed source commit: `f208fb105fdb7119a520523faf04088e650d8f1c`.
+- Validation run root: `/root/lfz/runs/vendor-ds4-16gb/20260705T064901Z-sparse-retained-graph-probe-pushed-validation`.
+- Summary artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-graph-probe-validation.json`; analyzer: `.Agent/run-tools/analyze_sparse_retained_graph_probe.py`.
+- Default-off fixed-text top1 passed under strict 16GB/no-swap cgroup: `same_top1=145/145`, `first_mismatch_pos=-1`, `memory_peak_bytes=16000000000`, `oom=0`, `oom_kill=0`.
+- Probe-enabled fixed-text top1 also passed under strict 16GB/no-swap cgroup: `same_top1=145/145`, `first_mismatch_pos=-1`, `memory_peak_bytes=16000000000`, `oom=0`, `oom_kill=0`.
+- Probe CSV rows: `6579`; all observed calls had `mix_tokens=1` and `selected_ne0=6`.
+- Backend placement observed for full gate/up/down tensors: `CPU_Mapped=5960`, `CUDA0=459`, `CUDA_Host=160` for each of gate/up/down. Graph intermediates `cur_ffn`, `selected_experts`, and `weights` were `no_buffer` at graph-build time.
+- Gate reuse verdict: `graph_gate_output_input_available=0` for all rows. `build_expert_mix` receives selected IDs and weights, not a retained gate-output tensor. Therefore the accepted graph path still cannot implement the top64 zero-transfer route by reusing gate output.
+- Hot manager verdict: `hot_active=0`, `hot_ready=0`, `dispatch_dual=0` for all rows in the accepted path. There is no active compact or rectangular hot branch in this accepted-path probe.
+- Rectangular payload verdict: active rectangular payload is `0` in this accepted-path probe because `DS4_HOT_DISPATCH` is not active. The previous planner result still applies if current `DS4_HOT_DISPATCH` is used: the sparse top64 profile would inflate from `64` real pairs to `295` rectangular entries.
+- Combine-copy lower bound from observed graph-build calls: `combine_bytes_total=646742016` bytes for the fixed-text run shape. This reinforces that any future hot/cold branch must account for final combine/copy explicitly before a performance benchmark.
+- Decision: keep this default-off probe as diagnostic infrastructure. It is not a token-rate result and does not change the accepted `4.4 tok/s` SOTA.
+
+Updated next work after this probe:
+
+1. Do not implement a logit-changing sparse retained path on the current accepted graph as-is; it lacks retained gate-output input and mostly uses non-CUDA full up/down tensors.
+2. Do not adapt current `DS4_HOT_DISPATCH` by feeding it the sparse top64 profile; the rectangular dummy payload inflation remains rejected.
+3. Before any runtime source edit that changes logits, write a hard-bound/design artifact for one concrete compact retained CUDA branch:
+   - how gate output or an equivalent hidden tensor becomes available to `build_expert_mix` without gate recompute;
+   - how only the global top64 up/down pairs are resident or staged, without per-layer dummy inflation;
+   - how hot up/swiglu/down and final hot/cold combine stay on CUDA or cross back with a bounded copy cost below the remaining `18.947 ms` graph margin;
+   - exact VRAM footprint, host RAM/page-cache footprint, TTFT impact, launch/sync count, correctness verifier sequence, and rollback rule.
+4. The next implementation, if the hard-bound still has positive margin, must be default-off and should start with a graph/new-op skeleton proving placement and copy counts before writing logits.
+5. If no such compact retained design can meet the hard bound, close the sparse retained route and rerun a fresh bottleneck search from the accepted `4.4 tok/s` SOTA rather than repeating source-only prefetch, direct top768 Q8_0, raw/transposed hot-batch kernels, CUDA graph wrapping, or rectangular `DS4_HOT_DISPATCH`.
 
 Mandatory record/push rule:
 

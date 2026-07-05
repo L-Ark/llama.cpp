@@ -1,0 +1,129 @@
+{
+  "active_compact_candidate_layers": {
+    "count": 43,
+    "first": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "last": [
+      38,
+      39,
+      40,
+      41,
+      42
+    ]
+  },
+  "backend_counts": {
+    "cur_buft": {
+      "no_buffer": 6579
+    },
+    "full_down_buft": {
+      "CPU_Mapped": 5960,
+      "CUDA0": 459,
+      "CUDA_Host": 160
+    },
+    "full_gate_buft": {
+      "CPU_Mapped": 5960,
+      "CUDA0": 459,
+      "CUDA_Host": 160
+    },
+    "full_up_buft": {
+      "CPU_Mapped": 5960,
+      "CUDA0": 459,
+      "CUDA_Host": 160
+    },
+    "selected_buft": {
+      "no_buffer": 6579
+    },
+    "weights_buft": {
+      "no_buffer": 6579
+    }
+  },
+  "bool_sums": {
+    "compact_candidate": 6579,
+    "current_hot_path_computes_gate": 0,
+    "dispatch_dual": 0,
+    "graph_gate_output_input_available": 0,
+    "hot_active": 0,
+    "hot_dispatch_enabled": 0,
+    "hot_ready": 0,
+    "selected_matches_hot_picks": 0
+  },
+  "combine_bytes_decode_like_mix1": 646742016,
+  "combine_bytes_total": 646742016,
+  "decision": "Keep the default-off probe as diagnostic infrastructure. The accepted graph path still has no retained gate tensor and most observed full up/down expert tensors are CPU_Mapped/CUDA_Host rather than CUDA0, so this does not yet prove a compact zero-transfer sparse retained route. The next source work must introduce or prove a real retained CUDA gate/up/down branch before any logit-changing benchmark.",
+  "default_top1": {
+    "baseline_top1_report_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T064901Z-sparse-retained-graph-probe-pushed-validation/defaultoff-top1",
+    "check_n_tokens": 145,
+    "check_top1_report_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "first_mismatch_pos": -1,
+    "memory_current_bytes": 15161708544,
+    "memory_events": "low 0\nhigh 0\nmax 17012\noom 0\noom_kill 0\noom_group_kill 0\n",
+    "memory_peak_bytes": 16000000000,
+    "mode": "defaultoff",
+    "n_tokens": 145,
+    "same_top1": 145,
+    "status": "pass"
+  },
+  "full_down_expert_bytes_counts": {
+    "4456448": 6579
+  },
+  "full_up_expert_bytes_counts": {
+    "4456448": 6579
+  },
+  "layers_observed": {
+    "count": 43,
+    "first": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "last": [
+      38,
+      39,
+      40,
+      41,
+      42
+    ]
+  },
+  "mix_tokens_counts": {
+    "1": 6579
+  },
+  "probe_csv": "/root/lfz/runs/vendor-ds4-16gb/20260705T064901Z-sparse-retained-graph-probe-pushed-validation/probe-top1/sparse-retained-graph-probe.csv",
+  "probe_top1": {
+    "baseline_top1_report_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T064901Z-sparse-retained-graph-probe-pushed-validation/probe-top1",
+    "check_n_tokens": 145,
+    "check_top1_report_sha256": "e6cf40c9c8bfc29f3b4c60fe3db8928b86861795d914eadfdf293202ee4476ef",
+    "first_mismatch_pos": -1,
+    "memory_current_bytes": 15165550592,
+    "memory_events": "low 0\nhigh 0\nmax 17645\noom 0\noom_kill 0\noom_group_kill 0\n",
+    "memory_peak_bytes": 16000000000,
+    "mode": "defaultoff",
+    "n_tokens": 145,
+    "same_top1": 145,
+    "status": "pass"
+  },
+  "rectangular_entries_max": 0,
+  "rectangular_updown_bytes_max": 0,
+  "row_count": 6579,
+  "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260705T064901Z-sparse-retained-graph-probe-pushed-validation",
+  "selected_ne0_counts": {
+    "6": 6579
+  },
+  "source_head": "f208fb105fdb7119a520523faf04088e650d8f1c",
+  "status": "validated_probe_rejects_current_accepted_graph_as_sparse_retained_route",
+  "top1_ok": true,
+  "verdict_reasons": [
+    "build_expert_mix receives no retained graph-level gate output tensor",
+    "accepted path has no active DS4 hot manager state",
+    "accepted path still uses non-CUDA full up/down expert tensors for many observed rows (up_non_cuda=6120, down_non_cuda=6120)",
+    "no current hot rectangular payload is active in this accepted-path probe"
+  ]
+}
