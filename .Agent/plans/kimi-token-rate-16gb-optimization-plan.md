@@ -69574,6 +69574,91 @@ Decision:
   workspace that overlaps with previous layer compute; otherwise it is expected
   to remain slower than mmap/page-cache faulting.
 
+## Phase 7LK - current fallback structure probe
+
+Timestamp: 2026-07-05 23:18:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-establish the current CPU fallback structure after 7LJ-A was rejected and
+  reverted.
+- Determine whether the remaining fallback traffic is concentrated enough to
+  justify a narrow asynchronous read-ahead or GPU-support patch.
+- Do not change source in this phase.
+
+Why this is needed:
+
+- 7LJ-A proved synchronous expert-pack direct reads are slower than the current
+  pack-mmap fallback path.
+- The next possible direction only makes sense if fallback work is dominated by
+  a small set of tensor types or layers that can be handled specially.
+- Existing 7KX/7LG/7LJ-A run directories do not contain
+  `fallback-profile.csv`, so the current fallback distribution is not
+  reproducibly available from artifacts.
+
+Experiment A: strict n32 fallback profile probe
+
+Run the accepted default code with profiling enabled but without source or
+runtime behavior changes:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 70c28d100
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lk-fallback-profile-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT="$RUN/fallback-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT `< 127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `fallback-profile.csv` exists and has entries, or stderr proves profiling was
+  enabled but no fallback rows were recorded.
+
+Analysis requirements:
+
+- Aggregate fallback by:
+  - prompt/decode phase;
+  - `src0_type`;
+  - tensor suffix (`ffn_down_exps`, `ffn_up_exps`, `ffn_gate_exps`, etc.);
+  - layer/tensor name;
+  - expert byte size;
+  - expert id hotness.
+- Compare endpoint metrics with 7KX/7LG to estimate profiling overhead.
+- Identify whether a top bucket accounts for at least `50%` of fallback time or
+  bytes.
+
+Decision rule:
+
+- If fallback is dominated by one unsupported type/tensor family, plan a narrow
+  default-off source patch for that family only.
+- If fallback is diffuse or profiling overhead makes the run non-comparable,
+  reject fallback-specific source work and return to a higher-level placement
+  strategy.
+- Do not promote any token-rate result from this phase; it is diagnostic only.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record run directory, exact command, output, gates, fallback profile path,
+  aggregation script/command, and decision.
+
 ### 7LG result
 
 Timestamp: 2026-07-05.
