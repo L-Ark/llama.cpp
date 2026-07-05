@@ -71047,3 +71047,169 @@ Reproducibility:
 
 - Commit and push this plan before running.
 - Save all CSVs and simulation output in the run directory.
+
+### Phase 7LR result
+
+Timestamp: 2026-07-06 00:03:00 CST.
+
+Status: accepted diagnostic; pack-layout implementation justified.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-073750Z-phase7lr-io-locality-n32`
+
+Result:
+
+- source commit: `40d87fcd3`;
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- TTFT `75235.52 ms`;
+- decode `23795.07 ms / 31`, `1.30 tok/s` (diagnostic overhead; not SOTA);
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- expert-pack iouring bytes `126391910400`;
+- expert-pack iouring wait `20684211 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`.
+
+IO profile:
+
+- `runtime_load`:
+  - rows `4318`;
+  - read jobs `19143`;
+  - bytes `97.127 GiB`;
+  - wait `18026.121 ms`;
+  - wall `18670.939 ms`;
+  - current `span/read=24.1267`;
+  - current `gap/read=23.1267`;
+  - current `adjacent/read_jobs=0.0230`.
+- `current_down_overlap`:
+  - rows `860`;
+  - read jobs `3504`;
+  - bytes `20.585 GiB`;
+  - wait `2666.982 ms`;
+  - wall `2773.136 ms`;
+  - current `span/read=24.2777`;
+  - current `gap/read=23.2777`;
+  - current `adjacent/read_jobs=0.0217`.
+
+Pack-layout simulation:
+
+- current trace:
+  - total `span/read=24.1531`, `gap/read=23.1531`,
+    `adjacent/read_jobs=0.0228`;
+  - runtime_load `span/read=24.1267`, `gap/read=23.1267`,
+    `adjacent/read_jobs=0.0230`.
+- first-use:
+  - total `span/read=6.8719`, `gap/read=5.8719`,
+    `adjacent/read_jobs=0.4228`;
+  - runtime_load `span/read=6.9127`, `gap/read=5.9127`,
+    `adjacent/read_jobs=0.4227`.
+- frequency:
+  - runtime_load `span/read=10.3638`, `gap/read=9.3638`,
+    `adjacent/read_jobs=0.0792`.
+- greedy_pair:
+  - runtime_load `span/read=8.4760`, `gap/read=7.4760`,
+    `adjacent/read_jobs=0.4987`.
+
+Interpretation:
+
+- first-use layout reduces runtime-load `span/read` by about `71.4%` and
+  `gap/read` by about `74.4%`.
+- This clears the 15% locality-improvement gate by a large margin.
+- Trace-only unique entries from the main+overlay packs are `13556` keys,
+  `70.482 GiB`; current free disk is about `88 GiB`, so a full-copy main pack is
+  impossible but a trace-only overlay-extra is feasible.
+- Runtime can load original main and overlay packs as fallback, plus a
+  first-use trace-only `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA` with
+  `GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1` so hot trace keys resolve to the
+  new physical layout.
+
+Decision:
+
+- Implement a multi-pack trace-only first-use overlay builder.
+- Generate a first-use overlay-extra from the 7LR trace.
+- Test it under the strict cold n32 gate.
+- Promote only if endpoint improves and all correctness/memory/TTFT/IO gates
+  pass; repeat n32 and validate n96 before SOTA.
+
+## Phase 7LS - first-use trace-only overlay-extra pack
+
+Timestamp: 2026-07-06 00:05:00 CST.
+
+Status: planned.
+
+Implementation:
+
+- Add `scripts/kimi-build-trace-overlay-pack.py`.
+- Inputs:
+  - `--trace io-read-trace.csv`;
+  - repeated `--pack` paths in runtime source order;
+  - `--out` output pack.
+- Behavior:
+  - read all input pack indexes;
+  - collect trace first-use keys;
+  - include only keys present in the trace and in the input packs;
+  - write one GGMLMOEPACKv1 file ordered by tensor and trace first-use expert
+    order;
+  - copy bytes exactly without changing quantized data.
+
+Generation command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+TRACE=/root/lfz/runs/vendor-kimi-token-rate/20260705-073750Z-phase7lr-io-locality-n32/io-read-trace.csv
+OUT=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7ls-firstuse-trace-overlay.expert-pack
+python3 scripts/kimi-build-trace-overlay-pack.py \
+  --trace "$TRACE" \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  --out "$OUT" \
+  > /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7ls-firstuse-trace-overlay.log
+```
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ls-firstuse-overlay-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7ls-firstuse-trace-overlay.expert-pack GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- build script committed and pushed before generation;
+- generated pack exists and size is below available disk;
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- stderr must show duplicate replacement from overlay-extra.
+
+Decision rule:
+
+- If n32 improves versus current accepted band with a counter explanation
+  (`iouring_wait_us` or runtime_load wait lower), repeat n32.
+- If repeat passes, run n96 before promoting.
+- If endpoint regresses or quality/memory/TTFT/IO gates fail, delete/reject the
+  generated overlay from production use and keep original packs.
+
+Reproducibility:
+
+- Record generation log, output pack path/size, exact run directory, metrics,
+  output text, stderr counters, and disk free space.
