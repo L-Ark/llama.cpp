@@ -1,0 +1,3502 @@
+{
+  "accepted_bound_inputs": {
+    "current_accepted_eval_tok_s": 4.4,
+    "current_accepted_ttft_gate_ms": 33617.688744,
+    "current_accepted_ttft_ms": 32087.738292,
+    "decode_fallback_ms": 19115.399,
+    "decode_non_fallback_ms": 11932.04771,
+    "decoded_tokens_estimate": 135.5739515152,
+    "gpu_vram_mib": 32109,
+    "native_extra_gpu_moe_layer_reference_bytes": 3422552064,
+    "native_reference_cpu_moe_layers": 40,
+    "native_reference_expert_used_count": 6,
+    "target_decode_ms_for_10_tok_s": 13557.39515152
+  },
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/priority-alternate-gguf-header-bound-20260706-after-layer-close.json",
+  "candidates": [
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 18,
+          "decode_ms": 14367.888,
+          "gpu_moe_layers_fit": 25,
+          "tok_s": 9.4359,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 41674604544,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 969176849.8604652,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 8764757376,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 18,
+            "decode_ms": 14367.888,
+            "gpu_moe_layers_fit": 25,
+            "tok_s": 9.4359,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 19,
+            "decode_ms": 14503.213,
+            "gpu_moe_layers_fit": 24,
+            "tok_s": 9.3479,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 20,
+            "decode_ms": 14638.537,
+            "gpu_moe_layers_fit": 23,
+            "tok_s": 9.2614,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 21,
+            "decode_ms": 14773.862,
+            "gpu_moe_layers_fit": 22,
+            "tok_s": 9.1766,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/50439361920",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 41674604544,
+        "expert_layer_bytes_sample": {
+          "0": 1811939328,
+          "1": 1811939328,
+          "2": 1811939328,
+          "3": 905969664,
+          "4": 905969664,
+          "5": 905969664,
+          "6": 905969664,
+          "7": 905969664
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5334316,
+        "kv_count": 64,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 553648128,
+            "offset": 9308160,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 562956288,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 553648128,
+            "offset": 1267599360,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 553648128,
+            "offset": 1821247488,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 2374895616,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 553648128,
+            "offset": 3079538688,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 553648128,
+            "offset": 3633186816,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 4186834944,
+            "type": "Q2_K"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "F16": 359,
+          "F32": 492,
+          "I32": 3,
+          "IQ2_XXS": 86,
+          "Q2_K": 43,
+          "Q8_0": 345
+        },
+        "version": 3
+      },
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "size": 50439361920,
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128-uniform.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 21,
+          "decode_ms": 15144.533,
+          "gpu_moe_layers_fit": 22,
+          "tok_s": 8.952,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 47110422528,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 1095591221.5813954,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 8764757664,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 21,
+            "decode_ms": 15144.533,
+            "gpu_moe_layers_fit": 22,
+            "tok_s": 8.952,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 22,
+            "decode_ms": 15297.509,
+            "gpu_moe_layers_fit": 21,
+            "tok_s": 8.8625,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 23,
+            "decode_ms": 15450.484,
+            "gpu_moe_layers_fit": 20,
+            "tok_s": 8.7747,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 24,
+            "decode_ms": 15603.46,
+            "gpu_moe_layers_fit": 19,
+            "tok_s": 8.6887,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/55875180192",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 47110422528,
+        "expert_layer_bytes_sample": {
+          "0": 1811939328,
+          "1": 1811939328,
+          "2": 1811939328,
+          "3": 905969664,
+          "4": 905969664,
+          "5": 905969664,
+          "6": 905969664,
+          "7": 905969664
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5334618,
+        "kv_count": 68,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 553648128,
+            "offset": 9308160,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 562956288,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 553648128,
+            "offset": 1267599360,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 553648128,
+            "offset": 1821247488,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 2374895616,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 553648128,
+            "offset": 3079538688,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 553648128,
+            "offset": 3633186816,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 4186834944,
+            "type": "Q2_K"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "F16": 359,
+          "F32": 492,
+          "I32": 3,
+          "IQ2_XXS": 74,
+          "Q2_K": 37,
+          "Q4_K": 18,
+          "Q8_0": 345
+        },
+        "version": 3
+      },
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "size": 55875180192,
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 29,
+          "decode_ms": 18690.758,
+          "gpu_moe_layers_fit": 14,
+          "tok_s": 7.2535,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 71772977152,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 1669139003.5348837,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 8764763456,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 29,
+            "decode_ms": 18690.758,
+            "gpu_moe_layers_fit": 14,
+            "tok_s": 7.2535,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 29,
+            "decode_ms": 18690.758,
+            "gpu_moe_layers_fit": 14,
+            "tok_s": 7.2535,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 30,
+            "decode_ms": 18923.817,
+            "gpu_moe_layers_fit": 13,
+            "tok_s": 7.1642,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 31,
+            "decode_ms": 19156.876,
+            "gpu_moe_layers_fit": 12,
+            "tok_s": 7.077,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-REAP-K128-hybrid.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/80537740608",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 71772977152,
+        "expert_layer_bytes_sample": {
+          "0": 704643072,
+          "1": 704643072,
+          "2": 704643072,
+          "3": 352321536,
+          "4": 352321536,
+          "5": 352321536,
+          "6": 352321536,
+          "7": 352321536
+        },
+        "expert_role_counts": {
+          "down_exps": 43
+        },
+        "expert_tensor_count": 215,
+        "header_end_offset": 5340393,
+        "kv_count": 64,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.nvfp4_weight",
+            "nbytes": 1207959552,
+            "offset": 9308160,
+            "type": "NVFP4"
+          },
+          {
+            "dims": [
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.nvfp4_scale_2",
+            "nbytes": 1024,
+            "offset": 1217267712,
+            "type": "F32"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 1217268736,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.nvfp4_weight",
+            "nbytes": 1207959552,
+            "offset": 1921911808,
+            "type": "NVFP4"
+          },
+          {
+            "dims": [
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.nvfp4_scale_2",
+            "nbytes": 1024,
+            "offset": 3129871360,
+            "type": "F32"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.nvfp4_weight",
+            "nbytes": 1207959552,
+            "offset": 3129872384,
+            "type": "NVFP4"
+          },
+          {
+            "dims": [
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.nvfp4_scale_2",
+            "nbytes": 1024,
+            "offset": 4337831936,
+            "type": "F32"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 4337832960,
+            "type": "Q2_K"
+          }
+        ],
+        "tensor_count": 1414,
+        "type_counts": {
+          "F16": 359,
+          "F32": 578,
+          "I32": 3,
+          "NVFP4": 86,
+          "Q2_K": 43,
+          "Q8_0": 345
+        },
+        "version": 3
+      },
+      "repo": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4",
+      "size": 80537740608,
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4/resolve/main/DeepSeek-V4-Flash-REAP-K128-hybrid.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 31,
+          "decode_ms": 20236.673,
+          "gpu_moe_layers_fit": 12,
+          "tok_s": 6.6994,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 82499916672,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 1918602713.3023255,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 8771976896,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 31,
+            "decode_ms": 20236.673,
+            "gpu_moe_layers_fit": 12,
+            "tok_s": 6.6994,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 31,
+            "decode_ms": 20236.673,
+            "gpu_moe_layers_fit": 12,
+            "tok_s": 6.6994,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 32,
+            "decode_ms": 20504.565,
+            "gpu_moe_layers_fit": 11,
+            "tok_s": 6.6119,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 32,
+            "decode_ms": 20504.565,
+            "gpu_moe_layers_fit": 11,
+            "tok_s": 6.6119,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-REAP-K150-hybrid.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/91271893568",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 82499916672,
+        "expert_layer_bytes_sample": {
+          "0": 704643072,
+          "1": 704643072,
+          "2": 704643072,
+          "3": 412876800,
+          "4": 412876800,
+          "5": 412876800,
+          "6": 412876800,
+          "7": 412876800
+        },
+        "expert_role_counts": {
+          "down_exps": 43
+        },
+        "expert_tensor_count": 215,
+        "header_end_offset": 5340393,
+        "kv_count": 64,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.nvfp4_weight",
+            "nbytes": 1207959552,
+            "offset": 9308160,
+            "type": "NVFP4"
+          },
+          {
+            "dims": [
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.nvfp4_scale_2",
+            "nbytes": 1024,
+            "offset": 1217267712,
+            "type": "F32"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 1217268736,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.nvfp4_weight",
+            "nbytes": 1207959552,
+            "offset": 1921911808,
+            "type": "NVFP4"
+          },
+          {
+            "dims": [
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.nvfp4_scale_2",
+            "nbytes": 1024,
+            "offset": 3129871360,
+            "type": "F32"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.nvfp4_weight",
+            "nbytes": 1207959552,
+            "offset": 3129872384,
+            "type": "NVFP4"
+          },
+          {
+            "dims": [
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.nvfp4_scale_2",
+            "nbytes": 1024,
+            "offset": 4337831936,
+            "type": "F32"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 4337832960,
+            "type": "Q2_K"
+          }
+        ],
+        "tensor_count": 1414,
+        "type_counts": {
+          "F16": 359,
+          "F32": 578,
+          "I32": 3,
+          "NVFP4": 86,
+          "Q2_K": 43,
+          "Q8_0": 345
+        },
+        "version": 3
+      },
+      "repo": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4",
+      "size": 91271893568,
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4/resolve/main/DeepSeek-V4-Flash-REAP-K150-hybrid.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 32,
+          "decode_ms": 22024.514,
+          "gpu_moe_layers_fit": 11,
+          "tok_s": 6.1556,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 97127561472,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 2258780499.3488374,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 8781813056,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 32,
+            "decode_ms": 22024.514,
+            "gpu_moe_layers_fit": 11,
+            "tok_s": 6.1556,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 33,
+            "decode_ms": 22339.904,
+            "gpu_moe_layers_fit": 10,
+            "tok_s": 6.0687,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 33,
+            "decode_ms": 22339.904,
+            "gpu_moe_layers_fit": 10,
+            "tok_s": 6.0687,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 34,
+            "decode_ms": 22655.293,
+            "gpu_moe_layers_fit": 9,
+            "tok_s": 5.9842,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-REAP-K180-hybrid.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/105909374528",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 97127561472,
+        "expert_layer_bytes_sample": {
+          "0": 704643072,
+          "1": 704643072,
+          "2": 704643072,
+          "3": 495452160,
+          "4": 495452160,
+          "5": 495452160,
+          "6": 495452160,
+          "7": 495452160
+        },
+        "expert_role_counts": {
+          "down_exps": 43
+        },
+        "expert_tensor_count": 215,
+        "header_end_offset": 5340393,
+        "kv_count": 64,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.nvfp4_weight",
+            "nbytes": 1207959552,
+            "offset": 9308160,
+            "type": "NVFP4"
+          },
+          {
+            "dims": [
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.nvfp4_scale_2",
+            "nbytes": 1024,
+            "offset": 1217267712,
+            "type": "F32"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 1217268736,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.nvfp4_weight",
+            "nbytes": 1207959552,
+            "offset": 1921911808,
+            "type": "NVFP4"
+          },
+          {
+            "dims": [
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.nvfp4_scale_2",
+            "nbytes": 1024,
+            "offset": 3129871360,
+            "type": "F32"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.nvfp4_weight",
+            "nbytes": 1207959552,
+            "offset": 3129872384,
+            "type": "NVFP4"
+          },
+          {
+            "dims": [
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.nvfp4_scale_2",
+            "nbytes": 1024,
+            "offset": 4337831936,
+            "type": "F32"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 704643072,
+            "offset": 4337832960,
+            "type": "Q2_K"
+          }
+        ],
+        "tensor_count": 1414,
+        "type_counts": {
+          "F16": 359,
+          "F32": 578,
+          "I32": 3,
+          "NVFP4": 86,
+          "Q2_K": 43,
+          "Q8_0": 345
+        },
+        "version": 3
+      },
+      "repo": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4",
+      "size": 105909374528,
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4/resolve/main/DeepSeek-V4-Flash-REAP-K180-hybrid.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 19,
+          "decode_ms": 14635.963,
+          "gpu_moe_layers_fit": 24,
+          "tok_s": 9.2631,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 43826282496,
+        "expert_count": 144,
+        "expert_payload_per_layer_bytes": 1019215872.0,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 8767249504,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 19,
+            "decode_ms": 14635.963,
+            "gpu_moe_layers_fit": 24,
+            "tok_s": 9.2631,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 20,
+            "decode_ms": 14778.274,
+            "gpu_moe_layers_fit": 23,
+            "tok_s": 9.1739,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 21,
+            "decode_ms": 14920.586,
+            "gpu_moe_layers_fit": 22,
+            "tok_s": 9.0864,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 22,
+            "decode_ms": 15062.897,
+            "gpu_moe_layers_fit": 21,
+            "tok_s": 9.0005,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/52593532000",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 43826282496,
+        "expert_layer_bytes_sample": {
+          "0": 1019215872,
+          "1": 1019215872,
+          "2": 1019215872,
+          "3": 1019215872,
+          "4": 1019215872,
+          "5": 1019215872,
+          "6": 1019215872,
+          "7": 1019215872
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5333508,
+        "kv_count": 58,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 144,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              144
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 311427072,
+            "offset": 9308160,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              144
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 396361728,
+            "offset": 320735232,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              144
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 311427072,
+            "offset": 717096960,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              144
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 311427072,
+            "offset": 1028524032,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              144
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 396361728,
+            "offset": 1339951104,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              144
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 311427072,
+            "offset": 1736312832,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              144
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 311427072,
+            "offset": 2047739904,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              144
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 396361728,
+            "offset": 2359166976,
+            "type": "Q2_K"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "F16": 359,
+          "F32": 492,
+          "I32": 3,
+          "IQ2_XXS": 86,
+          "Q2_K": 43,
+          "Q8_0": 345
+        },
+        "version": 3
+      },
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "size": 52593532000,
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 22,
+          "decode_ms": 15410.769,
+          "gpu_moe_layers_fit": 21,
+          "tok_s": 8.7974,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 48695869440,
+        "expert_count": 160,
+        "expert_payload_per_layer_bytes": 1132462080.0,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 8772888160,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 22,
+            "decode_ms": 15410.769,
+            "gpu_moe_layers_fit": 21,
+            "tok_s": 8.7974,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 22,
+            "decode_ms": 15410.769,
+            "gpu_moe_layers_fit": 21,
+            "tok_s": 8.7974,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 23,
+            "decode_ms": 15568.893,
+            "gpu_moe_layers_fit": 20,
+            "tok_s": 8.708,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 24,
+            "decode_ms": 15727.017,
+            "gpu_moe_layers_fit": 19,
+            "tok_s": 8.6204,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/57468757600",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 48695869440,
+        "expert_layer_bytes_sample": {
+          "0": 1132462080,
+          "1": 1132462080,
+          "2": 1132462080,
+          "3": 1132462080,
+          "4": 1132462080,
+          "5": 1132462080,
+          "6": 1132462080,
+          "7": 1132462080
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5333508,
+        "kv_count": 58,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 160,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              160
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 346030080,
+            "offset": 9308160,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              160
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 440401920,
+            "offset": 355338240,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              160
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 346030080,
+            "offset": 795740160,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              160
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 346030080,
+            "offset": 1141770240,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              160
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 440401920,
+            "offset": 1487800320,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              160
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 346030080,
+            "offset": 1928202240,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              160
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 346030080,
+            "offset": 2274232320,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              160
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 440401920,
+            "offset": 2620262400,
+            "type": "Q2_K"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "F16": 359,
+          "F32": 492,
+          "I32": 3,
+          "IQ2_XXS": 86,
+          "Q2_K": 43,
+          "Q8_0": 345
+        },
+        "version": 3
+      },
+      "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF",
+      "size": 57468757600,
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-180B-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 27,
+          "decode_ms": 17740.336,
+          "gpu_moe_layers_fit": 16,
+          "tok_s": 7.6421,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 66249031680,
+        "expert_count": 144,
+        "expert_payload_per_layer_bytes": 1540675155.3488371,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 8767249504,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 27,
+            "decode_ms": 17740.336,
+            "gpu_moe_layers_fit": 16,
+            "tok_s": 7.6421,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 28,
+            "decode_ms": 17955.458,
+            "gpu_moe_layers_fit": 15,
+            "tok_s": 7.5506,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 29,
+            "decode_ms": 18170.579,
+            "gpu_moe_layers_fit": 14,
+            "tok_s": 7.4612,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 29,
+            "decode_ms": 18170.579,
+            "gpu_moe_layers_fit": 14,
+            "tok_s": 7.4612,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-Spark-Mini-Q3-Dynamic-REAP-ds4.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/75016281184",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 66249031680,
+        "expert_layer_bytes_sample": {
+          "0": 1019215872,
+          "1": 1019215872,
+          "2": 1019215872,
+          "3": 1019215872,
+          "4": 1019215872,
+          "5": 1019215872,
+          "6": 1019215872,
+          "7": 1019215872
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5333508,
+        "kv_count": 58,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 144,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              144
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 311427072,
+            "offset": 9308160,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              144
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 396361728,
+            "offset": 320735232,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              144
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 311427072,
+            "offset": 717096960,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              144
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 311427072,
+            "offset": 1028524032,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              144
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 396361728,
+            "offset": 1339951104,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              144
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 311427072,
+            "offset": 1736312832,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              144
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 311427072,
+            "offset": 2047739904,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              144
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 396361728,
+            "offset": 2359166976,
+            "type": "Q2_K"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "F16": 359,
+          "F32": 492,
+          "I32": 3,
+          "IQ2_XXS": 42,
+          "Q2_K": 21,
+          "Q4_K": 66,
+          "Q8_0": 345
+        },
+        "version": 3
+      },
+      "repo": "0xSero/DeepSeek-V4-Flash-Spark-Mini-GGUF",
+      "size": 75016281184,
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-Spark-Mini-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Mini-Q3-Dynamic-REAP-ds4.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 29,
+          "decode_ms": 18863.75,
+          "gpu_moe_layers_fit": 14,
+          "tok_s": 7.187,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 73610035200,
+        "expert_count": 160,
+        "expert_payload_per_layer_bytes": 1711861283.7209303,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 8772888160,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 29,
+            "decode_ms": 18863.75,
+            "gpu_moe_layers_fit": 14,
+            "tok_s": 7.187,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 30,
+            "decode_ms": 19102.774,
+            "gpu_moe_layers_fit": 13,
+            "tok_s": 7.0971,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 30,
+            "decode_ms": 19102.774,
+            "gpu_moe_layers_fit": 13,
+            "tok_s": 7.0971,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 31,
+            "decode_ms": 19341.798,
+            "gpu_moe_layers_fit": 12,
+            "tok_s": 7.0094,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/82382923360",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 73610035200,
+        "expert_layer_bytes_sample": {
+          "0": 1132462080,
+          "1": 1132462080,
+          "2": 1132462080,
+          "3": 1132462080,
+          "4": 1132462080,
+          "5": 1132462080,
+          "6": 1132462080,
+          "7": 1132462080
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5333508,
+        "kv_count": 58,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 160,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              160
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 346030080,
+            "offset": 9308160,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              160
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 440401920,
+            "offset": 355338240,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              160
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 346030080,
+            "offset": 795740160,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              160
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 346030080,
+            "offset": 1141770240,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              160
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 440401920,
+            "offset": 1487800320,
+            "type": "Q2_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              160
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 346030080,
+            "offset": 1928202240,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              160
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 346030080,
+            "offset": 2274232320,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              160
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 440401920,
+            "offset": 2620262400,
+            "type": "Q2_K"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "F16": 359,
+          "F32": 492,
+          "I32": 3,
+          "IQ2_XXS": 42,
+          "Q2_K": 21,
+          "Q4_K": 66,
+          "Q8_0": 345
+        },
+        "version": 3
+      },
+      "repo": "0xSero/DeepSeek-V4-Flash-Spark-GGUF",
+      "size": 82382923360,
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-Spark-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 29,
+          "decode_ms": 19614.98,
+          "gpu_moe_layers_fit": 14,
+          "tok_s": 6.9118,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 81587601408,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 1897386079.2558138,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 6431937888,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 29,
+            "decode_ms": 19614.98,
+            "gpu_moe_layers_fit": 14,
+            "tok_s": 6.9118,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 30,
+            "decode_ms": 19879.909,
+            "gpu_moe_layers_fit": 13,
+            "tok_s": 6.8196,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 30,
+            "decode_ms": 19879.909,
+            "gpu_moe_layers_fit": 13,
+            "tok_s": 6.8196,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 31,
+            "decode_ms": 20144.838,
+            "gpu_moe_layers_fit": 12,
+            "tok_s": 6.73,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash.IQ2_S.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/88019539296",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 81587601408,
+        "expert_layer_bytes_sample": {
+          "0": 2164260864,
+          "1": 2164260864,
+          "2": 2164260864,
+          "3": 2164260864,
+          "4": 2164260864,
+          "5": 1862270976,
+          "6": 1862270976,
+          "7": 1862270976
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5334291,
+        "kv_count": 61,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 922746880,
+            "offset": 1213290816,
+            "type": "IQ3_S"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 620756992,
+            "offset": 2142918976,
+            "type": "IQ2_XS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 620756992,
+            "offset": 2775773504,
+            "type": "IQ2_XS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 922746880,
+            "offset": 3494316864,
+            "type": "IQ3_S"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 620756992,
+            "offset": 4423945024,
+            "type": "IQ2_XS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 620756992,
+            "offset": 5056799552,
+            "type": "IQ2_XS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 922746880,
+            "offset": 5782242624,
+            "type": "IQ3_S"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 620756992,
+            "offset": 6711870784,
+            "type": "IQ2_XS"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "BF16": 43,
+          "F32": 641,
+          "I32": 3,
+          "IQ2_XS": 124,
+          "IQ3_S": 5,
+          "Q6_K": 510,
+          "Q8_0": 2
+        },
+        "version": 3
+      },
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "size": 88019539296,
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ2_S.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 33,
+          "decode_ms": 23295.871,
+          "gpu_moe_layers_fit": 10,
+          "tok_s": 5.8197,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 106048782336,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 2466250752.0,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 7925493088,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 33,
+            "decode_ms": 23295.871,
+            "gpu_moe_layers_fit": 10,
+            "tok_s": 5.8197,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 33,
+            "decode_ms": 23295.871,
+            "gpu_moe_layers_fit": 10,
+            "tok_s": 5.8197,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 34,
+            "decode_ms": 23640.23,
+            "gpu_moe_layers_fit": 9,
+            "tok_s": 5.7349,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 34,
+            "decode_ms": 23640.23,
+            "gpu_moe_layers_fit": 9,
+            "tok_s": 5.7349,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash.IQ3_XXS.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/113974275424",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 106048782336,
+        "expert_layer_bytes_sample": {
+          "0": 2466250752,
+          "1": 2466250752,
+          "2": 2466250752,
+          "3": 2466250752,
+          "4": 2466250752,
+          "5": 2466250752,
+          "6": 2466250752,
+          "7": 2466250752
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5334291,
+        "kv_count": 61,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 1239193920,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 822083584,
+            "offset": 2070190400,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 822083584,
+            "offset": 2906403136,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 3854207808,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 822083584,
+            "offset": 4685204288,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 822083584,
+            "offset": 5521417024,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 6478153024,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 822083584,
+            "offset": 7309149504,
+            "type": "IQ3_XXS"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "BF16": 43,
+          "F32": 641,
+          "I32": 3,
+          "IQ3_XXS": 129,
+          "Q8_0": 512
+        },
+        "version": 3
+      },
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "size": 113974275424,
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ3_XXS.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 32,
+          "decode_ms": 21752.115,
+          "gpu_moe_layers_fit": 11,
+          "tok_s": 6.2327,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 94506057728,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 2197815296.0,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 7925493088,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 32,
+            "decode_ms": 21752.115,
+            "gpu_moe_layers_fit": 11,
+            "tok_s": 6.2327,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 32,
+            "decode_ms": 21752.115,
+            "gpu_moe_layers_fit": 11,
+            "tok_s": 6.2327,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 33,
+            "decode_ms": 22058.993,
+            "gpu_moe_layers_fit": 10,
+            "tok_s": 6.146,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 33,
+            "decode_ms": 22058.993,
+            "gpu_moe_layers_fit": 10,
+            "tok_s": 6.146,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash.IQ3_XXS-AS.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/102431550816",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 94506057728,
+        "expert_layer_bytes_sample": {
+          "0": 2197815296,
+          "1": 2197815296,
+          "2": 2197815296,
+          "3": 2197815296,
+          "4": 2197815296,
+          "5": 2197815296,
+          "6": 2197815296,
+          "7": 2197815296
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5334291,
+        "kv_count": 61,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 1239193920,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 553648128,
+            "offset": 2070190400,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 822083584,
+            "offset": 2637967680,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 3585772352,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 553648128,
+            "offset": 4416768832,
+            "type": "IQ2_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 822083584,
+            "offset": 4984546112,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 5941282112,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 553648128,
+            "offset": 6772278592,
+            "type": "IQ2_XXS"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "BF16": 43,
+          "F32": 641,
+          "I32": 3,
+          "IQ2_XXS": 43,
+          "IQ3_XXS": 86,
+          "Q8_0": 512
+        },
+        "version": 3
+      },
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "size": 102431550816,
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ3_XXS-AS.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 35,
+          "decode_ms": 26266.963,
+          "gpu_moe_layers_fit": 8,
+          "tok_s": 5.1614,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 126131109888,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 2933281625.3023257,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 7925493088,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 35,
+            "decode_ms": 26266.963,
+            "gpu_moe_layers_fit": 8,
+            "tok_s": 5.1614,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 35,
+            "decode_ms": 26266.963,
+            "gpu_moe_layers_fit": 8,
+            "tok_s": 5.1614,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 35,
+            "decode_ms": 26266.963,
+            "gpu_moe_layers_fit": 8,
+            "tok_s": 5.1614,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 36,
+            "decode_ms": 26676.532,
+            "gpu_moe_layers_fit": 7,
+            "tok_s": 5.0821,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash.IQ3_XXS-L21.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/134056602976",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 126131109888,
+        "expert_layer_bytes_sample": {
+          "0": 2466250752,
+          "1": 2466250752,
+          "2": 2466250752,
+          "3": 2466250752,
+          "4": 2466250752,
+          "5": 2466250752,
+          "6": 2466250752,
+          "7": 2466250752
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5334291,
+        "kv_count": 61,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 1239193920,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 822083584,
+            "offset": 2070190400,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 822083584,
+            "offset": 2906403136,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 3854207808,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 822083584,
+            "offset": 4685204288,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 822083584,
+            "offset": 5521417024,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 6478153024,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 822083584,
+            "offset": 7309149504,
+            "type": "IQ3_XXS"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "BF16": 43,
+          "F32": 641,
+          "I32": 3,
+          "IQ3_XXS": 66,
+          "MXFP4": 63,
+          "Q8_0": 512
+        },
+        "version": 3
+      },
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "size": 134056602976,
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ3_XXS-L21.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 36,
+          "decode_ms": 28688.748,
+          "gpu_moe_layers_fit": 7,
+          "tok_s": 4.7257,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 143344533504,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 3333593802.418605,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 7925493088,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 36,
+            "decode_ms": 28688.748,
+            "gpu_moe_layers_fit": 7,
+            "tok_s": 4.7257,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 36,
+            "decode_ms": 28688.748,
+            "gpu_moe_layers_fit": 7,
+            "tok_s": 4.7257,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 36,
+            "decode_ms": 28688.748,
+            "gpu_moe_layers_fit": 7,
+            "tok_s": 4.7257,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 29154.212,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 4.6502,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash.IQ3_XXS-L39.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/151270026592",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 143344533504,
+        "expert_layer_bytes_sample": {
+          "0": 2466250752,
+          "1": 2466250752,
+          "2": 2466250752,
+          "3": 2466250752,
+          "4": 3422552064,
+          "5": 3422552064,
+          "6": 3422552064,
+          "7": 3422552064
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5334291,
+        "kv_count": 61,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 1239193920,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 822083584,
+            "offset": 2070190400,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 822083584,
+            "offset": 2906403136,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 3854207808,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 822083584,
+            "offset": 4685204288,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 822083584,
+            "offset": 5521417024,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 822083584,
+            "offset": 6478153024,
+            "type": "IQ3_XXS"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 822083584,
+            "offset": 7309149504,
+            "type": "IQ3_XXS"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "BF16": 43,
+          "F32": 641,
+          "I32": 3,
+          "IQ3_XXS": 12,
+          "MXFP4": 117,
+          "Q8_0": 512
+        },
+        "version": 3
+      },
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "size": 151270026592,
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ3_XXS-L39.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 36,
+          "decode_ms": 29135.907,
+          "gpu_moe_layers_fit": 7,
+          "tok_s": 4.6532,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 147169738752,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 3422552064.0,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 9208605792,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 36,
+            "decode_ms": 29135.907,
+            "gpu_moe_layers_fit": 7,
+            "tok_s": 4.6532,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 29613.792,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 4.5781,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 29613.792,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 4.5781,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 29613.792,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 4.5781,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/156378344544",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 147169738752,
+        "expert_layer_bytes_sample": {
+          "0": 3422552064,
+          "1": 3422552064,
+          "2": 3422552064,
+          "3": 3422552064,
+          "4": 3422552064,
+          "5": 3422552064,
+          "6": 3422552064,
+          "7": 3422552064
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5334035,
+        "kv_count": 57,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 9308160,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 1150158848,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 2291009536,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 3431860224,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 4572710912,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 5713561600,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 6854412288,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 7995262976,
+            "type": "MXFP4"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "BF16": 190,
+          "F32": 641,
+          "I32": 3,
+          "MXFP4": 129,
+          "Q8_0": 365
+        },
+        "version": 3
+      },
+      "repo": "sokann/DeepSeek-V4-Flash-GGUF",
+      "size": 156378344544,
+      "url": "https://huggingface.co/sokann/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 36,
+          "decode_ms": 29135.907,
+          "gpu_moe_layers_fit": 7,
+          "tok_s": 4.6532,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 147169738752,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 3422552064.0,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 8887384832,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 36,
+            "decode_ms": 29135.907,
+            "gpu_moe_layers_fit": 7,
+            "tok_s": 4.6532,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 29613.792,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 4.5781,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 29613.792,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 4.5781,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 29613.792,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 4.5781,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-MXFP4-FP8-BF16.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/156057123584",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 147169738752,
+        "expert_layer_bytes_sample": {
+          "0": 3422552064,
+          "1": 3422552064,
+          "2": 3422552064,
+          "3": 3422552064,
+          "4": 3422552064,
+          "5": 3422552064,
+          "6": 3422552064,
+          "7": 3422552064
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5328807,
+        "kv_count": 57,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "deepseek4.feed_forward_length": 0,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek-V4-Flash-MXFP4-FP8-BF16",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 0,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 1140850688,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 2281701376,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 3422552064,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 4563402752,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 5704253440,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 6845104128,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 7985954816,
+            "type": "MXFP4"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "BF16": 425,
+          "F32": 406,
+          "F8_E4M3_B128": 365,
+          "I32": 3,
+          "MXFP4": 129
+        },
+        "version": 3
+      },
+      "repo": "6ms/DeepSeek-V4-Flash-MXFP4-GGUF",
+      "size": 156057123584,
+      "url": "https://huggingface.co/6ms/DeepSeek-V4-Flash-MXFP4-GGUF/resolve/main/DeepSeek-V4-Flash-MXFP4-FP8-BF16.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 37,
+          "decode_ms": 29613.792,
+          "gpu_moe_layers_fit": 6,
+          "tok_s": 4.5781,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 147169738752,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 3422552064.0,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 10912274304,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 29613.792,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 4.5781,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 29613.792,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 4.5781,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 29613.792,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 4.5781,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 38,
+            "decode_ms": 30091.677,
+            "gpu_moe_layers_fit": 5,
+            "tok_s": 4.5054,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-MXFP4-F16-Q8Compat.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/158082013056",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 147169738752,
+        "expert_layer_bytes_sample": {
+          "0": 3422552064,
+          "1": 3422552064,
+          "2": 3422552064,
+          "3": 3422552064,
+          "4": 3422552064,
+          "5": 3422552064,
+          "6": 3422552064,
+          "7": 3422552064
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5328688,
+        "kv_count": 55,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 6,
+          "deepseek4.feed_forward_length": 0,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek-V4-Flash-MXFP4-F16-Q8Compat",
+          "tokenizer.ggml.model": "gpt2"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 0,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 1140850688,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 2281701376,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 3422552064,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 4563402752,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 5704253440,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 6845104128,
+            "type": "MXFP4"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.2.ffn_down_exps.weight",
+            "nbytes": 1140850688,
+            "offset": 7985954816,
+            "type": "MXFP4"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "F16": 427,
+          "F32": 554,
+          "I32": 3,
+          "MXFP4": 129,
+          "Q8_0": 215
+        },
+        "version": 3
+      },
+      "repo": "6ms/DeepSeek-V4-Flash-MXFP4-GGUF",
+      "size": 158082013056,
+      "url": "https://huggingface.co/6ms/DeepSeek-V4-Flash-MXFP4-GGUF/resolve/main/DeepSeek-V4-Flash-MXFP4-F16-Q8Compat.gguf"
+    },
+    {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 37,
+          "decode_ms": 24413.279,
+          "gpu_moe_layers_fit": 6,
+          "tok_s": 5.5533,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 155826782208,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 3623878656.0,
+        "expert_used_count": 4,
+        "nonexpert_bytes_estimate": 8638978336,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 24413.279,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 5.5533,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 24413.279,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 5.5533,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 24413.279,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 5.5533,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 37,
+            "decode_ms": 24413.279,
+            "gpu_moe_layers_fit": 6,
+            "tok_s": 5.5533,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "bpe"
+      },
+      "file": "ds4flash-4expert.gguf",
+      "head_bytes_read": 67108864,
+      "head_fetch": {
+        "content_length": "67108864",
+        "content_range": "bytes 0-67108863/164465760544",
+        "status": 206
+      },
+      "header": {
+        "expert_bytes_estimate": 155826782208,
+        "expert_layer_bytes_sample": {
+          "0": 3623878656,
+          "1": 3623878656,
+          "2": 3623878656,
+          "3": 3623878656,
+          "4": 3623878656,
+          "5": 3623878656,
+          "6": 3623878656,
+          "7": 3623878656
+        },
+        "expert_role_counts": {
+          "down_exps": 43,
+          "gate_exps": 43,
+          "up_exps": 43
+        },
+        "expert_tensor_count": 129,
+        "header_end_offset": 5845209,
+        "kv_count": 48,
+        "metadata": {
+          "deepseek4.block_count": 43,
+          "deepseek4.embedding_length": 4096,
+          "deepseek4.expert_count": 256,
+          "deepseek4.expert_feed_forward_length": 2048,
+          "deepseek4.expert_used_count": 4,
+          "general.architecture": "deepseek4",
+          "general.name": "DeepSeek V4 Flash 4Expert",
+          "tokenizer.ggml.model": "bpe"
+        },
+        "sample_expert_tensors": [
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_gate_exps.weight",
+            "nbytes": 1207959552,
+            "offset": 8633133120,
+            "type": "Q4_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.0.ffn_up_exps.weight",
+            "nbytes": 1207959552,
+            "offset": 9841092672,
+            "type": "Q4_K"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.0.ffn_down_exps.weight",
+            "nbytes": 1207959552,
+            "offset": 11049052224,
+            "type": "Q4_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_gate_exps.weight",
+            "nbytes": 1207959552,
+            "offset": 12257011776,
+            "type": "Q4_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.1.ffn_up_exps.weight",
+            "nbytes": 1207959552,
+            "offset": 13464971328,
+            "type": "Q4_K"
+          },
+          {
+            "dims": [
+              2048,
+              4096,
+              256
+            ],
+            "name": "blk.1.ffn_down_exps.weight",
+            "nbytes": 1207959552,
+            "offset": 14672930880,
+            "type": "Q4_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_gate_exps.weight",
+            "nbytes": 1207959552,
+            "offset": 15880890432,
+            "type": "Q4_K"
+          },
+          {
+            "dims": [
+              4096,
+              2048,
+              256
+            ],
+            "name": "blk.2.ffn_up_exps.weight",
+            "nbytes": 1207959552,
+            "offset": 17088849984,
+            "type": "Q4_K"
+          }
+        ],
+        "tensor_count": 1328,
+        "type_counts": {
+          "F16": 338,
+          "F32": 492,
+          "I32": 3,
+          "Q4_K": 129,
+          "Q8_0": 366
+        },
+        "version": 3
+      },
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "size": 164465760544,
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf"
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "file": "DeepSeek-V4-Flash-KR-Full256-L10-HF-FP4.sidecar.gguf",
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF",
+      "size": 3623880352,
+      "traceback_tail": "Traceback (most recent call last):\n  File \"<stdin>\", line 114, in <module>\n  File \"<stdin>\", line 72, in head\n  File \"/usr/lib/python3.10/urllib/request.py\", line 216, in urlopen\n    return opener.open(url, data, timeout)\n  File \"/usr/lib/python3.10/urllib/request.py\", line 525, in open\n    response = meth(req, response)\n  File \"/usr/lib/python3.10/urllib/request.py\", line 634, in http_response\n    response = self.parent.error(\n  File \"/usr/lib/python3.10/urllib/request.py\", line 563, in error\n    return self._call_chain(*args)\n  File \"/usr/lib/python3.10/urllib/request.py\", line 496, in _call_chain\n    result = func(*args)\n  File \"/usr/lib/python3.10/urllib/request.py\", line 643, in http_error_default\n    raise HTTPError(req.full_url, code, msg, hdrs, fp)\nurllib.error.HTTPError: HTTP Error 401: Unauthorized\n"
+    }
+  ],
+  "created_at_utc": "2026-07-05T19:57:23Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "best_candidate": {
+      "bound": {
+        "arch": "deepseek4",
+        "best_vram_projection": {
+          "cpu_moe_layers_remaining": 18,
+          "decode_ms": 14367.888,
+          "gpu_moe_layers_fit": 25,
+          "tok_s": 9.4359,
+          "vram_reserve_gib": 0
+        },
+        "block_count": 43,
+        "decision": "below_10_metadata_hard_bound_or_not_full_vendor",
+        "expert_bytes_estimate": 41674604544,
+        "expert_count": 256,
+        "expert_payload_per_layer_bytes": 969176849.8604652,
+        "expert_used_count": 6,
+        "nonexpert_bytes_estimate": 8764757376,
+        "projections": [
+          {
+            "cpu_moe_layers_remaining": 18,
+            "decode_ms": 14367.888,
+            "gpu_moe_layers_fit": 25,
+            "tok_s": 9.4359,
+            "vram_reserve_gib": 0
+          },
+          {
+            "cpu_moe_layers_remaining": 19,
+            "decode_ms": 14503.213,
+            "gpu_moe_layers_fit": 24,
+            "tok_s": 9.3479,
+            "vram_reserve_gib": 1
+          },
+          {
+            "cpu_moe_layers_remaining": 20,
+            "decode_ms": 14638.537,
+            "gpu_moe_layers_fit": 23,
+            "tok_s": 9.2614,
+            "vram_reserve_gib": 2
+          },
+          {
+            "cpu_moe_layers_remaining": 21,
+            "decode_ms": 14773.862,
+            "gpu_moe_layers_fit": 22,
+            "tok_s": 9.1766,
+            "vram_reserve_gib": 3
+          }
+        ],
+        "tokenizer": "gpt2"
+      },
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "size": 50439361920
+    },
+    "full_model_download_performed": false,
+    "new_sota": false,
+    "runtime_source_edit_allowed_next": false,
+    "strict_cold_benchmark_allowed": false
+  },
+  "method": "Priority HF HTTP Range 64MiB GGUF header parse; no full model download; optimistic metadata-only VRAM placement bound."
+}
