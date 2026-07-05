@@ -66863,3 +66863,151 @@ Decision:
 - Keep the accepted runtime defaults unchanged.
 - Continue to require a measured `> 2 s` source-level bucket before making
   another runtime change.
+
+## Phase 7KV - current-head foreground runtime-load audit
+
+Timestamp: 2026-07-05 16:33:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-measure the current-head decode bottleneck after the 7KU reproducibility
+  baseline, with enough attribution to decide the next source change.
+- Keep the run cold-start, strict-16GB, and reproducible.
+- Do not promote the diagnostic itself as SOTA because copy/io profile output
+  adds overhead.
+
+Why this is needed:
+
+- 7KU proves the current branch still produces stable n96 output under the hard
+  gates:
+  - decode `56613.00 ms / 77`, `1.36 tok/s`;
+  - TTFT `77706.41 ms`;
+  - memory peak `15899996160`;
+  - quality pass.
+- Earlier post-7JY phases show remaining decode time is dominated by foreground
+  expert movement:
+  - 7KF: `runtime_load/all` wait `17303.732 ms` on n32;
+  - 7KF: up+gate foreground wait `14651.579 ms`;
+  - 7IW: no small tensor or layer group dominates foreground wait.
+- Several tempting directions are already rejected or bounded:
+  - online cache policy recovered only `52.390 ms`;
+  - expert byte-size conversion upper bound is below `2 s` with quality risk;
+  - Q4_0 down completeness has sub-`1 s` bound for the missing current-down
+    group and historical regressions;
+  - CUDA graph / launch overhead is not the measured bottleneck;
+  - CUDA scheduler relabeling cannot handle `MOE_FUSED_UP_GATE`.
+- Before implementing another runtime change, the current head needs a fresh
+  minimal attribution run to prove whether a `> 2 s` source-level bucket remains.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 8da496a0d
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7kv-current-head-foreground-audit-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Post-run analysis:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<phase7kv-run>
+python3 - <<'PY' "$RUN"
+import csv, os, sys
+run = sys.argv[1]
+copy_path = os.path.join(run, "copy-profile.csv")
+io_path = os.path.join(run, "io-batch-profile.csv")
+
+def kind(name):
+    if "ffn_up_exps" in name:
+        return "up"
+    if "ffn_gate_exps" in name:
+        return "gate"
+    if "ffn_down_exps" in name:
+        return "down"
+    return "other"
+
+rows = []
+with open(copy_path, newline="") as f:
+    for r in csv.DictReader(f):
+        if r.get("op") == "runtime_load":
+            rows.append(r)
+for label, pred in [
+    ("all", lambda r: True),
+    ("up", lambda r: kind(r.get("tensor", "")) == "up"),
+    ("gate", lambda r: kind(r.get("tensor", "")) == "gate"),
+    ("down", lambda r: kind(r.get("tensor", "")) == "down"),
+]:
+    sel = [r for r in rows if pred(r)]
+    print(label, "rows", len(sel),
+          "bytes_gib", round(sum(int(r.get("bytes", 0)) for r in sel)/1024**3, 3),
+          "wall_ms", round(sum(float(r.get("wall_ms", 0) or 0) for r in sel), 3),
+          "io_wait_ms", round(sum(float(r.get("io_wait_ms", 0) or 0) for r in sel), 3),
+          "h2d_ms", round(sum(float(r.get("h2d_ms", 0) or 0) for r in sel if float(r.get("h2d_ms", -1) or -1) >= 0), 3))
+
+top = {}
+for r in rows:
+    k = r.get("tensor", "")
+    rec = top.setdefault(k, [0, 0, 0.0])
+    rec[0] += 1
+    rec[1] += int(r.get("bytes", 0))
+    rec[2] += float(r.get("io_wait_ms", 0) or 0)
+for name, (cnt, b, wait) in sorted(top.items(), key=lambda kv: kv[1][2], reverse=True)[:20]:
+    print("top_tensor", round(wait, 3), "rows", cnt, "gib", round(b/1024**3, 3), name)
+
+if os.path.exists(io_path):
+    byop = {}
+    with open(io_path, newline="") as f:
+        for r in csv.DictReader(f):
+            op = r.get("op", "")
+            rec = byop.setdefault(op, [0, 0, 0.0])
+            rec[0] += 1
+            rec[1] += int(r.get("jobs", 0) or 0)
+            rec[2] += float(r.get("wait_ms", 0) or 0)
+    for op, (batches, jobs, wait) in sorted(byop.items(), key=lambda kv: kv[1][2], reverse=True):
+        print("io_op", op, "batches", batches, "jobs", jobs, "wait_ms", round(wait, 3))
+PY
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `copy-profile.csv` and `io-batch-profile.csv` exist.
+
+Decision rule:
+
+- If up+gate foreground `runtime_load` wait remains above `3 s` and the
+  wait is broad across many tensors, the next implementation should target
+  hiding or reducing foreground up/gate batch waits, not cache-policy changes.
+- If down foreground wait or current-down overlap dominates, target that path
+  only if the measured source-level bucket is above `2 s`.
+- If no measured bucket above `2 s` remains, do not modify runtime code; record
+  that the current plan needs a new lower-level design before more source work.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record the exact source commit, run directory, command shape, output text,
+  TTFT, decode time, token rate, memory peak, swap max, IO counters, and the
+  parsed attribution.
+- A future optimization is accepted only if the same repro script shape passes
+  all gates and improves decode time; otherwise revert source changes and record
+  the rejection.
