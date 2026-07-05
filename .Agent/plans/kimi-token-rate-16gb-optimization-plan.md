@@ -85560,3 +85560,115 @@ cat "$RUN/iq2xxs_siblings.tsv"
 cat "$RUN/asset_feasibility.json"
 cat "$RUN/decision.md"
 ```
+
+## Phase 7OK - IQ2_XXS disk reclamation and streaming-pack feasibility audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 09:52 CST.
+
+Reason:
+
+- Phase 7OJ changed the `IQ2_XXS` situation from "no known external asset" to:
+  - remote `IQ2_XXS` GGUF shard set exists and is metadata-complete;
+  - total remote size is `262.789 GiB`;
+  - current `/root/lfz` free space is only `87.750 GiB`;
+  - download-only staging is short by `175.039 GiB`;
+  - conservative full download plus expert-pack generation is short by
+    `484.366 GiB`.
+- The next useful step is not a blind deletion or download. It is a
+  reproducible space and pipeline feasibility audit:
+  - identify which local expert-pack files are required by the current accepted
+    runner;
+  - identify historical/diagnostic pack files that could be deleted only after
+    explicit approval;
+  - compute whether freeing those files would make either download-only or a
+    streaming one-shard-at-a-time pack path feasible.
+
+Goal:
+
+- Produce a disk-feasibility decision for `IQ2_XXS` without deleting files and
+  without downloading model shards.
+- Determine exact storage conditions required for the next executable
+  `IQ2_XXS` phase.
+
+Inputs:
+
+- Phase 7OJ metadata:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-233938Z-phase7oj-external-iq2xxs-asset-audit/asset_feasibility.json`
+- Current production runner:
+  `scripts/kimi-phase7fb-min-profile-repro.sh`
+- Existing local expert-pack asset directory:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets`
+- Current model directory:
+  `/root/lfz/models`
+
+Method:
+
+1. Commit and push this plan before running.
+2. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7ok-iq2xxs-space-plan`
+3. Record:
+   - git commit/branch/status;
+   - `/root/lfz` disk usage;
+   - all local Kimi model directories and sizes;
+   - all local `*.expert-pack` assets and sizes;
+   - which expert packs are referenced by the current production runner;
+   - which expert packs are not referenced by the runner.
+4. Compute scenarios:
+   - current state;
+   - after freeing non-runner expert packs only;
+   - after freeing all local Kimi diagnostic model dirs only;
+   - after freeing both non-runner expert packs and diagnostic model dirs;
+   - after freeing all expert packs, for reference only, not as a recommended
+     action.
+5. For each scenario compute whether it can fit:
+   - remote download-only staging (`262.789 GiB`);
+   - conservative full download plus pack generation (`572.117 GiB`);
+   - streaming pack generation with one largest shard plus an estimated output
+     pack.
+6. Estimate streaming output pack size conservatively:
+   - lower estimate: current production expert-pack bytes scaled by
+     `remote_iq2xxs_total / current_iq3s_total`;
+   - high estimate: current production expert-pack bytes unchanged;
+   - hard scenario uses high estimate until a real `IQ2_XXS` tensor inventory
+     is available.
+7. Produce:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `local_assets.tsv`;
+   - `space_scenarios.tsv`;
+   - `streaming_pack_feasibility.json`;
+   - `decision.md`;
+   - `phase7ok_iq2xxs_space_plan.py`.
+
+Decision rule:
+
+- Do not delete any file in this phase.
+- Do not download any model shard in this phase.
+- If no non-destructive scenario can fit download-only staging, keep `IQ2_XXS`
+  blocked until external storage or explicit cleanup approval exists.
+- If freeing non-runner historical assets would make download-only or streaming
+  pack feasible, record the exact file list and required user approval.
+- If streaming pack generation appears feasible only after cleanup, the next
+  phase must first ask for cleanup approval or use external storage.
+- If current disk can fit a streaming plan without cleanup, write a separate
+  implementation plan for a shard-by-shard downloader/pack builder with exact
+  checksum and rollback behavior.
+
+Acceptance:
+
+- Accepted if it produces reproducible file-level space accounting and a clear
+  next condition.
+- No SOTA promotion; no model inference.
+- Commit and push the result before any follow-up.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7ok-iq2xxs-space-plan
+mkdir -p "$RUN"
+python3 "$RUN/phase7ok_iq2xxs_space_plan.py"
+cat "$RUN/decision.md"
+```
