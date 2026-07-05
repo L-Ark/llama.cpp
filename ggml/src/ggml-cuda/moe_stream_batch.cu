@@ -16,7 +16,6 @@ bool ggml_cuda_moe_stream_cache_contains(const char *, size_t, int) { return fal
 bool ggml_cuda_moe_stream_up_gate_batch(int, int, const char *, const void *, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, int, float, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *, int, size_t) { return nullptr; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(const char *, int, size_t, const char **, size_t *, uint64_t *) { return nullptr; }
-bool ggml_cuda_moe_expert_pack_read(const char *, int, size_t, void *, size_t) { return false; }
 }
 #else
 // Decode-only batched streaming MoE path.
@@ -3528,26 +3527,6 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
         return false;
     }
     return true;
-}
-
-extern "C" bool ggml_cuda_moe_expert_pack_read(
-        const char * tensor_name,
-        int expert_idx,
-        size_t nbytes,
-        void * dst,
-        size_t dst_capacity) {
-    if (!tensor_name || !tensor_name[0] || expert_idx < 0 || nbytes == 0 || !dst) {
-        return false;
-    }
-    const expert_pack_entry * entry = expert_pack_lookup(tensor_name, expert_idx, nbytes);
-    if (!entry) {
-        return false;
-    }
-    const size_t read_sz = (size_t)align_up_u64((uint64_t)nbytes, (uint64_t)expert_pack_direct_alignment());
-    if (dst_capacity < read_sz || ((uintptr_t)dst % expert_pack_direct_alignment()) != 0) {
-        return false;
-    }
-    return expert_pack_read_entry(entry, dst, nbytes);
 }
 
 static bool stage_pinned_enabled() {
