@@ -81625,3 +81625,90 @@ Reproducibility:
 
 - Commit and push this 7NS plan before running the audit.
 - Commit and push the 7NS result before any follow-up source or asset work.
+
+### Phase 7NS result
+
+Timestamp: 2026-07-06 04:55 CST.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-194905Z-phase7ns-verifier-bound`
+
+Plan commit before execution:
+
+- `859963612` (`docs: plan verifier lower-bound audit`)
+
+Artifacts:
+
+- `repo_state.txt`
+- `commands.log`
+- `phase7ns_verifier_bound.py`
+- `verifier_bound.tsv`
+- `decision.md`
+- `audit_stdout.txt`
+
+Execution notes:
+
+- No model inference was run.
+- No source code was changed.
+- No asset was downloaded or deleted.
+- The first `scp` attempt was closed by the SSH server before transfer
+  completed; SSH reachability was verified and the script transfer/run was
+  retried successfully.
+
+Baselines:
+
+- 7NB strict n32 steady decode:
+  `21878.070 ms / 31 = 705.744 ms/token`, `1.417 tok/s`.
+- 7MU strict n96 steady decode:
+  `56696.970 ms / 77 = 736.324 ms/token`, `1.358 tok/s`.
+- 7NN expert-pack read volume:
+  `3.797 GiB/token` on n32.
+
+Verifier bounds:
+
+| block | measured verify ms | measured ms/token | serial n32 ms | serial n96 ms | required ms for 5 tok/s | required speedup vs serial n96 | measured / required |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| `1` | `1670.540` | `1670.540` | `705.744` | `736.324` | `200.000` | `3.682x` | `8.353x` |
+| `2` | `11238.700` | `5619.350` | `1411.488` | `1472.649` | `400.000` | `3.682x` | `28.097x` |
+| `4` | `18555.800` | `4638.950` | `2822.977` | `2945.297` | `800.000` | `3.682x` | `23.195x` |
+| `8` | `33609.700` | `4201.212` | `5645.954` | `5890.594` | `1600.000` | `3.682x` | `21.006x` |
+| `16` | `51832.100` | `3239.506` | `11291.907` | `11781.189` | `3200.000` | `3.682x` | `16.198x` |
+
+Interpretation:
+
+- Serial one-token target verification has a zero-draft upper bound equal to
+  the current target decode rate, about `1.36-1.42 tok/s`.
+- Serial verification therefore cannot approach `5 tok/s`; it performs one
+  expensive Kimi target step per accepted token.
+- To reach `5 tok/s`, even a perfect-draft verifier must verify at
+  `<=200 ms/output-token`.
+- Relative to the current n96 one-token decode cost, that requires about
+  `3.68x` target-verifier speedup before draft overhead.
+- The measured current multi-token verifier is `16.2x-23.2x` slower than the
+  `5 tok/s` envelope for block sizes `4-16`, and Phase 7NR shows it is on the
+  wrong prompt/multirow path.
+- A narrow source patch that merely serializes verification or calls the
+  existing multi-token `llama_decode` path cannot satisfy the bound.
+
+Decision:
+
+- Accept 7NS as a reproducible verifier lower-bound audit.
+- Reject serial target verification as a SOTA path.
+- Reject narrow DFlash/EAGLE glue work that relies on existing target
+  verification primitives.
+- Do not implement speculative decoding unless a new plan first designs true
+  multi-token MoE streaming verification with a hard path to
+  `<=200 ms/token` target verification, including VRAM/expert-pack cache
+  support and strict France quality gates.
+- Current SOTA remains unchanged.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-194905Z-phase7ns-verifier-bound
+python3 "$RUN/phase7ns_verifier_bound.py"
+cat "$RUN/verifier_bound.tsv"
+cat "$RUN/decision.md"
+```
