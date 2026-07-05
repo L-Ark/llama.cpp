@@ -1,0 +1,102 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/hot-batch-transposed-layout-hard-bound-design.json",
+  "date": "2026-07-05",
+  "title": "Hard-bound design: coalesced/transposed resident source layout for top768 warp compute",
+  "framework": "vendor",
+  "model": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "status": "conditional_default_off_diagnostic_allowed",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_ms": 32892.55329,
+    "ttft_accept_gate_ms": 33617.688744,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15102607360,
+    "correctness_ok": true
+  },
+  "inputs": {
+    "raw_warp_validation": ".Agent/runs/20260705-vendor-ds4-coldstart/hot-batch-warp-probe-validation.json",
+    "warp_design": ".Agent/runs/20260705-vendor-ds4-coldstart/hot-batch-warp-kernel-hard-bound-design.json",
+    "async_prefill": ".Agent/runs/20260705-vendor-ds4-coldstart/async-direct-prefill-overlap-diagnostic-result.json",
+    "top768_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/top768-source-hidden-hard-bound-recheck.json"
+  },
+  "why_needed": {
+    "raw_layout_result": "Correct but rejected: fixed-text warp compare sample bandwidth was only 74.590 GiB/s overall, projecting raw kernel time to about 1.82 s.",
+    "required": "Practical source bandwidth target is about 400-550 GiB/s after reserving time for H2D, D2H, launch/sync, and scatter/compare.",
+    "hypothesis": "The raw row-major expert layout causes poorly coalesced source loads for adjacent output columns. A block-major/output-contiguous layout may allow half-warps/warps to load neighboring MXFP4 blocks coalesced while preserving exact block bytes and arithmetic order."
+  },
+  "hard_budget": {
+    "top768_total_overhead_budget_ms": 446.414,
+    "raw_kernel_cutoff_before_integration_ms": 250,
+    "async_direct_prefill_added_service_runtime_ms": 647,
+    "accepted_ttft_slack_ms": 725.135454,
+    "remaining_async_prefill_margin_ms": 78.135454,
+    "workspace_target_mib": "<=64 additional transient MiB preferred, <=128 MiB absolute diagnostic ceiling"
+  },
+  "payload_and_bandwidth": {
+    "top768_payload_bytes": 3422552064,
+    "top768_payload_gib": 3.1875,
+    "fixed_text_ready_src0_gib": 135.817383,
+    "fixed_text_ready_q80_mib": 101.809,
+    "fixed_text_ready_out_mib": 383.688,
+    "source_time_ms_at_400_gib_s": 339.543,
+    "source_time_ms_at_500_gib_s": 271.635,
+    "source_time_ms_at_600_gib_s": 226.362,
+    "source_time_ms_at_800_gib_s": 169.772,
+    "interpretation": "A transposed kernel probably needs >=600 GiB/s effective source bandwidth to leave enough time for H2D/D2H/launch/sync and still fit 446.414 ms with margin."
+  },
+  "layout_design": {
+    "final_pool_size": "same as raw top768 direct pool, 3264 MiB; do not store raw and transposed full copies simultaneously",
+    "logical_layout": "For each expert, store MXFP4 blocks grouped by K block or K block-pair, with output columns contiguous inside each group. Up keeps ne01=2048, ne00=4096; down keeps ne01=4096, ne00=2048.",
+    "byte_exactness": "The transform only reorders existing block_mxfp4 bytes. It must not dequantize, requantize, compress, or modify e/qs bytes.",
+    "kernel_mapping": "Reuse the half-warp CPU-compatible accumulation mapping, but load x[ib,col] from the coalesced block-major layout so adjacent half-warps/warps read contiguous source addresses.",
+    "fallback_rule": "Missing, unready, or transform-failed entries must remain on exact CPU fallback."
+  },
+  "prefill_transform_options": [
+    {
+      "option": "cpu_transform_then_h2d",
+      "status": "rejected_unless_measured_otherwise",
+      "reason": "Transforming 3.1875 GiB on CPU at 40 GiB/s would cost about 80 ms before copy/coordination, already consuming the entire 78 ms async prefill margin."
+    },
+    {
+      "option": "gpu_streaming_transform",
+      "status": "allowed_as_default_off_diagnostic",
+      "reason": "A small raw staging buffer can receive each O_DIRECT expert payload, launch a GPU reorder into the final transposed pool, then reuse the staging buffer. Extra device traffic is about one read plus one write of 3.1875 GiB; at 400-800 GiB/s this is roughly 8-16 ms plus launch overhead, plausibly within the TTFT margin if overlapped."
+    },
+    {
+      "option": "store_raw_and_transposed",
+      "status": "rejected",
+      "reason": "It doubles the top768 payload to about 6.375 GiB and does not fit the current cpu_moe=41 dual-pool VRAM margin."
+    }
+  ],
+  "required_diagnostics_before_any_skip": [
+    {
+      "name": "transposed_prefill_timing",
+      "behavior": "Default-off direct hot pool mode that stores transposed bytes in the final pool and records raw read, H2D staging, GPU transform, insert counts, failures, VRAM, and cgroup stats.",
+      "pass": "direct inserted 768/768, failures 0, no OOM/no swap, extra service/TTFT cost over the accepted async direct diagnostic stays within the remaining 78.135 ms margin, with preferred <=50 ms extra."
+    },
+    {
+      "name": "transposed_compare_smoke",
+      "behavior": "Default-off compare-only kernel after CPU fallback; CPU dst remains authoritative.",
+      "pass": "smoke compare has compare_ok for all compare_ran records, max_abs=0, diff_count=0."
+    },
+    {
+      "name": "transposed_compare512_fixed_text",
+      "behavior": "Fixed-text llama-results compare with top1 check.",
+      "pass": "same_top1=145/145, first_mismatch_pos=-1, op-level max_abs=0, no OOM/no swap, projected raw kernel <=250 ms and projected total <=446.414 ms."
+    }
+  ],
+  "rejection_rules": [
+    "Reject if transposed prefill/transform consumes the 78.135 ms TTFT margin or needs full duplicate raw+transposed VRAM.",
+    "Reject if any byte-exact compare has max_abs != 0.",
+    "Reject if projected raw kernel remains above 250 ms.",
+    "Reject if combined H2D + kernel + D2H + launch/sync + scatter/compare cannot fit 446.414 ms with margin.",
+    "Reject and close cpu_moe=41 + top768 if this coalesced layout fails, because raw scalar, raw warp, CPU batch, source-only overlap, and exact raw residency have already been closed."
+  ],
+  "decision": {
+    "next_source_edit_allowed": true,
+    "allowed_scope": "default-off transposed-pool prefill timing and compare diagnostics only",
+    "strict_cold_performance_allowed": false,
+    "sota_changed": false
+  }
+}
