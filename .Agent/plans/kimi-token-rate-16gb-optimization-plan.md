@@ -67331,3 +67331,73 @@ Decision:
 - Revert source commit `a38cad83c`.
 - Do not enable combined up/gate IO in the repro script.
 - Keep the current accepted runtime defaults unchanged.
+
+## Phase 7KX - post-revert current-head n32 no-profile baseline
+
+Timestamp: 2026-07-05 17:18:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Re-establish a strict current-head n32 no-profile baseline after rejecting and
+  reverting 7KW.
+- Avoid judging the next runtime experiment against a stale or diagnostic-heavy
+  n32 run.
+- Keep the accepted n96 SOTA unchanged unless a future n96 confirmation beats
+  it.
+
+Why this is needed:
+
+- The accepted n32 reference is still Phase 7JY script-default:
+  `22667.39 ms / 31`, `1.37 tok/s`.
+- Recent current-head n32 diagnostics have varied:
+  - 7KQ no-profile current-head: `23693.92 ms / 31`, `1.31 tok/s`;
+  - 7KV copy/io profile diagnostic: `23776.55 ms / 31`, `1.30 tok/s`;
+  - 7KW rejected source experiment: `23278.73 ms / 31`, `1.33 tok/s`.
+- 7KU current-head n96 did reproduce the accepted path:
+  `56613.00 ms / 77`, `1.36 tok/s`, slightly faster than 7JY n96.
+- Before another source change, we need a post-revert no-profile n32 baseline at
+  the exact current commit `b94093a6c`.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard b94093a6c
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7kx-current-head-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If current-head n32 is close to 7JY script-default, keep using
+  `22667.39 ms / 31` as the n32 acceptance reference.
+- If current-head n32 is materially slower while all gates pass, record the
+  variance and use this run as an additional same-commit comparison for the
+  next experiment, but do not lower the acceptance bar for SOTA promotion.
+- If any hard gate fails, stop and debug before more source experiments.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record source commit, run directory, command, output, TTFT, decode, token
+  rate, memory, swap, IO counters, and comparison with 7JY/7KU.
