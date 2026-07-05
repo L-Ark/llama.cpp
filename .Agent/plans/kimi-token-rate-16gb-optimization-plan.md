@@ -83840,3 +83840,104 @@ cat disk_inventory.tsv
 cat repo_tool_refs.txt
 cat decision.md
 ```
+
+## Phase 7OE - IQ2_XXS conversion feasibility and space accounting
+
+Status: planned.
+
+Timestamp: 2026-07-06 06:31 CST.
+
+Reason:
+
+- Phase 7OD found no valid local Kimi imatrix data file and no local Kimi
+  `IQ2_XXS` GGUF shard set.
+- It also found only `87.790 GiB` available disk on the scanned filesystem,
+  while the current Kimi `IQ3_S` shard set is `377.549 GiB`.
+- Before spending more source work on `IQ2_XXS`, determine whether an asset path
+  is possible from local inputs and how much disk/external storage is required.
+- This is still part of token-rate optimization because Phase 7OA showed
+  `IQ2_XXS` could reduce MoE movement by `32.18%`, but asset feasibility is now
+  the limiting bottleneck.
+
+Goal:
+
+- Produce a reproducible feasibility decision for a Kimi `IQ2_XXS` asset path.
+- Quantify:
+  - whether `llama-quantize` can safely produce `IQ2_XXS` from the locally
+    available Kimi `IQ3_S` shards;
+  - whether an imatrix is mandatory and whether a valid one exists;
+  - whether conversion can be done one shard at a time without needing full
+    input plus full output resident on the same filesystem;
+  - expected output size and temporary space for full GGUF conversion;
+  - expected expert-pack size if only MoE tensors are packed;
+  - minimum cleanup or external-storage requirement.
+- Do not run full quantization.
+- Do not run model inference.
+- Do not download assets.
+- Do not edit source.
+- Do not promote SOTA.
+
+Method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7oe-iq2xxs-conversion-feasibility`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `quantize_help.txt`;
+   - `imatrix_help.txt`;
+   - `gguf_inventory.tsv`;
+   - `tensor_type_inventory.tsv`;
+   - `conversion_space_estimate.md`;
+   - `expert_pack_space_estimate.md`;
+   - `decision.md`.
+3. Pull the latest pushed plan commit on the server before running:
+   `git reset --hard 6e85b57fd`.
+4. Inspect local tool behavior only through help/version and metadata:
+   - `build-cuda-batch/bin/llama-quantize --help`;
+   - `build-cuda-batch/bin/llama-imatrix --help`;
+   - available GGUF inspection tools or lightweight Python metadata parsing.
+5. Inventory the real current Kimi `IQ3_S` shard set:
+   - path;
+   - per-shard size;
+   - total size;
+   - tensor types by rough category:
+     dense/attention/norm/output vs MoE up/gate/down.
+6. Check conversion constraints:
+   - whether quantizing from already quantized `IQ3_S` is technically allowed;
+   - whether it is acceptable for quality. If only `IQ3_S` source is available,
+     treat this as high-risk/rejected unless the tool/docs explicitly support
+     it and a later strict n96 quality gate can validate it.
+   - whether `IQ2_XXS` requires an imatrix path for `llama-quantize`;
+   - whether missing imatrix blocks conversion.
+7. Estimate space:
+   - lower bound from current `IQ3_S` size and Phase 7NZ byte ratio;
+   - upper bound using full output plus input plus one-shard temporary file;
+   - expert-pack-only lower bound using observed expert-pack sizes and
+     `IQ2_XXS/IQ3_S` byte ratio;
+   - compare all estimates to `87.790 GiB` available.
+8. Decide the next valid path:
+   - if local conversion is impossible, record the exact blocker and return to
+     current `IQ3_S` runtime optimization;
+   - if conversion needs only external storage or cleanup, record exact bytes;
+   - if a minimal expert-only conversion path exists without full GGUF output,
+     write the next plan for a small non-model smoke of that pack builder;
+   - if an imatrix must be generated, write the next plan for imatrix generation
+     feasibility under 16GB host RAM.
+
+Acceptance:
+
+- Accept this phase only if it produces a reproducible `decision.md` with enough
+  details to choose the next asset step.
+- Reject any conclusion that assumes a usable imatrix or `IQ2_XXS` shard set
+  without a concrete local path.
+- Reject any full conversion, model inference, download, or source edit in this
+  phase.
+
+Reproducibility:
+
+- Commit and push this 7OE plan before running the audit.
+- Commit and push the 7OE result before any conversion, source activation, or
+  benchmark.
+- The run directory must include the exact commands and scripts used to produce
+  every estimate.
