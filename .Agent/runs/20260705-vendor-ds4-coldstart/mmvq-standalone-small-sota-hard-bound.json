@@ -1,0 +1,103 @@
+{
+  "accepted_sota_reference": {
+    "accepted_decode_ms_estimate": 31047.446709999997,
+    "decoded_tokens_estimate": 136.60876552399998,
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_gate_ms": 33617.688744
+  },
+  "artifact": "mmvq-standalone-small-sota-hard-bound",
+  "bound_rows": [
+    {
+      "call_weighted_gib": 27.7412109375,
+      "gate_penalty_ms_est": 16.384835253137023,
+      "hot_save_ms_zero_kernel": 529.8379999999999,
+      "kernel_ms_at_measured_mmvq_bandwidth": 100.41914285714284,
+      "net_saving_ms_before_scatter_sched": 320.9587040265341,
+      "note": "Positive only before extra scatter/scheduler/implementation overhead; correctness is unproven for logit-changing MMVQ.",
+      "payload_mib": 272.0,
+      "projected_decode_ms": 30726.488005973464,
+      "projected_eval_tok_s_before_scatter_sched": 4.445960940848241,
+      "standalone_h2d_d2h_ms_scaled": 92.0753178631859,
+      "top_n": 64
+    },
+    {
+      "call_weighted_gib": 44.15185546875,
+      "gate_penalty_ms_est": 147.4635172782332,
+      "hot_save_ms_zero_kernel": 855.7039999999998,
+      "kernel_ms_at_measured_mmvq_bandwidth": 159.8232857142857,
+      "net_saving_ms_before_scatter_sched": 401.87362557890947,
+      "note": "Positive only before extra scatter/scheduler/implementation overhead; correctness is unproven for logit-changing MMVQ.",
+      "payload_mib": 544.0,
+      "projected_decode_ms": 30645.57308442109,
+      "projected_eval_tok_s_before_scatter_sched": 4.457699816794945,
+      "standalone_h2d_d2h_ms_scaled": 146.54357142857145,
+      "top_n": 128
+    },
+    {
+      "call_weighted_gib": 62.15625,
+      "gate_penalty_ms_est": 409.6208813284256,
+      "hot_save_ms_zero_kernel": 1215.129,
+      "kernel_ms_at_measured_mmvq_bandwidth": 224.9965714285714,
+      "net_saving_ms_before_scatter_sched": 374.20993738078386,
+      "note": "Positive only before extra scatter/scheduler/implementation overhead; correctness is unproven for logit-changing MMVQ.",
+      "payload_mib": 1088.0,
+      "projected_decode_ms": 30673.236772619213,
+      "projected_eval_tok_s_before_scatter_sched": 4.453679490582657,
+      "standalone_h2d_d2h_ms_scaled": 206.30160986221904,
+      "top_n": 256
+    },
+    {
+      "call_weighted_gib": 73.266845703125,
+      "gate_penalty_ms_est": 671.778245378618,
+      "hot_save_ms_zero_kernel": 1436.8120000000006,
+      "kernel_ms_at_measured_mmvq_bandwidth": 265.2153095238095,
+      "net_saving_ms_before_scatter_sched": 256.6398714532253,
+      "note": "Positive only before extra scatter/scheduler/implementation overhead; correctness is unproven for logit-changing MMVQ.",
+      "payload_mib": 1632.0,
+      "projected_decode_ms": 30790.80683854677,
+      "projected_eval_tok_s_before_scatter_sched": 4.436673785143575,
+      "standalone_h2d_d2h_ms_scaled": 243.17857364434778,
+      "top_n": 384
+    }
+  ],
+  "created_at_utc": "2026-07-05T08:00:22Z",
+  "decision": {
+    "reason": "Standalone MMVQ is rejected for 10 tok/s, but top128 has a small positive SOTA-only bound (~4.46 tok/s before integration overhead). Because compare-only top1 passed while op-level error is nonzero, a logit-changing skip/write path must start with correctness-only top1 validation, not a strict cold SOTA benchmark.",
+    "sota_changed": false,
+    "verdict": "allow_source_probe_after_plan_commit"
+  },
+  "implementation_boundary": {
+    "default_path": "must be unchanged when env is unset",
+    "first_verifier": "llama-results fixed-text top1 with direct pool top128 and MMVQ skip enabled; require same_top1 == n_tokens, first_mismatch_pos == -1, no OOM/no swap under 16GB cgroup",
+    "rollback": "if top1 mismatches or strict cold does not beat 4.4 / violates TTFT/RAM/correctness, record rejected and do not promote; default-off source may be kept only if diagnostic infrastructure is useful and default path is proven unchanged",
+    "source_change": "default-off only; add GGML_MOE_STREAM_MMVQ_HOT_BATCH_SKIP=1 plus report env, before CPU fallback; use direct hot pool resident src0 and F32 src1 rows; write dst and clear matrix_row_counts only on CUDA success.",
+    "strict_cold_benchmark": "allowed only after top1 passes; strict France must beat 4.4, TTFT <= 33617.688744 ms, RAM/page-cache <= 16GB, correctness coherent"
+  },
+  "inputs": {
+    "candidate_screen": ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-exact-decode-updown-candidate-screen.json",
+    "direct_manifest": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.offset_manifest.csv",
+    "mmvq_compare_validation": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-resident-compare-probe-validation.json"
+  },
+  "measured_probe_basis": {
+    "compare_only_top1_same": 145,
+    "compare_only_top1_tokens": 145,
+    "kernel_source_bandwidth_gib_s": 276.25420958795564,
+    "op_level_max_abs": 0.000209331512,
+    "op_level_mean_abs_avg_records": 9.627885090312974e-08,
+    "top128_projected_d2h_ms": 71.93914285714285,
+    "top128_projected_h2d_ms": 74.60442857142858,
+    "top128_projected_kernel_ms": 159.8232857142857
+  },
+  "not_10tok_route": true,
+  "preferred_probe_shape": {
+    "cpu_moe": 40,
+    "direct_pool_mib": 544,
+    "direct_prefill_limit": 128,
+    "top_n": 128,
+    "why": "Top128 has the best projected net saving (~402 ms before scatter/scheduler) while keeping pool payload small enough to limit gate-cache penalty. Top64 has lower net; top256 has larger gate penalty."
+  },
+  "remote_head": "583f08ac2360720dc5cb878efdf8682d4cbe5863",
+  "source_head": "583f08ac2360720dc5cb878efdf8682d4cbe5863",
+  "status": "allow_default_off_top1_skip_write_probe_only"
+}

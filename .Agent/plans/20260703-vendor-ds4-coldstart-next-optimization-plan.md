@@ -43,6 +43,14 @@ Next optimization direction after the lightning candidate:
 4. Do not promote steady-state, warm page-cache, diagnostic trace, or top1-only results as cold SOTA. Cold SOTA must start after `drop_caches` inside the strict runner and must keep total cgroup memory including page cache under `16000000000` bytes.
 5. Every compliant new SOTA must be documented in detail and pushed immediately to `ssd/vendor/deepseek-token-rate-16gb`. Required reproduction metadata: source commit, pushed remote branch, full env/CLI, run path, build command, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, pack/cache counters, and comparison to the previous `4.4 tok/s` SOTA.
 
+Current allowed source probe:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mmvq-standalone-small-sota-hard-bound.json`.
+- Scope: this is not a 10 tok/s route. It is only a small accepted-SOTA candidate because top128 standalone MMVQ projects about `401.874 ms` net saving before scatter/scheduler overhead, i.e. about `4.458 tok/s` on paper.
+- Source edit allowed only after this artifact is committed: add a default-off pre-CPU-fallback MMVQ hot-batch skip/write path, proposed env `GGML_MOE_STREAM_MMVQ_HOT_BATCH_SKIP=1`, using direct hot pool top128 (`GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB=544`, `GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT=128`) and clearing `matrix_row_counts` only after CUDA success.
+- First gate is fixed-text `llama-results` top1 only, not a performance benchmark. Required: `same_top1 == n_tokens`, `first_mismatch_pos == -1`, strict 16GB/no-swap cgroup, no OOM, default path unchanged. Because MMVQ compare-only had nonzero op error (`max_abs=0.000209331512`), any top1 mismatch rejects this path before strict cold France.
+- Strict cold France benchmark is allowed only after top1 passes. Promotion still requires `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, 16GB including page cache, coherent France answer, immediate commit/push, and clean pushed-source reproduction.
+
 ### 2026-07-05 Latest Active Plan Override After Sparse-Retained Planner
 
 This section is the latest active plan and supersedes the older active-plan text below when there is any conflict. Historical sections remain as experiment records.
