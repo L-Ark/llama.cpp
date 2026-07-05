@@ -4,6 +4,34 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Larger Exact Hot-Pair Rejected Before Source, Need Payload/Artifact Breakthrough
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。
+
+Latest rebound artifact:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/large-exact-hotpair-rebound-bound-after-membership.json`
+- Inputs: runtime membership validation `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-fused-mmvq-membership-validation.json` and accepted-path VRAM snapshot `.Agent/runs/20260705-vendor-ds4-coldstart/vram-footprint-snapshot-reconciliation.json`.
+- Accepted decode bound: accepted decode window `30812.261708 ms`, target decode time for `10 tok/s` `13557.39515152 ms`, required saving `17254.86655648 ms`.
+- Accepted VRAM basis: GPU total `32109 MiB`, accepted free `238 MiB`, accepted CUDA model `17339 MiB`, accepted gate slot payload `13566 MiB`, prior cpu41 recovered VRAM estimate `3264 MiB`.
+
+Hard-bound conclusions:
+
+- Top48 remains closed by runtime membership coverage: only `3441.406 ms / 24079.423 ms` estimated up/down CPU fallback is hit by the current top48 profile.
+- Top1024 is rejected before source. It is the first frontier point that reaches the prior required saving, but only barely: estimated saving `17261.427 ms`, projected zero-overhead decode `13550.834708 ms`, projected zero-overhead `10.0048 tok/s`, only `6.560 ms` slack to `10 tok/s`.
+- Top1024 payload is `8704 MiB` up/down. It does not fit while preserving the accepted gate cache: shortfall is `8466 MiB` on cpu40, or still `5202 MiB` even after the prior cpu41 VRAM recovery estimate, before workspace/allocator overhead.
+- Top1500 has a better zero-overhead saving (`20398.876 ms`) but needs `12750 MiB` up/down payload. Even with cpu41 it would require stealing about `9248 MiB` from the accepted gate cache, leaving only about `4318 MiB` of the accepted `13566 MiB` gate payload. That would likely destroy the current gate-hit path and TTFT margin.
+- Decision: no runtime source edit is allowed for raw larger exact hot-pair residency. Membership coverage and VRAM/overhead prove that top1024/top1500 cannot be a safe next implementation step under the current representation.
+
+Updated next executable plan:
+
+1. Commit and push the rebound hard-bound artifact and this plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+2. Do not implement top48 MMVQ write/skip, raw top1024 exact up/down residency, or raw top1500 exact up/down residency in source.
+3. Reopen only routes that change the bytes/coverage frontier before code: exact payload reduction, a compatible alternate artifact/representation, or a model/routing change with a verifier that proves fixed-text top1 before performance.
+4. Full 4Expert GGUF remains the nearest alternate artifact class but is disk-blocked; it requires explicit user approval for cleanup/relocation before empirical testing. Do not delete files without approval.
+5. Any new source route still requires a pre-code hard-bound artifact with exact bytes, VRAM, host RAM/page-cache, TTFT impact, correctness gate, rollback criteria, and expected token-rate ceiling. No strict cold SOTA benchmark is allowed from diagnostic probes alone.
+6. Promotion remains unchanged: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and a semantically correct/coherent France answer, followed by immediate source/artifact push and clean pushed-source reproduction.
+
 ### 2026-07-06 Latest Active Plan: Top48 Runtime Membership Rejected, Rebound Larger Exact Hot-Pair Route
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA：
