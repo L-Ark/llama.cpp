@@ -85317,3 +85317,126 @@ RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-231933Z-phase7oi-priority-wra
 RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-232250Z-phase7oi-priority-wrapper-n96-repeat \
   scripts/kimi-phase7og-priority-repro.sh
 ```
+
+## Phase 7OJ - external prebuilt IQ2_XXS asset feasibility refresh
+
+Status: planned.
+
+Timestamp: 2026-07-06 09:28 CST.
+
+Reason:
+
+- The current local `IQ2_XXS` path was previously blocked by missing valid Kimi
+  imatrix, missing local Kimi `IQ2_XXS` GGUF/expert-pack assets, and insufficient
+  disk for local conversion.
+- The current runtime/source support situation has changed since early lower-bit
+  audits:
+  - default-off `IQ2_XXS` CUDA prompt math/selftest support was added;
+  - decode-side generic CUDA type support exists;
+  - full runtime validation still requires a real Kimi `IQ2_XXS` GGUF shard set
+    and then an expert-pack path.
+- A new external search found a Hugging Face model repository that appears to
+  contain prebuilt `IQ2_XXS` Kimi-K2.7-Code GGUF shards:
+  `AesSedai/Kimi-K2.7-Code-GGUF`.
+- Before downloading anything, perform a reproducible metadata-only audit:
+  confirm exact shard names, sizes, total bytes, remote metadata, local disk
+  headroom, and whether the asset can support a future strict cold-start n32/n96
+  test under the 16GB host RAM gate.
+
+Current bottleneck:
+
+- Current n96 production repeat still moves about `293.72 GiB` of expert-pack
+  data for `77` decode tokens, with `50.355 s` `io_uring` wait.
+- Current byte mix shows the supported all-expert `IQ2_S` target saves only
+  `15.74%`, below the raw12 `20%` threshold.
+- A true `IQ2_XXS` asset remains one of the few byte-reduction directions that
+  can plausibly clear the movement threshold, but only if output quality remains
+  semantically correct.
+
+Theory and hard bound:
+
+- Phase 7OE dry-run estimated full Kimi `IQ2_XXS` output size around
+  `254735.35 MiB` (`248.765 GiB`) from the local `IQ3_S` source.
+- If an external prebuilt shard set has comparable size, it may reduce expert
+  movement by roughly `32%` versus the current measured byte mix, matching the
+  earlier `all expert -> IQ2_XXS` budget.
+- Raw movement bound:
+  - current runtime: `3.797 GiB/token`;
+  - `32%` byte reduction: about `2.58 GiB/token`;
+  - at the measured current runtime effective throughput, the movement-only
+    bound improves from about `1.54 tok/s` to about `2.27 tok/s`;
+  - this still does not reach `5 tok/s` alone, but it is one of the only
+    remaining changes with a >20% hard byte bound.
+- Risks:
+  - lower-bit quality may fail the France semantic gate;
+  - the remote model may use different shard naming, tensor types, metadata, or
+    tokenizer/chat template;
+  - local disk may still be insufficient for full download plus expert-pack
+    generation;
+  - runtime may need more source support before prompt/decode can pass.
+
+Audit method:
+
+1. Commit and push this plan before running the audit.
+2. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7oj-external-iq2xxs-asset-audit`
+3. Use metadata-only network calls. Do not download model shards.
+4. Query the Hugging Face model API for:
+   - model id;
+   - siblings;
+   - shard paths under `IQ2_XXS/`;
+   - LFS sizes and object ids where available;
+   - license/tags if returned by the API.
+5. Record local server state:
+   - git commit/branch/status;
+   - free disk on `/root/lfz`;
+   - existing local Kimi model directories;
+   - existing expert-pack assets and sizes;
+   - CUDA/GPU summary.
+6. Compute:
+   - exact remote `IQ2_XXS` total size;
+   - largest shard size;
+   - minimum required disk for full download only;
+   - minimum required disk for download plus expert-pack generation;
+   - whether current disk can support either path.
+7. Produce:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `hf_model_api.json`;
+   - `iq2xxs_siblings.tsv`;
+   - `asset_feasibility.json`;
+   - `decision.md`;
+   - `phase7oj_external_iq2xxs_audit.py`.
+
+Decision rule:
+
+- Do not download anything in 7OJ.
+- If the remote `IQ2_XXS` shard set is missing, incomplete, or metadata cannot
+  prove sizes, keep the path blocked.
+- If total remote size plus required staging/expert-pack space exceeds current
+  disk, keep the path blocked and record exact missing GiB.
+- If the asset exists and disk is sufficient for at least a download-only
+  staging path, write a separate next plan for:
+  - controlled shard download with checksums;
+  - expert-pack generation or direct-GGUF test;
+  - strict n32 France quality gate;
+  - n96 repeat only after n32 passes.
+- If runtime support gaps remain visible from metadata/type names, write a
+  source-support plan before downloading.
+
+Acceptance:
+
+- This phase is accepted if it produces a reproducible metadata decision with
+  exact remote sizes and local space accounting.
+- It cannot promote SOTA because no model inference is run.
+- Result must be committed and pushed before any follow-up.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7oj-external-iq2xxs-asset-audit
+mkdir -p "$RUN"
+python3 "$RUN/phase7oj_external_iq2xxs_audit.py"
+cat "$RUN/decision.md"
+```
