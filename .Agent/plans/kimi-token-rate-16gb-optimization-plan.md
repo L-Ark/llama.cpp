@@ -65351,3 +65351,106 @@ Decision update:
 - If pursuing the libgomp/wait bucket later, first prove that a specific barrier
   can be removed or overlapped without changing routing/math. Do not use perf
   self-time alone as the implementation bound.
+
+## Phase 7KM - CPU/file-backed fallback reduction upper-bound refresh
+
+Timestamp: 2026-07-05 12:52:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Decide whether the next source implementation should try to reduce decode
+  CPU/file-backed fallback work.
+- Use current post-7JY evidence:
+  - 7KG fallback profile;
+  - 7KL perf profile;
+  - historical rejected direct-buffer, anonymous-cache, and mmap-advice probes.
+- Do not change runtime behavior in this phase.
+
+Why this is needed:
+
+- 7KL proves CPU fallback mmap page faults are expensive, but prior attempts to
+  make mmap cheaper failed:
+  - 7N per-call direct/aligned buffer regressed;
+  - 7Z anonymous hot cache regressed;
+  - 7BK `MADV_RANDOM` regressed;
+  - 7BP `MADV_WILLNEED` regressed;
+  - 7EZ immediate `MADV_DONTNEED` regressed.
+- Before writing another fallback source patch, the remaining reducible
+  fallback bucket must have a hard upper bound above `2 s` n32 and a new design
+  shape that avoids those failure modes.
+
+Offline experiment:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7kg-post-mixed-fallback-profile-n32
+python3 - <<'PY'
+import csv, collections, re, os
+path = os.path.join(os.environ["RUN"], "fallback-profile.csv")
+def it(r, k):
+    try: return int(float(r.get(k, 0) or 0))
+    except Exception: return 0
+def layer(t):
+    m = re.search(r"blk\.(\d+)\.", t or "")
+    return int(m.group(1)) if m else -1
+rows = []
+for r in csv.DictReader(open(path)):
+    if r.get("phase") != "decode":
+        continue
+    us = it(r, "fallback_us")
+    cnt = it(r, "count")
+    eb = it(r, "expert_bytes")
+    calls = it(r, "calls")
+    rows.append({
+        "tensor": r.get("tensor", ""),
+        "expert": it(r, "expert_idx"),
+        "type": r.get("src0_type", ""),
+        "layer": layer(r.get("tensor", "")),
+        "us": us,
+        "count": cnt,
+        "calls": calls,
+        "bytes": cnt * eb,
+        "expert_bytes": eb,
+    })
+total_us = sum(r["us"] for r in rows)
+total_bytes = sum(r["bytes"] for r in rows)
+print("decode_total_ms", round(total_us / 1000.0, 3))
+print("decode_total_gib", round(total_bytes / (1024**3), 3))
+by_type = collections.Counter()
+by_layer = collections.Counter()
+by_key = collections.Counter()
+key_bytes = {}
+for r in rows:
+    by_type[r["type"]] += r["us"]
+    by_layer[r["layer"]] += r["us"]
+    k = (r["tensor"], r["expert"], r["expert_bytes"])
+    by_key[k] += r["us"]
+    key_bytes[k] = r["expert_bytes"]
+print("by_type_ms", {k: round(v/1000.0, 3) for k, v in by_type.items()})
+print("top_layers_ms", [(k, round(v/1000.0, 3)) for k, v in by_layer.most_common(10)])
+items = by_key.most_common()
+for n in [8,16,32,64,128,256,512]:
+    sel = items[:n]
+    us = sum(v for _, v in sel)
+    mem = sum(key_bytes[k] for k, _ in sel)
+    print("top_keys", n, "ms", round(us/1000.0, 3), "share", round(100*us/total_us, 2), "mib", round(mem/(1024**2), 2))
+PY
+```
+
+Decision rule:
+
+- If total decode fallback is below `2 s`, reject fallback reduction.
+- If total is above `2 s` but every feasible non-rejected implementation would
+  require one of the already rejected patterns, reject source changes.
+- If a small hotset below `512 MiB` covers `> 1.5 s` and avoids per-call reads,
+  write a new source plan.
+- If only a `> 1 GiB` cache reaches meaningful coverage, reject under the 16GB
+  host-RAM rule unless a new RAM budget source is identified.
+- This phase is offline only and cannot promote SOTA.
+
+Reproducibility:
+
+- Use 7KG, a strict cold-start run that already passed all hard gates.
+- Record the exact script output and decision here.
+- Commit and push result before any source changes.
