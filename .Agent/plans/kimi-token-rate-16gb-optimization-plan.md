@@ -72249,3 +72249,163 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record run directory, source commit, build status, metrics, output, memory,
   activation absence, and comparison with 7KZ/7JY.
+
+### Phase 7LZ result
+
+Timestamp: 2026-07-06 02:14:00 CST.
+
+Status: accepted reproducibility guard; no SOTA promotion.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-084317Z-phase7lz-current-default-n96`
+
+Source:
+
+- `0f0fcf9ce`, default path with shared-IO source reverted.
+
+Gates:
+
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- quality `pass`;
+- manual semantic quality `pass`;
+- TTFT `76568.16 ms`;
+- decode `56767.97 ms / 77`, `1.36 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- shared-IO activation match count `0`.
+
+Counters:
+
+- expert-pack iouring bytes `315379728384`;
+- iouring wait `50857238 us`;
+- iouring batches `12722`;
+- iouring inflight avg `3.37`;
+- current-down worker `8077294 us`;
+- down hit rate `73.0%`;
+- upgate hit rate `44.1%`.
+
+Comparison:
+
+- 7JY accepted source/runtime SOTA n96:
+  - decode `57169.16 ms / 77`, `1.35 tok/s`;
+  - TTFT `73810.16 ms`.
+- 7KZ current-head n96:
+  - decode `56777.55 ms / 77`, `1.36 tok/s`;
+  - TTFT `78143.95 ms`.
+- 7LZ:
+  - decode `56767.97 ms / 77`, `1.36 tok/s`;
+  - TTFT `76568.16 ms`.
+
+Interpretation:
+
+- The current default path is stable at the same n96 band as 7KZ.
+- 7LY's faster n32 result should be treated as variance, not a new promoted
+  optimization.
+- The main n96 counter remains iouring wait (`50.857 s`) inside a `56.768 s`
+  decode, but 7LX proved that reducing this counter alone can regress endpoint
+  wall time.
+
+Decision:
+
+- Keep current baseline as the post-revert default path.
+- Do not promote any new source SOTA from 7LZ.
+- Next diagnostic must explain endpoint overlap, not just raw iouring wait.
+
+## Phase 7MA - endpoint-overlap attribution diagnostic
+
+Timestamp: 2026-07-06 02:18:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Identify which non-IO or synchronization bucket explains why 7LX lowered raw
+  iouring wait but worsened decode wall time.
+- Use the current default path only; do not re-enable 7LX.
+- Produce a measured next target before any source change.
+
+Why this is needed:
+
+- 7LZ n96 still spends `50.857 s` in iouring wait, but 7LX showed:
+  - raw iouring wait improved by about `1.08 s` in n32;
+  - endpoint decode regressed by about `0.56 s`.
+- Therefore the next source change must be based on endpoint-overlap evidence:
+  - H2D enqueue/copy timing;
+  - foreground IO wait by op;
+  - current-down worker overlap;
+  - whether waits are hidden behind up/gate/down compute or exposed on the
+    critical path.
+
+Experiment:
+
+- Run current default n32 with targeted diagnostics only:
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`;
+  - `GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv`;
+  - `GGML_MOE_COPY_PROFILE_H2D=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv`;
+  - `GGML_MOE_UP_GATE_LAYER_PROFILE=1`;
+  - `GGML_MOE_UP_GATE_LAYER_PROFILE_TOP=96`.
+- This is diagnostic and may perturb timing; it cannot promote SOTA.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 0f0fcf9ce
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ma-endpoint-overlap-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=$'GGML_MOE_IO_BATCH_PROFILE_OUT='"$RUN"'/io-batch-profile.csv\nGGML_MOE_IO_WAIT_TRACE_OUT='"$RUN"'/io-wait-trace.csv\nGGML_MOE_COPY_PROFILE_OUT='"$RUN"'/copy-profile.csv\nGGML_MOE_COPY_PROFILE_H2D=1\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT='"$RUN"'/current-down-overlap-profile.csv\nGGML_MOE_UP_GATE_LAYER_PROFILE=1\nGGML_MOE_UP_GATE_LAYER_PROFILE_TOP=96' \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for the France prompt;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+
+Analysis:
+
+- Compare exposed wall buckets:
+  - `io-batch-profile.csv` foreground `runtime_load` wait/wall by tensor kind;
+  - `io-wait-trace.csv` wait calls where inflight drains to zero;
+  - `copy-profile.csv` H2D/host/enqueue wall by op and tensor;
+  - current-down worker profile;
+  - up/gate layer/type summary.
+- Decide whether the next source target is:
+  - H2D enqueue/copy overhead;
+  - exposed low-inflight wait;
+  - current-down overlap slack;
+  - CPU synchronization/thread overhead;
+  - or no measured bucket above `1 s`.
+
+Decision rule:
+
+- If a measured bucket above `1 s` has a credible source fix that does not
+  repeat rejected combined/split/shared/refill/depth paths, write the source
+  plan before coding.
+- If no such bucket exists, reject more IO-scheduler work and move to a
+  different bottleneck family.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record run directory, metrics, generated CSV files, aggregated summaries, and
+  the next implementation decision.
