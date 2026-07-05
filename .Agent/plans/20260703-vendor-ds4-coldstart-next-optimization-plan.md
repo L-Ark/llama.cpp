@@ -4,6 +4,46 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-05 Latest Plan: Post-MMVQ Non-Duplicate Gate
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续不能从已关闭路线直接继续写 runtime 代码，必须先在本节或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下写清新的硬性上界、正确性门槛和复现信息。
+
+Current accepted strict cold SOTA 仍然是 `4.4 tok/s`：
+
+- Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
+- Current-head no-trace guard: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Guard metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Latest pushed head before this plan update: `1c63249c0818a485c36e3aa307311c8579a2cca8` (`vendor-ds4: reject mmvq hot skip top1`) on local branch `feat/ds4-moe-stream-on-vendor`, pushed to `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+- Git identity for future pushes: `L-Ark <fliangae@connect.ust.hk>`
+- Promotion gate remains strict: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, France answer semantically correct and coherent, source plus artifacts committed and pushed, then clean pushed-source reproduction.
+
+Latest rejected/closed routes that must not be repeated without a new hard-bound:
+
+- `LLAMA_DEEPSEEK4_LIGHTNING_INDEXER=1` strict-cold recheck tied SOTA only: `eval_tok_s=4.4`, `TTFT=33269.766728 ms`, RAM/correctness OK, decision `rejected_tie_not_new_sota`. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-lightning-indexer-recheck-result.json`.
+- Current-head transient MXFP4 repack is closed by bound: zero-overhead all up/down route only `~4.58 tok/s`, far below the `10 tok/s` target. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/transient-repack-current-head-bound.json`.
+- Standalone MMVQ hot-resident skip/write is rejected before strict cold benchmark. Fixed-text top1 failed with `same_top1=142/145`, `first_mismatch_pos=9`, `max_abs=4.79565`, and the probe's 544 MiB direct pool broke the accepted gate VRAM cache allocation. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mmvq-hot-batch-skip-top1-rejected.json`.
+- The dirty MMVQ runtime source probe was reverted; `llama-cli` and `llama-results` were rebuilt from clean source. No logit-changing source from that probe is retained.
+- Already closed categories remain closed: sparse retained top64 on the current graph, full decode up/down CUDA/streaming, source/page-only prefetch or io_uring, CPU batch rewrite, extra full GPU MoE layer, rectangular `DS4_HOT_DISPATCH`, direct top768 Q8_0, raw/transposed/row-tile exact hot-batch kernels, CUDA graph wrapping, and no-source lookahead/ngram speculation.
+
+Current bottleneck and target math:
+
+- Accepted decode window is about `31047.447 ms`; the `10 tok/s` target requires saving about `17386.570 ms` while keeping total added overhead below about `1.6-1.7 s`.
+- Decode CPU up/down fallback plus source/page exposure is still the only measured component large enough to matter. Gate-only, scheduler-only, source-only, and hot-compute-only routes do not have enough zero-overhead ceiling.
+- Any future source edit must reduce source bytes and exact compute by construction, or introduce a correctness-verified algorithmic path. A top1-only diagnostic, trace run, warm page-cache run, or steady-state run cannot be promoted as cold SOTA.
+
+Next execution plan:
+
+1. Write a current-head non-duplicate mechanism screening artifact before any runtime patch. Required path: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-nonduplicate-next-screening-after-mmvq.json`.
+2. The screening must explicitly answer whether current vendor DeepSeek code already has any usable path for:
+   - compatible draft/MTP/NextN verified speculation;
+   - no-source verifier/speculation that preserves the greedy token stream;
+   - compact resident representation that can keep enough exact up/down work on GPU without violating VRAM or 16GB host/page-cache limits;
+   - predictive async source overlap that happens before the consuming layer/op rather than repeating same-op touch/prefetch.
+3. If the screening finds no existing mechanism with a hard-bound above `10 tok/s`, freeze runtime source changes and update this plan with the blocker: reaching 10 tok/s then requires either a compatible external draft/MTP artifact plus verifier integration, or a new exact compact representation design with measured bandwidth/VRAM/RAM proof.
+4. If a credible mechanism is found, write a separate hard-bound artifact before coding. That artifact must include exact bytes, expected saved milliseconds, kernel/transfer/sync/scatter overhead, VRAM footprint, host RAM/page-cache footprint, TTFT impact, correctness verifier, rollback criteria, full env/CLI, and the expected token-rate ceiling.
+5. Only after the hard-bound shows margin should a default-off source probe be implemented. The first gate is fixed-text `llama-results` top1 under strict 16GB/no-swap cgroup. Strict cold SOTA benchmarking is allowed only after correctness, RAM, TTFT, and default-path preservation pass.
+6. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`. Required metadata: source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, and comparison to the previous `4.4 tok/s` SOTA. After push, do a clean pushed-source reproduction before treating it as accepted.
+
 ### 2026-07-05 Latest Plan: Current Head After Full Up/Down Bound
 
 本节是当前最新生效计划，覆盖下面所有旧的 `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续执行必须先更新本计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下的实验 artifact，再做 runtime 改动或长跑。
