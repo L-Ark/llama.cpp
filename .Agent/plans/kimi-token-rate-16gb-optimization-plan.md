@@ -65142,3 +65142,154 @@ Decision rule:
 - If no new source-actionable hotspot appears, reject CPU-side changes and
   return to movement-byte reduction or model-format changes.
 - Record all metrics, perf findings, and reproduction method, then push.
+
+### 7KL result
+
+Timestamp: 2026-07-05.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7kl-perf-record-n32`.
+
+Source:
+
+- commit `f55d8d8d022168b93990d6596baef16acc676695`.
+- No runtime source changes.
+- Diagnostic wrapper:
+  `perf record -F 49 --call-graph fp -o "$RUN/perf.data" -- scripts/kimi-phase7fb-min-profile-repro.sh`.
+
+Artifacts:
+
+- `perf.data`: `30 MiB`;
+- `perf-report-nochildren.txt`;
+- `perf-report-children.txt`;
+- `perf-report-comm-nochildren.txt`;
+- `perf-report-comm-children.txt`;
+- `perf-report-flat-nochildren.txt`;
+- `perf-report-flat-children.txt`;
+- `perf-report-flat-comm-nochildren.txt`;
+- `perf-report-decode-flat-nochildren.txt`;
+- `perf-report-decode-flat-children.txt`;
+- `perf-script-header.txt`.
+
+Gate metrics:
+
+- exit `0`;
+- quality `pass`;
+- `quality_reason=ok`;
+- manual semantic quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `77253.84 ms`;
+- decode `25060.50 ms / 31`, `1.24 tok/s`;
+- memory peak `15899996160`;
+- memory final `15096172544`;
+- swap max `0`;
+- anon `2822144`;
+- file `14854561792`;
+- kernel `235048960`;
+- inactive_file `8195149824`;
+- active_file `6658777088`;
+- `pgmajfault=960547`;
+- `pgfault=2865172`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`, bytes `126391910400`;
+- iouring submit `51457 us`;
+- iouring wait `20921657 us`;
+- iouring batches `5178`, wait calls `18147`;
+- current-down overlap planned jobs `3673`, worker `3381935 us`;
+- down hit `73.4%`, slots `766`;
+- upgate hit `45.2%`, slots `1735`.
+
+Full-run perf summary:
+
+- samples `152K`;
+- lost samples `0`;
+- flat self-time top rows:
+  - `59.11%` `[kernel] __pv_queued_spin_lock_slowpath`;
+  - `21.55%` `libgomp.so.1.0.0` worker/wait symbol;
+  - `1.67%` `[kernel] io_sq_thread`;
+  - `1.00%` `libgomp.so.1.0.0` worker/wait symbol;
+  - `0.80%` `[kernel] xas_start`;
+  - `0.69%` `[kernel] __filemap_add_folio`;
+  - `0.54%` `ggml_vec_dot_iq3_xxs_q8_K`;
+  - `0.53%` `ggml_vec_dot_iq2_s_q8_K`;
+  - `0.23%` `ggml_vec_dot_q4_0_q8_0`.
+- full-run children-time rows include:
+  - `72.00%` in `asm_exc_page_fault`;
+  - `70.20%` in `filemap_fault`;
+  - `67.14%` in `filemap_add_folio`;
+  - `59.36%` self/children in `__pv_queued_spin_lock_slowpath`;
+  - `30.80%` in `try_to_free_mem_cgroup_pages`;
+  - `30.45%` in `__mem_cgroup_charge`.
+
+Decode-window perf summary:
+
+- Window derived from perf timestamp plus TTFT/decode:
+  `824642.784,824667.844`.
+- samples `29K`;
+- lost samples `0`.
+- flat self-time top rows:
+  - `79.02%` `[kernel] __pv_queued_spin_lock_slowpath`;
+  - `1.06%` `ggml_vec_dot_iq3_xxs_q8_K`;
+  - `0.97%` `[kernel] smp_call_function_many_cond`;
+  - `0.88%` `[kernel] __filemap_add_folio`;
+  - `0.67%` `libgomp.so.1.0.0` worker/wait symbol;
+  - `0.49%` `ggml_vec_dot_iq2_s_q8_K`;
+  - `0.40%` `ggml_vec_dot_q3_K_q8_K`;
+  - `0.20%` `[kernel] io_sq_thread`.
+- decode-window children-time rows include:
+  - `96.38%` in `asm_exc_page_fault`;
+  - `96.30%` in `do_user_addr_fault`;
+  - `94.12%` in `filemap_fault`;
+  - `90.61%` in `filemap_add_folio`;
+  - `89.83%` in `__filemap_add_folio`;
+  - `79.39%` self/children in `__pv_queued_spin_lock_slowpath`;
+  - `46.53%` in `try_to_free_mem_cgroup_pages`;
+  - `45.96%` in `__mem_cgroup_charge`.
+- decode-window vec-dot children/self:
+  - `ggml_vec_dot_q3_K_q8_K`: `37.14%` children, `0.40%` self;
+  - `ggml_vec_dot_iq3_xxs_q8_K`: `35.65%` children, `1.06%` self;
+  - `ggml_vec_dot_iq2_s_q8_K`: `19.92%` children, `0.49%` self;
+  - `ggml_vec_dot_iq4_xs_q8_K`: `5.71%` children, `0.06%` self.
+
+Interpretation:
+
+- Current post-7JY decode is still dominated by file-backed mmap page faults,
+  page-cache insertion, memcg charge/reclaim, and spinlock contention.
+- The arithmetic kernels are not the primary CPU bottleneck:
+  - Q4_0 self-time is below the top decode rows;
+  - IQ3/IQ2/Q3 vec-dot children-time is mostly page-fault path, not math.
+- SQPOLL is not the direct decode CPU hotspot in this perf window:
+  `io_sq_thread` is only `0.20%` decode self-time, and 7KJ already showed
+  SQPOLL-off slows wall time.
+- Libgomp wait is not the main decode self-time in the current SOTA window:
+  it is under `1%` self-time, unlike earlier topologies.
+- This confirms the core issue is not CPU wrapper code or Q4 arithmetic; it is
+  file-backed expert/prompt fallback pages competing inside the strict 16GB
+  cgroup.
+
+Decision:
+
+- Accept 7KL as diagnostic evidence.
+- Do not implement:
+  - Q4_0 CPU arithmetic rewrites;
+  - generic CPU thread-count changes;
+  - SQPOLL removal;
+  - global mmap advice changes;
+  - dense mmap retention;
+  - immediate pack-mmap `MADV_DONTNEED`;
+  - per-call direct fallback buffers;
+  - broad anonymous fallback hot cache.
+- Reason:
+  - the relevant variants were already rejected in 7N/7Z/7BK/7BP/7EZ/7KJ/7KK;
+  - 7KL shows they are attacking the symptom location or moving cost, not
+    reducing the amount of file-backed work on the critical path.
+- Next optimization should reduce the amount of decode work that reaches
+  CPU/file-backed fallback, or reduce required expert movement bytes, rather
+  than trying to make mmap page faults cheaper.
