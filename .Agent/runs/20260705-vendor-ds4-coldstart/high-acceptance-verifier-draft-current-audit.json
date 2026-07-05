@@ -1,0 +1,261 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/high-acceptance-verifier-draft-current-audit.json",
+  "created_utc": "2026-07-05T10:22:04Z",
+  "source_head_before_artifact": "b97c40fa81d916bf3dd7e4c55f25179a604e2674",
+  "branch": "feat/ds4-moe-stream-on-vendor",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "git_identity_required": "L-Ark <fliangae@connect.ust.hk>",
+  "runtime_source_modified": false,
+  "model_run_performed": false,
+  "full_model_download_performed": false,
+  "purpose": "Current hard-bound gate for whether any compatible high-acceptance verifier/draft path can be implemented next toward the 10 tok/s strict-cold vendor DeepSeek objective.",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms_guard": 32087.738292,
+    "ttft_limit_ms": 33617.688744,
+    "ttft_slack_ms": 1529.950452,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "strict_ram_rule": "16GB cgroup including file page cache, MemorySwapMax=0, no swap/OOM",
+    "correctness_ok": true,
+    "accepted_run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "current_head_guard_run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "promotion_gate": {
+    "eval_tok_s": "> 4.4",
+    "ttft_ms": "<= 33617.688744 for accepted SOTA; TTFT-regressed runs may only be recorded as rejected diagnostics",
+    "host_ram": "memory.peak <= 16000000000 bytes, page cache included",
+    "swap": "MemorySwapMax=0 and memory.events oom/oom_kill remain 0",
+    "correctness": "fixed-text top1 gate first, then France generated answer must be semantically correct and coherent",
+    "reproducibility": "record full env/CLI/run paths/metrics and immediately push source plus artifacts to ssd/vendor/deepseek-token-rate-16gb; clean pushed-source reproduction required before accepting a new SOTA"
+  },
+  "local_artifact_inventory": {
+    "search_roots": [
+      "/root/lfz/models",
+      "/root/lfz/runs",
+      "/root/lfz"
+    ],
+    "local_model_files_observed": [
+      "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00001-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00002-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00003-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00004-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00005-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00006-of-00007.gguf",
+      "/root/lfz/models/GLM-5.2-UD-IQ3_XXS/UD-IQ3_XXS/GLM-5.2-UD-IQ3_XXS-00007-of-00007.gguf"
+    ],
+    "compatible_deepseek_draft_or_mtp_file_present": false,
+    "notes": [
+      "No local official DSpark safetensors checkpoint is present under /root/lfz/models.",
+      "No local antirez DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf file is present.",
+      "Only the accepted target DeepSeek GGUF is locally available for the vendor strict-cold path."
+    ]
+  },
+  "external_observations_2026_07_05": {
+    "official_dspark_huggingface_api": {
+      "url": "https://huggingface.co/api/models/deepseek-ai/DeepSeek-V4-Flash-DSpark",
+      "status": 200,
+      "id": "deepseek-ai/DeepSeek-V4-Flash-DSpark",
+      "sha": "62af8fffb2f7030cac4de2f0169f5b8d1101b646",
+      "last_modified": "2026-07-04T03:15:12.000Z",
+      "siblings_count": 74,
+      "observed_weight_format": "48 safetensors shards plus Hugging Face config/tokenizer and custom inference code",
+      "first_weight_files": [
+        "model-00001-of-00048.safetensors",
+        "model-00002-of-00048.safetensors",
+        "model-00003-of-00048.safetensors",
+        "model-00004-of-00048.safetensors",
+        "model-00005-of-00048.safetensors",
+        "model-00006-of-00048.safetensors",
+        "model-00007-of-00048.safetensors",
+        "model-00008-of-00048.safetensors"
+      ]
+    },
+    "official_dspark_config": {
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-DSpark/raw/main/config.json",
+      "status": 200,
+      "architectures": [
+        "DeepseekV4ForCausalLM"
+      ],
+      "model_type": "deepseek_v4",
+      "num_hidden_layers": 43,
+      "num_nextn_predict_layers": 1,
+      "dspark_block_size": 5,
+      "dspark_target_layer_ids": [
+        40,
+        41,
+        42
+      ],
+      "dspark_markov_rank": 256,
+      "expert_dtype": "fp4",
+      "quantization_config": {
+        "activation_scheme": "dynamic",
+        "fmt": "e4m3",
+        "quant_method": "fp8",
+        "scale_fmt": "ue8m0",
+        "weight_block_size": [
+          128,
+          128
+        ]
+      }
+    },
+    "antirez_mtp_huggingface_api": {
+      "url": "https://huggingface.co/api/models/antirez/deepseek-v4-gguf",
+      "status": 200,
+      "id": "antirez/deepseek-v4-gguf",
+      "sha": "9170bf42beb77f38006e016503ecace31f2bd9a0",
+      "last_modified": "2026-05-31T11:28:43.000Z",
+      "siblings_count": 13,
+      "mtp_file": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
+    },
+    "antirez_mtp_head_request": {
+      "url": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/main/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+      "status": 200,
+      "content_length_bytes": 3807602400,
+      "content_length_gib": 3.546106,
+      "etag": "b5f0214286c2c07ad6a751eb3a7f99bc60ce0df5b5ad57a0562ae22cb7f30fd6"
+    },
+    "previous_partial_header_parse": {
+      "source_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/external-dspark-mtp-current-audit.json",
+      "general.architecture": "deepseek4_mtp_support",
+      "tensor_count": 32,
+      "kv_count": 5,
+      "deepseek4.nextn_predict_layers": 1,
+      "deepseek4.mtp_layer_count": 1,
+      "deepseek4.expert_count": 256,
+      "observed_tensor_prefixes": [
+        "mtp.0.hc_head_base.weight",
+        "mtp.0.hc_head_fn.weight",
+        "mtp.0.hc_head_scale.weight",
+        "mtp.0.attn_q_a.weight",
+        "mtp.0.attn_q_b.weight",
+        "mtp.0.attn_kv.weight",
+        "mtp.0.ffn_gate_exps.weight",
+        "mtp.0.ffn_up_exps.weight",
+        "mtp.0.ffn_down_exps.weight",
+        "mtp.0.e_proj.weight",
+        "mtp.0.h_proj.weight"
+      ]
+    }
+  },
+  "current_vendor_source_audit": {
+    "source_support_for_deepseek4_mtp_support_architecture": false,
+    "source_support_for_mtp_0_tensor_runtime": false,
+    "source_support_for_official_dspark_markov_confidence_runtime": false,
+    "generic_speculative_examples_built": [
+      "build-ds4-moe-stream/bin/llama-speculative",
+      "build-ds4-moe-stream/bin/llama-speculative-simple",
+      "build-ds4-moe-stream/bin/llama-lookup",
+      "build-ds4-moe-stream/bin/llama-lookup-stats"
+    ],
+    "why_generic_speculative_is_not_a_solution": [
+      "The generic llama-speculative path requires a standalone draft model with compatible vocab. The antirez file is a supplementary one-layer MTP artifact, not a standalone draft model.",
+      "The official DSpark artifact is safetensors/custom inference code, not a GGUF accepted by the current vendor runner.",
+      "The existing lookup/ngram style speculation has historical DeepSeek4 failures or insufficient acceptance and does not remove the CPU up/down fallback bottleneck."
+    ],
+    "grep_findings": [
+      "src/llama-model.cpp reads nextn_predict_layers for several architectures and can skip/preserve some NextN tensors.",
+      "src/llama-model.cpp contains comments that NextN/MTP tensors are preserved but unused.",
+      "src/llama-arch.cpp maps the generic %s.nextn_predict_layers key.",
+      "No source hit was found for deepseek4_mtp_support, deepseek4.mtp_layer_count, or mtp.0 tensor runtime handling under src."
+    ],
+    "decision": "current_vendor_source_cannot_load_or_execute_the_available_external_mtp_dspark_artifacts"
+  },
+  "rate_bound": {
+    "baseline_tok_s": 4.4,
+    "current_one_token_pass_ms": 227.272727,
+    "target_tok_s": 10.0,
+    "formula": "tok_s = 4.4 * (A + 1) / (C_verify + C_draft), where A is average accepted draft tokens and C_verify + C_draft is measured in units of one current target-token pass.",
+    "required_average_acceptance_if_total_cost_is_one_current_pass": 1.272727,
+    "cost_limits": [
+      {
+        "accepted_draft_tokens_A": 2,
+        "max_C_verify_plus_C_draft_x_one_pass": 1.32,
+        "max_C_verify_plus_C_draft_ms": 300.0,
+        "status": "closed_for_antirez_exact_n2"
+      },
+      {
+        "accepted_draft_tokens_A": 5,
+        "max_C_verify_plus_C_draft_x_one_pass": 2.64,
+        "max_C_verify_plus_C_draft_ms": 600.0,
+        "status": "official_dspark_block_size_but_current_source_union_bound_is_below_10"
+      },
+      {
+        "accepted_draft_tokens_A": 7,
+        "max_C_verify_plus_C_draft_x_one_pass": 3.52,
+        "max_C_verify_plus_C_draft_ms": 800.0,
+        "status": "theoretical_only_without_a_vendor_verifier_or_acceptance_proof"
+      }
+    ],
+    "existing_bound_artifacts": {
+      "forced_batch_target_verifier_diagnostic": {
+        "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/forced-batch-target-verifier-diagnostic.json",
+        "seq_elapsed_seconds": 107.623408161,
+        "batch16_elapsed_seconds": 107.597260262,
+        "seq_over_batch16_speedup": 1.0002430164014988,
+        "conclusion": "current vendor fixed-text path shows no measurable sublinear multi-token target evaluation"
+      },
+      "mtp_union_source_amortization_bound": {
+        "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/mtp-union-source-amortization-bound.json",
+        "window_5_all_non_moe_perfect_batch_tok_s": 8.454,
+        "window_6_all_non_moe_perfect_batch_tok_s": 9.069,
+        "window_8_all_non_moe_perfect_batch_tok_s": 10.512,
+        "conclusion": "W=5/W=6 do not reach 10 even under unrealistic perfect non-MoE batching; W=8 is theoretical-only with no compatible verifier/runtime proof"
+      },
+      "deepseek4_mtp_n2_verifier_cost_bound": {
+        "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-n2-verifier-cost-bound.json",
+        "conclusion": "exact N=2 cannot reach 10 because target verify plus draft must be <= 300 ms while CPU up/down fallback alone is about 139.9 ms/token"
+      }
+    }
+  },
+  "memory_vram_ttft_bound": {
+    "host_ram_current_peak_bytes": 16000000000,
+    "host_ram_current_file_cache_bytes": 15099523072,
+    "mtp_extra_file_bytes": 3807602400,
+    "mtp_extra_file_gib": 3.546106,
+    "full_mtp_read_time_at_1_85_gib_s_ms": 1916.814,
+    "ttft_slack_ms": 1529.950452,
+    "full_mtp_preload_ttft_margin_ms": -386.864,
+    "full_preload_decision": "rejected_for_accepted_sota_candidate_before_any_runtime_code",
+    "mmap_without_touch_decision": "not_sufficient; touched MTP pages still count against the same 16GB cgroup and will either displace target page cache or exceed the strict page-cache budget",
+    "odirect_stream_decision": "not_source_ready; may avoid page cache but adds per-use IO/latency and needs a loader/runtime design plus performance proof",
+    "vram_current_gate_cache_setting": "GGML_MOE_STREAM_ONE_CACHE_MIB=13568 in the accepted path",
+    "vram_mtp_residency_decision": "unproven; placing MTP tensors/workspaces on GPU risks reducing the accepted gate cache and must first account for lost hit rate, workspace, and fallback behavior"
+  },
+  "correctness_requirements_before_any_benchmark": {
+    "fixed_text_top1": "Run llama-results fixed-text target-only vs verifier/draft path under strict 16GB/no-swap cgroup. Any top1 mismatch rejects the path before performance.",
+    "generated_france_prompt": "Please introduce France in a short paragraph. Output must remain semantically correct and coherent.",
+    "small_prompt_set": [
+      "Please introduce France in a short paragraph.",
+      "Explain quantum computing briefly.",
+      "Write a short Python function for Fibonacci.",
+      "Introduce Japan in a short paragraph.",
+      "Summarize climate change in one paragraph."
+    ],
+    "state_correctness": "KV/cache commit and rollback must preserve the exact target greedy stream; speculative/draft tokens cannot contaminate accepted state."
+  },
+  "rollback_rules": [
+    "Reject and revert runtime changes if memory.peak exceeds 16000000000 bytes, swap occurs, or memory.events oom/oom_kill is nonzero.",
+    "Reject as accepted SOTA if TTFT exceeds 33617.688744 ms; commit only as rejected diagnostic if useful.",
+    "Reject before performance if fixed-text top1 differs from target-only at any checked position.",
+    "Reject before performance if France output is semantically wrong or incoherent.",
+    "Reject before performance if default accepted path changes without the explicit verifier/draft mode enabled.",
+    "Reject if target verification is effectively linear in draft length or if preserving the accepted gate cache is impossible."
+  ],
+  "decision": {
+    "status": "no_compatible_high_acceptance_verifier_or_draft_path_available_now",
+    "runtime_patch_allowed_now": false,
+    "full_download_allowed_now": false,
+    "strict_cold_benchmark_allowed_now": false,
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4,
+    "reason": "The only concrete external artifacts are official DSpark safetensors/custom code and antirez supplementary one-layer MTP GGUF. Neither is locally present or loadable by current vendor source. Existing hard bounds show official block-size 5 is below 10 under source-union math, exact N=2 is closed, and current fixed-text batch evaluation shows no target verifier batching speedup. Additional MTP bytes also fail the current full-preload TTFT slack and are unproven under the strict 16GB page-cache budget.",
+    "next_allowed_work": [
+      "Keep runtime source frozen.",
+      "Reopen verifier/draft only if a concrete compatible artifact proves A>=7, or A>=5 with measured sublinear target verification, plus RAM/VRAM/TTFT/correctness accounting.",
+      "Otherwise move to a new non-native representation or algorithm artifact that proves >5.33x effective payload reduction, fixed-text top1 correctness, France correctness, and decode overhead below the top4096 1008.842 ms slack before any code."
+    ]
+  }
+}
