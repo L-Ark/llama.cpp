@@ -122,6 +122,14 @@ Sparse graph/dataflow probe result:
 - Therefore the current CPU-backend one-stream helper cannot implement the top64 sparse graph zero-transfer route. It can cache/compute gate experts, but it returns through CPU memory and has no reusable graph-level GPU gate tensor. It also does not stream the sparse up/down pair rows in the accepted path.
 - Next source work must not layer a logit-changing sparse pair path on this helper. The only viable continuation is a true graph-level retained-tensor design: either change graph/backend scheduling so gate, GLU/up, and selected down hot branch stay on CUDA tensors, or create an equivalent retained GPU buffer with explicit lifetime and no H2D/D2H round trip. Gate recompute, existing per-layer dummy hot manager, and CPU-backend scatter routes remain rejected.
 
+Next retained-GPU sparse path design:
+
+- Design artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-gpu-path-next-design.json`.
+- Code audit result: DeepSeek4 uses the model-specific `src/models/deepseek4.cpp::build_expert_mix` graph path. The generic `GGML_OP_MOE_FUSED_UP_GATE` path in `src/llama-graph.cpp` can fuse up/gate for eligible generic MoE decode graphs, but it does not solve down or final hot/cold placement and is not the final DS4 route.
+- Existing `DS4_HOT_DISPATCH` is the closest graph-level retained mechanism, but its manager allocates dense per-layer `K + P + 1` hot tensors. For the current top64 sparse pair profile this is the already rejected `2507.5-3761.25 MiB` payload class, not the ideal `544 MiB` sparse payload.
+- The next allowed source work is a default-off DS4 graph-level sparse retained-hot branch design/probe. It must use the global top64 pair profile, avoid per-layer dummy inflation, keep hot gate/up/swiglu/down on CUDA tensors or equivalent retained CUDA buffers, and prove scheduler-copy count for the final hot/cold combine before any logit-changing benchmark.
+- The first pass must be a placement/payload/copy-count probe, not a strict cold SOTA run. Reject immediately if it introduces gate recompute, CPU-backend D2H/H2D/scatter, current DS4_HOT dense per-layer payload, or any unbounded scheduler copy that consumes the `18.947 ms` graph-bound margin.
+
 Latest closed decisions:
 
 - Current serial top768 direct prefill is not promotable: combined short diagnostic under `cpu_moe=41`, gate cache `13568 MiB`, direct pool `3264 MiB` succeeded under 16GB/no-swap, but ran direct prefill before gate prefill. Direct top768 prefill was `1745.225 ms`, exceeding accepted TTFT slack by about `1020.09 ms`; at least `58.45%` of that prefill cost must be hidden before top768 can remain viable.

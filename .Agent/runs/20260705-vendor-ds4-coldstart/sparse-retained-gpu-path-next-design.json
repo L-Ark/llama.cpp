@@ -1,0 +1,81 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-retained-gpu-path-next-design.json",
+  "timestamp_utc": "2026-07-05T06:05:00Z",
+  "status": "next_design_after_sparse_graph_probe_rejection",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "input_evidence": {
+    "sparse_graph_probe_validation": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-graph-probe-validation.json",
+    "sparse_graph_probe_status": "rejected_current_dataflow",
+    "probe_rows": 34800,
+    "probe_roles": {
+      "gate": 34800
+    },
+    "src1_h2d_bytes": 570163200,
+    "dst_d2h_bytes": 285081600,
+    "scatter_rows": 34800,
+    "zero_transfer_ready_rows": 0
+  },
+  "code_audit": {
+    "deepseek4_graph_path": {
+      "file": "src/models/deepseek4.cpp",
+      "entry": "build_expert_mix",
+      "finding": "DeepSeek4 uses a model-specific graph path that builds separate gate, up, swiglu, down, weight, and sum operations. The generic llm_graph_context::build_moe_ffn fused-up/gate branch is not the final DS4 path to optimize."
+    },
+    "generic_fused_up_gate": {
+      "files": [
+        "src/llama-graph.cpp",
+        "ggml/src/ggml.c",
+        "ggml/src/ggml-cpu/ggml-cpu.c",
+        "ggml/src/ggml-cuda/moe_stream_batch.cu"
+      ],
+      "env": "GGML_MOE_STREAM_FUSED_UP_GATE",
+      "finding": "This path can fuse up/gate into swiglu for eligible decode graphs, but it does not fuse or retain down, and historical DS4 fused-up/gate runs regressed. It cannot by itself implement the top64 sparse up/down pair route."
+    },
+    "existing_ds4_hot_dispatch": {
+      "files": [
+        "src/llama-deepseek4-hot.cpp",
+        "src/llama-deepseek4-hot.h",
+        "src/models/deepseek4.cpp"
+      ],
+      "env": "DS4_HOT_PROFILE_JSON + DS4_HOT_DISPATCH",
+      "finding": "This is the closest graph-level retained-GPU mechanism, but it allocates dense per-layer K hot experts plus P dummy experts and one padding slot. For the top64 sparse pair profile, this is the rejected 2507.5-3761.25 MiB payload shape rather than the 544 MiB ideal payload."
+    }
+  },
+  "hard_bound": {
+    "paper_route": "graph-level zero-transfer top64 sparse up/down pair route",
+    "tok_s": 10.013888843633731,
+    "margin_ms": 18.947062554683725,
+    "payload_mib": 544,
+    "source": ".Agent/runs/20260705-vendor-ds4-coldstart/mmvq-fused-transfer-hard-bound.json",
+    "implication": "Any backend copy, gate recompute, per-layer dummy payload, CPU scatter, or scheduler split overhead above about 19 ms rejects the route."
+  },
+  "next_allowed_work": {
+    "type": "default_off_design_or_probe_before_runtime",
+    "candidate": "DS4 graph-level sparse retained hot branch, not one-stream helper and not current DS4_HOT dense per-layer manager.",
+    "required_properties": [
+      "Use the top64 sparse pair profile as global selected pairs, not per-layer K dummies.",
+      "Keep gate/up/down hot branch on CUDA tensors or an equivalent retained CUDA buffer through the down result.",
+      "Avoid gate recompute.",
+      "Avoid CPU-backend D2H/H2D and CPU scatter in the hot branch.",
+      "Avoid current DS4_HOT K+P+1 per-layer allocation shape unless a new hard-bound proves it still fits the 18.947 ms margin.",
+      "Prove final hot/cold combination placement and any scheduler copies before any logit-changing benchmark."
+    ],
+    "minimum_first_probe": [
+      "Emit graph/backend placement for every DS4 MoE layer under a proposed sparse-hot branch.",
+      "Count selected hot payload bytes and dummy/padding bytes separately.",
+      "Count all backend copies inserted by the scheduler for hot gate/up/swiglu/down and final hot/cold combine.",
+      "Run fixed-text top1 with no logit changes or compare-only output first.",
+      "Reject immediately if any hidden backend copy or dense per-layer dummy payload appears."
+    ]
+  },
+  "rejected_continuations": [
+    "Adding sparse pair logic on top of ggml_cuda_moe_stream_one.",
+    "Rerunning generic GGML_MOE_STREAM_FUSED_UP_GATE as a SOTA candidate without solving down and final placement.",
+    "Using current DS4_HOT_DISPATCH profile format for top64 sparse pair without a new payload-bound that beats the known dummy inflation.",
+    "Gate recompute."
+  ],
+  "decision": "Proceed only with a graph-level retained sparse-hot design/probe. Do not run a strict cold SOTA benchmark until placement, payload, scheduler-copy count, correctness, RAM, and TTFT gates are proven."
+}
