@@ -61470,3 +61470,153 @@ Decision:
   - narrower pread coalescing only for the small subset with `gap/read < 0.25`;
   - foreground wait hiding for up/gate misses, because IO wait remains much
     larger than enqueue or slot wait.
+
+## Phase 7JQ: narrow low-gap iouring coalescing feasibility
+
+Timestamp: 2026-07-05.
+
+### Design step
+
+Current bottleneck:
+
+- 7IP shows iouring wait is still the dominant measurable movement cost:
+  - `runtime_load` wait `9465.256 ms`;
+  - `current_down_overlap` wait `2726.272 ms`.
+- Direct full-span coalescing is rejected because aggregate `span/read` is about
+  `24x`.
+- A small subset of rows has low gap:
+  - `runtime_load`: `57 / 2420` rows with `gap/read < 0.25`;
+  - `current_down_overlap`: `41 / 860` rows with `gap/read < 0.25`.
+
+Hypothesis:
+
+- If the low-gap subset also carries meaningful iouring wait, a narrow
+  thresholded coalescing path may reduce read count without large IO
+  amplification.
+- If the low-gap subset carries little wait or few reads, implementation risk is
+  not justified.
+
+Theory:
+
+- For a coalesced group with read bytes `R`, gap bytes `G`, and per-batch wait
+  `W`, the hard upper bound is `W`; the practical bound is lower because:
+  - only the first-CQE/random-read latency can be reduced;
+  - extra bytes `G` still consume SSD bandwidth and H2D staging;
+  - the existing `GGML_MOE_IO_SORT_OFFSET=1` already orders reads by offset.
+- Acceptable threshold for a probe:
+  - only same-source, same-tensor batches;
+  - `gap/read <= 0.25`;
+  - `span_bytes <= 1.25 * read_bytes`;
+  - total candidate wait should be at least `3%` of decode time or `> 2 s` on
+    n32 before writing a runtime path.
+
+Experiment:
+
+- Use the existing 7IP run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile`.
+- Join `io-locality-profile.csv` with `io-batch-profile.csv` by `seq`.
+- Compute:
+  - candidate row count;
+  - candidate read bytes, gap bytes, span bytes;
+  - candidate wait and wall;
+  - read jobs saved upper bound if adjacent/low-gap groups were merged;
+  - percentage of total iouring wait and total decode time.
+
+Decision rule:
+
+- If candidate wait is below `2 s` on n32 or below `3%` of decode time, reject
+  narrow coalescing and do not implement runtime changes.
+- If candidate wait is meaningful, implement default-off
+  `GGML_MOE_IO_COALESCE_GAP_RATIO` and validate with strict n32 before any n96.
+
+### 7JQ result
+
+Timestamp: 2026-07-05.
+
+Source data:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile/io-locality-profile.csv`;
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile/io-batch-profile.csv`;
+- n32 decode baseline for this analysis: `29082.91 ms / 31`, `1.07 tok/s`.
+
+Reproduction command:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile
+python3 - <<'PY'
+import csv, os, collections
+run = "/root/lfz/runs/vendor-kimi-token-rate/20260705-7ip-n32-io-locality-profile"
+loc = {int(float(r["seq"])): r for r in csv.DictReader(open(os.path.join(run, "io-locality-profile.csv")))}
+bat = {int(float(r["seq"])): r for r in csv.DictReader(open(os.path.join(run, "io-batch-profile.csv")))}
+def fl(r, k):
+    try: return float(r.get(k, 0) or 0)
+    except Exception: return 0.0
+def it(r, k):
+    try: return int(float(r.get(k, 0) or 0))
+    except Exception: return 0
+joined = []
+for seq, r in loc.items():
+    if seq in bat:
+        jr = dict(r)
+        for k, v in bat[seq].items():
+            jr["batch_" + k] = v
+        joined.append(jr)
+for thresh in [0.0, 0.05, 0.10, 0.25, 0.50, 1.0]:
+    agg = collections.defaultdict(lambda: collections.Counter())
+    for r in joined:
+        rb, gb = it(r, "read_bytes"), it(r, "gap_bytes")
+        if rb <= 0:
+            continue
+        if gb / rb <= thresh and it(r, "unique_sources") == 1 and it(r, "same_tensor") == 1 and it(r, "read_jobs") > 1:
+            c = agg[r.get("op", "")]
+            c["rows"] += 1
+            c["read_jobs"] += it(r, "read_jobs")
+            c["read_bytes"] += rb
+            c["gap_bytes"] += gb
+            c["span_bytes"] += it(r, "span_bytes")
+            c["wait_ms"] += fl(r, "batch_wait_ms")
+            c["wall_ms"] += fl(r, "batch_wall_ms")
+            c["reads_saved_upper"] += max(0, it(r, "read_jobs") - 1)
+    print("THRESH", thresh, {op: dict(c) for op, c in agg.items()})
+PY
+```
+
+Results:
+
+- Joined rows: `3280`.
+- At `gap/read <= 0.25`:
+  - candidate rows: `4`;
+  - `runtime_load`:
+    - rows `3`;
+    - read jobs `6`;
+    - read bytes `34406400`;
+    - gap bytes `0`;
+    - span/read `1.0`;
+    - wait `7.141 ms`;
+    - wall `7.329 ms`;
+    - reads-saved upper bound `3`;
+  - `current_down_overlap`:
+    - rows `1`;
+    - read jobs `2`;
+    - read bytes `12615680`;
+    - gap bytes `0`;
+    - span/read `1.0`;
+    - wait `1.494 ms`;
+    - wall `1.558 ms`;
+    - reads-saved upper bound `1`;
+  - total candidate wait `8.636 ms`.
+- Even at `gap/read <= 1.0`:
+  - candidate rows: `10`;
+  - total candidate wait only `21.687 ms`.
+
+Decision:
+
+- Reject narrow low-gap coalescing.
+- Reason:
+  - the strict low-gap candidate carries only `8.636 ms` of wait on n32;
+  - this is `0.030%` of decode time, far below the `2 s` / `3%` threshold;
+  - implementing a runtime coalescing path would add complexity and extra
+    failure modes without a credible token-rate bound.
+- Do not implement `GGML_MOE_IO_COALESCE_GAP_RATIO`.
+- Next target should be foreground wait hiding for up/gate misses or another
+  bottleneck with a multi-second theoretical upper bound.
