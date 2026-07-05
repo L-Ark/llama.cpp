@@ -70626,3 +70626,140 @@ Reproducibility:
 
 - Commit and push this plan before running.
 - Save the CSV and summaries in the run directory.
+
+### Phase 7LO result
+
+Timestamp: 2026-07-05 23:32:00 CST.
+
+Status: accepted diagnostic.
+
+Run directory:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-072213Z-phase7lo-bottleneck-audit-n32`
+
+Result:
+
+- source commit: `351a646d1`;
+- exit `0`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- quality `pass`;
+- TTFT `70746.04 ms`;
+- decode `22629.51 ms / 31`, `1.37 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- expert-pack iouring bytes `126391910400`;
+- expert-pack iouring wait `19487803 us`;
+- current-down overlap worker `3169424 us`;
+- down hit rate `73.4%`;
+- upgate hit rate `45.2%`;
+- CPU MoE profile:
+  - up_gate: `1861` calls, `7.831 ms/call`, `cuda_batch=7.751 ms/call`;
+  - down: `2038` calls, `36.968 ms/call`, `cuda_batch=2.093 ms/call`,
+    `fallback_t0=34.832 ms/call`;
+- fallback CSV:
+  - prompt,type=11: `20142.887 ms`, `17.812 GiB`;
+  - prompt,type=22: `19931.582 ms`, `21.384 GiB`;
+  - prompt,type=18: `17215.297 ms`, `19.988 GiB`;
+  - prompt,type=23: `7354.754 ms`, `6.297 GiB`;
+  - prompt,type=2: `3722.159 ms`, `3.476 GiB`;
+  - decode,type=2: `2612.160 ms`, `4.399 GiB`.
+
+Decode Q4_0 fallback by tensor:
+
+- `blk.8.ffn_down_exps.weight`: `434.304 ms`, `0.638 GiB`;
+- `blk.6.ffn_down_exps.weight`: `410.032 ms`, `0.638 GiB`;
+- `blk.9.ffn_down_exps.weight`: `401.464 ms`, `0.661 GiB`;
+- `blk.18.ffn_down_exps.weight`: `380.920 ms`, `0.615 GiB`;
+- `blk.10.ffn_down_exps.weight`: `380.816 ms`, `0.731 GiB`;
+- `blk.7.ffn_down_exps.weight`: `352.584 ms`, `0.623 GiB`;
+- `blk.15.ffn_down_exps.weight`: `252.040 ms`, `0.492 GiB`.
+
+Interpretation:
+
+- Q4_0 decode fallback is visible but only `2.61 s` of a `22.63 s` n32 decode.
+  The best possible endpoint if it vanished without side effects is roughly
+  `31 / (22.63 - 2.61) = 1.55 tok/s`.
+- Phase 7LL-C already showed broad Q4_0 GPU routing removes fallback but
+  regresses speed and fails quality, so Q4_0 cannot be the next blind
+  performance patch.
+- Up/gate accepted CUDA path is larger: `~14.43 s` total `cuda_batch` time
+  (`1861 * 7.751 ms`) and likely contains the next compressible movement or
+  compute bucket.
+- Current counters do not split up/gate `cuda_batch` enough to decide whether
+  to target wait, compute, fuse, D2H, or scatter.
+
+Decision:
+
+- Run a dedicated up/gate profile with `GGML_MOE_UP_GATE_PROFILE_OUT` and
+  `GGML_MOE_UP_GATE_LAYER_PROFILE=1`.
+- Do not edit source until this profile identifies the largest up/gate substage
+  and layer/type distribution.
+
+## Phase 7LP - up/gate stage and layer profile
+
+Timestamp: 2026-07-05 23:34:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Split the up/gate `cuda_batch` bucket into stage, quant, up compute, gate
+  compute, waits, fuse, D2H, scatter, and wall gap.
+- Determine whether the next source optimization should target:
+  - movement wait for cache misses;
+  - compact MMVQ compute;
+  - fuse/D2H/scatter;
+  - a small set of layers;
+  - or no up/gate source change.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 351a646d1
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lp-upgate-profile-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_UP_GATE_PROFILE_OUT=$RUN/up-gate-profile.csv GGML_MOE_BATCH_PROFILE=1 GGML_MOE_UP_GATE_LAYER_PROFILE=1 GGML_MOE_UP_GATE_LAYER_PROFILE_TOP=64" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Analysis to record:
+
+- `up-gate-profile.csv` aggregate by mode/type:
+  wall, stage, quant, up_wait, gate_wait, up_compute, gate_compute, fuse, D2H,
+  scatter, wall gap, stage job counts, cache misses.
+- stderr layer profile top rows.
+- Compare total up/gate wall against decode wall to compute an upper bound.
+
+Decision rule:
+
+- If up/gate wait dominates and is concentrated in one type/layer group, write
+  the next source plan around hiding or reducing those misses without increasing
+  read volume.
+- If compute dominates, inspect compact MMVQ kernels before changing scheduling.
+- If D2H/scatter dominates, target handoff/reduction; otherwise avoid D2H work.
+- If no substage has a `>2 s` n32 upper bound, stop local up/gate work and move
+  back to broader scheduler/perf evidence.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Save CSV and stderr summaries in the run directory.
