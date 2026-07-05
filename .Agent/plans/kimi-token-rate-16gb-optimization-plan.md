@@ -66154,3 +66154,143 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record run directory, exact commit, command shape, output quality, timings,
   memory peak, IO failure counters, and interpretation.
+
+### 7KQ result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `5b06eee77` (`docs: plan current head baseline refresh`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-035043Z-phase7kq-current-head-n32`.
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-035043Z-phase7kq-current-head-n32 \
+      N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75757.54 ms`;
+- decode `23693.92 ms / 31`, `1.31 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `iouring_reads=22647`;
+- `iouring_bytes=126391910400`;
+- `iouring_wait_us=20967599`;
+- `iouring_submit_us=50237`;
+- current-down overlap:
+  `planned_jobs=3673`, `completed_jobs=3673`, `worker_us=3296803`;
+- VRAM cache:
+  - down `hits=9631`, `misses=3489`, hit rate `73.4%`;
+  - upgate `hits=13469`, `misses=16307`, hit rate `45.2%`;
+- CPU fallback pack mmap:
+  `hits=1727`, `misses=9`, `bytes=14260764672`, `fallback_gguf=9`.
+
+Interpretation:
+
+- All hard gates pass:
+  - strict 16GB cgroup;
+  - cold start;
+  - semantic output pass;
+  - TTFT well below the `106331.72 ms * 1.2` gate;
+  - no read/iouring failures.
+- This run is slower than the accepted n32 reference:
+  - current `23693.92 ms`;
+  - accepted reference `22667.39 ms`;
+  - regression/noise `+1026.53 ms`.
+- Do not promote SOTA and do not run n96 from this result.
+- Counters are unchanged in shape from accepted SOTA: the largest visible
+  residual remains iouring wait around `20.97 s`, with current-down overlap
+  still active and useful.
+
+Decision:
+
+- Current head remains valid but does not improve token rate.
+- The next phase should use perf stat on this minimal-profile path to separate:
+  - wall vs task-clock;
+  - kernel/sys time;
+  - page faults and major faults;
+  - context switches;
+  - whether runtime overhead is still dominated by memcg/file-fault lock
+    contention or by user-space scheduling/barrier overhead.
+
+## Phase 7KR - current-head minimal-profile perf-stat attribution
+
+Timestamp: 2026-07-05 14:16:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Attribute the current minimal-profile n32 runtime overhead before source
+  changes.
+- Re-run the accepted runtime path under `perf stat` with `MIN_PROFILE=1`.
+- Compare with 7KQ counters and older 7KI/7KL evidence.
+
+Why this is needed:
+
+- Cache-policy, fallback-cache, mmap-advice, dense-retention, byte-size, and
+  simple IO-depth/thread-count paths have been rejected.
+- 7KQ still shows high iouring wait and high file-backed memory pressure, but
+  minimal-profile metrics do not show whether the remaining wall is mostly:
+  - kernel memcg/file-fault lock contention;
+  - user-space OpenMP/barrier wait;
+  - io_uring submit/wait overhead;
+  - or CUDA wrapper scheduling overhead.
+- The next implementation must target a measured bucket above `2 s`; perf stat
+  is the cheapest current evidence.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 5b06eee77
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7kr-perf-stat-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  perf stat -d -d -d -o "$RUN/perf-stat.txt" -- \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Collect:
+
+- `metrics.txt`;
+- `perf-stat.txt`;
+- cgroup memory files;
+- `stderr.txt` timing and moe summaries.
+
+Decision rule:
+
+- If gates fail, reject the diagnostic and rerun without perf.
+- If perf overhead makes decode slower, treat timings as diagnostic only.
+- If system time/page-fault/memcg remains dominant, do not pursue CUDA graph or
+  small kernel launch changes first.
+- If user-space scheduling/barrier time dominates without corresponding file
+  faults, plan a targeted CPU-wrapper/barrier implementation.
+- No SOTA promotion can come from this diagnostic phase.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record exact run directory, metrics, perf stat summary, and next-source
+  decision.
