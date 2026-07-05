@@ -73803,3 +73803,96 @@ Next direction:
     adding decode critical-path IO.
 - Before implementing either, profile whether `blk.6` q4_down misses occur on
   repeated experts that could be preloaded from the existing route profile.
+
+## Phase 7MI - Q4 down route-reuse profile
+
+Timestamp: 2026-07-06 19:20:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Determine whether `blk.6.ffn_down_exps.weight` Q4_0 routes have enough reuse
+  to support either:
+  - cache-hit-only Q4 GPU production; or
+  - early preload into a small isolated Q4 pool.
+- Do this without Q4 GPU staging, without changing final output, and without
+  using warm cache.
+
+Current bottleneck:
+
+- 7MH proved that preserving the original down pool geometry is necessary but
+  not sufficient.
+- Even with a separate `q4_down` pool, the selected Q4 tensor produced:
+  - q4_down hit rate `65.7%`;
+  - `85` q4_down misses;
+  - decode `23704.49 ms`, slower than default.
+- The missing evidence is whether those misses are unavoidable first-use misses
+  or predictable repeats that a small preload/hit-only policy could cover.
+
+Selected diagnostic:
+
+- Add default-off route profile env:
+  `GGML_MOE_Q4_DOWN_ROUTE_PROFILE_OUT=/path/q4-route-profile.csv`.
+- Optional filter:
+  `GGML_MOE_Q4_DOWN_ROUTE_PROFILE_TENSOR=blk.6.ffn_down_exps.weight`.
+- CPU eligibility may allow Q4_0 down into `ggml_cuda_moe_stream_batch()` when
+  route profile env is set.
+- CUDA batch must:
+  1. record one CSV row per active routed expert with call index, tensor, expert
+     id, destination id, token id, and active count;
+  2. return `false` before VRAM cache lookup/staging/kernel launch;
+  3. preserve CPU fallback output.
+
+Theory and upper bound:
+
+- The 7MH q4_down pool had only `65` slots and still missed `85` times for the
+  selected layer.
+- If the route profile shows unique routed experts for `blk.6` are close to or
+  below the pool size, then preload or better admission could eliminate most Q4
+  misses and reopen a cache-hit-only production test.
+- If unique routed experts are much larger than the pool or the first-use misses
+  dominate, then cache-hit-only Q4 cannot recover the Q4 fallback bucket under
+  the current 512 MiB pool.
+
+Run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7mi-q4-route-profile-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_Q4_DOWN_ROUTE_PROFILE_OUT=$RUN/q4-route-profile.csv GGML_MOE_Q4_DOWN_ROUTE_PROFILE_TENSOR=blk.6.ffn_down_exps.weight" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required analysis:
+
+- Count routed rows.
+- Count unique experts.
+- Simulate LRU hit rate for capacities `16`, `32`, `65`, `128`.
+- Count first-use misses versus repeat misses.
+- Identify top experts and whether a static top-65 preload would cover most
+  routes.
+
+Acceptance for the diagnostic source:
+
+- default behavior unchanged;
+- build passes;
+- n32 route-profile run exits `0`;
+- quality `pass`;
+- memory.peak `<= 15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- CSV present and sufficient to run the analysis.
+
+Decision rule:
+
+- If capacity-65 LRU/static hit rate is high and repeat misses dominate, plan a
+  cache-hit-only or preload-only Q4 production probe.
+- If capacity-65 hit rate is low or first-use misses dominate, keep Q4
+  production closed and return to non-Q4 bottlenecks.
