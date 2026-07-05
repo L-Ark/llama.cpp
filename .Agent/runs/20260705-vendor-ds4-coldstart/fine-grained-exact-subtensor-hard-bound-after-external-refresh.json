@@ -1,0 +1,78 @@
+{
+  "artifact": "fine-grained-exact-subtensor-hard-bound-after-external-refresh",
+  "created_at": "2026-07-06T03:05:38+08:00",
+  "purpose": "Check whether row-level, column-level, or sub-tensor exact residency can reduce DeepSeek4 expert payload below the current whole expert-role granularity before writing runtime source.",
+  "current_accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "ram_ok": true,
+    "correctness_ok": true
+  },
+  "source_evidence": {
+    "build_expert_mix_path": "src/models/deepseek4.cpp",
+    "build_expert_mix_lines_observed": "gate = build_lora_mm_id(ffn_gate_exps, cur_experts_in, selected_experts); up = build_lora_mm_id(ffn_up_exps, cur_experts_in, selected_experts); act = ggml_swiglu_split(gate, up); experts = build_lora_mm_id(ffn_down_exps, act, selected_experts); output is permuted and summed over full n_embd rows.",
+    "tensor_creation_path": "src/llama-model.cpp",
+    "tensor_creation_lines_observed": "ffn_down_exps dims are { n_ff_exp, n_embd, n_expert }; gate/up expert dims are { n_embd, n_ff_exp, n_expert }.",
+    "quant_block_path": "ggml/src/ggml-common.h",
+    "quant_block_lines_observed": "QK_MXFP4 = 32 and block_mxfp4 is one exponent byte plus QK_MXFP4 / 2 quant bytes."
+  },
+  "deepseek4_native_dimensions": {
+    "n_embd": 4096,
+    "n_ff_exp": 2048,
+    "n_expert": 256,
+    "gate_up_tensor_shape": [4096, 2048, 256],
+    "down_tensor_shape": [2048, 4096, 256],
+    "mxfp4_block_quantized_values": 32,
+    "mxfp4_block_bytes": 17
+  },
+  "minimum_exact_payload_math": {
+    "gate_or_up_row_bytes": "4096 / 32 * 17 = 2176",
+    "gate_or_up_role_bytes_per_expert": "2048 * 2176 = 4456448",
+    "down_row_bytes": "2048 / 32 * 17 = 1088",
+    "down_role_bytes_per_expert": "4096 * 1088 = 4456448",
+    "role_bytes_mib": 4.25,
+    "result": "The current role-level topN payload accounting already uses the minimum exact whole-output payload for one selected gate/up/down expert role."
+  },
+  "exactness_analysis": [
+    {
+      "route": "gate/up output row pruning",
+      "decision": "reject_before_source",
+      "reason": "SwiGLU consumes all n_ff_exp=2048 gate and up outputs for each selected expert. Omitting rows changes the activation vector and logits unless an approximate pruning rule is introduced."
+    },
+    {
+      "route": "down output row pruning",
+      "decision": "reject_before_source",
+      "reason": "The down projection contributes all n_embd=4096 output dimensions before the MoE weighted sum and residual path. Omitting output rows changes model math."
+    },
+    {
+      "route": "partial input-column residency",
+      "decision": "reject_before_source",
+      "reason": "MXFP4 blocks quantize dot-product columns in QK=32 groups. A partial-column split would require exact decomposition and accumulation for every output row; it does not reduce the exact output set and adds transfer/kernel overhead. Omitting columns changes the dot product."
+    },
+    {
+      "route": "activation sparsity or top-dim pruning",
+      "decision": "not_exact",
+      "reason": "This is approximate/logit-changing. It may only be reopened with a separate correctness proof and fixed-text top1 validation, not as an exact payload-reduction route."
+    }
+  ],
+  "hard_bound_conclusion": {
+    "new_runtime_source_allowed": false,
+    "why": "Fine-grained exact row/column/sub-tensor residency cannot reduce required bytes below one complete selected expert role for gate, up, or down. Existing topN role-based bounds are already the minimum exact payload frontier for the current representation.",
+    "sota_changed": false,
+    "accepted_eval_tok_s_remains": 4.4,
+    "next_executable_route": "No source work from this route. Continue only with a new hard-bound artifact proving >10 tok/s with margin, or obtain explicit disk cleanup approval for full alternate GGUF empirical testing."
+  },
+  "promotion_gate_remains": {
+    "eval_tok_s_must_exceed": 4.4,
+    "ttft_ms_must_be_at_most": 33617.688744,
+    "host_ram_including_page_cache_must_be_at_most_bytes": 16000000000,
+    "swap_allowed": false,
+    "strict_cold_drop_caches": true,
+    "correctness_required": true,
+    "push_branch": "ssd/vendor/deepseek-token-rate-16gb"
+  }
+}

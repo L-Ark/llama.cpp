@@ -4,7 +4,7 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
-### 2026-07-06 Latest Active Plan: Admission Ready, But Alternate GGUF Empirical Test Is Disk-Blocked
+### 2026-07-06 Latest Active Plan: Fine-Grained Exact Residency Closed, Alternate GGUF Empirical Test Is Disk-Blocked
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。
 
@@ -23,8 +23,9 @@ Latest planning artifact:
 - Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-refresh-20260706-after-split-close.json`
 - Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-header-admission-20260706-after-refresh.json`
 - Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-hard-bound-20260706-after-header-admission.json`
-- Source head when written: `185339798c8b9b32805f6ebf3842a2d10c7152ea`
-- Purpose: consolidate the post-admission state after header-only GGUF parsing and confirm what is executable next.
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/fine-grained-exact-subtensor-hard-bound-after-external-refresh.json`
+- Source head before this plan update: `7a2115631a0cb13770c4836e085cbb38723d1b67`
+- Purpose: consolidate the post-admission state after header-only GGUF parsing, external artifact hard-bounds, and the fine-grained exact-residency audit; confirm what is executable next.
 
 Current source/admission state:
 
@@ -41,6 +42,7 @@ Latest hard-bound conclusion:
 - 4Expert split-loader/overlay is closed for current evidence. Header-only comparison shows the native and cloudyu 4Expert GGUFs differ beyond routed experts: metadata differs (`tokenizer.ggml.model=gpt2` vs `bpe`, context length `1048576` vs `65536`, `expert_used_count=6` vs `4`), only `690` tensor names are common, `638` names are native-only, `638` are 4Expert-only, and `517` common tensors have type differences. 4Expert expert payload is `145.125 GiB`, and the non-expert payload is still about `8.046 GiB`; header metadata cannot prove native non-expert bytes are safe substitutes. A diskless remote-range overlay would be a new multi-source loader feature with TTFT/repro risk, not a small token-rate optimization.
 - 2026-07-06 external artifact refresh found additional vendor-shaped REAP/compact GGUFs, including `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF` and `eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4`. Header parsing confirms they are `deepseek4`, `expert_count=256`, `expert_used_count=6`, and full single-file GGUFs, but the best optimistic VRAM placement bound is only `9.436 tok/s`, still below 10 before correctness and implementation overhead.
 - Split GGUF and dense sidecar files are not promotable from per-file metadata. Split sizes must be charged as full split-family totals, and dense `model-dense.gguf` sidecars have no routed expert tensors, so their small size-only bound is invalid for current vendor full-model SOTA.
+- Fine-grained exact sub-tensor/row/column residency is closed before source. In the current DeepSeek4 math, gate/up are computed as full selected-expert projections, both are consumed by `ggml_swiglu_split`, and down must produce the full `n_embd=4096` output before the weighted MoE sum/residual path. Native expert dimensions are gate/up `[4096,2048,256]` and down `[2048,4096,256]`; MXFP4 uses `QK=32` with `17` bytes per block. The minimum exact selected role payload is therefore `2048 * (4096 / 32 * 17) = 4456448` bytes for gate or up, and `4096 * (2048 / 32 * 17) = 4456448` bytes for down. That is the same whole expert-role granularity already used by the topN payload bounds. Partial rows, partial columns, or activation top-dim pruning would change model math unless treated as a separate approximate route with fixed-text correctness proof.
 - No full model weights were downloaded for this update, and no runtime benchmark was run from metadata-only evidence.
 
 Updated next executable plan:
@@ -51,11 +53,12 @@ Updated next executable plan:
 4. Preserve these assets before any cleanup: accepted native GGUF `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, accepted France gate pack `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, accepted SOTA run above, current source branch, profiles, and pushed-source reproduction artifacts. Do not delete files without explicit user approval.
 5. If disk is approved, test `cloudyu` 4Expert first. Required order: download full GGUF, record URL/path/size/SHA256, validate loader metadata with `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` and `GGML_MOE_STREAM_ONE_Q4K=1`, confirm 16GB/no-swap accounting, run correctness gates, then run strict cold France only if correctness passes.
 6. Do not implement gate-sacrifice exact hotset/top1024/top1500 source paths from the current representation. The new hard-bound shows this route is below 10 even before real implementation overhead.
-7. Do not implement a 4Expert split-loader/overlay unless a new design first proves deterministic tensor byte sourcing, metadata/tensor-name compatibility, 16GB page-cache accounting, TTFT cost, and correctness. The current header comparison is a rejection artifact, not an implementation plan.
-8. Do not implement or benchmark metadata-only REAP/compact/split/sidecar candidates from the refresh. Full download plus correctness is required, and the current optimistic REAP bound remains below 10.
-9. Correctness remains mandatory before performance promotion. For same-model/default-off source changes, run fixed-text top1 and require `same_top1 == n_tokens`; for alternate model/quantization artifacts, record France output and the five-prompt semantic set before any SOTA claim. The France prompt must be semantically correct and coherent.
-10. Promotion remains unchanged: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and correct France output.
-11. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted. Required metadata includes source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, expert pack/profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, correctness decision, and comparison to the previous `4.4 tok/s` SOTA.
+7. Do not implement fine-grained exact row/column/sub-tensor residency from the current representation. The hard-bound shows the minimum exact payload per selected role is already one whole expert role (`4456448` bytes), so row/column slicing cannot improve the accepted topN frontier without changing math or adding overhead.
+8. Do not implement a 4Expert split-loader/overlay unless a new design first proves deterministic tensor byte sourcing, metadata/tensor-name compatibility, 16GB page-cache accounting, TTFT cost, and correctness. The current header comparison is a rejection artifact, not an implementation plan.
+9. Do not implement or benchmark metadata-only REAP/compact/split/sidecar candidates from the refresh. Full download plus correctness is required, and the current optimistic REAP bound remains below 10.
+10. Correctness remains mandatory before performance promotion. For same-model/default-off source changes, run fixed-text top1 and require `same_top1 == n_tokens`; for alternate model/quantization artifacts, record France output and the five-prompt semantic set before any SOTA claim. The France prompt must be semantically correct and coherent.
+11. Promotion remains unchanged: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and correct France output.
+12. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted. Required metadata includes source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, expert pack/profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, correctness decision, and comparison to the previous `4.4 tok/s` SOTA.
 
 ### 2026-07-06 Latest Active Plan: Payload/Artifact Refresh Still Blocks Source, Need Disk Approval For Empirical Alternate Test
 
