@@ -66446,3 +66446,104 @@ Reproducibility:
 
 - Commit and push this plan before running.
 - Record command, run directory, profile summaries, metrics, and decision.
+
+### 7KS result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `edf78c250` (`docs: record perf stat and plan down overlap diagnostic`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-040109Z-phase7ks-current-down-missing-n32`.
+
+Metrics:
+
+- exit `0`;
+- output quality `pass`;
+- TTFT `76903.01 ms`;
+- decode `23680.43 ms / 31`, `1.31 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- `iouring_reads=22647`;
+- `iouring_bytes=126391910400`;
+- `iouring_wait_us=21480395`;
+- current-down overlap:
+  - calls `992`;
+  - planned/completed jobs `3673/3673`;
+  - cache hits `3519`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - worker `3375745 us`.
+
+Profile files:
+
+- `current-down-overlap-profile.csv`: `33` lines;
+- `current-down-missing-profile.csv`: `94` lines.
+
+Missing tensor concentration:
+
+```text
+blk.7.ffn_down_exps.weight: calls=31, active_unique_sum=248,
+  active_pack_entries=247, active_present=247, bytes=8257536
+blk.8.ffn_down_exps.weight: calls=31, active_unique_sum=248,
+  active_pack_entries=247, active_present=247, bytes=8257536
+blk.9.ffn_down_exps.weight: calls=31, active_unique_sum=248,
+  active_pack_entries=246, active_present=246, bytes=8257536
+```
+
+Missing-pack concentration:
+
+```text
+blk.55.ffn_down_exps.weight missing_pack=6
+blk.14.ffn_down_exps.weight missing_pack=3
+blk.54.ffn_down_exps.weight missing_pack=3
+blk.49.ffn_down_exps.weight missing_pack=3
+blk.41.ffn_down_exps.weight missing_pack=3
+blk.51.ffn_down_exps.weight missing_pack=3
+blk.32.ffn_down_exps.weight missing_pack=2
+blk.45.ffn_down_exps.weight missing_pack=2
+blk.52.ffn_down_exps.weight missing_pack=2
+remaining tensors: 1 each
+```
+
+Interpretation:
+
+- `missing_pack=36` is small and diffuse. Building another overlay for this is
+  not justified.
+- `missing_tensor=93` is perfectly concentrated in `blk.7/8/9` down tensors.
+- The missing profile shows the active experts for those tensors are mostly
+  present in the expert pack, with `8257536` byte entries. The issue is not an
+  expert-pack data absence.
+- Source inspection confirms the cause:
+  - `ggml_cuda_moe_stream_batch` and
+    `ggml_cuda_moe_stream_register_tensor` both require
+    `moe_stream_type_supported`;
+  - `moe_stream_type_supported` currently accepts `IQ3_XXS`, `IQ3_S`,
+    `IQ2_S`, `Q3_K`, and `IQ4_XS`;
+  - it does not accept `Q4_0`;
+  - therefore these Q4_0 down tensors are not registered and cannot participate
+    in current-down overlap.
+- This is the same Q4_0 down fallback bucket already attributed in 7KG:
+  - `blk.9`: `409.672 ms`;
+  - `blk.8`: `315.600 ms`;
+  - `blk.7`: `266.904 ms`;
+  - combined `992.176 ms` in the diagnostic fallback profile.
+- The hard upper bound is below the `1 s` threshold for reopening a source path,
+  and any implementation would effectively retry the historically rejected
+  Q4_0 down GPU/cache support.
+
+Decision:
+
+- Reject current-down completeness source changes.
+- Do not add Q4_0 to `moe_stream_type_supported`.
+- Do not build another overlay for `missing_pack=36`.
+- Keep current-down overlap enabled in the accepted default path:
+  - historical `CURRENT_DOWN_OVERLAP=0` was rejected;
+  - historical `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1` was rejected.
+- Remaining evidence does not identify a new `> 2 s` safe source
+  implementation under the strict 16GB/cold-start constraints.
