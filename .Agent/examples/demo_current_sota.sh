@@ -85,8 +85,6 @@ cmd=(
   --extra-arg=-c --extra-arg=256
   --extra-arg=-b --extra-arg=16
   --extra-arg=-ub --extra-arg=16
-  --extra-arg=-t --extra-arg=20
-  --extra-arg=-tb --extra-arg=20
 )
 
 if [[ "$PRINT_COMMAND" -eq 1 ]]; then

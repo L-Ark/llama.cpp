@@ -1,0 +1,59 @@
+{
+  "acceptance": {
+    "correctness_ok": true,
+    "files_deleted": false,
+    "full_model_downloaded": false,
+    "new_sota": false,
+    "reproduces_current_sota": true,
+    "strict_16gb_ram_including_page_cache": true,
+    "ttft_ok_vs_gate_ms_33617_688744": true
+  },
+  "changes_validated": [
+    "Added GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000 to the demo command.",
+    "Added GGML_MOE_STREAM_ONE_PREFILL_PROFILE=$PROFILE to the demo command.",
+    "Updated the expected strict-cold line to about 4.4 eval tok/s.",
+    "Removed redundant --extra-arg -t/-tb because strict_ds4_runner already supplies -t 20 -tb 20."
+  ],
+  "created_at_utc": "2026-07-05T21:03:08Z",
+  "demo_file": ".Agent/examples/demo_current_sota.sh",
+  "diff_summary": "diff --git a/.Agent/examples/demo_current_sota.sh b/.Agent/examples/demo_current_sota.sh\nindex 37ce82f35..7f1b6fa58 100755\n--- a/.Agent/examples/demo_current_sota.sh\n+++ b/.Agent/examples/demo_current_sota.sh\n@@ -85,8 +85,6 @@ cmd=(\n   --extra-arg=-c --extra-arg=256\n   --extra-arg=-b --extra-arg=16\n   --extra-arg=-ub --extra-arg=16\n-  --extra-arg=-t --extra-arg=20\n-  --extra-arg=-tb --extra-arg=20\n )\n \n if [[ \"$PRINT_COMMAND\" -eq 1 ]]; then\n",
+  "purpose": "Validate the final current SOTA demo after adding explicit one-prefill env and removing redundant thread extra-args, so the printed exact command matches the accepted SOTA shape.",
+  "run": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T210100Z-demo-current-sota-prefill-exactargs-20260706/france-cpu40-vram0gb",
+    "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16",
+    "exact_command_thread_arg_counts": {
+      "-t": 1,
+      "-tb": 1
+    },
+    "required_env_present": {
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct": true,
+      "GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000": true,
+      "GGML_MOE_STREAM_ONE_PREFILL_PROFILE": true
+    },
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T210100Z-demo-current-sota-prefill-exactargs-20260706",
+    "stderr_counters": {
+      "expert_pack": "[moe_stream] one expert pack: hits=4886 misses=0 reads=4886 bytes=21774204928 failures=0 entries=4599 direct_enabled=1 direct_reads=4886 direct_failures=0 direct_fallbacks=0",
+      "one_prefill_final": "[moe_stream] one prefill: enabled=1 loaded=3313 limit=3000 attempted=3000 inserted=3000 pack_misses=0 read_failures=0 bytes=13369344000 elapsed_ms=4599.194",
+      "one_prefill_loaded": "[moe_stream] one prefill: loaded 3313 entries from /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv limit=3000",
+      "vram_cache": "[moe_stream] VRAM cache: hits=33265 misses=1886 hit_rate=94.6%"
+    },
+    "summary": {
+      "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "elapsed_seconds": 64.6,
+      "eval_tok_s": 4.4,
+      "memory_file_bytes": 15102562304,
+      "memory_max_events": 17133,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 274602,
+      "prompt_tok_s": 1.8,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 33337.895821,
+      "workingset_refault_file": 1628911
+    }
+  },
+  "source_head_before_commit": "bd0faa33d08434b495fadd5c239a8c83a0801ce8"
+}
