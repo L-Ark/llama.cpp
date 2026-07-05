@@ -69014,6 +69014,134 @@ Reproducibility:
 - Record run directory, command, output, gates, perf report top symbols, and
   decision.
 
+### 7LH result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `b71d7952f` (`docs: plan current perf record hotspot audit`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-060730Z-phase7lh-perf-record-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `76395.72 ms`;
+- decode `24196.59 ms / 31`, `1.28 tok/s`;
+- memory peak `15899996160`;
+- memory final `15098101760`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- cgroup events:
+  - `oom=0`;
+  - `oom_kill=0`.
+
+Runtime counters:
+
+- expert pack:
+  - hits `25045`, misses `192`;
+  - iouring reads `22647`;
+  - iouring bytes `126391910400`;
+  - iouring submit `47068 us`;
+  - iouring wait `20397099 us`;
+  - iouring H2D enqueues `22647`.
+- iouring detail:
+  - batches `5178`;
+  - submit calls `5178`;
+  - wait calls `18237`;
+  - cqes `22647`;
+  - inflight avg `3.32`;
+  - inflight max `8`;
+  - batch hist `1:176,2-4:2679,5-8:2323,9-16:0,17-32:0,gt32:0`.
+- current-down overlap:
+  - calls `992`;
+  - planned/completed `3673/3673`;
+  - cache hits `3519`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - worker `3296814 us`.
+
+Perf artifacts:
+
+- `perf.data`: `31 MiB`;
+- `perf-report.txt`: `1.3 MiB`;
+- lost samples: `0`;
+- samples: `150K` of `cycles:P`.
+
+Top perf findings:
+
+- Top symbol:
+  - `[kernel.kallsyms] __pv_queued_spin_lock_slowpath`: `60.10%`.
+- Dominant call stack:
+  - `_raw_spin_lock_irq`;
+  - `__filemap_add_folio`;
+  - `page_cache_ra_unbounded`;
+  - `page_cache_ra_order`;
+  - `do_sync_mmap_readahead`;
+  - `filemap_fault`;
+  - `do_read_fault`;
+  - `handle_mm_fault`;
+  - `do_user_addr_fault`;
+  - `asm_exc_page_fault`.
+- Major sampled CPU fallback entry points below the mmap fault stack:
+  - `ggml_vec_dot_q3_K_q8_K`: `~9.50%`;
+  - `ggml_vec_dot_iq2_s_q8_K`: `~7.40%`;
+  - `ggml_vec_dot_iq3_xxs_q8_K`: `~6.23%`;
+  - `ggml_vec_dot_iq4_xs_q8_K`: `~3.42%`;
+  - `ggml_vec_dot_q4_0_q8_0`: `~2.42%`.
+- Secondary kernel path:
+  - `ondemand_readahead`;
+  - `page_cache_async_ra`;
+  - `filemap_fault`.
+- Reclaim/memcg path also appears:
+  - `evict_folios`;
+  - `try_to_shrink_lruvec`;
+  - `try_charge_memcg`;
+  - `__mem_cgroup_charge`.
+
+Interpretation:
+
+- 7LH confirms the current hot path is kernel page-cache / mmap fault / memcg
+  lock contention under the 16GB cold-start cgroup.
+- The samples are not dominated by:
+  - CUDA launch overhead;
+  - `moe_stream_batch.cu` staging wrapper code;
+  - route/cache hash maps;
+  - CUDA event/synchronization calls;
+  - OpenMP barriers.
+- The CPU vec-dot symbols under the fault stack are the already-known
+  prompt/fallback CPU paths reading mmap-backed GGUF pages, not a new decode
+  GPU staging issue.
+- Existing related source families are already rejected:
+  - global or pack mmap `MADV_RANDOM` regressed in 7BK;
+  - targeted `MADV_WILLNEED` regressed in 7BP by moving cost into shared
+    IO/staging;
+  - immediate pack-mmap `MADV_DONTNEED` regressed in 7EZ;
+  - dense mmap retention regressed in 7KK;
+  - Q4_0 down GPU/cache and fallback pinning are bounded/rejected;
+  - `--no-mmap` is incompatible with the strict 16GB host-RAM objective unless a
+    separate model-loading design proves otherwise.
+
+Decision:
+
+- Do not implement another mmap advice, dense retention, CUDA graph, staging
+  wrapper, or small-batch IO reshaping patch from this evidence.
+- The remaining dominant bottleneck is external to a small safe source change:
+  cold-start mmap page faults and page-cache/memcg contention under the hard
+  16GB RAM limit.
+- Future work must first introduce a materially different model-loading or
+  tensor-placement design with a hard RAM proof. Do not continue guessing
+  micro-optimizations against the current mmap/page-cache path.
+- Current accepted defaults remain unchanged.
+
 ### 7LG result
 
 Timestamp: 2026-07-05.
