@@ -69738,6 +69738,167 @@ Acceptance:
   must contain `[kimi_cpu_moe_fallback_profile] written` with `entries=0`.
 - This remains diagnostic only, not a SOTA candidate.
 
+### 7LK-B result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `70096b48c` (`docs: record fallback profile env fix`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-064146Z-phase7lkb-fallback-profile-n32`.
+
+Artifacts:
+
+- `fallback-profile.csv`, `841 KiB`, `13625` entries, `dropped=0`.
+- `fallback-profile-summary.txt` written in the run directory by the aggregation
+  command.
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `75337.77 ms`;
+- decode `21405.43 ms / 31`, `1.45 tok/s`;
+- memory peak `15899996160`;
+- memory final `15102967808`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Fallback profile:
+
+- total fallback profile time: `73941.083 ms`;
+- total fallback profile bytes: `140.573 GiB`;
+- prompt fallback:
+  - `71571.267 ms`, `96.79%`;
+  - `127.222 GiB`;
+- decode fallback:
+  - `2369.816 ms`, `3.21%`;
+  - `13.351 GiB`.
+
+Decode fallback distribution:
+
+- `100%` of decode fallback is `src0_type=2` (`Q4_0`) down experts:
+  - tensor family: `ffn_down_exps.weight`;
+  - expert bytes: `8257536`;
+  - count: `1736`;
+  - bytes: `13.351 GiB`.
+- Decode Q4_0 fallback is concentrated in seven layers:
+  - `blk.6.ffn_down_exps.weight`: `393.192 ms`;
+  - `blk.7.ffn_down_exps.weight`: `384.504 ms`;
+  - `blk.10.ffn_down_exps.weight`: `379.392 ms`;
+  - `blk.8.ffn_down_exps.weight`: `368.400 ms`;
+  - `blk.9.ffn_down_exps.weight`: `343.792 ms`;
+  - `blk.18.ffn_down_exps.weight`: `255.232 ms`;
+  - `blk.15.ffn_down_exps.weight`: `245.304 ms`.
+
+Interpretation:
+
+- CPU fallback is a TTFT/prompt problem, not the main decode token-rate
+  bottleneck.
+- The maximum possible n32 decode gain from deleting CPU fallback is only about
+  `2369.816 ms / 31` (`~76.4 ms/token`) before adding any replacement H2D/GPU
+  compute cost.
+- Continuing to optimize generic CPU fallback cannot produce a large token-rate
+  jump.
+- A narrow Q4_0 down GPU feasibility test is still justified because:
+  - decode fallback is entirely Q4_0 down;
+  - CUDA MMQ/MMVQ code has Q4_0 kernels;
+  - MoE batch allowlists currently exclude Q4_0;
+  - the source change can be default-off and tightly scoped.
+
+Decision:
+
+- Close 7LK as successful diagnostic.
+- Do not pursue generic fallback read/prefetch.
+- Plan one narrow default-off Q4_0 down batch feasibility test.
+
+## Phase 7LL - default-off Q4_0 down batch feasibility
+
+Timestamp: 2026-07-05 23:55:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test whether the existing CUDA MoE down batch machinery can handle the
+  decode-only Q4_0 down fallback identified in 7LK-B.
+- Keep the change default-off via:
+  `GGML_MOE_STREAM_DOWN_BATCH_Q4_0=1`.
+
+Bottleneck:
+
+- 7LK-B shows n32 decode fallback is exactly:
+  - `Q4_0`;
+  - `ffn_down_exps.weight`;
+  - `13.351 GiB`;
+  - `2369.816 ms / 31`.
+
+Theory and upper bound:
+
+- Hard upper bound is the measured decode fallback time:
+  `2369.816 ms / 31`.
+- The actual gain must subtract:
+  - extra H2D for Q4_0 down experts not already in VRAM;
+  - Q4_0 MMQ/MMVQ kernel time;
+  - cache insertion/eviction overhead;
+  - any prompt TTFT cost from enabling Q4_0 down batch during prompt.
+- Expected realistic n32 gain is at most `0.5-1.5 s`, and regression is likely
+  if Q4_0 H2D/cache churn dominates.
+
+Implementation:
+
+- Add Q4_0 to MoE down batch allowlists only when
+  `GGML_MOE_STREAM_DOWN_BATCH_Q4_0=1`.
+- Add Q4_0 cases to the MoE batch launch switch using the existing
+  `launch_mul_mat_q<GGML_TYPE_Q4_0, 8>` path.
+- Do not enable Q4_0 for up/gate.
+- Do not change default runtime env in `scripts/kimi-phase7fb-min-profile-repro.sh`.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard <experiment-commit>
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ll-q4down-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=GGML_MOE_STREAM_DOWN_BATCH_Q4_0=1 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Acceptance gates:
+
+- build succeeds;
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for the France prompt;
+- TTFT `< 127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- n32 decode must improve versus 7KX (`22601.57 ms / 31`) by more than normal
+  noise or show a clear fallback removal with no endpoint regression, then
+  repeat n32 and confirm n96 before promotion.
+
+Rollback:
+
+- If Q4_0 kernels fail, output quality changes, memory/TTFT gates fail, or
+  decode regresses versus 7KX/7LG, revert the source patch and record the
+  rejection.
+- This phase must not resurrect the previously rejected broad Q4_0 down GPU
+  direction unless this narrow env-gated test proves endpoint value.
+
 ### 7LG result
 
 Timestamp: 2026-07-05.
