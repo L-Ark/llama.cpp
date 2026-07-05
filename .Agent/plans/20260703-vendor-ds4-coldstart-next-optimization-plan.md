@@ -4,16 +4,16 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
-### 2026-07-05 Latest Plan: Current Route and Disk Audit After MTP Sidecar Follow-Up
+### 2026-07-05 Latest Plan: Thread-Count Sweep Closure After Current Route Audit
 
-本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续优化继续围绕 strict cold-start vendor DeepSeek，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama 或非 vendor 结果提升为 SOTA。本次更新完成 current route and disk audit：当前公开 artifact、现有 runtime route、CPU microprobe 和磁盘状态都没有给出可直接实施的 10 tok/s source patch。
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续优化继续围绕 strict cold-start vendor DeepSeek，不能把 warm page-cache、steady-state、trace/top1-only、ik_llama 或非 vendor 结果提升为 SOTA。本次更新完成 current route/disk audit 后的 no-source thread-count sweep：当前公开 artifact、现有 runtime route、CPU microprobe、线程数参数和磁盘状态都没有给出可直接实施的 10 tok/s source patch。
 
 Current accepted strict cold SOTA 仍然是 `4.4 tok/s`：
 
 - Accepted SOTA run: `/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb`
 - Current-head no-trace guard: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
 - Guard metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
-- Current source/artifact head before this plan update: `0336a2e3c1422b99b5820f9f0b064dbc534522fd` (`vendor-ds4: audit external mtp sidecars`)
+- Current source/artifact head before this plan update: `31580b09eab8615e3ada0d3f3d9568ae5c460207` (`vendor-ds4: plan strict cold thread sweep`)
 - Push target for all future source/artifact updates: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
 - Git identity for future commits/pushes: `L-Ark <fliangae@connect.ust.hk>`
 - Promotion gate remains strict: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, France answer semantically correct and coherent, source plus artifacts committed and pushed, then clean pushed-source reproduction.
@@ -28,6 +28,7 @@ Current closed-route summary:
 - External MTP sidecar follow-up found only safetensors/vLLM/MLX sidecars (`FoxlightAI`, `canada-quant`, `LordNeel`, `inferencerlabs`, `mlx-community`) and no standalone vendor-loadable GGUF draft. Generic `llama-speculative` remains unusable for these because it expects a standalone draft model, not a DeepSeek4 MTP sidecar.
 - Public lower-bit GGUF target files were screened. The current best concrete header-verified candidate, `0xSero/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`, is still below the `10 tok/s` hard-bound on a 32GB RTX 5090 if enough CPU MoE layers remain off-GPU; optimistic placement tops out around `9.33 tok/s` with zero reserve and around `9.07 tok/s` with 3GiB reserve.
 - Joint source/page overlap plus CPU fallback batching is closed for current evidence. The CPU batch microprobe passed top1 but measured only `74.719 GiB/s` best source-payload bandwidth, below the `90.643 GiB/s` zero-overhead requirement and far below `130.298 GiB/s` with only `500 ms` overhead.
+- No-source CPU thread-count sweep is closed for the accepted route. Strict-cold `-t/-tb` values `24`, `32`, `40`, and `60` produced `4.4`, `2.6`, `2.1`, and `1.8 tok/s` respectively; all outputs were semantically correct, but none exceeded the accepted `4.4 tok/s` SOTA and `t=60` also exceeded the TTFT gate.
 - Disk state blocks large alternate-artifact empirical work unless space is freed deliberately: `/root` has about `1.8 GiB` free. The only clearly disposable candidate found is a `2.965 GB` Hugging Face `.incomplete` cache fragment, which is not enough for 50GB+ model tests. The `20.5 GB` France gate-miss pack is used by accepted SOTA and must be preserved for reproduction.
 - Previously closed routes remain closed unless a new hard-bound artifact changes the limiting math: source/page-only prefetch or io_uring, CPU batch rewrite, extra full GPU MoE layer, rectangular `DS4_HOT_DISPATCH`, direct top768 Q8_0, raw/transposed/row-tile exact hot-batch kernels, CUDA graph wrapping, standalone MMVQ skip/write, sparse retained top64 graph, transient MXFP4 repack, no-source lookahead/ngram speculation, and raw top4096 residency.
 
@@ -106,12 +107,22 @@ Latest current-route and disk audit:
 - Disk audit: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/.cache/...incomplete` is a `2965889623` byte incomplete HF cache fragment; deleting it would free only about `2.96 GB`. Large reclaim candidates such as `GLM-5.2-UD-IQ3_XXS` (`263 GB`) or non-SOTA expert packs require explicit preservation/deletion policy because they may be user assets or historical evidence.
 - Decision: immediate code work should stay frozen. The next meaningful progress requires one of: a new external vendor-loadable high-acceptance artifact, an exact kernel/representation proof above the already measured thresholds, or explicit disk-reclamation approval that preserves accepted SOTA evidence before downloading/testing alternate artifacts.
 
+Latest no-source thread-count sweep:
+
+- Plan artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/thread-count-sweep-plan.json`.
+- Result artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/thread-count-sweep-result.json`.
+- Run root: `/root/lfz/runs/vendor-ds4-16gb/20260705T115301Z-thread-count-sweep-current-head`.
+- Constant config: vendor strict-cold France prompt, `cpu_moe=40`, `vram_cache=0`, accepted France gate-miss O_DIRECT pack, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_CUDA_DISABLE_GRAPHS=1`, `drop_caches` before each case, 16GB cgroup with `MemorySwapMax=0`.
+- Results: `t=24` reached `eval_tok_s=4.4`, `prompt_tok_s=1.9`, `TTFT=31667.216978 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15101898752`, correctness passed, but it only tied SOTA and is not promotable. `t=32` reached `2.6 tok/s`, `t=40` reached `2.1 tok/s`, and `t=60` reached `1.8 tok/s` with `TTFT=34401.120694 ms`, over the gate.
+- Gate-pack and VRAM-cache counters stayed aligned across cases (`pack hits=4886 misses=0`, VRAM cache `hits=33265 misses=1886 hit_rate=94.6%`), so the regressions are not from cache-admission drift. They are consistent with CPU fallback scheduling/memory-bandwidth contention.
+- Decision: thread-count tuning does not reopen the 10 tok/s route and should not be repeated on this same accepted route unless a source/kernel change changes CPU fallback scaling.
+
 Next active plan:
 
 1. Keep the accepted `4.4 tok/s` strict-cold SOTA as the comparison baseline. Do not make a runtime/source patch before a new hard-bound artifact proves the route can clear the promotion gate.
 2. Verifier/draft work is closed for current public artifacts, including the latest MTP sidecar follow-up. Reopen it only with a concrete compatible DSpark/MTP/draft artifact and a hard-bound proving `A>=7`, or `A>=5` with measured sublinear target verification, while preserving the 16GB page-cache budget, accepted gate-cache behavior, TTFT limit, fixed-text top1, and France correctness.
 3. External lower-bit GGUF target work is closed for the currently screened public candidates. Reopen only with a new hard-bound that clears `10 tok/s` on the current 32GB GPU, or with a deliberately prepared empirical test after freeing enough disk space without deleting accepted SOTA reproduction evidence. Any alternate model/quantization run must still pass fixed-text, France, five-prompt semantic correctness, strict 16GB cgroup, and TTFT gates before it can be mentioned as SOTA.
-4. Source/page overlap plus CPU fallback batching is closed for current evidence. Reopen only if a new exact microkernel/probe exceeds the `90.643 GiB/s` zero-overhead threshold with enough integration margin, or if source/page overlap is proven in a prompt-general way without same-op regression and without violating the 16GB page-cache limit.
+4. Source/page overlap plus CPU fallback batching is closed for current evidence. No-source thread-count tuning is also closed for the accepted route. Reopen only if a new exact microkernel/probe exceeds the `90.643 GiB/s` zero-overhead threshold with enough integration margin, or if source/page overlap is proven in a prompt-general way without same-op regression and without violating the 16GB page-cache limit.
 5. Non-native representation work inside the current native GGUF is closed for current artifacts. Reopen it only through an offline or compare-only artifact proving fixed-text top1 plus `>5.33x` effective payload reduction, or equivalent source+CPU fallback reduction, with VRAM/RAM/TTFT and overhead accounting before source changes.
 6. Exact graph/dataflow work is closed for current artifacts. Reopen it only with a new placement/kernel proof that shows retained CUDA gate/up/down, hidden scheduler-copy counts, fixed-text top1, and enough margin above the current top64/top128/top768/full-MoE hard bounds before source changes.
 7. Disk cleanup is not an optimization result and cannot be used as SOTA evidence. If disk must be reclaimed for alternate-artifact tests, preserve at minimum the accepted SOTA run, current-head guard run, current source, profiles, and the accepted France gate-miss expert pack before deleting any large run/model artifact.
