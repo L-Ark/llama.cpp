@@ -1,0 +1,39 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: recheck cpu_moe=41 plus top768 source-hidden exact hot residual",
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "basis": {
+    "payload_reduction_audit": ".Agent/runs/20260705-vendor-ds4-coldstart/exact-payload-reduction-audit.json",
+    "prior_design": ".Agent/runs/20260704-vendor-ds4-coldstart/cpu41-top768-q80-hot-residual-design.json",
+    "top768_manifest": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top768_touch_residual.offset_manifest.csv",
+    "top768_payload_gib": 3.188,
+    "top768_direct_prefill_elapsed_ms": 1723.238,
+    "top768_source_hidden_zero_overhead_tok_s_prior_bound": 10.338,
+    "top768_source_hidden_slack_ms_prior_bound": 446.414,
+    "top768_not_source_hidden_slack_ms_prior_bound": 120.569
+  },
+  "why_reopened": "Raw top4096 residency and exact payload compression are rejected. The only fitting route with a prior positive 10 tok/s paper bound is not raw top768 alone; it is top768 exact hot residual combined with source/page overlap and cpu_moe=41, with all new source cost hidden.",
+  "hard_questions_before_code": [
+    {
+      "question": "Can the top768 direct prefill cost be hidden enough?",
+      "bound": "Measured synchronous prefill is 1723.238 ms, while accepted TTFT slack is about 725 ms. At least about 998 ms must be overlapped or moved out of the accepted TTFT path."
+    },
+    {
+      "question": "Can exact top768 compute fit the overhead budget?",
+      "bound": "The prior positive source-hidden bound has only 446.414 ms zero-overhead slack. The per-call Q8_0 CUDA path is already rejected, so only a batched/fused resident path can be considered."
+    },
+    {
+      "question": "Can correctness be proven before performance?",
+      "bound": "CPU-compatible Q8_0 arithmetic has passed fixed-text top1 for all up/down, but any new batched/fused resident path must pass llama-results top1 before strict cold benchmarking."
+    },
+    {
+      "question": "Does cpu_moe=41 still preserve the accepted gate cache and 16GB host RAM/page-cache behavior?",
+      "bound": "Use the existing top768 fit diagnostic as prior evidence, but any performance candidate must rerun under MemoryMax=16000000000 and MemorySwapMax=0."
+    }
+  ],
+  "immediate_next_action": "Write a refreshed top768 source-hidden hard-bound using current microprobe, VRAM snapshot, direct prefill measurement, and Q8_0 overhead data. Do not implement runtime code unless it still shows a plausible >10 tok/s path or an explicitly intermediate >4.4 tok/s SOTA candidate."
+}

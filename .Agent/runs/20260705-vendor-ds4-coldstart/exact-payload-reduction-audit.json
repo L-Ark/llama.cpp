@@ -1,0 +1,88 @@
+{
+  "date": "2026-07-05",
+  "title": "Audit: exact top4096 hotset payload reduction",
+  "result": "rejected_exact_compression_and_dedup_far_below_required_ratio",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb"
+  },
+  "inputs": {
+    "plan": ".Agent/runs/20260705-vendor-ds4-coldstart/exact-payload-reduction-feasibility-plan.json",
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "fallback_profile": "/root/lfz/runs/vendor-ds4-16gb/20260704T011127Z-20260704_current_sota_cpu_fallback_profile/france-cpu40-vram0gb/fallback_profile.csv"
+  },
+  "generated_artifacts": {
+    "top4096_profile": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top4096_fallback_us.tsv",
+    "top4096_manifest": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top4096_fallback_us.offset_manifest.csv",
+    "top4096_manifest_summary": ".Agent/runs/20260705-vendor-ds4-coldstart/top4096-offset-manifest-summary.json",
+    "payload_audit_tool": ".Agent/run-tools/audit_manifest_payload.py",
+    "sample_dedup": ".Agent/runs/20260705-vendor-ds4-coldstart/top4096-payload-sample-dedup-256x4096.json"
+  },
+  "manifest_summary": {
+    "entries": 4096,
+    "payload_bytes": 18253611008,
+    "payload_mib": 17408.0,
+    "residual_ms_sum": 18395.412,
+    "missing": 0,
+    "size_mismatches": 0,
+    "unique_tensors": 80,
+    "up_entries": 2054,
+    "down_entries": 2042
+  },
+  "hashes": {
+    "top4096_profile_sha256": "4d788548bf05433a7e34d41a0afaf568ad4354ef7e0a72dfd34b0353ba2aeed7",
+    "top4096_manifest_sha256": "68e0b26a47681b5fecc2cb5b43fdf5600478bfe6570af5d59a96769a4ae8b807",
+    "top4096_manifest_summary_sha256": "063c51e3951d4d6788a0d297807f03bdffd8ded42d4f06ee58788a9e191390b3",
+    "sample_dedup_sha256": "3a030aed381095fe35a7fd95832717f5b4bfedccd929a56b013abf19ce71c5b5",
+    "payload_audit_tool_sha256": "bf873fcca13ca149902a48e78c85c96b20e922e45e347623716bde83a52eeea8"
+  },
+  "compression_results": [
+    {
+      "name": "top4096 full zstd level 1",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T000437Z-top4096-payload-audit/zstd-full-l1",
+      "raw_bytes": 18253611008,
+      "compressed_bytes": 17549035634,
+      "ratio": 1.040149,
+      "cgroup": {
+        "MemoryMax": 16000000000,
+        "MemorySwapMax": 0,
+        "swaps": 0
+      }
+    },
+    {
+      "name": "top512 prefix zstd level 10",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T000539Z-top4096-payload-audit/zstd-top512-l10",
+      "raw_bytes": 2281701376,
+      "compressed_bytes": 2193648146,
+      "ratio": 1.04014,
+      "cgroup": {
+        "MemoryMax": 16000000000,
+        "MemorySwapMax": 0,
+        "swaps": 0
+      }
+    }
+  ],
+  "dedup_sample": {
+    "entries_sampled": 256,
+    "blocks_per_entry": 4096,
+    "block_size": 17,
+    "sampled_blocks": 1048576,
+    "sampled_bytes": 17825792,
+    "duplicate_blocks": 0,
+    "duplicate_ratio": 0,
+    "zero_blocks": 0,
+    "zero_ratio": 0
+  },
+  "required_ratio": {
+    "top3072_to_fit_measured_extra_pool": 4.0,
+    "top4096_to_fit_measured_extra_pool": 5.33,
+    "observed_best_lossless_ratio": 1.040149
+  },
+  "decision": {
+    "byte_level_compression": "rejected",
+    "block_or_row_dedup_as_primary_path": "rejected",
+    "reason": "Full hotset zstd and high-level prefix zstd both compress only about 1.04x, and sampled MXFP4 blocks show no duplicate or zero blocks. This is far below the 4.0x-5.33x exact reduction needed to fit a top3072/top4096 hotset in the measured extra-pool budget.",
+    "next_step": "Return to the only fitting positive paper route: cpu_moe=41 + top768 exact hot residual plus source-hidden overlap. Recheck its overhead, TTFT hiding requirement, and correctness gates before any runtime code."
+  }
+}

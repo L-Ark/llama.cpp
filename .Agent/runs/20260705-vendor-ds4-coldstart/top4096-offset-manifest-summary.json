@@ -1,0 +1,11 @@
+{
+  "entries": 4096,
+  "manifest": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top4096_fallback_us.offset_manifest.csv",
+  "missing": 0,
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "payload_bytes": 18253611008,
+  "payload_mib": 17408.0,
+  "profile": ".Agent/profiles/vendor-ds4/current_sota_updown_decode_top4096_fallback_us.tsv",
+  "residual_ms_sum": 18395.412,
+  "size_mismatches": 0
+}
