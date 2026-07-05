@@ -71691,3 +71691,130 @@ Reproducibility:
 - Commit and push this plan before running the audit.
 - Record the audit file path and the specific prior phase conclusions used for
   the next decision.
+
+### Phase 7LV result
+
+Timestamp: 2026-07-06 01:15:00 CST.
+
+Status: accepted diagnostic result; no source change.
+
+Audit output:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/phase7lv-type18-history-audit.txt`
+- line count: `394`
+- source commit on server: `985eef9aa`
+
+Findings:
+
+- The type18/IQ3 direct implementation space has already been tested:
+  - 7BS/7BT/7BU gate-copy/up-compute pipeline family:
+    - local type18 rows improved;
+    - endpoint decode regressed because global IO/staging contention increased;
+    - rejected.
+  - 7FL/7FM same-type IQ3 parallel up/gate:
+    - local type18 wall improved from `2894.960 ms` to `2607.844 ms`;
+    - n32 endpoint did not improve and the production-path confirmation failed
+      TTFT/decode gates;
+    - rejected.
+  - 7GR `VDR_IQ3_XXS_Q8_1_MMVQ=1`:
+    - rejected;
+    - VDR=2 remains the viable IQ3 MMVQ setting.
+  - vendor MMQ, Q8_K decode, and compute-only IQ3 parallel paths were also
+    rejected in earlier phases.
+
+Current bound:
+
+- 7LP type `(18,18)` wall is `2606.928 ms` in n32.
+- Even a perfect removal would only move `22693 ms / 31` to about
+  `20086 ms / 31`, or `1.54 tok/s`.
+- No known untried type18 source path has a credible way to remove this bucket
+  without reintroducing the already measured IO/staging contention.
+
+Decision:
+
+- Do not implement another type18/IQ3 patch now.
+- Return to current-head whole-decode evidence and select only a measured
+  bucket above roughly `2 s`.
+- Because 7LB identified foreground up/gate staging as the largest residual
+  bucket but 7LB missed `GGML_MOE_UP_GATE_LAYER_PROFILE=1`, rerun the corrected
+  layer profile on the current post-rollback HEAD before any source edit.
+
+## Phase 7LW - current-head corrected up/gate layer profile
+
+Timestamp: 2026-07-06 01:18:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Reproduce the corrected up/gate layer/type profile on the current
+  post-rollback HEAD (`985eef9aa` lineage) before the next source patch.
+- Confirm whether the current residual up/gate bottleneck is still:
+  - broad type `(22,22)` movement/wait;
+  - broad type `(18,18)` compute;
+  - or a newly concentrated layer/type pair after later accepted changes.
+
+Why this is needed:
+
+- 7LB found the largest foreground residual:
+  - up wait `7615.883 ms`;
+  - gate wait `7683.275 ms`;
+  - combined up+gate foreground wait `15299.158 ms`.
+- 7LC corrected the env and found broad layer distribution, but it was run on
+  an older commit before later accepted/rejected phases.
+- 7LP on the current path produced type-level evidence:
+  - type `(22,22)` wall `3203.944 ms`, dominated by movement/wait;
+  - type `(18,18)` wall `2606.928 ms`, dominated by compute;
+  - no current layer-level ranking is recorded for the post-rollback HEAD.
+
+Experiment command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 985eef9aa
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7lw-upgate-layer-current-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=$'GGML_MOE_UP_GATE_LAYER_PROFILE=1\nGGML_MOE_UP_GATE_LAYER_PROFILE_TOP=96' \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Analysis:
+
+- Parse stderr for:
+  - total up/gate layer records;
+  - top rows by wall;
+  - top rows by `up_wait + gate_wait`;
+  - sums by `(up_type, gate_type)`;
+  - whether any single row exceeds `700 ms` wall or any small group exceeds
+    `2000 ms` wall.
+- Compare against 7LC and 7LP:
+  - if broad distribution remains, reject single-layer work again;
+  - if a concentrated layer/type pair appears, write a targeted source plan
+    before coding;
+  - if type `(22,22)` wait remains dominant but broad, the next source plan
+    must preserve the accepted up-copy/up-compute/gate-copy overlap and target
+    intra-batch inflight/foreground wait, not type18 compute.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record exact run directory, source commit, command, metrics, output, memory,
+  stderr layer summary, and decision.
