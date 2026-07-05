@@ -4,6 +4,46 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
+### 2026-07-06 Latest Active Plan: Full MoE Layer GPU Placement Closed, Disk-Approved Alternate Artifact Is Next
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Config: native DeepSeek GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, O_DIRECT gate expert pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+- Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+Latest planning artifact:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/full-layer-gpu-placement-hard-bound-after-async-io.json`
+- Prior artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/async-updown-io-hard-bound-after-fine-grained.json`
+- Source head before this plan update: `7eaf162496899e7832d70490ca1979430f6ece9d`
+- Purpose: evaluate whether moving whole MoE layers to GPU, including the current `--n-cpu-moe` front-CPU/back-GPU placement model, can become the next `10 tok/s` route under the existing vendor/native GGUF representation.
+
+Latest hard-bound conclusion:
+
+- Full MoE layer GPU placement is closed before source. It is not a viable next implementation step for the current native DeepSeek GGUF and current 32GB GPU layout.
+- Current CLI semantics are fixed: `--n-cpu-moe N` keeps the first `N` MoE layers on CPU, so reducing `N` offloads tail layers first (`39`, then `38`, etc. for the current first-40-MoE CPU range). Arbitrary high-benefit layer placement would require new source work; the bound below also evaluates that more optimistic case.
+- One native DeepSeek MoE expert role is `4456448` bytes. A whole MoE layer contains gate/up/down expert roles for `256` experts, so one full MoE layer costs about `3264 MiB` VRAM. This matches the prior `cpu_moe=41` footprint probe.
+- The accepted SOTA layout has only about `238 MiB` free VRAM and `13566 MiB` of gate one-stream cache payload. Even if the entire accepted gate cache were repurposed, at most `4` full MoE layers can fit. In practice this would also destroy the current gate-hit path and likely hurt TTFT.
+- Actual `--n-cpu-moe` tail offload upper bound is weak. Moving layers `39,38,37,36` saves only `2014.182 ms` of up/down CPU fallback. Crediting the moved layers' rejected touch-split gate trace adds only `372.369 ms`. Even the extreme ceiling that credits the entire rejected gate trace to these four layers reaches only `6.611 tok/s`, still `6949.981 ms` short of `10 tok/s`, and needs stealing about `2732` additional gate slots.
+- Optimistic arbitrary full-layer placement is also below target. The best four layers by measured up/down fallback are `1,0,2,3`; they save `5308.868 ms` of up/down CPU fallback. Crediting their layer gate trace reaches only `5.416 tok/s`. Even the extreme ceiling that credits the entire rejected gate trace to those four layers reaches only `7.8764 tok/s`, still `3655.295 ms` short of `10 tok/s`, and needs stealing about `2422` additional gate slots.
+- These are zero-overhead ceilings: they ignore GPU MoE compute time, allocator/workspace overhead, synchronization cost, source changes, and gate-cache penalty. Real runs can only be worse.
+
+Updated next executable plan:
+
+1. Commit and push this full-layer GPU placement hard-bound artifact and plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+2. Do not implement `--n-cpu-moe` sweeps, arbitrary full-MoE-layer GPU placement, or front-CPU/back-GPU layer partitioning as the next optimization route for the current native GGUF. Reopen only if a new representation reduces whole-layer VRAM cost by several times, or if a new hard-bound proves more than `10 tok/s` with integration margin after gate-cache loss.
+3. Keep runtime/source optimization frozen unless a new hard-bound artifact proves a route above `10 tok/s` with integration margin. The closed routes now include async up/down I/O, fine-grained exact row/column/sub-tensor residency, gate-sacrifice topN up/down residency, full MoE layer GPU placement, 4Expert split-loader/overlay, metadata-only REAP/compact/split/sidecar candidates, and top48 sparse fused MMVQ.
+4. To make empirical progress, request explicit user approval for disk cleanup/relocation. Minimum useful targets remain about `60GB` for 0xSero Q2 REAP, `90-100GB` for low-bit native-topology GGUFs, and preferably `>=180GB` for cloudyu 4Expert GGUF plus hash/run artifacts.
+5. Preserve these assets before any cleanup: accepted native GGUF `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`, accepted France gate pack `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, accepted SOTA run above, current source branch, profiles, and pushed-source reproduction artifacts. Do not delete files without explicit user approval.
+6. If disk is approved, test `cloudyu` 4Expert first. Required order: download full GGUF, record URL/path/size/SHA256, validate loader metadata with `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` and `GGML_MOE_STREAM_ONE_Q4K=1`, confirm 16GB/no-swap accounting, run correctness gates, then run strict cold France only if correctness passes.
+7. Correctness remains mandatory before performance promotion. For same-model/default-off source changes, run fixed-text top1 and require `same_top1 == n_tokens`; for alternate model/quantization artifacts, record France output and the five-prompt semantic set before any SOTA claim. The France prompt must be semantically correct and coherent.
+8. Promotion remains unchanged: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM, and correct France output.
+9. If a compliant new SOTA appears, immediately record full reproduction metadata and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted. Required metadata includes source commit, pushed remote branch, full env/CLI, run path, build command, binary hash if available, model path and size, expert pack/profile/manifest hashes, token rates, TTFT, elapsed time, full France answer, cgroup `memory.peak`, `memory.current`, `memory.stat`, `memory.events`, page-cache bytes, cache/pack counters, correctness decision, and comparison to the previous `4.4 tok/s` SOTA.
+
 ### 2026-07-06 Latest Active Plan: Async Up/Down I/O Closed, Alternate GGUF Empirical Test Is Disk-Blocked
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。
