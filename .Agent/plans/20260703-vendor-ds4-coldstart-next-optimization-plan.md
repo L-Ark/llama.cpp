@@ -82,6 +82,14 @@ DeepSeek4 MTP tensor mapping and verifier design:
 - Reference source `antirez/ds4` binds the same `mtp.0.*` tensors, keeps a separate MTP raw cache, and has an exact N=2 verifier path. Its README says the current MTP/speculative path is experimental, correctness-gated, and provides at most slight speedup.
 - Decision: still no runtime patch. The next required artifact is `.Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-n2-verifier-cost-bound.json`. If exact N=2 cannot show a meaningful hard-bound under strict 16GB RAM, TTFT, and correctness gates, close MTP for the 10 tok/s objective rather than implementing loader code.
 
+DeepSeek4 MTP N=2 verifier cost bound:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-n2-verifier-cost-bound.json`.
+- Exact N=2 can emit at most 3 tokens per target verification pass. At current `4.4 tok/s`, even with perfect two-token acceptance, `C_verify + C_draft` must be `<=1.32x` one current target-token pass, i.e. `<=300 ms`; this leaves only `72.7 ms` over the current one-token pass.
+- Current decode CPU up/down fallback alone averages about `139.9 ms/token`. Unless target verification removes or batches that fallback far beyond any currently proven vendor path, the second verified token consumes more than the entire N=2 extra budget.
+- Because MTP draft has nonzero layer/output/cache/file cost, and antirez documents the reference MTP path as only a slight speedup, exact N=2 MTP has no credible `10 tok/s` hard-bound under the current 16GB/TTFT/correctness constraints.
+- Decision: close antirez exact N=2 MTP as a 10 tok/s route. Do not implement MTP loader/verifier for the 10 tok/s objective unless a new MTP/DSpark mechanism proves `A>=5` with sublinear target verification and full RAM/VRAM/TTFT/correctness accounting.
+
 ### 2026-07-05 Latest Plan: Current Head After Full Up/Down Bound
 
 本节是当前最新生效计划，覆盖下面所有旧的 `Latest Active Plan` / `Latest Active Plan Override` 段落；旧段落只作为历史实验记录保留。后续执行必须先更新本计划或 `.Agent/runs/20260705-vendor-ds4-coldstart/` 下的实验 artifact，再做 runtime 改动或长跑。

@@ -1,0 +1,77 @@
+{
+  "artifact": "deepseek4-mtp-n2-verifier-cost-bound",
+  "created_utc": "2026-07-05T09:10:00Z",
+  "source_head": "6d09c22ef57eb8f08430cefc4aa519260dfbc8f8",
+  "runtime_source_modified": false,
+  "model_run_performed": false,
+  "purpose": "Bound whether the antirez-style exact N=2 MTP verifier can plausibly be a 10 tok/s route for the current vendor DeepSeek4 strict-cold SOTA before implementing loader/runtime code.",
+  "current_sota_reference": {
+    "eval_tok_s": 4.4,
+    "decode_ms_per_token": 227.272729,
+    "accepted_decode_window_ms": 31047.447,
+    "decode_cpu_updown_fallback_ms": 19115.399,
+    "decode_cpu_updown_fallback_ms_per_token": 139.928056,
+    "decode_nonfallback_ms_per_token": 87.344673,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "n2_bound_math": {
+    "formula": "tok_s = 4.4 * (A + 1) / C_total, where A is average accepted draft tokens and C_total is target-verification plus MTP-draft cost in current one-token target-pass units.",
+    "max_A_for_exact_N2": 2,
+    "required_for_10_tok_s": [
+      {
+        "average_accepted_draft_tokens_A": 1.0,
+        "ideal_tok_s_if_C_total_1": 8.8,
+        "allowed_C_total": 0.88,
+        "allowed_ms": 200.0,
+        "decision": "cannot reach 10 even with one current-token cost"
+      },
+      {
+        "average_accepted_draft_tokens_A": 1.272727,
+        "ideal_tok_s_if_C_total_1": 10.0,
+        "allowed_C_total": 1.0,
+        "allowed_ms": 227.273,
+        "decision": "minimum acceptance threshold, leaves zero room for verifier/draft overhead"
+      },
+      {
+        "average_accepted_draft_tokens_A": 1.5,
+        "ideal_tok_s_if_C_total_1": 11.0,
+        "allowed_C_total": 1.1,
+        "allowed_ms": 250.0,
+        "decision": "requires target verification plus draft to add less than 22.7ms over current one-token pass"
+      },
+      {
+        "average_accepted_draft_tokens_A": 2.0,
+        "ideal_tok_s_if_C_total_1": 13.2,
+        "allowed_C_total": 1.32,
+        "allowed_ms": 300.0,
+        "decision": "best possible N=2 case; only 72.7ms extra over current one-token pass is allowed"
+      }
+    ]
+  },
+  "why_current_vendor_cannot_assume_this_bound": [
+    "The current accepted decode path is dominated by CPU up/down fallback, averaging about 139.9ms per token just for that component.",
+    "An exact N=2 verifier must compute target logits for the drafted suffix. Unless target MoE verification is substantially sublinear, the second verified token alone can consume more than the entire 72.7ms extra budget.",
+    "Existing current-head work has already rejected CPU batch rewrite, raw/transposed/row-tile exact hot-batch kernels, MMVQ skip/write, source-only overlap, and full up/down CUDA/streaming as 10 tok/s routes.",
+    "The MTP draft itself has nonzero cost: it needs an extra supplementary attention/MoE layer, MTP raw cache, output head work, and extra file/VRAM/page-cache accounting.",
+    "The 3.807GB MTP GGUF adds TTFT and 16GB page-cache pressure. Full preload was already rejected by TTFT math.",
+    "The antirez reference README states the current MTP/speculative path is experimental, correctness-gated, and provides at most slight speedup, not a meaningful generation-speed win."
+  ],
+  "decision": {
+    "exact_N2_mtp_has_10_tok_s_hard_bound": false,
+    "runtime_patch_allowed_for_10_tok_s": false,
+    "download_allowed_for_10_tok_s": false,
+    "strict_cold_benchmark_allowed": false,
+    "accepted_sota_unchanged": true,
+    "accepted_sota_eval_tok_s": 4.4,
+    "status": "close_antirez_exact_N2_mtp_as_10_tok_s_route",
+    "notes": [
+      "This does not prove MTP cannot produce a small token-rate gain. It only rejects MTP as an efficient path toward 10 tok/s under the current constraints.",
+      "Do not implement MTP loader/verifier unless the objective changes to small SOTA gains or a new MTP/DSpark implementation supports A>=5 with measured sublinear target verification."
+    ]
+  },
+  "next_direction_after_rejection": [
+    "Do not spend runtime-source work on antirez exact N=2 MTP for the 10 tok/s objective.",
+    "Return to non-MTP mechanisms only if they first provide a hard-bound above 10 tok/s.",
+    "The only remaining plausible class is a genuinely new exact compact representation or target-verification mechanism that removes most CPU up/down fallback without serial target work."
+  ]
+}
