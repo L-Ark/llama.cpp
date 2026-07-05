@@ -80648,3 +80648,144 @@ cd "$RUN"
 ./phase7nn_analyze_io.py
 cat io-summary.md
 ```
+
+## Phase 7NO - selective down requantization and typed-pack feasibility audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 02:58 CST.
+
+Reason:
+
+- Phase 7NN rejects the remaining simple I/O directions:
+  - queue-depth/refill-only work;
+  - in-batch adjacent/full-span coalescing;
+  - trace-order/layout-only packs;
+  - route-history prefetch without a new hard byte-reduction predictor.
+- The next viable path is reducing bytes moved from SSD to GPU.
+- Current strict n32 byte decomposition from 7NN:
+  - total expert-pack iouring bytes: `126391910400` (`117.712 GiB`);
+  - up read bytes: `36.009 GiB`;
+  - gate read bytes: `38.652 GiB`;
+  - down read bytes: `43.051 GiB`.
+- The current model assets are only IQ3_S GGUF shards. There is no local
+  smaller full Kimi quantization asset, and the server has only about `88 GiB`
+  free disk, which is not enough for another full split GGUF output.
+
+Candidate families:
+
+1. Full-GGUF selective down requantization:
+   - use `llama-quantize --allow-requantize --dry-run --keep-split`;
+   - default type `COPY`;
+   - override only `ffn_down_exps` tensors to smaller types such as `Q3_K`,
+     `IQ3_XXS`, or `IQ2_S`.
+   - This is likely blocked for actual output by disk space because even a
+     copied split model would need hundreds of GiB.
+2. Expert-pack-only typed down entries:
+   - create a smaller expert pack for down tensors while leaving GGUF metadata
+     unchanged.
+   - This is not currently supported by `GGMLMOEPACKv1`: pack entries contain
+     tensor name, expert id, offset, and nbytes, but no quantized type.
+   - Current runtime lookup also expects `entry->nbytes == src0_bytes`, where
+     `src0_bytes` comes from the GGUF tensor type. A smaller pack entry would
+     not be found and, if forced, would be interpreted with the wrong kernel
+     type.
+   - A real implementation would require a typed expert-pack format or sidecar,
+     cache slot sizing by pack type, and launching the down kernel with the
+     pack-entry type rather than the GGUF `src0_type`.
+
+Kernel support facts to verify:
+
+- The current CUDA down path supports these smaller types in the generic MMVQ
+  path:
+  - `Q3_K`;
+  - `IQ3_XXS`;
+  - `IQ3_S`;
+  - `IQ2_S`;
+  - `IQ4_XS`.
+- The optional down Q8_K reference path is currently restricted to
+  `Q3_K/IQ4_XS`.
+- Therefore byte reduction is a format/tooling/correctness problem first, not
+  a basic kernel-availability problem.
+
+Theoretical upper bound:
+
+- If only down bytes change:
+  - `Q3_K`/`Q3_K_M` can reduce down bytes by roughly `15-20%`;
+  - `IQ3_XXS` can reduce down bytes by roughly `25-35%`;
+  - `IQ2_S` can reduce down bytes by roughly `40-45%`.
+- On the 7NN n32 trace, these approximate byte savings are only on the
+  `43.051 GiB` down component:
+  - Q3-like: about `6-9 GiB`;
+  - IQ3_XXS-like: about `11-15 GiB`;
+  - IQ2_S-like: about `17-20 GiB`.
+- At the measured 7NN wait-side throughput `5.854 GiB/s`, the aggregate wait
+  reduction upper bound is approximately:
+  - Q3-like: `1.0-1.5 s`;
+  - IQ3_XXS-like: `1.9-2.6 s`;
+  - IQ2_S-like: `2.9-3.4 s`.
+- Endpoint gain will be lower because a large fraction of wait is overlapped.
+  This means selective down requantization must be treated as a modest-gain,
+  high-quality-risk path unless it also improves cache residency.
+
+Audit method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7no-down-requant-audit`
+2. Record:
+   - `commands.log`;
+   - `repo_state.txt`;
+   - `disk.txt`;
+   - `quantize-help.txt`;
+   - `dry-run-q3k.txt`;
+   - `dry-run-iq3xxs.txt`;
+   - `dry-run-iq2s.txt`;
+   - `typed-pack-scope.md`.
+3. Run only dry-run quantization commands under the strict 16GB cgroup:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  build-cuda-batch/bin/llama-quantize \
+    --dry-run --allow-requantize --keep-split \
+    --tensor-type ffn_down_exps=Q3_K \
+    /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf \
+    COPY
+```
+
+Repeat for:
+
+- `ffn_down_exps=IQ3_XXS`;
+- `ffn_down_exps=IQ2_S`.
+
+Strict constraints:
+
+- Do not create a quantized output GGUF.
+- Do not edit source.
+- Do not run model inference in this phase.
+- Keep dry-run commands under `MemoryMax=15900000000` and `MemorySwapMax=0`.
+- If a dry-run exceeds memory or attempts to write a large output, stop and
+  record the failure.
+
+Decision rule:
+
+- Reject full-GGUF requantization as an immediate path if dry-run confirms the
+  output still requires hundreds of GiB or if disk remains below the required
+  margin.
+- Reject typed expert-pack implementation unless all are true:
+  - expected strict n32 endpoint gain is at least `1.0 s` after overlap
+    discount, or n96 projected token-rate gain is at least `5%`;
+  - runtime changes can be default-off and isolated to expert-pack entries with
+    explicit type metadata;
+  - the plan includes a quality gate with the France prompt before any SOTA
+    claim;
+  - TTFT risk remains below the `20%` cap;
+  - host RAM remains below strict `16GB`.
+- If the hard bound is too small or quality risk dominates, reject down
+  requantization and move the next plan back to accepted-token parallelism or
+  external asset preparation.
+
+Reproducibility:
+
+- Commit and push this plan before running dry-runs.
+- Commit and push the audit result before any source implementation plan.
