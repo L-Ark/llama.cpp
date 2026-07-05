@@ -1,0 +1,30 @@
+{
+  "accepted_sota": {
+    "correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15099523072,
+    "memory_peak_bytes": 16000000000,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_gate_ms": 33617.688744,
+    "ttft_ms": 32087.738292
+  },
+  "created_at_utc": "2026-07-05T21:11:45Z",
+  "files_deleted": false,
+  "full_model_downloaded": false,
+  "planned_probe": {
+    "constant_config": "same as accepted demo_current_sota config: vendor, native GGUF, cpu_moe=40, vram_cache=0, one-prefill limit=3000, gate pack O_DIRECT, keep-topk 4 with layers 10-39=>3, strict drop_caches, MemoryMax=16000000000, MemorySwapMax=0",
+    "correctness_gate": "France output must be semantic/coherent and runner correctness_ok=true.",
+    "env_delta": {
+      "OMP_WAIT_POLICY": "ACTIVE"
+    },
+    "promotion_gate": "If eval_tok_s > 4.4 with TTFT/RAM/correctness passing, immediately run a clean reproduction before accepting and push all source/artifacts. If not, record rejected and do not repeat sampling.",
+    "run_name": "omp-wait-active-probe-20260706"
+  },
+  "purpose": "Plan a bounded no-source OpenMP wait-policy probe on the accepted SOTA route.",
+  "source_head": "14be61aaea4038530b0dceec14a24d8ba955dcef",
+  "theory": {
+    "upper_bound": "Treat as a SOTA-polish probe only. It can be promoted only if strict cold eval_tok_s > 4.4, correctness passes, RAM/page-cache stays within 16GB, and TTFT <= 33617.688744 ms. It does not reopen the 10 tok/s route unless the measured improvement is unexpectedly large and reproducible.",
+    "why_it_cannot_be_10tok_path": "The current post-TTFT generation window is about 31.262 s for roughly 137.6 generated tokens. Reaching 10 tok/s for the same output would require saving about 17.507 s. The CPU chunk critical path is about 27 s and is dominated by exact up/down work and memory traffic; wait-policy tuning can only reduce scheduling/wakeup overhead, not remove the exact fallback payload.",
+    "why_it_might_help": "ggml is built with libgomp and uses an OpenMP parallel region for graph compute. CPU up/down fallback dominates decode, so worker sleep/wakeup policy might affect per-token scheduling latency without changing model math."
+  }
+}

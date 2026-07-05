@@ -4,7 +4,7 @@
 
 本计划从当前已 push 的 vendor DeepSeek cold-start 复现状态继续推进。最终结果必须体现在 `vendor` 框架，`ik_llama` 只能作为参考。
 
-### 2026-07-06 Latest Active Plan: Demo Reproduction Fixed, Disk Approval Required For Empirical Progress
+### 2026-07-06 Latest Active Plan: OMP Wait Policy Rejected, Disk Approval Required For Empirical Progress
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Plan` / `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的可接受 token-rate SOTA。
 
@@ -29,9 +29,11 @@ Latest planning artifacts:
 - Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-continuation-no-delete-audit-20260706.json`
 - Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/demo-current-sota-explicit-prefill-validation-20260706.json`
 - Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/demo-current-sota-final-exactargs-validation-20260706.json`
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/omp-wait-policy-probe-plan-20260706.json`
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/omp-wait-policy-active-result-20260706.json`
 - Prior artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/full-layer-gpu-placement-hard-bound-after-async-io.json`
-- Source head before this plan update: `3b34b3b905e9d452f11bd3488f52aa8e8bfa7e59`
-- Purpose: after closing full MoE layer placement, alternate GGUF/speculative artifacts, and exact up/down fallback, run a current no-delete/no-full-download audit and repair the current SOTA demo so it explicitly carries the accepted one-prefill configuration. No full model weights were downloaded and no files were deleted.
+- Source head before this plan update: `14be61aaea4038530b0dceec14a24d8ba955dcef`
+- Purpose: after closing full MoE layer placement, alternate GGUF/speculative artifacts, and exact up/down fallback, run a current no-delete/no-full-download audit, repair the current SOTA demo, and test one bounded no-source OpenMP wait-policy probe. No full model weights were downloaded and no files were deleted.
 
 Latest hard-bound conclusion:
 
@@ -39,6 +41,7 @@ Latest hard-bound conclusion:
 - Disk remains the empirical blocker. `/root` still has only about `1.8 GiB` free, so full alternate GGUF tests cannot run without explicit user-approved cleanup or relocation. No files were deleted.
 - The current continuation refresh checked Hugging Face metadata again and found `repo_count=53`, but no new or changed usable GGUF weight files versus `.Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-refresh-20260706-after-layer-close-v2.json`. The newest visible `ilintar/DeepSeek-V4-Flash-GGUF` repo has only README metadata, and the only new repo versus the prior artifact, `cPilotGod/deepseek-deepseek-v4-284b-flash-gguf`, exposes no GGUF files. The recent `eadx` Huihui Q2/Q2_K/Q4_K files were already header-bounded below `10 tok/s` in the prior alternate-GGUF artifact.
 - `.Agent/examples/demo_current_sota.sh` has been corrected to explicitly pass `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000` and `GGML_MOE_STREAM_ONE_PREFILL_PROFILE=$PROFILE`, matching the accepted SOTA one-prefill path, and to avoid redundant thread extra-args already supplied by `strict_ds4_runner.py`. The strict cold final demo run `/root/lfz/runs/vendor-ds4-16gb/20260705T210100Z-demo-current-sota-prefill-exactargs-20260706/france-cpu40-vram0gb` reproduced the current SOTA envelope: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=33337.895821 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15102562304`, `ram_ok=true`, `correctness_ok=true`, `one prefill limit=3000`, and `one expert pack misses=0`. This is not a new SOTA, but it fixes the demo/repro path.
+- `OMP_WAIT_POLICY=ACTIVE` was tested as a bounded no-source runtime policy probe because the binary uses `libgomp` and the current decode path is CPU fallback dominated. The single candidate run `/root/lfz/runs/vendor-ds4-16gb/20260705T211313Z-omp-wait-active-probe-absbin-20260706/france-cpu40-vram0gb` reached `eval_tok_s=4.5` with correctness/RAM/TTFT passing, but the immediate clean reproduction `/root/lfz/runs/vendor-ds4-16gb/20260705T211514Z-omp-wait-active-pushed-repro-20260706/france-cpu40-vram0gb` reached only `eval_tok_s=4.3` while still passing correctness/RAM/TTFT. Therefore this is rejected as variance, not promoted, and this no-source knob should not be repeatedly sampled without a new hard-bound.
 - Best full single-file metadata bound remains `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf`, tied with the equivalent `eouya2` REAP50 compact IQ2XXS artifact: `expert_count=256`, `expert_used_count=6`, size about `50.44GB`, optimistic `gpu_moe_layers_fit=25`, `cpu_moe_layers_remaining=18`, projected `decode_ms=14367.888`, projected `tok_s=9.4359`. This is still below `10 tok/s` before correctness, TTFT, allocator, and implementation overhead.
 - Other priority candidates are lower under the same optimistic bound: `0xSero` Spark-Mini Q2 `9.2631 tok/s`, `0xSero` Spark Q2 `8.7974 tok/s`, `sleepyeldrazi` Q2/Q4 mixed `8.9520 tok/s`, `0xSero` Q3 Dynamic `7.6421/7.1870 tok/s`, `sleepyeldrazi` NVFP4 K128/K150/K180 `7.2535/6.6994/6.1556 tok/s`, `bullerwins` IQ2_S `6.9118 tok/s`, `bullerwins` IQ3 variants `6.2327 tok/s` or lower, and native-like `sokann`/`6ms` MXFP4 around `4.65 tok/s`.
 - `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf` parsed as `deepseek4`, `expert_used_count=4`, Q4_K experts. The generic full-file VRAM placement formula gives only `5.5533 tok/s`; the older 4Expert-specific hard-bound that granted perfect source/page elimination reached only about `9.581 tok/s`. Therefore it remains a full-download correctness/performance candidate after disk approval, not a metadata-proven `10 tok/s` path.
@@ -50,7 +53,7 @@ Latest hard-bound conclusion:
 
 Updated next executable plan:
 
-1. Commit and push this current metadata/no-delete audit, demo reproduction fix, validation artifact, and plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+1. Commit and push this current metadata/no-delete audit, demo reproduction fix, OMP wait-policy rejection artifact, and plan update to `ssd/vendor/deepseek-token-rate-16gb`.
 2. Do not implement runtime source edits from this refresh. No priority alternate GGUF has a metadata-only hard-bound above `10 tok/s`; all would still require full download, hash, loader validation, correctness gates, 16GB RAM/page-cache accounting, TTFT check, and strict cold benchmark before any promotion.
 3. Do not repeat no-source keep-topk/prefill/lightning parameter sweeps without a new hard-bound; the existing artifacts show correctness failure, reproduction failure, or no token-rate improvement.
 4. Do not implement diskless HTTP Range / remote GGUF loader as a token-rate path. It can be reopened only if a colocated object store or filesystem proves at least `0.914 GiB/s` sustained effective read bandwidth for the best Q2 REAP lower-bound bytes inside the TTFT gate, with random-read overhead and 16GB RAM accounting included.

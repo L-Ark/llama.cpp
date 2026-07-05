@@ -1,0 +1,201 @@
+{
+  "accepted_sota": {
+    "correctness_ok": true,
+    "eval_tok_s": 4.4,
+    "memory_file_bytes": 15099523072,
+    "memory_peak_bytes": 16000000000,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "ttft_gate_ms": 33617.688744,
+    "ttft_ms": 32087.738292
+  },
+  "cases": {
+    "candidate": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T211313Z-omp-wait-active-probe-absbin-20260706/france-cpu40-vram0gb",
+      "env_checks": {
+        "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct": true,
+        "GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000": true,
+        "OMP_WAIT_POLICY=ACTIVE": true
+      },
+      "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16",
+      "stderr_counters": {
+        "expert_pack": "[moe_stream] one expert pack: hits=4886 misses=0 reads=4886 bytes=21774204928 failures=0 entries=4599 direct_enabled=1 direct_reads=4886 direct_failures=0 direct_fallbacks=0",
+        "one_prefill": "[moe_stream] one prefill: enabled=1 loaded=3313 limit=3000 attempted=3000 inserted=3000 pack_misses=0 read_failures=0 bytes=13369344000 elapsed_ms=3823.425",
+        "vram_cache": "[moe_stream] VRAM cache: hits=33265 misses=1886 hit_rate=94.6%"
+      },
+      "summary": {
+        "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T211313Z-omp-wait-active-probe-absbin-20260706/france-cpu40-vram0gb",
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "cpu_moe": 40,
+        "elapsed_seconds": 62.66,
+        "eval_ms": null,
+        "eval_tok_s": 4.5,
+        "exit_status": 0,
+        "first_answer_ms": 32240.600586,
+        "load_ms": null,
+        "max_rss_kb": 15591396,
+        "memory_file_bytes": 15102832640,
+        "memory_max_bytes": 16000000000,
+        "memory_max_events": 17248,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 3519709184,
+          "anon": 1138688,
+          "file": 15102832640,
+          "file_mapped": 278528,
+          "inactive_file": 11582648320,
+          "kernel": 112693248,
+          "pgfault": 2335438,
+          "pgmajfault": 270053,
+          "slab": 112024008,
+          "workingset_activate_file": 408537,
+          "workingset_refault_file": 1636374,
+          "workingset_restore_file": 408228
+        },
+        "oom_seen": false,
+        "pgmajfault": 270053,
+        "prompt_eval_ms": null,
+        "prompt_tok_s": 1.9,
+        "ram_kill_threshold_bytes": 16000000000,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "systemd_status": 0,
+        "ttft_estimate_ms": 32240.600586,
+        "unit": "vendor-ds4-16gb-20260705T211313Z-cpu40.service",
+        "workingset_refault_file": 1636374
+      }
+    },
+    "invalid_relative_binary": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T211215Z-omp-wait-active-probe-20260706/france-cpu40-vram0gb",
+      "env_checks": {
+        "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct": true,
+        "GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000": true,
+        "OMP_WAIT_POLICY=ACTIVE": true
+      },
+      "exact_command": "build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16",
+      "stderr_counters": {
+        "expert_pack": null,
+        "one_prefill": null,
+        "vram_cache": null
+      },
+      "summary": {
+        "answer": "",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T211215Z-omp-wait-active-probe-20260706/france-cpu40-vram0gb",
+        "correctness_ok": false,
+        "correctness_reason": "too_short,missing_france,missing_europe,missing_expected_context",
+        "cpu_moe": 40,
+        "elapsed_seconds": 0.0,
+        "eval_ms": null,
+        "eval_tok_s": null,
+        "exit_status": 127,
+        "first_answer_ms": null,
+        "load_ms": null,
+        "max_rss_kb": 488,
+        "memory_file_bytes": 4841472,
+        "memory_max_bytes": 16000000000,
+        "memory_max_events": 0,
+        "memory_peak_bytes": 10706944,
+        "memory_stat_relevant": {
+          "active_file": 3280896,
+          "anon": 3362816,
+          "file": 4841472,
+          "file_mapped": 692224,
+          "inactive_file": 1552384,
+          "kernel": 917504,
+          "pgfault": 4408,
+          "pgmajfault": 36,
+          "slab": 326136,
+          "workingset_activate_file": 0,
+          "workingset_refault_file": 0,
+          "workingset_restore_file": 0
+        },
+        "oom_seen": false,
+        "pgmajfault": 36,
+        "prompt_eval_ms": null,
+        "prompt_tok_s": null,
+        "ram_kill_threshold_bytes": 16000000000,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "systemd_status": 127,
+        "ttft_estimate_ms": null,
+        "unit": "vendor-ds4-16gb-20260705T211215Z-cpu40.service",
+        "workingset_refault_file": 0
+      }
+    },
+    "reproduction": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T211514Z-omp-wait-active-pushed-repro-20260706/france-cpu40-vram0gb",
+      "env_checks": {
+        "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct": true,
+        "GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000": true,
+        "OMP_WAIT_POLICY=ACTIVE": true
+      },
+      "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16",
+      "stderr_counters": {
+        "expert_pack": "[moe_stream] one expert pack: hits=4886 misses=0 reads=4886 bytes=21774204928 failures=0 entries=4599 direct_enabled=1 direct_reads=4886 direct_failures=0 direct_fallbacks=0",
+        "one_prefill": "[moe_stream] one prefill: enabled=1 loaded=3313 limit=3000 attempted=3000 inserted=3000 pack_misses=0 read_failures=0 bytes=13369344000 elapsed_ms=3523.083",
+        "vram_cache": "[moe_stream] VRAM cache: hits=33265 misses=1886 hit_rate=94.6%"
+      },
+      "summary": {
+        "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260705T211514Z-omp-wait-active-pushed-repro-20260706/france-cpu40-vram0gb",
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "cpu_moe": 40,
+        "elapsed_seconds": 63.54,
+        "eval_ms": null,
+        "eval_tok_s": 4.3,
+        "exit_status": 0,
+        "first_answer_ms": 31954.331021,
+        "load_ms": null,
+        "max_rss_kb": 15598712,
+        "memory_file_bytes": 15096594432,
+        "memory_max_bytes": 16000000000,
+        "memory_max_events": 16617,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 10839146496,
+          "anon": 1130496,
+          "file": 15096594432,
+          "file_mapped": 278528,
+          "inactive_file": 4257107968,
+          "kernel": 112631808,
+          "pgfault": 2339263,
+          "pgmajfault": 267849,
+          "slab": 111963560,
+          "workingset_activate_file": 506977,
+          "workingset_refault_file": 1685356,
+          "workingset_restore_file": 506592
+        },
+        "oom_seen": false,
+        "pgmajfault": 267849,
+        "prompt_eval_ms": null,
+        "prompt_tok_s": 1.8,
+        "ram_kill_threshold_bytes": 16000000000,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "systemd_status": 0,
+        "ttft_estimate_ms": 31954.331021,
+        "unit": "vendor-ds4-16gb-20260705T211514Z-cpu40.service",
+        "workingset_refault_file": 1685356
+      }
+    }
+  },
+  "created_at_utc": "2026-07-05T21:17:31Z",
+  "decision": {
+    "accepted_sota_unchanged": true,
+    "candidate_eval_tok_s": 4.5,
+    "candidate_passed_gates": true,
+    "new_sota": false,
+    "reason": "Single OMP_WAIT_POLICY=ACTIVE candidate reached 4.5 tok/s, but immediate clean reproduction reached only 4.3 tok/s. Treat as variance, same as prior prefill-limit candidate policy; do not promote or repeatedly sample this no-source knob.",
+    "reproduction_eval_tok_s": 4.3,
+    "reproduction_passed_correctness_ram_ttft": true,
+    "route": "OMP_WAIT_POLICY=ACTIVE no-source runtime policy",
+    "run_more_omp_wait_policy_sampling_now": false
+  },
+  "files_deleted": false,
+  "full_model_downloaded": false,
+  "plan_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/omp-wait-policy-probe-plan-20260706.json",
+  "purpose": "Record OMP_WAIT_POLICY=ACTIVE no-source probe and immediate reproduction under strict cold 16GB constraints.",
+  "source_head": "14be61aaea4038530b0dceec14a24d8ba955dcef"
+}
