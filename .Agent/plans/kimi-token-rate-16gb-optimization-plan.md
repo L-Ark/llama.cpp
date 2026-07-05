@@ -80361,7 +80361,7 @@ cat "$RUN/script.diff"
 
 ## Phase 7NN - low-level io wait/locality decomposition
 
-Status: planned.
+Status: completed; diagnostic accepted; I/O coalescing/scheduler source work rejected for now.
 
 Timestamp: 2026-07-06 02:45 CST.
 
@@ -80493,3 +80493,158 @@ Reproducibility:
 - Commit and push this plan before running the diagnostic.
 - Commit and push the result and analysis before any source change or follow-up
   experiment.
+
+Result:
+
+- Timestamp: 2026-07-06 02:41 CST.
+- Plan commit before execution:
+  `d5a29b971` (`docs: plan io wait locality profile`).
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-183547Z-phase7nn-io-wait-locality-n32`
+- Source files were not changed.
+- Diagnostic activation passed. `env.txt` contains:
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`;
+  - `GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv`.
+- Required profile files were generated:
+  - `io-batch-profile.csv` (`5179` lines including header);
+  - `io-wait-trace.csv` (`18076` lines including header);
+  - `io-locality-profile.csv` (`5179` lines including header);
+  - `current-down-overlap-profile.csv` (`33` lines including header);
+  - `phase7nn_analyze_io.py`;
+  - `io-summary.md`;
+  - `analyze_stdout.txt`.
+
+Strict gate results:
+
+- Exit: `0`.
+- Quality: `pass`.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Manual semantic check: pass. The answer is France-specific and coherent,
+  although truncated by `N=32`.
+- TTFT: `76747.20 ms`, below the cap `127598.064 ms`.
+- Decode: `23428.83 ms / 31 runs = 1.32 tok/s`.
+- `memory.max`: `15899996160`.
+- `memory.swap.max`: `0`.
+- `memory.peak`: `15899996160`.
+- `memory.current.final`: `15085633536`.
+- `memory.events`: `oom=0`, `oom_kill=0`, `oom_group_kill=0`.
+
+Expert-pack counters:
+
+- `iouring_reads=22647`.
+- `iouring_bytes=126391910400` (`117.712 GiB`).
+- `iouring_submit_us=56923`.
+- `iouring_wait_us=20097441`.
+- `iouring_fallbacks=0`.
+- `read_failures=0`.
+- `inflight_avg=3.34`, `inflight_max=8`.
+- Batch histogram:
+  `1:176,2-4:2679,5-8:2323,9-16:0,17-32:0,gt32:0`.
+
+Analysis summary:
+
+- `io-summary.md` reports:
+  - batches: `5178`;
+  - read jobs: `22647`;
+  - batch wait sum: `20106.397 ms`;
+  - wait-trace wait sum: `20106.397 ms`;
+  - submit sum: `59.512 ms`;
+  - enqueue sum: `399.733 ms`;
+  - effective wait-side throughput: `5.854 GiB/s`.
+- Family wait:
+  - up: `1792` batches, `7854` read jobs, `7390.042 ms` wait;
+  - gate: `1792` batches, `7855` read jobs, `7455.239 ms` wait;
+  - down: `1594` batches, `6938` read jobs, `5261.117 ms` wait.
+- Read-job bucket wait:
+  - `1`: `176` batches, `249.489 ms`;
+  - `2-4`: `2679` batches, `8250.829 ms`;
+  - `5-8`: `2323` batches, `11606.079 ms`.
+- Long-tail contribution:
+  - top `1%` batches are only `2.42%` of batch wait;
+  - top `5%` batches are `10.34%`;
+  - top `10%` batches are `18.77%`.
+- Inflight wait is broadly distributed across `1..8`, not isolated to a small
+  number of pathological waits.
+
+Locality/coalescing bound:
+
+- Locality rows: `5178`.
+- Read bytes: `126391910400` (`117.712 GiB`).
+- Full-span coalesced bytes would be `3052754976768`
+  (`2843.100 GiB`).
+- Gap bytes inside spans: `2926363066368` (`2725.388 GiB`).
+- Span/read ratio: `24.15x`.
+- Adjacent pairs: `517` across all `22647` read jobs.
+- Max in-batch gap: `1772503040` bytes (`1690.39 MiB`).
+- Per family span/read ratios:
+  - up: `23.83x`;
+  - gate: `23.84x`;
+  - down: `24.70x`.
+
+Current-down overlap profile:
+
+- Tensors: `32`.
+- Planned jobs: `3673`.
+- Completed jobs: `3673`.
+- Cache hits: `3519`.
+- Missing tensor: `93`.
+- Missing pack: `36`.
+- Missing tensor rows are concentrated in `blk.7`, `blk.8`, and `blk.9`, each
+  with `31` missing tensor counts and zero planned/completed jobs. The current
+  overlap path otherwise completes its planned jobs.
+
+Interpretation:
+
+- Batch wait is not dominated by a tiny set of long-tail batches. Eliminating
+  the top `10%` batch waits entirely would only remove `3.773 s` from aggregate
+  wait, and aggregate wait is already partly overlapped with compute/copy.
+- Queue-depth/refill tuning alone remains unlikely to move the endpoint:
+  previous sweeps were rejected, submit overhead is only `59.512 ms`, and this
+  profile shows no `9-16+` read-job batches to unlock with a simple depth knob.
+- In-batch coalescing is not a viable next source target. Full-span coalescing
+  would multiply bytes read by `24.15x`, and only `517` adjacent pairs exist
+  across `22647` reads.
+- A new cross-tensor scheduler would have to cross layer/family boundaries to
+  enlarge batches. For Kimi decode, future-layer routes are not known until the
+  current layer output is computed, and previous-token route prediction was
+  already rejected in 7NL because useful predictions were already retained by
+  LRU.
+
+Decision:
+
+- Accept the diagnostic result.
+- Reject further source work on:
+  - simple io_uring queue-depth/refill changes;
+  - in-batch adjacent/full-span coalescing;
+  - trace-order/layout-only pack changes;
+  - cross-layer route-history prefetch without a new predictor with a hard
+    byte-reduction bound.
+- Current SOTA remains unchanged.
+- The next viable optimization plan should move to:
+  - real byte reduction on transferred expert tensors; or
+  - accepted-token parallelism/speculative decoding with a verifier cost below
+    the 7NA/7NB rejection envelope; or
+  - a new asset/runtime format that reduces the `117.712 GiB` n32 read volume
+    without violating the strict 16GB host RAM cap.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-183547Z-phase7nn-io-wait-locality-n32
+EXTRA_RUNTIME_ENV=$'GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv\nGGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv\nGGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv\nGGML_MOE_STAGE_GRANULARITY_PROFILE=1\nGGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap-profile.csv'
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="$EXTRA_RUNTIME_ENV" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+cd "$RUN"
+./phase7nn_analyze_io.py
+cat io-summary.md
+```
