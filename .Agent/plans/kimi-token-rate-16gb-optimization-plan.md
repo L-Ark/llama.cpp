@@ -83601,3 +83601,106 @@ Decision:
 - No token-rate/SOTA claim is made.
 - Remaining blocker before strict n32/n96 performance work:
   reproducible Kimi `IQ2_XXS` asset/imatrix validation.
+
+## Phase 7OD - IQ2_XXS Kimi asset and imatrix feasibility audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 06:06 CST.
+
+Reason:
+
+- Phase 7OC closed the prompt `Q8_K` code blocker with a model-free
+  `IQ2_XXS` selftest.
+- The remaining blocker before any strict n32/n96 performance or quality run is
+  a reproducible Kimi `IQ2_XXS` expert asset/imatrix path.
+- Phase 7NZ showed `IQ2_XXS` is the least aggressive candidate that clears the
+  raw8/raw12 byte-reduction envelope:
+  - target movement `79.741 GiB/n32`;
+  - `2.572 GiB/token`;
+  - `32.18%` byte reduction.
+- `IQ2_XXS` requires imatrix for quantization. Running source activation
+  without a validated asset would not prove France quality and could waste time
+  on an un-runnable path.
+
+Goal:
+
+- Determine whether the current server already has enough local assets and
+  tools to produce or validate a Kimi `IQ2_XXS` expert asset.
+- Identify the exact reproducible path required for the next phase:
+  - use an existing local/public `IQ2_XXS` Kimi GGUF shard set;
+  - or run `llama-quantize` with an existing imatrix;
+  - or generate a required imatrix;
+  - or conclude that asset work is blocked by missing inputs.
+- Do not download large model assets.
+- Do not convert the model.
+- Do not run model inference.
+- Do not edit source.
+- Do not promote SOTA.
+
+Inputs:
+
+- Current repo/build:
+  - `build-cuda-batch/bin/llama-quantize`;
+  - `build-cuda-batch/bin/llama-imatrix` if present;
+  - Kimi expert-pack scripts/tools in the repo;
+  - current Kimi GGUF/expert-pack paths used by accepted runs.
+- Current run records:
+  - latest strict n32/n96 command files;
+  - Phase 7NZ/7OA/7OC artifacts.
+- Server filesystem:
+  - local model directories under likely roots such as `/root/lfz`, `/root`,
+    `/mnt`, `/data`, and existing run command files;
+  - local imatrix files (`*.imatrix`, `*.dat`, `imatrix*`);
+  - available disk space.
+
+Method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7od-iq2xxs-asset-imatrix`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `phase7od_iq2xxs_asset_imatrix.py`;
+   - `local_assets.tsv`;
+   - `tool_support.tsv`;
+   - `command_inventory.tsv`;
+   - `disk_inventory.tsv`;
+   - `decision.md`.
+3. Parse recent accepted `command.txt`/`commands.log` files to identify:
+   - active model paths;
+   - expert pack paths;
+   - any imatrix or quantization-related arguments.
+4. Inventory local files without walking huge trees blindly:
+   - use bounded `find` under known roots;
+   - classify GGUF shards by name and size;
+   - classify expert pack files by name and size;
+   - classify imatrix candidates by name and size.
+5. Inspect tool availability:
+   - `llama-quantize --help` contains `IQ2_XXS`;
+   - `llama-imatrix` exists or not;
+   - any repo script supports expert-only pack generation or typed pack
+     rebuilding.
+6. Decide whether a next strict phase is possible:
+   - if a local `IQ2_XXS` Kimi asset exists, write the next plan for a strict
+     n32 cold smoke with France quality and 16GB host RAM gates;
+   - if a base Kimi GGUF plus imatrix exists, write the next plan for an
+     offline conversion dry-run/size estimate before full conversion;
+   - if no imatrix exists, write the next plan for imatrix generation feasibility
+     and dataset/TTFT/RAM implications;
+   - if disk space is insufficient, record exact required bytes and stop.
+
+Decision rule:
+
+- Proceed to asset conversion or strict n32 smoke only if the audit identifies a
+  concrete, local, reproducible input set and enough disk space.
+- Do not use an `IQ2_XXS` asset without imatrix provenance.
+- Do not run a model or conversion in this phase.
+- If asset/imatrix inputs are missing, do not implement more `IQ2_XXS` runtime
+  source; return to asset acquisition/generation planning.
+
+Reproducibility:
+
+- Commit and push this 7OD plan before running the audit.
+- Commit and push the 7OD result before any asset conversion, model run, or
+  further source implementation.
