@@ -1,0 +1,119 @@
+{
+  "date": "2026-07-05",
+  "title": "Plan: top768 resident batched/fused exact MXFP4 x Q8_0 compute",
+  "status": "design_complete_microprobe_allowed_not_performance",
+  "promoted_to_sota": false,
+  "accepted_sota_unchanged": {
+    "eval_tok_s": 4.4,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260703T220820Z-20260704_gate_prefill_top3000_pushed_repro/france-cpu40-vram0gb",
+    "ttft_accept_gate_ms": 33617.688744
+  },
+  "basis": {
+    "async_source_result": ".Agent/runs/20260705-vendor-ds4-coldstart/async-direct-prefill-overlap-diagnostic-result.json",
+    "top768_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/top768-source-hidden-hard-bound-recheck.json",
+    "topn_bound_warning": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-source-resident-batched-hard-bound-v2.json",
+    "q80_correctness": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-cpucompat-all-updown-validation.json",
+    "q80_slow_profile": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-upskip-overhead-profile-validation.json"
+  },
+  "important_interpretation": {
+    "not_raw_top768_10_path": "Raw source-resident top768 alone has a zero-overhead ceiling of only 6.48 tok/s in q80-source-resident-batched-hard-bound-v2. It must not be described as a standalone 10 tok/s route.",
+    "conditional_10_path": "The 10.338 tok/s paper bound depends on near-perfect source/page overlap first reducing decode to 15191.28071 ms, then top768 exact hot residual compute removing another 2048.86 ms, plus cpu_moe=41 source-hidden cost. The top768 compute work is only one component of that combined bound.",
+    "current_source_status": "Async direct prefill only proves the top768 prefill source cost can fit TTFT with narrow margin. It does not by itself implement full source/page overlap for all nonresident fallback.",
+    "allowed_use": "This plan allows a default-off compute microprobe/compare path to measure whether exact resident top768 compute could fit the remaining 446.414 ms overhead budget. It does not allow a SOTA claim or long performance run before correctness and source assumptions are proven."
+  },
+  "hard_bounds": {
+    "decoded_tokens_estimate": 136.608765524,
+    "target_decode_ms_for_10_tok_s": 13660.8765524,
+    "source_only_overlap_decode_ms": 15191.28071,
+    "top768_hot_residual_save_ms": 2048.86,
+    "extra_cpu41_layer_cost_if_source_hidden_ms": 72.041,
+    "top768_source_hidden_decode_ms_zero_overhead": 13214.463,
+    "top768_source_hidden_tok_s_zero_overhead": 10.338,
+    "top768_source_hidden_slack_ms": 446.414,
+    "top768_calls_covered": 19410,
+    "average_overhead_budget_per_covered_call_us": 22.999,
+    "async_direct_prefill_added_ttft_ms": 647.0,
+    "async_direct_prefill_ttft_margin_ms": 78.135454,
+    "workspace_or_extra_ttft_budget_ms": "very small; target <50 ms because async source margin is only about 78 ms"
+  },
+  "current_rejected_per_call_path": {
+    "calls_attempted": 18688,
+    "total_ms": 58687.042,
+    "avg_total_us": 3140.36,
+    "host_src0_ms": 28106.781,
+    "h2d_ms": 6062.462,
+    "kernel_sync_ms": 20341.664,
+    "avg_kernel_sync_us": 1088.488,
+    "d2h_ms": 184.696,
+    "scatter_ms": 17.111,
+    "cuda_alloc_plus_free_ms": 3796.468,
+    "reason_rejected": "It copies source per call, allocates/free per call, launches/synchronizes one small kernel per expert call, and uses a one-output-thread scalar kernel. It is orders of magnitude over budget."
+  },
+  "minimum_required_improvement": {
+    "remove_host_src0_copy": true,
+    "remove_full_src0_h2d": true,
+    "remove_per_call_cuda_malloc_free": true,
+    "avoid_per_call_device_synchronize": true,
+    "batch_selected_experts_per_mul_mat_id_op": true,
+    "target_total_compute_overhead_ms": "<=446.414 for all top768 covered calls, including q80 activation staging, kernel, D2H, scatter, and sync",
+    "target_kernel_plus_sync_ms": "<=200-250 ms unless D2H/scatter are improved far below current profile",
+    "target_workspace_mib": "<=128 MiB additional persistent workspace; reject if it threatens the observed ~244 MiB free VRAM in the cpu_moe=41 dual-pool diagnostic"
+  },
+  "proposed_runtime_shape": {
+    "cpu_hook": "Add a new default-off hook before CPU fallback in ggml_compute_forward_mul_mat_id, parallel to the existing q80_skip hook, but operating on all hot selected experts for the current mul_mat_id op at once.",
+    "env_gate": "GGML_MOE_STREAM_Q80_HOT_BATCH=1",
+    "source_lookup": "Extend one_direct_hot_pool with a tensor/expert -> slot index lookup and per-slot ready state. Only experts whose slot is ready may be submitted; unready or missing entries must remain in matrix_row_counts and fall back to CPU.",
+    "task_collection": "On ith==0, scan matrix_row_counts for current src0_name. For each cur_a with cne1>0 and ready hot slot, append one task containing slot pointer, expert id, cne1, row mappings, q8_0 activation row offsets, and dst offsets.",
+    "batching_granularity": "One batched launch per mul_mat_id op for selected hot tasks. Do not launch one kernel per expert call.",
+    "sync_rule": "A stream sync is allowed once per op because CPU graph needs dst before continuing. Per-expert cudaDeviceSynchronize is rejected.",
+    "fallback_rule": "If the batch hook returns false or any task is not covered/ready, leave that expert's matrix_row_counts unchanged so exact CPU fallback runs.",
+    "reporting": "Record tasks_seen, tasks_ready, tasks_submitted, tasks_failed, misses_not_in_manifest, misses_not_ready, q80_bytes_h2d, out_bytes_d2h, kernel_ms, d2h_ms, scatter_ms, sync_ms, and total_ms."
+  },
+  "kernel_design": {
+    "must_match_cpu_semantics": "Use the validated CPU-compatible MXFP4 x Q8_0 arithmetic, not the older scalar/non-compatible path and not the Q8_1 one-stream path.",
+    "existing_correctness_evidence": "CPU-compatible Q8_0 all-up plus all-down skip passed fixed-text top1 with same_top1=145/145 and max_abs=0.",
+    "first_kernel": "A warp/block-level CPU-compatible kernel that preserves the AVX2-style two-block, eight-lane accumulation order. It should parallelize across output rows and inner blocks while keeping the final reduction order fixed.",
+    "do_not_use_as_final": "The existing moe_stream_q80_probe_cpu_compat_kernel is acceptable as an oracle but likely too slow because it maps one output element to one scalar thread and was only validated for correctness.",
+    "activation_staging": "Copy only selected Q8_0 activation rows from params->wdata to a small device workspace. This is about 4 KiB per cne1=1 call in the current up profile and is small compared with source payload.",
+    "output_path": "Write selected outputs to a device output workspace, copy back once per op or per compact batch, then scatter to dst. D2H is unavoidable unless the downstream graph is moved to GPU, which is outside this plan.",
+    "workspace": "Reuse persistent d_task, d_q80, d_out, and pinned h_out buffers. No cudaMalloc/cudaFree in the per-op hot path."
+  },
+  "microprobe_before_skip": {
+    "purpose": "Measure the true lower bound of resident-source batched exact compute without changing logits.",
+    "env": "GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE=1",
+    "behavior": "Run normal CPU fallback first or keep CPU dst authoritative, then replay the selected ready hot tasks through the batched kernel, D2H, and compare against dst. Do not clear matrix_row_counts and do not change model outputs.",
+    "required_run": "fixed-text llama-results top1 with probe enabled under MemoryMax=16000000000 and MemorySwapMax=0",
+    "pass_condition_correctness": "llama-results exits 0, same_top1=145/145, first_mismatch_pos=-1, max_abs=0, mean_abs=0, and op-level compare max_abs=0 for probed tasks",
+    "pass_condition_performance_bound": "Projected full top768 total overhead from probe counters <=446.414 ms, with a preferred margin of at least 100 ms because source TTFT margin is only about 78 ms",
+    "reject_if": [
+      "Projected top768 kernel+D2H+scatter+sync overhead exceeds 446.414 ms",
+      "Additional workspace or allocation adds more than about 50 ms TTFT or causes cgroup/GPU OOM risk",
+      "Any top1 mismatch or op-level mismatch appears",
+      "Ready coverage is materially below the selected top768 call coverage"
+    ]
+  },
+  "skip_path_after_probe_only": {
+    "env": "GGML_MOE_STREAM_Q80_HOT_BATCH_SKIP=1",
+    "preconditions": [
+      "probe correctness passed",
+      "probe projected overhead passed",
+      "default-off path passed top1",
+      "ready/miss counters are understood"
+    ],
+    "first_scope": "fixed-text top1 only, not France performance",
+    "performance_scope": "Only after top1 passes, run strict cold France as diagnostic. Promote only if eval_tok_s>4.4, TTFT<=33617.688744 ms, ram including page cache <=16GB cgroup, no swap, and France output is coherent."
+  },
+  "open_risks": [
+    "The combined 10 bound still relies on source/page overlap beyond the top768 direct prefill. A top768 compute skip can be an intermediate improvement, but cannot prove 10 alone.",
+    "The async prefill TTFT margin is only about 78 ms. Any extra startup allocation, additional prefill synchronization, or disk contention can consume it.",
+    "The current cgroup runs hit memory.peak=16000000000 exactly. Workspace must remain small and page-cache pressure must be measured.",
+    "A one-kernel-per-op design may still have thousands of sync points. If sync overhead is high, the route must be rejected before a long benchmark.",
+    "Down and up shapes differ; the kernel and scatter must handle both without changing CPU-compatible accumulation order."
+  ],
+  "decision": {
+    "implement_full_skip_now": false,
+    "implement_microprobe_next": true,
+    "sota_status": "unchanged",
+    "next_action": "Implement only a default-off compare/probe path for resident-source batched exact top768 compute and measure projected overhead. Do not clear CPU fallback counts or claim performance until the probe passes."
+  }
+}
