@@ -3,6 +3,7 @@
 #include "llama-impl.h"
 #include "llama-memory-deepseek4.h"
 #include "../llama-deepseek4-hot.h"
+#include "ggml-backend.h"
 
 #include <algorithm>
 #include <cinttypes>
@@ -12,6 +13,7 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <tuple>
 #include <vector>
 
@@ -86,6 +88,195 @@ static bool deepseek4_hot_dispatch_enabled() {
         return std::strcmp(value, "0") != 0;
     }();
     return enabled;
+}
+
+struct deepseek4_sparse_retained_graph_probe_state {
+    std::mutex mutex;
+    FILE * fp = nullptr;
+    bool attempted = false;
+    uint64_t seq = 0;
+};
+
+static deepseek4_sparse_retained_graph_probe_state & deepseek4_sparse_retained_graph_probe() {
+    static deepseek4_sparse_retained_graph_probe_state state;
+    return state;
+}
+
+static const char * deepseek4_sparse_retained_graph_probe_path() {
+    const char * path = std::getenv("DS4_SPARSE_RETAINED_GRAPH_PROBE_OUT");
+    if (path == nullptr || path[0] == '\0' || std::strcmp(path, "0") == 0) {
+        return nullptr;
+    }
+    return path;
+}
+
+static const char * deepseek4_tensor_buft_name(const ggml_tensor * tensor) {
+    if (tensor == nullptr) {
+        return "null";
+    }
+    if (tensor->buffer == nullptr) {
+        return "no_buffer";
+    }
+    ggml_backend_buffer_type_t buft = ggml_backend_buffer_get_type(tensor->buffer);
+    if (buft == nullptr) {
+        return "no_buft";
+    }
+    const char * name = ggml_backend_buft_name(buft);
+    return name ? name : "unnamed_buft";
+}
+
+static const char * deepseek4_tensor_type_name(const ggml_tensor * tensor) {
+    return tensor ? ggml_type_name(tensor->type) : "null";
+}
+
+static uint64_t deepseek4_tensor_nbytes_u64(const ggml_tensor * tensor) {
+    return tensor ? (uint64_t) ggml_nbytes(tensor) : 0;
+}
+
+static uint64_t deepseek4_tensor_expert_bytes_u64(const ggml_tensor * tensor) {
+    if (tensor == nullptr || tensor->ne[2] <= 0) {
+        return 0;
+    }
+    return (uint64_t) (ggml_nbytes(tensor) / tensor->ne[2]);
+}
+
+static FILE * deepseek4_sparse_retained_graph_probe_fp_locked() {
+    auto & state = deepseek4_sparse_retained_graph_probe();
+    if (state.fp != nullptr) {
+        return state.fp;
+    }
+    if (state.attempted) {
+        return nullptr;
+    }
+    state.attempted = true;
+
+    const char * path = deepseek4_sparse_retained_graph_probe_path();
+    if (path == nullptr) {
+        return nullptr;
+    }
+
+    state.fp = std::fopen(path, "w");
+    if (state.fp == nullptr) {
+        std::fprintf(stderr, "deepseek4_sparse_retained_graph_probe: failed to open %s\n", path);
+        return nullptr;
+    }
+
+    std::fprintf(state.fp,
+        "seq,il,mix_tokens,n_embd,selected_ne0,selected_ne1,cur_buft,cur_experts_buft,selected_buft,weights_buft,"
+        "full_gate_up_buft,full_gate_buft,full_up_buft,full_down_buft,hot_gate_up_buft,hot_gate_buft,hot_up_buft,hot_down_buft,"
+        "full_gate_up_type,full_gate_type,full_up_type,full_down_type,hot_gate_up_type,hot_gate_type,hot_up_type,hot_down_type,"
+        "full_gate_up_expert_bytes,full_gate_expert_bytes,full_up_expert_bytes,full_down_expert_bytes,"
+        "hot_gate_up_nbytes,hot_gate_nbytes,hot_up_nbytes,hot_down_nbytes,"
+        "hot_active,hot_ready,hot_k,hot_n_picks,hot_dispatch_enabled,dispatch_dual,selected_matches_hot_picks,"
+        "graph_gate_output_input_available,current_hot_path_computes_gate,rectangular_entries_layer,rectangular_updown_bytes_layer,"
+        "combine_bytes_call,compact_candidate\n");
+    std::fflush(state.fp);
+    return state.fp;
+}
+
+static void deepseek4_sparse_retained_graph_probe_write(
+        int il,
+        int64_t mix_tokens,
+        int64_t n_embd,
+        const ggml_tensor * cur_ffn,
+        const ggml_tensor * cur_experts_in,
+        const ggml_tensor * selected_experts,
+        const ggml_tensor * weights,
+        const ggml_tensor * full_gate_up,
+        const ggml_tensor * full_gate,
+        const ggml_tensor * full_up,
+        const ggml_tensor * full_down,
+        const ds4_hot::layer_hot_state * hot,
+        bool hot_dispatch_enabled,
+        bool dispatch_dual) {
+    if (deepseek4_sparse_retained_graph_probe_path() == nullptr) {
+        return;
+    }
+
+    auto & state = deepseek4_sparse_retained_graph_probe();
+    std::lock_guard<std::mutex> lock(state.mutex);
+    FILE * fp = deepseek4_sparse_retained_graph_probe_fp_locked();
+    if (fp == nullptr) {
+        return;
+    }
+
+    const bool hot_active = hot != nullptr;
+    const bool hot_ready = hot && hot->ready_for_dispatch();
+    const int64_t hot_k = hot ? hot->k : 0;
+    const int64_t hot_n_picks = hot ? hot->n_picks : 0;
+    const int64_t selected_ne0 = selected_experts ? selected_experts->ne[0] : -1;
+    const int64_t selected_ne1 = selected_experts ? selected_experts->ne[1] : -1;
+    const bool selected_matches_hot_picks = hot && selected_ne0 == hot->n_picks;
+    const int64_t p = hot_n_picks > 0 ? hot_n_picks : (selected_ne0 > 0 ? selected_ne0 : 0);
+    const uint64_t up_expert_bytes = deepseek4_tensor_expert_bytes_u64(full_up);
+    const uint64_t down_expert_bytes = deepseek4_tensor_expert_bytes_u64(full_down);
+    const uint64_t rectangular_entries = hot_ready ? (uint64_t) (hot_k + hot_n_picks + 1) : 0;
+    const uint64_t rectangular_updown_bytes = rectangular_entries * (up_expert_bytes + down_expert_bytes);
+    const uint64_t combine_bytes_call =
+        (p > 0 && mix_tokens > 0 && n_embd > 0) ? (uint64_t) n_embd * (uint64_t) p * (uint64_t) mix_tokens * sizeof(float) : 0;
+
+    // build_expert_mix receives selected IDs and weights, not a retained gate
+    // output tensor. Current DS4_HOT_DISPATCH therefore computes gate again.
+    const bool graph_gate_output_input_available = false;
+    const bool current_hot_path_computes_gate =
+        dispatch_dual && hot && (hot->hot_gate_up_exps || hot->hot_gate_exps);
+    const bool compact_candidate =
+        selected_ne0 > 0 && selected_ne1 > 0 && full_down != nullptr && (full_up != nullptr || full_gate_up != nullptr);
+
+    std::fprintf(fp,
+        "%llu,%d,%lld,%lld,%lld,%lld,%s,%s,%s,%s,"
+        "%s,%s,%s,%s,%s,%s,%s,%s,"
+        "%s,%s,%s,%s,%s,%s,%s,%s,"
+        "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
+        "%d,%d,%lld,%lld,%d,%d,%d,%d,%d,%llu,%llu,%llu,%d\n",
+        (unsigned long long) state.seq++,
+        il,
+        (long long) mix_tokens,
+        (long long) n_embd,
+        (long long) selected_ne0,
+        (long long) selected_ne1,
+        deepseek4_tensor_buft_name(cur_ffn),
+        deepseek4_tensor_buft_name(cur_experts_in),
+        deepseek4_tensor_buft_name(selected_experts),
+        deepseek4_tensor_buft_name(weights),
+        deepseek4_tensor_buft_name(full_gate_up),
+        deepseek4_tensor_buft_name(full_gate),
+        deepseek4_tensor_buft_name(full_up),
+        deepseek4_tensor_buft_name(full_down),
+        deepseek4_tensor_buft_name(hot ? hot->hot_gate_up_exps : nullptr),
+        deepseek4_tensor_buft_name(hot ? hot->hot_gate_exps : nullptr),
+        deepseek4_tensor_buft_name(hot ? hot->hot_up_exps : nullptr),
+        deepseek4_tensor_buft_name(hot ? hot->hot_down_exps : nullptr),
+        deepseek4_tensor_type_name(full_gate_up),
+        deepseek4_tensor_type_name(full_gate),
+        deepseek4_tensor_type_name(full_up),
+        deepseek4_tensor_type_name(full_down),
+        deepseek4_tensor_type_name(hot ? hot->hot_gate_up_exps : nullptr),
+        deepseek4_tensor_type_name(hot ? hot->hot_gate_exps : nullptr),
+        deepseek4_tensor_type_name(hot ? hot->hot_up_exps : nullptr),
+        deepseek4_tensor_type_name(hot ? hot->hot_down_exps : nullptr),
+        (unsigned long long) deepseek4_tensor_expert_bytes_u64(full_gate_up),
+        (unsigned long long) deepseek4_tensor_expert_bytes_u64(full_gate),
+        (unsigned long long) up_expert_bytes,
+        (unsigned long long) down_expert_bytes,
+        (unsigned long long) deepseek4_tensor_nbytes_u64(hot ? hot->hot_gate_up_exps : nullptr),
+        (unsigned long long) deepseek4_tensor_nbytes_u64(hot ? hot->hot_gate_exps : nullptr),
+        (unsigned long long) deepseek4_tensor_nbytes_u64(hot ? hot->hot_up_exps : nullptr),
+        (unsigned long long) deepseek4_tensor_nbytes_u64(hot ? hot->hot_down_exps : nullptr),
+        hot_active ? 1 : 0,
+        hot_ready ? 1 : 0,
+        (long long) hot_k,
+        (long long) hot_n_picks,
+        hot_dispatch_enabled ? 1 : 0,
+        dispatch_dual ? 1 : 0,
+        selected_matches_hot_picks ? 1 : 0,
+        graph_gate_output_input_available ? 1 : 0,
+        current_hot_path_computes_gate ? 1 : 0,
+        (unsigned long long) rectangular_entries,
+        (unsigned long long) rectangular_updown_bytes,
+        (unsigned long long) combine_bytes_call,
+        compact_candidate ? 1 : 0);
+    std::fflush(fp);
 }
 
 static void deepseek4_fill_hadamard(std::vector<float> & data, int64_t n) {
@@ -548,9 +739,14 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
         // ne[0] = n_expert instead of n_picks. In that case our per-pick
         // arithmetic would assert in ggml_mul, so fall back to the single
         // path code below.
+        const bool hot_dispatch_env = deepseek4_hot_dispatch_enabled();
         const bool dispatch_dual = hot && hot->ready_for_dispatch()
-                                   && deepseek4_hot_dispatch_enabled()
+                                   && hot_dispatch_env
                                    && selected_experts->ne[0] == hot->n_picks;
+        deepseek4_sparse_retained_graph_probe_write(
+            il, mix_tokens, n_embd, cur_ffn, cur_experts_in, selected_experts, weights,
+            layer.ffn_gate_up_exps, layer.ffn_gate_exps, layer.ffn_up_exps, layer.ffn_down_exps,
+            hot, hot_dispatch_env, dispatch_dual);
 
         if (dispatch_dual) {
             const int64_t n_picks_local  = selected_experts->ne[0];
