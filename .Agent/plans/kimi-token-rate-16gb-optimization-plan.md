@@ -67401,3 +67401,91 @@ Reproducibility:
 - Commit and push this plan before running.
 - Record source commit, run directory, command, output, TTFT, decode, token
   rate, memory, swap, IO counters, and comparison with 7JY/7KU.
+
+### 7KX result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `3d15fc5b9` (`docs: plan current head n32 baseline`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-045134Z-phase7kx-current-head-n32`.
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260705-045134Z-phase7kx-current-head-n32 \
+      N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- manual semantic quality `pass` for the generated prefix;
+- TTFT `78182.34 ms`;
+- decode `22601.57 ms / 31`, `1.37 tok/s`;
+- memory peak `15899996160`;
+- memory final `15101116416`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Runtime counters:
+
+- expert pack hits `25045`, misses `192`;
+- iouring reads `22647`;
+- iouring bytes `126391910400`;
+- iouring wait `19756301 us`;
+- iouring submit `49077 us`;
+- global io_uring detail:
+  - batches `5178`;
+  - submit calls `5178`;
+  - wait calls `18265`;
+  - inflight avg `3.32`;
+  - inflight max `8`;
+  - batch histogram `1:176,2-4:2679,5-8:2323`;
+- current-down overlap:
+  - calls `992`;
+  - planned/completed jobs `3673/3673`;
+  - cache hits `3519`;
+  - missing tensor `93`;
+  - missing pack `36`;
+  - worker `3167865 us`;
+- down cache:
+  - slots `766`;
+  - hit rate `73.4%`;
+- upgate cache:
+  - slots `1735`;
+  - hit rate `45.2%`.
+
+Comparison:
+
+- 7JY accepted script-default n32:
+  - decode `22667.39 ms / 31`, `1.37 tok/s`.
+- 7KX current-head n32:
+  - decode `22601.57 ms / 31`, `1.37 tok/s`.
+- 7KX is `65.82 ms` faster than 7JY n32, within normal cold-run variance but
+  sufficient to show the current head did not regress after reverting 7KW.
+- 7KU current-head n96 remains the current strict n96 baseline:
+  - decode `56613.00 ms / 77`, `1.36 tok/s`;
+  - TTFT `77706.41 ms`;
+  - quality and memory gates pass.
+
+Decision:
+
+- Record 7KX as the post-revert current-head n32 no-profile baseline.
+- Do not claim a source-level SOTA change; this run only confirms the baseline.
+- Keep the accepted defaults unchanged.
+- Continue using `22667.39 ms / 31` as the n32 acceptance reference and require
+  n96 confirmation before promoting any future change.
