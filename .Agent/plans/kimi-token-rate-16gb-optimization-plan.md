@@ -79359,3 +79359,146 @@ Decision:
   verifier design exist.
 - Continue optimization from runtime bottlenecks that can be measured under the
   strict n32 cold-start gate.
+
+## Phase 7NI - scheduler MoE cache compatibility probe
+
+Timestamp: 2026-07-06 02:46:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test one current-source default-off mechanism that has not been covered in
+  this plan: the backend scheduler MoE expert cache controlled by
+  `GGML_SCHED_MOE_CACHE_SLOTS`.
+- Determine whether it can activate on the current Kimi streaming graph and
+  reduce expert movement, or whether it bypasses/conflicts with the existing
+  expert-pack + VRAM-cache path.
+- This phase is env-only. Do not edit source.
+- Do not promote SOTA unless a later repeat and n96 validation pass every hard
+  gate.
+
+Why this is the next valid step:
+
+- 7MY shows the current strict n32 bottleneck is still exposed expert movement:
+  `117.71 GiB` expert-pack io_uring bytes and `20.984633 s` io_uring wait.
+- Direct format/speculative assets are blocked by 7NF/7NH.
+- Local directions already rejected include RAM tier, host prefetch, IO
+  depth/refill, SQPOLL-off, coalescing/layout-only packs, Q4 down GPU, MMQ,
+  CUDA graph, broad VRAM split, and early current-down overlap.
+- A source/env inventory shows `GGML_SCHED_MOE_CACHE_SLOTS`,
+  `GGML_SCHED_MOE_CACHE_PREFETCH`, `GGML_SCHED_MOE_CACHE_PREFETCH_LIMIT`, and
+  `GGML_SCHED_MOE_CACHE_PRIME` exist in `ggml/src/ggml-backend.cpp` but are not
+  represented in previous plan phases.
+
+Implementation hypothesis:
+
+- The scheduler cache intercepts host-backed MoE weight inputs for
+  `GGML_OP_MUL_MAT_ID` or `GGML_OP_MOE_FUSED_UP_GATE`, creates a GPU resident
+  slot cache, remaps selected expert ids, and reuses resident slots across
+  calls.
+- If it activates on the current Kimi graph and replaces some per-token
+  expert-pack movement, it could reduce `iouring_reads`, `iouring_bytes`, or
+  exposed `iouring_wait_us`.
+- If the current custom streaming path already consumes the relevant nodes, or
+  if this scheduler cache reads from GGUF mmap instead of expert packs, it may:
+  - bypass with `reason=disabled/unsupported/too_many_experts`;
+  - duplicate the existing VRAM cache;
+  - increase host file cache and page faults;
+  - reduce token rate due extra GPU memory pressure.
+
+Theoretical upper bound:
+
+- The absolute naive upper bound remains 7MY's all-IO-wait removal:
+  `31 / (26.0457 - 20.984633) = 6.13 tok/s`.
+- A scheduler-cache success is much more limited because it can only help if it
+  actually replaces repeated expert movement. A practical first-pass success is:
+  - nonzero `moe_cache` activation logs;
+  - lower expert-pack io_uring bytes/wait than current n32 baseline at similar
+    output length;
+  - endpoint n32 improvement outside the current variance band.
+- If it only duplicates caches while keeping `iouring_bytes` roughly unchanged,
+  its upper bound is negative and the direction must be rejected.
+
+Experiment A: strict n32 activation/performance probe
+
+Use `VRAM_MIB=14500` to reserve GPU memory for the scheduler cache while still
+using most VRAM. If the scheduler cache does not activate, this run is not
+eligible for promotion because the lower stream-cache budget can only make the
+comparison conservative.
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git merge --ff-only wici/vendor/kimi-moe-stream-on-vendor
+cmake --build build-cuda-batch -j"$(nproc)"
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ni-sched-moe-cache-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=14500 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV=$'GGML_SCHED_MOE_CACHE_SLOTS=8\nGGML_SCHED_MOE_CACHE_PREFETCH=setmarkov\nGGML_SCHED_MOE_CACHE_PREFETCH_LIMIT=2\nGGML_SCHED_MOE_LOG=1' \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- plan committed and pushed before running;
+- source worktree clean before the run;
+- exit `0`;
+- cold-start script path with cache drop;
+- `MemoryMax=15900000000`, `MemorySwapMax=0`;
+- host RAM peak `<= 15899996160`, including page cache;
+- `memory.events`: `oom=0`, `oom_kill=0`;
+- quality `pass`;
+- manual semantic pass for
+  `Please introduce France in a short paragraph.`;
+- TTFT `< 127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Activation evidence:
+
+- `env.txt` must contain:
+  - `GGML_SCHED_MOE_CACHE_SLOTS=8`;
+  - `GGML_SCHED_MOE_CACHE_PREFETCH=setmarkov`;
+  - `GGML_SCHED_MOE_CACHE_PREFETCH_LIMIT=2`;
+  - `GGML_SCHED_MOE_LOG=1`.
+- `stderr.txt` must show either:
+  - `moe_cache` activation lines with nonzero hits/misses/copied bytes; or
+  - `moe_cache_bypass` lines with concrete bypass reasons.
+
+Metrics to record:
+
+- endpoint decode ms/rate and TTFT;
+- exact output text and quality result;
+- cgroup memory peak/final `file`, `inactive_file`, `active_file`, `anon`,
+  `kernel`, `pgmajfault`, `workingset_refault_file`;
+- expert-pack hits/misses, `iouring_reads`, `iouring_bytes`,
+  `iouring_wait_us`, inflight stats;
+- VRAM cache down/upgate slots and hit rates;
+- scheduler MoE cache activation/bypass counts summarized from stderr;
+- whether scheduler cache copied from GGUF mmap instead of expert pack, inferred
+  from increased page faults/file cache and unchanged expert-pack bytes.
+
+Decision rule:
+
+- Reject immediately if:
+  - no scheduler cache activation occurs;
+  - the run fails any quality/RAM/TTFT/IO gate;
+  - expert-pack bytes/wait do not fall enough to explain endpoint gain;
+  - decode is slower than the current n32 band;
+  - host page cache/refaults grow materially without reducing expert-pack IO.
+- If n32 shows activation plus a credible improvement, run one n32 repeat with
+  the same command.
+- Only if both n32 runs pass and improve, write a separate n96 validation plan
+  before any SOTA promotion.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Store raw commands, env, metrics, stderr, stdout, memory files, and scheduler
+  cache summaries in the run directory.
+- Commit and push the result before any follow-up benchmark or source change.
