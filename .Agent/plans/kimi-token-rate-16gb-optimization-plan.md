@@ -69899,6 +69899,104 @@ Rollback:
 - This phase must not resurrect the previously rejected broad Q4_0 down GPU
   direction unless this narrow env-gated test proves endpoint value.
 
+### 7LL-A result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `601b5df8a` (`cuda: gate q4 down moe batch support`).
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-065459Z-phase7ll-q4down-n32`.
+
+Gate metrics:
+
+- build succeeded;
+- exit `0`;
+- output quality `pass`;
+- output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`;
+- TTFT `69372.26 ms`;
+- decode `20629.19 ms / 31`, `1.50 tok/s`;
+- memory peak `15899996160`;
+- memory final `15104684032`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`;
+- iouring wait `16950109 us`;
+- current-down overlap worker time `2805845 us`.
+
+Activation concern:
+
+- `env.txt` contains `GGML_MOE_STREAM_DOWN_BATCH_Q4_0=1`.
+- However, `kimi_cpu_fallback_pack_mmap` is unchanged:
+  - hits `1727`;
+  - misses `9`;
+  - bytes `14260764672`.
+- This matches the default fallback footprint from 7LK-B, so the run does not
+  prove Q4_0 down fallback was removed.
+- The faster endpoint may be normal cold-start IO variance, lower iouring wait,
+  or partial behavior not visible in existing counters. It is not acceptable as
+  a SOTA result without activation proof.
+
+Decision:
+
+- Do not accept 7LL-A.
+- Before reverting, run one diagnostic profile on the same source commit to
+  determine whether Q4_0 down nodes are:
+  - eligible and batch accepted;
+  - eligible but batch declined;
+  - still unsupported by the CPU eligibility gate;
+  - accepted but followed by a correctness/fallback compare path that preserves
+    CPU fallback counters.
+
+### Phase 7LL-B - Q4_0 down eligibility diagnostic
+
+Timestamp: 2026-07-06 00:06:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Explain why 7LL-A did not reduce `kimi_cpu_fallback_pack_mmap` counters.
+- This is diagnostic only and does not promote performance.
+
+Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 601b5df8a
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7llb-q4down-elig-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15000 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_STREAM_DOWN_BATCH_Q4_0=1 GGML_KIMI_CPU_MOE_PROFILE=1 GGML_KIMI_CPU_MOE_NAME_PROFILE=1 GGML_KIMI_CPU_MOE_ELIGIBILITY_PROFILE=1 GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP=80 GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT=$RUN/fallback-profile.csv" \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required evidence:
+
+- stderr `kimi_cpu_moe_name_profile` and
+  `kimi_cpu_moe_eligibility_profile` lines for Q4_0 down tensors.
+- `fallback-profile.csv` exists.
+- Compare Q4_0 down decode fallback count and bytes against 7LK-B:
+  - 7LK-B decode Q4_0 fallback count `1736`;
+  - 7LK-B decode Q4_0 fallback bytes `13.351 GiB`.
+
+Decision rule:
+
+- If Q4_0 down is still unsupported, inspect the CPU eligibility condition and
+  fix the gate if the source patch failed to cover the actual node shape.
+- If Q4_0 down is eligible but batch declined, inspect CUDA decline reason.
+- If Q4_0 down is accepted but CPU fallback still runs for comparison/debug,
+  inspect whether the compare path is enabled and can be disabled safely.
+- If Q4_0 down fallback is unchanged and there is no small fix, revert
+  `601b5df8a` and record rejection.
+
 ### 7LG result
 
 Timestamp: 2026-07-05.
