@@ -78780,7 +78780,7 @@ Decision:
 
 Timestamp: 2026-07-06 01:20:00 CST.
 
-Status: planned.
+Status: complete; diagnostic accepted; no immediate strict-n32 asset found.
 
 Goal:
 
@@ -78884,3 +78884,116 @@ Reproducibility:
 - Store all raw metadata and commands in the run directory.
 - Commit and push the audit result into this plan before any follow-up
   benchmark or source work.
+
+Result:
+
+- Plan commit before execution:
+  `1e579c8d3 docs: plan fp4 asset refresh`.
+- Server run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-165244Z-phase7nf-fp4-asset-refresh`.
+- Server repo state during audit:
+  `1e579c8d3`.
+- No source code was changed.
+- No model run was launched.
+- No model weights were downloaded or deleted.
+
+Recorded artifacts:
+
+- `commands.log`;
+- `repo_state.txt`;
+- `disk_and_local_assets.txt`;
+- `converter_support.txt`;
+- `hf_asset_audit.py`;
+- `hf_search_results.jsonl`;
+- `hf_model_metadata.jsonl`;
+- `candidate_matrix.tsv`;
+- `decision.md`;
+- `audit_stdout.txt`;
+- `audit_stderr.txt`.
+
+Local state:
+
+- Free disk on `/` and `/root/lfz`: `88G` (`87.9 GiB` from Python).
+- Local target model:
+  `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S`, `378G`.
+- Main expert packs/assets:
+  - `kimi-iq3s-france-l12-upgate-v2.expert-pack`:
+    `175133036544` bytes (`~163.1 GiB`);
+  - `kimi-iq3s-france.expert-pack`:
+    `171692638208` bytes (`~159.9 GiB`);
+  - `kimi-iq3s-tracefirst-n64-20260630.expert-pack`:
+    `79544299520` bytes (`~74.1 GiB`);
+  - current overlay:
+    `kimi-iq3s-l1l2down-overlay.expert-pack`,
+    `4844539904` bytes (`~4.5 GiB`).
+
+Converter/runtime support evidence:
+
+- `convert_hf_to_gguf.py` contains NVFP4 repack paths:
+  - `_nvfp4_pack`;
+  - `_repack_nvfp4`;
+  - `_generate_nvfp4_tensors`;
+  - `GGMLQuantizationType.NVFP4`;
+  - `LlamaFileType.MOSTLY_NVFP4`.
+- `convert_hf_to_gguf.py` contains MXFP4 paths:
+  - `_pack_mxfp4`;
+  - `repack_mxfp4`;
+  - `GGMLQuantizationType.MXFP4`;
+  - `LlamaFileType.MOSTLY_MXFP4_MOE`;
+  - DeepSeek V4 specific MXFP4 validation/packing paths.
+- Loader enums include:
+  - `LLAMA_FTYPE_MOSTLY_MXFP4_MOE`;
+  - `LLAMA_FTYPE_MOSTLY_NVFP4`;
+  - `LLAMA_FTYPE_MOSTLY_F8_E4M3_MXFP4`.
+- This proves local source has partial converter/loader support symbols, but it
+  does not prove a full Kimi-K2.7 FP4 conversion can complete or that the current
+  MoE streaming expert-pack runtime can use the result without additional pack
+  generation and strict quality validation.
+
+Public metadata audit:
+
+- Hugging Face search/API rows recorded:
+  - `hf_search_results.jsonl`: `5` query rows;
+  - `hf_model_metadata.jsonl`: `22` model metadata rows.
+- Drop-in GGUF candidates fitting current free disk and not marked as needing
+  new runtime support: `0`.
+- Conversion-sized candidates fitting current free disk: `3`, all draft/spec
+  assets, not direct target-model replacements:
+  - `cm00cm/Kimi-K2.7-Code-DFlash`: `6.481 GiB`, safetensors,
+    requires DFlash runtime/conversion support;
+  - `cm00cm/Kimi-K2.7-Code-EAGLE3`: `2.697 GiB`, safetensors,
+    requires EAGLE3 runtime/conversion support;
+  - `novita/kimi-k2.7-code-eagle3-mla`: `3.430 GiB`, safetensors,
+    requires EAGLE3/MLA runtime support.
+- Small GGUF draft candidate:
+  - `freakyskittle/Kimi-K2.7-Code-Dflash`: `8.422 GiB`, GGUF,
+    but it is a speculative/draft asset, not a direct target replacement; 7NA
+    and 7NB already rejected the current DFlash/block-verifier route for the
+    `5 tok/s` track.
+- Direct target FP4 assets remain too large for the current server:
+  - `decart-ai/Kimi-K2.7-Code-NVFP4`: `554.341 GiB`, not fitting `87.9 GiB`
+    free disk;
+  - `amd/Kimi-K2.7-Code-MXFP4`: `514.886 GiB`, not fitting current free disk;
+  - `moonshotai/Kimi-K2.7-Code`: `554.328 GiB`, not fitting current free disk.
+- Public target GGUF bundles found by metadata are also too large:
+  - `cyberneurova/CyberNeurova-Kimi-K2.7-Code-GGUF`: `296.135 GiB`;
+  - `Edmon02/Kimi-K2.7-Code-GGUF`: `544.510 GiB`;
+  - `AesSedai/Kimi-K2.7-Code-GGUF`: `1961.274 GiB`;
+  - several other GGUF repos report multi-TiB file sets.
+
+Decision:
+
+- No asset found can enter the next strict n32 cold-start benchmark as a direct
+  model/expert-pack replacement under the current disk and runtime constraints.
+- Do not download partial target FP4/NVFP4/MXFP4 weights on this server.
+- Do not rerun the DFlash GGUF path without a new target-verification design;
+  7NB already measured target block verification as far above the required
+  envelope.
+- Current SOTA remains unchanged.
+- A future direct-format route requires one of:
+  - external preparation of a Kimi target GGUF/expert-pack that fits disk and is
+    materially smaller than the current IQ3 exposed-read path;
+  - freeing hundreds of GiB of server disk before a full NVFP4/MXFP4 conversion
+    dry-run;
+  - or a separately planned EAGLE/DFlash runtime implementation with a verifier
+    cost model that beats the 7NB rejection.
