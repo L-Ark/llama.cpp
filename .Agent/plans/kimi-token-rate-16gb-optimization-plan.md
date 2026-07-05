@@ -75721,3 +75721,212 @@ Reproducibility:
 - Commit and push this plan before running the audit.
 - Record raw API outputs, parsed summary, search time, source commit, and the
   final candidate decision in the plan.
+
+### Phase 7MR result
+
+Timestamp: 2026-07-05 20:18:00 CST.
+
+Status: accepted diagnostic result; no SOTA promotion.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-120128Z-phase7mr-external-asset-audit`
+
+Source:
+
+- `6efdb1c24`.
+
+Generated artifacts:
+
+- `hf-search-summary.json`;
+- `hf-expanded-summary.json`;
+- `hf-explicit-summary.json`;
+- `representative-head.txt`;
+- `representative-head-2.txt`;
+- raw per-repo API JSON under `hf-models/` and `hf-explicit/`;
+- small config/model-card files under `small-files3/`.
+
+External asset findings:
+
+- `decart-ai/Kimi-K2.7-Code-NVFP4`
+  - public Hugging Face repo;
+  - base model `moonshotai/Kimi-K2.7-Code`;
+  - safetensors, not GGUF;
+  - tags include `Kimi-K2.7-Code`, `quantized`, `FP4`, `NVFP4`,
+    `ModelOpt`;
+  - 60 safetensors shards plus config/tokenizer files;
+  - representative HEAD:
+    - shard 1 `content-length = 9996526192`;
+    - shard 60 `content-length = 5250188760`.
+- `amd/Kimi-K2.7-Code-MXFP4`
+  - public Hugging Face repo;
+  - base model `moonshotai/Kimi-K2.7-Code`;
+  - safetensors, not GGUF;
+  - README says AMD Quark MXFP4:
+    - MoE/Linear weights and activations are OCP MXFP4;
+    - attention projections use FP8 E4M3;
+    - MoE gates, `lm_head`, vision tower, and multimodal projector are
+      excluded from quantization;
+  - 64 safetensors shards plus config/tokenizer files;
+  - representative HEAD:
+    - shard 1 `content-length = 311876368`;
+    - shard 64 `content-length = 833769904`.
+- `moonshotai/Kimi-K2.7-Code`
+  - public source safetensors;
+  - representative HEAD for shard 1:
+    `content-length = 995001888`;
+  - still too large for conversion on the current runtime server and not a
+    direct runtime asset.
+- `unsloth/Kimi-K2.7-Code-GGUF`
+  - public GGUF repo;
+  - currently discovered files are already-lossy UD-IQ* GGUF variants, not
+    MXFP4/NVFP4 and not a valid replacement quality path for this phase.
+- Draft/speculative candidates:
+  - `cm00cm/Kimi-K2.7-Code-DFlash`;
+  - `cm00cm/Kimi-K2.7-Code-EAGLE3`;
+  - `novita/kimi-k2.7-code-eagle3-mla`;
+  - `AQ-MedAI/Kimi-K2.7-Code-eagle3`.
+
+Draft candidate details:
+
+- `cm00cm/Kimi-K2.7-Code-DFlash` README:
+  - DFlash speculative-decoding draft for `moonshotai/Kimi-K2.7-Code`;
+  - 6-layer Qwen3-style draft, hidden size 7168;
+  - consumes target hidden states at layers `[1,12,24,35,47,58]`;
+  - intended for SGLang DFlash speculative decoding.
+- `AQ-MedAI/Kimi-K2.7-Code-eagle3` README:
+  - EAGLE3 draft model;
+  - suggested SGLang settings:
+    `--speculative-num-steps 3`,
+    `--speculative-eagle-topk 1`,
+    `--speculative-num-draft-tokens 4`;
+  - reported average accepted lengths include `2.66` on MT-Bench and above
+    `2.9` on several code/math tasks.
+- These are not plain llama.cpp draft GGUFs. Existing
+  `examples/speculative` expects a loadable draft causal LM with tokenizer
+  compatibility and target-side verification. DFlash/EAGLE need target hidden
+  states and algorithm-specific heads, so they are a source-implementation
+  project, not a drop-in `--model-draft` run.
+
+Converter support evidence:
+
+- Current `convert_hf_to_gguf.py` supports:
+  - `--remote`, which reads safetensors remotely while downloading only config
+    and tokenizer files;
+  - `--outtype native`, mapped to `MOSTLY_F8_E4M3_MXFP4`;
+  - NVFP4 ModelOpt detection through `hf_quant_config.json`;
+  - `_generate_nvfp4_tensors`, `_generate_nvfp4_expert_tensors`, and writing
+    `GGMLQuantizationType.NVFP4`;
+  - MXFP4 repacking and writing `GGMLQuantizationType.MXFP4`.
+- This changes the 7MQ conclusion: there are now external safetensors assets
+  that are worth a converter dry-run. They are still not directly runnable
+  because the current vendor runtime expects GGUF plus expert packs.
+
+Decision:
+
+- No download or benchmark yet.
+- New actionable next step:
+  - run converter remote/dry-run on `decart-ai/Kimi-K2.7-Code-NVFP4`;
+  - run converter remote/dry-run on `amd/Kimi-K2.7-Code-MXFP4`;
+  - compute expected GGUF output size, split count, and whether conversion can
+    happen on the current 88 GiB free server.
+- Draft/EAGLE/DFlash remains a later source project after model-format dry-run,
+  because it requires implementing a new verification path that consumes target
+  hidden states.
+
+## Phase 7MS - remote FP4 safetensors to GGUF dry-run
+
+Timestamp: 2026-07-05 20:21:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Determine whether the external NVFP4/MXFP4 safetensors assets can be
+  converted into GGUF artifacts compatible with the vendor runtime without
+  downloading full source shards or writing full output.
+- Use dry-run only; no model shard download, no GGUF output, no benchmark.
+
+Candidates:
+
+- `decart-ai/Kimi-K2.7-Code-NVFP4`
+- `amd/Kimi-K2.7-Code-MXFP4`
+
+Why this could help:
+
+- A valid NVFP4/MXFP4 GGUF could reduce expert movement bytes and may enable
+  faster CUDA FP4 kernels.
+- Existing CUDA references show `MXFP4` and `NVFP4` MMVQ/MMQ support.
+- 7MR found public quantized safetensors assets, avoiding IQ3->FP4 lossy
+  requantization.
+
+Risks:
+
+- The runtime server has only about `88 GiB` free disk, likely insufficient for
+  full converted output.
+- Conversion may still need large temporary files, local config/tokenizer
+  snapshots, or high RAM even in dry-run.
+- A converted GGUF is not sufficient by itself; expert packs must be regenerated
+  and the vendor runtime must route the new tensor types through GPU paths.
+- `amd/Kimi-K2.7-Code-MXFP4` uses AMD Quark OCP MXFP4/FP8 conventions; current
+  converter support may not match that exact tensor naming/layout.
+- `decart-ai/Kimi-K2.7-Code-NVFP4` uses ModelOpt NVFP4; current converter has
+  explicit ModelOpt/NVFP4 code, so this is the first priority.
+
+Dry-run command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git reset --hard 6efdb1c24
+
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7ms-remote-fp4-convert-dryrun
+mkdir -p "$RUN"
+
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  bash -lc '
+    set -o pipefail
+    cd /root/lfz/llama.cpp-vendor-kimi
+    for repo in decart-ai/Kimi-K2.7-Code-NVFP4 amd/Kimi-K2.7-Code-MXFP4; do
+      safe=${repo//\//__}
+      python3 convert_hf_to_gguf.py \
+        --remote \
+        --outtype native \
+        --dry-run \
+        --split-max-size 45G \
+        --outfile "$RUN/${safe}-{ftype}.gguf" \
+        "$repo" \
+        > "$RUN/${safe}.stdout.txt" \
+        2> "$RUN/${safe}.stderr.txt"
+      echo $? > "$RUN/${safe}.exit.txt"
+    done
+  '
+```
+
+Required outputs:
+
+- exit codes for both candidates;
+- converter stdout/stderr;
+- cgroup memory peak and events;
+- local Hugging Face cache size after dry-run;
+- whether any full `.safetensors` or `.gguf` payload was downloaded or written;
+- parsed split plan or output size estimate;
+- decision whether a full conversion is feasible on this server.
+
+Decision rule:
+
+- If dry-run fails before reading remote metadata, record the converter gap and
+  do not attempt full conversion.
+- If dry-run succeeds but output size exceeds available disk, do not attempt
+  full conversion on this server. Plan an external conversion machine or remote
+  streaming output location.
+- If dry-run succeeds and output size fits with margin, write a separate
+  conversion plan before downloading or writing any large files.
+- No SOTA promotion can occur in this phase.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record exact command, source commit, repo IDs, commit/hash metadata, output
+  estimates, and all dry-run logs in the plan.
