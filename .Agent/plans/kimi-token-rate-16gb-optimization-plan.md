@@ -69997,6 +69997,104 @@ Decision rule:
 - If Q4_0 down fallback is unchanged and there is no small fix, revert
   `601b5df8a` and record rejection.
 
+### 7LL-B result
+
+Timestamp: 2026-07-05.
+
+Source commit:
+
+- `c6cfcc62a` (`docs: record q4 down activation concern`), containing source
+  commit `601b5df8a`.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260705-065928Z-phase7llb-q4down-elig-n32`.
+
+Gate metrics:
+
+- exit `0`;
+- output quality `pass`;
+- TTFT `72516.88 ms`;
+- decode `23343.98 ms / 31`, `1.33 tok/s`;
+- memory peak `15899996160`;
+- swap max `0`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Q4_0 fallback evidence:
+
+- `fallback-profile.csv` exists, `841 KiB`.
+- Decode fallback is still unchanged:
+  - `src0_type=2`;
+  - `ffn_down_exps.weight`;
+  - count `1736`;
+  - bytes `13.351 GiB`;
+  - time `2425.304 ms`.
+- The seven Q4_0 down layers are all CPU-eligible but CUDA-batch declined:
+  - `blk.6`: `batch_eligible=32 batch_accept=0 batch_decline=32`;
+  - `blk.7`: `batch_eligible=32 batch_accept=0 batch_decline=32`;
+  - `blk.8`: `batch_eligible=32 batch_accept=0 batch_decline=32`;
+  - `blk.9`: `batch_eligible=32 batch_accept=0 batch_decline=32`;
+  - `blk.10`: `batch_eligible=32 batch_accept=0 batch_decline=32`;
+  - `blk.15`: `batch_eligible=32 batch_accept=0 batch_decline=32`;
+  - `blk.18`: `batch_eligible=32 batch_accept=0 batch_decline=32`.
+- Eligibility for those layers reports:
+  - `src0_type=2`;
+  - `eligible=32`;
+  - `unsupported=0`;
+  - `decode_eligible=31`.
+
+Root cause:
+
+- CPU eligibility gate was fixed by `601b5df8a`.
+- CUDA `ggml_cuda_moe_stream_batch()` still calls
+  `moe_stream_type_supported(src0_type)` before launch.
+- `moe_stream_type_supported()` still excludes `GGML_TYPE_Q4_0`, so Q4_0 down
+  is eligible on CPU but immediately declined in CUDA.
+
+Decision:
+
+- 7LL-B explains the missing activation.
+- Implement one more default-off fix by adding `GGML_TYPE_Q4_0` to CUDA
+  `moe_stream_type_supported()`.
+- Keep the CPU-side env gate unchanged so default behavior remains unchanged.
+
+### Phase 7LL-C - complete Q4_0 CUDA type gate
+
+Timestamp: 2026-07-06 00:18:00 CST.
+
+Status: planned.
+
+Implementation:
+
+- Add `GGML_TYPE_Q4_0` to `moe_stream_type_supported()` in
+  `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Do not add any new runtime env defaults.
+- Continue requiring `GGML_MOE_STREAM_DOWN_BATCH_Q4_0=1` on the CPU side for
+  Q4_0 down batch eligibility.
+
+Experiment:
+
+- Build `build-cuda-batch`.
+- Run strict n32 with:
+  `EXTRA_RUNTIME_ENV=GGML_MOE_STREAM_DOWN_BATCH_Q4_0=1`.
+- If it exits successfully and counters suggest fallback removal, run a
+  profile repeat with fallback output to prove decode Q4_0 fallback decreases.
+
+Acceptance:
+
+- Same 16GB, cold-start, TTFT, quality, and read-failure gates.
+- `kimi_cpu_fallback_pack_mmap` hits/bytes must decrease versus 7LK-B, or a
+  fallback profile must show decode Q4_0 fallback count below `1736`.
+- Endpoint decode must not regress versus 7KX/7LG.
+- If successful, repeat n32 and then n96 before accepting.
+
+Rollback:
+
+- If Q4_0 CUDA kernels fail, quality fails, fallback remains unchanged, or
+  endpoint decode regresses, revert the Q4_0 source commits and record
+  rejection.
+
 ### 7LG result
 
 Timestamp: 2026-07-05.
