@@ -67866,3 +67866,95 @@ Decision:
 - Do not change runtime defaults.
 - Use 7KZ evidence to confirm that rejected 7KW/7KY source experiments were
   cleanly reverted and did not destabilize the default path.
+
+## Phase 7LA - narrow VRAM cache budget probe
+
+Timestamp: 2026-07-05 18:14:00 CST.
+
+Status: planned.
+
+Goal:
+
+- Test whether the current post-revert runtime can safely use a slightly larger
+  VRAM cache budget to reduce expert misses and improve token rate.
+- Keep the change env-only unless strict n32 and n96 both prove a reproducible
+  improvement under all hard gates.
+
+Current bottleneck and motivation:
+
+- 7KZ n96 default still has many VRAM misses:
+  - down cache hits `23812`, misses `8812`, hit rate `73.0%`;
+  - upgate cache hits `32608`, misses `41328`, hit rate `44.1%`;
+  - iouring reads `56535`;
+  - iouring wait `50680085 us`.
+- The runner currently uses:
+  - `VRAM_MIB=15000`;
+  - `GGML_MOE_VRAM_CACHE_SAFETY_MIB=512`;
+  - `GGML_MOE_VRAM_CACHE_AUTO_CLAMP=1`.
+- 7KZ logs show the cache allocation path reports free VRAM headroom after
+  initialization, so a narrow +256MiB probe is worth testing before declaring
+  the cache capacity axis closed.
+
+Theory and upper bound:
+
+- Increasing `VRAM_MIB` from `15000` to `15256` adds at most `256 MiB` cache
+  budget.
+- With the current split (`UPGATE_PCT=62`), the extra budget is roughly:
+  - upgate: `~158.7 MiB`, or about `29` extra `5.36 MiB` slots;
+  - down: `~97.3 MiB`, or about `13` extra `7.44 MiB` slots.
+- The hard upper bound is the iouring time of misses that those additional
+  slots convert into hits. Because LRU already captures the hottest experts and
+  Belady/online cache-policy work showed diminishing returns, expected gain is
+  small and must be measured.
+- Risk:
+  - higher VRAM budget can increase CUDA allocation pressure or reduce working
+    headroom for graph/compute buffers;
+  - auto-clamp may reduce the requested budget, in which case the experiment is
+    mostly diagnostic;
+  - if OOM, TTFT regression, quality failure, or fallback appears, reject.
+
+Experiment A: strict n32 gate
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard a88865270
+RUN=/root/lfz/runs/vendor-kimi-token-rate/$(date -u +%Y%m%d-%H%M%SZ)-phase7la-vram15256-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN="$RUN" N=32 VRAM_MIB=15256 THREADS=32 PINNED_SLOTS=12 \
+      UPGATE_PCT=62 IQ2_UPGATE_PARALLEL=1 MIN_PROFILE=1 \
+      MOE_IO_DEPTH=8 MOE_IO_REFILL_BATCH=4 MOE_PREFETCH_DOWN_DEPTH=2 \
+      scripts/kimi-phase7fb-min-profile-repro.sh
+```
+
+Required gates:
+
+- exit `0`;
+- cold-start script path with cache drop;
+- host RAM peak `<= 15899996160`;
+- swap max `0`;
+- output quality `pass`;
+- manual semantic quality pass for:
+  `Please introduce France in a short paragraph.`;
+- TTFT below `127598.064 ms`;
+- `read_failures=0`;
+- `iouring_fallbacks=0`.
+
+Decision rule:
+
+- If n32 decode improves versus the accepted n32 reference
+  `22667.39 ms / 31` and all gates pass, run n96 confirmation with the same
+  `VRAM_MIB=15256`.
+- If n32 is slower, auto-clamp leaves no meaningful budget increase, quality
+  fails, TTFT/memory/fallback gates fail, or VRAM allocation fails, reject
+  without n96.
+- Promote only if n96 improves over 7KU/7KZ while all gates pass. If promoted,
+  update the runner default, commit, and push immediately with exact
+  reproduction commands and metrics.
+
+Reproducibility:
+
+- Commit and push this plan before running.
+- Record source commit, run directory, command, output, TTFT, decode, token
+  rate, memory, swap, IO counters, actual VRAM cache budget line, cache slots,
+  hit rates, and decision.
