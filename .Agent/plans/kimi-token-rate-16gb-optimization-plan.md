@@ -90432,3 +90432,115 @@ Updated next direction:
   4. keep dense/attention CPU-offload as a bounded diagnostic only, because GP6
      showed expert cache is clamped by available VRAM after current model
      placement and naive split changes regress.
+
+## GP10: byte-reduction target bound from current dev SOTA
+
+Timestamp: `2026-07-07T02:27:02+0800`.
+
+Status: completed dev-only diagnostic.
+
+Rationale:
+
+- GP5-GP9 show runtime scheduling, cache policy, coalescing, and simple
+  prediction do not close the gap.
+- Before building a new representation, compute the hard byte-reduction target
+  required to reach `5 tok/s`.
+- This diagnostic uses only dev traces/profiles. Held-out test prompts remain
+  unused for tuning.
+
+Implemented script:
+
+- `.Agent/run-tools/kimi_byte_reduction_target_bound.py`
+
+Command:
+
+```bash
+.Agent/run-tools/kimi_byte_reduction_target_bound.py \
+  --runs-root .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct \
+  --out .Agent/runs/20260707-gp10-byte-reduction-target-bound/report.md \
+  --target-tps 5 \
+  --peak-gib-s 10.4
+```
+
+Syntax check:
+
+```bash
+python3 -m py_compile .Agent/run-tools/kimi_byte_reduction_target_bound.py
+```
+
+Output:
+
+- `.Agent/runs/20260707-gp10-byte-reduction-target-bound/report.md`
+- `.Agent/runs/20260707-gp10-byte-reduction-target-bound/report.json`
+
+Result:
+
+- Dev prompt token rate range:
+  - min `1.10 tok/s`;
+  - median `1.35 tok/s`;
+  - max `1.43 tok/s`.
+- Current moved bytes:
+  - min `3.79 GiB/token`;
+  - median `4.26 GiB/token`;
+  - max `5.33 GiB/token`.
+- Current effective decode movement bandwidth:
+  - min `5.35 GiB/s`;
+  - median `5.75 GiB/s`;
+  - max `6.10 GiB/s`.
+- Required byte ratio assuming optimistic sustained `10.4 GiB/s` movement:
+  - min `0.391x`;
+  - median `0.489x`;
+  - max `0.549x`.
+- Required byte reduction at the optimistic peak:
+  - min `45.1%`;
+  - median `51.1%`;
+  - max `60.9%`.
+- Required byte reduction at the current effective movement rate:
+  - min `71.5%`;
+  - median `73.0%`;
+  - max `78.0%`.
+- Estimated miss bytes by role from dev route trace scaled by current cache hit
+  rates:
+  - gate: `691.99 GiB`, `40.8%`;
+  - up: `640.08 GiB`, `37.7%`;
+  - down: `365.59 GiB`, `21.5%`.
+
+Interpretation:
+
+- Even with the best pure IO bench bandwidth, reaching `5 tok/s` requires
+  reducing moved expert bytes to about half of current dev SOTA.
+- At the actual effective decode movement rate, the target is closer to
+  one-quarter of current bytes.
+- Since up+gate are about `78.5%` of estimated miss bytes, a down-only
+  compression/runtime change cannot reach `5 tok/s`.
+- A viable next implementation must reduce up/gate bytes, not just down bytes.
+- Any scheme that only shifts reads earlier without reducing bytes is now
+  formally too weak unless it also raises sustained bandwidth from `~5.75` to
+  near `10.4 GiB/s` and still cuts bytes by about half.
+
+D2MoE cluster/base prior evidence:
+
+- Existing offline runs:
+  - `.Agent/runs/20260706-kimi-d2moe-phase0/cluster-base-blk56-down-top32.md`;
+  - `.Agent/runs/20260706-kimi-d2moe-phase0/cluster-base-blk56-gate-top32.md`.
+- Down tensor `blk.56.ffn_down_exps.weight`:
+  - `16` clusters + rank128 residual still has about `0.5002`
+    error/weight.
+- Gate tensor `blk.56.ffn_gate_exps.weight`:
+  - `16` clusters + rank128 residual still has about `0.3064`
+    error/weight.
+- Decision:
+  - do not implement this sampled cluster/base residual path directly;
+  - without retraining or stronger correction, these errors are too large for
+    a quality-sensitive Kimi runtime change.
+
+Updated next direction:
+
+- The next candidate must be a stronger byte-reduction method with an offline
+  error bound before runtime code:
+  1. sample currently hot up/gate tensors, because they dominate miss bytes;
+  2. test whether a lower-byte quantization/repack can reconstruct the current
+     dequantized values with low error;
+  3. compute expected moved-byte ratio including any GPU-side decode overhead;
+  4. only if the offline error and byte ratio pass, build a default-off runtime
+     path and validate on dev n32/n96 before held-out test.
