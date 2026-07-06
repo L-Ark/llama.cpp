@@ -1,0 +1,7 @@
+repo=/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c
+pwd=/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c
+branch=
+head=a6de1a8fcfd085c5c98f520e757b66164909187e
+short=a6de1a8fc
+status_short:
+diff_stat:

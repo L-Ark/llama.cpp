@@ -89870,3 +89870,416 @@ Post-commit reproduction:
 The post-commit held-out test is the authoritative GP4 SOTA record. The
 pre-commit correct dev/test runs remain useful diagnostics, but any future
 comparison should cite the post-commit test metrics above for SOTA.
+
+## GP5: io_uring depth/refill/slot saturation after direct reads are removed
+
+Timestamp: `2026-07-07T10:10:00+0800`.
+
+Status: planned for profiling and parameter sweep.
+
+Current bottleneck from GP4 post-commit held-out test:
+
+- GP4 eliminated expert-pack `direct_reads` in the correct dev/test runs.
+- The remaining exposed decode time is dominated by batched io_uring wait and
+  H2D staging:
+
+| prompt | tok/s | decode s | tokens | iouring GiB | iouring wait s | GiB/s | H2D s |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `test_english_factual_01` | 1.48 | 64.3 | 95 | 372.8 | 63.2 | 5.90 | 15.4 |
+| `test_english_factual_02` | 1.49 | 63.0 | 94 | 394.6 | 62.7 | 6.29 | 16.3 |
+| `test_reasoning_math_01` | 1.32 | 41.8 | 55 | 255.1 | 42.3 | 6.03 | 10.5 |
+| `test_coding_01` | 1.14 | 83.7 | 95 | 505.7 | 86.4 | 5.86 | 20.6 |
+| `test_chinese_01` | 1.44 | 66.0 | 95 | 378.0 | 66.4 | 5.69 | 15.4 |
+| `test_mixed_instruction_01` | 1.33 | 71.4 | 95 | 405.1 | 71.3 | 5.68 | 16.5 |
+
+- Pinned staging iouring counters show queue under-fill:
+  - `test_coding_01` main ring: `inflight_avg=4.01`, `inflight_max=8`,
+    `batches=11706`, `jobs=69605`;
+  - `test_coding_01` gate ring: `inflight_avg=4.06`, `inflight_max=8`,
+    `batches=4745`, `jobs=27636`;
+  - other held-out prompts are mostly `inflight_avg=3.26-3.61`.
+- This means GP4 is not limited by synchronous direct reads anymore. It is
+  limited by:
+  - insufficient sustained io_uring queue depth;
+  - frequent small batches/refills;
+  - H2D copy from pinned staging slots;
+  - remaining up/down compute after movement.
+
+Selected GP5 experiment:
+
+- No model math changes and no prompt-specific tuning.
+- Sweep only runtime parameters on dev prompts first:
+  - `MOE_IO_DEPTH`;
+  - `MOE_IO_REFILL_BATCH`;
+  - `PINNED_SLOTS`.
+- Candidate points:
+  - baseline GP4: depth `8`, refill `4`, slots `12`;
+  - GP5a: depth `16`, refill `8`, slots `24`;
+  - GP5b: depth `16`, refill `16`, slots `24`;
+  - GP5c: depth `32`, refill `16`, slots `32` only if GP5a/b remain under
+    16GB and show improved bandwidth without TTFT regression.
+- First profile prompts:
+  - `dev_python_reverse` as the known GP4 comparison prompt;
+  - `dev_mixed_summary` or `dev_photosynthesis_factual` as a longer general
+    prompt with high IO volume.
+- Use cold start, `MemoryMax=15900000000`, `MemorySwapMax=0`,
+  `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`, `PROFILE=1`, and the same alias TSV.
+
+Hard upper bound:
+
+- Current worst held-out prompt is `test_coding_01`:
+  - `95` decode tokens, `83.683 s`, `1.14 tok/s`;
+  - `505.7 GiB` iouring bytes, `86.36 s` iouring wait;
+  - effective read throughput `5.86 GiB/s`.
+- Previous pure IO benchmark reached about `10.0-10.4 GiB/s`.
+- If GP5 raises effective runtime throughput to `10 GiB/s`, the same bytes
+  cost about `50.6 s`.
+- A simple upper bound for `test_coding_01` is therefore:
+  - `83.7 - 86.4 + 50.6 = 47.9 s`;
+  - `95 / 47.9 = 1.98 tok/s`.
+- This still does not reach `5 tok/s`, but it is a necessary movement-side
+  step. If GP5 cannot improve effective bandwidth, the next path must be byte
+  reduction instead of more queue tuning.
+
+Acceptance gate:
+
+- GP5a/b/c are accepted only if:
+  - dev prompt quality passes;
+  - `memory.peak <= 15899996160`;
+  - TTFT stays within +20% of GP4 for the same prompt;
+  - `direct_reads=0` remains true;
+  - effective iouring throughput improves materially versus GP4;
+  - token rate improves on at least one slow dev prompt without regression on
+    the paired dev prompt.
+- If a candidate passes the dev gate, freeze it and run the full n96 dev suite.
+- Only after full dev passes, run held-out test once. Do not tune against
+  held-out failures.
+- If a candidate fails memory, quality, TTFT, direct-read, or token-rate gates,
+  reject it and revert to GP4 env parameters for subsequent work.
+
+Expected next decision:
+
+- If GP5 reaches around `1.7-2.0 tok/s` held-out min/median, commit/push the
+  reproducible env/tooling result and continue with H2D/byte-reduction work.
+- If GP5 stays near `1.1-1.4 tok/s`, stop queue tuning and design GP6 around
+  reducing expert bytes/token or increasing cache hits without exceeding 16GB.
+
+GP5a result, `2026-07-07T10:40:00+0800`:
+
+- Candidate:
+  - `MOE_IO_DEPTH=16`;
+  - `MOE_IO_REFILL_BATCH=8`;
+  - `PINNED_SLOTS=24`;
+  - `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`;
+  - `VRAM_MIB=15000`, `UPGATE_PCT=62`.
+- Runs:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260707-102000Z-gp5a-depth16-refill8-slots24-dev-python-n96`;
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260707-103500Z-gp5a-depth16-refill8-slots24-dev-mixed-n96`.
+- Local records:
+  - `.Agent/runs/20260707-gp5a-depth16-refill8-slots24-dev-python-n96`;
+  - `.Agent/runs/20260707-gp5a-depth16-refill8-slots24-dev-mixed-n96`.
+- Results:
+  - `dev_python_reverse`: quality pass, `1.30 tok/s`,
+    `TTFT=72315.99 ms`, `decode=72981.65 ms / 95`,
+    `direct_reads=0`, `memory.peak=15899996160`;
+  - `dev_mixed_summary`: quality pass, `1.30 tok/s`,
+    `TTFT=96618.29 ms`, `decode=41531.23 ms / 54`,
+    `direct_reads=0`, `memory.peak=15899996160`.
+- GP4 comparison:
+  - `dev_python_reverse`: `1.29 -> 1.30 tok/s`, negligible;
+  - `dev_mixed_summary`: `1.34 -> 1.30 tok/s`, regression.
+- Diagnosis:
+  - increasing depth/slots did not increase effective queue depth;
+  - `inflight_max` remained `8`;
+  - batch histograms still had no `9-16` or larger batches;
+  - active routed expert batches are naturally capped around 8 jobs, so a
+    deeper queue cannot help unless the runtime can prefetch across future
+    layers/tokens.
+- Decision:
+  - reject GP5a;
+  - do not run held-out test;
+  - do not promote these env values.
+
+## GP6: use more VRAM cache to reduce bytes/token
+
+Timestamp: `2026-07-07T10:45:00+0800`.
+
+Status: planned for dev-gated runtime experiment.
+
+Rationale:
+
+- GP5 shows queue-depth-only tuning cannot expose more parallel IO because each
+  immediate route batch is small.
+- GP4 post-commit test still moves `255-506 GiB` per prompt, or roughly
+  `4.6-5.3 GiB/token` for 95-token outputs.
+- At the observed runtime throughput of `~5.7-6.3 GiB/s`, this caps output
+  around `1.1-1.5 tok/s`.
+- Even at the best pure IO benchmark of `~10 GiB/s`, `5 GiB/token` only allows
+  about `2 tok/s`; reaching `5 tok/s` requires reducing bytes/token, not only
+  queue tuning.
+- Current accepted GP4 uses `VRAM_MIB=15000`, which allocates about:
+  - up/gate cache: `1735` slots of `5.36 MiB`, hit rate around `35-36%`;
+  - down cache: `766` slots of `7.44 MiB`, hit rate around `69-70%`.
+- The deployment GPU target has 32GB VRAM. GP6 should test whether filling more
+  VRAM improves generalized prompt throughput without increasing host RAM.
+
+Selected GP6 experiment:
+
+- Runtime env only, no source change:
+  - keep `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`;
+  - raise `VRAM_MIB` from `15000` to `22000`;
+  - set `UPGATE_PCT=70` so extra VRAM primarily targets the lower-hit up/gate
+    cache while keeping down cache at least comparable to GP4;
+  - keep GP4 IO parameters (`MOE_IO_DEPTH=8`,
+    `MOE_IO_REFILL_BATCH=4`, `PINNED_SLOTS=12`) because GP5a rejected deeper
+    queues.
+- First dev prompts:
+  - `dev_python_reverse`;
+  - `dev_mixed_summary`.
+
+Hard upper bound:
+
+- For `dev_python_reverse` GP4:
+  - iouring bytes roughly `472.6 GiB`;
+  - up/gate hit rate `35.8%`;
+  - down hit rate `69.9%`;
+  - token rate `1.29 tok/s`.
+- If the larger cache reduces moved bytes by `25%`, expected IO wait drops
+  roughly proportionally:
+  - `73.5 s * 0.75 = 55.1 s`;
+  - practical token rate upper bound around `95 / (73.8 - 73.5 + 55.1) =
+    1.72 tok/s`, before H2D/compute overlap effects.
+- If bytes drop by `40%`, practical upper bound is around `2.15 tok/s`.
+- If cache hit rates do not improve materially, GP6 cannot help and the next
+  direction must be compression/byte-reduction rather than more VRAM cache.
+
+Acceptance gate:
+
+- Dev prompt quality must pass.
+- `memory.peak <= 15899996160` must hold; VRAM growth must not push host RAM or
+  page cache over the cgroup limit.
+- No CUDA OOM or graph/cache instability.
+- TTFT must remain within +20% of GP4 for the same prompt.
+- `direct_reads=0` must remain true.
+- Token rate must improve on both first dev prompts, or improve one
+  materially with no regression on the other.
+- If dev passes, run full n96 dev. Only after full dev passes, run held-out
+  test once.
+- If dev fails, reject GP6a and return to byte-reduction/compression planning.
+
+GP6a result, `2026-07-07T10:58:00+0800`:
+
+- Candidate:
+  - `VRAM_MIB=22000`;
+  - `UPGATE_PCT=70`;
+  - GP4 IO parameters.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260707-105000Z-gp6a-vram22g-up70-dev-python-n96`.
+- Result:
+  - quality pass;
+  - `1.27 tok/s`;
+  - `TTFT=73748.06 ms`;
+  - `decode=74678.50 ms / 95`;
+  - `direct_reads=0`;
+  - `memory.peak=15899996160`.
+- GP4 comparison for `dev_python_reverse`:
+  - token rate regressed `1.29 -> 1.27`;
+  - iouring bytes increased `472.6 -> 479.8 GiB`;
+  - up/gate hit rate only improved `35.8% -> 37.1%`;
+  - down hit rate regressed `69.9% -> 67.7%`.
+- Auto-clamp diagnosis:
+  - log shows `requested=22000 MiB actual=15378 MiB free=15890 MiB`;
+  - after dense/model allocations, only about `15.4 GiB` is available for
+    expert cache under the current GPU placement;
+  - the `UPGATE_PCT=70` split mostly stole slots from down instead of
+    materially increasing total cache.
+- Decision:
+  - reject GP6a;
+  - do not run paired dev or held-out test;
+  - do not increase `VRAM_MIB`/`UPGATE_PCT` this way.
+
+## GP7: runtime LFU/LRU cache policy probe
+
+Timestamp: `2026-07-07T11:00:00+0800`.
+
+Status: planned for dev-gated runtime experiment.
+
+Rationale:
+
+- GP6a shows total cache is clamped near GP4 size unless dense/model placement
+  changes.
+- A policy change may improve hit rate without increasing VRAM or host RAM.
+- Existing code supports `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`.
+- This policy is prompt-agnostic in the required sense:
+  - it does not use held-out prompts;
+  - it does not use a prompt-specific profile or hotset;
+  - it uses only runtime hit counts within the current request.
+
+Selected GP7 experiment:
+
+- Runtime env only, no source change:
+  - keep GP4 accepted env;
+  - add `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`.
+- First dev prompts:
+  - `dev_python_reverse`;
+  - `dev_mixed_summary`.
+
+Hard upper bound:
+
+- If LFU/LRU improves `dev_python_reverse` up/gate hit rate from `35.8%` to
+  `45%` with similar down hit rate, up/gate moved bytes should drop by roughly
+  `(45-35.8)/(100-35.8) = 14.3%` of up/gate miss traffic.
+- Since total iouring bytes are still hundreds of GiB, even a `10-15%` byte
+  reduction could move token rate from `~1.3` toward `~1.45-1.55 tok/s`.
+- If hit rate does not improve or down hit rate regresses, this policy cannot
+  reach the target and should be rejected quickly.
+
+Acceptance gate:
+
+- Quality pass on both dev prompts.
+- `memory.peak <= 15899996160`.
+- TTFT within +20% of GP4 same-prompt values.
+- `direct_reads=0`.
+- Token rate improves on both paired dev prompts or improves one materially
+  with no regression on the other.
+- If accepted on paired dev prompts, run full dev before held-out test.
+
+GP7 result, `2026-07-07T11:12:00+0800`:
+
+- Candidate:
+  - GP4 env plus `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260707-110500Z-gp7-lfu-lru-dev-python-n96`.
+- Result:
+  - quality pass;
+  - `0.91 tok/s`;
+  - `TTFT=75948.39 ms`;
+  - `decode=104449.26 ms / 95`;
+  - `direct_reads=0`;
+  - `memory.peak=15899996160`.
+- GP4 comparison for `dev_python_reverse`:
+  - token rate regressed `1.29 -> 0.91`;
+  - iouring bytes increased `472.6 -> 743.5 GiB`;
+  - down hit rate collapsed `69.9% -> 14.3%`;
+  - up/gate hit rate collapsed `35.8% -> 14.1%`.
+- Decision:
+  - reject GP7 immediately;
+  - do not run paired dev or held-out test;
+  - keep default GP4 cache replacement.
+
+## GP8: IO locality and coalescing feasibility
+
+Timestamp: `2026-07-07T11:15:00+0800`.
+
+Status: planned diagnostic before source changes.
+
+Rationale:
+
+- GP5 proved deeper queue settings do not help because immediate batches are
+  capped near `8` jobs.
+- GP6 proved more VRAM cache is clamped near current cache size.
+- GP7 proved the available LFU/LRU policy is worse than default LRU for Kimi.
+- The remaining movement bottleneck may be random read overhead rather than
+  raw SSD bandwidth alone.
+- Existing instrumentation can record batch locality:
+  `GGML_MOE_IO_LOCALITY_PROFILE_OUT`.
+
+Diagnostic:
+
+- Run a cold-start n32 `dev_python_reverse` with GP4 env plus:
+  - `GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv`;
+  - optionally `GGML_MOE_IO_READ_TRACE_OUT=$RUN/io-read-trace.csv` if locality
+    summary is insufficient.
+- Measure per batch:
+  - `read_jobs`;
+  - `unique_sources`;
+  - `span_bytes`;
+  - `read_bytes`;
+  - `gap_bytes`;
+  - `max_gap_bytes`;
+  - `adjacent_pairs`;
+  - `same_tensor`.
+
+Hard bound:
+
+- If most batches have low gap overhead and many adjacent pairs, a coalesced
+  read path may reduce syscall/random-read overhead without reading much extra
+  data.
+- If span/read ratio is large, coalescing would read too much unused expert
+  data and cannot help under the 5 tok/s target.
+- If `unique_sources` is usually greater than one, coalescing is only possible
+  within each source shard and expected gain is lower.
+
+Acceptance for implementing GP8:
+
+- Only implement read coalescing if the diagnostic shows:
+  - common same-source groups with span/read ratio below `1.25`; or
+  - enough adjacent/near-adjacent expert reads to reduce read calls by at least
+    `25%` with less than `10%` extra bytes.
+- If locality is poor, reject coalescing and move to real byte-reduction
+  mechanisms.
+
+GP8 result, `2026-07-07T11:25:00+0800`:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260707-112000Z-gp8-io-locality-dev-python-n32`.
+- Local record:
+  `.Agent/runs/20260707-gp8-io-locality-dev-python-n32`.
+- Result:
+  - quality pass;
+  - `1.26 tok/s`;
+  - `TTFT=73208.95 ms`;
+  - `decode=24605.38 ms / 31`;
+  - `direct_reads=0`;
+  - `memory.peak=15899996160`.
+- Locality profile:
+  - rows: `5375` io_uring batches;
+  - jobs: `29317`;
+  - read bytes: `152.53 GiB`;
+  - span bytes: `5821.35 GiB`;
+  - gap bytes: `5668.82 GiB`;
+  - total `span/read` ratio: `38.16x`;
+  - median batch `span/read`: `34.99x`;
+  - p90 batch `span/read`: `64.80x`;
+  - low-ratio batches (`<=1.25x`): `110 / 5375`;
+  - single-source batches: `686 / 5375`;
+  - adjacent pairs: `280`.
+- Decision:
+  - reject read coalescing;
+  - the layout is too sparse for span-based reads, and coalescing would read
+    tens of times more unused expert data.
+
+Temporal route reuse diagnostic:
+
+- Data:
+  - GP4 correct dev route trace for `dev_python_reverse`;
+  - 96 detected token/layer cycles, first partial cycle ignored for aggregate
+    interpretation.
+- Consecutive-token same-layer expert reuse:
+  - up tensors: mean recall `31.1%`, mean Jaccard `20.1%`;
+  - gate tensors: mean recall `31.1%`, mean Jaccard `20.1%`;
+  - down tensors: mean recall `30.6%`, mean Jaccard `19.7%`;
+  - exact set repeat rate: `0%`.
+- Decision:
+  - do not implement a simple "prefetch previous token's experts for next
+    token" predictor;
+  - predicted experts are too incomplete, and repeated experts are usually the
+    ones default LRU is already likely to keep.
+
+Updated next direction:
+
+- GP5-GP8 rule out the cheap runtime-only paths:
+  - deeper queue settings;
+  - more VRAM cache under current dense placement;
+  - LFU/LRU cache policy;
+  - coalesced reads;
+  - simple previous-token route prediction.
+- To move meaningfully toward `5 tok/s`, the next implementation must reduce
+  bytes per routed expert or change compute/layout more substantially:
+  - a lower-byte expert representation validated for quality;
+  - a repacked expert format that can avoid per-role duplicate movement or
+    enable GPU-side reconstruction;
+  - a stronger route predictor/speculative prefetch with measured acceptance
+    substantially above the ~31% previous-token recall;
+  - or a dense/attention placement experiment only if it frees enough VRAM and
+    its CPU cost is bounded before implementation.
