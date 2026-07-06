@@ -90865,3 +90865,77 @@ Decision:
 - No further runtime code change should be promoted without first changing the
   expert representation or model asset, because the current IQ3_S pack is
   bounded far below `5 tok/s`.
+
+## GP15: external lower-byte Kimi asset survey
+
+Timestamp: `2026-07-07T02:46:48+0800`.
+
+Status: completed survey; candidate found but blocked by disk and asset format.
+
+Rationale:
+
+- GP14 showed the server cannot regenerate q2_k locally right now.
+- The next way to make progress is to check whether a downloadable lower-byte
+  Kimi GGUF or NVFP4/MXFP4 asset exists.
+- This is current external information, so it was verified online before making
+  a decision.
+
+Record:
+
+- `.Agent/runs/20260707-gp15-external-kimi-asset-survey/report.md`
+
+Sources checked:
+
+- `https://huggingface.co/AesSedai/Kimi-K2.7-Code-GGUF`
+- `https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF`
+- `https://huggingface.co/decart-ai/Kimi-K2.7-Code-NVFP4`
+- `https://huggingface.co/amd/Kimi-K2.7-Code-MXFP4`
+
+Method:
+
+- Used Hugging Face model file lists to enumerate candidate shards.
+- Used HTTP HEAD requests on each `/resolve/main/...` file to sum
+  `Content-Length`.
+- No model weights were downloaded.
+
+Candidate sizes:
+
+- `AesSedai/Kimi-K2.7-Code-GGUF`, `IQ2_XXS` GGUF:
+  - 7 files;
+  - `262.79 GiB`.
+- `unsloth/Kimi-K2.7-Code-GGUF`, `UD-IQ1_M` GGUF:
+  - 8 files;
+  - `283.04 GiB`.
+- `unsloth/Kimi-K2.7-Code-GGUF`, `UD-IQ2_M` GGUF:
+  - 8 files;
+  - `296.14 GiB`.
+- `unsloth/Kimi-K2.7-Code-GGUF`, `UD-IQ2_XXS` GGUF:
+  - 8 files;
+  - `296.00 GiB`.
+- `AesSedai/Kimi-K2.7-Code-GGUF`, `IQ2_S` GGUF:
+  - 8 files;
+  - `311.80 GiB`.
+- `amd/Kimi-K2.7-Code-MXFP4`, MXFP4 safetensors:
+  - 64 files;
+  - `514.87 GiB`.
+- `decart-ai/Kimi-K2.7-Code-NVFP4`, NVFP4 safetensors:
+  - 60 files;
+  - `554.31 GiB`.
+
+Decision:
+
+- The best immediate candidate is AesSedai `IQ2_XXS` GGUF because it is the
+  smallest GGUF asset found.
+- It still cannot be downloaded or tested now:
+  - GP14 measured only `86G` free on the server;
+  - the smallest candidate needs about `263 GiB` before any derived expert pack
+    or scratch space.
+- NVFP4 exists externally, but not in a directly usable GGUF/expert-pack form
+  for the current vendor runtime and is larger than the GGUF low-bit candidates.
+- The next step requires an explicit disk-space/artifact decision before more
+  code work:
+  1. free or attach at least `300-350 GiB` for AesSedai `IQ2_XXS`/`IQ2_S`;
+  2. download the chosen GGUF;
+  3. run dev n32 cold-start quality/token-rate baseline;
+  4. only if quality passes, build any needed expert pack and continue dev n96;
+  5. held-out test remains reserved until candidate freeze.
