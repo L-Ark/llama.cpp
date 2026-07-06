@@ -1,0 +1,7 @@
+Running as unit: run-u46113.service
+Finished with result: success
+Main processes terminated with: code=exited/status=0
+Service runtime: 2min 40.579s
+CPU time consumed: 58min 51.444s
+IO bytes read: 16.0K
+IO bytes written: 0B

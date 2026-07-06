@@ -1,0 +1,13 @@
+{
+  "cold_start": "per prompt: repro script sync + drop_caches inside each systemd cgroup",
+  "extra_runtime_env": "GGML_MOE_EXPERT_GGUF_ALIAS_TSV=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv\nGGML_MOE_IO_ALIGNED_ALIAS_BATCH=1",
+  "memory_max": "15900000000",
+  "memory_swap_max": 0,
+  "mode": "test",
+  "n": 96,
+  "profile": true,
+  "prompt_count": 6,
+  "prompt_file": ".Agent/evals/kimi-general-test-prompts.jsonl",
+  "runtime_max_sec": "900",
+  "started_at": "2026-07-06T17:04:18Z"
+}

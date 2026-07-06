@@ -71,6 +71,7 @@ def run_one(repo: pathlib.Path, out_root: pathlib.Path, row, args):
         "-p",
         "IOSchedulingPriority=0",
         "env",
+        f"REPO={repo}",
         f"RUN={run_dir}",
         f"N={args.n}",
         f"VRAM_MIB={args.vram_mib}",

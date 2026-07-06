@@ -89618,3 +89618,223 @@ Next required design step:
     direct-read cost and the observed n32 decode time;
   - acceptance gates against the formal n96 dev baseline and held-out test
     protocol.
+
+## GP4: alias-aware aligned io_uring for runtime_load up/gate
+
+Timestamp: `2026-07-06T23:50:00+0800`.
+
+Status: planned for implementation.
+
+Current bottleneck from GP3/GP3b and direct-read-site diagnostics:
+
+- The up/gate code already has a job-planning path:
+  `plan_tensor_sized()` -> `copy_stage_jobs()` ->
+  `expert_pack_iouring_copy_jobs()`.
+- However `expert_pack_iouring_copy_jobs()` rejects the whole batch when any
+  job has a non-4096-aligned expert-pack offset.
+- The fallback path then calls `batch_cache_copy_h2d()` one expert at a time,
+  which reaches `expert_pack_direct_read_entry_to_host()`.
+- `expert_pack_direct_read_entry_to_host()` supports non-aligned offsets by
+  doing a synchronous direct pread into a bounce buffer and then memcpying the
+  requested expert bytes.
+- This explains the n32 direct-read-site result:
+  - `runtime_load` up/gate direct reads: `90.140 GiB`;
+  - summed up/gate direct-read wall: `36.254 s`;
+  - no read failures;
+  - normal path, not expert-pack miss path.
+
+Selected optimization:
+
+- Add an alias-aware aligned read plan to `expert_pack_iouring_copy_jobs()`.
+- For each job:
+  - compute `aligned_offset = floor(entry.offset / 4096) * 4096`;
+  - compute `prefix = entry.offset - aligned_offset`;
+  - compute `read_sz = align_up(prefix + expert_bytes, 4096)`;
+  - submit `io_uring_prep_read(fd, slot.host, read_sz, aligned_offset)`;
+  - copy H2D from `slot.host + prefix` for exactly `expert_bytes`.
+- Allocate pinned staging slots for the maximum `read_sz` in the batch, not only
+  `expert_bytes`.
+- Keep the existing direct-read fallback if io_uring setup, read completion, or
+  H2D enqueue fails.
+- Gate the behavior with `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1` for the first
+  experiment so it can be reverted or disabled without touching other paths.
+
+Why it should help:
+
+- It converts the dominant synchronous per-expert direct reads into the existing
+  batched io_uring pipeline without changing model math, routing, cache
+  contents, quantization, or expert bytes copied to VRAM.
+- The only extra bytes are alignment padding:
+  at most `<8192` bytes per expert, versus `4.48-5.36 MiB` up/gate expert
+  payloads, so byte overhead is below `0.2%`.
+- Quality should be unchanged because the H2D copy still starts at
+  `slot.host + prefix` and copies exactly `expert_bytes`.
+
+Hard upper bound for the n32 diagnostic prompt:
+
+- Observed n32 `dev_python_reverse`:
+  - decode `48.044 s / 31 tokens`;
+  - token rate `0.65 tok/s`;
+  - up/gate direct-read wall `36.254 s`;
+  - up/gate direct-read bytes `90.140 GiB`.
+- If GP4 removes all exposed up/gate direct-read wall and adds no replacement
+  latency, decode lower bound is:
+  - `48.044 - 36.254 = 11.790 s`;
+  - upper-bound token rate: `31 / 11.790 = 2.63 tok/s`.
+- This still does not reach `5 tok/s`, but it is the largest currently
+  evidenced single-source improvement and should expose the next bottleneck.
+- If actual batched io_uring bandwidth is only the previously stable
+  `~10 GiB/s`, moving `90.140 GiB` still costs roughly `9.0 s`; expected
+  practical decode is closer to:
+  - `48.044 - 36.254 + 9.0 = 20.790 s`;
+  - practical token rate around `1.49 tok/s`.
+- Anything below roughly `1.1 tok/s` on the same n32 prompt means the gap is
+  likely slot wait, H2D serialization, stream ordering, or batch fallback still
+  escaping to direct reads.
+
+Acceptance gate:
+
+- First run: n32 `dev_python_reverse`, cold start, strict 16GB, `PROFILE=1`,
+  `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`.
+- Must pass quality with the same Python reverse semantics.
+- Must keep `memory.peak <= 15899996160`.
+- TTFT must stay within +20% of the GP2 formal dev baseline for the prompt.
+- `direct_reads` should drop materially from `27139`; target is near zero for
+  runtime_load up/gate in `direct-read-site-profile.csv`.
+- Token rate must improve versus the GP2 n32 diagnostic `0.65 tok/s`. If the
+  first run improves, repeat once cold-start with the same recipe before
+  promoting it.
+- If n32 passes and repeats, run the full n96 dev suite before any held-out
+  test evaluation.
+- If quality regresses, direct reads do not drop, TTFT exceeds the cap, memory
+  exceeds the cgroup limit, or token rate regresses, revert GP4 source and keep
+  only rejected run records.
+
+GP4 implementation result, `2026-07-07T01:50:00+0800`:
+
+- Source change:
+  - `expert_pack_iouring_copy_jobs()` now supports
+    `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`;
+  - for non-4096-aligned expert-pack offsets it reads from aligned file offsets
+    into pinned staging slots and copies H2D from `slot.host + prefix`;
+  - pinned staging slot size is raised to the maximum aligned read size in the
+    batch;
+  - default behavior remains unchanged unless the env gate is enabled.
+- Tooling fix:
+  - `.Agent/run-tools/kimi_general_prompt_sweep.py` now passes
+    `REPO=<repo>` through `systemd-run env`, because the repro script changes
+    directory via `$REPO`.
+  - Earlier sweep directories
+    `/root/lfz/runs/vendor-kimi-token-rate/20260706-225500Z-gp4-aligned-alias-dev-n96-profile`
+    and
+    `/root/lfz/runs/vendor-kimi-token-rate/20260706-233500Z-gp4-aligned-alias-test-n96-profile`
+    are invalid for GP4 acceptance: their `git.txt` shows they ran in
+    `/root/lfz/llama.cpp-vendor-kimi`, not the GP4 worktree.
+
+N32 acceptance:
+
+- Main run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-220500Z-gp4-aligned-alias-python-reverse-n32`.
+- Repeat run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-222500Z-gp4-aligned-alias-python-reverse-n32-repeat`.
+- Local records:
+  - `.Agent/runs/20260706-gp4-aligned-alias-python-reverse-n32`;
+  - `.Agent/runs/20260706-gp4-aligned-alias-python-reverse-n32-repeat`.
+- Main n32 result:
+  - quality pass;
+  - `0.65 -> 1.17 tok/s`;
+  - `decode=48044.29 -> 26413.67 ms / 31`;
+  - `TTFT=81997.63 -> 79846.33 ms`;
+  - `direct_reads=27139 -> 0`;
+  - `iouring_reads=2178 -> 29317`;
+  - `memory.peak=15899996160`.
+- Repeat n32 result:
+  - quality pass;
+  - `1.21 tok/s`;
+  - `decode=25725.45 ms / 31`;
+  - `TTFT=80780.23 ms`;
+  - `direct_reads=0`;
+  - `memory.peak=15899996160`.
+
+Correct n96 dev suite:
+
+- Remote run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260707-004500Z-gp4-aligned-alias-dev-n96-profile-correct`.
+- Local record:
+  `.Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct`.
+- Gate:
+  - `7/7` quality pass;
+  - all prompts `memory.peak=15899996160`;
+  - all prompts `direct_reads=0`;
+  - min/median/mean token rate: `1.10 / 1.35 / 1.331 tok/s`.
+
+| prompt | GP2 tok/s | GP4 tok/s | TTFT ms | decode ms/runs |
+|---|---:|---:|---:|---:|
+| `dev_france_regression` | 1.37 | 1.40 | 69559.95 | 54868.49/77 |
+| `dev_japan_factual` | 1.01 | 1.43 | 74287.66 | 59603.24/85 |
+| `dev_photosynthesis_factual` | 0.76 | 1.35 | 62295.72 | 69558.48/94 |
+| `dev_linear_equation` | 0.47 | 1.10 | 95649.82 | 30959.64/34 |
+| `dev_python_reverse` | 0.67 | 1.29 | 84032.95 | 73816.86/95 |
+| `dev_zh_france` | 0.93 | 1.41 | 66768.73 | 34695.57/49 |
+| `dev_mixed_summary` | 0.62 | 1.34 | 98983.24 | 40410.76/54 |
+
+Correct held-out n96 test suite:
+
+- Remote run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260707-012000Z-gp4-aligned-alias-test-n96-profile-correct`.
+- Local record:
+  `.Agent/runs/20260707-gp4-aligned-alias-test-n96-profile-correct`.
+- Gate:
+  - `6/6` quality pass;
+  - all prompts `memory.peak=15899996160`;
+  - all prompts `direct_reads=0`;
+  - min/median/mean token rate: `1.16 / 1.405 / 1.360 tok/s`.
+
+| prompt | GP4 tok/s | TTFT ms | decode ms/runs |
+|---|---:|---:|---:|
+| `test_english_factual_01` | 1.46 | 67586.07 | 65023.17/95 |
+| `test_english_factual_02` | 1.37 | 76017.00 | 68655.60/94 |
+| `test_reasoning_math_01` | 1.28 | 231652.45 | 42959.58/55 |
+| `test_coding_01` | 1.16 | 91484.39 | 81643.95/95 |
+| `test_chinese_01` | 1.45 | 68406.82 | 65342.62/95 |
+| `test_mixed_instruction_01` | 1.44 | 74452.09 | 65863.99/95 |
+
+TTFT gate check for the high-TTFT held-out prompt:
+
+- GP2-style comparison run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260707-014500Z-gp2-style-test-reasoning-ttft-baseline`.
+- Local record:
+  `.Agent/runs/20260707-gp2-style-test-reasoning-ttft-baseline`.
+- Same prompt, same repo, same alias TSV, but without
+  `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`:
+  - quality pass;
+  - `TTFT=225274.20 ms`;
+  - `decode=77182.99 ms`;
+  - `token_rate=0.71`;
+  - `direct_reads=45926`;
+  - `memory.peak=15899996160`.
+- GP4 comparison:
+  - `TTFT=231652.45 ms`, only `+2.83%`;
+  - `decode=42959.58 ms`;
+  - `token_rate=1.28`;
+  - `direct_reads=0`.
+- Therefore GP4 does not violate the +20% TTFT gate on this outlier prompt.
+
+GP4 decision:
+
+- Accept GP4 as the new prompt-general SOTA for this branch:
+  - held-out test quality passes;
+  - held-out test min token rate improves to `1.16 tok/s`;
+  - direct expert-pack reads drop to zero in the correct dev/test GP4 runs;
+  - host RAM remains at the 16GB cgroup ceiling but does not exceed it;
+  - TTFT gate passes against the measured same-prompt comparison.
+- This is still far from the required `>5 tok/s` deployment target. The next
+  bottleneck is no longer synchronous direct read fallback; it is the large
+  volume of batched io_uring reads plus H2D staging/copy and remaining
+  up/down compute.
+- Next design cycle should profile GP4 correct dev/test runs for:
+  - iouring wait per token and batch depth after direct reads are gone;
+  - H2D copy time from pinned slots;
+  - cache miss volume by role/layer under `direct_reads=0`;
+  - whether larger io depth/refill, more slots, or byte reduction can move
+    held-out test min from `1.16` toward `5 tok/s`.

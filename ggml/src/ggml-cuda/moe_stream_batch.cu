@@ -4537,22 +4537,28 @@ static bool expert_pack_iouring_copy_jobs(
 #if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
     if (jobs.empty()) return true;
     if (g_expert_pack.io_backend != 2) return false;
-    if (!pinned_stage_ensure(ring, expert_bytes, true)) return false;
 
     const size_t alignment = expert_pack_direct_alignment();
-    const size_t read_sz = (size_t)align_up_u64((uint64_t)expert_bytes, (uint64_t)alignment);
-    const size_t depth = std::min(expert_pack_io_depth(), ring.slots.size());
-    if (depth == 0 || read_sz == 0) return false;
+    const bool aligned_alias_batch = expert_pack_env_bool("GGML_MOE_IO_ALIGNED_ALIAS_BATCH", false);
+    const size_t default_read_sz = (size_t)align_up_u64((uint64_t)expert_bytes, (uint64_t)alignment);
+    if (default_read_sz == 0) return false;
     const bool profile_io_batch = io_batch_profile_enabled();
     const auto io_batch_start = profile_io_batch ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
-    std::vector<size_t> read_jobs;
-    read_jobs.reserve(jobs.size());
+    struct iouring_read_plan {
+        size_t job_idx = 0;
+        uint64_t offset = 0;
+        size_t read_sz = 0;
+        size_t prefix = 0;
+    };
+
+    std::vector<iouring_read_plan> read_plans;
+    read_plans.reserve(jobs.size());
+    size_t max_read_sz = default_read_sz;
     for (size_t i = 0; i < jobs.size(); ++i) {
         const Job &job = jobs[i];
         if (!job.pack_entry ||
-                job.pack_entry->nbytes != expert_bytes ||
-                (job.pack_entry->offset % alignment) != 0) {
+                job.pack_entry->nbytes != expert_bytes) {
             return false;
         }
         const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
@@ -4594,27 +4600,50 @@ static bool expert_pack_iouring_copy_jobs(
             }
             continue;
         }
-        read_jobs.push_back(i);
+
+        uint64_t read_offset = job.pack_entry->offset;
+        size_t read_sz = default_read_sz;
+        size_t prefix = 0;
+        if ((job.pack_entry->offset % alignment) != 0) {
+            if (!aligned_alias_batch) {
+                return false;
+            }
+            read_offset = (job.pack_entry->offset / alignment) * alignment;
+            prefix = (size_t)(job.pack_entry->offset - read_offset);
+            read_sz = (size_t)align_up_u64((uint64_t)prefix + (uint64_t)expert_bytes, (uint64_t)alignment);
+        }
+        if (read_sz < expert_bytes || read_sz > (size_t)UINT_MAX) {
+            return false;
+        }
+        max_read_sz = std::max(max_read_sz, read_sz);
+        read_plans.push_back({i, read_offset, read_sz, prefix});
+    }
+    if (!read_plans.empty() && !pinned_stage_ensure(ring, max_read_sz, true)) {
+        return false;
+    }
+    const size_t depth = std::min(expert_pack_io_depth(), ring.slots.size());
+    if (!read_plans.empty() && depth == 0) {
+        return false;
     }
     if (stage_granularity_profile_enabled()) {
         ++ring.granularity_calls;
         ring.granularity_total_jobs += jobs.size();
-        ring.granularity_read_jobs += read_jobs.size();
+        ring.granularity_read_jobs += read_plans.size();
         ring.granularity_depth_sum += depth;
         ring.granularity_slots_sum += ring.slots.size();
         ring.granularity_max_jobs = std::max<uint64_t>(ring.granularity_max_jobs, (uint64_t)jobs.size());
-        ring.granularity_max_read_jobs = std::max<uint64_t>(ring.granularity_max_read_jobs, (uint64_t)read_jobs.size());
+        ring.granularity_max_read_jobs = std::max<uint64_t>(ring.granularity_max_read_jobs, (uint64_t)read_plans.size());
         ring.granularity_max_depth = std::max<uint64_t>(ring.granularity_max_depth, (uint64_t)depth);
     }
     const bool sort_by_offset = expert_pack_env_bool("GGML_MOE_IO_SORT_OFFSET", false);
-    if (read_jobs.empty()) {
+    if (read_plans.empty()) {
         if (profile_io_batch) {
             const auto io_batch_end = std::chrono::steady_clock::now();
             io_batch_profile_record(
                     trace_op,
                     jobs.empty() ? "" : jobs.front().tensor,
                     jobs.empty() ? "" : jobs.back().tensor,
-                    jobs.size(), read_jobs.size(), depth, ring.slots.size(), 0, 0,
+                    jobs.size(), read_plans.size(), depth, ring.slots.size(), 0, 0,
                     0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0,
                     std::chrono::duration<double, std::milli>(io_batch_end - io_batch_start).count(),
                     sort_by_offset);
@@ -4627,16 +4656,16 @@ static bool expert_pack_iouring_copy_jobs(
         io_read_trace_next_batch_seq() : 0;
     if (io_locality_profile_enabled()) {
         std::vector<io_locality_profile_item> locality_items;
-        locality_items.reserve(read_jobs.size());
-        for (size_t job_idx : read_jobs) {
-            const Job &job = jobs[job_idx];
+        locality_items.reserve(read_plans.size());
+        for (const iouring_read_plan &plan : read_plans) {
+            const Job &job = jobs[plan.job_idx];
             if (!job.pack_entry) {
                 continue;
             }
             io_locality_profile_item item;
             item.source_idx = job.pack_entry->source_idx;
-            item.offset = job.pack_entry->offset;
-            item.nbytes = job.pack_entry->nbytes;
+            item.offset = plan.offset;
+            item.nbytes = plan.read_sz;
             std::snprintf(item.tensor, sizeof(item.tensor), "%s", job.tensor);
             locality_items.push_back(item);
         }
@@ -4656,8 +4685,8 @@ static bool expert_pack_iouring_copy_jobs(
                 header_written = true;
             }
             size_t batch_pos = 0;
-            for (size_t job_idx : read_jobs) {
-                const Job &job = jobs[job_idx];
+            for (const iouring_read_plan &plan : read_plans) {
+                const Job &job = jobs[plan.job_idx];
                 if (!job.pack_entry) {
                     continue;
                 }
@@ -4667,48 +4696,48 @@ static bool expert_pack_iouring_copy_jobs(
                         batch_pos++,
                         trace_op ? trace_op : "",
                         jobs.size(),
-                        read_jobs.size(),
+                        read_plans.size(),
                         job.tensor,
                         job.expert_idx,
                         job.pack_entry->source_idx,
-                        (unsigned long)job.pack_entry->offset,
-                        (unsigned long)job.pack_entry->nbytes);
+                        (unsigned long)plan.offset,
+                        (unsigned long)plan.read_sz);
             }
             std::fclose(f);
         }
     }
-    expert_pack_record_iouring_batch(read_jobs.size());
+    expert_pack_record_iouring_batch(read_plans.size());
     ring.iouring_batches += 1;
-    ring.iouring_jobs += read_jobs.size();
-    const size_t bucket = expert_pack_iouring_batch_bucket(read_jobs.size());
+    ring.iouring_jobs += read_plans.size();
+    const size_t bucket = expert_pack_iouring_batch_bucket(read_plans.size());
     if (bucket < 6) {
         ring.iouring_batch_hist[bucket] += 1;
     }
 
     struct pending_job {
-        size_t job_idx = 0;
+        size_t plan_idx = 0;
         size_t slot_idx = 0;
         size_t bytes = 0;
+        size_t prefix = 0;
         std::chrono::steady_clock::time_point copy_start;
     };
 
-    std::vector<size_t> job_order;
-    if (sort_by_offset && read_jobs.size() > 1) {
-        job_order.resize(read_jobs.size());
-        for (size_t i = 0; i < read_jobs.size(); ++i) {
-            job_order[i] = i;
+    std::vector<size_t> plan_order;
+    if (sort_by_offset && read_plans.size() > 1) {
+        plan_order.resize(read_plans.size());
+        for (size_t i = 0; i < read_plans.size(); ++i) {
+            plan_order[i] = i;
         }
-        std::stable_sort(job_order.begin(), job_order.end(),
+        std::stable_sort(plan_order.begin(), plan_order.end(),
             [&](size_t a, size_t b) {
-                const expert_pack_entry *ea = jobs[read_jobs[a]].pack_entry;
-                const expert_pack_entry *eb = jobs[read_jobs[b]].pack_entry;
+                const expert_pack_entry *ea = jobs[read_plans[a].job_idx].pack_entry;
+                const expert_pack_entry *eb = jobs[read_plans[b].job_idx].pack_entry;
                 if (ea->source_idx != eb->source_idx) return ea->source_idx < eb->source_idx;
-                return ea->offset < eb->offset;
+                return read_plans[a].offset < read_plans[b].offset;
             });
     }
-    auto ordered_job_idx = [&](size_t seq_idx) -> size_t {
-        const size_t read_idx = job_order.empty() ? seq_idx : job_order[seq_idx];
-        return read_jobs[read_idx];
+    auto ordered_plan_idx = [&](size_t seq_idx) -> size_t {
+        return plan_order.empty() ? seq_idx : plan_order[seq_idx];
     };
 
     const unsigned int flags = expert_pack_env_bool("GGML_MOE_IO_SQPOLL", false) ? IORING_SETUP_SQPOLL : 0;
@@ -4751,8 +4780,9 @@ static bool expert_pack_iouring_copy_jobs(
     uint64_t io_batch_inflight_sum = 0;
     uint64_t io_batch_inflight_samples = 0;
     uint64_t io_batch_inflight_max = 0;
-    auto submit_one = [&](size_t job_idx, size_t slot_idx, size_t pending_idx) -> bool {
-        const Job &job = jobs[job_idx];
+    auto submit_one = [&](size_t plan_idx, size_t slot_idx, size_t pending_idx) -> bool {
+        const iouring_read_plan &plan = read_plans[plan_idx];
+        const Job &job = jobs[plan.job_idx];
         pinned_stage_slot &slot = ring.slots[slot_idx];
         if (slot.pending) {
             const auto wait_start = (profile_stage || profile_io_batch) ?
@@ -4772,14 +4802,15 @@ static bool expert_pack_iouring_copy_jobs(
         io_uring_sqe *sqe = io_uring_get_sqe(ring_io);
         if (!sqe) return false;
         pending[pending_idx] = {
-            job_idx,
+            plan_idx,
             slot_idx,
-            read_sz,
+            plan.read_sz,
+            plan.prefix,
             (batch_ttft_trace_enabled() || profile_copy) ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}
         };
         const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
         if (!source || source->fd_direct < 0) return false;
-        io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)read_sz, (off_t)job.pack_entry->offset);
+        io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)plan.read_sz, (off_t)plan.offset);
         io_uring_sqe_set_data64(sqe, (uint64_t)pending_idx + 1);
         return true;
     };
@@ -4794,11 +4825,11 @@ static bool expert_pack_iouring_copy_jobs(
     };
     std::vector<reusable_pending> reusable_pending_slots;
     reusable_pending_slots.reserve(depth);
-    while (next_job < read_jobs.size() && inflight < depth) {
+    while (next_job < read_plans.size() && inflight < depth) {
         const size_t pending_idx = free_pending.back();
         free_pending.pop_back();
         const size_t slot_idx = ring.next++ % ring.slots.size();
-        if (!submit_one(ordered_job_idx(next_job), slot_idx, pending_idx)) {
+        if (!submit_one(ordered_plan_idx(next_job), slot_idx, pending_idx)) {
             ++g_expert_pack.iouring_fallbacks;
             return false;
         }
@@ -4821,7 +4852,7 @@ static bool expert_pack_iouring_copy_jobs(
     const size_t initial_submit_jobs = next_job;
 
     size_t completed = 0;
-    while (completed < read_jobs.size()) {
+    while (completed < read_plans.size()) {
         g_expert_pack.iouring_inflight_sum.fetch_add(inflight);
         ++g_expert_pack.iouring_inflight_samples;
         expert_pack_atomic_max(g_expert_pack.iouring_inflight_max, inflight);
@@ -4847,7 +4878,8 @@ static bool expert_pack_iouring_copy_jobs(
             }
 
             const pending_job done = pending[pending_idx];
-            const Job &job = jobs[done.job_idx];
+            const iouring_read_plan &plan = read_plans[done.plan_idx];
+            const Job &job = jobs[plan.job_idx];
             pinned_stage_slot &slot = ring.slots[done.slot_idx];
             io_uring_cqe_seen(ring_io, cqe);
             ++g_expert_pack.iouring_cqes;
@@ -4860,7 +4892,8 @@ static bool expert_pack_iouring_copy_jobs(
                     return false;
                 }
             }
-            if (cudaMemcpyAsync(job.dst, slot.host, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+            const char *slot_src = (const char *)slot.host + done.prefix;
+            if (cudaMemcpyAsync(job.dst, slot_src, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
                 return false;
             }
             if ((profile_stage || profile_copy_h2d) && slot.copy_done) {
@@ -4934,12 +4967,12 @@ static bool expert_pack_iouring_copy_jobs(
 
         auto refill_pending = [&]() -> bool {
             size_t submitted = 0;
-            while (next_job < read_jobs.size() && inflight < depth && !reusable_pending_slots.empty() && submitted < refill_batch) {
+            while (next_job < read_plans.size() && inflight < depth && !reusable_pending_slots.empty() && submitted < refill_batch) {
                 const reusable_pending reusable = reusable_pending_slots.back();
                 reusable_pending_slots.pop_back();
                 const size_t pending_idx = reusable.pending_idx;
                 const size_t slot_idx = reusable.slot_idx;
-                if (!submit_one(ordered_job_idx(next_job), slot_idx, pending_idx)) {
+                if (!submit_one(ordered_plan_idx(next_job), slot_idx, pending_idx)) {
                     ++g_expert_pack.iouring_fallbacks;
                     return false;
                 }
@@ -4987,7 +5020,7 @@ static bool expert_pack_iouring_copy_jobs(
         ++drained_cqes;
         if (refill_batch == 1 && !refill_pending()) return false;
 
-        while (completed < read_jobs.size() && inflight > 0) {
+        while (completed < read_plans.size() && inflight > 0) {
             io_uring_cqe *extra_cqe = nullptr;
             const int peek_rc = io_uring_peek_cqe(ring_io, &extra_cqe);
             if (peek_rc != 0 || !extra_cqe) {
@@ -5003,7 +5036,7 @@ static bool expert_pack_iouring_copy_jobs(
                     trace_op,
                     jobs.empty() ? "" : jobs.front().tensor,
                     jobs.empty() ? "" : jobs.back().tensor,
-                    read_jobs.size(),
+                    read_plans.size(),
                     wait_completed_before,
                     wait_inflight_before,
                     wait_next_job_before,
@@ -5026,7 +5059,7 @@ static bool expert_pack_iouring_copy_jobs(
                 trace_op,
                 jobs.empty() ? "" : jobs.front().tensor,
                 jobs.empty() ? "" : jobs.back().tensor,
-                jobs.size(), read_jobs.size(), depth, ring.slots.size(), refill_batch, initial_submit_jobs,
+                jobs.size(), read_plans.size(), depth, ring.slots.size(), refill_batch, initial_submit_jobs,
                 io_batch_submit_calls, io_batch_wait_calls, io_batch_cqes,
                 io_batch_inflight_sum, io_batch_inflight_samples, io_batch_inflight_max,
                 io_batch_slot_wait_ms, io_batch_submit_ms, io_batch_wait_ms, io_batch_enqueue_ms,

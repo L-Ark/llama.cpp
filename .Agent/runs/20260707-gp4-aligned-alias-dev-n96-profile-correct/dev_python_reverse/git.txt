@@ -1,0 +1,12 @@
+repo=/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c
+pwd=/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c
+branch=
+head=7788d43cdbb791265f507addf9b4312e74261d1e
+short=7788d43cd
+status_short:
+ M .Agent/run-tools/kimi_general_prompt_sweep.py
+ M ggml/src/ggml-cuda/moe_stream_batch.cu
+diff_stat:
+ .Agent/run-tools/kimi_general_prompt_sweep.py |   1 +
+ ggml/src/ggml-cuda/moe_stream_batch.cu        | 275 ++++++++++++++++++++------
+ 2 files changed, 220 insertions(+), 56 deletions(-)
