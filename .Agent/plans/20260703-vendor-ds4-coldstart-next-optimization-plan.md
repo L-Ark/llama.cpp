@@ -2,6 +2,42 @@
 
 ## Summary
 
+### 2026-07-06 Latest Active Plan: One-Stream Up/Down Closed; Move to Bound-Changing Routes
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，本节没有产生新的 accepted performance result。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `elapsed_seconds=62.9`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `memory_max_events=16879`, `pgmajfault=272731`, `workingset_refault_file=1638880`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Accepted binary path/version: `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli`, `b14849-d9e56fcdf`
+- Push target remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+New one-stream up/down hard-bound artifact:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/one-stream-updown-extension-bound-20260706.json`
+- Purpose: audit whether the accepted gate-only one-stream VRAM cache can be extended to `ffn_up_exps` / `ffn_down_exps` before writing or running another patch.
+- Source audit: `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE` only controls cache insertion. It does not decide whether a tensor/expert is executed through `ggml_cuda_moe_stream_one`. CPU calls `ggml_cuda_moe_stream_one` for every active expert when `use_gpu_stream` is true; CUDA-side acceptance is controlled by type/name filter, not by the admit profile.
+- Current accepted behavior is gate-only because accepted env sets `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`. If the filter is unset or broadened to include up/down, all matching up/down MXFP4 expert calls enter one-stream, not only the intended top-N hotset.
+- Therefore an env-only top32/top64 up/down test is not a clean experiment. It would measure broad/full up-down streaming and risks page-cache/TTFT regression, a route already rejected by `.Agent/runs/20260705-vendor-ds4-coldstart/full-decode-updown-cuda-streaming-hard-bound.json`.
+
+Hard-bound result:
+
+- Accepted cache budget: `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, expert tensor size `4456448` bytes (`4.25 MiB`), computed shared cache slots `3192`.
+- Fixed shared-cache frontier, after optimistic static gate-miss penalty, peaks at top1024 up/down tensors: projected zero-overhead `6.213 tok/s`, `8991.164 ms` net saving, projected decode `21821.098 ms`, still `8263.703 ms` short of the `10 tok/s` target.
+- Existing optimistic `cpu_moe=41` / gate-tradeoff bound remains below target too: best projected zero-overhead `8.095 tok/s` at top1024, still `3190.3 ms` negative slack to `10 tok/s`.
+- Conclusion: one-stream up/down extension is rejected as a `10 tok/s` route. It is not authorized as the next runtime/source patch without a new default-off execution allow-list and a separate overhead/TTFT proof, and even then it would only be a small-SOTA candidate rather than a route to 10.
+
+Updated next executable plan:
+
+1. Commit and push the one-stream up/down hard-bound artifact plus this plan update to `ssd/vendor/deepseek-token-rate-16gb` immediately.
+2. Do not run env-only one-stream up/down top-N benchmarks. Current env cannot restrict execution to top-N, and broadening `GGML_MOE_STREAM_ONE_NAME_FILTER` would change the measured route to full/broad up-down streaming.
+3. Do not implement a top-N execution allow-list solely for the `10 tok/s` target; the fixed-cache and cpu41/gate-tradeoff bounds are both below target before implementation overhead.
+4. If later pursuing an intermediate small-SOTA candidate, first write a separate plan and hard-bound for a default-off execution allow-list checked before `ggml_cuda_moe_stream_one` accepts a tensor/expert; then run strict cold only if TTFT/page-cache risk and correctness are covered. This is lower priority than a 10 tok/s route.
+5. Main next work must change the bound instead of moving the same bytes through the same one-stream path. Prioritize one of: sidecar loader integration with correctness proof, a true-parallel expert design beyond env toggles, verified speculation/MTP, or an expert-equivalent representation near/below `11.879710 GiB`.
+6. With current disk free around `1.1GB`, do not download alternate GGUFs or build large up/down packs. No accepted model, gate pack, SOTA run, profile, demo, or reproduction artifact may be deleted or moved without explicit approval.
+7. Promotion remains strict: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, and correct/coherent France output. New SOTA must be recorded with full reproduction metadata, committed, pushed to `ssd/vendor/deepseek-token-rate-16gb`, and cleanly reproduced from pushed source before acceptance.
+
 ### 2026-07-06 Latest Active Plan: One-Stream Up/Down Cache Audit Before Next Patch
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的 accepted performance result。本阶段目标不是先写 runtime patch，而是先把 one-stream cache 扩展到 up/down 的硬上界、VRAM 竞争和 page-cache 代价算清楚，再决定是否值得实践。
