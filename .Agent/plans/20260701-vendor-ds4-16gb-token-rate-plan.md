@@ -4041,3 +4041,38 @@
 - `current_download_status`: 下载 service 仍为 `active`，`.aria2` sidecar 仍存在，watcher 仅轮询等待。
 - `automatic_next_steps`: `.aria2` 消失后执行 `validate_4expert_ready.py --sha256`；通过后执行 `run_4expert_validation_after_download.sh`，产生 strict 16GB France correctness smoke 记录。
 - `claim_rule`: 当前没有任何 correctness/perf/SOTA 结论。只有 watcher 产出完整 `ready-validation.json` 和 strict runner `summary.json`，并确认 RAM/page cache/TTFT/correctness 后，才允许进入后续 decision 和提交记录。
+
+## 2026-07-06 执行记录：4Expert load compatibility 诊断
+
+- `attempt_id`: `20260706-4expert-load-compat-diagnostic`
+- `status`: `diagnostic_not_accepted`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-load-compat-diagnostic-20260706.json`
+- `prompt_scope`: 只使用 France smoke；未使用 `calibration_dev_set_v1` 做调参，未使用 `held_out_test_set_v1_locked`。该结果不能作为 generalized SOTA。
+- `source_scope`: 本轮实现为 4Expert load compatibility 和 CUDA type coverage 诊断；不改变当前 accepted native DeepSeek SOTA。
+- `implemented`:
+  - default-off GGUF metadata compatibility：`LLAMA_GGUF_ALLOW_U64_TO_U32=1` 和 `LLAMA_GGUF_ALLOW_F64_TO_F32=1`；
+  - `tokenizer.ggml.model=bpe` 进入现有 BPE tokenizer 路径；
+  - default-off 4Expert tensor aliases：`LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`，覆盖 `output_hc_* -> hc_head_*`、layer `.weight` 后缀、`attn_kv_latent -> attn_kv`、`compress -> compressor`、`exp_probs_b.bias`；
+  - default-off diagnostics：`LLAMA_DUMP_UNCREATED_TENSORS=1`、`GGML_CUDA_BINBCAST_DEBUG=1`、`GGML_CUDA_CONCAT_DEBUG=1`；
+  - CUDA `binbcast` 修复 `f32 + f16 -> f32` 分支，避免把 f16 src1 当作 float；
+  - CUDA `concat` 增加 pure f16 concat 支持。
+- `debug_findings`:
+  - readiness gate 已证明完整 4Expert 文件存在，sha256 为 `e9e7e22ba585f83330d08235de39e8dcd8cbb513fd9fad6103764da74a4e64bc`；
+  - 初始 blocker 依次为 metadata `u64/f64` type mismatch、`tokenizer.ggml.model=bpe` unknown、`output_hc_*`/layer tensor 命名差异、`attn_kv`/compressor 命名差异、以及 `exp_probs_b.bias` 未消费；
+  - `LLAMA_DUMP_UNCREATED_TENSORS=1` 定位最后 40 个未消费 tensor 全部为 `blk.3..42.exp_probs_b.bias`；
+  - `GGML_CUDA_BINBCAST_DEBUG=1` 定位 `blk.2.attn_compressor_ape.weight` f16 view 参与 f32 ADD 时触发 stride assert；
+  - `GGML_CUDA_CONCAT_DEBUG=1` 定位同一 tensor 的两个 f16 view 做 dim=1 concat，原 CUDA concat 只支持 f32。
+- `best_4expert_run_after_fixes`:
+  - `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T152334Z-4expert-concat-f16-fix-streamoff-france-strict-smoke/france-4expert-concat-f16-fix-streamoff-cpu40-vram0gb-cpu40-vram0gb`
+  - `env`: `LLAMA_GGUF_ALLOW_U64_TO_U32=1`, `LLAMA_GGUF_ALLOW_F64_TO_F32=1`, `LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`, `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`, `GGML_MOE_STREAM=0`
+  - `metrics`: `eval_tok_s=2.0`, `prompt_tok_s=1.4`, `elapsed_seconds=136.6`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14895955968`, `ram_ok=true`, `ram_limit_killed=false`, `exit_status=0`
+  - `correctness`: `false`; answer was empty, missing France/Europe/semantic content.
+  - `decision`: rejected / not accepted. It is slower than the native path target and fails correctness, so it cannot replace any SOTA.
+- `native_regression_after_changes`:
+  - `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T152707Z-native-regression-after-4expert-compat-france-strict-smoke/france-native-regression-cpu40-vram0gb-cpu40-vram0gb`
+  - `metrics`: `eval_tok_s=1.6`, `prompt_tok_s=0.7`, `TTFT=46905.717439ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14978998272`, `ram_ok=true`, `correctness_ok=true`
+  - `note`: 该回归 smoke 未使用 accepted SOTA pack/profile，因此不能与 `4.4 tok/s` France SOTA 比较；只证明当前源码没有让 native DeepSeek 路径崩溃。
+- `next_decision`:
+  - 4Expert 当前不是短期 SOTA 路径，除非先解决空输出/正确率问题；
+  - 当前 accepted native DeepSeek SOTA 不变；
+  - 后续 token-rate 主线仍回到 plan 中的 generalized prompt CPU fallback / up-down GPU path，而不是继续把 4Expert 空输出结果作为性能优化对象。
