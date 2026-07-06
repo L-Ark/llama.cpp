@@ -4343,3 +4343,17 @@
 - `why_this_candidate`: header probe 显示 `output_hc=3`、`tid2eid_weight=3`、`ffn_gate_inp=[4096,256]`，避免了 0xSero 的 missing `hc_head_base` 和 sleepy 的 K128 gate shape mismatch。
 - `completion_gate`: `.aria2` sidecar 消失、`stat size == 86720111200`、sha256/header validation 通过后，才允许 France strict 16GB smoke。
 - `claim_rule`: 当前只有下载启动记录，没有 correctness/token-rate/SOTA 结论。
+
+## 2026-07-07 执行记录：antirez IQ2XXS alternate GGUF ready validation 通过
+
+- `attempt_id`: `20260707-antirez-iq2xxs-alt-gguf-ready-validation`
+- `status`: `ready_for_france_strict_smoke`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-ready-validation-20260707.json`
+- `prompt_scope`: 未运行 prompt；未使用 `held_out_test_set_v1_locked`。
+- `model_path`: `/root/lfz/models/DeepSeek-V4-Flash-antirez-IQ2XXS-chat-v2-GGUF/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf`。
+- `size_and_sha256`: size `86720111200` bytes；sha256 `31598c67c8b8744d3bcebcd19aa62253c6dc43cef3b8adf9f593656c9e86fd8c`。
+- `header_validation`: GGUF version `3`，`n_kv=58`，`n_tensors=1328`，`general.architecture=deepseek4`，`general.file_type=19`，`expert_count=256`，`expert_used_count=6`，`nextn_predict_layers=1`。
+- `tensor_validation`: type counts 为 `F32=492`, `F16=359`, `Q8_0=345`, `IQ2_XXS=86`, `Q2_K=43`, `I32=3`；`output_hc=3`、`tid2eid_weight=3`、gate/up/down expert tensors 各 `43` 个，全部 `ffn_gate_inp=[4096,256]`。
+- `first_smoke_env`: `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`、`LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`、`LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1`、`GGML_MOE_STREAM=0`。
+- `next_action`: 运行 France strict 16GB load/correctness smoke；如果 load 或 correctness 失败，立即 reject，不进入 token-rate benchmark。
+- `claim_rule`: 当前只有下载和 metadata ready 结论，没有 correctness/token-rate/SOTA 结论。
