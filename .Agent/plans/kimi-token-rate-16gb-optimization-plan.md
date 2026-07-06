@@ -93535,3 +93535,86 @@ GP40 execution result:
     storage, or a different byte-reduction path;
   - no deletion/download/move/truncate/smoke was performed;
   - no SOTA or token-rate claim is possible from this phase.
+
+## GP41: mixed-type selected expert-pack override source audit
+
+Timestamp: `2026-07-07T14:40:00+0800`.
+
+Status: planned before execution.
+
+Purpose:
+
+- GP40 proves the full IQ1_S model cannot be stored on the current machine
+  without deletion approval or external storage.
+- GP34 showed selected IQ1_S hotsets could cut selected expert bytes to roughly
+  `0.52x-0.61x`, which is in the range needed for a material token-rate jump.
+- The known blocker is that current selected expert-pack runtime assumes the
+  main GGUF tensor's type/`nbytes`; an IQ1_S payload cannot simply replace an
+  IQ3_S tensor blob.
+- Before implementing a mixed-type pack format, audit the exact code paths and
+  invariants that would need to change.
+
+Audit questions:
+
+1. Where does expert-pack lookup key by tensor/layer/expert and where does it
+   return byte offsets and sizes?
+2. Where does the runtime decide the bytes to read/stage/H2D from `src0->data`,
+   `src0->type`, or `ggml_nbytes(src0)`?
+3. Where do CUDA MoE stream kernels select dequant/matmul kernels by type?
+4. Can one expert use a different quant type than the main GGUF tensor without:
+   - changing tensor shapes;
+   - changing MoE routing semantics;
+   - changing activation/output dtype;
+   - corrupting fallback correctness?
+5. What minimum metadata would a v2 expert pack need:
+   - packed tensor type;
+   - packed byte size;
+   - source logical dims;
+   - block size / type size validation;
+   - fallback policy when packed type lacks a supported kernel.
+
+Validation:
+
+- Inspect source only; no runtime code changes in this phase.
+- Record concrete files/functions and a go/no-go recommendation.
+- If feasible, the next phase must be a default-off v2 format/parser skeleton
+  with no behavior change for existing packs.
+- If infeasible, return to full IQ1_S smoke once disk/deletion is available.
+
+Acceptance:
+
+- The report must identify specific source locations, not just high-level
+  speculation.
+- The report must state whether this can be tested without held-out prompts.
+- No SOTA or token-rate claim is possible from this phase.
+
+GP41 execution result:
+
+- Timestamp: `2026-07-07T14:40:00+0800`.
+- Commit audited:
+  `cdabf98a7`.
+- Record:
+  `.Agent/runs/20260707-gp41-mixed-type-pack-audit/report.md`.
+- Key findings:
+  - v1 pack format stores only `tensor`, `expert_idx`, `offset`, and `nbytes`;
+  - v1 runtime lookup keys by exact `tensor/expert/nbytes`;
+  - IO/H2D helpers reject entries where `entry->nbytes != requested_size`;
+  - up/gate, down, and current-down-overlap all use the main GGUF tensor type
+    and byte size for cache lookup, copy size, and kernel launch;
+  - CUDA MMVQ can dispatch `IQ1_S`/`Q2_K` if the runtime passes the correct
+    `src0_type_int` and `nb01`.
+- Decision:
+  - selected IQ1_S payloads must not be forced into `GGMLMOEPACKv1`;
+  - a mixed-type selected expert path is feasible only as a default-off
+    `GGMLMOEPACKv2` path with per-entry `packed_type`, `packed_nbytes`, and
+    `packed_nb01`/dims metadata;
+  - v2 misses or unsupported packed types must fall back to the current IQ3_S
+    main GGUF path;
+  - testing can be done without held-out prompts via synthetic v2 parser/lookup,
+    v1 no-op regression, and then dev-only France n32/n96 gates;
+  - no SOTA or token-rate claim is possible from this phase.
+- Recommended next implementation:
+  - add default-off v2 format/parser skeleton and synthetic lookup test;
+  - keep existing v1 behavior unchanged;
+  - do not build real selected IQ1_S payloads until the skeleton proves
+    metadata and fallback behavior.
