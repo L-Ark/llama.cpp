@@ -92579,3 +92579,68 @@ Decision:
 - Before any cleanup/download, write GP32 and do a small header/range preflight
   to verify metadata, split/concat handling, tensor types, and stream
   compatibility.
+
+## GP32: mradermacher i1-IQ1_S header/range preflight
+
+Timestamp: `2026-07-07T08:30:00+0800`.
+
+Status: planned.
+
+Purpose:
+
+- GP31 identified `mradermacher/Kimi-K2.7-Code-i1-GGUF` `i1-IQ1_S` as the only
+  newly found full-model candidate that both:
+  - reaches a plausible byte ratio (`190.39 GiB`, `0.504x` of current IQ3_S);
+  - has a plausible current vendor stream path (`GGML_TYPE_IQ1_S`).
+- Before requesting cleanup or downloading `190.39 GiB`, verify whether the
+  multipart GGUF header is readable and metadata-compatible.
+
+Hard limits:
+
+- Do not delete anything.
+- Do not download full model parts.
+- Download only a small prefix/range from
+  `Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5`.
+- Held-out test prompts are not used.
+
+Checks:
+
+1. Download a small prefix of part 1 into a temp directory under `/root/lfz/tmp`.
+2. Run available GGUF metadata tooling on the prefix if possible.
+3. If standard tooling cannot read the partial file, parse enough GGUF metadata
+   locally to verify:
+   - GGUF version;
+   - `general.architecture`;
+   - `general.name`;
+   - `general.file_type`;
+   - `split.count` / split metadata if present;
+   - `deepseek2.block_count`;
+   - `deepseek2.expert_count`;
+   - `deepseek2.expert_used_count`;
+   - tensor count and first tensor metadata if present in the prefix.
+4. Confirm whether `general.file_type` maps to `LLAMA_FTYPE_MOSTLY_IQ1_S` or
+   whether tensor-level metadata must be inspected after more bytes.
+5. Record whether the file layout implies:
+   - direct split loading;
+   - required concatenation;
+   - stream-concatenation feasible without storing all parts at once.
+
+Pass gate:
+
+- Metadata confirms Kimi/deepseek2 architecture and expected expert count.
+- Metadata indicates IQ1_S or is at least not contradictory.
+- No evidence that this is incompatible with current Kimi loader.
+- The next step can be specified without full download.
+
+Fail gate:
+
+- Header is unreadable even with a reasonable prefix.
+- Metadata is not deepseek2/Kimi-compatible.
+- Metadata indicates an unsupported type or layout that would require a large
+  runtime implementation before any quality test.
+
+Execution records:
+
+- Store under:
+  `.Agent/runs/20260707-gp32-iq1s-header-preflight/`.
+- Commit and push the plan and result.
