@@ -4129,3 +4129,21 @@
   - 4Expert 当前不是短期 SOTA 路径，除非先解决空输出/正确率问题；
   - 当前 accepted native DeepSeek SOTA 不变；
   - 后续 token-rate 主线仍回到 plan 中的 generalized prompt CPU fallback / up-down GPU path，而不是继续把 4Expert 空输出结果作为性能优化对象。
+
+## 2026-07-07 执行记录：4Expert token_type 空输出诊断与 reject
+
+- `attempt_id`: `20260707-4expert-token-type-zero-normal-diagnostic`
+- `status`: `diagnostic_rejected_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-token-type-zero-normal-diagnostic-20260707.json`
+- `prompt_scope`: 只使用 France smoke 和 native default-off 回归；未使用 `calibration_dev_set_v1` 调参，未使用 `held_out_test_set_v1_locked`；该结果不能作为 generalized SOTA。
+- `source_change`:
+  - 新增 default-off `LLAMA_DEBUG_SAMPLE_TOKENS=1`，只在诊断时把 sampled token id 与 `token_to_piece(..., special=true)` 打到 stderr；默认关闭，不改变采样行为。
+  - 新增 default-off `LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1`，只在显式设置时把 GGUF `tokenizer.ggml.token_type=0` 当作 normal token；默认关闭，不影响 native DeepSeek 路径。
+- `root_cause`: 4Expert 之前不是没有生成 token，而是 sampled token id 正常但 piece 全为空。原因是 4Expert GGUF 中大量正常 token 的 `token_type` 为 `0`，当前 loader 将其解释为 `LLAMA_TOKEN_TYPE_UNDEFINED` 并覆盖默认 normal attr，导致 BPE `token_to_piece` 抑制输出。
+- `before_fix_evidence`: `/root/lfz/runs/vendor-ds4-16gb/20260706T162828Z-20260707-4expert-sample-token-debug-completion-n16/france-4expert-sample-debug-n16-cpu40-vram0gb`，sample debug 显示 `id=20/16/2619/...` 但 `piece=""`；stdout 只有换行；`token to piece cache size` 约 `0.0001 MB`。
+- `after_token_type_fix_evidence`: `/root/lfz/runs/vendor-ds4-16gb/20260706T163214Z-20260707-4expert-token-type-zero-normal-completion-n16/france-4expert-ttype0normal-n16-cpu40-vram0gb`，sample debug 显示 `id=20 piece="2"`, `id=2619 piece=" **"`, `id=71343 piece="Identify"`；`token to piece cache size` 约 `1.0267 MB`，证明空输出问题被 tokenizer attr 层修复。
+- `correctness_full_smoke`: `/root/lfz/runs/vendor-ds4-16gb/20260706T163339Z-20260707-4expert-token-type-zero-normal-cli-france-n192/france-4expert-ttype0normal-cli-cpu40-vram0gb`，`eval_tok_s=2.0`、`prompt_tok_s=1.4`、`TTFT=42943.682616 ms`、`memory_peak_bytes=16000000000`、`memory_file_bytes=14923116544`、`ram_ok=true`，但 `correctness_ok=false`，原因 `degenerate_text,truncated_or_corrupt_landmark`；输出前半段有 France 语义，但随后 markdown/code-fence 重复并出现 `Eiff Tower` 截断。
+- `template_probe`: `/root/lfz/runs/vendor-ds4-16gb/20260706T163647Z-20260707-4expert-ttype0normal-deepseek3-template-france-n128/france-4expert-deepseek3-template-n128-cpu40-vram0gb`，显式 `--chat-template deepseek3 --reasoning off` 后 `eval_tok_s=1.6`、`ram_ok=true`、`correctness_ok=false`，输出时间戳/Chat 噪声；模板不能修复正确性。
+- `native_defaultoff_regression`: `/root/lfz/runs/vendor-ds4-16gb/20260706T163913Z-20260707-native-defaultoff-regression-after-token-debug-n64/france-native-defaultoff-regression-n64-cpu40-vram0gb`，新 env 默认关闭时 native DeepSeek gate-only n64 smoke `eval_tok_s=1.5`、`TTFT=47080.892513 ms`、`memory_peak_bytes=16000000000`、`ram_ok=true`、`correctness_ok=true`。
+- `decision`: 4Expert 从空输出推进到可见文本，但仍未通过正确性，且速度低于 native generalized baseline，不是 accepted SOTA。短期 token-rate 主线不要基于 4Expert 做性能 benchmark；如果之后继续 4Expert，必须先定位剩余 tensor alias / 数值路径 / 模板不匹配导致的退化，再进入性能实验。
+- `next_allowed_work`: 回到 native generalized prompt 的主线。下一步优先选择能够减少 up/down fallback payload 或改变数据流的方案；不要把 4Expert 作为 token-rate 候选，除非 correctness 先过。
