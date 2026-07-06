@@ -1,0 +1,109 @@
+{
+  "accepted_sota_branch_unchanged": "ssd/vendor/deepseek-token-rate-16gb",
+  "accepted_sota_changed": false,
+  "auto_merged_both_changed_files": [
+    "ggml/src/ggml-cpu/ggml-cpu.c"
+  ],
+  "build_validation": {
+    "binary": "build-ds4-moe-stream/bin/llama-cli",
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-kimi-verify-bench -j2",
+    "git_diff_check": "pass",
+    "kimi_verify_bench": "build-ds4-moe-stream/bin/llama-kimi-verify-bench",
+    "llama_cli_version": "version: 14901 (f9defd426-dirty during uncommitted merge build)",
+    "real_conflict_markers": "none",
+    "status": "pass"
+  },
+  "conflict_files": [
+    "ggml/src/ggml-cuda/moe_stream_batch.cu"
+  ],
+  "conflict_resolution_summary": [
+    "Preserved Kimi mixed up/gate parallel-stage and serial fallback structure instead of deleting Kimi functionality.",
+    "Removed the stale duplicated DeepSeek sequential block from the conflict region because Kimi's else path already preserves the sequential fallback.",
+    "Added the current DeepSeek launch_moe_mmvq_compact_batch stride arguments up_nb01/gate_nb01 in the Kimi mixed-type calls so the merged runtime builds with the current signature.",
+    "DeepSeek default accepted SOTA env remains gate-only one-stream cache; Kimi source-list/runtime additions remain compiled and reachable."
+  ],
+  "date": "2026-07-06",
+  "decision": "merge_checkpoint_no_accepted_sota_change",
+  "deepseek_base_commit": "f9defd426562f5a3d355b202f0c1697c301bbbca",
+  "deepseek_strict_cold_regression": {
+    "accepted_thresholds": {
+      "correctness_required": true,
+      "eval_tok_s_must_exceed_for_new_sota": 4.4,
+      "memory_peak_bytes_max": 16000000000,
+      "page_cache_in_cgroup_required": true,
+      "ttft_ms_max": 33617.688744
+    },
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "gate_result": {
+      "accepted_as_new_sota": false,
+      "correctness_ok": true,
+      "eval_tok_s_improved": false,
+      "ram_ok": true,
+      "ttft_ok": true
+    },
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T031711Z-merge-kimi-preserve-regression/france-cpu40-vram0gb",
+    "status": "pass_constraints_but_below_accepted_sota",
+    "summary": {
+      "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T031711Z-merge-kimi-preserve-regression/france-cpu40-vram0gb",
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "cpu_moe": 40,
+      "elapsed_seconds": 64.08,
+      "eval_ms": null,
+      "eval_tok_s": 4.3,
+      "exit_status": 0,
+      "first_answer_ms": 32303.449436,
+      "load_ms": null,
+      "max_rss_kb": 15597268,
+      "memory_file_bytes": 15093403648,
+      "memory_max_bytes": 16000000000,
+      "memory_max_events": 17044,
+      "memory_peak_bytes": 16000000000,
+      "memory_stat_relevant": {
+        "active_file": 9520254976,
+        "anon": 1138688,
+        "file": 15093403648,
+        "file_mapped": 163840,
+        "inactive_file": 5573128192,
+        "kernel": 112459776,
+        "pgfault": 2355333,
+        "pgmajfault": 272593,
+        "slab": 111800048,
+        "workingset_activate_file": 703155,
+        "workingset_refault_file": 1714115,
+        "workingset_restore_file": 703136
+      },
+      "oom_seen": false,
+      "pgmajfault": 272593,
+      "prompt_eval_ms": null,
+      "prompt_tok_s": 1.8,
+      "ram_kill_threshold_bytes": 16000000000,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "systemd_status": 0,
+      "ttft_estimate_ms": 32303.449436,
+      "unit": "vendor-ds4-16gb-20260706T031712Z-cpu40.service",
+      "workingset_refault_file": 1714115
+    }
+  },
+  "kimi_preservation_smoke": {
+    "full_kimi_performance_regression": "not_run_due_to_scope_and_asset/disk limits; functionality smoke only, no Kimi SOTA claim",
+    "kimi_verify_bench_help": "pass",
+    "python_scripts_py_compile": "pass",
+    "remote_manifest_help": "pass",
+    "remote_pack_builder_help": "pass",
+    "source_list_symbols_in_runtime": 44,
+    "status": "pass_smoke_not_full_perf_validation"
+  },
+  "kimi_source_branch": "ssd/vendor/kimi-moe-stream-on-vendor",
+  "kimi_source_commit": "9820ecbbb3dbb503b179ea605c848b903082e121",
+  "kind": "kimi_preserving_merge_probe",
+  "merge_base": "f0d44910233b0bcf52050025a522313a78b93232",
+  "notes": [
+    "This merge probe should be pushed to the probe branch, not promoted as the accepted DeepSeek SOTA branch, because eval_tok_s=4.3 is below the current accepted 4.4 tok/s.",
+    "The strict cold run still satisfies RAM/page-cache, TTFT, and correctness constraints, so the merge is suitable as a functional checkpoint if Kimi preservation is desired."
+  ],
+  "probe_branch": "vendor/deepseek-merge-kimi-preserve-kimi-probe",
+  "push_target_probe_branch": "ssd/vendor/deepseek-merge-kimi-preserve-kimi-probe"
+}

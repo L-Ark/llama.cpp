@@ -594,9 +594,13 @@ struct llama_mmap::impl {
         }
     }
 
-    void dontneed_fragment(size_t first, size_t last) {
+    bool dontneed_fragment(size_t first, size_t last, size_t * len_out) {
         GGML_UNUSED(first);
         GGML_UNUSED(last);
+        if (len_out) {
+            *len_out = 0;
+        }
+        return true;
     }
 
     void unmap_fragment(size_t first, size_t last) {
@@ -627,11 +631,15 @@ struct llama_mmap::impl {
         throw std::runtime_error("mmap not supported");
     }
 
-    void dontneed_fragment(size_t first, size_t last) {
+    bool dontneed_fragment(size_t first, size_t last, size_t * len_out) {
         GGML_UNUSED(first);
         GGML_UNUSED(last);
 
+        if (len_out) {
+            *len_out = 0;
+        }
         throw std::runtime_error("mmap not supported");
+        return false;
     }
 
     void unmap_fragment(size_t first, size_t last) {

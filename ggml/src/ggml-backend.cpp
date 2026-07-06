@@ -1712,6 +1712,7 @@ static bool ggml_backend_sched_moe_cache_prime_last_enabled() {
 }
 
 struct ggml_kimi_split_profile_key {
+    int phase = 0;
     std::string backend;
     std::string first;
     std::string last;
@@ -1719,8 +1720,8 @@ struct ggml_kimi_split_profile_key {
     int i_end = 0;
 
     bool operator<(const ggml_kimi_split_profile_key & other) const {
-        return std::tie(backend, first, last, i_start, i_end) <
-               std::tie(other.backend, other.first, other.last, other.i_start, other.i_end);
+        return std::tie(phase, backend, first, last, i_start, i_end) <
+               std::tie(other.phase, other.backend, other.first, other.last, other.i_start, other.i_end);
     }
 };
 
@@ -1732,6 +1733,11 @@ struct ggml_kimi_split_profile_value {
 
 static std::mutex g_kimi_split_profile_mutex;
 static std::map<ggml_kimi_split_profile_key, ggml_kimi_split_profile_value> g_kimi_split_profile;
+static int g_kimi_split_profile_phase = 0;
+
+void ggml_backend_sched_kimi_set_profile_phase(int phase) {
+    g_kimi_split_profile_phase = phase >= 0 && phase <= 2 ? phase : 0;
+}
 
 static int ggml_kimi_split_profile_top() {
     const char * env = getenv("GGML_KIMI_SPLIT_PROFILE_TOP");
@@ -1760,33 +1766,72 @@ static void ggml_kimi_split_profile_report() {
     std::sort(rows.begin(), rows.end(), [](const auto & a, const auto & b) {
         return a.second.wall_us > b.second.wall_us;
     });
-    uint64_t total_us = 0;
-    uint64_t total_calls = 0;
-    for (const auto & row : rows) {
-        total_us += row.second.wall_us;
-        total_calls += row.second.calls;
-    }
-    GGML_LOG_INFO(
-        "[kimi_split_profile] total: signatures=%zu calls=%" PRIu64 " wall=%.3f ms\n",
-        rows.size(), total_calls, (double) total_us / 1000.0);
-    const int top = std::min<int>(ggml_kimi_split_profile_top(), (int) rows.size());
-    for (int i = 0; i < top; ++i) {
-        const auto & key = rows[i].first;
-        const auto & val = rows[i].second;
+    auto report_phase = [&](const char * label, int phase_filter) {
+        uint64_t total_us = 0;
+        uint64_t total_calls = 0;
+        size_t signatures = 0;
+        std::vector<size_t> indexes;
+        std::map<std::string, ggml_kimi_split_profile_value> backend_totals;
+        indexes.reserve(rows.size());
+        for (size_t i = 0; i < rows.size(); ++i) {
+            if (phase_filter >= 0 && rows[i].first.phase != phase_filter) {
+                continue;
+            }
+            const auto & key = rows[i].first;
+            const auto & val = rows[i].second;
+            total_us += val.wall_us;
+            total_calls += val.calls;
+            signatures++;
+            indexes.push_back(i);
+            ggml_kimi_split_profile_value & backend_val = backend_totals[key.backend];
+            backend_val.calls += val.calls;
+            backend_val.nodes += val.nodes;
+            backend_val.wall_us += val.wall_us;
+        }
+        if (signatures == 0) {
+            return;
+        }
         GGML_LOG_INFO(
-            "[kimi_split_profile] top%d: backend=%s range=%d:%d nodes_avg=%.2f calls=%" PRIu64
-            " wall=%.3f ms avg=%.3f ms/call first=%s last=%s\n",
-            i + 1,
-            key.backend.c_str(),
-            key.i_start,
-            key.i_end,
-            val.calls == 0 ? 0.0 : (double) val.nodes / (double) val.calls,
-            val.calls,
-            (double) val.wall_us / 1000.0,
-            val.calls == 0 ? 0.0 : (double) val.wall_us / 1000.0 / (double) val.calls,
-            key.first.c_str(),
-            key.last.c_str());
-    }
+            "[kimi_split_profile] phase=%s total: signatures=%zu calls=%" PRIu64 " wall=%.3f ms\n",
+            label, signatures, total_calls, (double) total_us / 1000.0);
+        for (const auto & backend_kv : backend_totals) {
+            const auto & backend = backend_kv.first;
+            const auto & val = backend_kv.second;
+            GGML_LOG_INFO(
+                "[kimi_split_profile] phase=%s backend=%s total: calls=%" PRIu64
+                " nodes=%" PRIu64 " wall=%.3f ms avg=%.3f ms/call\n",
+                label,
+                backend.c_str(),
+                val.calls,
+                val.nodes,
+                (double) val.wall_us / 1000.0,
+                val.calls == 0 ? 0.0 : (double) val.wall_us / 1000.0 / (double) val.calls);
+        }
+        const int top = std::min<int>(ggml_kimi_split_profile_top(), (int) indexes.size());
+        for (int i = 0; i < top; ++i) {
+            const auto & row = rows[indexes[i]];
+            const auto & key = row.first;
+            const auto & val = row.second;
+            GGML_LOG_INFO(
+                "[kimi_split_profile] phase=%s top%d: backend=%s range=%d:%d nodes_avg=%.2f calls=%" PRIu64
+                " wall=%.3f ms avg=%.3f ms/call first=%s last=%s\n",
+                label,
+                i + 1,
+                key.backend.c_str(),
+                key.i_start,
+                key.i_end,
+                val.calls == 0 ? 0.0 : (double) val.nodes / (double) val.calls,
+                val.calls,
+                (double) val.wall_us / 1000.0,
+                val.calls == 0 ? 0.0 : (double) val.wall_us / 1000.0 / (double) val.calls,
+                key.first.c_str(),
+                key.last.c_str());
+        }
+    };
+    report_phase("all", -1);
+    report_phase("prompt", 1);
+    report_phase("decode", 2);
+    report_phase("idle", 0);
 }
 
 static bool ggml_kimi_split_profile_enabled() {
@@ -1801,6 +1846,287 @@ static bool ggml_kimi_split_profile_enabled() {
     return enabled;
 }
 
+static bool ggml_kimi_split_moe_assign_profile_enabled() {
+    static const bool enabled = []() {
+        const char * env = getenv("GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE");
+        return env && env[0] && env[0] != '0';
+    }();
+    return enabled;
+}
+
+static bool ggml_kimi_moe_upgate_cuda_dryrun_enabled() {
+    static const bool enabled = []() {
+        const char * env = getenv("GGML_KIMI_MOE_UPGATE_CUDA_DRYRUN");
+        return env && env[0] && env[0] != '0';
+    }();
+    return enabled;
+}
+
+static int ggml_kimi_split_moe_assign_profile_limit() {
+    static const int limit = []() {
+        const char * env = getenv("GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE_LIMIT");
+        int value = (env && env[0]) ? atoi(env) : 256;
+        if (value < 1) {
+            value = 1;
+        }
+        if (value > 4096) {
+            value = 4096;
+        }
+        return value;
+    }();
+    return limit;
+}
+
+static int ggml_kimi_moe_upgate_cuda_dryrun_limit() {
+    static const int limit = []() {
+        const char * env = getenv("GGML_KIMI_MOE_UPGATE_CUDA_DRYRUN_LIMIT");
+        int value = (env && env[0]) ? atoi(env) : 32;
+        if (value < 1) {
+            value = 1;
+        }
+        if (value > 4096) {
+            value = 4096;
+        }
+        return value;
+    }();
+    return limit;
+}
+
+static bool ggml_kimi_name_contains(const char * name, const char * needle) {
+    return name != nullptr && needle != nullptr && strstr(name, needle) != nullptr;
+}
+
+static const char * ggml_kimi_tensor_buffer_name(const ggml_tensor * tensor) {
+    if (tensor == nullptr) {
+        return "<null>";
+    }
+    ggml_backend_buffer_t buffer = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
+    return buffer != nullptr ? ggml_backend_buffer_name(buffer) : "<none>";
+}
+
+static int ggml_kimi_tensor_buffer_usage(const ggml_tensor * tensor) {
+    if (tensor == nullptr) {
+        return -1;
+    }
+    ggml_backend_buffer_t buffer = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
+    return buffer != nullptr ? (int) buffer->usage : -1;
+}
+
+static bool ggml_kimi_tensor_buffer_name_contains(const ggml_tensor * tensor, const char * needle) {
+    return strstr(ggml_kimi_tensor_buffer_name(tensor), needle) != nullptr;
+}
+
+static int ggml_kimi_find_backend_by_name(ggml_backend_sched_t sched, const char * needle) {
+    if (sched == nullptr || needle == nullptr) {
+        return -1;
+    }
+    for (int b = 0; b < sched->n_backends; ++b) {
+        if (strstr(ggml_backend_name(sched->backends[b]), needle) != nullptr) {
+            return b;
+        }
+    }
+    return -1;
+}
+
+static const ggml_tensor * ggml_kimi_find_split_node_by_name(
+        const ggml_backend_sched_split * split,
+        const char * needle) {
+    if (split == nullptr || needle == nullptr) {
+        return nullptr;
+    }
+    for (int node_id = 0; node_id < split->graph.n_nodes; ++node_id) {
+        const ggml_tensor * node = split->graph.nodes[node_id];
+        if (node != nullptr && ggml_kimi_name_contains(node->name, needle)) {
+            return node;
+        }
+    }
+    return nullptr;
+}
+
+static void ggml_kimi_moe_upgate_cuda_dryrun_record(
+        ggml_backend_sched_t sched,
+        int split_id,
+        const ggml_backend_sched_split * split,
+        ggml_backend_t split_backend) {
+    if (!ggml_kimi_moe_upgate_cuda_dryrun_enabled() ||
+            g_kimi_split_profile_phase != 2 ||
+            sched == nullptr || split == nullptr || split_backend == nullptr ||
+            split->graph.n_nodes <= 0) {
+        return;
+    }
+    if (strstr(ggml_backend_name(split_backend), "CPU") == nullptr) {
+        return;
+    }
+    const ggml_tensor * upgate = ggml_kimi_find_split_node_by_name(split, "ffn_moe_swiglu");
+    const ggml_tensor * down   = ggml_kimi_find_split_node_by_name(split, "ffn_moe_down");
+    if (upgate == nullptr || upgate->op != GGML_OP_MOE_FUSED_UP_GATE) {
+        return;
+    }
+
+    static int emitted = 0;
+    if (emitted >= ggml_kimi_moe_upgate_cuda_dryrun_limit()) {
+        return;
+    }
+    emitted++;
+
+    const int cuda_backend_id = ggml_kimi_find_backend_by_name(sched, "CUDA");
+    ggml_backend_t cuda_backend = cuda_backend_id >= 0 ? sched->backends[cuda_backend_id] : nullptr;
+    const bool upgate_cuda_support = cuda_backend != nullptr && ggml_backend_supports_op(cuda_backend, upgate);
+    const bool down_cuda_support = cuda_backend != nullptr && down != nullptr && ggml_backend_supports_op(cuda_backend, down);
+
+    const ggml_tensor * up_w   = upgate->src[0];
+    const ggml_tensor * gate_w = upgate->src[1];
+    const ggml_tensor * act    = upgate->src[2];
+    const ggml_tensor * ids    = upgate->src[3];
+    const ggml_tensor * down_w = down != nullptr ? down->src[0] : nullptr;
+    const int64_t rows_stride = ids != nullptr ? ids->ne[0] * ids->ne[1] : -1;
+    const bool down_weight_cpu_mapped = ggml_kimi_tensor_buffer_name_contains(down_w, "CPU_Mapped");
+    const bool upgate_weights_cpu_mapped =
+        ggml_kimi_tensor_buffer_name_contains(up_w, "CPU_Mapped") &&
+        ggml_kimi_tensor_buffer_name_contains(gate_w, "CPU_Mapped");
+
+    GGML_LOG_INFO(
+        "[kimi_upgate_cuda_dryrun] split=%d backend=%s cuda_backend=%s"
+        " upgate=%s op=%s type=%s ne=[%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "]"
+        " out_buf=%s cuda_support=%d"
+        " ids=%s ids_type=%s ids_ne=[%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "] rows_stride=%" PRId64
+        " act=%s act_buf=%s"
+        " up_w=%s up_type=%s up_buf=%s gate_w=%s gate_type=%s gate_buf=%s"
+        " helper_needs_cpu_rowmap=1 weights_cpu_mapped=%d\n",
+        split_id,
+        ggml_backend_name(split_backend),
+        cuda_backend != nullptr ? ggml_backend_name(cuda_backend) : "<none>",
+        upgate->name[0] ? upgate->name : "<unnamed>",
+        ggml_op_name(upgate->op),
+        ggml_type_name(upgate->type),
+        upgate->ne[0], upgate->ne[1], upgate->ne[2], upgate->ne[3],
+        ggml_kimi_tensor_buffer_name(upgate),
+        upgate_cuda_support ? 1 : 0,
+        ids && ids->name[0] ? ids->name : "<null>",
+        ids ? ggml_type_name(ids->type) : "<null>",
+        ids ? ids->ne[0] : -1, ids ? ids->ne[1] : -1, ids ? ids->ne[2] : -1, ids ? ids->ne[3] : -1,
+        rows_stride,
+        act && act->name[0] ? act->name : "<null>",
+        ggml_kimi_tensor_buffer_name(act),
+        up_w && up_w->name[0] ? up_w->name : "<null>",
+        up_w ? ggml_type_name(up_w->type) : "<null>",
+        ggml_kimi_tensor_buffer_name(up_w),
+        gate_w && gate_w->name[0] ? gate_w->name : "<null>",
+        gate_w ? ggml_type_name(gate_w->type) : "<null>",
+        ggml_kimi_tensor_buffer_name(gate_w),
+        upgate_weights_cpu_mapped ? 1 : 0);
+
+    GGML_LOG_INFO(
+        "[kimi_upgate_cuda_dryrun] split=%d down=%s op=%s type=%s ne=[%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "]"
+        " out_buf=%s cuda_support=%d down_w=%s down_type=%s down_buf=%s down_weight_cpu_mapped=%d"
+        " current_chain_cpu_because_upgate_cuda_support=0 estimated_next_if_upgate_cuda=down_requires_selected_weight_copy_or_cache=%d\n",
+        split_id,
+        down && down->name[0] ? down->name : "<null>",
+        down ? ggml_op_name(down->op) : "<null>",
+        down ? ggml_type_name(down->type) : "<null>",
+        down ? down->ne[0] : -1, down ? down->ne[1] : -1, down ? down->ne[2] : -1, down ? down->ne[3] : -1,
+        ggml_kimi_tensor_buffer_name(down),
+        down_cuda_support ? 1 : 0,
+        down_w && down_w->name[0] ? down_w->name : "<null>",
+        down_w ? ggml_type_name(down_w->type) : "<null>",
+        ggml_kimi_tensor_buffer_name(down_w),
+        down_weight_cpu_mapped ? 1 : 0,
+        down_weight_cpu_mapped ? 1 : 0);
+}
+
+static void ggml_kimi_split_moe_assign_profile_record(
+        ggml_backend_sched_t sched,
+        int split_id,
+        const ggml_backend_sched_split * split,
+        ggml_backend_t split_backend) {
+    const bool assign_profile = ggml_kimi_split_moe_assign_profile_enabled();
+    const bool dryrun_profile = ggml_kimi_moe_upgate_cuda_dryrun_enabled();
+    if ((!assign_profile && !dryrun_profile) ||
+            g_kimi_split_profile_phase != 2 ||
+            sched == nullptr || split == nullptr || split_backend == nullptr ||
+            split->graph.n_nodes <= 0) {
+        return;
+    }
+    if (strstr(ggml_backend_name(split_backend), "CPU") == nullptr) {
+        return;
+    }
+    const ggml_tensor * first = split->graph.nodes[0];
+    const ggml_tensor * last = split->graph.nodes[split->graph.n_nodes - 1];
+    const char * first_name = first && first->name[0] ? first->name : "<unnamed>";
+    const char * last_name = last && last->name[0] ? last->name : "<unnamed>";
+    const bool moe_split =
+        ggml_kimi_name_contains(first_name, "ffn_moe_swiglu") ||
+        ggml_kimi_name_contains(first_name, "ffn_moe_down") ||
+        ggml_kimi_name_contains(last_name, "ffn_moe_swiglu") ||
+        ggml_kimi_name_contains(last_name, "ffn_moe_down");
+    if (!moe_split) {
+        return;
+    }
+
+    ggml_kimi_moe_upgate_cuda_dryrun_record(sched, split_id, split, split_backend);
+    if (!assign_profile) {
+        return;
+    }
+
+    static int emitted = 0;
+    if (emitted >= ggml_kimi_split_moe_assign_profile_limit()) {
+        return;
+    }
+    emitted++;
+
+    GGML_LOG_INFO(
+        "[kimi_moe_assign_profile] split=%d backend=%s range=%d:%d nodes=%d first=%s last=%s\n",
+        split_id,
+        ggml_backend_name(split_backend),
+        split->i_start,
+        split->i_end,
+        split->graph.n_nodes,
+        first_name,
+        last_name);
+
+    for (int node_id = 0; node_id < split->graph.n_nodes; ++node_id) {
+        const ggml_tensor * node = split->graph.nodes[node_id];
+        std::string support;
+        for (int b = 0; b < sched->n_backends; ++b) {
+            if (!support.empty()) {
+                support += ",";
+            }
+            support += ggml_backend_name(sched->backends[b]);
+            support += ":";
+            support += ggml_backend_supports_op(sched->backends[b], node) ? "1" : "0";
+        }
+        GGML_LOG_INFO(
+            "[kimi_moe_assign_profile] split=%d node=%d name=%s op=%s type=%s buf=%s usage=%d supports=[%s]\n",
+            split_id,
+            node_id,
+            node && node->name[0] ? node->name : "<unnamed>",
+            node ? ggml_op_name(node->op) : "<null>",
+            node ? ggml_type_name(node->type) : "<null>",
+            ggml_kimi_tensor_buffer_name(node),
+            ggml_kimi_tensor_buffer_usage(node),
+            support.c_str());
+        if (node == nullptr) {
+            continue;
+        }
+        for (int src_id = 0; src_id < GGML_MAX_SRC; ++src_id) {
+            const ggml_tensor * src = node->src[src_id];
+            if (src == nullptr) {
+                continue;
+            }
+            GGML_LOG_INFO(
+                "[kimi_moe_assign_profile] split=%d node=%d src=%d name=%s op=%s type=%s buf=%s usage=%d\n",
+                split_id,
+                node_id,
+                src_id,
+                src->name[0] ? src->name : "<unnamed>",
+                ggml_op_name(src->op),
+                ggml_type_name(src->type),
+                ggml_kimi_tensor_buffer_name(src),
+                ggml_kimi_tensor_buffer_usage(src));
+        }
+    }
+}
+
 static void ggml_kimi_split_profile_record(
         const ggml_backend_sched_split * split,
         ggml_backend_t backend,
@@ -1809,6 +2135,7 @@ static void ggml_kimi_split_profile_record(
         return;
     }
     ggml_kimi_split_profile_key key;
+    key.phase = g_kimi_split_profile_phase;
     key.backend = ggml_backend_name(backend);
     key.i_start = split->i_start;
     key.i_end = split->i_end;
@@ -2679,6 +3006,7 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
         if (split_profile) {
             ggml_kimi_split_profile_record(split, split_backend, (uint64_t) (ggml_time_us() - split_start_us));
         }
+        ggml_kimi_split_moe_assign_profile_record(sched, split_id, split, split_backend);
     }
 
     return GGML_STATUS_SUCCESS;

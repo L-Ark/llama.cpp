@@ -2,6 +2,34 @@
 
 ## Summary
 
+### 2026-07-06 Merge Result: Kimi-Preserving Checkpoint, No Accepted DeepSeek SOTA Change
+
+This is the latest result record for the Kimi-preserving merge probe. The merge was implemented on branch `vendor/deepseek-merge-kimi-preserve-kimi-probe` and is suitable only as a functional merge checkpoint. It must not replace the accepted DeepSeek SOTA branch because the strict cold DeepSeek regression reached `4.3 tok/s`, below the accepted `4.4 tok/s`.
+
+Merge source and resolution:
+
+- DeepSeek base: `f9defd426562f5a3d355b202f0c1697c301bbbca`
+- Kimi source: `ssd/vendor/kimi-moe-stream-on-vendor` at `9820ecbbb3dbb503b179ea605c848b903082e121`
+- Merge base: `f0d44910233b0bcf52050025a522313a78b93232`
+- Conflict file: `ggml/src/ggml-cuda/moe_stream_batch.cu`
+- Resolution: preserved Kimi mixed up/gate parallel-stage and serial fallback logic, removed only the duplicated stale DeepSeek sequential block in the conflict hunk, and added the current DeepSeek `up_nb01` / `gate_nb01` stride arguments to the Kimi mixed-type calls so the merged runtime builds with the current signature.
+
+Validation:
+
+- Build passed: `cmake --build build-ds4-moe-stream --target llama-cli llama-kimi-verify-bench -j2`
+- Static checks passed: no real conflict markers; `git diff --check` clean.
+- Kimi preservation smoke passed: all added Kimi Python tools compile, remote manifest/build tool help works, `llama-kimi-verify-bench --help` works, and source-list runtime symbols remain present. Full Kimi performance regression was not claimed because this was a smoke-only validation under current asset/disk constraints.
+- DeepSeek strict cold run: `/root/lfz/runs/vendor-ds4-16gb/20260706T031711Z-merge-kimi-preserve-regression/france-cpu40-vram0gb`
+- DeepSeek metrics: `eval_tok_s=4.3`, `prompt_tok_s=1.8`, `TTFT=32303.449436 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15093403648`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
+- France answer is coherent and semantically correct.
+
+Decision:
+
+- Accepted SOTA remains unchanged at `4.4 tok/s`.
+- Do not push this merge as the accepted SOTA update to `ssd/vendor/deepseek-token-rate-16gb`.
+- Push this result as a checkpoint to `ssd/vendor/deepseek-merge-kimi-preserve-kimi-probe`.
+- Result artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/kimi-preserving-merge-probe-20260706.json`
+
 ### 2026-07-06 Latest Active Plan: Preserve-Kimi Merge Probe Before Runtime Work
 
 This is the latest active plan and supersedes older Latest Active Plan sections below. Older sections remain as historical experiment records only. The immediate task is to document and then implement a Kimi-preserving merge probe before any runtime optimization work. Current accepted strict cold DeepSeek SOTA remains 4.4 tok/s; this section itself produces no new performance result.

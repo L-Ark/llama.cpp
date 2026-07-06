@@ -2835,7 +2835,11 @@ static bool ggml_cuda_compute_forward(ggml_backend_cuda_context & ctx, struct gg
             ggml_cuda_op_hc_weighted_sum(ctx, dst);
             break;
         case GGML_OP_LIGHTNING_INDEXER:
+#ifdef GGML_CUDA_NO_LIGHTNING_INDEXER
+            GGML_ABORT("CUDA lightning indexer was disabled at build time");
+#else
             ggml_cuda_op_lightning_indexer(ctx, dst);
+#endif
             break;
         case GGML_OP_OUT_PROD:
             ggml_cuda_out_prod(ctx, dst);
@@ -5208,6 +5212,9 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
                 op->ne[1] == op->src[0]->ne[2] &&
                 op->ne[2] == 1 && op->ne[3] == 1;
         case GGML_OP_LIGHTNING_INDEXER:
+#ifdef GGML_CUDA_NO_LIGHTNING_INDEXER
+            return false;
+#else
             // The CUDA kernel currently only handles n_embd=128, n_head=64
             // (matches DeepSeek V3.2 / V4 indexer shapes). Other shapes
             // GGML_ABORT inside the kernel; surface that here so the
@@ -5227,6 +5234,7 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
                  op->src[1]->type == GGML_TYPE_Q5_0 ||
                  op->src[1]->type == GGML_TYPE_Q5_1 ||
                  op->src[1]->type == GGML_TYPE_Q8_0);
+#endif
         case GGML_OP_PAD:
             return true;
         case GGML_OP_UPSCALE:
