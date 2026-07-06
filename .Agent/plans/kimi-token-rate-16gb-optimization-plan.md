@@ -87056,4 +87056,86 @@ Acceptance:
 
 Result:
 
-- Pending.
+- Plan commit before run: `8fb2a0470`.
+- Server run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-010831Z-phase7oq-current-head-n96-minprofile`.
+- Exit code: `0`.
+- Source/model/asset changes: none.
+- Model inference: run with `N=96`, `MIN_PROFILE=1`.
+- Pack output: none.
+
+Quality and timing:
+
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]`
+- Quality: `pass`, reason `ok`.
+- Prompt eval / TTFT proxy: `81892.21 ms` for `17` prompt tokens.
+- Decode: `55800.11 ms` for `77` runs.
+- Token rate: `1.38 tok/s`.
+- Total time: `137742.99 ms / 94 tokens`.
+- Graphs reused: `76`.
+
+16GB host-RAM gate:
+
+- `memory.max`: `15899996160`.
+- `memory.swap.max`: `0`.
+- `memory.peak`: `15899996160`.
+- `memory.current.final`: `15092387840`.
+- Final `memory.stat`:
+  - `anon`: `454656`;
+  - `file`: `14845526016`;
+  - `active_file`: `13177696256`;
+  - `inactive_file`: `1667284992`;
+  - `kernel`: `243347456`;
+  - `pgmajfault`: `1027244`.
+- No OOM or swap event was observed.
+
+Runtime counters:
+
+- Expert-pack hits/misses: `63050 / 633`.
+- Read failures: `0`.
+- `iouring_reads`: `56535`.
+- `iouring_bytes`: `315379728384`.
+- `iouring_wait_us`: `48336684`.
+- `iouring_h2d_enqueues`: `56535`.
+- VRAM total hit rate: `52.9%`.
+- Down hit rate: `73.0%`.
+- Upgate hit rate: `44.1%`.
+- Down prefetch useful rate: `100.0%`.
+- CPU fallback pack mmap:
+  `enabled=1 hits=4286 misses=26 bytes=35391799296 fallback_gguf=26`.
+- Current-down overlap:
+  `calls=2464 planned_jobs=9199 completed_jobs=9199 cache_hits=8665 missing_tensor=231 missing_pack=99 submitted_batches=2224 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=7799041`.
+
+SOTA comparison:
+
+- This run passes all gates and reproduces the current accepted strict n96 band.
+- It does not establish a new SOTA:
+  - 7OG priority B was `55755.91 ms / 77`, `1.38 tok/s`;
+  - 7OQ is `55800.11 ms / 77`, `1.38 tok/s`;
+  - difference is within run variance and slightly slower in raw decode ms.
+
+Decision:
+
+- Accept 7OQ as current-head production validation.
+- Keep the current accepted SOTA/performance reference unchanged:
+  - strict n96 production band around `1.38 tok/s`;
+  - representative decode `~55.7-55.8 s / 77 runs`.
+- Do not change runtime env defaults from 7OQ.
+- The next optimization cannot be another broad env/cache split/cache-policy
+  probe; it needs either:
+  - a new source-level data-movement reduction with a hard byte/time bound; or
+  - a matching lower-bit asset/runtime path with enough disk/external storage;
+  - otherwise the current strict production path should be preserved.
+
+Reproduce result:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 8fb2a0470
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260706-010831Z-phase7oq-current-head-n96-minprofile
+N=96 MIN_PROFILE=1 RUN="$RUN" scripts/kimi-phase7og-priority-repro.sh
+cat "$RUN/metrics.txt"
+cat "$RUN/stdout.txt"
+tail -n 80 "$RUN/stderr.txt"
+```
