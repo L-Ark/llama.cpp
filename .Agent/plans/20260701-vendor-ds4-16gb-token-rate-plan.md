@@ -4147,3 +4147,16 @@
 - `native_defaultoff_regression`: `/root/lfz/runs/vendor-ds4-16gb/20260706T163913Z-20260707-native-defaultoff-regression-after-token-debug-n64/france-native-defaultoff-regression-n64-cpu40-vram0gb`，新 env 默认关闭时 native DeepSeek gate-only n64 smoke `eval_tok_s=1.5`、`TTFT=47080.892513 ms`、`memory_peak_bytes=16000000000`、`ram_ok=true`、`correctness_ok=true`。
 - `decision`: 4Expert 从空输出推进到可见文本，但仍未通过正确性，且速度低于 native generalized baseline，不是 accepted SOTA。短期 token-rate 主线不要基于 4Expert 做性能 benchmark；如果之后继续 4Expert，必须先定位剩余 tensor alias / 数值路径 / 模板不匹配导致的退化，再进入性能实验。
 - `next_allowed_work`: 回到 native generalized prompt 的主线。下一步优先选择能够减少 up/down fallback payload 或改变数据流的方案；不要把 4Expert 作为 token-rate 候选，除非 correctness 先过。
+
+## 2026-07-07 hard-bound：generalized grouped up/down staging rejected
+
+- `attempt_id`: `20260707-generalized-grouped-staging-hard-bound`
+- `status`: `rejected_before_source_change`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-grouped-staging-hard-bound-20260707.json`
+- `prompt_scope`: 只使用 `calibration_dev_set_v1` 的 no-prompt-specific fallback profile；未使用 `held_out_test_set_v1_locked`。
+- `purpose`: 重新按当前任务背景评估 native generalized prompt 路线：16GB host RAM + 32GB 5090、随机 prompt 稳定 `>5 tok/s`。该 bound 不沿用 France-only 4.4/10 tok/s 结论，而是基于 generalized calibration baseline (`mean=2.18`, `min=1.7/1.8`) 估算 paired up/down grouped staging 的上限。
+- `method`: 从每个 calibration prompt 的 decode up/down fallback profile 聚合 `(layer, expert)`，把 up/down 同一 expert 作为 paired staging 单元；用 `eval_tok_s` 和 decode calls 反推 decode window，并在 zero-overhead 模型中扣除被选 hot set 覆盖的 decode fallback ms。该结果是乐观上限，不包含 H2D/D2H、GPU kernel、launch/sync、scatter、cache bookkeeping 或 gate-cache 退化。
+- `gate_preserving_pool_bound`: 沿用之前 top768/Q8 hard-bound 中可保留 gate cache 的约 `3.2GiB` extra pool。`3.2GiB` paired layer-expert hot set 选择 `385` 个 layer-expert，payload `3.196GiB`；zero-overhead 上限约为 `mean=2.64-2.68 tok/s`、`min=1.94-1.96 tok/s`。
+- `large_payload_sensitivity`: `8GiB` 上限约 `mean=3.07`、`min=2.22`；`16GiB` 上限约 `mean=3.69`、`min=2.60`；`25.5GiB` 上限约 `mean=4.24`、`min=3.03`。这些 payload 已经会挤压 gate cache/VRAM，且仍不到 generalized `5 tok/s`。
+- `decision`: reject grouped up/down staging as a direct route before source change. 它只改变 staging/scheduling，不减少 expert payload，也不能在 gate-cache-safe VRAM budget 内覆盖足够 generalized fallback；任何真实实现开销都会低于 zero-overhead 上限。
+- `next_allowed_work`: 不写 grouped staging runtime patch。后续必须转向能减少 payload/改变数据流的路线：例如有 top1 proof 的表示压缩/非 native representation、能完全消除 up/down bytes 的 graph/dataflow 证明，或者先解决 4Expert correctness 后再重新评估 smaller representation。继续保持 held-out set 未使用，直到 candidate freeze。
