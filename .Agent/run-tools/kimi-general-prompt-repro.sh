@@ -17,6 +17,7 @@ cd "${REPO:-/root/lfz/llama.cpp-vendor-kimi}" || exit 1
 : "${PROMPT_USER_TEXT:=Please introduce France in a short paragraph.}"
 : "${QUALITY_KEYWORDS:=}"
 : "${PROFILE:=0}"
+: "${COPY_PROFILE:=0}"
 : "${EXTRA_RUNTIME_ENV:=}"
 
 PROMPT="<|im_user|>user<|im_middle|>${PROMPT_USER_TEXT}<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>"
@@ -98,6 +99,12 @@ GGML_MOE_STREAM_DECLINE_DEBUG=1
 GGML_MOE_TTFT_TRACE_MAX_EVENTS=120000
 EOF
 fi
+if [ "$COPY_PROFILE" != "0" ]; then
+  cat >> "$RUN/env.txt" <<EOF
+GGML_MOE_COPY_PROFILE_OUT=$RUN/copy-profile.csv
+GGML_MOE_COPY_PROFILE_H2D=1
+EOF
+fi
 if [ -n "$EXTRA_RUNTIME_ENV" ]; then
   printf '%s\n' "$EXTRA_RUNTIME_ENV" >> "$RUN/env.txt"
 fi
@@ -122,6 +129,7 @@ LLAMA_ARGS=(build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl
   echo "MOE_IO_REFILL_BATCH=$MOE_IO_REFILL_BATCH"
   echo "MOE_PREFETCH_DOWN_DEPTH=$MOE_PREFETCH_DOWN_DEPTH"
   echo "PROFILE=$PROFILE"
+  echo "COPY_PROFILE=$COPY_PROFILE"
   printf '%q ' "${LLAMA_ARGS[@]}"
   echo
 } > "$RUN/command.txt"
