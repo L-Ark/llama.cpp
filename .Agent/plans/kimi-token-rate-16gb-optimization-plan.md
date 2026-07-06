@@ -85998,7 +85998,7 @@ test ! -e "$RUN"/*.expert-pack
 
 ## Phase 7OM - remote IQ2_XXS hot-key pack size probe
 
-Status: planned.
+Status: completed.
 
 Timestamp: 2026-07-06 10:45 CST.
 
@@ -86117,3 +86117,146 @@ Reproducibility:
 - Commit and push this plan before editing scripts.
 - Commit and push the script before server execution.
 - Commit and push the 7OM result before any pack builder or download phase.
+
+Result:
+
+- Plan commit: `75fdd7765`.
+- Script commit: `c45a26ad5d7fc9679c444c22aff9c73a3c466b96`.
+- Server run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-001309Z-phase7om-iq2xxs-hotkey-size`.
+- Exit code: `0`.
+- `python3 -m py_compile scripts/kimi-plan-hotkey-remote-pack.py`: pass.
+- `stderr.txt`: empty.
+- `.expert-pack` outputs: none.
+- Artifacts:
+  - `repo_state.txt`;
+  - `command.txt`;
+  - `hotkey-pack-plan.json`;
+  - `hotkey-pack-plan.tsv`;
+  - `stdout.txt`;
+  - `stderr.txt`;
+  - `exit.txt`;
+  - `artifacts.txt`;
+  - `expert_pack_outputs.txt`.
+
+Remote metadata probe:
+
+- Remote repo: `AesSedai/Kimi-K2.7-Code-GGUF`.
+- Remote prefix: `IQ2_XXS/`.
+- Remote files: `7`.
+- Range limit: `64 MiB` per shard.
+- Received ranges:
+  - shard 1: `6.593 MiB`;
+  - shards 2..7: `64.000 MiB` each.
+- Parsed expert tensors: `180`.
+- Expert tensors by shard: `[0, 30, 33, 32, 32, 32, 21]`.
+- Metadata bytes by shard:
+  `[6912767, 13224, 12976, 12212, 12713, 12833, 7671]`.
+- Remote file sizes:
+  `[0.006, 46.538, 46.360, 46.204, 46.294, 44.663, 32.724] GiB`.
+
+Selected hot-key result:
+
+- Input packs:
+  - main up/gate pack: `30831` entries, `175128346624` indexed bytes;
+  - l1/l2 down overlay: `768` entries, `4844421120` indexed bytes.
+- Unique selected entries: `31599`.
+- Duplicate replacements: `0`.
+- Selected tensors: `180`.
+- Required remote shards for selected keys: `6`.
+- Largest required remote shard: `46.538 GiB`.
+- Current selected IQ3 payload: `167.613 GiB`.
+- Current selected IQ3 pack estimate: `167.617 GiB`.
+- Exact remote selected `IQ2_XXS` payload: `115.215 GiB`.
+- Exact remote selected `IQ2_XXS` pack estimate: `115.220 GiB`.
+- Payload ratio: `0.687389`.
+- One-shard streaming temporary space estimate:
+  `161.758 GiB`.
+- Direct HTTP-Range builder temporary upper bound:
+  `115.282 GiB`.
+- Current free disk on `/root/lfz`: `87.744 GiB`.
+- Fits current disk with one-shard streaming: no.
+- Fits current disk with direct HTTP-Range builder: no.
+- Additional free space required:
+  - direct HTTP-Range builder: about `27.538 GiB`;
+  - one-shard streaming builder: about `74.014 GiB`.
+
+Selected size by kind:
+
+- `up`: `10389` entries, current `47.585 GiB`, remote `29.187 GiB`.
+- `gate`: `10388` entries, current `51.319 GiB`, remote `32.610 GiB`.
+- `down`: `10822` entries, current `68.709 GiB`, remote `53.418 GiB`.
+
+Selected size by kind/type:
+
+- `up/IQ1_S`: `8698` entries, current `38.734 GiB`, remote `23.226 GiB`.
+- `up/IQ2_XXS`: `1691` entries, current `8.850 GiB`, remote `5.960 GiB`.
+- `gate/IQ1_S`: `4687` entries, current `21.481 GiB`, remote `12.516 GiB`.
+- `gate/IQ2_XXS`: `5701` entries, current `29.838 GiB`, remote `20.095 GiB`.
+- `down/IQ2_S`: `3056` entries, current `17.953 GiB`, remote `13.383 GiB`.
+- `down/IQ2_XS`: `384` entries, current `2.256 GiB`, remote `1.518 GiB`.
+- `down/IQ3_XXS`: `7224` entries, current `47.572 GiB`, remote `37.809 GiB`.
+- `down/Q2_K`: `158` entries, current `0.928 GiB`, remote `0.709 GiB`.
+
+Runtime compatibility audit:
+
+- Current expert-pack lookup is keyed by `(tensor_name, expert_idx, nbytes)`,
+  not just `(tensor_name, expert_idx)`:
+  `ggml/src/ggml-cuda/moe_stream_batch.cu`,
+  `expert_pack_entry_cmp()`.
+- The lookup call passes the runtime tensor's expected expert byte size:
+  `expert_pack_lookup(tensor_name, expert_idx, nbytes)`.
+- Therefore an `IQ2_XXS` hot-key pack will not hit when running the current
+  `IQ3_S` GGUF model, because `nbytes` differs for many tensors. Even if forced,
+  the kernel decode type comes from the model tensor metadata, not from the
+  pack entry.
+- This size probe is valid for a full `IQ2_XXS` model/runtime path, or for a
+  future format/runtime extension that carries per-entry quant type and decode
+  metadata. It is not valid as a direct mixed-quant replacement under the
+  current pack format.
+
+Interpretation:
+
+- The exact selected `IQ2_XXS` hot-key output would reduce movement bytes by
+  about `31.26%` versus the current selected IQ3 payload.
+- Disk is still insufficient even for a direct HTTP-Range selected-pack builder:
+  it misses by about `27.538 GiB`.
+- Since current runtime cannot consume lower-bit expert bytes with an `IQ3_S`
+  model, building the selected `IQ2_XXS` pack now would not be a valid
+  token-rate optimization.
+
+Decision:
+
+- Accept 7OM as a reproducible remote metadata and hot-key size probe.
+- Do not build an `IQ2_XXS` expert pack yet.
+- Do not download complete `IQ2_XXS` shards.
+- Do not delete historical packs without explicit approval.
+- Next viable low-bit directions are:
+  - obtain enough disk/external storage for the full `IQ2_XXS` GGUF model plus
+    selected expert pack, then run quality gates on the matching model;
+  - or design a new pack/runtime format that supports mixed expert quant types,
+    with explicit decode kernels and quality validation;
+  - or choose a smaller same-quant `IQ3_S` hot subset/packing optimization that
+    is compatible with the current runtime.
+
+Reproduce result:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard c45a26ad5d7fc9679c444c22aff9c73a3c466b96
+python3 -m py_compile scripts/kimi-plan-hotkey-remote-pack.py
+RUN=/root/lfz/runs/vendor-kimi-token-rate/repro-phase7om-iq2xxs-hotkey-size
+mkdir -p "$RUN"
+python3 scripts/kimi-plan-hotkey-remote-pack.py \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  --hf-repo AesSedai/Kimi-K2.7-Code-GGUF \
+  --remote-prefix IQ2_XXS/ \
+  --range-mib 64 \
+  --disk-path /root/lfz \
+  --json "$RUN/hotkey-pack-plan.json" \
+  --tsv "$RUN/hotkey-pack-plan.tsv" \
+  > "$RUN/stdout.txt" 2> "$RUN/stderr.txt"
+cat "$RUN/stdout.txt"
+test ! -e "$RUN"/*.expert-pack
+```
