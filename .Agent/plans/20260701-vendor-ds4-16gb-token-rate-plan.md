@@ -4483,3 +4483,81 @@
 - `decision`: compact/batched updown transfer alone 不足以达成“随机 prompt 稳定 >5 tok/s”的任务目标。原因是之前零开销 full up/down removal bound 已经显示 Fibonacci 仍低于 5；加入任何真实 H2D 成本后，更多 prompt 低于 5。
 - `implication`: 不能现在就写 compact up/down runtime 原型作为主 SOTA 路线。它最多是组合优化的一部分；必须同时解决 non-updown decode cost，或找到避免从 host streaming full expert bytes 的表示/驻留方案。
 - `next_plan`: 回到全 decode bottleneck 拆解：在 calibration/dev 上记录 gate one-stream、remaining CPU fallback、dense/attention、sampling/graph overhead 的分段时间，找除 up/down 外还能压缩的秒数；同时评估 VRAM-resident low-bit/partial representation 是否能在 32GB 显存内容纳更大比例的 random-prompt expert payload。
+
+## 2026-07-07 执行记录：full decode bottleneck profile（France-specialized vs generalized quantum）
+
+- `attempt_id`: `20260707-full-decode-bottleneck-profile-france-vs-quantum`
+- `status`: `completed_diagnostic_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/full-decode-bottleneck-profile-france-specialized-vs-quantum-generalized-20260707.json`
+- `single_case_artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-full-decode-profile-france-20260707.json`
+- `push_target`: 后续所有源码、计划和可复现实验记录继续 push 到 `ssd/vendor/deepseek-token-rate-16gb`；出现合规 generalized SOTA 时必须立刻提交、push，并从 pushed commit 复现一次。
+- `held_out_policy`: held-out test set 未使用。本轮只使用 France calibration 和 quantum calibration/dev；不能把本轮结果当 held-out SOTA。
+
+### Run A: France-specialized 4.4 路径复现 + profile
+
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T191504Z-20260707-current-sota-full-decode-profile-rerun/france-full-decode-profile-cpu40-vram0gb`
+- `config`: strict cold 16GB cgroup、`MemorySwapMax=0`、vendor DeepSeek native GGUF、`cpu_moe=40`、`vram_cache=0`、gate-only one-stream、`ONE_CACHE_MIB=13568`、France-derived expert pack/profile/prefill、`KEEP_TOPK_UPDOWN=4`、layer `10-39 => 3`、`-n192 -c256 -b16 -ub16`。
+- `result`: `eval_tok_s=4.4`，`prompt_tok_s=1.9`，`TTFT=32262.47 ms`，`memory_peak_bytes=16000000000`，`memory_file_bytes=15065071616`，`ram_ok=true`，`correctness_ok=true`。
+- `decode_profile`: graph 记录 `138` decode tokens；按 eval rate 反推 decode wall `31363.64 ms`，约 `227.27 ms/token`。
+- `fallback_decode`: up/down CPU fallback 计数器合计 `18223.24 ms`，约 `132.05 ms/token`。source probe 仍显示 `src0_buft=CPU_Mapped`、`src1/ids/dst=CUDA_Host`，reason 是 `batch_env_missing + one_name_filter`。
+- `gate_one_stream`: gate one-stream trace 合计 `8348.02 ms`，主要是 `src0_ms` source movement/cache path；这部分是 France-specific pack/profile 帮忙压低后的结果。
+- `graph_overhead`: `LLAMA_KIMI_GRAPH_PROFILE` 显示 decode sync `109.16 ms`，约 `0.79 ms/token`。CUDA graph/sync 不是当前主瓶颈。
+
+### Run B: generalized no-prompt-specific quantum profile
+
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T191925Z-20260707-generalized-quantum-full-decode-profile/quantum-full-decode-profile-cpu40-vram0gb`
+- `config`: strict cold 16GB cgroup、`MemorySwapMax=0`、vendor DeepSeek native GGUF、`cpu_moe=40`、`vram_cache=0`、gate-only one-stream、`ONE_CACHE_MIB=13568`、`KEEP_TOPK_UPDOWN=4`、layer `10-39 => 3`、不使用 `GGML_MOE_STREAM_ONE_EXPERT_PACK`、不使用 `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE`、不使用 `GGML_MOE_STREAM_ONE_PREFILL_PROFILE`，即 no-prompt-specific generalized config。
+- `result`: `eval_tok_s=1.9`，`prompt_tok_s=0.9`，`TTFT=37988.80 ms`，`memory_peak_bytes=16000000000`，`memory_file_bytes=14957862912`，`ram_ok=true`，`correctness_ok=true`。
+- `decode_profile`: graph 记录 `191` decode tokens；按 eval rate 反推 decode wall `100526.32 ms`，约 `526.32 ms/token`。
+- `fallback_decode`: up/down CPU fallback 计数器合计约 `259.29 ms/token`。
+- `gate_one_stream`: gate one-stream trace 合计 `40706.16 ms`，比 France-specialized 的 `8348.02 ms` 大很多，说明 prompt-specific pack/profile 主要是在减少 cold gate source movement；这不能作为随机 prompt 产品 SOTA。
+- `graph_overhead`: decode sync 仍约 `0.81 ms/token`，远小于要补的 `>300 ms/token` gap。
+
+### Bottleneck conclusion
+
+- 当前真实产品目标是：16GB host RAM（含 page cache）+ 32GB RTX 5090 上，用户随机/generalized prompt 稳定 `>5 tok/s`。因此主要 baseline 是 no-prompt-specific generalized baseline，而不是 France-specialized `4.4 tok/s`。
+- generalized quantum 从 `1.9 tok/s` 到 `5 tok/s` 需要把 decode 从约 `526 ms/token` 压到 `<=200 ms/token`，至少减少约 `326 ms/token`。
+- 单独消除 up/down CPU fallback 的理论上限不够：quantum fallback 约 `259 ms/token`，即使完全消失，剩余 source movement/其他 decode 仍接近或超过 `267 ms/token`，达不到稳定 `>5 tok/s`。
+- 单独做 CUDA graph 不值得作为主线：sync overhead 只有约 `0.8 ms/token`。
+- 单独把 up/down 加入 one-stream 已经验证为 rejected：CPU fallback 可归零，但 per-expert source movement 变成更大的瓶颈，token rate 下降。
+
+## 2026-07-07 下一阶段计划：generalized cold-start source movement + up/down fallback 组合优化
+
+### 新限制重申
+
+- 所有优化必须服务于随机/generalized prompt，不允许 prompt-specific hotset、France-specific expert pack、France-specific prefill/admit profile 作为 SOTA 条件。
+- calibration/dev set 可用于设计和调参；held-out test set 只能在 candidate freeze 后测试，最终 SOTA 必须报告 held-out 指标。
+- 每个 candidate 必须在 strict 16GB cgroup 内运行，page cache 计入 RAM；`MemorySwapMax=0`。
+- TTFT 接受门槛仍是相对 accepted generalized baseline 不升高超过 `20%`；超过可作为 rejected/diagnostic 提交，但不能 promotion。
+- 一旦出现合规 generalized SOTA，必须详细记录：commit、branch、exact command、env、run_dir、artifact、answer、TTFT、eval_tok_s、prompt_tok_s、memory.current/peak/stat/events、page cache、correctness、held-out prompt set 结果；随后立刻 push 到 `ssd/vendor/deepseek-token-rate-16gb` 并从 pushed commit 复现。
+
+### Step 1: generalized source-movement hard bound
+
+- `goal`: 用 quantum generalized profile 和现有 calibration/dev baseline，计算 gate source movement、up/down fallback、non-MoE graph submit 的可压缩空间。
+- `expected_output`: hard-bound artifact，给出在不同假设下的 tok/s 上限：
+  - 仅消除 up/down fallback；
+  - 仅消除 gate cold source movement；
+  - 同时消除两者；
+  - 保留 16GB host RAM、32GB VRAM 下可实际容纳的 generalized resident payload。
+- `decision_rule`: 只有组合上界能覆盖 held-out `>5 tok/s` 所需空间，才写 runtime prototype。
+
+### Step 2: prompt-independent VRAM residency / representation 方案
+
+- `candidate`: 不再使用单 prompt 派生 pack；改用 calibration/dev 聚合或模型结构派生的 prompt-independent manifest。候选包括：
+  - gate-only generalized hotset prefill/admit，不含 held-out 信息；
+  - role-aware split residency：gate hotset + 少量 up/down resident low-bit/exact rows；
+  - tail/layer placement：把少数 late layers 的完整 MoE 或低位表示放入 VRAM，同时减少 gate cache。
+- `theory_required_before_code`: 对每个候选先算 payload GiB、预计 page-cache/refault 减少、预计 decode ms/token、TTFT 影响和 VRAM headroom。
+- `correctness_gate`: 任何 low-bit/partial representation 输出写回前，先用 fixed-text/top1 或等价一致性校验；France prompt 仍必须语义正确，但最终 promotion 以 held-out generalized set 为准。
+
+### Step 3: compact/batched up/down fallback 只作为组合项
+
+- `reason`: previous hard-bound 已证明 compact/batched up/down transfer alone 不能稳定到 `>5 tok/s`。
+- `allowed_scope`: 只有在 Step 1/2 显示 gate/source movement 已经被足够压缩时，才实现 compact exact/batched up/down route。
+- `reject_rule`: 如果新 route 只是把 CPU fallback 换成 per-expert one-stream H2D，或 token rate/TTFT/correctness/RAM 任一不合格，立即标记 rejected，不作为 SOTA。
+
+### Step 4: candidate freeze and held-out test
+
+- `calibration_gate`: 先在 calibration/dev 至少覆盖 France、quantum、Fibonacci、Japan、climate；不得使用 held-out 调参。
+- `held_out_gate`: freeze 后只跑 held-out test set，一次性记录 photosynthesis、home office tips、JavaScript palindrome、exercise、Brazil。
+- `promotion_rule`: held-out min token rate 必须 `>5 tok/s`，所有 prompt correctness pass，TTFT 合格，RAM/page cache 合格，才允许 promotion 并立刻 push + pushed commit rerun。
