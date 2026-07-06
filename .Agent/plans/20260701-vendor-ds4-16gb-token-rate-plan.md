@@ -4807,3 +4807,13 @@
 - `repr_pool`: allocated `16 MiB`，attempted `96`，inserted `96`，payload bytes `2506752`，read `42.784 ms`，H2D `0.786 ms`，direct I/O enabled。
 - `partial_probe_result`: aggregate records `4246`，nonzero CSV rows `3786`，`compare_ran=3786`，`compare_ok=3786`，`diff_count=0`，`max_abs=0`，`src0_bytes=110871552`，`q80_bytes=13858944`，`out_bytes=271744`。
 - `decision`: row-range loader/kernel/compare 映射已通过 fixed-text correctness gate；但 partial exact 只验证局部输出列，不能替代完整 up/down fallback，不是 token-rate SOTA。下一步只能在此 compare-only 基础上测试真实 compressed/approx payload 的数值正确性，再决定是否进入性能路径。
+
+## 2026-07-07 执行记录：partial exact nonzero row offset smoke
+
+- `attempt_id`: `20260707-partial-exact-row128-offset-smoke`
+- `status`: `passed_nonzero_row_offset_compare_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/partial-exact-row128-offset-smoke-20260707.json`
+- `manifest`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.partial_exact_manifest.csv`，`96` entries，`row0=128,row_count=16`，payload `2506752` bytes；`model_offset` 使用 full expert offset + `row0 * nb01`，用于验证非零 row offset。held-out 未使用。
+- `result`: strict 16GB/no-swap cgroup 内 top1 exit `0`，`same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`memory_peak_bytes=1000103936`，无 OOM。
+- `partial_probe_result`: aggregate records `4246`，nonzero CSV rows `3786`，`compare_ran=3786`，`compare_ok=3786`，`diff_count=0`，`max_abs=0`。
+- `decision`: row0=0 与 row0=128 均通过，说明 partial exact loader 的 model offset、local column kernel 和 `dst[row0+col]` compare 映射可信。该结果仍只是 correctness/infrastructure 证据，不是 SOTA。
