@@ -86867,4 +86867,193 @@ Decision rule:
 
 Result:
 
+- Plan/result commit before run: `e6f5a8cd6`.
+- Server run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-005556Z-phase7op-current-head-n32-profile`.
+- Exit code: `0`.
+- Source/model/asset changes: none.
+- Model inference: run with `N=32`, `MIN_PROFILE=0`.
+- Pack output: none.
+- Run artifacts include:
+  - `metrics.txt`;
+  - `stdout.txt`;
+  - `stderr.txt`;
+  - `fallback-profile.csv`;
+  - `down-batch-profile.csv`;
+  - `up-gate-profile.csv`;
+  - `route-profile.csv`;
+  - `route-trace.csv`;
+  - `ttft-trace.csv`;
+  - `phase7op_profile_summary.json`;
+  - cgroup memory files and wrapper reproduction files.
+
+Quality and timing:
+
+- Output:
+  `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Quality: `pass`, reason `ok`.
+- Prompt eval / TTFT proxy: `74057.55 ms` for `17` prompt tokens.
+- Decode: `24196.44 ms` for `31` runs.
+- Diagnostic token rate: `1.28 tok/s`.
+- This token rate is not promoted as SOTA because `MIN_PROFILE=0` enables
+  instrumentation.
+
+16GB host-RAM gate:
+
+- `memory.max`: `15899996160`.
+- `memory.swap.max`: `0`.
+- `memory.peak`: `15899996160`.
+- `memory.current.final`: `15068917760`.
+- Final `memory.stat`:
+  - `anon`: `458752`;
+  - `file`: `14830497792`;
+  - `active_file`: `11442659328`;
+  - `inactive_file`: `3387252736`;
+  - `kernel`: `234962944`;
+  - `pgmajfault`: `970316`.
+- Interpretation:
+  - the run stayed under the configured strict cgroup cap but touched the cap;
+  - the remaining host memory is overwhelmingly file-backed model/cache pages,
+    so future host-RAM additions are unsafe unless another file-backed bucket is
+    reduced first.
+
+Profile summary:
+
+- Up/gate decode profile:
+  - calls: `869`;
+  - total wall: `6383.165 ms`;
+  - total kernel: `6293.368 ms`;
+  - up cache hits/misses: `2898 / 4054`;
+  - gate cache hits/misses: `2897 / 4055`.
+- Same-type `IQ3_XXS` up/gate (`type=18,18`):
+  - calls: `311`;
+  - wall: `2816.624 ms`;
+  - kernel: `2775.830 ms`;
+  - up misses: `1502`;
+  - gate misses: `1502`.
+- Same-type `IQ2_S` up/gate (`type=22,22`):
+  - calls: `558`;
+  - wall: `3566.540 ms`;
+  - kernel: `3517.538 ms`;
+  - up misses: `2552`;
+  - gate misses: `2553`.
+- Down CUDA batch profile:
+  - calls: `1644`;
+  - wall: `4453.663 ms`;
+  - stage: `4135.925 ms`;
+  - kernel: `192.538 ms`;
+  - cache hits/misses: `9631 / 3521`.
+- CPU fallback profile:
+  - total: `72449.137 ms`, `140.573 GiB`;
+  - prompt/type 11: `20483.956 ms`, `31.958 GiB`;
+  - prompt/type 18: `17509.035 ms`, `35.590 GiB`;
+  - prompt/type 22: `21447.566 ms`, `40.500 GiB`;
+  - prompt/type 23: `7172.834 ms`, `11.854 GiB`;
+  - prompt/type 2: `3290.034 ms`, `7.321 GiB`;
+  - decode/type 2: `2545.712 ms`, `13.351 GiB`.
+- Expert-pack and VRAM counters:
+  - expert-pack hits/misses: `25045 / 192`;
+  - read failures: `0`;
+  - `iouring_reads`: `22647`;
+  - `iouring_bytes`: `126391910400`;
+  - `iouring_wait_us`: `20547333`;
+  - VRAM total hit rate: `53.9%`;
+  - down hit rate: `73.4%`;
+  - upgate hit rate: `45.2%`;
+  - down prefetch useful rate: `100.0%`;
+  - current-down overlap:
+    `calls=992 planned_jobs=3673 completed_jobs=3673 cache_hits=3519 missing_tensor=93 missing_pack=36 worker_us=3250026`.
+
+Bottleneck interpretation:
+
+- The pack itself is not missing: only `192` pack misses.
+- The exposed problem is still VRAM miss driven expert movement:
+  - upgate misses dominate count;
+  - down misses are fewer but stage time is almost all of the down CUDA batch
+    wall time;
+  - decode Q4_0 fallback remains a smaller but visible residual bucket.
+- Prompt TTFT is still dominated by prompt fallback, but 7OP's TTFT is below
+  the current cap and this phase targets decode token rate first.
+- The obvious follow-up ideas are already closed by previous phases:
+  - broad VRAM split sweeps (`50`, `55`, `60`, `61`, `62`, `65`, `68`);
+  - broad cache policies (`lfu_lru`, profile LFU/LRU, hybrid profile LFU/LRU);
+  - online admission policies (`admit2_lru`, `twoq`, `slru`, `lru2`);
+  - exact hot-key pinning/admission;
+  - trace prefetch and reuse-filter prefetch;
+  - same-type `IQ3_XXS` parallel/upgate scheduling, vendor MMQ, Q8_K decode,
+    and VDR probes;
+  - Q4_0 down one-shot/GPU/cache paths;
+  - RAM tier expansion.
+
+Decision:
+
+- Accept 7OP as the current-head bottleneck refresh.
+- Do not implement another cache split, generic cache policy, exact hot-key
+  pinning, trace prefetch, same-type `IQ3_XXS` scheduling, or Q4_0 GPU path from
+  this evidence.
+- Before any new source change, run a strict current-head `n96 MIN_PROFILE=1`
+  validation to confirm the production line is still stable and to refresh the
+  comparable token-rate/quality/RAM baseline after the latest docs-only commits.
+
+Reproduce result:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard e6f5a8cd6
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260706-005556Z-phase7op-current-head-n32-profile
+N=32 MIN_PROFILE=0 RUN="$RUN" scripts/kimi-phase7og-priority-repro.sh
+cat "$RUN/metrics.txt"
+cat "$RUN/phase7op_profile_summary.json"
+```
+
+## Phase 7OQ - current-head strict n96 production validation
+
+Start time: `2026-07-06T09:06:13+0800` / `20260706-010613Z`.
+
+Purpose:
+
+- Refresh the comparable production baseline after 7OP.
+- Validate `n96` stable output under the strict 16GB host-RAM cold-start gate.
+- Use `MIN_PROFILE=1` so token rate is comparable to the accepted production
+  path, without CSV/profile overhead.
+
+Experiment:
+
+- Use `scripts/kimi-phase7og-priority-repro.sh`.
+- Set:
+  - `N=96`;
+  - `MIN_PROFILE=1`;
+  - default `PINNED_SLOTS=12`;
+  - default `VRAM_MIB=15000`;
+  - default `UPGATE_PCT=62`;
+  - default `IQ2_UPGATE_PARALLEL=1`;
+  - default `MOE_IO_DEPTH=8`;
+  - default `MOE_IO_REFILL_BATCH=4`;
+  - default `MOE_PREFETCH_DOWN_DEPTH=2`.
+- Keep strict systemd/cgroup properties:
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - `IOAccounting=yes`;
+  - `IOWeight=10000`;
+  - `CPUWeight=10000`;
+  - `Nice=-10`;
+  - `IOSchedulingClass=realtime`;
+  - `IOSchedulingPriority=0`.
+- Keep cold start via wrapper:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`.
+
+Acceptance:
+
+- Exit code `0`.
+- France answer must be semantically correct and coherent.
+- `memory.peak <= 15899996160`.
+- TTFT must remain below `127598.064 ms`.
+- If token rate improves over the accepted current SOTA while all gates pass,
+  record and promote it.
+- If token rate is lower, treat it as a baseline/variance point only; do not
+  change source/env from it.
+
+Result:
+
 - Pending.
