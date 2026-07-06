@@ -93106,3 +93106,37 @@ Validation before any real execution:
 
 No SOTA or token-rate claim is possible from this phase. It is reproducibility
 and safety preparation for the blocked IQ1_S full-model smoke.
+
+GP35 execution result:
+
+- Timestamp: `2026-07-07T10:55:00+0800`.
+- Commit tested on remote:
+  `a891550541b1480a8174ba45d61af1c244414cc5`.
+- Record:
+  `.Agent/runs/20260707-gp35-iq1s-smoke-prep-dry-run/report.md`.
+- Remote worktree:
+  `/root/lfz/tmp/vendor-kimi-speculative-gp33`.
+- Default dry-run command:
+  `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+- Default dry-run result:
+  - exit code `0`;
+  - no deletion executed;
+  - no download executed;
+  - no smoke executed;
+  - `free_before=89653850112`;
+  - `required_iq1s_bytes=204429739520`;
+  - `required_with_20GiB_reserve=225904576000`;
+  - `missing=136250725888`;
+  - `space_ready=0`;
+  - `smoke_ready=0`.
+- Delete guard negative test:
+  - command:
+    `DELETE_OLD_PACKS=1 .Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`;
+  - exit code `1`;
+  - stopped with:
+    `ERROR deletion requested without exact CONFIRM_DELETE token`;
+  - no deletion executed.
+- Decision:
+  - GP35 passes reproducibility/safety preparation.
+  - Full IQ1_S n32 smoke remains gated by either additional disk space or
+    explicit deletion approval.
