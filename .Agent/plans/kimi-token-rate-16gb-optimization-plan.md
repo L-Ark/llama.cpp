@@ -86536,3 +86536,149 @@ cat "$RUN/gate_matrix.tsv"
 cat "$RUN/bounds.tsv"
 cat "$RUN/decision.md"
 ```
+
+## Phase 7OO - same-quant runtime switch inventory
+
+Start time: `2026-07-06T08:43:24+0800` / `20260706-004324Z`.
+
+Purpose:
+
+- Continue optimization after 7ON without jumping into the rejected
+  mixed-quant v2 path.
+- Under current disk/assets, focus on same-quant `IQ3_S` runtime candidates.
+- Before running another cold-start model experiment, inventory the remaining
+  default-off MoE runtime switches against:
+  - the current accepted production wrapper;
+  - source-level behavior;
+  - historical accepted/rejected results in this plan.
+- The output of this phase is a reproducible candidate matrix and a decision
+  for the next cold-start `n32` or `n96` experiment.
+
+Hard constraints carried into this phase:
+
+- Host RAM must remain below `16 GB`, including page cache and cgroup memory.
+- Future model experiments must use cold start only:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`;
+  - `systemd-run --wait --collect` with
+    `MemoryMax=15900000000` and `MemorySwapMax=0`.
+- VRAM should remain as full as practical without increasing OOM risk.
+- Every accepted performance change must pass the France quality gate:
+  `Please introduce France in a short paragraph.`
+- TTFT must not rise by more than 20% over the current accepted cap:
+  `127598.064 ms`.
+- Any source/runtime change that improves token rate while satisfying all
+  gates must be committed and pushed immediately.
+- Any source/runtime change that regresses token rate, output quality, RAM, or
+  TTFT must be reverted before continuing.
+- Every result must include exact reproduction commands and raw artifacts.
+
+Bottleneck hypothesis:
+
+- Current SOTA is still dominated by exposed expert movement and residual
+  fallback rather than dense/attention compute.
+- 7ON shows that reducing expert bytes via mixed-quant pack is not a narrow
+  implementation.
+- The next same-quant opportunity, if any, must either:
+  - hide more existing expert movement behind useful GPU compute;
+  - reduce repeated staging/copy overhead without adding host RAM pressure;
+  - improve cache residency decisions without repeating the rejected broad
+    RAM-tier or profile-protect regressions;
+  - or prove that no remaining default-off runtime switch is a valid next
+    experiment.
+
+Inventory method:
+
+1. Create a server run directory:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7oo-runtime-switch-inventory
+```
+
+2. Record:
+
+- `repo_state.txt`;
+- `commands.log`;
+- `phase7oo_runtime_switch_inventory.py`;
+- `runtime_switch_matrix.tsv`;
+- `source_evidence.tsv`;
+- `history_evidence.tsv`;
+- `candidate_summary.md`;
+- `decision.md`;
+- `summary.json`;
+- `audit_stdout.txt`;
+- `audit_stderr.txt`;
+- `exit.txt`;
+- `artifacts.txt`.
+
+3. Enumerate source switches from
+   `ggml/src/ggml-cuda/moe_stream_batch.cu`:
+
+- all `GGML_MOE_*`;
+- all `LLAMA_DROP_*`;
+- relevant `GGML_KIMI_*` profile switches.
+
+4. Enumerate enabled switches from
+   `scripts/kimi-phase7fb-min-profile-repro.sh`.
+
+5. Search this plan for historical mentions of every source switch.
+
+6. Classify each switch/family as one of:
+
+- `production_enabled`;
+- `diagnostic_only`;
+- `already_rejected`;
+- `already_accepted_in_wrapper`;
+- `asset_blocked`;
+- `candidate_needs_model_probe`;
+- `candidate_needs_source_plan`;
+- `unknown_needs_manual_read`.
+
+7. Give special attention to the remaining default-off families:
+
+- `GGML_MOE_GPU_HANDOFF`;
+- `GGML_MOE_GPU_HANDOFF_SYNC`;
+- `GGML_MOE_HOST_PREFETCH`;
+- `GGML_MOE_PLANNED_HOST_PREFETCH`;
+- `GGML_MOE_TRACE_PREFETCH`;
+- `GGML_MOE_RAM_TIER_*`;
+- `GGML_MOE_STREAM_PROMPT_UP_GATE`;
+- `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ`;
+- `GGML_MOE_STREAM_UP_GATE_MMQ_COMPARE`;
+- `GGML_MOE_STREAM_DOWN_Q8K`;
+- `GGML_MOE_STREAM_IQ2S_BATCH_MMVQ`;
+- `GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT`;
+- `GGML_MOE_STREAM_UP_GATE_SPLIT_STAGE`;
+- `GGML_MOE_UP_GATE_COMBINED_STAGE`;
+- `GGML_MOE_VRAM_PROFILE*`;
+- `GGML_MOE_VRAM_CACHE_POLICY`;
+- `GGML_MOE_SKIP_NONRESIDENT`;
+- `GGML_MOE_Q4_DOWN_*`.
+
+Decision rule:
+
+- If the audit finds one credible same-quant candidate that is not already
+  rejected and does not require new assets, plan that exact cold-start `n32`
+  model probe next, with:
+  - theoretical reason for possible speedup;
+  - upper-bound estimate;
+  - exact env delta versus the production wrapper;
+  - quality/RAM/TTFT acceptance gates.
+- If all default-off candidates are already rejected, diagnostic-only, or
+  asset/format blocked, do not run a speculative model probe. Record that the
+  next practical step is either:
+  - current-head strict baseline refresh;
+  - a source-planned implementation that changes data movement, not just envs;
+  - or explicit disk/external-storage approval for matching low-bit assets.
+
+Acceptance for Phase 7OO:
+
+- Plan committed and pushed before the audit.
+- Audit exits `0`.
+- Audit makes no source/model/pack changes.
+- Audit records exact commands and artifacts.
+- Result appended here and committed/pushed before any follow-up experiment.
+
+Result:
+
+- Pending.
