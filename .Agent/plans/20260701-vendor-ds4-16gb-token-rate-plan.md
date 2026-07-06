@@ -4657,3 +4657,30 @@
 - `run_method`: 在 strict 16GB/no-swap cgroup 内先生成 current-head baseline `result.gguf`，再用 `GGML_MOE_STREAM_Q80_CPU_COMPAT=1`、`GGML_MOE_STREAM_Q80_ALLOW_DOWN=1`、`GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER=ffn_`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1=1`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS=0` 运行 `llama-results --check --top1-report --top1-fail-on-mismatch`。
 - `pass_gate`: `llama-results` exit `0`，`same_top1 == n_tokens`，`first_mismatch_pos == -1`，`memory.peak <= 16000000000`，no OOM/no swap；记录 skip report、top1 report、memory.stat/events、exact command/env。
 - `decision_rule`: 通过则作为下一步 low-bit/partial representation correctness scaffold 的 current-head 证据；失败则停止 Q8_0 skip 扩展，转向 exact/partial-row 或重新定位数值差异。
+
+## 2026-07-07 执行记录：current-head Q8_0 CPU-compatible correctness revalidation
+
+- `attempt_id`: `20260707-current-head-q80-cpucompat-all-updown-revalidation`
+- `status`: `passed_correctness_probe_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-q80-cpucompat-all-updown-revalidation-20260707.json`
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T193647Z-20260707-current-head-q80-cpucompat-all-updown-revalidation/top1`
+- `source_head`: `b3b1cbddf` at build/run time。
+- `build`: `cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2` passed。
+- `prompt_scope`: fixed France text top1 verifier only；held-out 未使用；不是 token-rate benchmark，不是 SOTA。
+- `config`: baseline 与 check 均在 strict `MemoryMax=16000000000`、`MemorySwapMax=0` cgroup 内运行；check 增加 `GGML_MOE_STREAM_Q80_CPU_COMPAT=1`、`GGML_MOE_STREAM_Q80_ALLOW_DOWN=1`、`GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER=ffn_`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1=1`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS=0`。
+- `top1_result`: baseline exit `0`，check exit `0`，`same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`mean_abs=0`。
+- `q80_coverage`: skip report `37700` records：up `18850`、down `18850`，unique tensor/expert pairs `5790`。fallback reason profile check-side entries `0`，说明 fixed-text verifier 中 up/down fallback 被 Q80 skip 覆盖。
+- `memory`: `memory_peak_bytes=16000000000`，`oom=0`，`oom_kill=0`；page cache 计入 cgroup。
+- `overhead_profile`: Q80 per-call skip 总 `127592.615 ms`，其中 `host_src0_ms=76458.769`、`h2d_ms=12125.037`、`kernel_sync_ms=30674.175`、`cuda_alloc_ms=4320.181`、`cuda_free_ms=3190.559`。这证明该 per-call path 是 correctness scaffold，不是性能路线。
+- `decision`: current head 上 Q8_0 CPU-compatible all-up/all-down arithmetic/token-stability 通过，可作为下一步 resident/batched low-bit/partial representation 设计的 correctness 起点；禁止把现有 per-call Q80 skip 当 SOTA 或直接跑性能 promotion。
+
+## 2026-07-07 下一步计划：resident/batched Q80 或 partial representation 设计
+
+- `objective`: 基于已通过的 Q8_0 CPU-compatible correctness scaffold，设计能避免 per-call host src0 copy、cuda alloc/free、sync 的 resident/batched representation；目标是把 low-bit coverage bound 中的理论余量转成可运行候选。
+- `must_reduce`: 当前 per-call Q80 skip 的主要成本是 `host_src0_ms` 和 `kernel_sync_ms`。下一步必须：
+  1. 让 selected low-bit/expert representation 常驻 VRAM 或一次性 batched H2D；
+  2. 同一 layer/token 的 up/down selected rows 批量处理；
+  3. 避免每 expert `cudaMalloc/cudaFree/cudaDeviceSynchronize`；
+  4. 保留 fixed-text top1 gate。
+- `first_design_artifact`: 写 resident/batched Q80 design hard-bound，量化需要的 VRAM payload、workspace、expected kernel launches、expected H2D/D2H、与 generalized calibration min `>5 tok/s` 的 overhead margin。
+- `source_edit_gate`: 只有 design hard-bound 显示 calibration/dev min `>=6 tok/s` 且 top1 correctness path 明确，才写 default-off runtime prototype。
