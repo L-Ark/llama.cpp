@@ -1,0 +1,107 @@
+{
+  "artifacts": {
+    "partial_repr_probe_csv": {
+      "bytes": 930838,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q2ternary-partial-compressed-candidate/q2ternary-sidecar/partial-repr-probe.csv",
+      "sha256": "9293433b58ab9bf89bf0eaa8cf547f9361062947c21808b94e6fb8a480812f2e"
+    },
+    "repr_report_csv": {
+      "bytes": 852855,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q2ternary-partial-compressed-candidate/q2ternary-sidecar/repr-report.csv",
+      "sha256": "970f36b1689e932a4207137a33709cd31c1af1f8915bdecc699af82fce6f1812"
+    },
+    "run_script": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q2ternary-partial-compressed-candidate/q2ternary-sidecar/run_case.sh",
+    "top1_check_json": {
+      "bytes": 285,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q2ternary-partial-compressed-candidate/q2ternary-sidecar/top1-check.json",
+      "sha256": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+    }
+  },
+  "attempt_id": "20260707-q2ternary-partial-compressed-candidate",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "candidate_format": {
+    "block_mapping": "MXFP4 17 bytes/block -> q2 ternary 9 bytes/block: preserve e, map zero to 0, positive to +4, negative to -4, code 3 reserved",
+    "compression_ratio_vs_exact_partial": 1.8888888888888888,
+    "manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.q2tern_manifest.csv",
+    "manifest_bytes": 10400,
+    "manifest_sha256": "6c216e868623c1762fab84ef9e91c7b698d03427d4503f287d3db6cf9a4f5be5",
+    "payload": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.q2tern_payload.bin",
+    "payload_bytes": 1327104,
+    "payload_sha256": "b62ee9c502b03ff82b67b678235a37f1821834d063cf6f9563f20c3615081d1c",
+    "repr_type": "mxfp4_q2tern_partial"
+  },
+  "check_exit_status": 0,
+  "commands": {
+    "build": "cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2",
+    "run": "systemd-run --wait --collect --unit=vendor-ds4-q2tern-probe-20260707 -p MemoryMax=16000000000 -p MemorySwapMax=0 /root/lfz/runs/vendor-ds4-16gb/20260707T-q2ternary-partial-compressed-candidate/q2ternary-sidecar/run_case.sh"
+  },
+  "decision": "reject: q2 ternary partial representation has nonzero op-level errors; do not enable writeback or token-rate benchmark",
+  "hot_pool_and_repr_summary_tail": [
+    "[moe_stream] one direct hot pool: prefill attempted=96 inserted=96 bytes=427819008 elapsed_ms=244.782 read_ms=222.433 h2d_ms=15.910 transform_ms=4.362 transposed=1",
+    "[moe_stream] VRAM cache: 12.8 GiB, 3072 slots (4.25 MiB each)",
+    "[moe_stream] one direct repr manifest: loaded 96 entries compressed_bytes=1327104 original_bytes=2506752 from /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.q2tern_manifest.csv",
+    "[moe_stream] one direct repr pool: allocated 16.00 MiB attempted=96 inserted=96 bytes=1327104 read_ms=37.018 h2d_ms=0.683 direct_enabled=1 sidecar=1",
+    "[moe_stream] one direct repr manifest: entries=96 compressed_bytes=1327104 original_bytes=2506752 exact_entries=0 partial_entries=96 compressed_entries=0 hits=4246 misses=33454 pool_enabled=1 pool_sz=16777216 pool_attempted=96 pool_inserted=96 pool_bytes=1327104 pool_read_failures=0 pool_copy_failures=0 pool_read_ms=37.018 pool_h2d_ms=0.683 direct_enabled=1 sidecar=1",
+    "[moe_stream] VRAM cache: hits=29879 misses=4921 hit_rate=85.9%",
+    "[moe_stream] one direct hot pool: enabled=1 slots=96 slot_sz=4456448 pool_sz=427819008 attempted=96 inserted=96 read_failures=0 copy_failures=0 transform_failures=0 bytes=427819008 elapsed_ms=244.782 read_ms=222.433 h2d_ms=15.910 transform_ms=4.362 transposed=1 async_started=0 async_done=0",
+    "[moe_stream] one direct manifest: entries=96 manifest_bytes=427819008 hits=0 misses=0 reads=96 bytes=427819008 failures=0 direct_enabled=1 direct_reads=96 direct_failures=0 direct_fallbacks=0"
+  ],
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "next_direction": "Do not pursue naive 2-bit ternary. Next compressed candidate must preserve magnitude better or avoid lossy replacement before op-level compare is zero/acceptable.",
+  "partial_compare_aggregate": {
+    "alloc_us": 28339,
+    "compare_ok_rows": 3786,
+    "compare_ran_rows": 3786,
+    "csv_rows": 11600,
+    "d2h_us": 24859,
+    "diff_count": 67936,
+    "free_us": 32374,
+    "h2d_us": 54557,
+    "kernel_us": 178576,
+    "matched_experts": 4246,
+    "max_abs": 9.40296984,
+    "mean_abs_max": 2.49075008,
+    "out_bytes": 271744,
+    "q80_bytes": 13858944,
+    "records": 4246,
+    "rows_total": 37700,
+    "src0_bytes": 58696704
+  },
+  "prompt_scope": "fixed France text verifier only; calibration/dev derived manifest; held-out not used; not SOTA",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q2ternary-partial-compressed-candidate/q2ternary-sidecar",
+  "source_diff_stat_before_commit": " ggml/src/ggml-cuda/moe_stream.cu | 203 ++++++++++++++++++++++++++++++++++++---\n 1 file changed, 188 insertions(+), 15 deletions(-)\n",
+  "source_head_before_commit": "3021dc6d38cb18ab510ebb0383811d8143e40591",
+  "status": "rejected_correctness_probe_not_sota",
+  "strict_memory": {
+    "MemoryMax": 16000000000,
+    "MemorySwapMax": 0,
+    "memory_current_bytes": 7364608,
+    "memory_events": {
+      "high": 0,
+      "low": 0,
+      "max": 0,
+      "oom": 0,
+      "oom_group_kill": 0,
+      "oom_kill": 0
+    },
+    "memory_peak_bytes": 1008803840,
+    "ram_ok": true,
+    "systemd_unit": "vendor-ds4-q2tern-probe-20260707.service"
+  },
+  "timestamp_local": "2026-07-07",
+  "top1_check": {
+    "base_top1_matches_next_token": 119,
+    "calc_top1_matches_next_token": 119,
+    "first_mismatch_pos": -1,
+    "max_abs": 0,
+    "mean_abs": 0,
+    "mismatches_preview": [],
+    "n_tokens": 145,
+    "n_vocab": 129280,
+    "next_token_positions": 144,
+    "same_top1": 145,
+    "same_top1_ratio": 1
+  }
+}

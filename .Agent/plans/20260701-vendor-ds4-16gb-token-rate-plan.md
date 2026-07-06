@@ -4853,3 +4853,16 @@
 - `source_scope`: default-off，只支持 partial row-range sidecar manifest；不写回 logits，不清空 CPU fallback counts。复用 `GGML_MOE_STREAM_ONE_DIRECT_REPR_PAYLOAD` 和 `GGML_MOE_STREAM_Q80_PARTIAL_REPR_PROBE_OUT`，新增/识别 `repr_type=mxfp4_q2tern_partial`。
 - `math/correctness_expectation`: q2 ternary 会丢失 magnitude 信息，预期局部 `diff_count>0`，很可能 rejected。若 rejected，则证明 naive 2-bit ternary 不可作为 up/down replacement；下一步应转向更高精度或结构性方案，而不是硬跑 token-rate。
 - `validation_gate`: strict 16GB/no-swap fixed France verifier；top1 应保持 `145/145` 因为 compare-only 不写回；partial compressed compare 必须记录 `compare_ran`、`diff_count`、`max_abs`。如果 `diff_count>0`，标记 rejected，不允许 writeback/benchmark。
+
+
+## 2026-07-07 执行记录：q2 ternary partial compressed candidate
+
+- attempt_id: 20260707-q2ternary-partial-compressed-candidate
+- status: rejected_correctness_probe_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/q2ternary-partial-compressed-candidate-20260707.json
+- source_change: 在 ggml/src/ggml-cuda/moe_stream.cu 增加 default-off mxfp4_q2tern_partial resident candidate 识别、q2 ternary sidecar pool 命中分流、q2 row-range CUDA compare kernel，以及 q2 compressed payload 的 compare-only 汇总。未设置相关 env 时默认路径不变；本轮不写回 logits、不清空 CPU fallback counts。
+- candidate_payload: .Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.q2tern_payload.bin，1327104 bytes；manifest .q2tern_manifest.csv，96 entries。格式为 MXFP4 17 bytes/block -> q2 ternary 9 bytes/block，压缩比约 1.889x。
+- validation: build llama-results llama-cli passed；strict 16GB/no-swap cgroup run exit 0，top1 checker same_top1=145/145、first_mismatch_pos=-1、max_abs=0。注意 top1 不变是因为 compare-only 不写回 logits。
+- memory: memory_peak_bytes=1008803840，memory_current_bytes=7364608，oom=0，oom_kill=0，因此 strict RAM gate pass。
+- partial_compare_result: records 4246，compare rows 3786，diff_count=67936，max_abs=9.40296984，mean_abs_max=2.49075008；q2 payload 的 src0 compressed bytes aggregate 58696704，q80 bytes 13858944。
+- decision: reject。naive q2 ternary 丢失 magnitude 信息，op-level partial compare 出现大量非零误差，不能进入 writeback 或 token-rate benchmark，也不能作为 generalized SOTA。后续 compressed candidate 必须先在 compare-only gate 下证明数值误差可接受，再谈性能。
