@@ -2,6 +2,27 @@
 
 ## Summary
 
+### 2026-07-06 DeepSeek Branch Push Decision and 4.3 vs 4.4 Observation
+
+Per user request, the Kimi-preserving merge checkpoint is to be pushed directly to the previous DeepSeek branch `ssd/vendor/deepseek-token-rate-16gb` as source state, even though the merge regression did not produce a new accepted DeepSeek SOTA.
+
+Observation from comparing the accepted `4.4 tok/s` run with the merge regression `4.3 tok/s` run:
+
+- The exact command was identical.
+- Expert-pack behavior was identical: `hits=4886`, `misses=0`, `reads=4886`, `bytes=21774204928`.
+- VRAM cache behavior was identical: `hits=33265`, `misses=1886`, `hit_rate=94.6%`.
+- RAM and page-cache accounting were effectively the same: both runs reached `memory_peak_bytes=16000000000`; file cache was about `15.09 GB` in both runs.
+- Major page faults were effectively the same: about `272k` in both runs.
+- TTFT changed only from `32087.738292 ms` to `32303.449436 ms`, a `0.67%` increase and still within the TTFT gate.
+- The largest visible delta was one-stream prefill time: `4092.052 ms` in the accepted run versus `4935.276 ms` in the merge run, about `843 ms` slower. Total elapsed changed from `62.90 s` to `64.08 s`, about `1.18 s` slower.
+
+Interpretation:
+
+- Current evidence does not indicate a broken cache/fallback path after the merge; cache hits, pack reads, RAM, page-cache, and page faults line up.
+- The `4.4 -> 4.3` difference is likely near-boundary cold-start/prefill variability, but this is not proven by a single run.
+- Accepted performance should still be reported conservatively: current pushed merge checkpoint has a verified strict-cold DeepSeek result of `4.3 tok/s`; historical accepted SOTA evidence remains `4.4 tok/s`.
+- To prove pure variability, run at least three strict-cold repeats each on the pre-merge baseline and merge checkpoint, then compare medians.
+
 ### 2026-07-06 Merge Result: Kimi-Preserving Checkpoint, No Accepted DeepSeek SOTA Change
 
 This is the latest result record for the Kimi-preserving merge probe. The merge was implemented on branch `vendor/deepseek-merge-kimi-preserve-kimi-probe` and is suitable only as a functional merge checkpoint. It must not replace the accepted DeepSeek SOTA branch because the strict cold DeepSeek regression reached `4.3 tok/s`, below the accepted `4.4 tok/s`.
