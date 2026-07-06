@@ -91718,7 +91718,8 @@ Decision:
 
 Timestamp: `2026-07-07T05:35:00+0800`.
 
-Status: planned; execute only on branch
+Status: completed feasibility pass; no runtime change; no SOTA claim. Execute
+follow-up work only on branch
 `vendor/kimi-speculative-general-token-rate-16gb`.
 
 Branch rule:
@@ -91847,3 +91848,61 @@ Acceptance / commit rule:
   dead-end work.
 - Do not modify runtime decode behavior until the GP26 report shows a plausible
   route to `>5 tok/s` under the hard constraints.
+
+GP26 execution result:
+
+- Timestamp: `2026-07-07T05:35:00+0800`.
+- Report:
+  `.Agent/runs/20260707-gp26-speculative-feasibility/report.md`.
+- Code-path notes:
+  `.Agent/runs/20260707-gp26-speculative-feasibility/code-path-inspection.md`.
+- Remote asset inventory:
+  `.Agent/runs/20260707-gp26-speculative-feasibility/remote-asset-inventory.md`.
+- Analyzer:
+  `.Agent/run-tools/kimi_ngram_lookup_acceptance.py`.
+- Metrics:
+  `.Agent/runs/20260707-gp26-speculative-feasibility/ngram-self-acceptance.json`.
+  `.Agent/runs/20260707-gp26-speculative-feasibility/ngram-self-acceptance.csv`.
+
+Command:
+
+```bash
+python3 .Agent/run-tools/kimi_ngram_lookup_acceptance.py \
+  --answers-glob '.Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/*/answer.txt' \
+  --out-json .Agent/runs/20260707-gp26-speculative-feasibility/ngram-self-acceptance.json \
+  --out-csv .Agent/runs/20260707-gp26-speculative-feasibility/ngram-self-acceptance.csv
+```
+
+Results:
+
+- Data source: dev answer files only.
+- Held-out test prompts: not used.
+- Remote assets: Kimi IQ3_S GGUF shards only; no compatible draft model found;
+  no lower-byte full Kimi GGUF found.
+- `examples/speculative` and `examples/speculative-simple` require a
+  compatible draft model.
+- `examples/lookup` / `common/ngram-*` can draft without an external model, but
+  only exploit repeated ngrams in prompt/context/history.
+- Best dev-only self-ngram text-token estimate:
+  - `ngram=1`;
+  - `n_draft=8` or `16`;
+  - prompts: `7`;
+  - text tokens: `518`;
+  - verify steps: `486`;
+  - accepted draft tokens: `26`;
+  - average accepted draft tokens per step: `0.0535`;
+  - effective output tokens per step: `1.0658`.
+
+Decision:
+
+- Reject no-extra-model self-ngram lookup as the primary route to `5 tok/s`.
+  It would only move `1.385 tok/s` to about `1.48 tok/s` before overhead.
+- Do not implement Kimi runtime lookup integration as the next primary SOTA
+  path.
+- Model-based speculation remains asset-blocked and must first pass an explicit
+  draft-model RAM/VRAM/TTFT feasibility gate.
+- The next branch of work should focus on one of:
+  - compatible tiny draft model feasibility;
+  - route/expert prediction for IO queue-depth improvement without requiring
+    high text acceptance;
+  - more aggressive prompt-agnostic byte reduction than GP25 lower-byte hotsets.
