@@ -94117,3 +94117,91 @@ GP46 execution result:
   - accepted as non-SOTA planning evidence;
   - no runtime behavior changed;
   - no token-rate or output-quality claim is made.
+
+## GP47: dev-only expert route predictability analysis
+
+Timestamp: `2026-07-07T07:12:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- GP46 shows selected low-byte payloads alone are not enough.
+- The remaining large bottleneck is IO queue continuity: the runtime cannot keep
+  enough independent expert reads continuously in flight because it learns exact
+  active experts layer-by-layer after routing.
+- Before implementing predictor-driven prefetch or a draft-model predictor, test
+  whether simple route history has enough recall to be useful.
+
+Theory and upper bound:
+
+- If the active expert set for `(layer, role)` repeats strongly from the previous
+  token, then a cheap predictor can prefetch those experts before routing
+  finishes, improving iouring depth and reducing wait bubbles.
+- If previous-token recall is low, then simple history prefetch will waste SSD,
+  H2D, and VRAM bandwidth, likely harming TTFT/token rate under 16GB RAM.
+- This phase measures an upper-bound signal only:
+  - group route-trace rows into consecutive tensor calls;
+  - for each tensor call after the first, predict current experts using the
+    previous call for the same tensor;
+  - compute recall, precision, and byte coverage.
+
+Scope:
+
+- Add `.Agent/run-tools/kimi_expert_predictability_from_trace.py`.
+- Inputs:
+  - dev-only `route-trace.csv` files;
+  - no held-out test traces.
+- Outputs:
+  - CSV/JSON/Markdown predictability summary.
+- No runtime code changes.
+
+Validation:
+
+1. Run locally on dev N96 route traces.
+2. Run remotely in `/root/lfz/tmp/vendor-kimi-speculative-gp33`.
+3. Record whether raw route traces are committed or the result is exploratory.
+4. No token-rate or SOTA claim.
+
+Acceptance:
+
+- The analyzer reports per-prompt and aggregate previous-call recall/precision.
+- It states whether simple history-based prefetch is likely worth runtime
+  integration.
+
+GP47 execution result:
+
+- Timestamp: `2026-07-07T06:55:58+08:00`.
+- Record:
+  `.Agent/runs/20260707-gp47-route-predictability/report.md`.
+- Added:
+  `.Agent/run-tools/kimi_expert_predictability_from_trace.py`.
+- Inputs:
+  - seven dev-only N96 `route-trace.csv` files from
+    `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile`;
+  - no held-out test traces were used.
+- Headline result for previous-call same-tensor predictor:
+  - calls: `84445`;
+  - predictable call ratio: `0.985659`;
+  - recall: `0.337820`;
+  - precision: `0.342736`;
+  - byte recall: `0.337250`;
+  - predicted/actual byte ratio: `0.985659`.
+- Interpretation:
+  - simple previous-token same-tensor prefetch would move almost a full active
+    set worth of bytes while covering only about one third of actual experts;
+  - this is not worth runtime integration under 16GB host RAM and constrained
+    SSD/H2D bandwidth;
+  - a useful prediction path needs a stronger learned/draft route predictor or
+    a scheduler that creates more independent jobs without broad wrong-expert
+    overfetch.
+- Validation:
+  - local analyzer run passed;
+  - local `python3 -m py_compile` passed;
+  - local `git diff --check` passed;
+  - remote analyzer run produced matching headline metrics;
+  - remote `python3 -m py_compile` and `git diff --check` passed.
+- Decision:
+  - accepted as non-SOTA planning evidence;
+  - no runtime behavior changed;
+  - no token-rate or output-quality claim is made.
