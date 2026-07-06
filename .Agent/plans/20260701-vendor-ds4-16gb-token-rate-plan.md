@@ -29,9 +29,25 @@
   3. `Write a short Python function for Fibonacci.`
   4. `Introduce Japan in a short paragraph.`
   5. `Summarize climate change in one paragraph.`
+- `prompt_split_rule`: 为了避免继续过拟合少数 prompt，后续 prompt 必须分成 `calibration/dev` 和 `held-out test`。`held-out test` 在优化期间不能用于 trace、expert pack、cache admission profile、hotset 选择、参数 sweep、kernel shape 筛选或人工针对性调参；只能在候选方案冻结后用于最终验收。最终 SOTA 必须报告 `held-out test` 指标，不能用 calibration/dev 或 France 单项替代。
+- `calibration_dev_set_v1`:
+  1. `Please introduce France in a short paragraph.`
+  2. `Explain quantum computing briefly.`
+  3. `Write a short Python function for Fibonacci.`
+  4. `Introduce Japan in a short paragraph.`
+  5. `Summarize climate change in one paragraph.`
+- `held_out_test_set_v1_locked`: locked before further optimization. Do not use these prompts for design, tracing, packing, profiling, or parameter search.
+  1. `Describe photosynthesis in a short paragraph.`
+  2. `Give three practical tips for organizing a small home office.`
+  3. `Write a concise JavaScript function that checks whether a string is a palindrome.`
+  4. `Explain why regular exercise is important in one paragraph.`
+  5. `Introduce Brazil in a short paragraph.`
+- `sota_metric_update`: A future accepted generalized SOTA requires `held_out_test_set_v1_locked` per-prompt metrics after the candidate is frozen. The acceptance summary must include min/mean eval tok/s, every prompt's TTFT/RAM/page-cache/correctness, and exact outputs. The product target is not met until held-out test prompts are stable at `>5 tok/s` under the 16GB RAM + 32GB 5090 envelope.
 - `baseline_required_before_next_code_change`: run the current pushed source/config under strict cold `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`, page-cache accounting inside cgroup, and record each prompt's `eval_tok_s`, `prompt_tok_s`, `TTFT`, elapsed time, `memory_peak_bytes`, `memory_file_bytes`, OOM/swap status, exact env/CLI, answer text, and manual/automatic correctness note.
 - `promotion_update`: A future accepted generalized SOTA must beat the baseline on prompt-set aggregate and must not introduce a severe regression on any individual prompt. France correctness remains a mandatory sentinel, but France alone is no longer sufficient evidence for promotion.
 - `next_action`: pause W2/W3 implementation until the generalized baseline artifact is produced, written into this plan, committed, and pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- `baseline_result_20260706_dev_reference`: completed no-prompt-specific strict cold baseline on `calibration_dev_set_v1`, not held-out SOTA. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`. Config excludes `GGML_MOE_STREAM_ONE_EXPERT_PACK`, `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE`, `GGML_MOE_STREAM_ONE_PREFILL_PROFILE`, and prompt-derived packs/profiles. Results: France `2.7 tok/s`, quantum `1.8 tok/s`, Fibonacci `1.8 tok/s`, Japan `2.4 tok/s`, climate `2.2 tok/s`; mean `2.18 tok/s`, min `1.8 tok/s`, all runs `memory_peak_bytes=16000000000`, all `ram_ok=true`, no prompt-specific env detected. This is a dev/reference baseline only; final SOTA must be measured on `held_out_test_set_v1_locked`.
+- `invalidated_result`: `/root/lfz/runs/vendor-ds4-16gb/20260706T105534Z-general-prompt-baseline-current-config-20260706` used France-derived gate pack/profile and is invalid as a generalized baseline. It must not be used for SOTA or target progress.
 
 ## 2026-07-06 最新执行计划：消灭 up/down CPU fallback
 
