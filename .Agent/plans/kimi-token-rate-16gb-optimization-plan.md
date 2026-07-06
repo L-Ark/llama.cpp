@@ -89838,3 +89838,35 @@ GP4 decision:
   - cache miss volume by role/layer under `direct_reads=0`;
   - whether larger io depth/refill, more slots, or byte reduction can move
     held-out test min from `1.16` toward `5 tok/s`.
+
+Post-commit reproduction:
+
+- Commit:
+  `a6de1a8fcfd085c5c98f520e757b66164909187e`
+  (`cuda: batch aligned alias expert pack reads`).
+- Remote run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260707-020500Z-gp4-postcommit-test-n96-profile`.
+- Local record:
+  `.Agent/runs/20260707-gp4-postcommit-test-n96-profile`.
+- `git.txt` records:
+  - `repo=/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c`;
+  - `head=a6de1a8fcfd085c5c98f520e757b66164909187e`;
+  - empty `status_short` and empty `diff_stat`.
+- Gate:
+  - `6/6` held-out test quality pass;
+  - all prompts `memory.peak=15899996160`;
+  - all prompts `direct_reads=0`;
+  - min/median/mean token rate: `1.14 / 1.385 / 1.367 tok/s`.
+
+| prompt | post-commit GP4 tok/s | TTFT ms | decode ms/runs |
+|---|---:|---:|---:|
+| `test_english_factual_01` | 1.48 | 53196.00 | 64332.16/95 |
+| `test_english_factual_02` | 1.49 | 69820.25 | 63006.07/94 |
+| `test_reasoning_math_01` | 1.32 | 231632.04 | 41772.79/55 |
+| `test_coding_01` | 1.14 | 84072.90 | 83682.56/95 |
+| `test_chinese_01` | 1.44 | 70343.09 | 66012.01/95 |
+| `test_mixed_instruction_01` | 1.33 | 79872.16 | 71383.52/95 |
+
+The post-commit held-out test is the authoritative GP4 SOTA record. The
+pre-commit correct dev/test runs remain useful diagnostics, but any future
+comparison should cite the post-commit test metrics above for SOTA.

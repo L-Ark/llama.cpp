@@ -1,0 +1,41 @@
+run=/root/lfz/runs/vendor-kimi-token-rate/20260707-020500Z-gp4-postcommit-test-n96-profile/test_chinese_01
+prompt_id=test_chinese_01
+prompt=用中文简要说明为什么要节约用水。
+exit=0
+quality=pass
+quality_reason=ok
+output=节约用水的原因主要有以下几点： 1. **水资源有限**：地球上淡水资源仅占约2.5%，且大部分难以直接利用，可利用的淡水资源十分稀缺。 2. **人口增长与需求增加**：随着人口增加和经济发展，用水量不断上升，供需矛盾加剧。 3. **保护生态环境**：过度用水会导致河流干涸、湿地减少、地下水位下降，破坏生态系统平衡。 4. **减少能源消耗**：水的抽取、净化和输送都需要消耗能源
+ttft_ms=70343.09
+prompt_tokens=17
+decode_ms=66012.01
+decode_runs=95
+token_rate=1.44
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=14944419840
+anon=454656
+file=14696673280
+kernel=244097024
+inactive_file=4634599424
+active_file=10061574144
+pgmajfault=967033
+pgfault=3069284
+workingset_refault_file=175247
+expert_pack_0=78086 misses=0 read_failures=0 direct_reads=0 direct_fallbacks=0 iouring_reads=72766 iouring_bytes=405835530240 iouring_fallbacks=0 iouring_submit_us=281507 iouring_wait_us=66449238 iouring_h2d_enqueues=72766 entries=69120
+expert_pack_iouring_0=batches=16351 submit_calls=16351 wait_calls=59046 cqes=72766 inflight_avg=3.32 inflight_max=8 batch_hist=1:530,2-4:8066,5-8:7755,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 4.49 MiB
+pinned_staging_1=: enabled, 12 slots of 7.44 MiB
+pinned_staging_2=: enabled, 12 slots of 5.36 MiB
+pinned_staging_3=: enabled, 12 slots of 7.44 MiB
+pinned_staging_4=: copies=52142 waits=52094 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=88.347 ms host_stage=0.000 ms enqueue=677.047 ms h2d=11206.074 ms h2d_timed=52142
+pinned_staging_5= iouring: batches=11626 jobs=52142 submit_calls=11626 wait_calls=42216 cqes=52142 inflight_avg=3.33 inflight_max=8 batch_hist=1:376,2-4:5612,5-8:5638,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=20624 waits=20600 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=35.183 ms host_stage=0.000 ms enqueue=278.177 ms h2d=4222.448 ms h2d_timed=20624
+pinned_staging_7= gate iouring: batches=4725 jobs=20624 submit_calls=4725 wait_calls=16830 cqes=20624 inflight_avg=3.31 inflight_max=8 batch_hist=1:154,2-4:2454,5-8:2117,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=3040 planned_jobs=11356 completed_jobs=11356 cache_hits=10684 missing_tensor=285 missing_pack=0 submitted_batches=2733 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=8778750 batch_hist=1:114,2-4:1547,5-8:1072,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=29586 misses=10670 preloads=11356 pinned=0 hit_rate=73.5%
+vram_down_1=slots=766 slot=7.44 MiB hits=29586 misses=10670 preloads=11356 pinned=0 hit_rate=73.5%
+vram_down_2=slots=766 slot=7.44 MiB hits=29586 misses=10670 preloads=11356 pinned=0 hit_rate=73.5%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=40508 misses=50708 preloads=0 pinned=0 hit_rate=44.4%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=40508 misses=50708 preloads=0 pinned=0 hit_rate=44.4%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=40508 misses=50708 preloads=0 pinned=0 hit_rate=44.4%

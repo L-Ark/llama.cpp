@@ -1,0 +1,1 @@
+I need to find the arrival time by adding 2 hours and 15 minutes to 3 PM. 3 PM + 2 hours = 5 PM 5 PM + 15 minutes = 5:15 PM The train arrives at **5:15 PM**.

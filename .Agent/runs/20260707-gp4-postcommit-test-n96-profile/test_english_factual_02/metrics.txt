@@ -1,0 +1,41 @@
+run=/root/lfz/runs/vendor-kimi-token-rate/20260707-020500Z-gp4-postcommit-test-n96-profile/test_english_factual_02
+prompt_id=test_english_factual_02
+prompt=Briefly explain why the Moon has phases.
+exit=0
+quality=pass
+quality_reason=ok
+output=The Moon has phases because it orbits Earth and we see varying amounts of its sunlit half from our perspective. When the Moon is between Earth and the Sun, its lit side faces away from us, creating a new moon. As it orbits, we see progressively more of the illuminated portion, growing to a full moon when Earth is between the Moon and Sun. Then it wanes back to new moon, completing the cycle in about 29.5 days.
+ttft_ms=69820.25
+prompt_tokens=18
+decode_ms=63006.07
+decode_runs=94
+token_rate=1.49
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=15000109056
+anon=454656
+file=14739574784
+kernel=257077248
+inactive_file=5385228288
+active_file=9353740288
+pgmajfault=1008588
+pgfault=3187425
+workingset_refault_file=144644
+expert_pack_0=81040 misses=0 read_failures=0 direct_reads=0 direct_fallbacks=0 iouring_reads=75776 iouring_bytes=423657242624 iouring_fallbacks=0 iouring_submit_us=291269 iouring_wait_us=62733563 iouring_h2d_enqueues=75776 entries=69120
+expert_pack_iouring_0=batches=16232 submit_calls=16232 wait_calls=61414 cqes=75776 inflight_avg=3.34 inflight_max=8 batch_hist=1:251,2-4:7591,5-8:8390,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 6.02 MiB
+pinned_staging_1=: enabled, 12 slots of 4.49 MiB
+pinned_staging_2=: enabled, 12 slots of 7.44 MiB
+pinned_staging_3=: enabled, 12 slots of 5.36 MiB
+pinned_staging_4=: copies=54865 waits=54829 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=91.746 ms host_stage=0.000 ms enqueue=681.369 ms h2d=11938.473 ms h2d_timed=54865
+pinned_staging_5= iouring: batches=11548 jobs=54865 submit_calls=11548 wait_calls=44332 cqes=54865 inflight_avg=3.36 inflight_max=8 batch_hist=1:168,2-4:5139,5-8:6241,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=20911 waits=20887 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=36.613 ms host_stage=0.000 ms enqueue=277.770 ms h2d=4367.597 ms h2d_timed=20911
+pinned_staging_7= gate iouring: batches=4684 jobs=20911 submit_calls=4684 wait_calls=17082 cqes=20911 inflight_avg=3.30 inflight_max=8 batch_hist=1:83,2-4:2452,5-8:2149,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=3008 planned_jobs=11874 completed_jobs=11874 cache_hits=9934 missing_tensor=282 missing_pack=0 submitted_batches=2717 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=8610743 batch_hist=1:50,2-4:1458,5-8:1209,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=28327 misses=11505 preloads=11874 pinned=0 hit_rate=71.1%
+vram_down_1=slots=766 slot=7.44 MiB hits=28327 misses=11505 preloads=11874 pinned=0 hit_rate=71.1%
+vram_down_2=slots=766 slot=7.44 MiB hits=28327 misses=11505 preloads=11874 pinned=0 hit_rate=71.1%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=37891 misses=52365 preloads=0 pinned=0 hit_rate=42.0%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=37891 misses=52365 preloads=0 pinned=0 hit_rate=42.0%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=37891 misses=52365 preloads=0 pinned=0 hit_rate=42.0%
