@@ -4327,3 +4327,19 @@
 - `loader_error`: `blk.3.ffn_gate_inp.weight` shape mismatch，vendor 期望 `[4096,256]`，sleepy REAP K128 从 layer 3 开始是 `[4096,128]`。
 - `decision`: reject，不进入 token-rate benchmark。该问题是 REAP K128 gate/dataflow 结构差异，不是简单 alias、RAM 或 cache 参数问题。
 - `next_action`: 记录并 push 后删除本地 sleepy 大文件释放磁盘；下一候选改为 antirez IQ2XXS chat-v2，因为 header probe 显示其 `output_hc` alias 存在且 `ffn_gate_inp` 为 `[4096,256]`。
+
+## 2026-07-07 执行记录：antirez IQ2XXS alternate GGUF 下载启动
+
+- `attempt_id`: `20260707-antirez-iq2xxs-alt-gguf-download-start`
+- `status`: `download_started_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-download-start-20260707.json`
+- `prompt_scope`: 未运行 prompt；未使用 `held_out_test_set_v1_locked`。
+- `cleanup`: 已删除本地 rejected sleepy K128 GGUF 大文件释放磁盘；该 candidate 的 sha256、ready validation、reject 记录已 push。
+- `candidate`: `antirez/deepseek-v4-gguf` / `DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf`。
+- `download_path`: `/root/lfz/models/DeepSeek-V4-Flash-antirez-IQ2XXS-chat-v2-GGUF/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf`。
+- `expected_size_bytes`: `86720111200`。
+- `download_unit`: `ds4-antirez-iq2xxs-alt-gguf-download-20260706T175230Z.service`。
+- `download_log`: `/root/lfz/runs/vendor-ds4-16gb/20260706T175230Z-antirez-iq2xxs-alt-gguf-download/download.log`。
+- `why_this_candidate`: header probe 显示 `output_hc=3`、`tid2eid_weight=3`、`ffn_gate_inp=[4096,256]`，避免了 0xSero 的 missing `hc_head_base` 和 sleepy 的 K128 gate shape mismatch。
+- `completion_gate`: `.aria2` sidecar 消失、`stat size == 86720111200`、sha256/header validation 通过后，才允许 France strict 16GB smoke。
+- `claim_rule`: 当前只有下载启动记录，没有 correctness/token-rate/SOTA 结论。
