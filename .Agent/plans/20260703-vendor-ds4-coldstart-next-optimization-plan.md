@@ -2,6 +2,54 @@
 
 ## Summary
 
+### 2026-07-06 Latest Active Plan: Preserve-Kimi Merge Probe Before Runtime Work
+
+This is the latest active plan and supersedes older Latest Active Plan sections below. Older sections remain as historical experiment records only. The immediate task is to document and then implement a Kimi-preserving merge probe before any runtime optimization work. Current accepted strict cold DeepSeek SOTA remains 4.4 tok/s; this section itself produces no new performance result.
+
+Current accepted DeepSeek SOTA remains:
+
+- Run: /root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb
+- Metrics: eval_tok_s=4.4, prompt_tok_s=1.8, TTFT=32087.738292 ms, elapsed_seconds=62.9, memory_peak_bytes=16000000000, memory_file_bytes=15099523072, ram_ok=true, oom_seen=false, correctness_ok=true
+- Accepted reproduction inputs remain the native GGUF plus the France gate pack: /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf and /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack.
+- Push target remains ssd, https://github.com/wici-ai/ssd-llama.git, branch vendor/deepseek-token-rate-16gb, using L-Ark <fliangae@connect.ust.hk>.
+
+Kimi source state and merge risk:
+
+- Source branch: ssd/vendor/kimi-moe-stream-on-vendor
+- Kimi HEAD at plan time: 9820ecbbb3dbb503b179ea605c848b903082e121
+- DeepSeek baseline at plan time: 533cfcc70c3a45b78a729ef1c43513b305d8a44c
+- Merge base: f0d44910233b0bcf52050025a522313a78b93232
+- Dry-run merge showed one content conflict: ggml/src/ggml-cuda/moe_stream_batch.cu. ggml/src/ggml-cpu/ggml-cpu.c changed on both sides but auto-merged in the dry run.
+- Kimi-side additions include expert-pack source-list support, remote expert-pack manifest/build/partition tooling, Kimi repro wrappers, Kimi verify bench, and extensive Kimi 16GB optimization records.
+
+Non-negotiable merge constraints:
+
+1. Do not remove or weaken Kimi functionality. Kimi expert-pack source-list behavior, remote pack tooling, io_uring/read-fallback accounting, Kimi repro scripts, Kimi verify bench, and Kimi plan history must remain available unless replaced by an equivalent implementation and verified.
+2. Do not regress the accepted DeepSeek SOTA path. DeepSeek default execution must keep the accepted inputs, strict cold 16GB cgroup including page cache, correctness requirement, and TTFT gate.
+3. Resolve conflicts by preserving both model paths through architecture/tensor/pack/env isolation, not by deleting either side's logic. DeepSeek defaults must remain the accepted SOTA path; Kimi-specific behavior must remain reachable for Kimi runs.
+4. Do not delete or move model files, run artifacts, packs, or other large assets during this merge probe without explicit user approval.
+5. Do not claim a new accepted SOTA unless eval_tok_s > 4.4, TTFT <= 33617.688744 ms, memory_peak_bytes <= 16000000000 including file page cache, MemorySwapMax=0, no swap/OOM/ram kill, and correctness_ok=true with coherent France output.
+
+Implementation plan:
+
+1. Keep the current untracked metadata artifact isolated from merge commits: .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json must either stay untracked or be committed separately; it must not be mixed into the merge checkpoint.
+2. Create a temporary working branch from 533cfcc70, named vendor/deepseek-merge-kimi-preserve-kimi-probe.
+3. Merge ssd/vendor/kimi-moe-stream-on-vendor into the temporary branch with --no-ff.
+4. Resolve ggml/src/ggml-cuda/moe_stream_batch.cu by preserving DeepSeek's accepted cold path and Kimi's source-list/parallel-stage behavior. If behavior cannot be safely unified in one branch, gate the divergent behavior by existing model/tensor/pack/env evidence and keep the default DeepSeek path unchanged.
+5. Preserve Kimi-added scripts/tools/docs and CMake entries unless a build failure proves a specific entry is invalid; if any entry must be adjusted, record the exact reason and keep the Kimi capability reachable.
+6. Build the vendor CUDA target and Kimi verify bench where available. No strict cold benchmark may start until the build is clean and no conflict markers remain.
+7. Run DeepSeek France strict cold 16GB regression with the accepted SOTA configuration and record all token rate, TTFT, RAM/page-cache, OOM, and output metrics.
+8. Run a Kimi functionality smoke/regression that at minimum proves source-list/manifest/tooling initialization still works. If full Kimi performance assets are unavailable, record the missing asset/disk reason and do not claim full Kimi SOTA validation.
+9. If DeepSeek token rate improves and all gates pass, immediately commit source, plan, run artifact, and push to ssd/vendor/deepseek-token-rate-16gb with complete reproduction details. If DeepSeek does not improve but both DeepSeek and Kimi functionality are preserved, commit/push only as a merge checkpoint labeled "no accepted SOTA change". If either side regresses, record a rejected merge probe and do not update the accepted SOTA branch.
+
+Required records before any accepted promotion:
+
+- Merge source commit, DeepSeek base commit, conflict files, and conflict resolution summary.
+- Exact build command and binary version/hash.
+- DeepSeek strict cold run directory, command, env, prompt, raw output, summary metrics, memory.current/peak/stat/events, and cgroup path.
+- Kimi smoke/regression command and result, including source-list/read/io_uring counters where applicable.
+- Push commit SHA on ssd/vendor/deepseek-token-rate-16gb and reproduction instructions sufficient to replay the result from the pushed source.
+
 ### 2026-07-06 Latest Active Plan: Native Expert Pack Reclassified as Cleanup Candidate
 
 This is the latest active plan and supersedes older Latest Active Plan and Historical Plan sections below. Older sections remain as historical experiment records only. Current accepted strict cold SOTA remains 4.4 tok/s. This section produced no new accepted performance result, no file deletion or movement, no source patch, and no strict cold benchmark.
