@@ -92454,3 +92454,69 @@ Next direction after GP30:
     overhead; or
   - implement an expert computation approximation only after an offline quality
     bound shows much lower error than the rejected D2MoE/base-residual screens.
+
+## GP31: current external asset and disk feasibility refresh
+
+Timestamp: `2026-07-07T07:55:00+0800`.
+
+Status: planned.
+
+Purpose:
+
+- GP30 rules out the next obvious runtime/cache-only branch.
+- GP10 requires moved expert bytes to drop toward roughly `0.39x-0.55x` for
+  `5 tok/s` to be plausible.
+- GP15/GP17/GP25 previously found AesSedai `IQ2_XXS` is the most plausible GGUF
+  candidate but still blocked by disk and not small enough as a selected
+  hotset. That survey may be stale.
+- GP31 refreshes current external asset availability and remote disk state
+  before any large download or new implementation.
+
+Design:
+
+- Query current Hugging Face metadata for:
+  - Kimi/K2.7 Code GGUF variants smaller than the current IQ3_S model;
+  - NVFP4/MXFP4 variants and whether a GGUF/expert-pack path exists;
+  - any compatible small/draft Kimi or DeepSeek2/Kimi router/draft model that
+    could support speculative decoding or route prediction.
+- Use metadata/HEAD/API sizes only. Do not download full model weights in this
+  phase.
+- Check remote disk state:
+  - free space under `/root/lfz`;
+  - size of current Kimi IQ3_S shards;
+  - size of reusable or old temporary artifacts;
+  - size of current SOTA expert packs that must be preserved.
+- Recompute feasibility against the deployment target:
+  - expected bytes/token ratio versus IQ3_S;
+  - whether full download fits without deleting current SOTA assets;
+  - whether the asset can run in the current GGUF/vendor path;
+  - whether 16GB host RAM + 32GB VRAM cold start remains plausible;
+  - whether TTFT is likely to exceed the +20% gate.
+
+Acceptance gate:
+
+- A new asset branch is allowed only if it satisfies all of:
+  - direct GGUF/vendor path or a clearly scoped conversion/runtime path;
+  - estimated moved expert byte ratio <= `0.55x`, or a separate draft-token
+    acceptance mechanism with plausible >3.6x end-to-end speedup;
+  - full artifact can fit on disk while preserving current SOTA reproducibility,
+    or there is an explicit safe cleanup plan;
+  - no held-out test prompts are used for asset selection or tuning.
+
+Execution records:
+
+- Store report under:
+  `.Agent/runs/20260707-gp31-external-asset-refresh/report.md`.
+- Store raw metadata summaries, not large model files.
+- Commit and push this plan and the GP31 report.
+
+Decision rules:
+
+- If no asset passes the gate, record the block and do not start another
+  runtime-only cache experiment.
+- If one asset passes, write the next plan before any download:
+  - exact files and sizes;
+  - disk cleanup requirements;
+  - expected byte ratio and upper token-rate bound;
+  - cold-start n32 smoke gate;
+  - n96 dev and held-out test gates.
