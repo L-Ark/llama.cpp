@@ -87804,4 +87804,82 @@ Acceptance:
 
 Result:
 
-- Pending.
+- Plan commit: `216161c67`.
+- Builder commit: `19ee13cd5`.
+- Remote branch: `wici/vendor/kimi-moe-stream-on-vendor`.
+- Server run:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260706-015729Z-phase7ou-remote-pack-builder-smoke
+```
+
+- Local validation before push:
+  - `python3 -m py_compile scripts/kimi-build-remote-pack-from-manifest.py`
+    passed.
+- Server validation:
+  - repo head: `19ee13cd599d052ff0aac3e49d3c15d40b250f30`;
+  - git status: clean;
+  - start: `2026-07-06T01:57:29Z`;
+  - end: `2026-07-06T01:57:32Z`;
+  - exit: `0`;
+  - `python3 -m py_compile` passed;
+  - `.expert-pack` output: absent.
+- Builder summary:
+  - dry run: `true`;
+  - execute: `false`;
+  - pack written: `false`;
+  - entries: `31599`;
+  - selected tensors: `180`;
+  - remote shards: `6`;
+  - payload: `115.215134 GiB`;
+  - estimated pack: `115.219608 GiB`;
+  - runtime nbytes mismatches: `31599`;
+  - current `IQ3_S` runtime compatible: `false`;
+  - invalid remote ranges: `0`;
+  - bad pack offsets: `0`;
+  - output filesystem free: `87.694946 GiB`;
+  - fits output filesystem: `false`;
+  - missing space: `27.524662 GiB`;
+  - smoke entries completed: `2`;
+  - smoke bytes: `8486912`.
+- Smoke HTTP Range rows:
+  - entry `0`, tensor `blk.1.ffn_down_exps.weight`, expert `0`,
+    bytes `4243456`, sha256 prefix `7874463173231983`, time `1.306 s`;
+  - entry `1`, tensor `blk.1.ffn_down_exps.weight`, expert `1`,
+    bytes `4243456`, sha256 prefix `45b8cfc0c8ac38bb`, time `0.977 s`.
+
+Reproduce result:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git checkout vendor/kimi-moe-stream-on-vendor
+git merge --ff-only 19ee13cd599d052ff0aac3e49d3c15d40b250f30
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<new-ts>-phase7ou-remote-pack-builder-smoke
+MAN=/root/lfz/runs/vendor-kimi-token-rate/20260706-014334Z-phase7ot-remote-pack-manifest/manifest.tsv
+mkdir -p "$RUN"
+python3 -m py_compile scripts/kimi-build-remote-pack-from-manifest.py
+python3 scripts/kimi-build-remote-pack-from-manifest.py \
+  --dry-run \
+  --manifest-tsv "$MAN" \
+  --output-pack "$RUN/selected-iq2xxs.expert-pack" \
+  --summary-json "$RUN/builder-summary.json" \
+  --smoke-entries 2
+test ! -e "$RUN/selected-iq2xxs.expert-pack"
+cat "$RUN/builder-summary.json"
+```
+
+Decision:
+
+- Accept 7OU as a reproducible tooling/preflight step.
+- This is not a token-rate SOTA change and does not run inference.
+- The direct builder can validate and range-read the selected lower-bit
+  manifest without writing a pack or using additional disk payload space.
+- The next bottleneck remains the selected-pack asset/runtime gap:
+  - current storage is still short by about `27.5 GiB` for a direct selected
+    `IQ2_XXS` pack;
+  - the current `IQ3_S` runtime cannot consume this lower-bit pack because all
+    selected entries have different runtime byte sizes;
+  - a real speed experiment still requires either enough storage plus a
+    matching lower-bit runtime/model path, or an explicitly approved cleanup
+    target.
