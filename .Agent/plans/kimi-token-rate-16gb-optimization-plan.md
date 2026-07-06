@@ -88077,3 +88077,84 @@ Decision:
   - explicit approval to reclaim enough disk from old artifacts; or
   - a separate, default-off mixed-quant runtime design that makes pack entry
     type/bytes authoritative and then passes strict n96 quality.
+
+## Phase 7OW - arbitrary expert-pack source list
+
+Start time: `2026-07-06T10:17:51+0800` / `20260706-021751Z`.
+
+Purpose:
+
+- Remove the next small runtime plumbing limit exposed by 7OV.
+- Current runtime source loading supports exactly:
+  - `GGML_MOE_EXPERT_PACK`;
+  - `GGML_MOE_EXPERT_PACK_OVERLAY`;
+  - `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA`.
+- 7OV's by-kind split fits that three-source limit, but future size-bounded
+  lower-bit partitions or trace-first replacement packs may require more than
+  three source files.
+- Add a default-off source-list env without changing the behavior of existing
+  wrappers or accepted SOTA runs.
+
+Scope:
+
+- Add `GGML_MOE_EXPERT_PACK_LIST`.
+- Parse it as a colon-separated list of pack paths.
+- Load sources in this order:
+  1. existing `GGML_MOE_EXPERT_PACK`, if set;
+  2. existing `GGML_MOE_EXPERT_PACK_OVERLAY`, if set;
+  3. existing `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA`, if set;
+  4. each non-empty path in `GGML_MOE_EXPERT_PACK_LIST`, if set.
+- Preserve existing duplicate-key behavior:
+  - duplicates are rejected by default;
+  - `GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1` still allows later sources to
+    replace earlier sources.
+- Do not change pack v1 schema, lookup key, cache key, quant type dispatch,
+  mixed-quant behavior, or runtime defaults.
+
+Bottleneck/rationale:
+
+- This does not reduce token time by itself.
+- It is aligned with the lower-bit movement-reduction path because it lets
+  future valid pack partitions be loaded without forcing a single large pack or
+  only three physical files.
+- The hard token-rate bottleneck remains 7OQ expert movement:
+  `iouring_wait_us=48336684`, `iouring_bytes=315.380 GiB`.
+- This phase is accepted only as reproducible runtime plumbing; no SOTA claim is
+  possible without a later strict n96 inference run using valid same-quant or
+  matching lower-bit assets.
+
+Implementation plan:
+
+1. Commit and push this Phase 7OW plan before source edits.
+2. Patch only `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+3. Introduce a small helper that appends non-empty colon-separated paths from
+   `GGML_MOE_EXPERT_PACK_LIST` to the existing pack-source vector.
+4. Replace the fixed three-source load sequence with a loop over the assembled
+   source vector.
+5. Keep all source indices monotonic and equal to load order.
+6. Validate:
+   - local/source inspection;
+   - remote CUDA build with `cmake --build build-cuda -j$(nproc)`;
+   - no model inference;
+   - no pack output.
+
+Acceptance:
+
+- Plan committed and pushed before source edit.
+- Source compiles on the server.
+- Existing behavior is unchanged when `GGML_MOE_EXPERT_PACK_LIST` is unset.
+- The code can load more than three configured source paths by construction.
+- No existing files are deleted, moved, truncated, or overwritten.
+- Result and exact build command are appended here and pushed.
+
+Rollback/rejection:
+
+- Revert if the build fails.
+- Revert if the patch changes existing env semantics or duplicate replacement
+  rules.
+- Do not proceed from this phase to lower-bit inference without solving the
+  storage and runtime type/bytes blockers recorded in 7OV.
+
+Result:
+
+- Pending.
