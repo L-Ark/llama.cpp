@@ -90820,3 +90820,48 @@ Decision:
   calibrated lower-byte Kimi model/expert pack, especially for up/gate experts.
 - Without that, the current IQ3_S uncalibrated runtime path is bounded far below
   stable `5 tok/s` by GP10-GP12 evidence.
+
+## GP14: q2_k regeneration feasibility
+
+Timestamp: `2026-07-07T02:43:01+0800`.
+
+Status: completed feasibility check; regeneration not currently feasible.
+
+Rationale:
+
+- GP13 found historical q2_k conversion logs but no q2_k GGUF assets.
+- Before treating q2_k as a practical next implementation path, check whether
+  the server still has the HF source model, enough disk, and reasonable
+  generation cost.
+
+Record:
+
+- `.Agent/runs/20260707-gp14-q2k-regeneration-feasibility/report.md`
+
+Server checks:
+
+- Free disk:
+  - `/dev/root`: `993G` total, `907G` used, `86G` available.
+- HF source model:
+  - `/root/lfz/models/Kimi-K2.7-Code` is missing.
+- Conversion scripts exist, including:
+  - `/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c/convert_hf_to_gguf.py`.
+- Historical q2_k conversion:
+  - rc `0`;
+  - exported to `/root/lfz/models/Kimi-K2.7-Code-GGUF/`;
+  - elapsed `5:51:43`;
+  - max RSS `57017852 KB`;
+  - file system outputs `660167272` blocks, consistent with hundreds of GiB.
+
+Decision:
+
+- Regenerating q2_k is not currently feasible:
+  - source HF model is absent;
+  - free disk is far below the historical q2_k output size;
+  - conversion is a multi-hour artifact-generation task and not an immediate
+    runtime optimization.
+- The current optimization work is now dependent on an externally supplied or
+  newly generated calibrated lower-byte Kimi GGUF/expert pack.
+- No further runtime code change should be promoted without first changing the
+  expert representation or model asset, because the current IQ3_S pack is
+  bounded far below `5 tok/s`.
