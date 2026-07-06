@@ -5116,3 +5116,27 @@
 - correctness_blk0_r2: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-rowtile-v2-correctness/top1-blk0-only-r2，独立 `d_src0_rows` 后复跑，仍 exit_status=139，未写出 top1-check.json。
 - memory: 两次 run 的 cgroup `memory.peak=16000000000`，`memory.events` 中 `oom=0`、`oom_kill=0`；page cache 计入 cgroup。崩溃不是可接受结果，不能进入 full-down top1 或 performance benchmark。
 - decision: v2 rowtile 方向目前没有通过最小 correctness gate。按规则回退源码，只保留 rejected artifact/plan。下一步不应继续堆性能测试，应先做小型 op-level harness/cuda-memcheck，定位 signal 11 是 Q8_0 wdata layout、kernel bounds、还是 CUDA async error 在 host 侧延迟爆出。
+
+## 2026-07-07 下一步 diagnostic plan：Q8_0 rowtile v2 signal 11 最小化定位
+
+- attempt_id: 20260707-q80-rowtile-v2-crash-root-cause
+- status: planned_before_experiment
+- why_now: v1 证明 Q8_0 数学正确但慢；v2 rowtile 在最小 blk.0 fixed-text gate 中 signal 11，且 cgroup `oom=0/oom_kill=0`，说明不能继续做 full-down 或 token-rate benchmark，必须先定位崩溃根因。
+- task_scope: 仍服务于最终任务：vendor DeepSeek 在 16GB host RAM（含 page cache）+ 32GB 5090 上对随机/泛化 prompt 稳定 >5 tok/s；不得使用 held-out prompt 调参，不得引入 prompt-specific 优化。
+- diagnostic_sequence: 1) 检查 `compute-sanitizer`/CUDA memcheck 是否可用；2) 复盘 v2 source diff 与 crash stderr，确认 crash 是 host signal 11 还是 CUDA async error 延迟；3) 若需要源码，做 default-off minimal debug path，只在 `GGML_MOE_STREAM_DOWN_Q80_COMPAT_DEBUG=*` 下启用，并把 batch size/cols/calls 限到极小；4) 用 blk.0 fixed-text 或更小 one-call probe 复现，收集 backtrace/sanitizer/decline reason。
+- source_rule: 默认路径必须保持当前稳定 SOTA/Kimi 功能不变；任何 debug source 如果不能证明安全且有价值，实验后回退，只提交 artifact/plan。若 debug helper default-off 且不改变默认行为，可在通过 build 后作为诊断工具提交，但不能视作性能优化。
+- expected_root_causes: Q8_0 wdata row layout/stride 与 batch route mapping 不一致；rowtile kernel bounds 或 shared-memory/shuffle 使用错误；device pointer array 指向 cache slot 时机错误；CUDA kernel illegal access 被后续 host API/sync 暴露；host-side dst scatter 使用未完整写出的 rows。
+- pass_gate: 只有明确定位 signal 11，并给出下一步可验证修复方案，才进入下一轮 source fix。任何 fixed-text top1 必须 same_top1=145/145 且 RAM<=16GB/no-swap，才能继续 full-down 或性能测试。
+- push_rule: root-cause artifact 和计划更新必须 push 到 `ssd/vendor/deepseek-token-rate-16gb`；若出现可接受新 SOTA，必须详细记录复现信息并立即 push 源码，再从 pushed commit 复现。
+
+## 2026-07-07 执行记录修正：Q8_0 rowtile v2 crash root-cause 与有效 correctness/perf gate
+
+- attempt_id: 20260707-q80-rowtile-v2-crash-root-cause
+- status: correctness_passed_performance_timeout_source_not_retained
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/q80-rowtile-v2-correctness-pass-perf-timeout-20260707.json
+- important_correction: 之前 v2 `exit_status=139` 不是 CUDA rowtile kernel 崩溃证据。gdb 显示 backtrace 为 `gguf_get_n_kv -> gguf_find_key -> main`，stderr 中有 `gguf_init_from_file: failed to open GGUF file 'result.gguf'`；原因是新 run 目录没有先放 baseline `result.gguf`，`llama-results --check` 对空 gguf ctx 解引用导致 segfault。
+- valid_blk0_check: 复制 v1 baseline `result.gguf` 后复跑 /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-check-with-baseline/top1-blk0-copy-baseline，strict 16GB/no-swap，exit=0，same_top1=145/145，first_mismatch_pos=-1，max_abs=0，mean_abs=0。
+- valid_full_down_check: 复制 v1 full-down baseline `result.gguf` 后复跑 /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-check-with-baseline/top1-full-down-copy-baseline，strict 16GB/no-swap，exit=0，same_top1=145/145，first_mismatch_pos=-1，max_abs=0，mean_abs=0，batch_accept=5800，batch_decline=0。
+- perf_probe: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-perf/france-n96，strict cold 16GB/no-swap，France n96，`GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=2`，exit=124 after 520s timeout；未完成 eval token timing。profile: down total=9.985 ms/call，cuda_batch=4.647 ms/call，fallback_t0=5.295 ms/call，batch_accept=3920，batch_decline=0。
+- memory: corrected checks and perf all recorded `memory.peak=16000000000`，`oom=0`，`oom_kill=0`；page cache included in cgroup。
+- decision: v2 rowtile 数学/正确率可行，但性能仍不可接受，不能 promotion，源码仍不保留。下一步 bottleneck 是 rowtile kernel/runtime performance，而不是 Q8_0 math parity。后续若继续该方向，必须先用 microbench/profile 降低 `cuda_batch` 和 timeout 风险，再重新进入 n96/generalized gate。
