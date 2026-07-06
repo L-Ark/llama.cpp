@@ -4173,3 +4173,26 @@
 - `template_check_deepseek3`: 之前的 `/root/lfz/runs/vendor-ds4-16gb/20260706T163647Z-20260707-4expert-ttype0normal-deepseek3-template-france-n128/france-4expert-deepseek3-template-n128-cpu40-vram0gb`，同样 `correctness_ok=false`，输出 timestamp/Chat 噪声。
 - `decision`: 4Expert 不是短期 token-rate 候选。tokenizer attr 层已修复空输出，但 default/deepseek/deepseek3 模板都无法通过 France correctness，且没有明显未消费 tensor；剩余问题更可能是 tensor alias / numerical / route compatibility，需要单独的 layer-output parity 计划。除非 France correctness 先过，否则不要对 4Expert 做性能 benchmark 或 generalized SOTA claim。
 - `next_allowed_work`: 回到 native generalized path；若未来重开 4Expert，先写 dedicated numerical parity plan，而不是继续试模板或 token-rate 参数。
+
+## 2026-07-07 hard-bound：generalized full up/down removal still insufficient alone
+
+- `attempt_id`: `20260707-generalized-full-updown-removal-bound`
+- `status`: `completed_bound_no_source_change`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json`
+- `prompt_scope`: 只使用 `calibration_dev_set_v1`；未使用 `held_out_test_set_v1_locked`。
+- `purpose`: 在关闭 grouped staging 后，重新回答一个核心问题：如果理想地移除 native decode up/down CPU fallback，本任务要求的 randomized/generalized `>5 tok/s` 是否自然成立。
+- `method`: 从 no-prompt-specific fallback profile 中用 decode up calls 反推 decode token 数，按 `40` 和 `43` 层做 sensitivity；用当前 `eval_tok_s` 反推 decode window，然后 zero-overhead 扣除 measured decode up/down fallback ms。
+- `result_40_layer`: mean upper-bound `4.916 tok/s`，min `3.592 tok/s`；`quantum` 和 `fibonacci` 即使理想移除 decode up/down fallback 仍低于 `5 tok/s`。
+- `result_43_layer`: mean upper-bound `5.433 tok/s`，min `3.919 tok/s`；`fibonacci` 仍低于 `5 tok/s`。
+- `decision`: up/down fallback 是大瓶颈，但“只做 up/down exact path”不足以保证 generalized `>5 tok/s`。后续候选必须同时处理 gate/source/residual decode cost，或者在表示/模型层减少整体 payload。
+
+## 2026-07-07 hard-bound：generalized residual bottleneck after up/down removal
+
+- `attempt_id`: `20260707-generalized-residual-bottleneck-after-updown`
+- `status`: `completed_measurement_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-residual-bottleneck-after-updown-bound-20260707.json`
+- `prompt_scope`: 只使用 calibration/dev artifacts；未使用 held-out。
+- `inputs`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json` 和 `.Agent/runs/20260705-vendor-ds4-coldstart/dev-gate-updown-overlap-trace-20260706.json`。
+- `observation`: gate/source trace 与 up/down fallback 同量级。示例：`fibonacci` 的 gate `src0_ms` trace total 为 `48157.035 ms`，decode up/down fallback 为约 `48085.4 ms`；`quantum` gate `src0_ms=38041.296 ms`，decode up/down fallback 约 `49631.8 ms`。注意 gate trace 未按 phase 分离且有 instrumentation，只能作为 bottleneck 量级，不直接从 eval decode window 扣除。
+- `decision`: 不允许写只替换 up/down fallback 的 runtime patch 来 claim generalized `>5 tok/s`。下一步必须先做 joint hard-bound：要么 exact graph/dataflow 证明可以同时减少/隐藏 gate source + up/down movement，要么 representation/top1 proof 证明能整体减少 payload 并保持 correctness。
+- `next_allowed_work`: 评估 current graph 是否能保留 gate results 并避免 up/down repeated source movement；若当前 graph 不具备该数据流，则记录为 generalized 5 的 blocker。另一条可重开路线是 representation，但必须先有 fixed-text top1/correctness proof；4Expert 已因 correctness 失败暂时关闭。
