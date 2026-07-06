@@ -1,0 +1,319 @@
+{
+  "aggregate_by_h2d_bandwidth_gib_s": {
+    "16": {
+      "below_5": [
+        "france",
+        "quantum",
+        "fibonacci",
+        "japan",
+        "climate"
+      ],
+      "max_tok_s": 3.971558687964485,
+      "mean_tok_s": 3.640936895454577,
+      "min_tok_s": 2.903801119177663
+    },
+    "24": {
+      "below_5": [
+        "france",
+        "quantum",
+        "fibonacci",
+        "japan",
+        "climate"
+      ],
+      "max_tok_s": 4.503574401148105,
+      "mean_tok_s": 4.089136493501856,
+      "min_tok_s": 3.178318345384699
+    },
+    "32": {
+      "below_5": [
+        "france",
+        "quantum",
+        "fibonacci",
+        "japan",
+        "climate"
+      ],
+      "max_tok_s": 4.826869432836382,
+      "mean_tok_s": 4.357883945397158,
+      "min_tok_s": 3.336006711687097
+    },
+    "48": {
+      "below_5": [
+        "quantum",
+        "fibonacci",
+        "japan"
+      ],
+      "max_tok_s": 5.20017053745745,
+      "mean_tok_s": 4.664962171499314,
+      "min_tok_s": 3.510158942176312
+    },
+    "64": {
+      "below_5": [
+        "quantum",
+        "fibonacci"
+      ],
+      "max_tok_s": 5.409344873392096,
+      "mean_tok_s": 4.835563506252282,
+      "min_tok_s": 3.6042363610385415
+    }
+  },
+  "artifact_id": "20260707-compact-batched-updown-transfer-hard-bound",
+  "assumptions": {
+    "layer_sensitivity_used": 43,
+    "logical_bytes_source": "fallback_by_role_phase up/decode + down/decode logical_gib from calibration/dev runs",
+    "model": "Replace decode up/down CPU fallback with a hypothetical perfect batched route that streams each measured logical up/down byte over H2D once at the given sustained bandwidth; kernel, scheduling, D2H, scatter, and allocation overhead are zero. This is optimistic."
+  },
+  "decision": {
+    "next_action": "Before runtime prototype, identify additional non-updown decode costs and/or a representation route that avoids streaming full expert bytes from host for random prompts. Do not implement compact updown alone as the main SOTA attempt.",
+    "source_edit_allowed_by_this_artifact": false,
+    "summary": "Compact/batched updown transfer alone is not sufficient for the generalized 5 tok/s target under realistic transfer costs. Even the previously recorded zero-overhead full up/down removal leaves Fibonacci below 5; adding any H2D transfer cost pushes more prompts below 5. This route can still be a component, but must be combined with other decode bottleneck reductions or GPU-resident representation changes."
+  },
+  "prompt_scope": "calibration_dev_set_v1 only; held_out_test_set_v1_locked not used",
+  "results": [
+    {
+      "bandwidth_sensitivity": [
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 16,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 9307.25,
+          "remaining_decode_ms": 26262.315069767403,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 3.971558687964485
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 24,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 6204.833333333333,
+          "remaining_decode_ms": 23159.898403100735,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 4.503574401148105
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 32,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 4653.625,
+          "remaining_decode_ms": 21608.690069767403,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 4.826869432836382
+        },
+        {
+          "below_5": false,
+          "h2d_bandwidth_gib_s": 48,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 3102.4166666666665,
+          "remaining_decode_ms": 20057.48173643407,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 5.20017053745745
+        },
+        {
+          "below_5": false,
+          "h2d_bandwidth_gib_s": 64,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 2326.8125,
+          "remaining_decode_ms": 19281.877569767403,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 5.409344873392096
+        }
+      ],
+      "current_decode_ms": 40116.27906976744,
+      "current_eval_tok_s": 2.6,
+      "decode_updown_fallback_ms": 23161.21400000004,
+      "down_decode_logical_gib": 74.458,
+      "estimated_decode_tokens": 104.30232558139535,
+      "prompt_id": "france",
+      "total_decode_logical_gib": 148.916,
+      "up_decode_logical_gib": 74.458,
+      "zero_overhead_updown_removed_tok_s": 6.151691258760012
+    },
+    {
+      "bandwidth_sensitivity": [
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 16,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 12881.75,
+          "remaining_decode_ms": 39229.13116646249,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 3.679930215729447
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 24,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 8587.833333333334,
+          "remaining_decode_ms": 34935.214499795824,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 4.132233540948282
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 32,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 6440.875,
+          "remaining_decode_ms": 32788.25616646249,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 4.402810091008694
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 48,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 4293.916666666667,
+          "remaining_decode_ms": 30641.297833129156,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 4.711303871737363
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 64,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 3220.4375,
+          "remaining_decode_ms": 29567.81866646249,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 4.882350867499771
+        }
+      ],
+      "current_decode_ms": 75979.19216646267,
+      "current_eval_tok_s": 1.9,
+      "decode_updown_fallback_ms": 49631.81100000018,
+      "down_decode_logical_gib": 103.054,
+      "estimated_decode_tokens": 144.36046511627907,
+      "prompt_id": "quantum",
+      "total_decode_logical_gib": 206.108,
+      "up_decode_logical_gib": 103.054,
+      "zero_overhead_updown_removed_tok_s": 5.479120076648647
+    },
+    {
+      "bandwidth_sensitivity": [
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 16,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 12881.75,
+          "remaining_decode_ms": 49714.308656634516,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 2.903801119177663
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 24,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 8587.833333333334,
+          "remaining_decode_ms": 45420.39198996785,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 3.178318345384699
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 32,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 6440.875,
+          "remaining_decode_ms": 43273.433656634516,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 3.336006711687097
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 48,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 4293.916666666667,
+          "remaining_decode_ms": 41126.47532330118,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 3.510158942176312
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 64,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 3220.4375,
+          "remaining_decode_ms": 40052.996156634516,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 3.6042363610385415
+        }
+      ],
+      "current_decode_ms": 84917.92065663474,
+      "current_eval_tok_s": 1.7,
+      "decode_updown_fallback_ms": 48085.36200000023,
+      "down_decode_logical_gib": 103.054,
+      "estimated_decode_tokens": 144.36046511627907,
+      "prompt_id": "fibonacci",
+      "total_decode_logical_gib": 206.108,
+      "up_decode_logical_gib": 103.054,
+      "zero_overhead_updown_removed_tok_s": 3.919371077693945
+    },
+    {
+      "bandwidth_sensitivity": [
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 16,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 9104.875,
+          "remaining_decode_ms": 27049.931883720925,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 3.7720939246555534
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 24,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 6069.916666666667,
+          "remaining_decode_ms": 24014.973550387593,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 4.248802669169854
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 32,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 4552.4375,
+          "remaining_decode_ms": 22497.494383720925,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 4.535388785106762
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 48,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 3034.9583333333335,
+          "remaining_decode_ms": 20980.015217054257,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 4.863432302851145
+        },
+        {
+          "below_5": false,
+          "h2d_bandwidth_gib_s": 64,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 2276.21875,
+          "remaining_decode_ms": 20221.275633720925,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 5.0459172590861305
+        }
+      ],
+      "current_decode_ms": 42514.53488372093,
+      "current_eval_tok_s": 2.4,
+      "decode_updown_fallback_ms": 24569.478000000006,
+      "down_decode_logical_gib": 72.839,
+      "estimated_decode_tokens": 102.03488372093024,
+      "prompt_id": "japan",
+      "total_decode_logical_gib": 145.678,
+      "up_decode_logical_gib": 72.839,
+      "zero_overhead_updown_removed_tok_s": 5.685960450395252
+    },
+    {
+      "bandwidth_sensitivity": [
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 16,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 10453.75,
+          "remaining_decode_ms": 30214.620169868595,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 3.877300529745735
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 24,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 6969.166666666666,
+          "remaining_decode_ms": 26730.036836535262,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 4.38275351085834
+        },
+        {
+          "below_5": true,
+          "h2d_bandwidth_gib_s": 32,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 5226.875,
+          "remaining_decode_ms": 24987.745169868595,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 4.688344706346856
+        },
+        {
+          "below_5": false,
+          "h2d_bandwidth_gib_s": 48,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 3484.583333333333,
+          "remaining_decode_ms": 23245.453503201927,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 5.0397452032742995
+        },
+        {
+          "below_5": false,
+          "h2d_bandwidth_gib_s": 64,
+          "h2d_ms_if_all_decode_updown_bytes_streamed_once": 2613.4375,
+          "remaining_decode_ms": 22374.307669868595,
+          "tok_s_if_cpu_fallback_replaced_by_batched_h2d_zero_kernel_overhead": 5.235968170244871
+        }
+      ],
+      "current_decode_ms": 50935.28816986856,
+      "current_eval_tok_s": 2.3,
+      "decode_updown_fallback_ms": 31174.417999999965,
+      "down_decode_logical_gib": 83.63,
+      "estimated_decode_tokens": 117.15116279069767,
+      "prompt_id": "climate",
+      "total_decode_logical_gib": 167.26,
+      "up_decode_logical_gib": 83.63,
+      "zero_overhead_updown_removed_tok_s": 5.928441499976551
+    }
+  ],
+  "source_artifacts": {
+    "dev_fallback_profile": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+    "full_updown_zero_overhead_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json",
+    "one_stream_trace": ".Agent/runs/20260705-vendor-ds4-coldstart/updown-one-stream-trace-france-20260707.json"
+  },
+  "status": "completed_hard_bound_no_source_edit_not_sota"
+}

@@ -4466,3 +4466,20 @@
 - `trace`: up/down `cache_hit=0`、`cache_inserted=0`，但 `src0_ms` 仍为主因：up 平均 `2.057 ms/call`、down 平均 `2.058 ms/call`；总 stage share 中 `src0_ms=91.61%`。
 - `decision`: reject。禁止 up/down cache insert 没有改善，反而从 all-cache up/down 的 `1.7 tok/s` 降到 `1.4 tok/s`。瓶颈不是单纯 cache 抖动，而是每 expert source movement 本身太贵。
 - `next_plan`: 只剩 compact/batched exact route 值得继续：同一 layer/token 的 topK experts 必须合并搬运/计算，减少 `9357 up + 9357 down` 这类 per-expert calls；否则即使 CPU fallback 归零，token rate 也会下降。
+
+## 2026-07-07 hard-bound：compact/batched updown transfer alone insufficient
+
+- `attempt_id`: `20260707-compact-batched-updown-transfer-hard-bound`
+- `status`: `completed_hard_bound_no_source_edit_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-batched-updown-transfer-hard-bound-20260707.json`
+- `prompt_scope`: 只使用 `calibration_dev_set_v1`；未使用 held-out。
+- `method`: 基于 `generalized-full-updown-removal-bound-20260707.json` 和 dev fallback logical GiB，假设一个理想 compact/batched route：decode up/down CPU fallback 完全消失；所有 up/down logical expert bytes 只按一次 batched H2D 传输；kernel、调度、D2H、scatter、alloc 全部零开销。这是乐观上界。
+- `aggregate_43_layer_bound`:
+  - 16 GiB/s H2D：mean `3.641 tok/s`，min `2.904 tok/s`，五个 dev prompt 全部低于 5。
+  - 24 GiB/s H2D：mean `4.089 tok/s`，min `3.178 tok/s`，五个 dev prompt 全部低于 5。
+  - 32 GiB/s H2D：mean `4.358 tok/s`，min `3.336 tok/s`，五个 dev prompt 全部低于 5。
+  - 48 GiB/s H2D：mean `4.665 tok/s`，min `3.510 tok/s`，quantum/fibonacci/Japan 低于 5。
+  - 64 GiB/s H2D：mean `4.836 tok/s`，min `3.604 tok/s`，quantum/fibonacci 低于 5。
+- `decision`: compact/batched updown transfer alone 不足以达成“随机 prompt 稳定 >5 tok/s”的任务目标。原因是之前零开销 full up/down removal bound 已经显示 Fibonacci 仍低于 5；加入任何真实 H2D 成本后，更多 prompt 低于 5。
+- `implication`: 不能现在就写 compact up/down runtime 原型作为主 SOTA 路线。它最多是组合优化的一部分；必须同时解决 non-updown decode cost，或找到避免从 host streaming full expert bytes 的表示/驻留方案。
+- `next_plan`: 回到全 decode bottleneck 拆解：在 calibration/dev 上记录 gate one-stream、remaining CPU fallback、dense/attention、sampling/graph overhead 的分段时间，找除 up/down 外还能压缩的秒数；同时评估 VRAM-resident low-bit/partial representation 是否能在 32GB 显存内容纳更大比例的 random-prompt expert payload。
