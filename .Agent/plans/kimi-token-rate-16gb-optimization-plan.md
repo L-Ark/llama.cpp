@@ -88134,7 +88134,7 @@ Implementation plan:
 5. Keep all source indices monotonic and equal to load order.
 6. Validate:
    - local/source inspection;
-   - remote CUDA build with `cmake --build build-cuda -j$(nproc)`;
+   - remote CUDA build with the server's configured CUDA build directory;
    - no model inference;
    - no pack output.
 
@@ -88157,4 +88157,69 @@ Rollback/rejection:
 
 Result:
 
-- Pending.
+- Plan commit: `a49922f6e`.
+- Source commit: `75c8de9b8`.
+- Remote branch: `wici/vendor/kimi-moe-stream-on-vendor`.
+- Source change:
+  - added `GGML_MOE_EXPERT_PACK_LIST`;
+  - preserved existing `GGML_MOE_EXPERT_PACK`,
+    `GGML_MOE_EXPERT_PACK_OVERLAY`, and
+    `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA` behavior when the list env is unset;
+  - preserved duplicate-key semantics and replacement behavior.
+
+Validation:
+
+- Initial build attempt:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260706-022053Z-phase7ow-expert-pack-source-list
+```
+
+  - command: `cmake --build build-cuda -j$(nproc)`;
+  - exit: `1`;
+  - reason: server has no `build-cuda` directory;
+  - decision: infrastructure/command error, not a source compile failure.
+- Accepted build run:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260706-022227Z-phase7ow-expert-pack-source-list-build
+```
+
+  - repo head: `75c8de9b864dfa005bf7ac5623a00973ed6f86f1`;
+  - git status: clean;
+  - command: `cmake --build build-cuda-batch -j$(nproc)`;
+  - start: `2026-07-06T02:22:27Z`;
+  - end: `2026-07-06T02:23:00Z`;
+  - exit: `0`;
+  - model inference: not run;
+  - pack output: none.
+
+Build notes:
+
+- The build completed all targets through `llama-server`.
+- Stderr contained existing compile warnings in `moe_stream_batch.cu`
+  (`unused`/`missing-declarations`/format truncation) and a CMake
+  `LLAMA_CURL` deprecation warning.
+- No warning was specific to the new source-list helper.
+
+Reproduce result:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git checkout vendor/kimi-moe-stream-on-vendor
+git merge --ff-only 75c8de9b864dfa005bf7ac5623a00973ed6f86f1
+cmake --build build-cuda-batch -j"$(nproc)"
+```
+
+Decision:
+
+- Accept 7OW as a reproducible runtime-plumbing step.
+- This is not a token-rate SOTA change and did not run inference.
+- Future pack partition work can now use either:
+  - the existing three explicit env vars; or
+  - `GGML_MOE_EXPERT_PACK_LIST` for more than three physical pack sources.
+- The hard blockers from 7OV remain:
+  - lower-bit partitions still need enough total storage or explicit cleanup;
+  - current `IQ3_S` runtime still cannot consume lower-bit `remote_nbytes`
+    entries safely.
