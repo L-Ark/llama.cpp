@@ -93189,3 +93189,34 @@ Validation:
    `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
 3. Confirm output contains five `part_size_ok` lines and one `part_total_ok`
    line before the current disk gate.
+
+GP36 execution result:
+
+- Timestamp: `2026-07-07T11:15:00+0800`.
+- Commit tested on remote:
+  `9aa90af34d3c8add20f294ea6ca94dc647e46c5b`.
+- Record:
+  `.Agent/runs/20260707-gp36-iq1s-part-metadata-validation/report.md`.
+- Remote command:
+  `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+- Result:
+  - exit code `0`;
+  - no deletion executed;
+  - no download executed;
+  - no smoke executed;
+  - five `part_size_ok` lines emitted;
+  - `part_total_ok bytes=204430872480`;
+  - `required_iq1s_bytes=204430872480`;
+  - `free_before=89649844224`;
+  - `required_with_20GiB_reserve=225905708960`;
+  - `missing=136255864736`;
+  - `space_ready=0`;
+  - `smoke_ready=0`.
+- Correction:
+  - earlier hardcoded final size `204429739520` was wrong;
+  - corrected authoritative size is `204430872480`;
+  - correction happened before any real download or smoke run.
+- Decision:
+  - IQ1_S part metadata gate passes;
+  - full IQ1_S n32 smoke remains gated only by disk capacity or explicit
+    deletion approval.
