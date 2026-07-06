@@ -94118,6 +94118,104 @@ GP46 execution result:
   - no runtime behavior changed;
   - no token-rate or output-quality claim is made.
 
+## GP49: dev-only IO queue and backend utilization analysis
+
+Timestamp: `2026-07-07T07:34:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- GP46/GP47/GP48 show that the obvious byte-reduction and cheap-prediction
+  paths are insufficient.
+- The next question is whether the current runtime is leaving throughput on the
+  table because the actual IO path falls back to direct reads, low iouring
+  inflight, small batches, or high wait time.
+- Existing dev N96 `metrics.json` files already include enough atexit counters
+  to analyze this without adding runtime code.
+
+Theory and upper bound:
+
+- If iouring bytes per decode second are far below the measured pure-IO peak
+  (`~10 GiB/s`) and inflight average is low, then the bottleneck is queue
+  starvation or backend fallback, not SSD peak bandwidth.
+- If many reads are direct rather than iouring, then the current scheduling path
+  is not consistently using the high-throughput batch path.
+- Improving token rate toward `5 tok/s` requires either:
+  - moving more known expert jobs into iouring batches;
+  - avoiding direct-read fallback;
+  - or reducing expert bytes/demand enough that low queue utilization matters
+    less.
+
+Scope:
+
+- Add `.Agent/run-tools/kimi_io_queue_metrics_summary.py`.
+- Inputs:
+  - committed dev-only N96 `metrics.json` files;
+  - no held-out test metrics.
+- Outputs:
+  - CSV/JSON/Markdown summary of:
+    - token rate and decode seconds;
+    - iouring GiB/s;
+    - iouring/direct read mix;
+    - average inflight and batch histogram;
+    - iouring wait time;
+    - VRAM hit rates;
+    - current-down-overlap job histogram.
+- No runtime code changes.
+
+Validation:
+
+1. Run locally on committed dev metrics.
+2. Run remotely in `/root/lfz/tmp/vendor-kimi-speculative-gp33`.
+3. Confirm local and remote headline metrics match.
+4. No token-rate or SOTA claim.
+
+Acceptance:
+
+- The report identifies whether backend fallback/queue starvation is a higher
+  priority than v2 low-byte payload integration.
+- The next implementation direction must follow the measured bottleneck.
+
+GP49 execution result:
+
+- Timestamp: `2026-07-07T07:04:32+08:00`.
+- Record:
+  `.Agent/runs/20260707-gp49-io-queue-metrics/report.md`.
+- Added:
+  `.Agent/run-tools/kimi_io_queue_metrics_summary.py`.
+- Inputs:
+  - seven committed dev-only N96 `metrics.json` files from
+    `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile`;
+  - no held-out test metrics were used.
+- Headline result:
+  - weighted token rate: `0.265472 tok/s`;
+  - aggregate iouring throughput: `0.342567 GiB/s`;
+  - utilization vs `10.3 GiB/s` pure-IO peak: `0.033259`;
+  - iouring read ratio: `0.427672`;
+  - direct read ratio: `0.572328`;
+  - weighted iouring inflight average: `3.334995`;
+  - iouring wait/decode fraction: `0.065532`.
+- Interpretation:
+  - general dev prompts are not saturating SSD or iouring;
+  - direct-read fallback dominates many prompts;
+  - France is the exception with `iouring_read_ratio=0.962` and
+    `iouring_gib_s=4.814`, explaining why it is much faster than the broader
+    general set;
+  - next runtime work should target putting more known general-prompt expert
+    loads onto the batched iouring path and reducing direct fallback, before
+    implementing real v2 mixed-type payload compute.
+- Validation:
+  - local summary run passed;
+  - local `python3 -m py_compile` passed;
+  - local `git diff --check` passed;
+  - remote summary run produced matching headline metrics;
+  - remote `python3 -m py_compile` and `git diff --check` passed.
+- Decision:
+  - accepted as non-SOTA planning evidence;
+  - no runtime behavior changed;
+  - no token-rate or output-quality claim is made.
+
 ## GP48: dev-only static expert-prior prefetch analysis
 
 Timestamp: `2026-07-07T07:24:00+08:00`.
