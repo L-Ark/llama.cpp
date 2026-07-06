@@ -1,0 +1,1 @@
+Here's a Python function to reverse a string: ```python def reverse_string(s): return s[::-1] ``` **Example usage:** ```python text = "Hello, World!" reversed_text = reverse_string(text) print(reversed_text) # Output: "!dlroW ,olleH" ``` **How it works:** `s[::-1]` uses Python's slice notation with a step of `-1`, which creates a new string containing all characters

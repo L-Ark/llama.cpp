@@ -256,6 +256,78 @@ Smoke validation on 2026-07-06:
   - Run the full `n96`, `PROFILE=1`, strict 16GB cold-start dev baseline over
     all dev prompts, then rerun route entropy analysis on the full dev set.
 
+Formal dev baseline on 2026-07-06:
+
+- Remote run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-114204Z-general-dev-baseline-n96-profile`.
+- Local copied record:
+  `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile`.
+- Source branch/head:
+  `vendor/kimi-general-prompt-token-rate-16gb`, `12a5b1d79`.
+- Config:
+  - `n96`, `PROFILE=1`;
+  - strict cold start per prompt;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - one RTX 5090 / 32 GB VRAM;
+  - current Kimi SOTA runtime/env, no runtime optimization changes.
+- Completion:
+  - all seven dev prompts completed;
+  - no timeout/failure records;
+  - all seven quality checks passed;
+  - every run hit `memory.peak=15899996160`, so the formal baseline is at the
+    16GB cgroup ceiling including page cache.
+
+| prompt | quality | tok/s | TTFT ms | decode ms/runs | expert iouring GiB | iouring wait ms | upgate hit | down hit |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `dev_france_regression` | pass | 1.26 | 78633.75 | 61014.54/77 | 293.72 | 52397.23 | 44.1% | 73.0% |
+| `dev_japan_factual` | pass | 0.42 | 74493.28 | 202574.74/85 | 136.73 | 26679.44 | 44.7% | 73.3% |
+| `dev_photosynthesis_factual` | pass | 0.24 | 66719.53 | 393773.93/94 | 62.77 | 13517.01 | 40.9% | 71.9% |
+| `dev_linear_equation` | pass | 0.16 | 85340.38 | 218566.07/34 | 12.86 | 2391.69 | 26.0% | 65.8% |
+| `dev_python_reverse` | pass | 0.17 | 84157.32 | 566552.71/95 | 33.28 | 6939.05 | 35.8% | 69.9% |
+| `dev_zh_france` | pass | 0.38 | 72540.09 | 128861.89/49 | 58.30 | 11866.10 | 47.1% | 74.1% |
+| `dev_mixed_summary` | pass | 0.20 | 91143.37 | 266891.43/54 | 32.06 | 6673.32 | 36.3% | 69.5% |
+
+Aggregate dev baseline:
+
+- min token rate: `0.16 tok/s`;
+- median token rate: `0.24 tok/s`;
+- mean token rate: `0.404 tok/s`;
+- current gap to the deployment target:
+  - min-rate target gap: `5 / 0.16 = 31.25x`;
+  - median-rate target gap: `5 / 0.24 = 20.83x`.
+
+Route entropy result:
+
+- Entropy output:
+  `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/entropy/summary.md`.
+- The highest-routed-cost layer/role entries are dominated by
+  `high_entropy_or_low_overlap`.
+- Examples from the top of the entropy table:
+  - `layer 57 down`: top-8 Jaccard mean `0.045`, min `0.000`,
+    normalized entropy `0.889`, routed `28.36 GiB`;
+  - `layer 58 down`: top-8 Jaccard mean `0.059`, min `0.000`,
+    normalized entropy `0.903`, routed `28.36 GiB`;
+  - `layer 25 down`: top-8 Jaccard mean `0.074`, min `0.000`,
+    normalized entropy `0.901`, routed `28.36 GiB`.
+
+Decision:
+
+- A fixed prompt-agnostic hotset / expert pack is unlikely to close the gap by
+  itself. The full dev trace shows many expensive layers have low cross-prompt
+  top-K overlap and high entropy.
+- The next optimization branch should not be another France-style fixed hotset.
+- Next design step must focus on prompt-independent byte reduction and/or
+  runtime-adaptive behavior:
+  - quantify per-token non-I/O vs movement time for the full dev baseline;
+  - estimate a lower bound for fixed layer-aware cache using the full dev
+    traces, but treat it as a ceiling/proof-of-insufficiency unless it can
+    reduce worst-prompt movement by an order of magnitude;
+  - prioritize mechanisms that reduce bytes/token independent of prompt:
+    lower-byte expert representation, compression/decompression on GPU,
+    larger exposed IO batches where dependency allows, and route/prefetch
+    prediction only if its acceptance/coverage is measured on dev and later
+    validated on held-out test.
+
 ## Current correctness base
 
 The correctness base is the vendor Kimi path after the DeepSeek2 YaRN kq-scale
