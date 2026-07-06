@@ -1,0 +1,862 @@
+{
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "required_expert_equiv_payload_gib": 11.87971032580139,
+    "target_tok_s": 10.0
+  },
+  "created_at_utc": "2026-07-06T01:13:21.281086+00:00",
+  "decision": {
+    "download_allowed_now": false,
+    "found_k_below_128_gguf": false,
+    "found_under_65gib_files": true,
+    "note": "No K<128 complete GGUF candidate surfaced if found_k_below_128_gguf is false. Under-65GiB files still require header-bound/correctness/benchmark and current disk is insufficient.",
+    "sota_changed": false
+  },
+  "gguf_files_under_65gib": [
+    {
+      "file": {
+        "blobId": "7c7de858772e4ed0c74fde191be675e6d44e2e6f",
+        "lfs_oid": null,
+        "rfilename": "DeepSeek-V4-Flash-KR-ThinkTop64-L10-HF-FP4.sidecar.gguf",
+        "size": 905970592,
+        "size_gib": 0.8437508642673492
+      },
+      "k_values": [],
+      "modelId": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF",
+      "notes": [
+        "has_gguf",
+        "sidecar_named"
+      ],
+      "url": "https://huggingface.co/KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blobId": "ba9a91da1df3d391d28f60b858c070732f0c0f44",
+        "lfs_oid": null,
+        "rfilename": "DeepSeek-V4-Flash-KR-ThinkTop128-L10-HF-FP4.sidecar.gguf",
+        "size": 1811940512,
+        "size_gib": 1.6875011026859283
+      },
+      "k_values": [],
+      "modelId": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF",
+      "notes": [
+        "has_gguf",
+        "sidecar_named"
+      ],
+      "url": "https://huggingface.co/KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blobId": "4bb67eaf7ab638660fabaec149de7a097b4021b3",
+        "lfs_oid": null,
+        "rfilename": "DeepSeek-V4-Flash-KR-Full256-L10-HF-FP4.sidecar.gguf",
+        "size": 3623880352,
+        "size_gib": 3.3750015795230865
+      },
+      "k_values": [],
+      "modelId": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF",
+      "notes": [
+        "has_gguf",
+        "sidecar_named"
+      ],
+      "url": "https://huggingface.co/KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "file": {
+        "blobId": "2828317ac06ff002c7c8925fff40d5640c814c9c",
+        "lfs_oid": null,
+        "rfilename": "DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf",
+        "size": 68579737280,
+        "size_gib": 63.869857490062714
+      },
+      "k_values": [],
+      "modelId": "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4",
+      "notes": [
+        "has_gguf"
+      ],
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4"
+    },
+    {
+      "file": {
+        "blobId": "b8dfaea26fe96adf51be6014f13c29727d4459d4",
+        "lfs_oid": null,
+        "rfilename": "DeepSeek-V4-Flash-REAP25-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+        "size": 68579737312,
+        "size_gib": 63.869857519865036
+      },
+      "k_values": [],
+      "modelId": "eouya2/DeepSeek-V4-Flash-REAP25-REAPDataset10K-BalancedWithKO-DS4",
+      "notes": [
+        "has_gguf"
+      ],
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP25-REAPDataset10K-BalancedWithKO-DS4"
+    },
+    {
+      "file": {
+        "blobId": "84691e0e1452e5ee7fd5568f7d75393e4e0ea406",
+        "lfs_oid": null,
+        "rfilename": "DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+        "size": 50439362272,
+        "size_gib": 46.97531673312187
+      },
+      "k_values": [],
+      "modelId": "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+      "notes": [
+        "has_gguf"
+      ],
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4"
+    },
+    {
+      "file": {
+        "blobId": "3b858d7b83c8c8dc739ba7668302a97d1db9aca2",
+        "lfs_oid": null,
+        "rfilename": "DeepSeek-V4-Flash-IQ1_S-XL.gguf",
+        "size": 61540805344,
+        "size_gib": 57.31434127688408
+      },
+      "k_values": [],
+      "modelId": "persadian/DeepSeek-V4-Flash-IQ1_S-XL",
+      "notes": [
+        "has_gguf"
+      ],
+      "url": "https://huggingface.co/persadian/DeepSeek-V4-Flash-IQ1_S-XL"
+    },
+    {
+      "file": {
+        "blobId": "bcdfc9f557c9e662e595e28efed8291be4b38075",
+        "lfs_oid": null,
+        "rfilename": "dense/model-dense.gguf",
+        "size": 8767239936,
+        "size_gib": 8.165128469467163
+      },
+      "k_values": [],
+      "modelId": "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+      "notes": [
+        "has_gguf",
+        "sidecar_named"
+      ],
+      "url": "https://huggingface.co/shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs"
+    },
+    {
+      "file": {
+        "blobId": "fbc6873277a8e7f5d2f0d09ba24f8b31934db5ab",
+        "lfs_oid": null,
+        "rfilename": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+        "size": 50439361920,
+        "size_gib": 46.975316405296326
+      },
+      "k_values": [
+        128
+      ],
+      "modelId": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "notes": [
+        "has_gguf"
+      ],
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF"
+    },
+    {
+      "file": {
+        "blobId": "cd524e77a0d915cbde6975e3362d8c4961539716",
+        "lfs_oid": null,
+        "rfilename": "DeepSeek-V4-Flash-REAP-K128.gguf",
+        "size": 55875180192,
+        "size_gib": 52.03781667351723
+      },
+      "k_values": [
+        128
+      ],
+      "modelId": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "notes": [
+        "has_gguf"
+      ],
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF"
+    }
+  ],
+  "k_below_128_models_with_gguf": [],
+  "method": "HF API broad/narrow REAP, K16-K96, sidecar, IQ1/Q1 searches; blobs metadata only; no model downloads.",
+  "model_details": [
+    {
+      "detected_k_values": [],
+      "gguf_count": 3,
+      "lastModified": "2026-05-20T14:06:22.000Z",
+      "modelId": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF",
+      "notes": [
+        "has_gguf",
+        "sidecar_named"
+      ],
+      "search_hits": [
+        "DeepSeek-v4-Flash-sidecar"
+      ],
+      "sha": "d141a597c3b36cac4e92025659f02993445b6958",
+      "smallest_ggufs": [
+        {
+          "blobId": "7c7de858772e4ed0c74fde191be675e6d44e2e6f",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-KR-ThinkTop64-L10-HF-FP4.sidecar.gguf",
+          "size": 905970592,
+          "size_gib": 0.8437508642673492
+        },
+        {
+          "blobId": "ba9a91da1df3d391d28f60b858c070732f0c0f44",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-KR-ThinkTop128-L10-HF-FP4.sidecar.gguf",
+          "size": 1811940512,
+          "size_gib": 1.6875011026859283
+        },
+        {
+          "blobId": "4bb67eaf7ab638660fabaec149de7a097b4021b3",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-KR-Full256-L10-HF-FP4.sidecar.gguf",
+          "size": 3623880352,
+          "size_gib": 3.3750015795230865
+        }
+      ],
+      "tags": [
+        "gguf",
+        "deepseek-v4",
+        "ds4",
+        "sidecar",
+        "korean",
+        "private",
+        "license:other",
+        "region:us"
+      ],
+      "total_gguf_gib": 5.906253546476364,
+      "url": "https://huggingface.co/KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "detected_k_values": [],
+      "gguf_count": 1,
+      "lastModified": "2026-05-21T04:03:32.000Z",
+      "modelId": "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4",
+      "notes": [
+        "has_gguf"
+      ],
+      "search_hits": [
+        "DeepSeek-v4-Flash-REAP",
+        "deepseek-v4-flash-reap",
+        "DeepSeek V4 Flash REAP"
+      ],
+      "sha": "287ab178f9a8762af54d74023a68c868facc3fc4",
+      "smallest_ggufs": [
+        {
+          "blobId": "2828317ac06ff002c7c8925fff40d5640c814c9c",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf",
+          "size": 68579737280,
+          "size_gib": 63.869857490062714
+        }
+      ],
+      "tags": [
+        "gguf",
+        "deepseek-v4",
+        "ds4",
+        "reap",
+        "expert-pruning",
+        "livecodebench",
+        "experimental",
+        "text-generation",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "total_gguf_gib": 63.869857490062714,
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4"
+    },
+    {
+      "detected_k_values": [],
+      "gguf_count": 1,
+      "lastModified": "2026-05-28T12:04:55.000Z",
+      "modelId": "eouya2/DeepSeek-V4-Flash-REAP25-REAPDataset10K-BalancedWithKO-DS4",
+      "notes": [
+        "has_gguf"
+      ],
+      "search_hits": [
+        "DeepSeek-v4-Flash-REAP",
+        "deepseek-v4-flash-reap",
+        "DeepSeek V4 Flash REAP"
+      ],
+      "sha": "654caec4cfe76876f40faca6f9ea01ec8a1952fa",
+      "smallest_ggufs": [
+        {
+          "blobId": "b8dfaea26fe96adf51be6014f13c29727d4459d4",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-REAP25-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+          "size": 68579737312,
+          "size_gib": 63.869857519865036
+        }
+      ],
+      "tags": [
+        "gguf",
+        "deepseek-v4",
+        "ds4",
+        "reap",
+        "expert-pruning",
+        "reap-dataset",
+        "experimental",
+        "text-generation",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "total_gguf_gib": 63.869857519865036,
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP25-REAPDataset10K-BalancedWithKO-DS4"
+    },
+    {
+      "detected_k_values": [],
+      "gguf_count": 1,
+      "lastModified": "2026-05-29T12:27:41.000Z",
+      "modelId": "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+      "notes": [
+        "has_gguf"
+      ],
+      "search_hits": [
+        "DeepSeek-v4-Flash-REAP",
+        "deepseek-v4-flash-reap",
+        "DeepSeek V4 Flash REAP"
+      ],
+      "sha": "7b86e8b7092de195f007029ec2cd4b9db3567aa8",
+      "smallest_ggufs": [
+        {
+          "blobId": "84691e0e1452e5ee7fd5568f7d75393e4e0ea406",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+          "size": 50439362272,
+          "size_gib": 46.97531673312187
+        }
+      ],
+      "tags": [
+        "gguf",
+        "deepseek-v4",
+        "ds4",
+        "reap",
+        "expert-pruning",
+        "reap-dataset",
+        "experimental",
+        "text-generation",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "total_gguf_gib": 46.97531673312187,
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4"
+    },
+    {
+      "detected_k_values": [],
+      "gguf_count": 0,
+      "lastModified": "2026-06-04T20:16:19.000Z",
+      "modelId": "lvyufeng/DeepSeek-V4-Flash-IQ1_M",
+      "notes": [],
+      "search_hits": [
+        "DeepSeek-v4-Flash-IQ1"
+      ],
+      "sha": "ecc894fdfc1adce1eacff0a46ec46cd3175c1dbf",
+      "smallest_ggufs": [],
+      "tags": [
+        "gguf",
+        "deepseek-v4-flash",
+        "moe",
+        "quantization",
+        "iq1_m",
+        "dynamic-quantization",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ],
+      "total_gguf_gib": 0.0,
+      "url": "https://huggingface.co/lvyufeng/DeepSeek-V4-Flash-IQ1_M"
+    },
+    {
+      "detected_k_values": [],
+      "gguf_count": 1,
+      "lastModified": "2026-05-26T18:44:51.000Z",
+      "modelId": "persadian/DeepSeek-V4-Flash-IQ1_S-XL",
+      "notes": [
+        "has_gguf"
+      ],
+      "search_hits": [
+        "DeepSeek-v4-Flash-IQ1"
+      ],
+      "sha": "7e641d4869031039314f0ae48c79a4f2a7862230",
+      "smallest_ggufs": [
+        {
+          "blobId": "3b858d7b83c8c8dc739ba7668302a97d1db9aca2",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-IQ1_S-XL.gguf",
+          "size": 61540805344,
+          "size_gib": 57.31434127688408
+        }
+      ],
+      "tags": [
+        "llama.cpp",
+        "gguf",
+        "programming",
+        "coding-assistant",
+        "text-generation-inference",
+        "deepseek",
+        "quantized",
+        "moe",
+        "mixture-of-experts",
+        "iq1_s",
+        "284b",
+        "code-generation",
+        "conversational",
+        "llama-cpp",
+        "ollama",
+        "docker",
+        "mit",
+        "13b-active",
+        "1m-context",
+        "long-context",
+        "persadian",
+        "text-generation",
+        "en",
+        "dataset:openwebtext",
+        "dataset:c4",
+        "dataset:common_crawl",
+        "dataset:pile",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "doi:10.57967/hf/8853",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix"
+      ],
+      "total_gguf_gib": 57.31434127688408,
+      "url": "https://huggingface.co/persadian/DeepSeek-V4-Flash-IQ1_S-XL"
+    },
+    {
+      "detected_k_values": [],
+      "gguf_count": 1,
+      "lastModified": "2026-06-05T07:26:07.000Z",
+      "modelId": "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+      "notes": [
+        "has_gguf",
+        "sidecar_named"
+      ],
+      "search_hits": [
+        "DeepSeek-v4-Flash-REAP",
+        "deepseek-v4-flash-reap",
+        "DeepSeek V4 Flash REAP",
+        "DeepSeek-v4-Flash-sidecar"
+      ],
+      "sha": "35b75f351d73e4aa62b6d00c46557b1319eb0f51",
+      "smallest_ggufs": [
+        {
+          "blobId": "bcdfc9f557c9e662e595e28efed8291be4b38075",
+          "lfs_oid": null,
+          "rfilename": "dense/model-dense.gguf",
+          "size": 8767239936,
+          "size_gib": 8.165128469467163
+        }
+      ],
+      "tags": [
+        "gguf",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_gguf_gib": 8.165128469467163,
+      "url": "https://huggingface.co/shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs"
+    },
+    {
+      "detected_k_values": [
+        128
+      ],
+      "gguf_count": 1,
+      "lastModified": "2026-06-23T07:41:44.000Z",
+      "modelId": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4",
+      "notes": [
+        "has_gguf"
+      ],
+      "search_hits": [
+        "DeepSeek-v4-Flash-REAP",
+        "deepseek-v4-flash-reap",
+        "DeepSeek V4 Flash REAP"
+      ],
+      "sha": "1b13d61171b44e41c5234cf261c40fca86240313",
+      "smallest_ggufs": [
+        {
+          "blobId": "7f12f9c000895abc2986f6d292ed577126a6aedb",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-REAP-K128-hybrid.gguf",
+          "size": 80537740608,
+          "size_gib": 75.00661593675613
+        }
+      ],
+      "tags": [
+        "ds4",
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "nvfp4",
+        "hybrid-quant",
+        "dgx-spark",
+        "gb10",
+        "blackwell",
+        "experimental",
+        "text-generation",
+        "en",
+        "arxiv:2510.13999",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_gguf_gib": 75.00661593675613,
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4"
+    },
+    {
+      "detected_k_values": [
+        150
+      ],
+      "gguf_count": 1,
+      "lastModified": "2026-06-23T07:41:50.000Z",
+      "modelId": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4",
+      "notes": [
+        "has_gguf"
+      ],
+      "search_hits": [
+        "DeepSeek-v4-Flash-REAP",
+        "deepseek-v4-flash-reap",
+        "DeepSeek V4 Flash REAP"
+      ],
+      "sha": "f490ab99da3a2bb1c541fe1e8b50666932ded712",
+      "smallest_ggufs": [
+        {
+          "blobId": "6890885edd6d77405815465979db5e286aa1a8f2",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-REAP-K150-hybrid.gguf",
+          "size": 91271893568,
+          "size_gib": 85.0035749077797
+        }
+      ],
+      "tags": [
+        "ds4",
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "nvfp4",
+        "hybrid-quant",
+        "dgx-spark",
+        "gb10",
+        "blackwell",
+        "experimental",
+        "text-generation",
+        "en",
+        "arxiv:2510.13999",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_gguf_gib": 85.0035749077797,
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4"
+    },
+    {
+      "detected_k_values": [
+        180
+      ],
+      "gguf_count": 1,
+      "lastModified": "2026-06-23T07:41:47.000Z",
+      "modelId": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4",
+      "notes": [
+        "has_gguf"
+      ],
+      "search_hits": [
+        "DeepSeek-v4-Flash-REAP",
+        "deepseek-v4-flash-reap",
+        "DeepSeek V4 Flash REAP"
+      ],
+      "sha": "264a4ff7224ad28688830fa5d800c9b83fd45e14",
+      "smallest_ggufs": [
+        {
+          "blobId": "b1baae9d0e4320302fdf4a097801143d95167e47",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-REAP-K180-hybrid.gguf",
+          "size": 105909374528,
+          "size_gib": 98.63579136133194
+        }
+      ],
+      "tags": [
+        "ds4",
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "nvfp4",
+        "hybrid-quant",
+        "dgx-spark",
+        "gb10",
+        "blackwell",
+        "1m-context",
+        "experimental",
+        "text-generation",
+        "en",
+        "arxiv:2510.13999",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_gguf_gib": 98.63579136133194,
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4"
+    },
+    {
+      "detected_k_values": [
+        128
+      ],
+      "gguf_count": 1,
+      "lastModified": "2026-06-19T15:56:40.000Z",
+      "modelId": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "notes": [
+        "has_gguf"
+      ],
+      "search_hits": [
+        "DeepSeek-v4-Flash-REAP",
+        "deepseek-v4-flash-reap",
+        "DeepSeek V4 Flash REAP",
+        "DeepSeek-V4-Flash-GGUF REAP"
+      ],
+      "sha": "62d010639c0114e9eddc245ebce6aba235b0bdc5",
+      "smallest_ggufs": [
+        {
+          "blobId": "fbc6873277a8e7f5d2f0d09ba24f8b31934db5ab",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+          "size": 50439361920,
+          "size_gib": 46.975316405296326
+        }
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "ds4",
+        "experimental",
+        "dgx-spark",
+        "text-generation",
+        "arxiv:2510.13999",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "total_gguf_gib": 46.975316405296326,
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF"
+    },
+    {
+      "detected_k_values": [
+        128
+      ],
+      "gguf_count": 1,
+      "lastModified": "2026-06-19T16:06:20.000Z",
+      "modelId": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "notes": [
+        "has_gguf"
+      ],
+      "search_hits": [
+        "DeepSeek-v4-Flash-REAP",
+        "deepseek-v4-flash-reap",
+        "DeepSeek V4 Flash REAP",
+        "DeepSeek-V4-Flash-GGUF REAP"
+      ],
+      "sha": "c062d7afe018ac152266236e8b591d124269feb8",
+      "smallest_ggufs": [
+        {
+          "blobId": "cd524e77a0d915cbde6975e3362d8c4961539716",
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-REAP-K128.gguf",
+          "size": 55875180192,
+          "size_gib": 52.03781667351723
+        }
+      ],
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "ds4",
+        "experimental",
+        "dgx-spark",
+        "text-generation",
+        "arxiv:2510.13999",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "total_gguf_gib": 52.03781667351723,
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF"
+    }
+  ],
+  "queries": [
+    "DeepSeek-v4-Flash-REAP",
+    "deepseek-v4-flash-reap",
+    "DeepSeek V4 Flash REAP",
+    "DeepSeek-V4-Flash-GGUF REAP",
+    "DeepSeek-v4-Flash-REAP-K64",
+    "DeepSeek-v4-Flash-REAP-K32",
+    "DeepSeek-v4-Flash-REAP-K96",
+    "DeepSeek-v4-Flash-REAP-K80",
+    "DeepSeek-v4-Flash-REAP-K48",
+    "DeepSeek-v4-Flash-REAP-K16",
+    "DeepSeek-v4-Flash-IQ1",
+    "DeepSeek-v4-Flash-Q1",
+    "DeepSeek-v4-Flash-sidecar"
+  ],
+  "query_results": [
+    {
+      "count": 9,
+      "modelIds": [
+        "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4",
+        "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4",
+        "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4",
+        "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+        "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+        "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+        "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+        "eouya2/DeepSeek-V4-Flash-REAP25-REAPDataset10K-BalancedWithKO-DS4",
+        "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4"
+      ],
+      "query": "DeepSeek-v4-Flash-REAP",
+      "url": "https://huggingface.co/api/models?search=DeepSeek-v4-Flash-REAP&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 9,
+      "modelIds": [
+        "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4",
+        "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4",
+        "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4",
+        "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+        "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+        "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+        "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+        "eouya2/DeepSeek-V4-Flash-REAP25-REAPDataset10K-BalancedWithKO-DS4",
+        "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4"
+      ],
+      "query": "deepseek-v4-flash-reap",
+      "url": "https://huggingface.co/api/models?search=deepseek-v4-flash-reap&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 9,
+      "modelIds": [
+        "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4",
+        "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4",
+        "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4",
+        "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+        "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+        "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+        "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+        "eouya2/DeepSeek-V4-Flash-REAP25-REAPDataset10K-BalancedWithKO-DS4",
+        "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4"
+      ],
+      "query": "DeepSeek V4 Flash REAP",
+      "url": "https://huggingface.co/api/models?search=DeepSeek+V4+Flash+REAP&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 2,
+      "modelIds": [
+        "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+        "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF"
+      ],
+      "query": "DeepSeek-V4-Flash-GGUF REAP",
+      "url": "https://huggingface.co/api/models?search=DeepSeek-V4-Flash-GGUF+REAP&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 0,
+      "modelIds": [],
+      "query": "DeepSeek-v4-Flash-REAP-K64",
+      "url": "https://huggingface.co/api/models?search=DeepSeek-v4-Flash-REAP-K64&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 0,
+      "modelIds": [],
+      "query": "DeepSeek-v4-Flash-REAP-K32",
+      "url": "https://huggingface.co/api/models?search=DeepSeek-v4-Flash-REAP-K32&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 0,
+      "modelIds": [],
+      "query": "DeepSeek-v4-Flash-REAP-K96",
+      "url": "https://huggingface.co/api/models?search=DeepSeek-v4-Flash-REAP-K96&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 0,
+      "modelIds": [],
+      "query": "DeepSeek-v4-Flash-REAP-K80",
+      "url": "https://huggingface.co/api/models?search=DeepSeek-v4-Flash-REAP-K80&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 0,
+      "modelIds": [],
+      "query": "DeepSeek-v4-Flash-REAP-K48",
+      "url": "https://huggingface.co/api/models?search=DeepSeek-v4-Flash-REAP-K48&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 0,
+      "modelIds": [],
+      "query": "DeepSeek-v4-Flash-REAP-K16",
+      "url": "https://huggingface.co/api/models?search=DeepSeek-v4-Flash-REAP-K16&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 2,
+      "modelIds": [
+        "lvyufeng/DeepSeek-V4-Flash-IQ1_M",
+        "persadian/DeepSeek-V4-Flash-IQ1_S-XL"
+      ],
+      "query": "DeepSeek-v4-Flash-IQ1",
+      "url": "https://huggingface.co/api/models?search=DeepSeek-v4-Flash-IQ1&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 0,
+      "modelIds": [],
+      "query": "DeepSeek-v4-Flash-Q1",
+      "url": "https://huggingface.co/api/models?search=DeepSeek-v4-Flash-Q1&sort=lastModified&direction=-1&limit=80&full=true"
+    },
+    {
+      "count": 2,
+      "modelIds": [
+        "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+        "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+      ],
+      "query": "DeepSeek-v4-Flash-sidecar",
+      "url": "https://huggingface.co/api/models?search=DeepSeek-v4-Flash-sidecar&sort=lastModified&direction=-1&limit=80&full=true"
+    }
+  ],
+  "schema": "vendor-ds4-compact-reap-under12-discovery-v2"
+}

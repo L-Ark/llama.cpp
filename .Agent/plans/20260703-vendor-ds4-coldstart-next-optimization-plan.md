@@ -58,6 +58,18 @@ REAP and required-payload bounds:
 - Derived requirement from current accepted profile: with `138` decode tokens, current decode window `31.1806s`, and all decode up/down fallback bound `19.03s`, `10 tok/s` requires decode window `13.8s`. If only fallback payload scales, the required expert/native payload ratio is `0.086674`, or about `11.879710 GiB` expert-equivalent payload versus native `137.062500 GiB`.
 - Conclusion: no current direct GGUF candidate found by metadata satisfies the `10 tok/s` payload bound. The best current metadata candidate is still about `3.27x` too large in expert-equivalent payload (`38.8125 / 11.8797`).
 
+Additional compact discovery and under-65GiB bounds:
+
+- Discovery artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-reap-under12-discovery-20260706.json`
+- Method: HF API broad/narrow searches for REAP, K16/K32/K48/K64/K80/K96, sidecar, IQ1/Q1 DeepSeek-V4-Flash GGUF candidates; blobs metadata only; no model downloads.
+- Search result: no complete K<128 GGUF candidate surfaced. Under-65GiB followups included `eouya2` REAP25/50 compact IQ2XXS, `persadian` IQ1_S-XL, `sleepyeldrazi` K128 Q2/Q2-Q4, `shreyvish5678` dense sidecar, and private/unauthorized `KCh3dRi4n` sidecars.
+- Header-bound artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/new-compact-under65-header-bound-20260706.json`
+- Best direct-model under-65GiB bound: `eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4/DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf`, file size `46.975317 GiB`, expert payload `38.812500 GiB`, optimistic decode bound `7.868 tok/s`. This matches the `sleepyeldrazi` K128 Q2 bound and remains below `10 tok/s`.
+- `persadian/DeepSeek-V4-Flash-IQ1_S-XL.gguf` has file size `57.314341 GiB`, expert payload `41.421875 GiB`, optimistic decode bound `7.709 tok/s`; still below target.
+- `eouya2` REAP25 compact variants have expert payload `55.687500 GiB` and optimistic bound `6.941 tok/s`; still below target.
+- `shreyvish5678/.../dense/model-dense.gguf` has `0` expert payload and a misleading optimistic bound above `10`, but it is rejected as `sidecar_requires_loader_integration_not_direct_model`; it is not a complete vendor model and cannot be used for correctness/performance claims without a separate sidecar loader design and proof.
+- `KCh3dRi4n` sidecar files returned HTTP `401 Unauthorized`, so they are not actionable in the current environment.
+
 Updated next executable plan:
 
 1. Commit and push this manifest validation artifact plus this plan update to `ssd/vendor/deepseek-token-rate-16gb` immediately.
@@ -66,7 +78,7 @@ Updated next executable plan:
 4. Correctness gates come before performance claims: France prompt must be semantically correct and coherent, then run the five-prompt set (`France`, `quantum computing`, `Python Fibonacci`, `Japan`, `climate change`) and record exact outputs.
 5. Only after correctness passes, run strict cold France benchmark under the same hard gates: `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, `TTFT <= 33617.688744 ms`, `eval_tok_s > 4.4`, and full metric/counter capture.
 6. If a compliant new SOTA appears, immediately record full reproduction metadata, commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted.
-7. For the 10 tok/s target, prioritize either a complete representation with expert-equivalent payload near or below `11.879710 GiB`, or a mechanism that changes the bound (true parallel expert execution, verified speculation/MTP, or another path that reduces the `19.03s` decode fallback term without correctness loss). If disk remains unavailable, continue metadata-only discovery; do not repeat rejected runtime patches without new math.
+7. For the 10 tok/s target, the next plan must target either a complete representation with expert-equivalent payload near or below `11.879710 GiB`, or a mechanism that changes the bound: sidecar loader integration with correctness proof, true parallel expert execution, verified speculation/MTP, or another path that reduces the `19.03s` decode fallback term without correctness loss. Direct GGUF download/testing is now lower priority unless it is for empirical >4.4 SOTA after disk approval; do not repeat rejected runtime patches without new math.
 
 ### 2026-07-06 Latest Active Plan: Broader Header Refresh Completed, Validate Sharded Compact GGUF
 

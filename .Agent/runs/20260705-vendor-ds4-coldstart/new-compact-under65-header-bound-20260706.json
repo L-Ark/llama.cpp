@@ -1,0 +1,706 @@
+{
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "required_expert_equiv_payload_gib": 11.87971032580139,
+    "target_tok_s": 10.0
+  },
+  "created_at_utc": "2026-07-06T01:16:06.678215Z",
+  "decision": {
+    "best_direct_model_bound": {
+      "category_bytes": {
+        "attention": 5796589696,
+        "expert_down": 16206790656,
+        "expert_gate": 12733906944,
+        "expert_up": 12733906944,
+        "other_nonexpert": 1754822592,
+        "router": 48234496,
+        "shared_ffn_or_dense_ffn": 1159776256
+      },
+      "category_counts": {
+        "attention": 701,
+        "expert_down": 43,
+        "expert_gate": 43,
+        "expert_up": 43,
+        "other_nonexpert": 280,
+        "router": 43,
+        "shared_ffn_or_dense_ffn": 175
+      },
+      "category_gib": {
+        "attention": 5.398495,
+        "expert_down": 15.09375,
+        "expert_gate": 11.859375,
+        "expert_up": 11.859375,
+        "other_nonexpert": 1.634306,
+        "router": 0.044922,
+        "shared_ffn_or_dense_ffn": 1.080126
+      },
+      "content_range": "bytes 0-8388607/50439362272",
+      "data_start": 5334688,
+      "decision": "metadata_bound_below_10",
+      "expert_payload_bytes": 41674604544,
+      "expert_payload_gib": 38.8125,
+      "expert_vs_native_ratio": 0.28317373461012313,
+      "file": "DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+      "file_size_bytes": 50439362272,
+      "file_size_gib": 46.975317,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "interesting_metadata": {
+        "deepseek4.block_count": {
+          "type": "UINT32",
+          "value": 43
+        },
+        "deepseek4.expert_count": {
+          "type": "UINT32",
+          "value": 256
+        },
+        "deepseek4.expert_used_count": {
+          "type": "UINT32",
+          "value": 6
+        },
+        "general.architecture": {
+          "type": "STRING",
+          "value": "deepseek4"
+        },
+        "general.file_type": {
+          "type": "UINT32",
+          "value": 19
+        }
+      },
+      "n_kv": 68,
+      "n_tensors": 1328,
+      "notes": [
+        "has_gguf"
+      ],
+      "optimistic_decode_bound_if_fallback_scales_only_with_expert_payload": {
+        "optimistic_eval_tok_s": 7.868001763877491,
+        "optimistic_new_decode_window_s": 17.539396169630642,
+        "scaled_fallback_s": 5.388796169630644
+      },
+      "parse_end": 5334661,
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4/resolve/main/DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf"
+    },
+    "download_allowed_now": false,
+    "note": "Sidecar files are not direct vendor models unless loader integration exists. Direct model candidates still require correctness and strict cold benchmark.",
+    "sota_changed": false
+  },
+  "errors": [
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "file": "DeepSeek-V4-Flash-KR-ThinkTop64-L10-HF-FP4.sidecar.gguf",
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "file": "DeepSeek-V4-Flash-KR-ThinkTop128-L10-HF-FP4.sidecar.gguf",
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    },
+    {
+      "error": "<HTTPError 401: 'Unauthorized'>",
+      "file": "DeepSeek-V4-Flash-KR-Full256-L10-HF-FP4.sidecar.gguf",
+      "repo": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+    }
+  ],
+  "method": "HTTP Range parse headers for under-65GiB compact/IQ1/sidecar candidates discovered by compact search; infer payload by offsets; no model downloads.",
+  "native_expert_payload_gib": 137.0625,
+  "results": [
+    {
+      "category_bytes": {
+        "attention": 5796589696,
+        "other_nonexpert": 1754825152,
+        "router": 50724864,
+        "shared_ffn_or_dense_ffn": 1159776256
+      },
+      "category_counts": {
+        "attention": 701,
+        "other_nonexpert": 280,
+        "router": 43,
+        "shared_ffn_or_dense_ffn": 175
+      },
+      "category_gib": {
+        "attention": 5.398495,
+        "other_nonexpert": 1.634308,
+        "router": 0.047241,
+        "shared_ffn_or_dense_ffn": 1.080126
+      },
+      "content_range": "bytes 0-8388607/8767239936",
+      "data_start": 5323968,
+      "decision": "sidecar_requires_loader_integration_not_direct_model",
+      "expert_payload_bytes": 0,
+      "expert_payload_gib": 0.0,
+      "expert_vs_native_ratio": 0.0,
+      "file": "dense/model-dense.gguf",
+      "file_size_bytes": 8767239936,
+      "file_size_gib": 8.165128,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "interesting_metadata": {
+        "deepseek4.block_count": {
+          "type": "UINT32",
+          "value": 43
+        },
+        "deepseek4.expert_count": {
+          "type": "UINT32",
+          "value": 144
+        },
+        "deepseek4.expert_used_count": {
+          "type": "UINT32",
+          "value": 6
+        },
+        "general.architecture": {
+          "type": "STRING",
+          "value": "deepseek4"
+        },
+        "general.file_type": {
+          "type": "UINT32",
+          "value": 19
+        }
+      },
+      "n_kv": 58,
+      "n_tensors": 1199,
+      "notes": [
+        "has_gguf",
+        "sidecar_named"
+      ],
+      "optimistic_decode_bound_if_fallback_scales_only_with_expert_payload": {
+        "optimistic_eval_tok_s": 11.357463828946722,
+        "optimistic_new_decode_window_s": 12.150599999999997,
+        "scaled_fallback_s": 0.0
+      },
+      "parse_end": 5323949,
+      "repo": "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs/resolve/main/dense/model-dense.gguf"
+    },
+    {
+      "category_bytes": {
+        "attention": 5796589696,
+        "expert_down": 16206790656,
+        "expert_gate": 12733906944,
+        "expert_up": 12733906944,
+        "other_nonexpert": 1754822592,
+        "router": 48234496,
+        "shared_ffn_or_dense_ffn": 1159776256
+      },
+      "category_counts": {
+        "attention": 701,
+        "expert_down": 43,
+        "expert_gate": 43,
+        "expert_up": 43,
+        "other_nonexpert": 280,
+        "router": 43,
+        "shared_ffn_or_dense_ffn": 175
+      },
+      "category_gib": {
+        "attention": 5.398495,
+        "expert_down": 15.09375,
+        "expert_gate": 11.859375,
+        "expert_up": 11.859375,
+        "other_nonexpert": 1.634306,
+        "router": 0.044922,
+        "shared_ffn_or_dense_ffn": 1.080126
+      },
+      "content_range": "bytes 0-8388607/50439362272",
+      "data_start": 5334688,
+      "decision": "metadata_bound_below_10",
+      "expert_payload_bytes": 41674604544,
+      "expert_payload_gib": 38.8125,
+      "expert_vs_native_ratio": 0.28317373461012313,
+      "file": "DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+      "file_size_bytes": 50439362272,
+      "file_size_gib": 46.975317,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "interesting_metadata": {
+        "deepseek4.block_count": {
+          "type": "UINT32",
+          "value": 43
+        },
+        "deepseek4.expert_count": {
+          "type": "UINT32",
+          "value": 256
+        },
+        "deepseek4.expert_used_count": {
+          "type": "UINT32",
+          "value": 6
+        },
+        "general.architecture": {
+          "type": "STRING",
+          "value": "deepseek4"
+        },
+        "general.file_type": {
+          "type": "UINT32",
+          "value": 19
+        }
+      },
+      "n_kv": 68,
+      "n_tensors": 1328,
+      "notes": [
+        "has_gguf"
+      ],
+      "optimistic_decode_bound_if_fallback_scales_only_with_expert_payload": {
+        "optimistic_eval_tok_s": 7.868001763877491,
+        "optimistic_new_decode_window_s": 17.539396169630642,
+        "scaled_fallback_s": 5.388796169630644
+      },
+      "parse_end": 5334661,
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP50-REAPDataset10K-BalancedWithKO-DS4/resolve/main/DeepSeek-V4-Flash-REAP50-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf"
+    },
+    {
+      "category_bytes": {
+        "attention": 5796589696,
+        "expert_down": 16206790656,
+        "expert_gate": 12733906944,
+        "expert_up": 12733906944,
+        "other_nonexpert": 1754822592,
+        "router": 48234496,
+        "shared_ffn_or_dense_ffn": 1159776256
+      },
+      "category_counts": {
+        "attention": 701,
+        "expert_down": 43,
+        "expert_gate": 43,
+        "expert_up": 43,
+        "other_nonexpert": 280,
+        "router": 43,
+        "shared_ffn_or_dense_ffn": 175
+      },
+      "category_gib": {
+        "attention": 5.398495,
+        "expert_down": 15.09375,
+        "expert_gate": 11.859375,
+        "expert_up": 11.859375,
+        "other_nonexpert": 1.634306,
+        "router": 0.044922,
+        "shared_ffn_or_dense_ffn": 1.080126
+      },
+      "content_range": "bytes 0-8388607/50439361920",
+      "data_start": 5334336,
+      "decision": "metadata_bound_below_10",
+      "expert_payload_bytes": 41674604544,
+      "expert_payload_gib": 38.8125,
+      "expert_vs_native_ratio": 0.28317373461012313,
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "file_size_bytes": 50439361920,
+      "file_size_gib": 46.975316,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "interesting_metadata": {
+        "deepseek4.block_count": {
+          "type": "UINT32",
+          "value": 43
+        },
+        "deepseek4.expert_count": {
+          "type": "UINT32",
+          "value": 256
+        },
+        "deepseek4.expert_used_count": {
+          "type": "UINT32",
+          "value": 6
+        },
+        "general.architecture": {
+          "type": "STRING",
+          "value": "deepseek4"
+        },
+        "general.file_type": {
+          "type": "UINT32",
+          "value": 19
+        }
+      },
+      "n_kv": 64,
+      "n_tensors": 1328,
+      "notes": [
+        "has_gguf"
+      ],
+      "optimistic_decode_bound_if_fallback_scales_only_with_expert_payload": {
+        "optimistic_eval_tok_s": 7.868001763877491,
+        "optimistic_new_decode_window_s": 17.539396169630642,
+        "scaled_fallback_s": 5.388796169630644
+      },
+      "parse_end": 5334316,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128-uniform.gguf"
+    },
+    {
+      "category_bytes": {
+        "attention": 4359070976,
+        "expert_down": 15535702016,
+        "expert_gate": 14680064000,
+        "expert_up": 14260633600,
+        "other_nonexpert": 782566720,
+        "router": 146800640,
+        "shared_ffn_or_dense_ffn": 11770650400
+      },
+      "category_counts": {
+        "attention": 565,
+        "expert_down": 35,
+        "expert_gate": 35,
+        "expert_up": 34,
+        "other_nonexpert": 220,
+        "router": 35,
+        "shared_ffn_or_dense_ffn": 142
+      },
+      "category_gib": {
+        "attention": 4.059701,
+        "expert_down": 14.46875,
+        "expert_gate": 13.671875,
+        "expert_up": 13.28125,
+        "other_nonexpert": 0.728822,
+        "router": 0.136719,
+        "shared_ffn_or_dense_ffn": 10.962272
+      },
+      "content_range": "bytes 0-8388607/61540805344",
+      "data_start": 5316992,
+      "decision": "metadata_bound_below_10",
+      "expert_payload_bytes": 44476399616,
+      "expert_payload_gib": 41.421875,
+      "expert_vs_native_ratio": 0.3022115823073415,
+      "file": "DeepSeek-V4-Flash-IQ1_S-XL.gguf",
+      "file_size_bytes": 61540805344,
+      "file_size_gib": 57.314341,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "interesting_metadata": {
+        "deepseek4.block_count": {
+          "type": "UINT32",
+          "value": 43
+        },
+        "deepseek4.expert_count": {
+          "type": "UINT32",
+          "value": 256
+        },
+        "deepseek4.expert_used_count": {
+          "type": "UINT32",
+          "value": 6
+        },
+        "general.architecture": {
+          "type": "STRING",
+          "value": "deepseek4"
+        },
+        "general.file_type": {
+          "type": "UINT32",
+          "value": 24
+        },
+        "split.count": {
+          "type": "UINT16",
+          "value": 2
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 0
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 68,
+      "n_tensors": 1066,
+      "notes": [
+        "has_gguf"
+      ],
+      "optimistic_decode_bound_if_fallback_scales_only_with_expert_payload": {
+        "optimistic_eval_tok_s": 7.70877094086643,
+        "optimistic_new_decode_window_s": 17.901686411308706,
+        "scaled_fallback_s": 5.75108641130871
+      },
+      "parse_end": 5316980,
+      "repo": "persadian/DeepSeek-V4-Flash-IQ1_S-XL",
+      "type_counts": {
+        "F32": 430,
+        "I32": 3,
+        "IQ1_S": 203,
+        "Q2_K": 5,
+        "Q5_K": 2,
+        "Q8_0": 423
+      },
+      "url": "https://huggingface.co/persadian/DeepSeek-V4-Flash-IQ1_S-XL/resolve/main/DeepSeek-V4-Flash-IQ1_S-XL.gguf"
+    },
+    {
+      "category_bytes": {
+        "attention": 5796589696,
+        "expert_down": 17716740096,
+        "expert_gate": 14696841216,
+        "expert_up": 14696841216,
+        "other_nonexpert": 1754822592,
+        "router": 48234496,
+        "shared_ffn_or_dense_ffn": 1159776256
+      },
+      "category_counts": {
+        "attention": 701,
+        "expert_down": 43,
+        "expert_gate": 43,
+        "expert_up": 43,
+        "other_nonexpert": 280,
+        "router": 43,
+        "shared_ffn_or_dense_ffn": 175
+      },
+      "category_gib": {
+        "attention": 5.398495,
+        "expert_down": 16.5,
+        "expert_gate": 13.6875,
+        "expert_up": 13.6875,
+        "other_nonexpert": 1.634306,
+        "router": 0.044922,
+        "shared_ffn_or_dense_ffn": 1.080126
+      },
+      "content_range": "bytes 0-8388607/55875180192",
+      "data_start": 5334624,
+      "decision": "metadata_bound_below_10",
+      "expert_payload_bytes": 47110422528,
+      "expert_payload_gib": 43.875,
+      "expert_vs_native_ratio": 0.320109439124487,
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "file_size_bytes": 55875180192,
+      "file_size_gib": 52.037817,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "interesting_metadata": {
+        "deepseek4.block_count": {
+          "type": "UINT32",
+          "value": 43
+        },
+        "deepseek4.expert_count": {
+          "type": "UINT32",
+          "value": 256
+        },
+        "deepseek4.expert_used_count": {
+          "type": "UINT32",
+          "value": 6
+        },
+        "general.architecture": {
+          "type": "STRING",
+          "value": "deepseek4"
+        },
+        "general.file_type": {
+          "type": "UINT32",
+          "value": 19
+        }
+      },
+      "n_kv": 68,
+      "n_tensors": 1328,
+      "notes": [
+        "has_gguf"
+      ],
+      "optimistic_decode_bound_if_fallback_scales_only_with_expert_payload": {
+        "optimistic_eval_tok_s": 7.564842779008189,
+        "optimistic_new_decode_window_s": 18.242282626538987,
+        "scaled_fallback_s": 6.091682626538988
+      },
+      "parse_end": 5334618,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 74,
+        "Q2_K": 37,
+        "Q4_K": 18,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128.gguf"
+    },
+    {
+      "category_bytes": {
+        "attention": 5796589696,
+        "expert_down": 23253221376,
+        "expert_gate": 18270388224,
+        "expert_up": 18270388224,
+        "other_nonexpert": 1754832832,
+        "router": 69206016,
+        "shared_ffn_or_dense_ffn": 1159776256
+      },
+      "category_counts": {
+        "attention": 701,
+        "expert_down": 43,
+        "expert_gate": 43,
+        "expert_up": 43,
+        "other_nonexpert": 280,
+        "router": 43,
+        "shared_ffn_or_dense_ffn": 175
+      },
+      "category_gib": {
+        "attention": 5.398495,
+        "expert_down": 21.65625,
+        "expert_gate": 17.015625,
+        "expert_up": 17.015625,
+        "other_nonexpert": 1.634315,
+        "router": 0.064453,
+        "shared_ffn_or_dense_ffn": 1.080126
+      },
+      "content_range": "bytes 0-8388607/68579737280",
+      "data_start": 5334656,
+      "decision": "metadata_bound_below_10",
+      "expert_payload_bytes": 59793997824,
+      "expert_payload_gib": 55.6875,
+      "expert_vs_native_ratio": 0.4062927496580027,
+      "file": "DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf",
+      "file_size_bytes": 68579737280,
+      "file_size_gib": 63.869857,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "interesting_metadata": {
+        "deepseek4.block_count": {
+          "type": "UINT32",
+          "value": 43
+        },
+        "deepseek4.expert_count": {
+          "type": "UINT32",
+          "value": 256
+        },
+        "deepseek4.expert_used_count": {
+          "type": "UINT32",
+          "value": 6
+        },
+        "general.architecture": {
+          "type": "STRING",
+          "value": "deepseek4"
+        },
+        "general.file_type": {
+          "type": "UINT32",
+          "value": 19
+        }
+      },
+      "n_kv": 68,
+      "n_tensors": 1328,
+      "notes": [
+        "has_gguf"
+      ],
+      "optimistic_decode_bound_if_fallback_scales_only_with_expert_payload": {
+        "optimistic_eval_tok_s": 6.940829070948171,
+        "optimistic_new_decode_window_s": 19.882351025991788,
+        "scaled_fallback_s": 7.731751025991792
+      },
+      "parse_end": 5334644,
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4/resolve/main/DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf"
+    },
+    {
+      "category_bytes": {
+        "attention": 5796589696,
+        "expert_down": 23253221376,
+        "expert_gate": 18270388224,
+        "expert_up": 18270388224,
+        "other_nonexpert": 1754832832,
+        "router": 69206016,
+        "shared_ffn_or_dense_ffn": 1159776256
+      },
+      "category_counts": {
+        "attention": 701,
+        "expert_down": 43,
+        "expert_gate": 43,
+        "expert_up": 43,
+        "other_nonexpert": 280,
+        "router": 43,
+        "shared_ffn_or_dense_ffn": 175
+      },
+      "category_gib": {
+        "attention": 5.398495,
+        "expert_down": 21.65625,
+        "expert_gate": 17.015625,
+        "expert_up": 17.015625,
+        "other_nonexpert": 1.634315,
+        "router": 0.064453,
+        "shared_ffn_or_dense_ffn": 1.080126
+      },
+      "content_range": "bytes 0-8388607/68579737312",
+      "data_start": 5334688,
+      "decision": "metadata_bound_below_10",
+      "expert_payload_bytes": 59793997824,
+      "expert_payload_gib": 55.6875,
+      "expert_vs_native_ratio": 0.4062927496580027,
+      "file": "DeepSeek-V4-Flash-REAP25-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf",
+      "file_size_bytes": 68579737312,
+      "file_size_gib": 63.869858,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "interesting_metadata": {
+        "deepseek4.block_count": {
+          "type": "UINT32",
+          "value": 43
+        },
+        "deepseek4.expert_count": {
+          "type": "UINT32",
+          "value": 256
+        },
+        "deepseek4.expert_used_count": {
+          "type": "UINT32",
+          "value": 6
+        },
+        "general.architecture": {
+          "type": "STRING",
+          "value": "deepseek4"
+        },
+        "general.file_type": {
+          "type": "UINT32",
+          "value": 19
+        }
+      },
+      "n_kv": 68,
+      "n_tensors": 1328,
+      "notes": [
+        "has_gguf"
+      ],
+      "optimistic_decode_bound_if_fallback_scales_only_with_expert_payload": {
+        "optimistic_eval_tok_s": 6.940829070948171,
+        "optimistic_new_decode_window_s": 19.882351025991788,
+        "scaled_fallback_s": 7.731751025991792
+      },
+      "parse_end": 5334661,
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP25-REAPDataset10K-BalancedWithKO-DS4",
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      },
+      "url": "https://huggingface.co/eouya2/DeepSeek-V4-Flash-REAP25-REAPDataset10K-BalancedWithKO-DS4/resolve/main/DeepSeek-V4-Flash-REAP25-REAPDataset10K-Balanced-DS4-compact-IQ2XXS.gguf"
+    }
+  ],
+  "schema": "vendor-ds4-new-compact-under65-header-bound-v1",
+  "source_artifacts": [
+    ".Agent/runs/20260705-vendor-ds4-coldstart/compact-reap-under12-discovery-20260706.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/native-vs-lovedheart-q2k-header-bound-20260706.json"
+  ]
+}
