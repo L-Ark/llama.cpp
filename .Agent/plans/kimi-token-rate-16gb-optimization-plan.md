@@ -92888,3 +92888,56 @@ GP33 remote preparation and disk gate result:
   - Do not delete any old expert packs without explicit approval.
   - Next executable action is either explicit deletion approval for the listed
     old non-SOTA packs, or attaching/providing additional disk space.
+
+GP33 non-destructive space audit and asset recheck:
+
+- Timestamp: `2026-07-07T09:50:00+0800`.
+- Scope:
+  - read-only disk usage audit on `root@92.180.27.82`;
+  - Hugging Face API recheck for currently visible Kimi-K2.7-Code GGUF
+    candidates.
+- Remote filesystem:
+  - `/dev/root`: `993G` total, `909G` used, `84G` available.
+- Major remote usage:
+  - `/root/lfz/models`: `378G`;
+  - `/root/lfz/runs`: `438G`;
+  - `/root/lfz/tmp`: `2.0G`;
+  - `/root/lfz/llama.cpp-vendor-kimi`: `2.2G`.
+- Model usage:
+  - `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S`: `378G`;
+  - this is the current SOTA model and must be preserved.
+- Run usage:
+  - `/root/lfz/runs/ik_llama`: `427G`;
+  - `/root/lfz/runs/vendor-kimi-token-rate`: `9.4G`.
+- Large files found under `/root/lfz/runs`:
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`:
+    `175133036544` bytes, current SOTA main pack, preserve;
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack`:
+    `171692638208` bytes, old pack, deletion candidate only with explicit
+    approval;
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-tracefirst-n64-20260630.expert-pack`:
+    `79544299520` bytes, old trace pack, deletion candidate only with explicit
+    approval.
+- Large files under `/root/lfz/tmp`:
+  - none over `1G`;
+  - total temp usage is only `2.0G`, so temp cleanup cannot create enough room
+    for IQ1_S.
+- Current Hugging Face visible candidate check:
+  - search still shows `mradermacher/Kimi-K2.7-Code-i1-GGUF` as the smallest
+    practical Kimi GGUF candidate for this path;
+  - `Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5`:
+    `41875931136` bytes;
+  - `part2of5`: `41875931136` bytes;
+  - `part3of5`: `41875931136` bytes;
+  - `part4of5`: `41875931136` bytes;
+  - `part5of5`: `36927147936` bytes;
+  - total: `204429739520` bytes, about `190.39 GiB`.
+- Decision:
+  - There is no non-destructive local cleanup path that frees the required
+    space.
+  - Do not attempt streaming download into the current filesystem because the
+    final GGUF cannot fit.
+  - Do not switch to larger split GGUF variants such as Q4/Q8; they require
+    more disk and are not aligned with the 16GB host-RAM token-rate target.
+  - Next implementation step remains gated on explicit deletion approval for
+    old non-SOTA packs or additional disk capacity.
