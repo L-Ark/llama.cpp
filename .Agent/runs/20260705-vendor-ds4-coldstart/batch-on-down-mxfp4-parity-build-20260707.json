@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260707-batch-on-down-mxfp4-parity-build",
+  "binary_sha256_file": "5bf197ecdf9bdbedf0f9d4d40daa4a9b951cb38c940295c81cf52f98f80a0a5f  /root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-on/bin/llama-cli",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "build_dir": "build-ds4-moe-stream-batch-on",
+  "cmake_batch_flag": "GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON",
+  "decision": "batch=ON build is valid and real MXFP4 down probe activates, but existing full parity reporter is too expensive and produced no CSV before manual timeout; next source edit should add limited parity comparison knobs",
+  "down_mxfp4_probe_csv_present": false,
+  "fallback_reason_aggregate": {
+    "down|prompt|eligible|not_attempted_batch_path_selected|batch_declined_internal_no_single_retry": {
+      "batch_accepts": 0,
+      "batch_attempts": 1171,
+      "calls": 1171,
+      "fallback_us": 4344302,
+      "rows": 1820
+    },
+    "up|prompt|batch_unsupported|one_name_filter|one_name_filter": {
+      "batch_accepts": 0,
+      "batch_attempts": 0,
+      "calls": 1171,
+      "fallback_us": 3877235,
+      "rows": 1820
+    }
+  },
+  "libggml_cuda_contains_probe_string": true,
+  "next_step": "source edit: add GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE and MAX_COLS to limit CPU reference compare, then rerun batch=ON parity smoke under strict 16GB",
+  "profile_files": {
+    "fallback_reason_profile.csv": {
+      "bytes": 249182,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-batch-on-down-mxfp4-parity-build/france-n1-mxfp4-down-parity/fallback_reason_profile.csv",
+      "sha256": "4c729b77ac0b574a24b7cc3673993a2e9c4f2fcbb1d44dfe3b5a7f5f3691c005"
+    },
+    "stderr.txt": {
+      "bytes": 14639,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-batch-on-down-mxfp4-parity-build/france-n1-mxfp4-down-parity/stderr.txt",
+      "sha256": "5fe7555c4e5f86b24ce61cdda9de506508396becda580caeadb3bc9bce5bd231"
+    }
+  },
+  "prompt_scope": "France n1 calibration diagnostic only; held-out not used; not SOTA",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-batch-on-down-mxfp4-parity-build/france-n1-mxfp4-down-parity",
+  "source_head": "f31e72202b210631d73909974caf55b070faf8a4",
+  "status": "build_passed_probe_active_full_parity_timeout_not_sota",
+  "stderr_probe_lines": [
+    "[moe_stream_batch] MXFP4 down batch probe active mode=parity",
+    "[moe_stream_batch] mxfp4_down_probe active tensor=blk.0.ffn_down_exps.weight call=0 active=8 ne01=4096 ne00=2048",
+    "[moe_stream] batched decode path active: experts=8 ne01=4096 ne00=2048",
+    "[moe_stream_batch] mxfp4_down_probe active tensor=blk.1.ffn_down_exps.weight call=1 active=8 ne01=4096 ne00=2048",
+    "[moe_stream_batch] mxfp4_down_probe active tensor=blk.2.ffn_down_exps.weight call=2 active=8 ne01=4096 ne00=2048",
+    "[moe_stream_batch] mxfp4_down_probe active tensor=blk.3.ffn_down_exps.weight call=3 active=8 ne01=4096 ne00=2048"
+  ],
+  "stdout_bytes": 634288710,
+  "systemd_runtime_before_kill": "3min53.115s"
+}

@@ -4947,3 +4947,15 @@
 - build_command: cmake -S . -B build-ds4-moe-stream-batch-on with GGML_CUDA=ON, GGML_CUDA_MOE_STREAM=ON, GGML_CUDA_MOE_STREAM_BATCH=ON, matching existing build options where practical；then cmake --build build-ds4-moe-stream-batch-on --target llama-cli llama-results -j2。
 - validation: binary strings 必须包含 mxfp4_down_probe；CMakeCache 必须 GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON。之后才允许 rerun GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity strict 16GB smoke。
 - decision_rule: 若 batch=ON 编译失败或 binary 仍为 stub，记录 reject 并不写 source edit；若 parity 通过，再写下一轮 source-edit plan 允许 default-off MXFP4 down batch writeback；若 parity 失败，记录数值错误并停止该路线。
+
+
+## 2026-07-07 执行记录：batch=ON down MXFP4 parity build
+
+- attempt_id: 20260707-batch-on-down-mxfp4-parity-build
+- status: build_passed_probe_active_full_parity_timeout_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/batch-on-down-mxfp4-parity-build-20260707.json
+- build: build-ds4-moe-stream-batch-on configured with GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON；moe_stream_batch.cu.o 约 6.2MB；libggml-cuda.so strings 包含 mxfp4_down_probe，说明真实 batch implementation 已编译。
+- run: /root/lfz/runs/vendor-ds4-16gb/20260707T-batch-on-down-mxfp4-parity-build/france-n1-mxfp4-down-parity，strict 16GB/no-swap，France n1 calibration only，不是 SOTA。
+- result: stderr 证明真实 probe 触发：MXFP4 down batch probe active mode=parity，blk.0-3 ffn_down_exps call=0..3 active=8 ne01=4096 ne00=2048，并进入 batched decode path。run 3min53s 未写出 down_mxfp4_probe.csv，被手动终止。
+- interpretation: batch=ON build route 可用，但现有 mxfp4_down_probe_report 做全量 CPU reference compare，4 calls * active8 * 4096 columns * 2048 inputs 太重，不能作为快速 correctness gate。
+- decision: 不作为 SOTA，不写 writeback。下一步 source edit 必须先给 probe 加 compare 限制，例如 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE 和 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_COLS，默认保持全量；用 limited parity 先拿到 max_abs/mean_abs 证据。
