@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import struct
 import tempfile
@@ -20,6 +21,11 @@ def tensor_field(name: str) -> bytes:
     if len(raw) >= 128:
         raise ValueError(f"tensor name too long: {name}")
     return raw + b"\0" * (128 - len(raw))
+
+
+def payload_bytes(entry: dict) -> bytes:
+    seed = entry["expert_idx"] * 17 + entry["packed_type"] * 31
+    return bytes((seed + i * 13) & 0xFF for i in range(entry["nbytes"]))
 
 
 def write_pack(path: Path) -> list[dict]:
@@ -63,6 +69,11 @@ def write_pack(path: Path) -> list[dict]:
                     entry["reserved"],
                 )
             )
+        for entry in entries:
+            payload = payload_bytes(entry)
+            entry["sha256"] = hashlib.sha256(payload).hexdigest()
+            f.seek(entry["offset"])
+            f.write(payload)
         f.truncate(DATA_START + 8192)
     return entries
 
@@ -101,6 +112,10 @@ def parse_pack(path: Path) -> list[dict]:
             raise AssertionError(f"invalid packed metadata: {item}")
         if item["ne00"] <= 0 or item["ne01"] <= 0 or item["nb01"] <= 0:
             raise AssertionError(f"invalid dims: {item}")
+        payload = data[item["offset"] : item["offset"] + item["nbytes"]]
+        if len(payload) != item["nbytes"]:
+            raise AssertionError(f"short payload: {item}")
+        item["sha256"] = hashlib.sha256(payload).hexdigest()
         out.append(item)
     return out
 

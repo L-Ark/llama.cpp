@@ -1,0 +1,26 @@
+[
+  {
+    "tensor": "blk.1.ffn_up_exps.weight",
+    "expert_idx": 7,
+    "packed_type": 24,
+    "offset": 4096,
+    "nbytes": 64,
+    "ne00": 256,
+    "ne01": 4,
+    "nb01": 16,
+    "reserved": 0,
+    "sha256": "3bf32f70544abc626049805ad2a3c4f8f7061a1186aedc406d4fb674b785d4af"
+  },
+  {
+    "tensor": "blk.1.ffn_down_exps.weight",
+    "expert_idx": 11,
+    "packed_type": 10,
+    "offset": 8192,
+    "nbytes": 128,
+    "ne00": 4,
+    "ne01": 256,
+    "nb01": 32,
+    "reserved": 0,
+    "sha256": "3e14a183bdf8f0bd166a3df0be66d41bb4a8887cec81e9a5ca2c3a07b62ea20c"
+  }
+]

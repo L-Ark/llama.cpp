@@ -93722,3 +93722,95 @@ GP42 execution result:
   - no token-rate or quality claim is made;
   - next valid step is v2 lookup/handoff design for selected low-byte expert
     payloads, still default-off and dev-only until correctness is proven.
+
+## GP43: default-off GGMLMOEPACKv2 payload read debug path
+
+Timestamp: `2026-07-07T06:34:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck connection:
+
+- The current n96 SOTA is still far below the `>5 tok/s` target because decode
+  is dominated by expert payload movement from SSD/host staging into VRAM.
+- GP41/GP42 point to selected low-byte expert payloads as the next byte-reduction
+  path, but the current v1 runtime assumes pack payload bytes match the main
+  GGUF tensor bytes.
+- Before any low-byte payload can be trusted, the v2 format must prove that it
+  can locate and read a payload by `(tensor, expert)` while preserving per-entry
+  packed type and byte metadata.
+
+Theory and upper bound:
+
+- This phase has no token-rate upside by itself because it remains debug-only
+  and is not connected to decode.
+- It enables the next phase to replace selected IQ3_S expert payload reads with
+  smaller selected payloads such as IQ1_S or Q2_K.
+- The byte-movement upper bound for a future selected low-byte path is:
+  `old_tok_s * (old_miss_bytes / new_miss_bytes)`, capped by kernel support,
+  decode scheduling bubbles, iouring queue continuity, and quality gates.
+- Based on previous selected-IQ1_S sizing, a `0.52x-0.61x` selected payload
+  byte ratio would only justify a theoretical `~1.6x-1.9x` improvement for the
+  moved-miss portion. It is not enough to claim `5 tok/s` alone; it is one
+  required component.
+
+Scope:
+
+- Add a default-off v2 debug payload read function in
+  `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Keep the current v1 pack path and all decode runtime paths unchanged.
+- Use the existing v2 metadata table to:
+  - find the source file;
+  - seek to the v2 entry payload offset;
+  - read exactly `packed_nbytes` into a caller-provided host buffer.
+- Do not connect v2 payloads to:
+  - `batch_cache_copy_h2d`;
+  - `expert_pack_iouring_copy_jobs`;
+  - RAM tier;
+  - up/gate/down compute kernels.
+
+Validation:
+
+1. Update the synthetic v2 pack to include deterministic payload bytes.
+2. Keep the Python mirror parser/checksum validation.
+3. Compile `moe_stream_batch.cu` on the remote with
+   `-DGGML_CUDA_MOE_STREAM_BATCH`.
+4. Confirm no held-out prompts are used.
+
+Acceptance:
+
+- Existing SOTA and v1 runtime behavior are unchanged unless the new v2 debug
+  symbol is called explicitly.
+- Synthetic v2 payload metadata remains reproducible.
+- CUDA source compiles in the actual batch branch.
+- No token-rate or quality claim is made from this phase.
+
+GP43 execution result:
+
+- Timestamp: `2026-07-07T06:34:28+08:00`.
+- Record:
+  `.Agent/runs/20260707-gp43-moepack-v2-read-debug/report.md`.
+- Implemented debug-only v2 payload reading:
+  - successful v2 parser loads now keep the source file handle open;
+  - new helper maps v2 entries back to source files;
+  - new `ggml_cuda_moe_expert_pack_v2_read_debug(...)` reads exactly
+    `packed_nbytes` from the entry offset into a caller-provided host buffer.
+- Updated synthetic v2 test to write deterministic payload bytes and record
+  SHA-256 checksums.
+- Local validation:
+  - synthetic payload metadata/checksum round-trip passed with `entries=2`,
+    `entry_size=184`;
+  - `python3 -m py_compile` passed;
+  - `git diff --check` passed.
+- Remote validation:
+  - synthetic payload metadata/checksum round-trip passed in
+    `/root/lfz/tmp/vendor-kimi-speculative-gp33`;
+  - targeted CUDA compile with `-DGGML_CUDA_MOE_STREAM_BATCH` succeeded and
+    produced `/tmp/moe_stream_batch_gp43_batch.cu.o` (`6.9M`);
+  - warnings matched existing unused/missing-declaration patterns plus the new
+    v2 read debug missing declaration warning.
+- Decision:
+  - accepted as non-SOTA infrastructure progress;
+  - no held-out prompts were used;
+  - no runtime decode path was changed;
+  - no token-rate or quality claim is made.

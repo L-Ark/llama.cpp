@@ -18,6 +18,7 @@ bool ggml_cuda_moe_stream_up_gate_batch(int, int, const char *, const void *, co
 const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *, int, size_t) { return nullptr; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(const char *, int, size_t, const char **, size_t *, uint64_t *) { return nullptr; }
 bool ggml_cuda_moe_expert_pack_v2_lookup_debug(const char *, int, int *, int64_t *, int64_t *, size_t *, size_t *) { return false; }
+bool ggml_cuda_moe_expert_pack_v2_read_debug(const char *, int, void *, size_t, size_t *) { return false; }
 }
 #else
 // Decode-only batched streaming MoE path.
@@ -2850,10 +2851,12 @@ static bool expert_pack_v2_load_source(const char *path, int32_t source_idx, std
             return false;
         }
     }
-    std::fclose(file);
-
     expert_pack_source source;
+    source.file = file;
     std::snprintf(source.path, sizeof(source.path), "%s", path);
+#if !defined(_WIN32)
+    source.fd_direct = -1;
+#endif
     g_expert_pack_v2.sources.push_back(source);
     std::fprintf(stderr, "[moe_stream_batch] expert pack v2: loaded %lu metadata entries from %s\n",
                  (unsigned long)n_entries, path);
@@ -3064,6 +3067,14 @@ static const expert_pack_v2_entry * expert_pack_v2_lookup(const char *tensor_nam
     return nullptr;
 }
 
+static expert_pack_source * expert_pack_v2_source_for_entry(const expert_pack_v2_entry *entry) {
+    if (!entry || entry->source_idx < 0 ||
+            (size_t)entry->source_idx >= g_expert_pack_v2.sources.size()) {
+        return nullptr;
+    }
+    return &g_expert_pack_v2.sources[(size_t)entry->source_idx];
+}
+
 extern "C" bool ggml_cuda_moe_expert_pack_v2_lookup_debug(
         const char *tensor_name,
         int expert_idx,
@@ -3079,6 +3090,35 @@ extern "C" bool ggml_cuda_moe_expert_pack_v2_lookup_debug(
     if (ne01) *ne01 = entry->ne01;
     if (nb01) *nb01 = (size_t)entry->nb01;
     if (nbytes) *nbytes = (size_t)entry->nbytes;
+    return true;
+}
+
+extern "C" bool ggml_cuda_moe_expert_pack_v2_read_debug(
+        const char *tensor_name,
+        int expert_idx,
+        void *dst,
+        size_t dst_capacity,
+        size_t *nread) {
+    if (nread) *nread = 0;
+    if (!dst || dst_capacity == 0) return false;
+    const expert_pack_v2_entry *entry = expert_pack_v2_lookup(tensor_name, expert_idx);
+    if (!entry || entry->nbytes == 0 || entry->nbytes > dst_capacity) return false;
+    expert_pack_source *source = expert_pack_v2_source_for_entry(entry);
+    if (!source || !source->file) return false;
+
+    std::lock_guard<std::mutex> lk(g_expert_pack_v2.mu);
+#if defined(_WIN32)
+    if (_fseeki64(source->file, (int64_t)entry->offset, SEEK_SET) != 0) {
+#else
+    if (::fseeko(source->file, (off_t)entry->offset, SEEK_SET) != 0) {
+#endif
+        return false;
+    }
+    const size_t sz = (size_t)entry->nbytes;
+    if (!expert_pack_read_exact(source->file, dst, sz)) {
+        return false;
+    }
+    if (nread) *nread = sz;
     return true;
 }
 
