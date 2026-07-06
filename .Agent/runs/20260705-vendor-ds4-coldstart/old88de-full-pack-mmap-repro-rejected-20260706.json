@@ -1,0 +1,99 @@
+{
+  "schema": "vendor-ds4-coldstart-experiment-v1",
+  "created_at_utc": "2026-07-06T00:00:09.660629Z",
+  "status": "rejected",
+  "candidate": "old 88de4bb09 full native expert-pack mmap reproduction",
+  "reason": "Rebuilding/running the old 88de4bb09 source state reproduced only 3.9 tok/s, below the accepted 4.4 tok/s strict cold SOTA. The earlier 5.1 tok/s run remains a non-reproducible diagnostic signal and is not promoted.",
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "constraints": "strict cold drop_caches, 16GB cgroup including file page cache, MemorySwapMax=0, no swap/OOM, correctness_ok=true"
+  },
+  "old_positive_diagnostic_closed": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T224825Z-20260706_full_native_pack_mmap_diag/france-cpu40-vram0gb",
+    "eval_tok_s": 5.1,
+    "prompt_tok_s": 1.9,
+    "ttft_ms": 26197.922333,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 12725145600,
+    "memory_max_events": 26,
+    "build_string": "b14646-88de4bb09",
+    "conclusion": "Diagnostic only; not reproducible after bounded old-source rebuild and strict rerun. Do not treat as SOTA."
+  },
+  "reproduction_run": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T234941Z-20260706_old88de_full_pack_mmap_repro/france-cpu40-vram0gb",
+    "build_string": "b14646-88de4bb09",
+    "source_commit": "88de4bb09",
+    "eval_tok_s": 3.9,
+    "prompt_tok_s": 1.5,
+    "ttft_ms": 32150.778336,
+    "elapsed_seconds": 65.76,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15058735104,
+    "memory_max_events": 18060,
+    "pgmajfault": 296930,
+    "workingset_refault_file": 1258444,
+    "ram_ok": true,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage."
+  },
+  "build_hashes": {
+    "old_88de_rebuilt_binary": {
+      "llama_cli": "866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc",
+      "libggml_cuda_so": "a4b0188dba545c3f1f1e824a3663121cf90f3039b8bc5b498eca2a5faeb1ace9",
+      "libggml_cpu_so": "f668215c35c88e1c27391bc1afc3a3e514ea2a49009775fb17f24483784247d2",
+      "libllama_so": "afa5425437b4f4e3d164e42e5132b097eca3cde81462076ac65ece1a0c23dca1"
+    },
+    "current_head_restored_after_old_run": {
+      "commit": "51995ed992589d7fe86129bcd273ebbfc215c51e",
+      "llama_cli_version": "14885 (51995ed99)",
+      "llama_cli": "866890c34606a1a91a28d7ef53904b506680036391f7f8edb7dbcff13568c8bc",
+      "libggml_cuda_so": "537aabf2678d130306e7d8ffae1aad1947620342a496c67c196dbbb7239ed9a2",
+      "libggml_cpu_so": "cf38cd1328d456560820422ce05de5be181dac5a21dbdc031e47efdaf7bb1f88",
+      "libllama_so": "a9f3a1110d3ef74f318ca73226717e618156b4eab4a467bdcedc015165e1d691"
+    }
+  },
+  "runtime_counters": {
+    "full_pack_mmap": {
+      "hits": 35880,
+      "misses": 0,
+      "fallback_gguf": 0,
+      "bytes": 159897354240,
+      "entries": 33024
+    },
+    "gate_one_pack": {
+      "hits": 4623,
+      "misses": 0,
+      "reads": 4623,
+      "bytes": 20602159104,
+      "entries": 4599,
+      "direct_enabled": true
+    },
+    "vram_cache": {
+      "hits": 30528,
+      "misses": 4623,
+      "hit_rate_percent": 86.8
+    },
+    "cpu_moe_profile": {
+      "calls": 16920,
+      "total_ms_per_call": 1.983,
+      "fallback_t0_ms_per_call": 1.556,
+      "cuda_single_ms_per_call": 0.412,
+      "batch_accept": 0,
+      "single_accept": 35151,
+      "single_decline": 38222
+    }
+  },
+  "acceptance_gates": {
+    "token_rate_gt_accepted_sota": false,
+    "ttft_within_gate": true,
+    "ram_under_16gb_including_page_cache": true,
+    "no_swap_or_oom": true,
+    "correctness_ok": true
+  },
+  "conclusion": "Reject old-source reproduction and keep 4.4 tok/s as accepted strict cold SOTA. Current exact full-pack mmap variants and old 88de reproduction are closed unless a new hard-bound explains a reproducible gap.",
+  "next_action": "Update the top-level plan, push source/artifacts to ssd/vendor/deepseek-token-rate-16gb, then continue only with a new hard-bound route or disk-approved alternate GGUF empirical testing."
+}
