@@ -86681,4 +86681,190 @@ Acceptance for Phase 7OO:
 
 Result:
 
+- Plan commit: `d57c46c22`.
+- Server run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-005003Z-phase7oo-runtime-switch-inventory`.
+- Exit code: `0`.
+- Source/model/asset changes: none.
+- Model inference: not run.
+- Pack output: none.
+- Artifacts:
+  - `repo_state.txt`;
+  - `commands.log`;
+  - `phase7oo_runtime_switch_inventory.py`;
+  - `runtime_switch_matrix.tsv`;
+  - `source_evidence.tsv`;
+  - `history_evidence.tsv`;
+  - `candidate_summary.md`;
+  - `decision.md`;
+  - `summary.json`;
+  - `manual_unknown_closure.tsv`;
+  - `decision_manual_closure.md`;
+  - `summary.closed.json`;
+  - `audit_stdout.txt`;
+  - `audit_stderr.txt`;
+  - `exit.txt`;
+  - `artifacts.txt`.
+
+Automated classification:
+
+- Total related switches: `131`.
+- Source switches: `121`.
+- Wrapper-mentioned switches: `48`.
+- Production-enabled switches: `36`.
+- `already_rejected`: `42`.
+- `asset_blocked`: `3`.
+- `diagnostic_only`: `44`.
+- `production_enabled`: `36`.
+- Initial `unknown_needs_manual_read`: `6`.
+
+Manual closure for the 6 initial unknown rows:
+
+- `GGML_MOE_DISABLE_LIBURING`:
+  compile-time guard that disables liburing include; not a runtime throughput
+  improvement.
+- `GGML_MOE_HAS_LIBURING`:
+  compile-time capability macro from liburing include; not a user runtime
+  switch.
+- `GGML_MOE_IO_REQUIRE_DIRECT`:
+  only affects behavior/message when io_uring headers are unavailable; current
+  production run uses liburing/direct iouring.
+- `GGML_MOE_IO_URING_SINGLE`:
+  single-entry read path is superseded by current accepted batch iouring and
+  would add per-entry submission overhead.
+- `GGML_MOE_UP_GATE_LAYER_PROFILE`:
+  profiling only.
+- `GGML_MOE_VRAM_CACHE_GRAPH_RESERVE_MIB`:
+  safety/reserve clamp for graph headroom; useful for OOM risk, not token-rate
+  increase.
+
+Default-off family decision:
+
+- `GGML_MOE_GPU_HANDOFF`: already rejected.
+- `GGML_MOE_HOST_PREFETCH`: already rejected.
+- `GGML_MOE_PLANNED_HOST_PREFETCH`: already rejected.
+- `GGML_MOE_TRACE_PREFETCH`: already rejected.
+- `GGML_MOE_RAM_TIER_*`: already rejected.
+- `GGML_MOE_STREAM_PROMPT_UP_GATE`: asset/format blocked for current same-quant
+  decode work.
+- `GGML_MOE_STREAM_UP_GATE_FUSED_MMQ`: asset/format blocked for current
+  `IQ3_S` mixed-type path.
+- `GGML_MOE_STREAM_DOWN_Q8K`: already rejected.
+- `GGML_MOE_STREAM_IQ2S_BATCH_MMVQ`: asset/format blocked.
+- `GGML_MOE_STREAM_UP_GATE_STAGE_SPLIT` /
+  `GGML_MOE_STREAM_UP_GATE_SPLIT_STAGE`: already rejected.
+- `GGML_MOE_UP_GATE_COMBINED_STAGE`: already rejected.
+- `GGML_MOE_VRAM_PROFILE*`: already rejected for SOTA use.
+- `GGML_MOE_VRAM_CACHE_POLICY`: already rejected.
+- `GGML_MOE_SKIP_NONRESIDENT`: source only clears output buffer and does not
+  skip miss copy/fallback work.
+- `GGML_MOE_Q4_DOWN_*`: diagnostic/rejected family.
+
+Decision:
+
+- Accept 7OO as a reproducible source/history inventory.
+- Do not run a blind env-only model probe from the remaining default-off
+  switches.
+- No credible same-quant env-only switch remains that is both untested and
+  likely to improve token rate under the 16GB RAM, cold-start, TTFT, and
+  France-quality gates.
+- Next step: run a current-head strict cold-start profiling baseline to
+  re-measure the exposed per-token time and choose a source-level data-movement
+  change with a calculated upper bound.
+
+Reproduce result:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard d57c46c22
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260706-005003Z-phase7oo-runtime-switch-inventory
+python3 "$RUN/phase7oo_runtime_switch_inventory.py"
+python3 "$RUN/phase7oo_manual_unknown_closure.py"
+cat "$RUN/runtime_switch_matrix.tsv"
+cat "$RUN/manual_unknown_closure.tsv"
+cat "$RUN/decision_manual_closure.md"
+```
+
+## Phase 7OP - current-head cold-start profiling baseline
+
+Start time: `2026-07-06T08:53:07+0800` / `20260706-005307Z`.
+
+Purpose:
+
+- Re-establish the current HEAD bottleneck after 7OO ruled out blind env-only
+  probes.
+- Measure the accepted production runtime with profiling enabled, under the
+  same 16GB host-RAM and cold-start constraints.
+- Use the measured per-token time split to decide the next source-level
+  optimization. The next source change must target the largest exposed
+  compressible component.
+
+Experiment:
+
+- Use the current production wrapper:
+  `scripts/kimi-phase7fb-min-profile-repro.sh`.
+- Run `N=32` first, not as SOTA promotion, but to collect profiles cheaply.
+- Set `MIN_PROFILE=0` so the run records:
+  - `fallback-profile.csv`;
+  - `down-batch-profile.csv`;
+  - `up-gate-profile.csv`;
+  - `route-profile.csv`;
+  - `route-trace.csv`;
+  - `ttft-trace.csv`.
+- Keep production env otherwise unchanged:
+  - `PINNED_SLOTS=12`;
+  - `VRAM_MIB=15000`;
+  - `UPGATE_PCT=62`;
+  - `IQ2_UPGATE_PARALLEL=1`;
+  - `MOE_IO_DEPTH=8`;
+  - `MOE_IO_REFILL_BATCH=4`;
+  - `MOE_PREFETCH_DOWN_DEPTH=2`.
+- Launch through `systemd-run --wait --collect --same-dir` with:
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - `IOAccounting=yes`;
+  - `IOWeight=10000`;
+  - `CPUWeight=10000`;
+  - `Nice=-10`;
+  - `IOSchedulingClass=realtime`;
+  - `IOSchedulingPriority=0`.
+- Use cold start:
+  - wrapper performs `sync`;
+  - wrapper performs `echo 3 > /proc/sys/vm/drop_caches`.
+
+Metrics to record:
+
+- output text and France semantic quality;
+- eval tokens/s;
+- prompt time and TTFT-related timing;
+- cgroup `memory.peak`;
+- final `memory.stat` including `anon`, `file`, `active_file`, and
+  `inactive_file`;
+- profile row counts and aggregate times for:
+  - up/gate stage;
+  - up/gate quant/kernel/d2h;
+  - down stage;
+  - down quant/kernel/d2h;
+  - CPU fallback bytes/time;
+  - pack hit/miss/read statistics if present in stderr.
+
+Acceptance:
+
+- Exit code must be `0`.
+- France output must pass the existing semantic quality check.
+- Host RAM must stay below `16GB`.
+- Because `MIN_PROFILE=0` adds instrumentation, do not promote token-rate
+  numbers as SOTA from this run.
+- Use the run only to select the next source-level optimization.
+
+Decision rule:
+
+- If one component dominates and is compressible, write the next phase plan
+  before changing source.
+- If profiling overhead makes the timing split unusable, run one more
+  `N=32 MIN_PROFILE=1` strict baseline and use only stderr/cgroup metrics.
+- Do not change source or runtime env before this phase is recorded and pushed.
+
+Result:
+
 - Pending.
