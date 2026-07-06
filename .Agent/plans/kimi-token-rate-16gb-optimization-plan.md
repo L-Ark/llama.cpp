@@ -92231,3 +92231,107 @@ Next direction:
   - a tighter learned or statistical route classifier that predicts a bounded
     candidate set and must pass the same byte coverage / false-byte gate before
     runtime changes.
+
+## GP30: prompt-general route-detail cache-wave bound
+
+Timestamp: `2026-07-07T07:10:00+0800`.
+
+Status: planned.
+
+Branch: `vendor/kimi-speculative-general-token-rate-16gb`.
+
+Purpose:
+
+- GP29 was useful but France-only and n32. It rejected one naive same-layer
+  previous-call predictor, but it is not enough to decide the next cache
+  reallocation.
+- The next practical question is whether a prompt-general, layer-aware VRAM
+  allocation can reduce exposed IO waves more than the current global hotset,
+  especially for worst prompts.
+- This phase must use dev prompts only. Held-out test prompts remain sealed and
+  cannot be used for cache policy design.
+
+Design step 1: collect exact dev route-detail traces
+
+- Run the dev prompt suite with:
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - cold process start per prompt;
+  - `N=32` first, because this is a diagnostic trace collection phase;
+  - `GGML_MOE_ROUTE_DETAIL_OUT=$RUN/route-detail.csv`;
+  - `PROFILE=1`;
+  - same current SOTA runtime settings:
+    `PINNED_SLOTS=12`, `VRAM_MIB=15000`, `THREADS=32`,
+    `UPGATE_PCT=62`, `IQ2_UPGATE_PARALLEL=1`,
+    `MOE_IO_DEPTH=8`, `MOE_IO_REFILL_BATCH=4`,
+    `MOE_PREFETCH_DOWN_DEPTH=2`.
+- Record for every dev prompt:
+  - output and quality verdict;
+  - token rate, TTFT, decode time;
+  - cgroup memory peak/current/file/anon;
+  - route detail row count;
+  - expert-pack bytes/wait;
+  - iouring batch histogram;
+  - VRAM up/gate/down slots and hit rates.
+- This is not SOTA. Do not use held-out test prompts.
+
+Design step 2: layer/cache-wave simulator
+
+- Create `.Agent/run-tools/kimi_route_detail_cache_wave_bound.py`.
+- Inputs:
+  - all GP30 dev `route-detail.csv` files;
+  - per-prompt `metrics.txt` files for the current slot split/hit-rate context.
+- Reconstruct decode calls by `(prompt, call, layer, kind, tensor)`.
+- Evaluate prompt-general cache candidates under the current approximate VRAM
+  entry budget:
+  - up/gate pool around `1735` entries;
+  - down pool around `766` entries;
+  - total VRAM around current `15GB` setting.
+- Compare strategies:
+  1. global LFU by `(tensor, expert)`;
+  2. front-layer full coverage for `layers 1..N`, sweep
+     `N = 2, 4, 8, 12, 16`;
+  3. utility greedy, where candidate score is based on predicted reduction of
+     per-call IO waves:
+
+```text
+waves = ceil(miss_expert_count / MOE_IO_DEPTH)
+```
+
+  4. role-rebalanced splits, sweeping up/gate budget from `62%` to `80%`,
+     with the same total entry budget.
+
+Metrics:
+
+- per-prompt and aggregate:
+  - hit bytes;
+  - missed bytes;
+  - estimated IO waves;
+  - full-hit `(call, layer, kind)` count;
+  - worst-prompt wave reduction;
+  - worst-prompt byte reduction;
+  - entries used by role and layer.
+
+Theory gate before runtime changes:
+
+- A runtime cache-policy implementation is allowed only if the simulator shows
+  a prompt-general candidate with:
+  - worst-prompt estimated IO-wave reduction >= `20%` versus global LFU under
+    the same entry budget;
+  - no prompt with estimated miss bytes increasing by more than `5%`;
+  - no role losing more than `10%` full-hit calls unless total wave reduction is
+    still positive for every prompt;
+  - implementation can stay within current `VRAM_MIB=15000` and 16GB host RAM.
+- If no strategy passes, reject layer full-hit / front-layer cache
+  reallocation as the next primary path and return to model-side byte
+  reduction or draft/predictor asset work.
+
+Execution rules:
+
+- Update this plan before every runtime or code change.
+- Commit and push reproducible GP30 trace/analyzer records even if the result
+  is a rejection.
+- Do not run held-out test prompts until a candidate runtime policy is frozen.
+- Do not claim SOTA from GP30 diagnostics. A SOTA claim still requires n96
+  cold-start held-out test metrics, quality pass, TTFT gate, and 16GB cgroup
+  proof.
