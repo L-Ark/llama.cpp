@@ -4751,3 +4751,17 @@
   4. 定义 writeback mode 的 top1 gate，默认关闭；
   5. 给出 VRAM split：gate cache + resident payload + workspace 必须在 32GB 5090 下同时成功。
 - `first_edit_allowed`: 只允许先写 manifest parser + report-only loader/probe，不允许默认写回；未设置 env 时默认路径必须保持不变。
+
+## 2026-07-07 source-edit plan：compressed/partial manifest report-only parser
+
+- `attempt_id`: `20260707-compressed-partial-manifest-report-only-parser`
+- `status`: `planned_before_source_edit`
+- `why_now`: exact prompt-independent hotset 已被 hard-bound reject；Q80 hot-batch skeleton 已证明 compare-only row-tile 路径可用。下一步需要在不改 logits 的情况下，让 runtime 能读取 compressed/partial manifest 元信息并统计 coverage/VRAM payload，为后续真正 compressed/partial resident 表示做准备。
+- `source_scope`: 只改 `ggml/src/ggml-cuda/moe_stream.cu` 的 manifest/parser/report 层；复用现有 `GGML_MOE_STREAM_ONE_DIRECT_*` hot pool，不新建 per-call compute path。
+- `new_default_off_env`:
+  - `GGML_MOE_STREAM_ONE_DIRECT_REPR_MANIFEST`: 可选 extended manifest；未设置时完全沿用旧 `tensor,expert,model_offset,nbytes` direct manifest。
+  - `GGML_MOE_STREAM_ONE_DIRECT_REPR_REPORT`: 可选 report-only CSV/summary；只记录 manifest 与 probe coverage，不参与输出。
+- `manifest_format`: header 建议为 `tensor,expert,row0,row_count,model_offset,compressed_offset,compressed_nbytes,original_nbytes,repr_type,flags`；本轮 parser 同时兼容旧 4 列 exact manifest。`repr_type=exact_mxfp4` 可映射到现有 exact hot pool；其他 `q80/partial/lowbit` 类型只统计 payload 和 coverage，暂不写入 hot pool、暂不写回。
+- `runtime_behavior`: 默认路径 bit-for-bit 不变；开启 repr manifest 时仅加载/排序/统计 metadata，probe CSV 增加 ready rows 中 exact/partial/compressed 覆盖计数。compare-only mode 仍以 CPU fallback dst 为真值，不清空 fallback counts。
+- `validation_gate`: build `llama-cli` + `llama-results`；跑 default-off fixed-text top1 self-check；跑 repr-manifest report-only smoke，要求 strict 16GB/no-swap、top1 `same_top1 == n_tokens`、无 OOM、report 能证明 parser 生效且 logits 未变。
+- `promotion_rule`: 本轮不是 SOTA，不允许性能 promotion；通过后才进入 compressed payload 生成与 kernel/compare 设计。
