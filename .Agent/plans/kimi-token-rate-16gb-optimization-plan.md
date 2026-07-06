@@ -92941,3 +92941,104 @@ GP33 non-destructive space audit and asset recheck:
     more disk and are not aligned with the 16GB host-RAM token-rate target.
   - Next implementation step remains gated on explicit deletion approval for
     old non-SOTA packs or additional disk capacity.
+
+## GP34: mradermacher IQ1_S selected-hotset byte bound under current disk gate
+
+Timestamp: `2026-07-07T10:20:00+0800`.
+
+Status: completed dev-only offline bound; no runtime change and no SOTA claim.
+
+Purpose:
+
+- GP33 shows the full `i1-IQ1_S` model cannot fit without deletion approval.
+- Before waiting on destructive cleanup, test whether a smaller selected
+  IQ1_S hotset could fit within the current free-disk envelope and provide a
+  meaningful byte-reduction bound.
+- This is strictly dev-only:
+  - use GP4 dev `route-profile.csv` files;
+  - do not inspect held-out test prompts;
+  - do not download IQ1_S payload bytes;
+  - do not build or run a low-byte pack.
+
+Important runtime constraint checked before the experiment:
+
+- Current expert-pack lookup key includes:
+  `tensor_name + expert_idx + nbytes`.
+- Current CUDA dispatch uses the main GGUF `src0_type` and current
+  `src0_bytes` to choose kernels and staging size.
+- Therefore a selected IQ1_S pack cannot be used directly with the current
+  IQ3_S main GGUF unless one of these is true:
+  - the full IQ1_S GGUF is loaded as the main model; or
+  - a future mixed-type expert override path is implemented, including
+    metadata, lookup, staging, kernel dispatch, and quality validation.
+
+Tool:
+
+- Added:
+  `.Agent/run-tools/kimi_iq1s_budgeted_hotset_bound.py`.
+- The tool uses GP32 metadata:
+  - `up/gate`: `IQ1_S`;
+  - `down`: first three MoE layers are `Q2_K`, the remaining down tensors are
+    `IQ1_S`;
+  - `n_experts=384`;
+  - expert matrix elements per expert:
+    `7168 * 2048`.
+- Quant byte assumptions from current GGML constants:
+  - `IQ1_S`: block size `256`, type size `50`;
+  - `Q2_K`: block size `256`, type size `84`.
+
+Reproduction:
+
+```bash
+python3 .Agent/run-tools/kimi_iq1s_budgeted_hotset_bound.py \
+  $(find .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct \
+      -path '*/route-profile.csv' | sort | sed 's#^#--profile #') \
+  --kind up,gate,down \
+  --budget-gib 62 \
+  --budget-gib 85 \
+  --budget-gib 115 \
+  --out-dir .Agent/runs/20260707-gp34-iq1s-budgeted-hotset-bound
+```
+
+Records:
+
+- `.Agent/runs/20260707-gp34-iq1s-budgeted-hotset-bound/report.md`.
+- Budget JSON files and selected-plan TSVs under the same directory.
+
+Results:
+
+| budget GiB | selected entries | pack GiB | hybrid byte ratio | current GiB | hybrid GiB | IQ3 direct compatible |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `62` | `23151` | `61.999` | `0.6083` | `3506.568` | `2132.909` | no |
+| `85` | `31692` | `84.998` | `0.5672` | `3506.568` | `1988.879` | no |
+| `115` | `42746` | `114.998` | `0.5359` | `3506.568` | `1879.071` | no |
+
+All dev-profile candidate keys selected:
+
+- Entries: `56896`.
+- Pack size: `153.753 GiB`.
+- Hybrid byte ratio: `0.5205`.
+- Runtime `nbytes` mismatch count: `56896`.
+
+Interpretation:
+
+- IQ1_S is materially better than the earlier AesSedai selected lower-byte
+  bound:
+  - AesSedai GP25 `85 GiB`: `0.7348x`;
+  - mradermacher IQ1_S GP34 `85 GiB`: `0.5672x`;
+  - all dev candidates with IQ1_S: `0.5205x`.
+- This reaches the GP10 byte-ratio neighborhood where `5 tok/s` starts to be
+  plausible, assuming quality and kernel speed hold.
+- However, it is not a runnable improvement on the current IQ3_S main model
+  because every selected entry has an `nbytes` mismatch.
+
+Decision:
+
+- Do not build a selected IQ1_S pack for the current IQ3_S runtime.
+- The least risky executable route remains the full IQ1_S model smoke after
+  disk space is available.
+- A mixed-type expert override is a separate high-risk implementation branch:
+  it would need new pack metadata for remote type, relaxed lookup, typed
+  staging, typed kernels for up/gate/down, and a full quality gate. It should
+  not be started until the full IQ1_S smoke is impossible for several turns or
+  until deletion/additional-disk is explicitly rejected.

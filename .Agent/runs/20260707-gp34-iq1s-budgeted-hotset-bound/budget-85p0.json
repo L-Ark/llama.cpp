@@ -1,0 +1,138 @@
+{
+  "aggregate": {
+    "current_bytes": 3765149237248,
+    "hybrid_byte_ratio": 0.5671865934219642,
+    "hybrid_bytes": 2135542169600
+  },
+  "budget_gib": 85.0,
+  "by_kind": {
+    "down": {
+      "current_nbytes": 75406557184,
+      "entries": 11238,
+      "remote_nbytes": 32615432192
+    },
+    "gate": {
+      "current_nbytes": 57467977728,
+      "entries": 10737,
+      "remote_nbytes": 30785126400
+    },
+    "up": {
+      "current_nbytes": 48164945920,
+      "entries": 9717,
+      "remote_nbytes": 27860582400
+    }
+  },
+  "by_prompt": [
+    {
+      "current_bytes": 594076499968,
+      "events": 106592,
+      "hybrid_byte_ratio": 0.5478905530879146,
+      "hybrid_bytes": 325488902144,
+      "prompt": "dev_france_regression",
+      "selected_byte_coverage": 0.935216187999234,
+      "selected_current_bytes": 555589959680,
+      "selected_remote_bytes": 287002361856
+    },
+    {
+      "current_bytes": 655784148992,
+      "events": 117664,
+      "hybrid_byte_ratio": 0.5507463819416074,
+      "hybrid_bytes": 361170747392,
+      "prompt": "dev_japan_factual",
+      "selected_byte_coverage": 0.9293626914660832,
+      "selected_current_bytes": 609461321728,
+      "selected_remote_bytes": 314847920128
+    },
+    {
+      "current_bytes": 262397886464,
+      "events": 47080,
+      "hybrid_byte_ratio": 0.5919036787870947,
+      "hybrid_bytes": 155314274304,
+      "prompt": "dev_linear_equation",
+      "selected_byte_coverage": 0.8381050452636621,
+      "selected_current_bytes": 219916992512,
+      "selected_remote_bytes": 112833380352
+    },
+    {
+      "current_bytes": 416667009024,
+      "events": 74760,
+      "hybrid_byte_ratio": 0.5781112718576799,
+      "hybrid_bytes": 240879894528,
+      "prompt": "dev_mixed_summary",
+      "selected_byte_coverage": 0.8676196956384832,
+      "selected_current_bytes": 361508503552,
+      "selected_remote_bytes": 185721389056
+    },
+    {
+      "current_bytes": 725205254144,
+      "events": 130120,
+      "hybrid_byte_ratio": 0.5622500509228743,
+      "hybrid_bytes": 407746691072,
+      "prompt": "dev_photosynthesis_factual",
+      "selected_byte_coverage": 0.903668154921933,
+      "selected_current_bytes": 655344893952,
+      "selected_remote_bytes": 337886330880
+    },
+    {
+      "current_bytes": 732918710272,
+      "events": 131504,
+      "hybrid_byte_ratio": 0.5916297579673968,
+      "hybrid_bytes": 433616519168,
+      "prompt": "dev_python_reverse",
+      "selected_byte_coverage": 0.8382333335002466,
+      "selected_current_bytes": 614356893696,
+      "selected_remote_bytes": 315054702592
+    },
+    {
+      "current_bytes": 378099728384,
+      "events": 67840,
+      "hybrid_byte_ratio": 0.5589137603859294,
+      "hybrid_bytes": 211325140992,
+      "prompt": "dev_zh_france",
+      "selected_byte_coverage": 0.9116195012812549,
+      "selected_current_bytes": 344683085824,
+      "selected_remote_bytes": 177908498432
+    }
+  ],
+  "by_remote_type": {
+    "IQ1_S": {
+      "current_nbytes": 179765297152,
+      "entries": 31490,
+      "remote_nbytes": 90288128000
+    },
+    "Q2_K": {
+      "current_nbytes": 1274183680,
+      "entries": 202,
+      "remote_nbytes": 973012992
+    }
+  },
+  "candidate_keys": 56896,
+  "current_iq3_runtime_compatible": false,
+  "kinds": [
+    "down",
+    "gate",
+    "up"
+  ],
+  "note": "The selected IQ1_S bytes are a theoretical bound for byte movement. They are not directly runnable with the IQ3_S main GGUF because expert-pack lookup and kernels require current nbytes/src0_type.",
+  "pack": {
+    "data_start": 4820992,
+    "entries": 31692,
+    "estimated_pack_bytes": 91265961984,
+    "padding_bytes": 3768,
+    "payload_bytes": 91261140992
+  },
+  "profiles": [
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_france_regression/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_japan_factual/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_linear_equation/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_mixed_summary/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_photosynthesis_factual/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_python_reverse/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_zh_france/route-profile.csv"
+  ],
+  "remote_asset": "mradermacher/Kimi-K2.7-Code-i1-GGUF Kimi-K2.7-Code.i1-IQ1_S.gguf",
+  "runtime_nbytes_mismatch_count": 31692,
+  "selected_entries": 31692,
+  "selected_tensors": 173,
+  "source_header_record": ".Agent/runs/20260707-gp32-iq1s-header-preflight/parsed-header-full.json"
+}

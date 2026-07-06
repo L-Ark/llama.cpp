@@ -1,0 +1,137 @@
+{
+  "aggregate": {
+    "current_bytes": 3765149237248,
+    "hybrid_byte_ratio": 0.5205107017177479,
+    "hybrid_bytes": 1959800471552
+  },
+  "budget_gib": null,
+  "by_kind": {
+    "down": {
+      "current_nbytes": 115579699200,
+      "entries": 17412,
+      "remote_nbytes": 51873382400
+    },
+    "gate": {
+      "current_nbytes": 104762212352,
+      "entries": 19742,
+      "remote_nbytes": 56604262400
+    },
+    "up": {
+      "current_nbytes": 96898285568,
+      "entries": 19742,
+      "remote_nbytes": 56604262400
+    }
+  },
+  "by_prompt": [
+    {
+      "current_bytes": 594076499968,
+      "events": 106592,
+      "hybrid_byte_ratio": 0.5205114503345215,
+      "hybrid_bytes": 309223620608,
+      "prompt": "dev_france_regression",
+      "selected_byte_coverage": 1.0,
+      "selected_current_bytes": 594076499968,
+      "selected_remote_bytes": 309223620608
+    },
+    {
+      "current_bytes": 655784148992,
+      "events": 117664,
+      "hybrid_byte_ratio": 0.5205121245529893,
+      "hybrid_bytes": 341343600640,
+      "prompt": "dev_japan_factual",
+      "selected_byte_coverage": 1.0,
+      "selected_current_bytes": 655784148992,
+      "selected_remote_bytes": 341343600640
+    },
+    {
+      "current_bytes": 262397886464,
+      "events": 47080,
+      "hybrid_byte_ratio": 0.5205023934319611,
+      "hybrid_bytes": 136578727936,
+      "prompt": "dev_linear_equation",
+      "selected_byte_coverage": 1.0,
+      "selected_current_bytes": 262397886464,
+      "selected_remote_bytes": 136578727936
+    },
+    {
+      "current_bytes": 416667009024,
+      "events": 74760,
+      "hybrid_byte_ratio": 0.5205083995587176,
+      "hybrid_bytes": 216878678016,
+      "prompt": "dev_mixed_summary",
+      "selected_byte_coverage": 1.0,
+      "selected_current_bytes": 416667009024,
+      "selected_remote_bytes": 216878678016
+    },
+    {
+      "current_bytes": 725205254144,
+      "events": 130120,
+      "hybrid_byte_ratio": 0.5205127459005505,
+      "hybrid_bytes": 377478578176,
+      "prompt": "dev_photosynthesis_factual",
+      "selected_byte_coverage": 1.0,
+      "selected_current_bytes": 725205254144,
+      "selected_remote_bytes": 377478578176
+    },
+    {
+      "current_bytes": 732918710272,
+      "events": 131504,
+      "hybrid_byte_ratio": 0.5205128076733374,
+      "hybrid_bytes": 381493575680,
+      "prompt": "dev_python_reverse",
+      "selected_byte_coverage": 1.0,
+      "selected_current_bytes": 732918710272,
+      "selected_remote_bytes": 381493575680
+    },
+    {
+      "current_bytes": 378099728384,
+      "events": 67840,
+      "hybrid_byte_ratio": 0.52050735750893,
+      "hybrid_bytes": 196803690496,
+      "prompt": "dev_zh_france",
+      "selected_byte_coverage": 1.0,
+      "selected_current_bytes": 378099728384,
+      "selected_remote_bytes": 196803690496
+    }
+  ],
+  "by_remote_type": {
+    "IQ1_S": {
+      "current_nbytes": 310932357120,
+      "entries": 55896,
+      "remote_nbytes": 160265011200
+    },
+    "Q2_K": {
+      "current_nbytes": 6307840000,
+      "entries": 1000,
+      "remote_nbytes": 4816896000
+    }
+  },
+  "candidate_keys": 56896,
+  "current_iq3_runtime_compatible": false,
+  "kinds": [
+    "down",
+    "gate",
+    "up"
+  ],
+  "note": "All dev-profile candidate keys selected; still a theoretical bound, not directly runnable with IQ3_S.",
+  "pack": {
+    "data_start": 8650752,
+    "entries": 56896,
+    "estimated_pack_bytes": 165090557952,
+    "padding_bytes": 2520,
+    "payload_bytes": 165081907200
+  },
+  "profiles": [
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_france_regression/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_japan_factual/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_linear_equation/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_mixed_summary/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_photosynthesis_factual/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_python_reverse/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_zh_france/route-profile.csv"
+  ],
+  "remote_asset": "mradermacher/Kimi-K2.7-Code-i1-GGUF Kimi-K2.7-Code.i1-IQ1_S.gguf",
+  "runtime_nbytes_mismatch_count": 56896,
+  "selected_entries": 56896,
+  "selected_tensors": 173
+}
