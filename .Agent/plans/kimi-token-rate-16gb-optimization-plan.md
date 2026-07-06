@@ -87883,3 +87883,101 @@ Decision:
   - a real speed experiment still requires either enough storage plus a
     matching lower-bit runtime/model path, or an explicitly approved cleanup
     target.
+
+## Phase 7OV - partitioned selected lower-bit pack manifests
+
+Start time: `2026-07-06T10:05:29+0800` / `20260706-020529Z`.
+
+Purpose:
+
+- Continue the selected lower-bit path without deleting files, downloading full
+  shards, or writing a `115 GiB` pack.
+- Remove one avoidable engineering blocker from 7OU:
+  - 7OU can only validate/build the selected lower-bit manifest as a single
+    large `115.220 GiB` `GGMLMOEPACKv1` output;
+  - the runtime already supports three pack sources through
+    `GGML_MOE_EXPERT_PACK`, `GGML_MOE_EXPERT_PACK_OVERLAY`, and
+    `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA`;
+  - 7OM showed a natural three-way split by kind:
+    `up` `29.187 GiB`, `gate` `32.610 GiB`, `down` `53.418 GiB`.
+- Produce deterministic partition manifests whose `entry_idx` and `pack_offset`
+  are valid for each independent output pack, so the existing 7OU builder can
+  consume each partition directly.
+
+Bottleneck and rationale:
+
+- The current production token-rate bottleneck remains expert movement, with
+  7OQ `iouring_wait_us=48336684` and `iouring_bytes=315.380 GiB`.
+- 7OR's hard-bound audit showed current `IQ3_S` cannot reach `5 tok/s` through
+  narrow cache/scheduler/Q4 fallback changes. The only remaining material path
+  is reducing expert bytes with matching lower-bit assets/runtime.
+- 7OU proved the selected remote lower-bit bytes are valid and range-readable,
+  but the single-output pack is too large for current free space.
+- Partitioning does not solve the total-space or current-runtime type mismatch
+  by itself. It does make future lower-bit construction reproducible and
+  incremental:
+  - each kind partition can be dry-run and smoke-tested independently now;
+  - if explicit cleanup/external storage is provided later, each partition can
+    be built and attached through the existing three-source loader;
+  - no token-rate result is accepted from this phase.
+
+Implementation plan:
+
+1. Commit and push this Phase 7OV plan before source edits.
+2. Add:
+
+```text
+scripts/kimi-partition-remote-pack-manifest.py
+```
+
+3. Script behavior:
+   - input: 7OT `manifest.tsv`;
+   - strategy: `--by-kind`;
+   - output: one manifest per `kind` under `--out-dir`;
+   - preserve all remote range fields;
+   - add diagnostic fields such as `source_entry_idx` and `partition`;
+   - recompute `entry_idx` and `pack_offset` for each partition, starting from
+     that partition's own `GGMLMOEPACKv1` header/index size;
+   - write `partition-summary.json`.
+4. Validate locally:
+   - `python3 -m py_compile scripts/kimi-partition-remote-pack-manifest.py`.
+5. Server dry-run:
+   - sync server to the source commit;
+   - partition the 7OT manifest in a new 7OV run directory;
+   - for each generated partition manifest, run the 7OU builder with
+     `--dry-run --smoke-entries 1`;
+   - assert no `.expert-pack` output exists.
+
+Acceptance:
+
+- No model inference is run.
+- No full shard or full pack payload is downloaded.
+- No existing files are deleted, moved, truncated, or overwritten.
+- Partition manifests are deterministic and internally valid:
+  - contiguous `entry_idx`;
+  - aligned monotonic `pack_offset`;
+  - valid remote ranges;
+  - exact expected bytes.
+- Summary must show:
+  - three partitions: `up`, `gate`, `down`;
+  - total entries `31599`;
+  - total payload still `115.215 GiB`;
+  - each partition's estimated pack size fits the current filesystem
+    individually;
+  - all partitions together still require about `115.220 GiB` and therefore do
+    not fit simultaneously on the current filesystem;
+  - current `IQ3_S` runtime compatibility remains false for all partitions.
+- Each partition builder dry-run exits `0`, completes one HTTP Range smoke
+  entry, and writes no `.expert-pack`.
+- Result is appended here and pushed.
+
+Rollback/rejection:
+
+- Revert the script if it produces non-contiguous entries, bad offsets, invalid
+  ranges, nondeterministic output, or modifies payload files.
+- Do not proceed to any runtime lower-bit test from this phase unless a matching
+  lower-bit model/runtime path and sufficient storage are available.
+
+Result:
+
+- Pending.
