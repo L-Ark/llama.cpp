@@ -1,0 +1,20 @@
+{
+  "artifact_id": "20260706-one-stream-cache-tail-partition-design",
+  "design": {
+    "GGML_MOE_STREAM_CACHE_PARTITION_TAIL_FILTER": "comma/colon tensor-name filter for tensors inserted into the tail partition, e.g. ffn_up_exps",
+    "GGML_MOE_STREAM_CACHE_PARTITION_TAIL_SLOTS": "number of slots reserved at the end of g_vcache for matching tensors; nonmatching tensors evict only in [0,n-tail).",
+    "default": "unset tail filter/slots keeps current full-pool LRU behavior",
+    "lookup": "lookup still scans the full cache, so existing entries remain visible regardless of partition"
+  },
+  "first_probe": {
+    "gate_slots_remaining": 2952,
+    "profile": ".Agent/profiles/vendor-ds4/calib-dev-up-hot1g-20260706.tsv",
+    "scope": "calibration France n64 smoke first; no held-out; expand only if smoke beats 2.2 gate-only n64 control",
+    "tail_slots": 240,
+    "total_slots_reference": 3192
+  },
+  "held_out_used": false,
+  "reason": "up hot1g gated stream tied because hot up experts shared the same LRU pool as gate and dropped VRAM cache hit rate from 78.3% to 58.5%. A tail partition can bound up hotset damage by reserving a fixed slot range for matching up tensors.",
+  "risk": "Gate loses 240 slots, so small gate miss increase is expected. The candidate is only useful if preventing up/gate mutual eviction recovers more than this loss.",
+  "status": "ready_for_default_off_implementation"
+}

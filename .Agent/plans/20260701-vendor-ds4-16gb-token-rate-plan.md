@@ -3913,3 +3913,14 @@
 - `defaultoff_control`: `/root/lfz/runs/vendor-ds4-16gb/20260706T123731Z-20260706T-hotset-gated-defaultoff-gate-only-n64-control/france-defaultoff-gate-only-n64-cpu40-vram0gb`, `eval_tok_s=2.2`, `prompt_tok_s=1.0`, `memory_peak_bytes=16000000000`, `ram_ok=true`; correctness false only due n64 truncation.
 - `decision`: reject 1GiB up hotset as performance candidate and do not expand to full dev set. The mechanism is useful as default-off diagnostic/control, but a small resident up hotset still steals enough cache/movement budget to erase fallback savings.
 - `next_design`: do not try larger up hotsets unless a gate-cache partition or separate pool prevents hit-rate collapse. The next credible route is a cache-partitioned experiment or a non-cache grouped staging design; both need a hard bound before another full cold benchmark.
+
+
+## 2026-07-06 设计：one-stream cache tail partition
+
+- `attempt_id`: `20260706-one-stream-cache-tail-partition`
+- `status`: `ready_for_default_off_implementation`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/one-stream-cache-tail-partition-design-20260706.json`
+- `reason`: `up hot1g gated stream` only tied because it reduced up fallback but dropped shared VRAM cache hit rate from `78.3%` to `58.5%`. The cache is a single LRU pool, so up hotset inserts can evict gate entries.
+- `implementation`: add default-off tail partition controls in `moe_stream.cu`: `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_FILTER=<names>` and `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_SLOTS=<N>`. Matching tensors evict only in the tail slot range; nonmatching tensors evict only in the main range. Lookup still scans all slots. Unset env keeps existing behavior.
+- `first_probe`: use existing calibration-only `up hot1g` profile with `tail_slots=240` under strict `n64` France smoke. Total slots are about `3192`; this leaves about `2952` gate slots and gives up hotset about `1.0GiB`. Do not use held-out.
+- `acceptance`: proceed to full calibration/dev only if the n64 smoke beats the gate-only `2.2 tok/s` control and does not break RAM/TTFT/correctness. If it ties or regresses, record rejected and do not expand.
