@@ -2,6 +2,51 @@
 
 ## Summary
 
+### 2026-07-06 Latest Active Plan: 6.2-6.5 tok/s Intermediate Up/Down Hotset Route
+
+This is the latest active plan and supersedes older Latest Active Plan sections below. Older sections remain historical experiment records only. The goal is to move the accepted vendor DeepSeek strict-cold SOTA from `4.4 tok/s` toward `6.2-6.5 tok/s` under the existing constraints, not to claim a `10 tok/s` route.
+
+Current accepted SOTA and branch policy remain:
+
+- Accepted strict-cold SOTA evidence: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `elapsed_seconds=62.9`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Current pushed merge checkpoint has a verified strict-cold DeepSeek result of `4.3 tok/s`; the accepted historical SOTA evidence remains `4.4 tok/s` until a better strict-cold run is reproduced and recorded.
+- Push target for DeepSeek work remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+- Any accepted new SOTA must be recorded with enough reproduction detail to replay from the pushed source, then committed and pushed immediately.
+
+Bottleneck basis:
+
+- The current decode bottleneck is still up/down CPU fallback, with prior profile evidence around `19.03s` of decode fallback time.
+- The 6.2-6.5 route is a medium up/down hotset route: keep the accepted gate one-stream cache behavior, and only move the highest-value selected up/down experts to GPU one-stream.
+- Existing bound evidence says raw up/down top-N zero-overhead projections are approximately: top256 logical up/down hotset near `6.15 tok/s`, top384 logical up/down hotset near `6.74 tok/s`, before implementation overhead and TTFT/page-cache effects.
+- In implementation terms, these logical hotsets correspond to profile sizes of about top512 and top768 up/down tensor entries respectively because up and down are separate expert tensors.
+- This route is explicitly not the rejected full/broad up/down streaming route. It must not be measured by simply broadening `GGML_MOE_STREAM_ONE_NAME_FILTER` to `ffn_` or by unsetting the filter.
+
+Implementation plan:
+
+1. First produce a new hard-bound artifact under `.Agent/runs/20260705-vendor-ds4-coldstart/` for this 6.2-6.5 route. It must record the current SOTA metrics, source commit, input profiles, projected top512/top768 tensor-entry payload, expected fallback saving, expected token-rate range, TTFT risk, page-cache risk, and exact promotion gates.
+2. Generate two execution profiles from `.Agent/profiles/vendor-ds4/current_sota_updown_decode_top4096_fallback_us.tsv`: a top512 tensor-entry profile and a top768 tensor-entry profile. These are the first implementation candidates for logical top256/top384 up/down hotsets.
+3. Add a default-off execution allow-list to the one-stream path, controlled by a new env such as `GGML_MOE_STREAM_ONE_EXEC_PROFILE`. This allow-list must be checked before GPU one-stream accepts a tensor/expert. A miss must return `false` so the existing CPU fallback remains responsible for correctness.
+4. Keep default behavior unchanged when the new env is unset. The accepted gate-only path must remain reproducible with the existing env: `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, gate cache admit profile, France gate pack, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, and strict 16GB cgroup.
+5. For candidate runs, use a name filter/profile combination that allows gate plus only selected up/down entries. Gate insertion behavior must remain controlled by the accepted gate profile unless the hard-bound artifact explicitly justifies a different cache split.
+6. Add runtime counters sufficient to diagnose the route: execution-profile loaded entries, accepted hits, rejected misses, up/down GPU calls, CPU fallback calls where already available, VRAM cache hits/misses, expert-pack hits/reads/bytes, one-stream prefill elapsed, and page-cache/RAM counters from the strict runner.
+7. Preserve Kimi functionality while touching shared MoE stream files. Kimi source-list behavior, remote pack tooling, Kimi repro scripts, Kimi verify bench, and Kimi plan history must not be deleted or weakened.
+
+Validation order:
+
+1. Build and static checks first: `cmake --build build-ds4-moe-stream --target llama-cli llama-kimi-verify-bench -j2`, no conflict markers, and `git diff --check` clean.
+2. Correctness before performance: run the France prompt and require a coherent, semantically correct paragraph. Then run the five-prompt set: France, quantum computing, Fibonacci Python function, Japan, and climate change. Any clear correctness failure rejects the candidate.
+3. Strict cold benchmark under `MemoryMax=16000000000`, `MemorySwapMax=0`, cold `drop_caches`, and RAM kill threshold `16000000000`. Page cache must be included in the cgroup accounting.
+4. Run top512 first, then top768. If top768 degrades TTFT/page-cache or misses correctness, fall back to top512. If top768 is near the target but noisy, run at least three strict-cold repeats and compare the median.
+5. Promotion requires `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, `memory_peak_bytes <= 16000000000`, no swap/OOM/ram kill, and coherent output. If token rate improves but TTFT exceeds the gate, commit only as a rejected/diagnostic record, explicitly marked not accepted.
+
+Commit and push rule:
+
+- If a compliant improvement appears, immediately commit source, profiles, plan update, run artifact, exact command/env, output, RAM/page-cache metrics, and reproduction instructions, then push to `ssd/vendor/deepseek-token-rate-16gb`.
+- After pushing an accepted SOTA candidate, reproduce from pushed source before declaring it current accepted SOTA.
+- If performance, correctness, RAM, or TTFT fails, do not promote it. Revert runtime source if it changes default behavior or leaves risk; otherwise keep only default-off source plus rejected documentation if useful.
+- Do not commit unrelated untracked artifacts, including `.Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json`, unless a later task explicitly asks for it.
+
 ### 2026-07-06 DeepSeek Branch Push Decision and 4.3 vs 4.4 Observation
 
 Per user request, the Kimi-preserving merge checkpoint is to be pushed directly to the previous DeepSeek branch `ssd/vendor/deepseek-token-rate-16gb` as source state, even though the merge regression did not produce a new accepted DeepSeek SOTA.
