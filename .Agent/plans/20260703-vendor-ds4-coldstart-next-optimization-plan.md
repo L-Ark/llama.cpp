@@ -70,6 +70,15 @@ Additional compact discovery and under-65GiB bounds:
 - `shreyvish5678/.../dense/model-dense.gguf` has `0` expert payload and a misleading optimistic bound above `10`, but it is rejected as `sidecar_requires_loader_integration_not_direct_model`; it is not a complete vendor model and cannot be used for correctness/performance claims without a separate sidecar loader design and proof.
 - `KCh3dRi4n` sidecar files returned HTTP `401 Unauthorized`, so they are not actionable in the current environment.
 
+Batch/true-parallel audit:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/batch-parallel-audit-20260706.json`
+- Short diagnostic run: `/root/lfz/runs/vendor-ds4-16gb/20260706T012215Z-20260706_batch_decline_debug/france-debug-n32`
+- Source/build finding: accepted SOTA binary `build-ds4-moe-stream/bin/llama-cli` is built with `GGML_CUDA_MOE_STREAM_BATCH=OFF`; in this build `moe_stream_batch.cu` compiles stub functions for `ggml_cuda_moe_stream_batch` and `ggml_cuda_moe_stream_up_gate_batch`, returning `false` without real CUDA batch execution. Batch-probe builds exist with the option ON, but they are not the accepted SOTA binary.
+- Runtime diagnostic with `GGML_MOE_STREAM_DOWN_BATCH=1` confirmed env-only activation is not viable: exit `0`, `memory_peak_bytes=16000000000`, truncated France answer begins coherently, but generation line is only `3.4 tok/s`; profile reports `down calls=4080`, `batch_accept=0`, `batch_decline=1360`, `cuda_batch=0.000 ms/call`, `cuda_single=1.510 ms/call`, `fallback_t0=3.263 ms/call`.
+- Interpretation: `GGML_MOE_STREAM_DOWN_BATCH=1` on the accepted binary is a rejected diagnostic, not a parallel optimization. It cannot be used for SOTA claims and does not test the real batch kernel.
+- Historical plan records batch-enabled attempts as rejected for correctness and/or performance. Therefore true-parallel remains only a future source-design route, requiring a fresh hard-bound and correctness proof before implementation.
+
 Updated next executable plan:
 
 1. Commit and push this manifest validation artifact plus this plan update to `ssd/vendor/deepseek-token-rate-16gb` immediately.
@@ -78,7 +87,7 @@ Updated next executable plan:
 4. Correctness gates come before performance claims: France prompt must be semantically correct and coherent, then run the five-prompt set (`France`, `quantum computing`, `Python Fibonacci`, `Japan`, `climate change`) and record exact outputs.
 5. Only after correctness passes, run strict cold France benchmark under the same hard gates: `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, `TTFT <= 33617.688744 ms`, `eval_tok_s > 4.4`, and full metric/counter capture.
 6. If a compliant new SOTA appears, immediately record full reproduction metadata, commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted.
-7. For the 10 tok/s target, the next plan must target either a complete representation with expert-equivalent payload near or below `11.879710 GiB`, or a mechanism that changes the bound: sidecar loader integration with correctness proof, true parallel expert execution, verified speculation/MTP, or another path that reduces the `19.03s` decode fallback term without correctness loss. Direct GGUF download/testing is now lower priority unless it is for empirical >4.4 SOTA after disk approval; do not repeat rejected runtime patches without new math.
+7. For the 10 tok/s target, the next plan must target either a complete representation with expert-equivalent payload near or below `11.879710 GiB`, or a mechanism that changes the bound: sidecar loader integration with correctness proof, a new true-parallel expert source design beyond env toggles, verified speculation/MTP, or another path that reduces the `19.03s` decode fallback term without correctness loss. Direct GGUF download/testing is now lower priority unless it is for empirical >4.4 SOTA after disk approval; do not repeat rejected runtime patches or `GGML_MOE_STREAM_DOWN_BATCH` env-only probes without new math.
 
 ### 2026-07-06 Latest Active Plan: Broader Header Refresh Completed, Validate Sharded Compact GGUF
 

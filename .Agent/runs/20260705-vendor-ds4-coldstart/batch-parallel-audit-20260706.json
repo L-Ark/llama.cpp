@@ -1,0 +1,79 @@
+{
+  "accepted_sota_context": {
+    "binary": "build-ds4-moe-stream/bin/llama-cli",
+    "cmake_GGML_CUDA_MOE_STREAM_BATCH": "OFF",
+    "eval_tok_s": 4.4
+  },
+  "bound_interpretation": {
+    "all_decode_updown_fallback_zero_overhead_tok_s": 11.356121,
+    "integration_slack_to_10tok_s_ms": 1648.844637,
+    "new_source_work_required": true,
+    "risk": "Any true-parallel path must solve prior batch cache/staging/mapping/correctness issues and cannot be promoted without France + five-prompt correctness, TTFT, strict 16GB cold benchmark, and pushed-source reproduction.",
+    "runtime_env_only_batch_enable_possible": false
+  },
+  "build_cache_evidence": {
+    "build-ds4-moe-stream": "OFF",
+    "build-ds4-moe-stream-batch": "ON",
+    "build-ds4-moe-stream-batch-probe": "ON"
+  },
+  "created_at_utc": "2026-07-06T01:25:44.714899Z",
+  "decision": {
+    "diagnostic_status": "rejected_as_optimization_candidate",
+    "reason": "Runtime env cannot activate batch in accepted binary; short diagnostic regresses generation to 3.4 tok/s and uses stub batch functions. Continue only with a new design/hard-bound, not env toggles.",
+    "sota_changed": false
+  },
+  "historical_context_from_plan": "Batch-enabled probe builds exist with GGML_CUDA_MOE_STREAM_BATCH=ON, but prior plan history records down-batch/fused-up-gate attempts rejected for correctness or performance regressions; current accepted SOTA intentionally uses batch OFF.",
+  "purpose": "Audit whether the current accepted SOTA can enable true MoE batch/parallel execution by runtime env alone, and record a short strict diagnostic.",
+  "schema": "vendor-ds4-batch-parallel-audit-v1",
+  "short_diagnostic": {
+    "exit_status": "0",
+    "memory_events": "low 0\nhigh 0\nmax 7616\noom 0\noom_kill 0\noom_group_kill 0",
+    "memory_peak_bytes": 16000000000,
+    "observed_interpretation": "batch_accept remains 0 and cuda_batch time is 0.000 ms/call; lack of decline logs is consistent with stub batch functions in the accepted build, not a real CUDA batch kernel decline.",
+    "parsed_profile": {
+      "batch_accept": 0,
+      "batch_decline": 1360,
+      "cuda_batch_ms_per_call": 0.0,
+      "cuda_single_ms_per_call": 1.51,
+      "down_calls": 4080,
+      "fallback_t0_ms_per_call": 3.263,
+      "single_accept": 9471,
+      "single_decline": 5201,
+      "total_ms_per_call": 4.791
+    },
+    "profile_line": "[kimi_cpu_moe_profile] down calls=4080 total=4.791 ms/call convert_t0=0.002 route=0.005 route_barrier=0.003 cuda_batch=0.000 cuda_single=1.510 post_cuda_barrier=0.003 fallback_t0=3.263 batch_accept=0 batch_decline=1360 single_accept=9471 single_decline=5201",
+    "prompt_generation_line": "[ Prompt: 1.8 t/s | Generation: 3.4 t/s ]",
+    "purpose": "Strict 16GB short run with GGML_MOE_STREAM_DOWN_BATCH=1 and decline debug enabled to verify runtime behavior without promoting a SOTA.",
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T012215Z-20260706_batch_decline_debug/france-debug-n32",
+    "stderr_decline_reason_count": 0,
+    "stderr_has_decline_reasons": false,
+    "stdout_tail_semantic_note": "France answer begins coherently but is intentionally truncated by -n 32; this is not a correctness/SOTA benchmark."
+  },
+  "source_commit": "12d1ff75bc32b5b64281e65dd836ccc8f8f39a5c",
+  "source_evidence": [
+    {
+      "file": "ggml/src/ggml-cuda/moe_stream_batch.cu",
+      "lines": "1-19",
+      "summary": "When GGML_CUDA_MOE_STREAM_BATCH is not defined, ggml_cuda_moe_stream_batch and ggml_cuda_moe_stream_up_gate_batch are stub functions returning false without decline logs."
+    },
+    {
+      "file": "ggml/src/ggml-cuda/CMakeLists.txt",
+      "lines": "139-143",
+      "summary": "GGML_CUDA_MOE_STREAM_BATCH is a CMake option defaulting OFF and only defines the full batch translation unit when ON."
+    },
+    {
+      "file": "build-ds4-moe-stream/CMakeCache.txt",
+      "summary": "Accepted SOTA build has GGML_CUDA_MOE_STREAM_BATCH:BOOL=OFF."
+    },
+    {
+      "file": "ggml/src/ggml-cpu/ggml-cpu.c",
+      "lines": "3501-3552",
+      "summary": "Down batch is only attempted when GGML_MOE_STREAM_DOWN_BATCH is set and then calls ggml_cuda_moe_stream_batch; in the accepted build this resolves to the stub."
+    },
+    {
+      "file": "ggml/src/ggml-cpu/ggml-cpu.c",
+      "lines": "4328-4368",
+      "summary": "Up/gate batch calls ggml_cuda_moe_stream_up_gate_batch when CUDA stream helpers are available; in the accepted build this also resolves to the stub."
+    }
+  ]
+}
