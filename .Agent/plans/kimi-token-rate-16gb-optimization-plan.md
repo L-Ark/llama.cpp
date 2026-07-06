@@ -85799,7 +85799,7 @@ cat "$RUN/decision.md"
 
 ## Phase 7OL - GGUF expert-pack streaming dry-run tool
 
-Status: planned.
+Status: completed.
 
 Timestamp: 2026-07-06 10:16 CST.
 
@@ -85907,3 +85907,91 @@ Reproducibility:
 - Commit and push this plan before editing scripts.
 - Commit and push the script before server execution.
 - Commit and push the 7OL result before any follow-up cleanup/download plan.
+
+Result:
+
+- Script commit: `80b1b372b5d9815904b974da0c342ce8548d922c`.
+- Server run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-235730Z-phase7ol-gguf-pack-dry-run-iq3s`.
+- Exit code: `0`.
+- `python3 -m py_compile scripts/kimi-build-expert-pack-from-gguf.py`: pass.
+- `stderr.txt`: empty.
+- `.expert-pack` outputs: none.
+- Artifacts:
+  - `repo_state.txt`;
+  - `command.txt`;
+  - `pack-plan.json`;
+  - `tensor-inventory.tsv`;
+  - `stdout.txt`;
+  - `stderr.txt`;
+  - `exit.txt`;
+  - `artifacts.txt`;
+  - `expert_pack_outputs.txt`.
+
+Dry-run metrics:
+
+- Model shards: `10`.
+- Model total size: `377.551 GiB`.
+- Largest shard: `46.539 GiB`.
+- Expert tensors: `180`.
+- Layers covered:
+  - `up`: layers `1..60`, `60` tensors;
+  - `gate`: layers `1..60`, `60` tensors;
+  - `down`: layers `1..60`, `60` tensors.
+- Pack entries: `69120`.
+- Estimated full IQ3_S expert pack size: `365.500 GiB`.
+- Estimated pack payload bytes excluding index/alignment: `365.490 GiB`.
+- Estimated streaming temporary space with one shard plus output pack:
+  `412.039 GiB`.
+- Size by kind:
+  - `up`: `60` tensors, `23040` entries, `105.164 GiB`;
+  - `gate`: `60` tensors, `23040` entries, `113.695 GiB`;
+  - `down`: `60` tensors, `23040` entries, `146.631 GiB`.
+- Size by kind/type:
+  - `up/IQ2_S`: `47` tensors, `18048` entries, `79.037 GiB`;
+  - `up/IQ3_XXS`: `13` tensors, `4992` entries, `26.127 GiB`;
+  - `gate/IQ2_S`: `21` tensors, `8064` entries, `35.314 GiB`;
+  - `gate/IQ3_XXS`: `39` tensors, `14976` entries, `78.381 GiB`;
+  - `down/IQ4_XS`: `12` tensors, `4608` entries, `33.469 GiB`;
+  - `down/Q3_K`: `41` tensors, `15744` entries, `92.490 GiB`;
+  - `down/Q4_0`: `7` tensors, `2688` entries, `20.672 GiB`.
+
+Interpretation:
+
+- The planner correctly finds the complete local `IQ3_S` expert inventory:
+  `60` MoE layers times `up/gate/down`.
+- A full all-expert `IQ3_S` pack is much larger than the current runner packs
+  because current production assets only materialize selected hot/upgate/down
+  overlays, not every expert for every tensor.
+- Streaming pack generation is still disk constrained on the current server:
+  current free space is below the `412.039 GiB` one-shard-plus-output estimate.
+- No model execution was performed in this phase, so there are no new token
+  rate, TTFT, host-RAM, or France-prompt quality metrics. The inference path
+  was unchanged.
+
+Decision:
+
+- Accept 7OL as a reproducible metadata/planning tool.
+- Do not start `IQ2_XXS` download, cleanup, or pack writing yet.
+- Next executable phase should use this planner to design a streaming builder
+  with bounded temporary space, or request explicit cleanup/external-storage
+  approval before any destructive or large-data operation.
+
+Reproduce result:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 80b1b372b5d9815904b974da0c342ce8548d922c
+python3 -m py_compile scripts/kimi-build-expert-pack-from-gguf.py
+RUN=/root/lfz/runs/vendor-kimi-token-rate/repro-phase7ol-gguf-pack-dry-run-iq3s
+mkdir -p "$RUN"
+python3 scripts/kimi-build-expert-pack-from-gguf.py \
+  --model-glob '/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/*.gguf' \
+  --n-experts 384 \
+  --dry-run \
+  --json "$RUN/pack-plan.json" \
+  --tsv "$RUN/tensor-inventory.tsv" \
+  > "$RUN/stdout.txt" 2> "$RUN/stderr.txt"
+cat "$RUN/stdout.txt"
+test ! -e "$RUN"/*.expert-pack
+```
