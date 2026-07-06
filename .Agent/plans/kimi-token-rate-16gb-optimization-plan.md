@@ -92335,3 +92335,122 @@ Execution rules:
 - Do not claim SOTA from GP30 diagnostics. A SOTA claim still requires n96
   cold-start held-out test metrics, quality pass, TTFT gate, and 16GB cgroup
   proof.
+
+GP30 execution result:
+
+- Timestamp: `2026-07-07T07:35:00+0800`.
+- Status: completed; dev-only diagnostic; no runtime cache policy accepted.
+- Runtime worktree: `/root/lfz/tmp/gp29-route-detail-run`.
+- Runtime commit: `b95ef6df95b3fa317de7993c45656c9e6e7d5db2`.
+- Note: current branch head after GP29/GP30 planning has only plan/tool/result
+  changes after this runtime commit; the route-detail runtime code is the same.
+- Remote run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp30-route-detail-dev-n32`.
+- Local records:
+  `.Agent/runs/20260707-gp30-route-detail-dev-n32/`.
+- Analyzer:
+  `.Agent/run-tools/kimi_route_detail_cache_wave_bound.py`.
+- Report:
+  `.Agent/runs/20260707-gp30-route-detail-dev-n32/report.md`.
+
+Run settings:
+
+- Dev prompts only: `7`.
+- Held-out test prompts: not used.
+- `N=32`.
+- `MemoryMax=15900000000`.
+- `MemorySwapMax=0`.
+- Cold process/cache start per prompt via the repro script.
+- Route-detail env:
+  `GGML_MOE_ROUTE_DETAIL_OUT=$RUN/route-detail.csv`.
+- Current SOTA runtime settings:
+  `PINNED_SLOTS=12`, `VRAM_MIB=15000`, `THREADS=32`,
+  `UPGATE_PCT=62`, `IQ2_UPGATE_PARALLEL=1`,
+  `MOE_IO_DEPTH=8`, `MOE_IO_REFILL_BATCH=4`,
+  `MOE_PREFETCH_DOWN_DEPTH=2`.
+
+Per-prompt diagnostic metrics:
+
+| prompt | quality | tok/s | TTFT ms | decode ms | memory peak | route rows |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `dev_france_regression` | pass | 1.33 | 66329.46 | 23354.81 | 15899996160 | 42928 |
+| `dev_japan_factual` | pass | 0.43 | 73191.37 | 72255.59 | 15899996160 | 42928 |
+| `dev_photosynthesis_factual` | pass | 0.30 | 59685.97 | 103730.58 | 15899996160 | 42928 |
+| `dev_linear_equation` | fail | 0.15 | 83494.76 | 205431.05 | 15899996160 | 42928 |
+| `dev_python_reverse` | pass | 0.16 | 74750.65 | 190100.26 | 15899996160 | 42928 |
+| `dev_zh_france` | pass | 0.35 | 66773.41 | 87496.45 | 15899996160 | 42928 |
+| `dev_mixed_summary` | pass | 0.20 | 101048.20 | 152855.86 | 15899996160 | 42928 |
+
+Quality note:
+
+- `dev_linear_equation` failed the n32 quality keyword check because the output
+  did not contain `7` or `seven` within the generated limit. This GP30 phase is
+  diagnostic only and is not a SOTA candidate.
+- The failure reinforces that later accepted candidates must use n96 quality
+  gates, not n32 diagnostic traces.
+
+Analyzer command:
+
+```bash
+.Agent/run-tools/kimi_route_detail_cache_wave_bound.py \
+  --run-dir .Agent/runs/20260707-gp30-route-detail-dev-n32 \
+  --out-json .Agent/runs/20260707-gp30-route-detail-dev-n32/cache-wave-bound.json \
+  --out-md .Agent/runs/20260707-gp30-route-detail-dev-n32/report.md
+```
+
+Cache-wave result:
+
+- Passing strategies: `0`.
+- up/gate global LFU baseline:
+  - slots: `1735`;
+  - estimated waves: `26052`;
+  - full-hit rate: `0.0001`;
+  - missed bytes: `697.90 GiB`.
+- Best up/gate wave reduction:
+  - `setcover_fullhit`;
+  - aggregate wave reduction: `4.99%`;
+  - worst-prompt wave reduction: `4.94%`;
+  - worst prompt miss-byte increase: `61.94%`.
+- Front-layer up/gate coverage is worse for bytes:
+  - layers `1..4` reduces aggregate waves `4.92%`, but worst miss bytes
+    increase `59.68%`.
+- Split-only up/gate expansion is not enough:
+  - `split_80_lfu` reduces up/gate missed bytes to `652.86 GiB`, but aggregate
+    wave reduction is only `0.04%` and worst-prompt wave reduction is `0.0%`.
+- down global LFU baseline:
+  - slots: `766`;
+  - estimated waves: `11507`;
+  - full-hit rate: `0.0001`;
+  - missed bytes: `401.52 GiB`.
+- Best down wave reduction:
+  - `setcover_fullhit`;
+  - aggregate wave reduction: `5.39%`;
+  - worst-prompt wave reduction: `4.87%`;
+  - worst prompt miss-byte increase: `60.36%`.
+
+Decision:
+
+- Reject front-layer/full-hit cache reallocation as the next primary runtime
+  path under the current entry budget.
+- Do not implement a runtime layer-reservation or set-cover cache policy now.
+- Reason: active expert sets are too diverse for a static prompt-general cache
+  to make whole `(call, layer, kind)` groups full-hit. Partial hit-rate and
+  byte savings do not remove enough IO waves when `MOE_IO_DEPTH=8`; the
+  simulator predicts at most about `5%` wave reduction, far below the `20%`
+  gate, and the strategies that reduce waves increase miss bytes heavily.
+
+Next direction after GP30:
+
+- Runtime/cache-only work has now failed three independent gates:
+  - GP27/GP29 route prediction cannot prefetch enough future experts without
+    too many false bytes;
+  - GP30 static layer/full-hit cache allocation cannot reduce enough waves;
+  - GP10/GP25 show selected lower-byte hotsets are not enough unless the
+    representation itself is much smaller.
+- The next material branch should require a model-side mechanism:
+  - obtain or generate a genuinely smaller Kimi expert representation that
+    reduces moved bytes toward the GP10 `0.39x-0.55x` range; or
+  - obtain a compatible draft/predictor model and measure real acceptance /
+    overhead; or
+  - implement an expert computation approximation only after an offline quality
+    bound shows much lower error than the rejected D2MoE/base-residual screens.

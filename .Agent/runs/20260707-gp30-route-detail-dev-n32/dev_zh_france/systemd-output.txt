@@ -1,0 +1,5 @@
+Running as unit: run-u46409.service
+Finished with result: success
+Main processes terminated with: code=exited/status=0
+Service runtime: 3min 3.038s
+CPU time consumed: 47min 57.460s

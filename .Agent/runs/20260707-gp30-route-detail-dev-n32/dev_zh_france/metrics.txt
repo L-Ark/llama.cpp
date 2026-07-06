@@ -1,0 +1,41 @@
+run=/root/lfz/runs/vendor-kimi-token-rate/20260707-gp30-route-detail-dev-n32/dev_zh_france
+prompt_id=dev_zh_france
+prompt=用中文简单介绍法国。
+exit=0
+quality=pass
+quality_reason=ok
+output=法国是西欧国家，首都巴黎。面积约55万平方公里，人口约6700万。法国以浪漫文化、美食、葡萄酒和艺术闻名，拥有埃菲尔
+ttft_ms=66773.41
+prompt_tokens=15
+decode_ms=87496.45
+decode_runs=31
+token_rate=0.35
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=15201394688
+anon=446464
+file=14931296256
+kernel=267751424
+inactive_file=4852834304
+active_file=10077917184
+pgmajfault=880183
+pgfault=3144387
+workingset_refault_file=1571342
+expert_pack_0=17786 misses=6351 read_failures=0 direct_reads=9253 direct_fallbacks=0 iouring_reads=7148 iouring_bytes=39885389824 iouring_fallbacks=0 iouring_submit_us=46723 iouring_wait_us=7904096 iouring_h2d_enqueues=7148 entries=31599
+expert_pack_iouring_0=batches=1901 submit_calls=1901 wait_calls=5625 cqes=7148 inflight_avg=3.08 inflight_max=8 batch_hist=1:184,2-4:1127,5-8:590,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 6.02 MiB
+pinned_staging_1=: enabled, 12 slots of 4.48 MiB
+pinned_staging_2=: enabled, 12 slots of 7.44 MiB
+pinned_staging_3=: enabled, 12 slots of 5.36 MiB
+pinned_staging_4=: copies=16045 waits=16009 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=77.786 ms host_stage=67975.011 ms enqueue=444.078 ms h2d=3544.493 ms h2d_timed=16045
+pinned_staging_5= iouring: batches=1320 jobs=5016 submit_calls=1320 wait_calls=3935 cqes=5016 inflight_avg=3.07 inflight_max=8 batch_hist=1:121,2-4:777,5-8:422,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=6356 waits=6332 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=30.849 ms host_stage=25267.470 ms enqueue=156.498 ms h2d=1329.480 ms h2d_timed=6356
+pinned_staging_7= gate iouring: batches=581 jobs=2132 submit_calls=581 wait_calls=1690 cqes=2132 inflight_avg=3.10 inflight_max=8 batch_hist=1:63,2-4:350,5-8:168,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=992 planned_jobs=3347 completed_jobs=3347 cache_hits=3845 missing_tensor=93 missing_pack=950 submitted_batches=888 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=17046102 batch_hist=1:61,2-4:567,5-8:260,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=9720 misses=3400 preloads=3347 pinned=0 hit_rate=74.1%
+vram_down_1=slots=766 slot=7.44 MiB hits=9720 misses=3400 preloads=3347 pinned=0 hit_rate=74.1%
+vram_down_2=slots=766 slot=7.44 MiB hits=9720 misses=3400 preloads=3347 pinned=0 hit_rate=74.1%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=14154 misses=15622 preloads=0 pinned=0 hit_rate=47.5%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=14154 misses=15622 preloads=0 pinned=0 hit_rate=47.5%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=14154 misses=15622 preloads=0 pinned=0 hit_rate=47.5%

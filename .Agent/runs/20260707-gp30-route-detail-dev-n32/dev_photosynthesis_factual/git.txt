@@ -1,0 +1,7 @@
+repo=/root/lfz/tmp/gp29-route-detail-run
+pwd=/root/lfz/tmp/gp29-route-detail-run
+branch=
+head=b95ef6df95b3fa317de7993c45656c9e6e7d5db2
+short=b95ef6df9
+status_short:
+diff_stat:
