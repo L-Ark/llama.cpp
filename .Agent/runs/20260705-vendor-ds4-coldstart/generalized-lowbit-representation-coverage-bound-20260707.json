@@ -1,0 +1,1171 @@
+{
+  "best_overall_top20": [
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 4.472564697265625
+      },
+      "gate_budget_gib": 6,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "projections": [
+        {
+          "bound_ms_per_token": 117.10146932870336,
+          "bound_tok_s": 8.539602498009687,
+          "prompt_id": "france",
+          "save_ms_per_token": 253.26890104166696
+        },
+        {
+          "bound_ms_per_token": 96.87815451388877,
+          "bound_tok_s": 10.322244524761635,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 458.67740104166677
+        },
+        {
+          "bound_ms_per_token": 52.04520659722374,
+          "bound_tok_s": 19.214065336294453,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 503.5103489583318
+        },
+        {
+          "bound_ms_per_token": 152.89625520833317,
+          "bound_tok_s": 6.540382553107147,
+          "prompt_id": "japan",
+          "save_ms_per_token": 263.7704114583335
+        },
+        {
+          "bound_ms_per_token": 134.20410558712206,
+          "bound_tok_s": 7.451336869503029,
+          "prompt_id": "climate",
+          "save_ms_per_token": 320.34134895833245
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 6.72882080078125
+      },
+      "updown_budget_gib": 7.25,
+      "updown_compression": 8
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 4.472564697265625
+      },
+      "gate_budget_gib": 6,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "projections": [
+        {
+          "bound_ms_per_token": 117.10146932870336,
+          "bound_tok_s": 8.539602498009687,
+          "prompt_id": "france",
+          "save_ms_per_token": 253.26890104166696
+        },
+        {
+          "bound_ms_per_token": 96.87815451388877,
+          "bound_tok_s": 10.322244524761635,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 458.67740104166677
+        },
+        {
+          "bound_ms_per_token": 52.04520659722374,
+          "bound_tok_s": 19.214065336294453,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 503.5103489583318
+        },
+        {
+          "bound_ms_per_token": 152.89625520833317,
+          "bound_tok_s": 6.540382553107147,
+          "prompt_id": "japan",
+          "save_ms_per_token": 263.7704114583335
+        },
+        {
+          "bound_ms_per_token": 134.20410558712206,
+          "bound_tok_s": 7.451336869503029,
+          "prompt_id": "climate",
+          "save_ms_per_token": 320.34134895833245
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 3.364410400390625
+      },
+      "updown_budget_gib": 7.25,
+      "updown_compression": 16
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 4.472564697265625
+      },
+      "gate_budget_gib": 8,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "projections": [
+        {
+          "bound_ms_per_token": 117.10146932870336,
+          "bound_tok_s": 8.539602498009687,
+          "prompt_id": "france",
+          "save_ms_per_token": 253.26890104166696
+        },
+        {
+          "bound_ms_per_token": 96.87815451388877,
+          "bound_tok_s": 10.322244524761635,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 458.67740104166677
+        },
+        {
+          "bound_ms_per_token": 52.04520659722374,
+          "bound_tok_s": 19.214065336294453,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 503.5103489583318
+        },
+        {
+          "bound_ms_per_token": 152.89625520833317,
+          "bound_tok_s": 6.540382553107147,
+          "prompt_id": "japan",
+          "save_ms_per_token": 263.7704114583335
+        },
+        {
+          "bound_ms_per_token": 134.20410558712206,
+          "bound_tok_s": 7.451336869503029,
+          "prompt_id": "climate",
+          "save_ms_per_token": 320.34134895833245
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 3.364410400390625
+      },
+      "updown_budget_gib": 5.25,
+      "updown_compression": 16
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 2.2362823486328125
+      },
+      "gate_budget_gib": 4,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "projections": [
+        {
+          "bound_ms_per_token": 117.10146932870336,
+          "bound_tok_s": 8.539602498009687,
+          "prompt_id": "france",
+          "save_ms_per_token": 253.26890104166696
+        },
+        {
+          "bound_ms_per_token": 96.87815451388877,
+          "bound_tok_s": 10.322244524761635,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 458.67740104166677
+        },
+        {
+          "bound_ms_per_token": 52.04520659722374,
+          "bound_tok_s": 19.214065336294453,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 503.5103489583318
+        },
+        {
+          "bound_ms_per_token": 152.89625520833317,
+          "bound_tok_s": 6.540382553107147,
+          "prompt_id": "japan",
+          "save_ms_per_token": 263.7704114583335
+        },
+        {
+          "bound_ms_per_token": 134.20410558712206,
+          "bound_tok_s": 7.451336869503029,
+          "prompt_id": "climate",
+          "save_ms_per_token": 320.34134895833245
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 6.72882080078125
+      },
+      "updown_budget_gib": 9.25,
+      "updown_compression": 8
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 2.2362823486328125
+      },
+      "gate_budget_gib": 6,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "projections": [
+        {
+          "bound_ms_per_token": 117.10146932870336,
+          "bound_tok_s": 8.539602498009687,
+          "prompt_id": "france",
+          "save_ms_per_token": 253.26890104166696
+        },
+        {
+          "bound_ms_per_token": 96.87815451388877,
+          "bound_tok_s": 10.322244524761635,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 458.67740104166677
+        },
+        {
+          "bound_ms_per_token": 52.04520659722374,
+          "bound_tok_s": 19.214065336294453,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 503.5103489583318
+        },
+        {
+          "bound_ms_per_token": 152.89625520833317,
+          "bound_tok_s": 6.540382553107147,
+          "prompt_id": "japan",
+          "save_ms_per_token": 263.7704114583335
+        },
+        {
+          "bound_ms_per_token": 134.20410558712206,
+          "bound_tok_s": 7.451336869503029,
+          "prompt_id": "climate",
+          "save_ms_per_token": 320.34134895833245
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 6.72882080078125
+      },
+      "updown_budget_gib": 7.25,
+      "updown_compression": 8
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 2.2362823486328125
+      },
+      "gate_budget_gib": 4,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "projections": [
+        {
+          "bound_ms_per_token": 117.10146932870336,
+          "bound_tok_s": 8.539602498009687,
+          "prompt_id": "france",
+          "save_ms_per_token": 253.26890104166696
+        },
+        {
+          "bound_ms_per_token": 96.87815451388877,
+          "bound_tok_s": 10.322244524761635,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 458.67740104166677
+        },
+        {
+          "bound_ms_per_token": 52.04520659722374,
+          "bound_tok_s": 19.214065336294453,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 503.5103489583318
+        },
+        {
+          "bound_ms_per_token": 152.89625520833317,
+          "bound_tok_s": 6.540382553107147,
+          "prompt_id": "japan",
+          "save_ms_per_token": 263.7704114583335
+        },
+        {
+          "bound_ms_per_token": 134.20410558712206,
+          "bound_tok_s": 7.451336869503029,
+          "prompt_id": "climate",
+          "save_ms_per_token": 320.34134895833245
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 3.364410400390625
+      },
+      "updown_budget_gib": 9.25,
+      "updown_compression": 16
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 2.2362823486328125
+      },
+      "gate_budget_gib": 6,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "projections": [
+        {
+          "bound_ms_per_token": 117.10146932870336,
+          "bound_tok_s": 8.539602498009687,
+          "prompt_id": "france",
+          "save_ms_per_token": 253.26890104166696
+        },
+        {
+          "bound_ms_per_token": 96.87815451388877,
+          "bound_tok_s": 10.322244524761635,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 458.67740104166677
+        },
+        {
+          "bound_ms_per_token": 52.04520659722374,
+          "bound_tok_s": 19.214065336294453,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 503.5103489583318
+        },
+        {
+          "bound_ms_per_token": 152.89625520833317,
+          "bound_tok_s": 6.540382553107147,
+          "prompt_id": "japan",
+          "save_ms_per_token": 263.7704114583335
+        },
+        {
+          "bound_ms_per_token": 134.20410558712206,
+          "bound_tok_s": 7.451336869503029,
+          "prompt_id": "climate",
+          "save_ms_per_token": 320.34134895833245
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 3.364410400390625
+      },
+      "updown_budget_gib": 7.25,
+      "updown_compression": 16
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 2.2362823486328125
+      },
+      "gate_budget_gib": 8,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "projections": [
+        {
+          "bound_ms_per_token": 117.10146932870336,
+          "bound_tok_s": 8.539602498009687,
+          "prompt_id": "france",
+          "save_ms_per_token": 253.26890104166696
+        },
+        {
+          "bound_ms_per_token": 96.87815451388877,
+          "bound_tok_s": 10.322244524761635,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 458.67740104166677
+        },
+        {
+          "bound_ms_per_token": 52.04520659722374,
+          "bound_tok_s": 19.214065336294453,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 503.5103489583318
+        },
+        {
+          "bound_ms_per_token": 152.89625520833317,
+          "bound_tok_s": 6.540382553107147,
+          "prompt_id": "japan",
+          "save_ms_per_token": 263.7704114583335
+        },
+        {
+          "bound_ms_per_token": 134.20410558712206,
+          "bound_tok_s": 7.451336869503029,
+          "prompt_id": "climate",
+          "save_ms_per_token": 320.34134895833245
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 3.364410400390625
+      },
+      "updown_budget_gib": 5.25,
+      "updown_compression": 16
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 8.94512939453125
+      },
+      "gate_budget_gib": 10,
+      "gate_compression": 4,
+      "mean_bound_tok_s": 10.381149994739976,
+      "min_bound_tok_s": 6.534739799934863,
+      "projections": [
+        {
+          "bound_ms_per_token": 117.21938599536995,
+          "bound_tok_s": 8.531012097602176,
+          "prompt_id": "france",
+          "save_ms_per_token": 253.15098437500038
+        },
+        {
+          "bound_ms_per_token": 97.11647222222217,
+          "bound_tok_s": 10.296914386591364,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 458.4390833333334
+        },
+        {
+          "bound_ms_per_token": 52.34282638889016,
+          "bound_tok_s": 19.104814718454932,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 503.2127291666654
+        },
+        {
+          "bound_ms_per_token": 153.02828124999985,
+          "bound_tok_s": 6.534739799934863,
+          "prompt_id": "japan",
+          "save_ms_per_token": 263.63838541666684
+        },
+        {
+          "bound_ms_per_token": 134.4398816287886,
+          "bound_tok_s": 7.438268971116548,
+          "prompt_id": "climate",
+          "save_ms_per_token": 320.1055729166659
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178034.9949999985,
+        "covered_exact_gib": 51.99609375,
+        "entries": 12528,
+        "used_compressed_gib": 3.249755859375
+      },
+      "updown_budget_gib": 3.25,
+      "updown_compression": 16
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 4.472564697265625
+      },
+      "gate_budget_gib": 10,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 10.381149994739976,
+      "min_bound_tok_s": 6.534739799934863,
+      "projections": [
+        {
+          "bound_ms_per_token": 117.21938599536995,
+          "bound_tok_s": 8.531012097602176,
+          "prompt_id": "france",
+          "save_ms_per_token": 253.15098437500038
+        },
+        {
+          "bound_ms_per_token": 97.11647222222217,
+          "bound_tok_s": 10.296914386591364,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 458.4390833333334
+        },
+        {
+          "bound_ms_per_token": 52.34282638889016,
+          "bound_tok_s": 19.104814718454932,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 503.2127291666654
+        },
+        {
+          "bound_ms_per_token": 153.02828124999985,
+          "bound_tok_s": 6.534739799934863,
+          "prompt_id": "japan",
+          "save_ms_per_token": 263.63838541666684
+        },
+        {
+          "bound_ms_per_token": 134.4398816287886,
+          "bound_tok_s": 7.438268971116548,
+          "prompt_id": "climate",
+          "save_ms_per_token": 320.1055729166659
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178034.9949999985,
+        "covered_exact_gib": 51.99609375,
+        "entries": 12528,
+        "used_compressed_gib": 3.249755859375
+      },
+      "updown_budget_gib": 3.25,
+      "updown_compression": 16
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 2.2362823486328125
+      },
+      "gate_budget_gib": 10,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 10.381149994739976,
+      "min_bound_tok_s": 6.534739799934863,
+      "projections": [
+        {
+          "bound_ms_per_token": 117.21938599536995,
+          "bound_tok_s": 8.531012097602176,
+          "prompt_id": "france",
+          "save_ms_per_token": 253.15098437500038
+        },
+        {
+          "bound_ms_per_token": 97.11647222222217,
+          "bound_tok_s": 10.296914386591364,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 458.4390833333334
+        },
+        {
+          "bound_ms_per_token": 52.34282638889016,
+          "bound_tok_s": 19.104814718454932,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 503.2127291666654
+        },
+        {
+          "bound_ms_per_token": 153.02828124999985,
+          "bound_tok_s": 6.534739799934863,
+          "prompt_id": "japan",
+          "save_ms_per_token": 263.63838541666684
+        },
+        {
+          "bound_ms_per_token": 134.4398816287886,
+          "bound_tok_s": 7.438268971116548,
+          "prompt_id": "climate",
+          "save_ms_per_token": 320.1055729166659
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178034.9949999985,
+        "covered_exact_gib": 51.99609375,
+        "entries": 12528,
+        "used_compressed_gib": 3.249755859375
+      },
+      "updown_budget_gib": 3.25,
+      "updown_compression": 16
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 4.472564697265625
+      },
+      "gate_budget_gib": 8,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 9.914326945935999,
+      "min_bound_tok_s": 6.465625016311398,
+      "projections": [
+        {
+          "bound_ms_per_token": 118.8891307870366,
+          "bound_tok_s": 8.411197839365798,
+          "prompt_id": "france",
+          "save_ms_per_token": 251.48123958333372
+        },
+        {
+          "bound_ms_per_token": 100.70592013888916,
+          "bound_tok_s": 9.929902816247985,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 454.8496354166664
+        },
+        {
+          "bound_ms_per_token": 57.26027430555695,
+          "bound_tok_s": 17.464114730986417,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 498.2952812499986
+        },
+        {
+          "bound_ms_per_token": 154.6640885416665,
+          "bound_tok_s": 6.465625016311398,
+          "prompt_id": "japan",
+          "save_ms_per_token": 262.0025781250002
+        },
+        {
+          "bound_ms_per_token": 136.9713972537886,
+          "bound_tok_s": 7.300794326768395,
+          "prompt_id": "climate",
+          "save_ms_per_token": 317.5740572916659
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 175280.9539999991,
+        "covered_exact_gib": 41.997802734375,
+        "entries": 10119,
+        "used_compressed_gib": 5.249725341796875
+      },
+      "updown_budget_gib": 5.25,
+      "updown_compression": 8
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 2.2362823486328125
+      },
+      "gate_budget_gib": 8,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 9.914326945935999,
+      "min_bound_tok_s": 6.465625016311398,
+      "projections": [
+        {
+          "bound_ms_per_token": 118.8891307870366,
+          "bound_tok_s": 8.411197839365798,
+          "prompt_id": "france",
+          "save_ms_per_token": 251.48123958333372
+        },
+        {
+          "bound_ms_per_token": 100.70592013888916,
+          "bound_tok_s": 9.929902816247985,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 454.8496354166664
+        },
+        {
+          "bound_ms_per_token": 57.26027430555695,
+          "bound_tok_s": 17.464114730986417,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 498.2952812499986
+        },
+        {
+          "bound_ms_per_token": 154.6640885416665,
+          "bound_tok_s": 6.465625016311398,
+          "prompt_id": "japan",
+          "save_ms_per_token": 262.0025781250002
+        },
+        {
+          "bound_ms_per_token": 136.9713972537886,
+          "bound_tok_s": 7.300794326768395,
+          "prompt_id": "climate",
+          "save_ms_per_token": 317.5740572916659
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 175280.9539999991,
+        "covered_exact_gib": 41.997802734375,
+        "entries": 10119,
+        "used_compressed_gib": 5.249725341796875
+      },
+      "updown_budget_gib": 5.25,
+      "updown_compression": 8
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 163528.7529999986,
+        "covered_exact_gib": 31.99951171875,
+        "entries": 7710,
+        "used_compressed_gib": 7.9998779296875
+      },
+      "gate_budget_gib": 8,
+      "gate_compression": 4,
+      "mean_bound_tok_s": 9.79565503503711,
+      "min_bound_tok_s": 6.4471055618843955,
+      "projections": [
+        {
+          "bound_ms_per_token": 119.10521412037008,
+          "bound_tok_s": 8.395938056829152,
+          "prompt_id": "france",
+          "save_ms_per_token": 251.26515625000025
+        },
+        {
+          "bound_ms_per_token": 101.46558680555523,
+          "bound_tok_s": 9.855558238837782,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 454.0899687500003
+        },
+        {
+          "bound_ms_per_token": 58.64115451389023,
+          "bound_tok_s": 17.052870263035693,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 496.9144010416653
+        },
+        {
+          "bound_ms_per_token": 155.10836458333318,
+          "bound_tok_s": 6.4471055618843955,
+          "prompt_id": "japan",
+          "save_ms_per_token": 261.5583020833335
+        },
+        {
+          "bound_ms_per_token": 138.37377225378867,
+          "bound_tok_s": 7.226803054598521,
+          "prompt_id": "climate",
+          "save_ms_per_token": 316.17168229166583
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 3.364410400390625
+      },
+      "updown_budget_gib": 5.25,
+      "updown_compression": 16
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 163528.7529999986,
+        "covered_exact_gib": 31.99951171875,
+        "entries": 7710,
+        "used_compressed_gib": 3.99993896484375
+      },
+      "gate_budget_gib": 4,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 9.79565503503711,
+      "min_bound_tok_s": 6.4471055618843955,
+      "projections": [
+        {
+          "bound_ms_per_token": 119.10521412037008,
+          "bound_tok_s": 8.395938056829152,
+          "prompt_id": "france",
+          "save_ms_per_token": 251.26515625000025
+        },
+        {
+          "bound_ms_per_token": 101.46558680555523,
+          "bound_tok_s": 9.855558238837782,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 454.0899687500003
+        },
+        {
+          "bound_ms_per_token": 58.64115451389023,
+          "bound_tok_s": 17.052870263035693,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 496.9144010416653
+        },
+        {
+          "bound_ms_per_token": 155.10836458333318,
+          "bound_tok_s": 6.4471055618843955,
+          "prompt_id": "japan",
+          "save_ms_per_token": 261.5583020833335
+        },
+        {
+          "bound_ms_per_token": 138.37377225378867,
+          "bound_tok_s": 7.226803054598521,
+          "prompt_id": "climate",
+          "save_ms_per_token": 316.17168229166583
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 6.72882080078125
+      },
+      "updown_budget_gib": 9.25,
+      "updown_compression": 8
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 163528.7529999986,
+        "covered_exact_gib": 31.99951171875,
+        "entries": 7710,
+        "used_compressed_gib": 3.99993896484375
+      },
+      "gate_budget_gib": 4,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 9.79565503503711,
+      "min_bound_tok_s": 6.4471055618843955,
+      "projections": [
+        {
+          "bound_ms_per_token": 119.10521412037008,
+          "bound_tok_s": 8.395938056829152,
+          "prompt_id": "france",
+          "save_ms_per_token": 251.26515625000025
+        },
+        {
+          "bound_ms_per_token": 101.46558680555523,
+          "bound_tok_s": 9.855558238837782,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 454.0899687500003
+        },
+        {
+          "bound_ms_per_token": 58.64115451389023,
+          "bound_tok_s": 17.052870263035693,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 496.9144010416653
+        },
+        {
+          "bound_ms_per_token": 155.10836458333318,
+          "bound_tok_s": 6.4471055618843955,
+          "prompt_id": "japan",
+          "save_ms_per_token": 261.5583020833335
+        },
+        {
+          "bound_ms_per_token": 138.37377225378867,
+          "bound_tok_s": 7.226803054598521,
+          "prompt_id": "climate",
+          "save_ms_per_token": 316.17168229166583
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 3.364410400390625
+      },
+      "updown_budget_gib": 9.25,
+      "updown_compression": 16
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 163528.7529999986,
+        "covered_exact_gib": 31.99951171875,
+        "entries": 7710,
+        "used_compressed_gib": 1.999969482421875
+      },
+      "gate_budget_gib": 2,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 9.79565503503711,
+      "min_bound_tok_s": 6.4471055618843955,
+      "projections": [
+        {
+          "bound_ms_per_token": 119.10521412037008,
+          "bound_tok_s": 8.395938056829152,
+          "prompt_id": "france",
+          "save_ms_per_token": 251.26515625000025
+        },
+        {
+          "bound_ms_per_token": 101.46558680555523,
+          "bound_tok_s": 9.855558238837782,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 454.0899687500003
+        },
+        {
+          "bound_ms_per_token": 58.64115451389023,
+          "bound_tok_s": 17.052870263035693,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 496.9144010416653
+        },
+        {
+          "bound_ms_per_token": 155.10836458333318,
+          "bound_tok_s": 6.4471055618843955,
+          "prompt_id": "japan",
+          "save_ms_per_token": 261.5583020833335
+        },
+        {
+          "bound_ms_per_token": 138.37377225378867,
+          "bound_tok_s": 7.226803054598521,
+          "prompt_id": "climate",
+          "save_ms_per_token": 316.17168229166583
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 6.72882080078125
+      },
+      "updown_budget_gib": 11.25,
+      "updown_compression": 8
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 163528.7529999986,
+        "covered_exact_gib": 31.99951171875,
+        "entries": 7710,
+        "used_compressed_gib": 1.999969482421875
+      },
+      "gate_budget_gib": 2,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 9.79565503503711,
+      "min_bound_tok_s": 6.4471055618843955,
+      "projections": [
+        {
+          "bound_ms_per_token": 119.10521412037008,
+          "bound_tok_s": 8.395938056829152,
+          "prompt_id": "france",
+          "save_ms_per_token": 251.26515625000025
+        },
+        {
+          "bound_ms_per_token": 101.46558680555523,
+          "bound_tok_s": 9.855558238837782,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 454.0899687500003
+        },
+        {
+          "bound_ms_per_token": 58.64115451389023,
+          "bound_tok_s": 17.052870263035693,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 496.9144010416653
+        },
+        {
+          "bound_ms_per_token": 155.10836458333318,
+          "bound_tok_s": 6.4471055618843955,
+          "prompt_id": "japan",
+          "save_ms_per_token": 261.5583020833335
+        },
+        {
+          "bound_ms_per_token": 138.37377225378867,
+          "bound_tok_s": 7.226803054598521,
+          "prompt_id": "climate",
+          "save_ms_per_token": 316.17168229166583
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 178231.1529999985,
+        "covered_exact_gib": 53.83056640625,
+        "entries": 12970,
+        "used_compressed_gib": 3.364410400390625
+      },
+      "updown_budget_gib": 11.25,
+      "updown_compression": 16
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 163528.7529999986,
+        "covered_exact_gib": 31.99951171875,
+        "entries": 7710,
+        "used_compressed_gib": 1.999969482421875
+      },
+      "gate_budget_gib": 2,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 9.549485897393902,
+      "min_bound_tok_s": 6.401936158892327,
+      "projections": [
+        {
+          "bound_ms_per_token": 120.13316203703661,
+          "bound_tok_s": 8.324096219923884,
+          "prompt_id": "france",
+          "save_ms_per_token": 250.2372083333337
+        },
+        {
+          "bound_ms_per_token": 103.84046180555549,
+          "bound_tok_s": 9.630157480159625,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 451.71509375000005
+        },
+        {
+          "bound_ms_per_token": 61.53033680555666,
+          "bound_tok_s": 16.25214572057555,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 494.0252187499989
+        },
+        {
+          "bound_ms_per_token": 156.20274479166653,
+          "bound_tok_s": 6.401936158892327,
+          "prompt_id": "japan",
+          "save_ms_per_token": 260.46392187500015
+        },
+        {
+          "bound_ms_per_token": 140.07379829545533,
+          "bound_tok_s": 7.139093907418121,
+          "prompt_id": "climate",
+          "save_ms_per_token": 314.47165624999917
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 176486.56199999875,
+        "covered_exact_gib": 44.99853515625,
+        "entries": 10842,
+        "used_compressed_gib": 11.2496337890625
+      },
+      "updown_budget_gib": 11.25,
+      "updown_compression": 4
+    },
+    {
+      "gate": {
+        "aggregate_score_ms": 167285.9819999987,
+        "covered_exact_gib": 35.780517578125,
+        "entries": 8621,
+        "used_compressed_gib": 2.2362823486328125
+      },
+      "gate_budget_gib": 4,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 9.42267679707674,
+      "min_bound_tok_s": 6.380858063894122,
+      "projections": [
+        {
+          "bound_ms_per_token": 120.8492505787033,
+          "bound_tok_s": 8.274772042121587,
+          "prompt_id": "france",
+          "save_ms_per_token": 249.52111979166702
+        },
+        {
+          "bound_ms_per_token": 105.54312847222224,
+          "bound_tok_s": 9.474799681186148,
+          "prompt_id": "quantum",
+          "save_ms_per_token": 450.0124270833333
+        },
+        {
+          "bound_ms_per_token": 63.18825347222344,
+          "bound_tok_s": 15.825726223618197,
+          "prompt_id": "fibonacci",
+          "save_ms_per_token": 492.3673020833321
+        },
+        {
+          "bound_ms_per_token": 156.71873437500005,
+          "bound_tok_s": 6.380858063894122,
+          "prompt_id": "japan",
+          "save_ms_per_token": 259.94793229166663
+        },
+        {
+          "bound_ms_per_token": 139.7188972537886,
+          "bound_tok_s": 7.157227974563649,
+          "prompt_id": "climate",
+          "save_ms_per_token": 314.8265572916659
+        }
+      ],
+      "updown": {
+        "aggregate_score_ms": 171915.68299999906,
+        "covered_exact_gib": 36.99658203125,
+        "entries": 8914,
+        "used_compressed_gib": 9.2491455078125
+      },
+      "updown_budget_gib": 9.25,
+      "updown_compression": 4
+    }
+  ],
+  "compression_family_summary": [
+    {
+      "best_gate_budget_gib": 8,
+      "best_updown_budget_gib": 5.25,
+      "gate_compression": 4,
+      "mean_bound_tok_s": 6.902439369909851,
+      "min_bound_tok_s": 5.742872399925731,
+      "passes_5": true,
+      "passes_6": false,
+      "updown_compression": 4
+    },
+    {
+      "best_gate_budget_gib": 4,
+      "best_updown_budget_gib": 9.25,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 8.958339986542745,
+      "min_bound_tok_s": 6.292044869358467,
+      "passes_5": true,
+      "passes_6": true,
+      "updown_compression": 4
+    },
+    {
+      "best_gate_budget_gib": 8,
+      "best_updown_budget_gib": 5.25,
+      "gate_compression": 4,
+      "mean_bound_tok_s": 9.377761273409828,
+      "min_bound_tok_s": 6.374453315927538,
+      "passes_5": true,
+      "passes_6": true,
+      "updown_compression": 8
+    },
+    {
+      "best_gate_budget_gib": 6,
+      "best_updown_budget_gib": 7.25,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "passes_5": true,
+      "passes_6": true,
+      "updown_compression": 8
+    },
+    {
+      "best_gate_budget_gib": 4,
+      "best_updown_budget_gib": 9.25,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "passes_5": true,
+      "passes_6": true,
+      "updown_compression": 8
+    },
+    {
+      "best_gate_budget_gib": 6,
+      "best_updown_budget_gib": 7.25,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "passes_5": true,
+      "passes_6": true,
+      "updown_compression": 16
+    }
+  ],
+  "created_at_utc": "2026-07-06T19:32:12.758449Z",
+  "decision": {
+    "best_family_recommendation": {
+      "best_gate_budget_gib": 8,
+      "best_updown_budget_gib": 5.25,
+      "gate_compression": 4,
+      "mean_bound_tok_s": 6.902439369909851,
+      "min_bound_tok_s": 5.742872399925731,
+      "passes_5": true,
+      "passes_6": false,
+      "updown_compression": 4
+    },
+    "exact_hotset_already_rejected": true,
+    "lowbit_bound_interpretation": "If a compression family only barely exceeds 5 tok/s in this zero-overhead bound, it is not enough for runtime. Need >=6 tok/s bound plus correctness path before source edit."
+  },
+  "inputs": {
+    "baseline_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+    "trace_set": "20260706 dev gate traces + dev fallback profiles"
+  },
+  "inventory": {
+    "gate_exact_gib": 35.780517578125,
+    "gate_unique_entries": 8621,
+    "updown_exact_gib": 53.83056640625,
+    "updown_unique_entries": 12970
+  },
+  "method": "Prompt-independent greedy aggregate ms/byte manifest with hypothetical compression ratio. Savings are zero-overhead disappearance of gate src0_ms and up/down decode fallback_ms; no numerical correctness is implied. Total compressed payload budget fixed to 13.25 GiB.",
+  "per_prompt": {
+    "climate": {
+      "baseline_ms_per_token": 454.5454545454545,
+      "baseline_tok_s": 2.2,
+      "gate_src0_ms": 30022.49000000565,
+      "tokens": 192,
+      "updown_fallback_ms": 31483.048999999886
+    },
+    "fibonacci": {
+      "baseline_ms_per_token": 555.5555555555555,
+      "baseline_tok_s": 1.8,
+      "gate_src0_ms": 48157.03499996934,
+      "tokens": 192,
+      "updown_fallback_ms": 48516.95199999988
+    },
+    "france": {
+      "baseline_ms_per_token": 370.3703703703703,
+      "baseline_tok_s": 2.7,
+      "gate_src0_ms": 25210.969000004756,
+      "tokens": 192,
+      "updown_fallback_ms": 23416.66000000011
+    },
+    "japan": {
+      "baseline_ms_per_token": 416.6666666666667,
+      "baseline_tok_s": 2.4,
+      "gate_src0_ms": 25854.192000004794,
+      "tokens": 192,
+      "updown_fallback_ms": 24789.726999999995
+    },
+    "quantum": {
+      "baseline_ms_per_token": 555.5555555555555,
+      "baseline_tok_s": 1.8,
+      "gate_src0_ms": 38041.29599998524,
+      "tokens": 192,
+      "updown_fallback_ms": 50024.765
+    }
+  },
+  "prompt_scope": "calibration/dev only; held-out unused",
+  "status": "lowbit_coverage_bound_not_sota"
+}

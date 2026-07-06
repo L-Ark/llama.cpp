@@ -4619,3 +4619,30 @@
   3. `late_layer_full_or_lowbit`: late layers 的 gate/up/down 同层放置，优先选择 aggregate saving/byte 最大的 layer；如果 exact 只能放 4 层且 bound 不足，则只保留为 rejected exact layer bound。
 - `math_required`: 对每个 candidate 先计算：compression ratio、covered bytes/entries、estimated saved ms/token、replacement compute/H2D overhead、TTFT 增量、VRAM headroom、16GB cgroup page-cache影响。
 - `source_edit_gate`: 只有某 candidate 的 calibration/dev min bound 明显超过 `5 tok/s`（建议 `>=6 tok/s` 作为 overhead buffer），才进行 default-off runtime prototype。否则仅提交 rejected bound。
+
+## 2026-07-07 hard-bound：generalized low-bit representation coverage
+
+- `attempt_id`: `20260707-generalized-lowbit-representation-coverage-bound`
+- `status`: `completed_hard_bound_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-lowbit-representation-coverage-bound-20260707.json`
+- `prompt_scope`: calibration/dev only；held-out 未使用。
+- `method`: 复用五个 no-prompt-specific calibration/dev gate traces 和 fallback profiles，假设 gate source movement 与 up/down fallback 可通过低位/压缩 representation 驻留后零开销消失。总 compressed payload budget 固定为 `13.25 GiB`，扫描 gate/updown budget split 和 compression ratio。这只是容量/coverage 上界，不代表数值正确性或 kernel overhead 已解决。
+- `inventory`: gate unique entries `8621`，exact payload `35.78 GiB`；up/down unique entries `12970`，exact payload `53.83 GiB`。
+- `family_bounds`:
+  - gate `4x` + up/down `4x`：最佳 split gate `8 GiB` + up/down `5.25 GiB`，calibration min bound `5.74 tok/s`，mean `6.90 tok/s`。刚过线，真实 overhead 后风险高。
+  - gate `8x` + up/down `4x`：最佳 split gate `4 GiB` + up/down `9.25 GiB`，min `6.29 tok/s`，mean `8.96 tok/s`。
+  - gate `4x` + up/down `8x`：最佳 split gate `8 GiB` + up/down `5.25 GiB`，min `6.37 tok/s`，mean `9.38 tok/s`。
+  - gate `8x` + up/down `8x`：最佳 split gate `6 GiB` + up/down `7.25 GiB`，min `6.54 tok/s`，mean `10.41 tok/s`。
+- `decision`: low-bit/partial representation 是目前唯一在 prompt-independent coverage 上有可能达到 generalized `>5 tok/s` 的路线；exact hotset 已被 hard-bound reject。下一步应先做 default-off correctness/overhead probe，而不是直接改 accepted path。
+- `risk`: 低位 up/down 直接参与输出，数值正确性风险高；gate 低位若只服务 source movement/cache，仍需验证 router/gate MMVQ 输出是否 token-stable。任何近似写回必须先通过 fixed-text/top1 或等价 logits 一致性，再跑性能。
+
+## 2026-07-07 下一步 source-edit 前计划：default-off low-bit correctness probe
+
+- `objective`: 用最小范围 default-off probe 验证 low-bit/partial representation 是否能在 DeepSeek vendor 路径上保持输出正确；不改变默认 SOTA 路径。
+- `probe_scope`:
+  1. 从单层/单 tensor 开始，优先 `ffn_gate_exps` 或已做过 Q8_0 CPU-compatible scaffold 的 up/down；
+  2. 只做 correctness/top1/profiling，不做 promotion；
+  3. 如果 gate 低位 token-stable，再扩展到 calibration/dev aggregate manifest；
+  4. 如果 up/down 低位 top1 不稳定，停止该表示路线，回到 exact/partial row 或 layer-level 方案。
+- `required_metrics`: same_top1/n_tokens、first_mismatch_pos、max_abs/mean_abs、affected tensor/expert rows、extra VRAM、extra TTFT、strict cgroup memory peak、France semantic output（仅 smoke）。
+- `promotion_blocker`: 在 held-out freeze 前，所有 low-bit probe 都只能是 diagnostic/rejected/candidate；不得作为 SOTA。
