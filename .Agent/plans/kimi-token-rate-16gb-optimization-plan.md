@@ -347,6 +347,48 @@ Hard-bound follow-up:
     baseline, especially `dev_linear_equation`, `dev_python_reverse`, and
     `dev_mixed_summary`, before code edits.
 
+Profile breakdown and cache-oracle follow-up:
+
+- Reports:
+  - `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/profile-breakdown-summary.md`;
+  - `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/cache-oracle-bound.md`.
+- Profile breakdown:
+  - down batch type `23` wall `194381 ms`, stage `193221 ms`, kernel `554 ms`,
+    hit rate `38.0%`;
+  - down batch type `11` wall `154705 ms`, stage `150476 ms`, kernel
+    `2690 ms`, hit rate `81.1%`;
+  - up/gate type pair `up18_gate18` wall `265666 ms`, almost all kernel-side;
+  - up/gate type pair `up22_gate22` wall `219665 ms`, with large up/gate wait
+    components;
+  - decode Q4_0 down fallback (`src0_type=2`) totals `78911 ms` across dev,
+    but this alone is too small to close the worst-prompt gap.
+- Cache oracle:
+  - dev-wide fixed LFU hotsets are generally worse than the current runtime
+    cache on these traces;
+  - prompt-static LFU oracle improves some up/gate traces but still leaves large
+    miss volumes and does not approach `5 tok/s`;
+  - Belady/offline replacement improves up/gate hit rates, but the remaining
+    miss volume and measured compute/stage cost still imply a large gap.
+- Next branch decision:
+  - Reject queue-depth-only, fixed-hotset-only, and Q4_0-fallback-only work as
+    primary paths to `5 tok/s`.
+  - First implementation should be default-off diagnostic/profiling or a
+    narrowly bounded byte-reduction experiment aimed at:
+    1. splitting down stage time by cache miss, pack read/wait, host staging,
+       H2D enqueue, and actual GPU down kernel for type `23` and `11`;
+    2. splitting up/gate type `18` and `22` wall time into stage/wait/compute
+       components at the same layer/type granularity;
+    3. measuring whether a lower-byte expert representation or compressed
+       staging path can reduce the dominant stage/compute rows by at least
+       `20x` on the slow dev prompts.
+- Required bound before source edits:
+  - For `dev_python_reverse`, `5 tok/s` needs decode `<=19000 ms` versus
+    observed `566553 ms`, a `29.8x` improvement.
+  - For `dev_linear_equation`, `5 tok/s` needs decode `<=6800 ms` versus
+    observed `218566 ms`, a `32.1x` improvement.
+  - Any candidate that cannot plausibly reduce both of these by at least an
+    order of magnitude is diagnostic only and must not be promoted.
+
 ## Current correctness base
 
 The correctness base is the vendor Kimi path after the DeepSeek2 YaRN kq-scale
