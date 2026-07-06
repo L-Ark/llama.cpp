@@ -4684,3 +4684,31 @@
   4. 保留 fixed-text top1 gate。
 - `first_design_artifact`: 写 resident/batched Q80 design hard-bound，量化需要的 VRAM payload、workspace、expected kernel launches、expected H2D/D2H、与 generalized calibration min `>5 tok/s` 的 overhead margin。
 - `source_edit_gate`: 只有 design hard-bound 显示 calibration/dev min `>=6 tok/s` 且 top1 correctness path 明确，才写 default-off runtime prototype。
+
+## 2026-07-07 hard-bound：resident/batched Q80 design constraints
+
+- `attempt_id`: `20260707-resident-batched-q80-design-hard-bound`
+- `status`: `completed_design_hard_bound_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/resident-batched-q80-design-hard-bound-20260707.json`
+- `prompt_scope`: calibration/dev bounds + fixed France correctness profile；held-out 未使用；不是 SOTA。
+- `input_correctness_profile`: current-head Q80 CPU-compatible all-up/all-down revalidation。
+- `current_per_call_cost`: fixed-text verifier 中 Q80 skip 约 `260` records/token；每 token 约 `1.079 GiB` repeated `src0` copy、`0.809 MiB` q80 activation、`3.047 MiB` output；总 `879.95 ms/token`，其中 `host_src0_ms=527.30`、`kernel_sync_ms=211.55`、`h2d_ms=83.62`、`alloc_free_ms=51.80`。
+- `key_constraint`: 当前 per-call Q80 path 只能证明 arithmetic/top1 correctness，不能证明性能。任何 runtime candidate 必须消除 repeated host src0 copy、per-call malloc/free 和 per-expert sync，并改成 resident/batched layout。
+- `overhead_budget_from_lowbit_bound`:
+  - gate `4x` + up/down `4x`: zero-overhead min `5.74 tok/s`，只剩约 `25.87 ms/token` overhead；在 8 launches/token、0.10ms launch、32GiB/s transfer 假设下，kernel budget 约 `24.95 ms/token`，需要比当前 kernel_sync 快 `8.48x`，余量太小，reject as first runtime target。
+  - gate `8x` + up/down `4x`: min `6.29 tok/s`，kernel budget 约 `40.15 ms/token`，需要 `5.27x` kernel speedup。
+  - gate `4x` + up/down `8x`: min `6.37 tok/s`，kernel budget 约 `42.21 ms/token`，需要 `5.01x` speedup。
+  - gate `8x` + up/down `8x`: min `6.54 tok/s`，kernel budget 约 `46.19 ms/token`，需要 `4.58x` speedup。
+- `decision`: 不直接写 per-call Q80 performance path；下一步只允许写 default-off resident/batched microprobe 的 source plan，且目标 family 应至少是 `8x` on gate or up/down，最好 `8x/8x`。4x/4x 因 overhead margin 不足，不作为首个 runtime target。
+- `correctness_caveat`: Q80 CPU-compatible 证明的是 MXFP4 weight x Q8_0 activation 替代 CPU fallback 的 token-stability；它不证明 8x weight compression 或 partial representation 正确。任何压缩/partial 写回仍必须重新跑 fixed-text top1。
+
+## 2026-07-07 下一步 source-edit plan：resident/batched low-bit microprobe skeleton
+
+- `objective`: 写一个 default-off microprobe skeleton，只记录/验证 resident/batched layout 的 feasibility，不改变默认输出。
+- `scope_before_code`: microprobe 先支持一个小 bounded manifest（例如单层或 top-N tensor/expert pairs），做以下事情：
+  1. 解析 prompt-independent manifest，计算 compressed/resident payload 和 VRAM request；
+  2. 在启动时或首次使用时把 selected representation 放入 persistent CUDA buffer，而不是每 call copy `src0`；
+  3. 对同一 layer/token/role 的 selected rows 做 batched probe，记录 launches、H2D/D2H bytes、kernel ms、coverage；
+  4. 默认不写回 logits；如果未来启用写回，必须先 fixed-text top1 pass。
+- `source_edit_gate`: 先写更细的 source-edit plan 并确认 code insertion point；只允许 default-off env，例如 `GGML_MOE_RESIDENT_Q80_PROBE_MANIFEST` / `GGML_MOE_RESIDENT_Q80_PROBE_OUT`。未设置 env 时默认路径必须 bit-for-bit 不变。
+- `validation_gate`: build `llama-cli llama-results`，default-off top1 self-check，probe-on fixed-text report；strict 16GB/no-swap；不跑 SOTA benchmark。
