@@ -1,0 +1,325 @@
+{
+  "aggregate": {
+    "byte_coverage": 0.6979234573958768,
+    "covered_current_bytes": 1667883843584,
+    "covered_events": 327073,
+    "covered_remote_bytes": 1041533222912,
+    "covered_remote_to_current_ratio": 0.6244638839320618,
+    "current_bytes": 2389780463616,
+    "event_coverage": 0.6979910028340219,
+    "events": 468592,
+    "hybrid_byte_ratio": 0.7379045354968453,
+    "hybrid_bytes": 1763429842944
+  },
+  "kinds": [
+    "gate",
+    "up"
+  ],
+  "manifest_entries": 20777,
+  "manifest_tsv": ".Agent/runs/20260707-gp21-remote-range-pack/manifest.tsv",
+  "profiles": [
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_france_regression/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_japan_factual/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_linear_equation/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_mixed_summary/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_photosynthesis_factual/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_python_reverse/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_zh_france/route-profile.csv"
+  ],
+  "results": [
+    {
+      "by_kind": {
+        "gate": {
+          "byte_coverage": 0.993800733513511,
+          "covered_current_bytes": 194666364928,
+          "covered_events": 36740,
+          "covered_remote_bytes": 123870838784,
+          "covered_remote_to_current_ratio": 0.6363237882919082,
+          "current_bytes": 195880681472,
+          "event_coverage": 0.9938325037870591,
+          "events": 36968,
+          "hybrid_byte_ratio": 0.6385783140430834,
+          "hybrid_bytes": 125085155328
+        },
+        "up": {
+          "byte_coverage": 0.9937334474394487,
+          "covered_current_bytes": 180050526208,
+          "covered_events": 36740,
+          "covered_remote_bytes": 110386282496,
+          "covered_remote_to_current_ratio": 0.6130850313010378,
+          "current_bytes": 181185937408,
+          "event_coverage": 0.9938325037870591,
+          "events": 36968,
+          "hybrid_byte_ratio": 0.6155096542888538,
+          "hybrid_bytes": 111521693696
+        }
+      },
+      "profile": ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_france_regression/route-profile.csv",
+      "prompt": "dev_france_regression",
+      "total": {
+        "byte_coverage": 0.9937684015864905,
+        "covered_current_bytes": 374716891136,
+        "covered_events": 73480,
+        "covered_remote_bytes": 234257121280,
+        "covered_remote_to_current_ratio": 0.6251576238525596,
+        "current_bytes": 377066618880,
+        "event_coverage": 0.9938325037870591,
+        "events": 73936,
+        "hybrid_byte_ratio": 0.6274934910090761,
+        "hybrid_bytes": 236606849024
+      }
+    },
+    {
+      "by_kind": {
+        "gate": {
+          "byte_coverage": 0.8199848092027378,
+          "covered_current_bytes": 177303060480,
+          "covered_events": 33504,
+          "covered_remote_bytes": 112573153280,
+          "covered_remote_to_current_ratio": 0.6349194028306037,
+          "current_bytes": 216227250176,
+          "event_coverage": 0.8210154871593806,
+          "events": 40808,
+          "hybrid_byte_ratio": 0.700639456186431,
+          "hybrid_bytes": 151497342976
+        },
+        "up": {
+          "byte_coverage": 0.8214313566280868,
+          "covered_current_bytes": 164291018752,
+          "covered_events": 33504,
+          "covered_remote_bytes": 100762124288,
+          "covered_remote_to_current_ratio": 0.6133148668345778,
+          "current_bytes": 200005779456,
+          "event_coverage": 0.8210154871593806,
+          "events": 40808,
+          "hybrid_byte_ratio": 0.6823647064760149,
+          "hybrid_bytes": 136476884992
+        }
+      },
+      "profile": ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_japan_factual/route-profile.csv",
+      "prompt": "dev_japan_factual",
+      "total": {
+        "byte_coverage": 0.8206798954278333,
+        "covered_current_bytes": 341594079232,
+        "covered_events": 67008,
+        "covered_remote_bytes": 213335277568,
+        "covered_remote_to_current_ratio": 0.6245286160920528,
+        "current_bytes": 416233029632,
+        "event_coverage": 0.8210154871593806,
+        "events": 81616,
+        "hybrid_byte_ratio": 0.691858183918282,
+        "hybrid_bytes": 287974227968
+      }
+    },
+    {
+      "by_kind": {
+        "gate": {
+          "byte_coverage": 0.5350329278768148,
+          "covered_current_bytes": 46289911808,
+          "covered_events": 8768,
+          "covered_remote_bytes": 29450043392,
+          "covered_remote_to_current_ratio": 0.6362086735907397,
+          "current_bytes": 86517874688,
+          "event_coverage": 0.5369916707496325,
+          "events": 16328,
+          "hybrid_byte_ratio": 0.8053596614950634,
+          "hybrid_bytes": 69678006272
+        },
+        "up": {
+          "byte_coverage": 0.5376440240756664,
+          "covered_current_bytes": 43027267584,
+          "covered_events": 8768,
+          "covered_remote_bytes": 26348879872,
+          "covered_remote_to_current_ratio": 0.6123763220743773,
+          "current_bytes": 80029286400,
+          "event_coverage": 0.5369916707496325,
+          "events": 16328,
+          "hybrid_byte_ratio": 0.7915964459730582,
+          "hybrid_bytes": 63350898688
+        }
+      },
+      "profile": ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_linear_equation/route-profile.csv",
+      "prompt": "dev_linear_equation",
+      "total": {
+        "byte_coverage": 0.5362876125207964,
+        "covered_current_bytes": 89317179392,
+        "covered_events": 17536,
+        "covered_remote_bytes": 55798923264,
+        "covered_remote_to_current_ratio": 0.6247277807453672,
+        "current_bytes": 166547161088,
+        "event_coverage": 0.5369916707496325,
+        "events": 32656,
+        "hybrid_byte_ratio": 0.7987461574905521,
+        "hybrid_bytes": 133028904960
+      }
+    },
+    {
+      "by_kind": {
+        "gate": {
+          "byte_coverage": 0.5791855052525428,
+          "covered_current_bytes": 79570993152,
+          "covered_events": 15020,
+          "covered_remote_bytes": 50473271296,
+          "covered_remote_to_current_ratio": 0.63431747294625,
+          "current_bytes": 137384296448,
+          "event_coverage": 0.5792965134217835,
+          "events": 25928,
+          "hybrid_byte_ratio": 0.7882019808063472,
+          "hybrid_bytes": 108286574592
+        },
+        "up": {
+          "byte_coverage": 0.5820186996859319,
+          "covered_current_bytes": 73962291200,
+          "covered_events": 15020,
+          "covered_remote_bytes": 45382959104,
+          "covered_remote_to_current_ratio": 0.6135959063420685,
+          "current_bytes": 127078891520,
+          "event_coverage": 0.5792965134217835,
+          "events": 25928,
+          "hybrid_byte_ratio": 0.7751055918558897,
+          "hybrid_bytes": 98499559424
+        }
+      },
+      "profile": ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_mixed_summary/route-profile.csv",
+      "prompt": "dev_mixed_summary",
+      "total": {
+        "byte_coverage": 0.580546901561882,
+        "covered_current_bytes": 153533284352,
+        "covered_events": 30040,
+        "covered_remote_bytes": 95856230400,
+        "covered_remote_to_current_ratio": 0.6243351779034051,
+        "current_bytes": 264463187968,
+        "event_coverage": 0.5792965134217835,
+        "events": 51856,
+        "hybrid_byte_ratio": 0.7819089515060262,
+        "hybrid_bytes": 206786134016
+      }
+    },
+    {
+      "by_kind": {
+        "gate": {
+          "byte_coverage": 0.5842941941623148,
+          "covered_current_bytes": 139714756608,
+          "covered_events": 26440,
+          "covered_remote_bytes": 88617123840,
+          "covered_remote_to_current_ratio": 0.6342717547627021,
+          "current_bytes": 239117139968,
+          "event_coverage": 0.5858890267683035,
+          "events": 45128,
+          "hybrid_byte_ratio": 0.7863071096666756,
+          "hybrid_bytes": 188019507200
+        },
+        "up": {
+          "byte_coverage": 0.5875350009333582,
+          "covered_current_bytes": 129949876224,
+          "covered_events": 26441,
+          "covered_remote_bytes": 79720202240,
+          "covered_remote_to_current_ratio": 0.6134688585819272,
+          "current_bytes": 221178101760,
+          "event_coverage": 0.5859111859599362,
+          "events": 45128,
+          "hybrid_byte_ratio": 0.7728994254661605,
+          "hybrid_bytes": 170948427776
+        }
+      },
+      "profile": ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_photosynthesis_factual/route-profile.csv",
+      "prompt": "dev_photosynthesis_factual",
+      "total": {
+        "byte_coverage": 0.5858514457365422,
+        "covered_current_bytes": 269664632832,
+        "covered_events": 52881,
+        "covered_remote_bytes": 168337326080,
+        "covered_remote_to_current_ratio": 0.6242469556060527,
+        "current_bytes": 460295241728,
+        "event_coverage": 0.5859001063641198,
+        "events": 90256,
+        "hybrid_byte_ratio": 0.7798645357018988,
+        "hybrid_bytes": 358967934976
+      }
+    },
+    {
+      "by_kind": {
+        "gate": {
+          "byte_coverage": 0.5342240944002976,
+          "covered_current_bytes": 129100840960,
+          "covered_events": 24398,
+          "covered_remote_bytes": 81933795328,
+          "covered_remote_to_current_ratio": 0.6346495864685032,
+          "current_bytes": 241660461056,
+          "event_coverage": 0.5349500087703911,
+          "events": 45608,
+          "hybrid_byte_ratio": 0.8048210061923619,
+          "hybrid_bytes": 194493415424
+        },
+        "up": {
+          "byte_coverage": 0.537155880457581,
+          "covered_current_bytes": 120070766592,
+          "covered_events": 24398,
+          "covered_remote_bytes": 73572581376,
+          "covered_remote_to_current_ratio": 0.612743496724722,
+          "current_bytes": 223530582016,
+          "event_coverage": 0.5349500087703911,
+          "events": 45608,
+          "hybrid_byte_ratio": 0.7919828920202439,
+          "hybrid_bytes": 177032396800
+        }
+      },
+      "profile": ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_python_reverse/route-profile.csv",
+      "prompt": "dev_python_reverse",
+      "total": {
+        "byte_coverage": 0.5356328572161146,
+        "covered_current_bytes": 249171607552,
+        "covered_events": 48796,
+        "covered_remote_bytes": 155506376704,
+        "covered_remote_to_current_ratio": 0.6240934841324052,
+        "current_bytes": 465191043072,
+        "event_coverage": 0.5349500087703911,
+        "events": 91216,
+        "hybrid_byte_ratio": 0.7986521188596855,
+        "hybrid_bytes": 371525812224
+      }
+    },
+    {
+      "by_kind": {
+        "gate": {
+          "byte_coverage": 0.7915338872656889,
+          "covered_current_bytes": 98678702080,
+          "covered_events": 18666,
+          "covered_remote_bytes": 62649237504,
+          "covered_remote_to_current_ratio": 0.634881045083158,
+          "current_bytes": 124667691008,
+          "event_coverage": 0.7933526011560693,
+          "events": 23528,
+          "hybrid_byte_ratio": 0.7109959743002863,
+          "hybrid_bytes": 88638226432
+        },
+        "up": {
+          "byte_coverage": 0.790931694315153,
+          "covered_current_bytes": 91207467008,
+          "covered_events": 18666,
+          "covered_remote_bytes": 55792730112,
+          "covered_remote_to_current_ratio": 0.6117123075801053,
+          "current_bytes": 115316490240,
+          "event_coverage": 0.7933526011560693,
+          "events": 23528,
+          "hybrid_byte_ratio": 0.6928909575526117,
+          "hybrid_bytes": 79901753344
+        }
+      },
+      "profile": ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_zh_france/route-profile.csv",
+      "prompt": "dev_zh_france",
+      "total": {
+        "byte_coverage": 0.7912445232870218,
+        "covered_current_bytes": 189886169088,
+        "covered_events": 37332,
+        "covered_remote_bytes": 118441967616,
+        "covered_remote_to_current_ratio": 0.6237524733099954,
+        "current_bytes": 239984181248,
+        "event_coverage": 0.7933526011560693,
+        "events": 47056,
+        "hybrid_byte_ratio": 0.7022962051062464,
+        "hybrid_bytes": 168539979776
+      }
+    }
+  ]
+}

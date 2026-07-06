@@ -91540,3 +91540,78 @@ Decision:
   - the real lower-byte GGUF, or
   - a future explicit lower-byte expert override path.
 - No token-rate improvement is claimed.
+
+## GP24: dev-only up/gate lower-byte subpack coverage bound
+
+Timestamp: `2026-07-07T04:32:00+0800`.
+
+Status: completed dev-only coverage analysis; no runtime change.
+
+Rationale:
+
+- GP23 showed an `up+gate` lower-byte selected subpack would fit current disk
+  at about `61.8 GiB`.
+- Before implementing a complex lower-byte expert override path, estimate how
+  much it could help on general dev prompts.
+- This analysis uses dev route profiles only, not held-out test prompts.
+
+Tooling:
+
+- `.Agent/run-tools/kimi_lowbyte_subpack_coverage.py`
+
+Record:
+
+- `.Agent/runs/20260707-gp24-lowbyte-upgate-coverage/report.md`
+- `.Agent/runs/20260707-gp24-lowbyte-upgate-coverage/report.json`
+
+Input:
+
+- Manifest:
+  `.Agent/runs/20260707-gp21-remote-range-pack/manifest.tsv`
+- Profiles:
+  `.Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/*/route-profile.csv`
+- Kinds:
+  `up,gate`
+
+Method:
+
+- For each dev route-profile key `(tensor, expert)`:
+  - if the key is in the selected lower-byte manifest, count remote bytes;
+  - otherwise count current IQ3_S bytes as fallback;
+  - sum by prompt and aggregate.
+- This is a byte bound, not a runtime result. It does not model batch-level
+  all-hit requirements, additional type override overhead, or correctness.
+
+Results:
+
+- Dev prompts: `7`.
+- Manifest entries for up/gate: `20777`.
+- Aggregate up/gate events: `468592`.
+- Aggregate event coverage: `0.697991`.
+- Aggregate current up/gate bytes: `2225.656 GiB`.
+- Aggregate hybrid up/gate bytes: `1642.322 GiB`.
+- Aggregate hybrid byte ratio: `0.737905`.
+
+Per-prompt hybrid byte ratio:
+
+- `dev_france_regression`: `0.6275`.
+- `dev_japan_factual`: `0.6919`.
+- `dev_linear_equation`: `0.7987`.
+- `dev_mixed_summary`: `0.7819`.
+- `dev_photosynthesis_factual`: `0.7799`.
+- `dev_python_reverse`: `0.7987`.
+- `dev_zh_france`: `0.7023`.
+
+Decision:
+
+- The France prompt benefits much more than unrelated dev prompts, confirming
+  this hotset remains prompt-biased.
+- A selected `up+gate` lower-byte override alone is not enough for the `5 tok/s`
+  target:
+  - even the up/gate-only hybrid byte ratio is `0.738x`;
+  - GP10 estimated the full path needs about `0.39-0.55x` bytes/token.
+- Do not implement a complex selected-only up/gate override as the next primary
+  optimization unless it is paired with a broader prompt-agnostic hotset,
+  lower-byte full model, or another byte-reduction mechanism.
+- The next useful branch should target a prompt-agnostic lower-byte asset or a
+  substantially smaller full selected pack, not another France-derived hotset.
