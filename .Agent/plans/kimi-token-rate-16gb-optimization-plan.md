@@ -93042,3 +93042,67 @@ Decision:
   staging, typed kernels for up/gate/down, and a full quality gate. It should
   not be started until the full IQ1_S smoke is impossible for several turns or
   until deletion/additional-disk is explicitly rejected.
+
+## GP35: guarded IQ1_S cleanup/download/smoke executor
+
+Timestamp: `2026-07-07T10:45:00+0800`.
+
+Status: planned before execution.
+
+Purpose:
+
+- GP33/GP34 show the next least-risk material branch is the full
+  `mradermacher` `i1-IQ1_S` model smoke, not selected low-byte override.
+- Full IQ1_S is currently gated by disk capacity or explicit deletion approval.
+- Prepare a reproducible executor now so the eventual cleanup/download/smoke
+  path is not assembled manually under time pressure.
+
+Hard safety requirements:
+
+- The executor must default to dry-run.
+- It must not delete any file unless all of the following are set:
+  - `EXECUTE=1`;
+  - `DELETE_OLD_PACKS=1`;
+  - `CONFIRM_DELETE=DELETE_OLD_KIMI_NON_SOTA_PACKS`.
+- It must preserve:
+  - `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S`;
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`.
+- It must record or print:
+  - repo commit/branch;
+  - free space before deletion/download;
+  - preserve-path sizes;
+  - deletion-candidate sizes;
+  - exact IQ1_S part URLs and expected byte counts;
+  - model path and expected final byte count;
+  - smoke command with `MemoryMax=15900000000`, `MemorySwapMax=0`,
+    `N=32`, France prompt, and `MODEL_PATH`.
+
+Implementation:
+
+- Add:
+  `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+- Default settings:
+  - `EXECUTE=0`;
+  - `DOWNLOAD=1`;
+  - `RUN_SMOKE=1`;
+  - `MODEL_PATH=/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF/Kimi-K2.7-Code.i1-IQ1_S.gguf`;
+  - `REPO=/root/lfz/tmp/vendor-kimi-speculative-gp33`.
+- Expected final IQ1_S bytes:
+  `204429739520`.
+- Keep at least `20 GiB` free after download by default.
+
+Validation before any real execution:
+
+1. Local syntax:
+   `bash -n .Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+2. Remote dry-run from the clean temp worktree after push:
+   `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+3. Confirm remote dry-run reports:
+   - no deletion step executed;
+   - current free space is insufficient;
+   - model smoke is not ready;
+   - dry-run download/smoke command shape is printed.
+
+No SOTA or token-rate claim is possible from this phase. It is reproducibility
+and safety preparation for the blocked IQ1_S full-model smoke.
