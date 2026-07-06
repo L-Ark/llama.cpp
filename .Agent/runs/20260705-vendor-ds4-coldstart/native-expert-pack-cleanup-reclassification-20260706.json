@@ -1,0 +1,152 @@
+{
+  "schema": "vendor-ds4-native-expert-pack-cleanup-reclassification-v1",
+  "created_at_utc": "2026-07-06T02:15:22Z",
+  "status": "completed_no_delete_no_move",
+  "source_state": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "head": "2008ee358047f88ecbac51b4fe66046d2d0a6672",
+    "status_short": ""
+  },
+  "current_free_gib": 1.570469,
+  "accepted_sota_reproduction_inputs": {
+    "model": {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "exists": true,
+      "bytes": 156148189760,
+      "gib": 145.424334,
+      "mtime_utc": "2026-06-22T14:12:05Z"
+    },
+    "gate_pack": {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "exists": true,
+      "bytes": 20495904768,
+      "gib": 19.088299,
+      "mtime_utc": "2026-07-02T11:13:53Z"
+    },
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "environment_evidence": "Accepted run environment uses GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack and does not set GGML_MOE_EXPERT_PACK to native.expert-pack."
+  },
+  "native_full_expert_pack": {
+    "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+    "exists": true,
+    "bytes": 147174760448,
+    "gib": 137.067177,
+    "mtime_utc": "2026-06-23T08:18:58Z",
+    "classification": "approval_cleanup_candidate_deepseek_adjacent_not_accepted_sota_input",
+    "evidence": [
+      ".Agent/runs/20260705-vendor-ds4-coldstart/native-full-expert-pack-route-audit-20260706.json decision: route_status=closed_before_new_run; accepted_sota_unchanged=true; runtime_source_edit_allowed=false; strict_cold_benchmark_allowed=false.",
+      ".Agent/runs/20260705-vendor-ds4-coldstart/native-full-pack-mmap-rebuild-repro-rejected-20260706.json decision=rejected_not_sota.",
+      ".Agent/runs/20260705-vendor-ds4-coldstart/full-pack-mmap-no-prefill-rejected-20260706.json decision=rejected_not_sota.",
+      ".Agent/runs/20260705-vendor-ds4-coldstart/storage-cleanup-approval-audit-20260706.json role: DeepSeek-adjacent non-accepted expert-pack; delete/move only with explicit approval."
+    ],
+    "do_not_delete_without_explicit_approval": true,
+    "reason": "Not needed for accepted SOTA reproduction, but adjacent to target model and useful for reproducing rejected diagnostics; explicit user approval is required before deletion or relocation."
+  },
+  "cleanup_options": [
+    {
+      "name": "native_full_expert_pack_only",
+      "paths": [
+        "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack"
+      ],
+      "risk": "DeepSeek-adjacent but not accepted SOTA input; full-pack mmap route is rejected. Requires explicit approval.",
+      "enables": [
+        "REAP/compact candidates requiring >=60GiB",
+        "low-bit native-topology candidates requiring around 90-100GiB",
+        "not enough by itself for preferred 180GiB 4Expert target"
+      ],
+      "expected_free_gib_after_cleanup": 138.637646,
+      "path_stats": [
+        {
+          "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+          "exists": true,
+          "bytes": 147174760448,
+          "gib": 137.067177,
+          "mtime_utc": "2026-06-23T08:18:58Z"
+        }
+      ]
+    },
+    {
+      "name": "glm_directory_only",
+      "paths": [
+        "/root/lfz/models/GLM-5.2-UD-IQ3_XXS"
+      ],
+      "risk": "Unrelated GLM model directory; best large-space candidate if user approves.",
+      "enables": [
+        "REAP/compact",
+        "low-bit native topology",
+        "4Expert-class full empirical tests plus artifacts"
+      ],
+      "expected_free_gib_after_cleanup": 263.913288,
+      "path_stats": [
+        {
+          "path": "/root/lfz/models/GLM-5.2-UD-IQ3_XXS",
+          "exists": true,
+          "bytes": 281688457065,
+          "gib": 262.342819,
+          "mtime_utc": "2026-06-23T06:03:14Z"
+        }
+      ]
+    },
+    {
+      "name": "promptset_union_and_rejected_updown_packs",
+      "paths": [
+        "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack",
+        "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top512-down-20260703.pack",
+        "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top256-updown-20260703.pack",
+        "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top128-updown-20260703.pack"
+      ],
+      "risk": "Historical/rejected packs; not accepted France SOTA pack. Requires approval; insufficient for 4Expert and likely tight for REAP after artifacts unless combined with other paths.",
+      "enables": [
+        "partial space recovery",
+        "possibly DFlash/small artifact work",
+        "not enough alone for preferred direct GGUF empirical tests"
+      ],
+      "expected_free_gib_after_cleanup": 41.071091,
+      "path_stats": [
+        {
+          "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack",
+          "exists": true,
+          "bytes": 38420348928,
+          "gib": 35.781738,
+          "mtime_utc": "2026-07-02T11:56:04Z"
+        },
+        {
+          "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top512-down-20260703.pack",
+          "exists": true,
+          "bytes": 2281783296,
+          "gib": 2.125076,
+          "mtime_utc": "2026-07-03T04:32:34Z"
+        },
+        {
+          "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top256-updown-20260703.pack",
+          "exists": true,
+          "bytes": 1140891648,
+          "gib": 1.062538,
+          "mtime_utc": "2026-07-03T03:57:58Z"
+        },
+        {
+          "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top128-updown-20260703.pack",
+          "exists": true,
+          "bytes": 570445824,
+          "gib": 0.531269,
+          "mtime_utc": "2026-07-03T03:46:00Z"
+        }
+      ]
+    }
+  ],
+  "space_targets": {
+    "reap_or_compact_empirical_minimum_gib": 60,
+    "low_bit_native_topology_target_gib": "90-100",
+    "cloudyu_4expert_preferred_gib": 180
+  },
+  "decision": {
+    "accepted_sota_changed": false,
+    "files_deleted": false,
+    "files_moved": false,
+    "native_expert_pack_reclassified": true,
+    "new_classification": "approval cleanup candidate, not accepted SOTA input",
+    "recommended_if_user_approves_cleanup": "Free/relocate either GLM directory for broad runway, or native.expert-pack for enough space to test REAP/compact candidates; preserve accepted native GGUF and accepted France gate pack.",
+    "next_without_approval": "Continue metadata/header-only route watch; no downloads, no source patch, no benchmark."
+  }
+}

@@ -2,6 +2,34 @@
 
 ## Summary
 
+### 2026-07-06 Latest Active Plan: Native Expert Pack Reclassified as Cleanup Candidate
+
+This is the latest active plan and supersedes older Latest Active Plan and Historical Plan sections below. Older sections remain as historical experiment records only. Current accepted strict cold SOTA remains 4.4 tok/s. This section produced no new accepted performance result, no file deletion or movement, no source patch, and no strict cold benchmark.
+
+Current accepted SOTA remains:
+
+- Run: /root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb
+- Metrics: eval_tok_s=4.4, prompt_tok_s=1.8, TTFT=32087.738292 ms, elapsed_seconds=62.9, memory_peak_bytes=16000000000, memory_file_bytes=15099523072, ram_ok=true, oom_seen=false, correctness_ok=true
+- Accepted reproduction inputs remain the native GGUF plus the France gate pack: /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf and /root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack.
+- Push target remains ssd, https://github.com/wici-ai/ssd-llama.git, branch vendor/deepseek-token-rate-16gb, using L-Ark <fliangae@connect.ust.hk>.
+
+New cleanup reclassification artifact:
+
+- Artifact: .Agent/runs/20260705-vendor-ds4-coldstart/native-expert-pack-cleanup-reclassification-20260706.json
+- DeepSeek-V4-Flash-FP4-FP8-native.expert-pack is now classified more precisely as approval_cleanup_candidate_deepseek_adjacent_not_accepted_sota_input, not as an accepted SOTA reproduction input.
+- Evidence: accepted SOTA env uses GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack and does not set GGML_MOE_EXPERT_PACK to native.expert-pack; full-pack mmap related artifacts are rejected: native-full-pack-mmap-rebuild-repro-rejected, full-pack-mmap-no-prefill-rejected, and native-full-expert-pack-route-audit.
+- Size: 147174760448 bytes, 137.067 GiB. If explicitly approved for deletion or relocation, expected free space becomes about 138.638 GiB, enough for REAP/compact and low-bit native-topology empirical tests, but still not the preferred 180 GiB runway for 4Expert.
+- GLM directory cleanup remains the broadest runway option: /root/lfz/models/GLM-5.2-UD-IQ3_XXS would yield about 263.9 GiB free if explicitly approved, enough for 4Expert-class testing.
+- Historical promptset and rejected updown packs would yield only about 41.1 GiB free, not enough for the preferred direct GGUF candidate tests by themselves.
+
+Updated next executable plan:
+
+1. Commit and push this reclassification artifact plus this plan update to ssd/vendor/deepseek-token-rate-16gb immediately.
+2. Without explicit cleanup or relocation approval, continue only metadata/header/source-audit work. Do not delete or move files, download models, build large packs, run strict cold benchmarks, or patch runtime source from the current evidence.
+3. If the user approves cleaning native.expert-pack, preserve the accepted native GGUF and France gate pack, record exact before/after bytes, then prioritize one REAP/compact direct-model candidate through loader metadata, France correctness, five-prompt correctness, strict 16GB cold cgroup, TTFT gate, commit/push, and pushed-source reproduction.
+4. If the user approves cleaning the GLM directory, prioritize the highest-value disk-gated empirical candidate because this gives enough runway for 4Expert-class tests as well as REAP/compact tests.
+5. Promotion remains strict: eval_tok_s > 4.4, TTFT <= 33617.688744 ms, strict cold drop_caches, MemorySwapMax=0, no swap/OOM/ram kill, and correct/coherent output.
+
 ### 2026-07-06 Latest Active Plan: Disk and Loader Blocker Audit After Route Triage
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，本节没有产生新的 accepted performance result，没有删除/移动文件，没有源码 patch，也没有 strict cold benchmark。
