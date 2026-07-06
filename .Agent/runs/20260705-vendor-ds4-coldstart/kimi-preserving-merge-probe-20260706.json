@@ -91,10 +91,21 @@
     "full_kimi_performance_regression": "not_run_due_to_scope_and_asset/disk limits; functionality smoke only, no Kimi SOTA claim",
     "kimi_verify_bench_help": "pass",
     "python_scripts_py_compile": "pass",
+    "remote_manifest_dry_run": {
+      "bad_pack_offset_count": 0,
+      "command": "python3 scripts/kimi-build-remote-pack-from-manifest.py --manifest-tsv /tmp/.../manifest.tsv --output-pack /tmp/.../out.pack --summary-json /tmp/.../summary.json --dry-run --smoke-entries 0",
+      "current_iq3_runtime_compatible": true,
+      "entries": 1,
+      "execute": false,
+      "invalid_remote_range_count": 0,
+      "pack_exists_after_dry_run": false,
+      "pack_written": false,
+      "status": "pass"
+    },
     "remote_manifest_help": "pass",
     "remote_pack_builder_help": "pass",
     "source_list_symbols_in_runtime": 44,
-    "status": "pass_smoke_not_full_perf_validation"
+    "status": "pass_smoke_not_full_perf_validation_with_manifest_dry_run"
   },
   "kimi_source_branch": "ssd/vendor/kimi-moe-stream-on-vendor",
   "kimi_source_commit": "9820ecbbb3dbb503b179ea605c848b903082e121",
@@ -102,7 +113,8 @@
   "merge_base": "f0d44910233b0bcf52050025a522313a78b93232",
   "notes": [
     "This merge probe should be pushed to the probe branch, not promoted as the accepted DeepSeek SOTA branch, because eval_tok_s=4.3 is below the current accepted 4.4 tok/s.",
-    "The strict cold run still satisfies RAM/page-cache, TTFT, and correctness constraints, so the merge is suitable as a functional checkpoint if Kimi preservation is desired."
+    "The strict cold run still satisfies RAM/page-cache, TTFT, and correctness constraints, so the merge is suitable as a functional checkpoint if Kimi preservation is desired.",
+    "Supplemental Kimi remote-pack manifest dry-run passed on a temporary 1-entry manifest: parser/summary path initialized, execute=0, pack_written=0, no pack file created."
   ],
   "probe_branch": "vendor/deepseek-merge-kimi-preserve-kimi-probe",
   "push_target_probe_branch": "ssd/vendor/deepseek-merge-kimi-preserve-kimi-probe"

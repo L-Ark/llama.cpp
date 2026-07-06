@@ -18,7 +18,7 @@ Validation:
 
 - Build passed: `cmake --build build-ds4-moe-stream --target llama-cli llama-kimi-verify-bench -j2`
 - Static checks passed: no real conflict markers; `git diff --check` clean.
-- Kimi preservation smoke passed: all added Kimi Python tools compile, remote manifest/build tool help works, `llama-kimi-verify-bench --help` works, and source-list runtime symbols remain present. Full Kimi performance regression was not claimed because this was a smoke-only validation under current asset/disk constraints.
+- Kimi preservation smoke passed: all added Kimi Python tools compile, remote manifest/build tool help works, `llama-kimi-verify-bench --help` works, source-list runtime symbols remain present, and a temporary 1-entry remote-pack manifest dry-run completed with `execute=0` and `pack_written=0`. Full Kimi performance regression was not claimed because this was a smoke-only validation under current asset/disk constraints.
 - DeepSeek strict cold run: `/root/lfz/runs/vendor-ds4-16gb/20260706T031711Z-merge-kimi-preserve-regression/france-cpu40-vram0gb`
 - DeepSeek metrics: `eval_tok_s=4.3`, `prompt_tok_s=1.8`, `TTFT=32303.449436 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15093403648`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
 - France answer is coherent and semantically correct.
