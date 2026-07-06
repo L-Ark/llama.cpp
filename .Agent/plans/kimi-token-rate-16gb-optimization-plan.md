@@ -88595,3 +88595,257 @@ Decision:
   - lower-bit partitions still need enough total storage or explicit cleanup;
   - current `IQ3_S` runtime still cannot consume lower-bit `remote_nbytes`
     entries safely.
+
+## Phase GP1 - general-prompt expert-pack coverage hard-bound
+
+Start time: `2026-07-06T20:50:00+0800`.
+
+Branch:
+
+- Local: `vendor/kimi-general-prompt-token-rate-16gb`.
+- Push target: `wici/vendor/kimi-general-prompt-token-rate-16gb`.
+
+Purpose:
+
+- Continue from the formal general-prompt dev baseline instead of the older
+  France-specific SOTA path.
+- Explain why increasing queue depth, fixed VRAM hotsets, or France-derived
+  expert packs cannot by themselves solve random-prompt throughput.
+- Identify the next implementation target that can improve arbitrary prompts
+  while staying within:
+  - 16 GB host RAM including page cache and helper processes;
+  - one 32 GB RTX 5090;
+  - cold start;
+  - TTFT no more than 20% above the matching baseline;
+  - semantic correctness on France and the general prompt suite;
+  - reproducible commands, run paths, commits, and artifacts.
+
+Diagnostic input:
+
+- Run:
+  `.Agent/runs/20260706-kimi-copy-profile-python-reverse-n32`.
+- Remote source run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-124354Z-copy-profile-python-reverse-n32`.
+- Prompt:
+  `dev_python_reverse`.
+- Mode:
+  - `N=32`;
+  - `PROFILE=1`;
+  - `COPY_PROFILE=1`;
+  - `COPY_PROFILE_H2D=1`;
+  - strict 16 GB cgroup;
+  - cold start.
+- Caveat:
+  `COPY_PROFILE_H2D=1` synchronizes H2D for measurement, so this run is a
+  diagnostic copy-path split, not a token-rate SOTA result.
+
+New reproducible analysis tool:
+
+```bash
+cd /Users/spark/llama.cpp-vendor-kimi
+.Agent/run-tools/kimi_copy_profile_breakdown.py \
+  --run-dir .Agent/runs/20260706-kimi-copy-profile-python-reverse-n32 \
+  --out .Agent/runs/20260706-kimi-copy-profile-python-reverse-n32/copy-profile-summary.md
+```
+
+Result summary:
+
+- Report:
+  `.Agent/runs/20260706-kimi-copy-profile-python-reverse-n32/copy-profile-summary.md`.
+- Token rate from this diagnostic run:
+  `0.16 tok/s`, not SOTA-comparable because H2D sync profiling was enabled.
+- Total profiled copy wall:
+  `256862 ms`.
+- Expert-pack miss path:
+  `207424 ms` over `64.85 GiB`.
+- Expert-pack hit path:
+  `49438 ms` over `87.64 GiB`.
+- iouring path:
+  `11811 ms`.
+- non-iouring path:
+  `245051 ms`.
+
+Largest copy-path buckets:
+
+| op | role | pack hit | iouring | calls | GiB | host ms | H2D ms | wall ms |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| `runtime_load` | gate | `0` | `0` | `4354` | `21.63` | `69941` | `925` | `71033` |
+| `runtime_load` | up | `0` | `0` | `4354` | `19.83` | `67191` | `853` | `68220` |
+| `current_down_overlap` | down | `0` | `0` | `2282` | `13.41` | `39220` | `565` | `39880` |
+| `runtime_load` | down | `0` | `0` | `1503` | `9.98` | `27821` | `415` | `28291` |
+| `runtime_load` | gate | `1` | `0` | `5109` | `25.32` | `11612` | `1091` | `12895` |
+| `runtime_load` | up | `1` | `0` | `5109` | `23.36` | `11252` | `1008` | `12478` |
+
+Interpretation:
+
+- The dominant exposed copy cost in this general-prompt diagnostic is not only
+  VRAM cache miss and not only io_uring wait.
+- A large fraction of selected experts are absent from the current expert
+  packs. Those accesses take the `pack_hit=0` GGUF-backed materialization path,
+  which is much slower per GiB than the expert-pack hit path.
+- This explains why fixed VRAM hotset tuning has weak generalization:
+  - a VRAM miss can still be cheap if the tensor exists in a prompt-independent
+    optimized expert pack;
+  - the current general-prompt workload often misses both VRAM and expert-pack
+    coverage.
+- Dev-union or prompt-specific expert packs are diagnostic only. They are not
+  acceptable SOTA because the deployment target is arbitrary user prompts and
+  the held-out test prompts must not influence pack contents.
+
+Immediate design decision:
+
+- Reject as primary next step:
+  - queue-depth-only tuning;
+  - France-specific hotset changes;
+  - dev/test prompt-specific expert packs;
+  - moving more fixed hot experts into VRAM without first fixing pack coverage.
+- Prioritize prompt-independent expert-pack coverage:
+  1. inspect the current expert-pack format and loader;
+  2. determine whether a model-wide same-quant expert pack can be built within
+     available disk and without exceeding 16 GB host RAM at runtime;
+  3. if full duplication is too large, design a GGUF-offset direct-read
+     expert-pack alias/manifest so missing experts can use the pack/iouring
+     path without duplicating hundreds of GiB;
+  4. if aliasing is unsafe or too invasive, build a smaller prompt-independent
+     broad-coverage pack using model metadata or offline corpus traces that do
+     not include held-out test prompts, and treat it as an intermediate bound.
+
+Theoretical bound to compute before implementation:
+
+- For every candidate pack-coverage design, record:
+  - expected `pack_hit=0` byte reduction;
+  - maximum removable copy wall from the diagnostic profile;
+  - disk footprint;
+  - expected cold-start TTFT impact;
+  - expected page-cache impact under the 16 GB cgroup;
+  - whether the design is prompt-independent.
+- The current n32 diagnostic upper bound from eliminating all observed
+  `pack_hit=0` copy wall is about `207 s` for this prompt/run shape. This is a
+  necessary but not sufficient condition for `5 tok/s`; full n96 dev/test
+  validation is still required.
+
+Acceptance gate for any GP1 implementation:
+
+- Plan update before source edits.
+- Commit and push any accepted improvement immediately.
+- Revert or abandon any candidate that:
+  - exceeds 16 GB host RAM including page cache;
+  - raises TTFT by more than 20% versus matching baseline;
+  - worsens semantic quality on France or dev prompts;
+  - depends on held-out test prompts;
+  - cannot be reproduced from committed scripts/commands.
+- First run n32 diagnostics only as a cheap bound.
+- Then rerun strict n96 dev baseline.
+- Run held-out test only after the candidate is frozen.
+- Promote SOTA only from held-out test metrics, with answer text, token rate,
+  TTFT, decode time, memory peak, pack hit/miss, io_uring, staging, and
+  reproduction method recorded.
+
+Next concrete action:
+
+- Inspect current expert-pack generation and loader code to choose between:
+  - model-wide same-quant expert pack;
+  - GGUF-offset direct-read alias/manifest;
+  - prompt-independent broad coverage pack.
+
+Implementation/format inspection result:
+
+- Expert-pack v1 runtime key is exactly:
+  `(tensor_name, expert_idx, nbytes)`.
+- v1 source entries store:
+  - `tensor[128]`;
+  - `expert_idx`;
+  - reserved/source index;
+  - `offset`;
+  - `nbytes`.
+- Current loader treats `offset` as an offset inside the physical pack file.
+- Current optimized read paths (`direct`, `io_uring`, host prefetch, RAM tier,
+  CPU fallback mmap helper) all dereference the entry through its loaded pack
+  source.
+- Therefore a GGUF-offset alias cannot be implemented as a plain v1 manifest
+  pointed at a GGUF file unless the runtime knows that the source is a GGUF data
+  source and that entry offsets are absolute GGUF tensor payload offsets.
+- The minimally invasive source change would be a default-off second source
+  kind:
+  - keep v1 pack behavior unchanged;
+  - add a GGUF-offset index/alias format or sidecar that maps
+    `(tensor, expert_idx, nbytes)` to `(gguf_path, absolute_offset, nbytes)`;
+  - reuse the existing read functions after `expert_pack_source_for_entry`
+    resolves the correct file descriptor and absolute offset;
+  - keep `nbytes` exact to avoid mixed-quant corruption.
+
+Disk feasibility result:
+
+- Existing dry-run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260705-235730Z-phase7ol-gguf-pack-dry-run-iq3s/pack-plan.json`.
+- Full same-quant IQ3_S all-expert pack estimate:
+  `365.500 GiB`.
+- Current server free space on `/`:
+  about `88 GiB`.
+- Existing current runner packs:
+  - main France/upgate pack: `164 GiB`;
+  - l1/l2 down overlay: `4.6 GiB`.
+- Conclusion:
+  building a full duplicated same-quant pack is currently not feasible without
+  deleting old artifacts or adding external storage. It is also wasteful because
+  the GGUF shards already contain the bytes.
+
+Prompt-agnostic current-pack coverage audit:
+
+New tool:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+.Agent/run-tools/kimi_pack_coverage_audit.py \
+  --replace-duplicates \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  --runs-root /root/lfz/runs/vendor-kimi-token-rate/20260706-114204Z-general-dev-baseline-n96-profile \
+  --out /root/lfz/runs/vendor-kimi-token-rate/20260706-130000Z-gp1-pack-coverage-audit/pack-coverage-summary.md
+```
+
+Local report copy:
+
+- `.Agent/runs/20260706-gp1-pack-coverage-audit/pack-coverage-summary.md`.
+
+Coverage result:
+
+| prompt | events | byte hit | miss GiB |
+|---|---:|---:|---:|
+| `dev_france_regression` | `106592` | `99.4%` | `3.20` |
+| `dev_japan_factual` | `117664` | `82.4%` | `107.51` |
+| `dev_linear_equation` | `47080` | `54.1%` | `112.22` |
+| `dev_mixed_summary` | `74760` | `58.5%` | `161.17` |
+| `dev_photosynthesis_factual` | `130120` | `59.0%` | `276.74` |
+| `dev_python_reverse` | `131504` | `54.0%` | `313.99` |
+| `dev_zh_france` | `67840` | `79.4%` | `72.41` |
+
+Aggregate:
+
+- routed events: `675560`;
+- event hit rate: `70.1%`;
+- routed bytes: `3506.57 GiB`;
+- byte hit rate: `70.1%`;
+- miss bytes: `1047.24 GiB`.
+
+By role:
+
+| role | byte hit | miss GiB |
+|---|---:|---:|
+| down | `70.7%` | `374.92` |
+| gate | `69.7%` | `350.30` |
+| up | `69.9%` | `322.02` |
+
+Decision update:
+
+- The current expert packs are strongly France-biased:
+  France route-byte coverage is `99.4%`, while unrelated dev prompts fall to
+  `54-82%`.
+- This confirms that the historical France SOTA is not a valid proxy for random
+  user prompts.
+- The next implementation should not build another prompt-specific pack.
+- The primary next source work should be a default-off GGUF-offset expert source
+  path, because it can target the measured `1047.24 GiB` dev pack-miss bytes
+  without requiring a `365.500 GiB` duplicated pack.
+- A broad prompt-independent selected pack remains possible only as a secondary
+  diagnostic if the alias source proves too risky.
