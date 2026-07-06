@@ -91141,3 +91141,63 @@ Decision:
   2. cold-start `n32` dev quality/token-rate smoke under the 16 GB cgroup;
   3. if quality passes, expert-pack adaptation/rebuild and dev `n96`;
   4. held-out test only after the candidate is frozen.
+
+## GP19: IQ2_XXS remote dry-run verification
+
+Timestamp: `2026-07-07T03:10:00+0800`.
+
+Status: completed remote dry-run; cleanup/download not executed.
+
+Rationale:
+
+- GP18 produced the reproducible helper locally.
+- Before asking for a destructive disk-space action, verify the helper against
+  the actual server state without altering the dirty remote checkout.
+
+Record:
+
+- `.Agent/runs/20260707-gp19-iq2xxs-remote-dry-run/report.md`
+
+Method:
+
+- Remote host: `ssh -p 51056 root@92.180.27.82`.
+- Remote checkout:
+  `/root/lfz/llama.cpp-vendor-kimi`.
+- The remote checkout is dirty, so no `git pull` or reset was run.
+- Used `git fetch wici vendor/kimi-general-prompt-token-rate-16gb` and
+  `git show FETCH_HEAD:<path>` to extract only the GP18 script and manifest
+  into `/root/lfz/tmp/gp18-iq2xxs-dry-run`.
+- Ran:
+
+```bash
+bash -n /root/lfz/tmp/gp18-iq2xxs-dry-run/kimi_iq2xxs_prepare_download.sh
+REPO_ROOT=/root/lfz/llama.cpp-vendor-kimi \
+MANIFEST=/root/lfz/tmp/gp18-iq2xxs-dry-run/download-manifest.json \
+  /root/lfz/tmp/gp18-iq2xxs-dry-run/kimi_iq2xxs_prepare_download.sh
+```
+
+Result:
+
+- Remote free space: `85.71 GiB`.
+- Preserve list resolved as intended:
+  - current IQ3_S GGUF model;
+  - `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `kimi-iq3s-l1l2down-overlay.expert-pack`.
+- Old cleanup candidates are present and match GP16:
+  - `160G` `kimi-iq3s-france.expert-pack`;
+  - `75G` `kimi-iq3s-tracefirst-n64-20260630.expert-pack`;
+  - `7.2G` `kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack`;
+  - `4.7G` `kimi-iq3s-phase7gz-combined-overlay.expert-pack`;
+  - `328M` `tmp-hot-upgate-pair-smoke.expert-pack`;
+  - `190M` `kimi-iq3s-phase7gz-missing-down-overlay.expert-pack`.
+- Script output confirmed:
+  - cleanup skipped without `KIMI_IQ2_CLEANUP_OLD_PACKS=YES`;
+  - download skipped without `KIMI_IQ2_DOWNLOAD=YES`.
+
+Decision:
+
+- The server still cannot download the `262.789 GiB` candidate with the current
+  `85.71 GiB` free space.
+- The next step requires explicit approval to delete the listed old packs, or
+  an external storage expansion.
+- No token-rate improvement is claimed in GP19.
