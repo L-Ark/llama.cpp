@@ -5971,6 +5971,155 @@ static bool q4_down_parity_candidate(const char *name, ggml_type type) {
     return !target || !target[0] || std::strcmp(target, name) == 0;
 }
 
+static const char *mxfp4_down_probe_mode() {
+    const char *env = std::getenv("GGML_MOE_STREAM_DOWN_MXFP4_PROBE");
+    if (!env || !env[0] || env[0] == '0') return nullptr;
+    return env;
+}
+
+static bool mxfp4_down_probe_candidate(const char *name, ggml_type type) {
+    if (!mxfp4_down_probe_mode()) return false;
+    if (type != GGML_TYPE_MXFP4 || !name || !std::strstr(name, "ffn_down_exps")) return false;
+    const char *target = std::getenv("GGML_MOE_STREAM_DOWN_MXFP4_PROBE_TENSOR");
+    return !target || !target[0] || std::strcmp(target, name) == 0;
+}
+
+static bool mxfp4_down_probe_parity_mode() {
+    const char *mode = mxfp4_down_probe_mode();
+    return mode && std::strcmp(mode, "perf") != 0;
+}
+
+static int mxfp4_down_probe_max_calls() {
+    const char *env = std::getenv("GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_CALLS");
+    long max_calls = (env && env[0]) ? std::atol(env) : 8;
+    if (max_calls < 1) max_calls = 1;
+    if (max_calls > 256) max_calls = 256;
+    return (int)max_calls;
+}
+
+static std::atomic<int> g_mxfp4_down_probe_calls{0};
+static std::mutex g_mxfp4_down_probe_out_mu;
+
+static void mxfp4_down_probe_write_csv(
+        const char *name,
+        int call_id,
+        const char *status,
+        int n_active,
+        int64_t ne01,
+        int64_t ne00,
+        int64_t compared,
+        double max_abs,
+        double mean_abs,
+        double max_rel,
+        double mean_rel,
+        int worst_active,
+        int worst_expert,
+        int64_t worst_col,
+        float worst_gpu,
+        float worst_cpu) {
+    const char *path = std::getenv("GGML_MOE_STREAM_DOWN_MXFP4_PROBE_OUT");
+    if (!path || !path[0]) return;
+
+    static bool header_written = false;
+    std::lock_guard<std::mutex> lk(g_mxfp4_down_probe_out_mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "call,tensor,status,active,ne01,ne00,compared,max_abs,mean_abs,max_rel,mean_rel,"
+                "worst_active,worst_expert,worst_col,gpu,cpu\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%d,%s,%s,%d,%ld,%ld,%ld,%.9g,%.9g,%.9g,%.9g,%d,%d,%ld,%.9g,%.9g\n",
+            call_id, name ? name : "", status ? status : "", n_active, (long)ne01, (long)ne00,
+            (long)compared, max_abs, mean_abs, max_rel, mean_rel, worst_active, worst_expert,
+            (long)worst_col, (double)worst_gpu, (double)worst_cpu);
+    std::fclose(f);
+}
+
+static void mxfp4_down_probe_report(
+        const char *name,
+        int call_id,
+        const void *src0_data,
+        size_t nb01,
+        size_t nb02,
+        int64_t ne00,
+        int64_t ne01,
+        const float *src1_f32,
+        size_t src1_nb1,
+        size_t src1_nb2,
+        const int *active_experts,
+        const int32_t *dst_ids,
+        const int32_t *token_ids,
+        int n_active,
+        const float *gpu_rows) {
+    if (!src0_data || !src1_f32 || !active_experts || !dst_ids || !token_ids || !gpu_rows ||
+            ne00 <= 0 || ne01 <= 0 || n_active <= 0 || ne00 % QK_MXFP4 != 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] mxfp4_down_probe tensor=%s call=%d status=invalid_args active=%d ne01=%ld ne00=%ld\n",
+                name ? name : "", call_id, n_active, (long)ne01, (long)ne00);
+        mxfp4_down_probe_write_csv(name, call_id, "invalid_args", n_active, ne01, ne00,
+                0, 0.0, 0.0, 0.0, 0.0, -1, -1, -1, 0.0f, 0.0f);
+        return;
+    }
+
+    std::vector<float> deq((size_t)ne00);
+    double sum_abs = 0.0;
+    double sum_rel = 0.0;
+    double max_abs = -1.0;
+    double max_rel = -1.0;
+    float worst_gpu = 0.0f;
+    float worst_cpu = 0.0f;
+    int worst_active = -1;
+    int worst_expert = -1;
+    int64_t worst_col = -1;
+    int64_t compared = 0;
+
+    for (int j = 0; j < n_active; ++j) {
+        const char *expert_base = (const char *)src0_data + (size_t)active_experts[j] * nb02;
+        const float *src_row = (const float *)((const char *)src1_f32 +
+                (size_t)dst_ids[j] * src1_nb1 + (size_t)token_ids[j] * src1_nb2);
+        const float *gpu_row = gpu_rows + (size_t)j * (size_t)ne01;
+        for (int64_t col = 0; col < ne01; ++col) {
+            const block_mxfp4 *qrow = (const block_mxfp4 *)(expert_base + (size_t)col * nb01);
+            dequantize_row_mxfp4(qrow, deq.data(), ne00);
+            double cpu = 0.0;
+            for (int64_t k = 0; k < ne00; ++k) {
+                cpu += (double)deq[(size_t)k] * (double)src_row[(size_t)k];
+            }
+            const double gpu = (double)gpu_row[(size_t)col];
+            const double abs_err = std::fabs(gpu - cpu);
+            const double rel_err = abs_err / std::max(1.0e-6, std::fabs(cpu));
+            sum_abs += abs_err;
+            sum_rel += rel_err;
+            ++compared;
+            if (abs_err > max_abs) {
+                max_abs = abs_err;
+                max_rel = rel_err;
+                worst_gpu = (float)gpu;
+                worst_cpu = (float)cpu;
+                worst_active = j;
+                worst_expert = active_experts[j];
+                worst_col = col;
+            }
+        }
+    }
+
+    const double mean_abs = compared > 0 ? sum_abs / (double)compared : std::numeric_limits<double>::quiet_NaN();
+    const double mean_rel = compared > 0 ? sum_rel / (double)compared : std::numeric_limits<double>::quiet_NaN();
+    std::fprintf(stderr,
+            "[moe_stream_batch] mxfp4_down_probe tensor=%s call=%d status=ok active=%d compared=%ld "
+            "max_abs=%.9g mean_abs=%.9g max_rel=%.9g mean_rel=%.9g worst_active=%d worst_expert=%d "
+            "worst_col=%ld gpu=%.9g cpu=%.9g\n",
+            name ? name : "", call_id, n_active, (long)compared,
+            max_abs, mean_abs, max_rel, mean_rel, worst_active, worst_expert,
+            (long)worst_col, worst_gpu, worst_cpu);
+    mxfp4_down_probe_write_csv(name, call_id, "ok", n_active, ne01, ne00, compared,
+            max_abs, mean_abs, max_rel, mean_rel, worst_active, worst_expert, worst_col,
+            worst_gpu, worst_cpu);
+}
+
 static bool q4_down_route_profile_candidate(const char *name, ggml_type type) {
     const char *path = std::getenv("GGML_MOE_Q4_DOWN_ROUTE_PROFILE_OUT");
     if (!path || !path[0]) return false;
@@ -6443,6 +6592,7 @@ static bool launch_moe_mmvq_compact_batch(
         case GGML_TYPE_IQ3_S:
         case GGML_TYPE_IQ2_S:
         case GGML_TYPE_IQ4_XS:
+        case GGML_TYPE_MXFP4:
             break;
         default: return false;
     }
@@ -8370,9 +8520,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         const char *env = std::getenv("GGML_MOE_STREAM_DECLINE_DEBUG");
         return env && env[0] && env[0] != '0';
     }();
-    int active_experts[128];
-    int32_t dst_ids[128];
-    int32_t token_ids[128];
+    int active_experts[MOE_STREAM_MAX_ACTIVE];
+    int32_t dst_ids[MOE_STREAM_MAX_ACTIVE];
+    int32_t token_ids[MOE_STREAM_MAX_ACTIVE];
     int n_active = 0;
     int max_dst_id = -1;
     auto decline = [&](const char *reason) -> bool {
@@ -8388,22 +8538,25 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (!src0_name || !std::strstr(src0_name, "ffn_down_exps")) return decline("not_down_tensor");
     const bool q4_parity_candidate = q4_down_parity_candidate(src0_name, src0_type);
     const bool q4_route_profile_candidate = q4_down_route_profile_candidate(src0_name, src0_type);
-    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate) return decline("unsupported_type");
+    const bool mxfp4_probe_candidate = mxfp4_down_probe_candidate(src0_name, src0_type);
+    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate && !mxfp4_probe_candidate) return decline("unsupported_type");
     if (!src1_f32) return decline("missing_src1");
     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
 
     for (int64_t e = 0; e < n_as; ++e) {
-        if (matrix_row_counts[e] != 1) {
-            if (matrix_row_counts[e] > 1) return decline("multirow_not_supported");
+        if (matrix_row_counts[e] <= 0) {
             continue;
         }
-        if (n_active >= 128) return decline("too_many_active_routes");
         const ggml_moe_row_mapping * r = matrix_rows + e*rows_stride;
-        active_experts[n_active] = (int)e;
-        dst_ids[n_active] = r[0].i1;
-        token_ids[n_active] = r[0].i2;
-        if (dst_ids[n_active] > max_dst_id) max_dst_id = dst_ids[n_active];
-        ++n_active;
+        for (int64_t ir = 0; ir < matrix_row_counts[e]; ++ir) {
+            if (n_active >= MOE_STREAM_MAX_ACTIVE) return decline("too_many_active_routes");
+            active_experts[n_active] = (int)e;
+            dst_ids[n_active] = r[ir].i1;
+            token_ids[n_active] = r[ir].i2;
+            if (dst_ids[n_active] < 0 || token_ids[n_active] < 0) return decline("bad_route_row");
+            if (dst_ids[n_active] > max_dst_id) max_dst_id = dst_ids[n_active];
+            ++n_active;
+        }
     }
     if (n_active <= 0 || max_dst_id < 0) return decline("no_active_routes");
     static std::atomic<int> q4_route_profile_calls{0};
@@ -8435,6 +8588,23 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         std::fprintf(stderr,
                 "[moe_stream_batch] q4_down_parity active tensor=%s call=%d active=%d ne01=%ld ne00=%ld\n",
                 src0_name ? src0_name : "", q4_parity_call, n_active, (long)ne01, (long)ne00);
+    }
+    bool mxfp4_probe_run = false;
+    int mxfp4_probe_call = -1;
+    if (mxfp4_probe_candidate) {
+        static std::atomic<int> first_mxfp4_down_probe{0};
+        if (first_mxfp4_down_probe.fetch_add(1, std::memory_order_relaxed) == 0) {
+            std::fprintf(stderr, "[moe_stream_batch] MXFP4 down batch probe active mode=%s\n",
+                    mxfp4_down_probe_mode() ? mxfp4_down_probe_mode() : "");
+        }
+        if (mxfp4_down_probe_parity_mode()) {
+            mxfp4_probe_call = g_mxfp4_down_probe_calls.fetch_add(1, std::memory_order_relaxed);
+            if (mxfp4_probe_call >= mxfp4_down_probe_max_calls()) return decline("mxfp4_probe_limit");
+            mxfp4_probe_run = true;
+            std::fprintf(stderr,
+                    "[moe_stream_batch] mxfp4_down_probe active tensor=%s call=%d active=%d ne01=%ld ne00=%ld\n",
+                    src0_name ? src0_name : "", mxfp4_probe_call, n_active, (long)ne01, (long)ne00);
+        }
     }
 
     static std::atomic<int> first_batch{0};
@@ -8491,7 +8661,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         down_q8k_type_allowed &&
         (!src0_name || std::strstr(src0_name, ".ffn_down_exps.") || std::strstr(src0_name, "ffn_down_exps")) &&
         moe_tensor_layer_in_simple_range(src0_name, down_q8k_layer_range);
-    const int64_t dst_cols = max_dst_id + 1;
+    const int64_t dst_cols = std::max<int64_t>(max_dst_id + 1, n_active);
     const bool use_handoff =
         gpu_handoff_enabled() &&
         g_handoff.host_ptr == src1_f32 &&
@@ -8695,6 +8865,14 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return decline("copy_dst_d2h");
     if (profile) cudaEventRecord(bc.ev_d2h, st);
     if (cudaStreamSynchronize(st) != cudaSuccess) return decline("sync_stream");
+
+    if (mxfp4_probe_run) {
+        mxfp4_down_probe_report(
+                src0_name, mxfp4_probe_call, src0_data, nb01, nb02, ne00, ne01,
+                src1_f32, src1_nb1, src1_nb2,
+                active_experts, dst_ids, token_ids, n_active, (const float *)bc.h_dst);
+        return false;
+    }
 
     if (q4_parity_run) {
         q4_down_parity_report(

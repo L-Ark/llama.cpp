@@ -70,6 +70,11 @@
   - 先做 compact-row CPU vs GPU parity/row-mapping 验证，记录 `max_abs`, `mean_abs`, `max_rel`, active experts, dst/token row mapping；
   - parity 通过后才跑 `calibration_dev_set_v1` performance probe；
   - promoted 条件：down fallback 时间下降、输出正确、16GB RAM/page cache 合规、TTFT 不超 gate、dev set token rate 有稳定提升。否则 revert source，只保留 rejected 记录。
+- `step_2_implementation_20260706`: added default-off `GGML_MOE_STREAM_DOWN_MXFP4_PROBE` in `ggml/src/ggml-cuda/moe_stream_batch.cu`. Mode `1` is parity-only: it attempts MXFP4/type39 `ffn_down_exps` compact batch, writes CPU/GPU error rows, then returns `false` so CPU fallback remains the final output. Mode `perf` is reserved for later performance testing after parity passes. Default unset behavior is unchanged.
+- `step_2_multirow_fix`: down batch route collection now expands `matrix_row_counts[e]` multirow experts into compact active rows, and sizes temporary dst rows as `max(max_dst_id+1,n_active)`. This fixes the previous `multirow_not_supported` blocker exposed by the MXFP4 probe.
+- `step_2_parity_smoke`: diagnostic only, calibration France prompt, `n=16`, no held-out test. Clean run: `/root/lfz/runs/vendor-ds4-16gb/20260706T115617Z-down-mxfp4-probe-parity-clean-smoke-20260706/france-cpu40-vram0gb`. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/down-mxfp4-defaultoff-parity-smoke-20260706.json`.
+- `step_2_parity_result`: clean smoke exited `0`, stayed in 16GB cgroup (`memory_peak_bytes=16000000000`, `ram_ok=true`), and generated `8` MXFP4 down parity rows. Error maxima: `max_abs=0.0451961701`, `mean_abs=0.0067439112`, `max_rel=0.0323935935`, `mean_rel=0.0711474475`. Output correctness is intentionally false because `n=16` truncates the answer; this run is not a performance or SOTA run.
+- `step_2_vram_note`: with `GGML_MOE_STREAM_ONE_CACHE_MIB=13568` plus `GGML_MOE_VRAM_CACHE_MIB=512`, parity rows were produced but later CUDA allocation OOMed due VRAM pressure. Clean parity used a conservative diagnostic split (`GGML_MOE_STREAM_ONE_CACHE_MIB=8192`, `GGML_MOE_VRAM_CACHE_MIB=512`). The next perf probe must sweep VRAM split conservatively and may not promote a result unless correctness/RAM/TTFT/dev-set metrics all pass.
 - `step_3_up_fallback_fix`:
   - `ffn_up_exps` 当前主要因 `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps` 被排除而回到 CPU；
   - 不能简单把 up 加进 France gate cache 或复用 France route hotset；
