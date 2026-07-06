@@ -3939,3 +3939,13 @@
 - `defaultoff_control`: `/root/lfz/runs/vendor-ds4-16gb/20260706T124907Z-20260706T-tailpart-defaultoff-gate-only-n64-control/france-tailpart-defaultoff-gate-only-n64-cpu40-vram0gb`, `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `memory_peak_bytes=16000000000`, `ram_ok=true`, cache `hits=13435`, `misses=3716`, `hit_rate=78.3%`; correctness false only due n64 truncation.
 - `decision`: reject/tie. Tail partition is safe as a default-off diagnostic but does not create a measurable speed improvement. Do not expand to full dev set.
 - `next_design`: stop cache-based up hotset experiments unless a new metric separates gate hits from denied up misses and shows a strong path. The remaining credible route is non-cache grouped staging or a model/representation change; both require hard-bound proof before another cold benchmark.
+
+
+## 2026-07-06 设计：up hot3g tail partition smoke
+
+- `attempt_id`: `20260706-up-hot3g-tailpart-n64`
+- `status`: `planned_before_smoke`
+- `profile`: `.Agent/profiles/vendor-ds4/calib-dev-up-hot3g-20260706.tsv`, calibration/dev only, no held-out.
+- `profile_summary`: selects `722` up pairs, payload `2.997GiB`, covers `51854.272ms` or `42.0%` of aggregate up fallback.
+- `theory`: 1GiB up hotset tied because fallback savings were too small. With tail partition active, 3GiB may recover more up fallback while bounding up entries to the tail partition. It sacrifices about `722` gate slots, so promote only if n64 smoke clearly beats the `2.2 tok/s` gate-only control.
+- `scope`: run only calibration France `n64` smoke first; no held-out; do not expand to full dev set unless it beats control and remains RAM/TTFT/correctness safe.
