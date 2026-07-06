@@ -3821,3 +3821,19 @@
 - `control_fallback`: gate-only retained `up decode=7469.804ms`, `up prompt=3772.828ms`, `down decode=5037.867ms`, `down prompt=4480.035ms`; VRAM cache `hits=13435`, `misses=3716`, `hit_rate=78.3%`.
 - `decision`: reject naive `gate+up` one-stream shared-cache path. It proves `ffn_up_exps` can be routed through one-stream, but end-to-end speed regresses from `2.2` to `1.9 tok/s` on the matched `n=64` control. The local up fallback win is outweighed by cache/staging overhead and remaining down fallback.
 - `next_design`: a valid up/down fallback fix must avoid stealing enough gate cache residency to create more misses. Prioritize either a separate hard-bounded up/offload path with better residency policy, or a combined design that reduces total expert movement instead of simply adding up experts to the existing gate cache. Continue using only calibration/dev prompts until a candidate is frozen.
+
+
+## 2026-07-06 执行记录：up stream with gate-only cache rejected
+
+- `attempt_id`: `20260706-up-stream-gate-cache-only-n64`
+- `status`: `rejected_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-stream-gate-cache-only-n64-rejection-20260706.json`
+- `source_change`: added default-off `GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER` in `moe_stream.cu`. When unset, cache admission behavior is unchanged. When set, one-stream GPU execution can still run for allowed tensors, but VRAM cache insertion is limited to matching tensor names.
+- `theoretical_test`: If the previous `gate+up` regression was mainly from up evicting gate experts, then allowing `ffn_up_exps` to run through GPU while only admitting `ffn_gate_exps` into cache should have recovered some of the `~11.24s` n64 up fallback from the gate-only control without destroying gate residency.
+- `candidate_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T122248Z-20260706T-up-stream-gate-cache-only-n64-dev-probe/france-up-stream-gate-cache-only-cpu40-vram0gb`.
+- `candidate_config`: calibration France only, no held-out, no prompt-specific pack/profile, strict 16GB cgroup, `n=64`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps`, `GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`.
+- `candidate_metrics`: `eval_tok_s=1.7`, `prompt_tok_s=0.8`, `TTFT=39585.19629ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15086202880`, `ram_ok=true`, `oom_seen=false`, heuristic France correctness `true` despite short output.
+- `candidate_fallback`: up fallback was again removed; remaining fallback was down only (`down decode=8142.154ms`, `down prompt=5160.372ms`). VRAM cache reported `hits=13392`, `misses=13121`, `hit_rate=50.5%` because uncached up routes still count as misses and pay repeated transfer/staging.
+- `matched_controls`: gate-only `n64` control was `2.2 tok/s`; `gate+up` shared-cache probe was `1.9 tok/s`; gate-cache-only up stream was worse at `1.7 tok/s`.
+- `decision`: reject. The bottleneck is not just up evicting gate cache; naive up GPU streaming has too much repeated expert movement/synchronization cost and leaves down fallback untouched.
+- `next_design`: stop simple up one-stream/admission sweeps. The next credible path needs a hard-bound design that reduces total expert movement, e.g. prompt-general persistent residency, combined up/down scheduling with bounded VRAM footprint, or a kernel path that reuses already-staged expert data across projections. Continue using calibration/dev prompts only until a candidate is frozen.

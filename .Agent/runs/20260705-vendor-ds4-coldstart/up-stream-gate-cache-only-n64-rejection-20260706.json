@@ -1,0 +1,46 @@
+{
+  "artifact_id": "up-stream-gate-cache-only-n64-rejection-20260706",
+  "timestamp_local": "2026-07-06T12:32:00+08:00",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "base_head_before_commit": "94a5272d9",
+  "prompt_scope": "calibration_dev_set_v1_france_only",
+  "held_out_used": false,
+  "source_change": {
+    "file": "ggml/src/ggml-cuda/moe_stream.cu",
+    "default_behavior": "unchanged when GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER is unset",
+    "new_capability": "GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER limits one-stream VRAM cache insertion by tensor name while still allowing matching tensors to stream through GPU uncached"
+  },
+  "candidate_run": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T122248Z-20260706T-up-stream-gate-cache-only-n64-dev-probe/france-up-stream-gate-cache-only-cpu40-vram0gb",
+    "config_delta": "GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps; GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER=ffn_gate_exps; no prompt-specific pack/profile; n=64",
+    "metrics": {
+      "eval_tok_s": 1.7,
+      "prompt_tok_s": 0.8,
+      "ttft_ms": 39585.19629,
+      "elapsed_seconds": 74.64,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15086202880,
+      "pgmajfault": 113870,
+      "workingset_refault_file": 1350768,
+      "ram_ok": true,
+      "oom_seen": false,
+      "correctness_ok": true
+    },
+    "fallback_summary": {
+      "remaining_roles": [
+        "down"
+      ],
+      "down_decode_fallback_ms": 8142.154,
+      "down_prompt_fallback_ms": 5160.372,
+      "up_fallback_ms": 0.0,
+      "vram_cache": "hits=13392 misses=13121 hit_rate=50.5%"
+    }
+  },
+  "matched_controls": {
+    "gate_only_n64_eval_tok_s": 2.2,
+    "gate_up_shared_cache_n64_eval_tok_s": 1.9
+  },
+  "decision": "rejected_not_sota",
+  "conclusion": "Preventing up from entering the gate cache did not recover performance. It worsened eval_tok_s to 1.7 because up still pays repeated uncached expert H2D/MMVQ/D2H, and down fallback remains. This rejects simple name-based admission as a route to generalized improvement.",
+  "next_action": "Stop simple up one-stream/admission sweeps. Next work should quantify/implement a combined up/down movement reduction, persistent prompt-general residency, or a different kernel path with hard transfer bounds before running more cold benchmarks."
+}

@@ -276,7 +276,42 @@ static void moe_stream_dontneed_source_pages(const void * ptr, size_t size) {
 #endif
 }
 
+static bool moe_stream_cache_admit_name_matches(const char * filter, const char * tensor) {
+    if (!filter || !filter[0] || !tensor) {
+        return false;
+    }
+
+    const char * p = filter;
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == ',' || *p == ':') {
+            ++p;
+        }
+        const char * start = p;
+        while (*p && *p != ',' && *p != ':') {
+            ++p;
+        }
+        const char * end = p;
+        while (end > start && (end[-1] == ' ' || end[-1] == '\t')) {
+            --end;
+        }
+        const size_t len = (size_t) (end - start);
+        if (len > 0) {
+            for (const char * hit = tensor; *hit; ++hit) {
+                if (std::strncmp(hit, start, len) == 0) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 static bool moe_stream_cache_admit_allows(const char * tensor, int64_t expert) {
+    static const char * name_filter = std::getenv("GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER");
+    if (name_filter && name_filter[0] && !moe_stream_cache_admit_name_matches(name_filter, tensor)) {
+        return false;
+    }
+
     static std::mutex mu;
     static bool initialized = false;
     static bool enabled = false;
