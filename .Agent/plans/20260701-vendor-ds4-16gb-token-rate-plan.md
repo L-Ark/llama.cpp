@@ -4014,3 +4014,15 @@
 - `pre_gate`: wrapper 首先运行 `.Agent/run-tools/validate_4expert_ready.py --sha256`；只有 `.aria2` 不存在、size 等于 `164465760544`、metadata 符合 4Expert 预期并且 sha256 记录完成，才允许进入后续 load/correctness smoke。
 - `first_smoke_config`: `cpu_moe=40`，`vram_cache_gb=0`，`ONE_CACHE_MIB=13568`，strict `drop_caches`，`MemoryMax=16000000000`，`MemorySwapMax=0`，France prompt，`LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`，`GGML_MOE_STREAM_ONE_Q4K=1`，`GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`，`GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`。
 - `claim_rule`: 该 first smoke 只证明完整 4Expert GGUF 能否在严格 16GB 下加载并输出正确 France 回答；不能作为 generalized SOTA。若 smoke 通过，再按 calibration/dev set 评估候选；candidate freeze 后才允许使用 held-out test set。
+
+## 2026-07-06 设计/执行准备：4Expert 下载完成自动验证 watcher
+
+- `attempt_id`: `20260706-4expert-download-watch-tool`
+- `status`: `tooling_ready_not_yet_launched`
+- `tool`: `.Agent/run-tools/watch_4expert_download_then_validate.sh`
+- `prompt_scope`: 工具准备阶段未运行任何 prompt，未使用 held-out test set。
+- `purpose`: 当前完整 4Expert GGUF 下载仍在进行，手动等待容易错过完成窗口；新增 watcher 在 `.aria2` sidecar 消失后自动执行 readiness gate、sha256 和 strict France smoke，并把日志固定落盘。
+- `safety_gate`: watcher 在 `.aria2` 存在时只轮询，不会运行 load/correctness/perf；若下载 service 非 active 但 `.aria2` 仍存在，会直接失败并记录状态，避免对损坏/未完成文件做 benchmark。
+- `post_download_steps`: 先运行 `.Agent/run-tools/validate_4expert_ready.py --sha256`，通过后才调用 `.Agent/run-tools/run_4expert_validation_after_download.sh`。该 wrapper 内部还会再次执行 readiness gate，形成双重门禁。
+- `log_location`: 默认 `/root/lfz/runs/vendor-ds4-16gb/<stamp>-4expert-download-watch/watch.log`，同时记录 `ready-validation.json`、`ready_exit_status.txt`、`validation_exit_status.txt`。
+- `claim_rule`: watcher 的 first smoke 只用于确认完整 4Expert GGUF 是否能在严格 16GB 下加载并输出正确 France 回答；不是 generalized SOTA。若通过，后续仍需 calibration/dev，再 freeze 后跑 held-out test set。
