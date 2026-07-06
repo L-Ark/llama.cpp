@@ -93412,3 +93412,32 @@ Acceptance:
   script as reproducibility infrastructure.
 - If it fails, fix the downloader before any real IQ1_S download attempt.
 - No SOTA or token-rate claim is possible from this phase.
+
+GP39 execution result:
+
+- Timestamp: `2026-07-07T06:02:14+0800`.
+- Commit tested on remote:
+  `b1e43fbaed6e30439979ec6cb2aee8e6cc761219`.
+- Record:
+  `.Agent/runs/20260707-gp39-iq1s-curl-rollback-synthetic/report.md`.
+- Remote command:
+  `ssh -p 51056 root@92.180.27.82 'cd /root/lfz/tmp/vendor-kimi-speculative-gp33 && git fetch origin vendor/kimi-speculative-general-token-rate-16gb && git checkout vendor/kimi-speculative-general-token-rate-16gb && git reset --hard origin/vendor/kimi-speculative-general-token-rate-16gb && .Agent/run-tools/kimi_iq1s_test_curl_rollback.sh'`.
+- Result:
+  - exit code `0`;
+  - synthetic prepare script used `EXECUTE=1`;
+  - no deletion executed;
+  - no real model download executed;
+  - no smoke executed;
+  - `validate_parts=0`;
+  - synthetic `required_iq1s_bytes=16`;
+  - fake curl wrote partial stdout and exited with rc `23`;
+  - prepare script emitted:
+    `ERROR part 1 curl failed rc=23; truncating temp back to 0`;
+  - test assertion passed:
+    `[kimi_iq1s_test_curl_rollback] pass tmp_size=0 rc=1`.
+- Decision:
+  - the partial-append rollback path is now reproducibly tested;
+  - failed synthetic transfer leaves no corrupt resume offset;
+  - full IQ1_S n32 smoke remains gated by disk capacity or explicit deletion
+    approval;
+  - no SOTA or token-rate claim is possible from this phase.
