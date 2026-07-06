@@ -4438,3 +4438,18 @@
 - `fallback_result`: `fallback_source_probe_rows=0`，即 up/down CPU fallback 被 name_filter 扩展消除；但性能从 gate-only probe smoke 的 `2.5 tok/s` 降到 `1.7 tok/s`，wall runtime 也更长。
 - `decision`: reject，不扩大到 calibration/dev。该路线证明“up/down 可以进入 one-stream”，但 per-expert one-stream 搬运/同步/散写开销超过 CPU fallback 收益。不能把它当作 SOTA 或泛化候选。
 - `next_plan`: 用 `GGML_MOE_STREAM_Q80_SKIP_PROFILE=1` / `GGML_MOE_STREAM_Q80_SKIP_PROFILE_OUT=<file>` 或等价 one-stream timing profile 拆分 up/down one-stream 内部时间：host_src0、q80、cuda_alloc、H2D、kernel_sync、D2H、scatter、cuda_free。若主要时间在每 expert H2D/D2H/free/sync，则下一步应做 layer-level compact/batched exact route，而不是继续扩大 single-expert one-stream。
+
+## 2026-07-07 执行记录：up/down one-stream trace 定位
+
+- `attempt_id`: `20260707-updown-one-stream-trace-france`
+- `status`: `completed_trace_rejected_route_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-one-stream-trace-france-20260707.json`
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T185809Z-20260707-updown-one-stream-trace-france/france-updown-one-stream-trace-cpu40-vram0gb`
+- `prompt_scope`: France calibration trace only，`-n 64`，未使用 held-out，不是 SOTA。
+- `config`: up/down one-stream filter + `GGML_MOE_STREAM_ONE_TRACE_OUT`，strict cold 16GB cgroup，`cpu_moe=40`，`vram_cache=0`。
+- `result`: exit `0`，`eval_tok_s=1.7`，`prompt_tok_s=0.8`，`TTFT=42062.01 ms`，`memory_peak_bytes=16000000000`，`ram_ok=true`，`correctness_ok=true`。
+- `trace_rows`: `35863` one-stream calls。按 role 聚合：gate `17149` calls，up `9357` calls，down `9357` calls；平均 `cne1≈1.07`，说明当前 one-stream 基本是 per-expert/per-row 小调用。
+- `time_breakdown`: 所有 role 汇总中 `src0_ms` 占 `93.94%`，`dontneed_ms` 占 `3.95%`，`kernel_ms` 占 `0.81%`，`sync_ms` 占 `0.62%`，`src1_ms` 占 `0.38%`，`d2h_ms` 占 `0.21%`。up/down 每个 role 各约 `15.17 s` total，gate 约 `25.08 s` total。
+- `key_finding`: up/down one-stream 变慢的根因不是 CUDA kernel 算慢，也不是 D2H/sync 主导，而是每个 expert call 都在 `src0` source movement / cache insert / host copy 上付出约 `1.37-1.52 ms`。打开 up/down 后 call 数从 gate-only 扩大到 gate+up+down，source movement 成为绝对瓶颈。
+- `decision`: reject 单 expert one-stream 扩展路线。下一步不能继续简单扩大 name_filter 或 hotset；必须做 layer-level compact/batched exact route，让同一 layer/token 的 selected up/down experts 批量搬运/计算，或把输出留在 GPU，减少 per-expert source movement 次数。
+- `next_plan`: 设计 compact exact route 的硬上界：以当前 trace 的 up/down calls、平均 cne1、expert bytes 计算，如果把每层 selected experts 合并为一次 batched transfer/compute，理论上可减少多少 src0 movement 次数和时间；只有硬上界能接近/超过 5 tok/s，才写 runtime 原型。
