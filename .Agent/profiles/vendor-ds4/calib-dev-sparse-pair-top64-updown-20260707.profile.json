@@ -1,0 +1,3471 @@
+{
+  "active_layers": 33,
+  "aggregation": "sum decode fallback_us by complete (layer, expert) up/down pairs across calibration/dev prompts",
+  "fallback_profile": "MULTI_PROMPT_AGGREGATE",
+  "format": "ds4_sparse_pair_profile_v1",
+  "input_profile_csvs": {
+    "climate": "/root/lfz/runs/vendor-ds4-16gb/20260706T113425Z-dev-fallback-profile-no-prompt-specific-20260706/climate-cpu40-vram0gb/fallback_reason_profile.csv",
+    "fibonacci": "/root/lfz/runs/vendor-ds4-16gb/20260706T113014Z-dev-fallback-profile-no-prompt-specific-20260706/fibonacci-cpu40-vram0gb/fallback_reason_profile.csv",
+    "france": "/root/lfz/runs/vendor-ds4-16gb/20260706T112616Z-dev-fallback-profile-no-prompt-specific-20260706/france-cpu40-vram0gb/fallback_reason_profile.csv",
+    "japan": "/root/lfz/runs/vendor-ds4-16gb/20260706T113247Z-dev-fallback-profile-no-prompt-specific-20260706/japan-cpu40-vram0gb/fallback_reason_profile.csv",
+    "quantum": "/root/lfz/runs/vendor-ds4-16gb/20260706T112751Z-dev-fallback-profile-no-prompt-specific-20260706/quantum-cpu40-vram0gb/fallback_reason_profile.csv"
+  },
+  "max_pairs_per_layer": 4,
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "pairs": [
+    {
+      "down_calls": 509,
+      "down_hot_ms": 286.277,
+      "down_nbytes": 4456448,
+      "down_rows": 509,
+      "down_tensor": "blk.22.ffn_down_exps.weight",
+      "expert": 66,
+      "fused_calls": 509,
+      "hot_ms": 709.663,
+      "layer": 22,
+      "pair_key": "blk.22.expert.66",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 132,
+          "down_ms": 78.078,
+          "hot_ms": 173.97,
+          "up_calls": 132,
+          "up_ms": 95.892
+        },
+        "fibonacci": {
+          "down_calls": 20,
+          "down_ms": 17.5,
+          "hot_ms": 44.13,
+          "up_calls": 20,
+          "up_ms": 26.63
+        },
+        "france": {
+          "down_calls": 101,
+          "down_ms": 40.4,
+          "hot_ms": 92.487,
+          "up_calls": 101,
+          "up_ms": 52.087
+        },
+        "japan": {
+          "down_calls": 124,
+          "down_ms": 58.104,
+          "hot_ms": 163.372,
+          "up_calls": 124,
+          "up_ms": 105.268
+        },
+        "quantum": {
+          "down_calls": 132,
+          "down_ms": 92.195,
+          "hot_ms": 235.704,
+          "up_calls": 132,
+          "up_ms": 143.509
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 1,
+      "up_calls": 509,
+      "up_hot_ms": 423.386,
+      "up_nbytes": 4456448,
+      "up_rows": 509,
+      "up_tensor": "blk.22.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 440,
+      "down_hot_ms": 308.228,
+      "down_nbytes": 4456448,
+      "down_rows": 440,
+      "down_tensor": "blk.3.ffn_down_exps.weight",
+      "expert": 101,
+      "fused_calls": 440,
+      "hot_ms": 701.273,
+      "layer": 3,
+      "pair_key": "blk.3.expert.101",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 112,
+          "down_ms": 90.179,
+          "hot_ms": 162.017,
+          "up_calls": 112,
+          "up_ms": 71.838
+        },
+        "fibonacci": {
+          "down_calls": 21,
+          "down_ms": 11.015,
+          "hot_ms": 37.808,
+          "up_calls": 21,
+          "up_ms": 26.793
+        },
+        "france": {
+          "down_calls": 101,
+          "down_ms": 61.715,
+          "hot_ms": 131.966,
+          "up_calls": 101,
+          "up_ms": 70.251
+        },
+        "japan": {
+          "down_calls": 116,
+          "down_ms": 63.26,
+          "hot_ms": 153.363,
+          "up_calls": 116,
+          "up_ms": 90.103
+        },
+        "quantum": {
+          "down_calls": 90,
+          "down_ms": 82.059,
+          "hot_ms": 216.119,
+          "up_calls": 90,
+          "up_ms": 134.06
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 2,
+      "up_calls": 440,
+      "up_hot_ms": 393.045,
+      "up_nbytes": 4456448,
+      "up_rows": 440,
+      "up_tensor": "blk.3.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 366,
+      "down_hot_ms": 235.929,
+      "down_nbytes": 4456448,
+      "down_rows": 366,
+      "down_tensor": "blk.18.ffn_down_exps.weight",
+      "expert": 166,
+      "fused_calls": 366,
+      "hot_ms": 597.821,
+      "layer": 18,
+      "pair_key": "blk.18.expert.166",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 72,
+          "down_ms": 37.634,
+          "hot_ms": 108.591,
+          "up_calls": 72,
+          "up_ms": 70.957
+        },
+        "fibonacci": {
+          "down_calls": 70,
+          "down_ms": 50.451,
+          "hot_ms": 126.16,
+          "up_calls": 70,
+          "up_ms": 75.709
+        },
+        "france": {
+          "down_calls": 74,
+          "down_ms": 42.187,
+          "hot_ms": 100.123,
+          "up_calls": 74,
+          "up_ms": 57.936
+        },
+        "japan": {
+          "down_calls": 80,
+          "down_ms": 37.502,
+          "hot_ms": 93.652,
+          "up_calls": 80,
+          "up_ms": 56.15
+        },
+        "quantum": {
+          "down_calls": 70,
+          "down_ms": 68.155,
+          "hot_ms": 169.295,
+          "up_calls": 70,
+          "up_ms": 101.14
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 3,
+      "up_calls": 366,
+      "up_hot_ms": 361.892,
+      "up_nbytes": 4456448,
+      "up_rows": 366,
+      "up_tensor": "blk.18.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 487,
+      "down_hot_ms": 220.089,
+      "down_nbytes": 4456448,
+      "down_rows": 487,
+      "down_tensor": "blk.17.ffn_down_exps.weight",
+      "expert": 3,
+      "fused_calls": 487,
+      "hot_ms": 582.88,
+      "layer": 17,
+      "pair_key": "blk.17.expert.3",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 112,
+          "down_ms": 49.097,
+          "hot_ms": 137.76,
+          "up_calls": 112,
+          "up_ms": 88.663
+        },
+        "fibonacci": {
+          "down_calls": 85,
+          "down_ms": 55.566,
+          "hot_ms": 136.563,
+          "up_calls": 85,
+          "up_ms": 80.997
+        },
+        "france": {
+          "down_calls": 95,
+          "down_ms": 27.136,
+          "hot_ms": 79.735,
+          "up_calls": 95,
+          "up_ms": 52.599
+        },
+        "japan": {
+          "down_calls": 98,
+          "down_ms": 36.3,
+          "hot_ms": 98.672,
+          "up_calls": 98,
+          "up_ms": 62.372
+        },
+        "quantum": {
+          "down_calls": 97,
+          "down_ms": 51.99,
+          "hot_ms": 130.15,
+          "up_calls": 97,
+          "up_ms": 78.16
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 4,
+      "up_calls": 487,
+      "up_hot_ms": 362.791,
+      "up_nbytes": 4456448,
+      "up_rows": 487,
+      "up_tensor": "blk.17.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 276,
+      "down_hot_ms": 185.853,
+      "down_nbytes": 4456448,
+      "down_rows": 276,
+      "down_tensor": "blk.4.ffn_down_exps.weight",
+      "expert": 233,
+      "fused_calls": 276,
+      "hot_ms": 457.237,
+      "layer": 4,
+      "pair_key": "blk.4.expert.233",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 77,
+          "down_ms": 45.962,
+          "hot_ms": 109.719,
+          "up_calls": 77,
+          "up_ms": 63.757
+        },
+        "fibonacci": {
+          "down_calls": 27,
+          "down_ms": 28.089,
+          "hot_ms": 56.307,
+          "up_calls": 27,
+          "up_ms": 28.218
+        },
+        "france": {
+          "down_calls": 59,
+          "down_ms": 20.941,
+          "hot_ms": 62.361,
+          "up_calls": 59,
+          "up_ms": 41.42
+        },
+        "japan": {
+          "down_calls": 59,
+          "down_ms": 35.158,
+          "hot_ms": 100.738,
+          "up_calls": 59,
+          "up_ms": 65.58
+        },
+        "quantum": {
+          "down_calls": 54,
+          "down_ms": 55.703,
+          "hot_ms": 128.112,
+          "up_calls": 54,
+          "up_ms": 72.409
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 5,
+      "up_calls": 276,
+      "up_hot_ms": 271.384,
+      "up_nbytes": 4456448,
+      "up_rows": 276,
+      "up_tensor": "blk.4.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 403,
+      "down_hot_ms": 181.45,
+      "down_nbytes": 4456448,
+      "down_rows": 403,
+      "down_tensor": "blk.27.ffn_down_exps.weight",
+      "expert": 152,
+      "fused_calls": 403,
+      "hot_ms": 448.759,
+      "layer": 27,
+      "pair_key": "blk.27.expert.152",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 78,
+          "down_ms": 28.694,
+          "hot_ms": 80.101,
+          "up_calls": 78,
+          "up_ms": 51.407
+        },
+        "fibonacci": {
+          "down_calls": 41,
+          "down_ms": 29.709,
+          "hot_ms": 69.965,
+          "up_calls": 41,
+          "up_ms": 40.256
+        },
+        "france": {
+          "down_calls": 116,
+          "down_ms": 45.557,
+          "hot_ms": 109.387,
+          "up_calls": 116,
+          "up_ms": 63.83
+        },
+        "japan": {
+          "down_calls": 120,
+          "down_ms": 54.349,
+          "hot_ms": 126.082,
+          "up_calls": 120,
+          "up_ms": 71.733
+        },
+        "quantum": {
+          "down_calls": 48,
+          "down_ms": 23.141,
+          "hot_ms": 63.224,
+          "up_calls": 48,
+          "up_ms": 40.083
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 6,
+      "up_calls": 403,
+      "up_hot_ms": 267.309,
+      "up_nbytes": 4456448,
+      "up_rows": 403,
+      "up_tensor": "blk.27.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 367,
+      "down_hot_ms": 190.046,
+      "down_nbytes": 4456448,
+      "down_rows": 367,
+      "down_tensor": "blk.18.ffn_down_exps.weight",
+      "expert": 79,
+      "fused_calls": 367,
+      "hot_ms": 445.354,
+      "layer": 18,
+      "pair_key": "blk.18.expert.79",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 93,
+          "down_ms": 32.425,
+          "hot_ms": 78.715,
+          "up_calls": 93,
+          "up_ms": 46.29
+        },
+        "fibonacci": {
+          "down_calls": 27,
+          "down_ms": 23.377,
+          "hot_ms": 46.724,
+          "up_calls": 27,
+          "up_ms": 23.347
+        },
+        "france": {
+          "down_calls": 66,
+          "down_ms": 22.481,
+          "hot_ms": 66.792,
+          "up_calls": 66,
+          "up_ms": 44.311
+        },
+        "japan": {
+          "down_calls": 73,
+          "down_ms": 33.581,
+          "hot_ms": 83.328,
+          "up_calls": 73,
+          "up_ms": 49.747
+        },
+        "quantum": {
+          "down_calls": 108,
+          "down_ms": 78.182,
+          "hot_ms": 169.795,
+          "up_calls": 108,
+          "up_ms": 91.613
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 7,
+      "up_calls": 367,
+      "up_hot_ms": 255.308,
+      "up_nbytes": 4456448,
+      "up_rows": 367,
+      "up_tensor": "blk.18.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 317,
+      "down_hot_ms": 152.092,
+      "down_nbytes": 4456448,
+      "down_rows": 317,
+      "down_tensor": "blk.8.ffn_down_exps.weight",
+      "expert": 200,
+      "fused_calls": 317,
+      "hot_ms": 412.382,
+      "layer": 8,
+      "pair_key": "blk.8.expert.200",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 56,
+          "down_ms": 25.084,
+          "hot_ms": 61.848,
+          "up_calls": 56,
+          "up_ms": 36.764
+        },
+        "fibonacci": {
+          "down_calls": 75,
+          "down_ms": 41.591,
+          "hot_ms": 130.965,
+          "up_calls": 75,
+          "up_ms": 89.374
+        },
+        "france": {
+          "down_calls": 63,
+          "down_ms": 17.497,
+          "hot_ms": 54.23,
+          "up_calls": 63,
+          "up_ms": 36.733
+        },
+        "japan": {
+          "down_calls": 57,
+          "down_ms": 16.566,
+          "hot_ms": 46.574,
+          "up_calls": 57,
+          "up_ms": 30.008
+        },
+        "quantum": {
+          "down_calls": 66,
+          "down_ms": 51.354,
+          "hot_ms": 118.765,
+          "up_calls": 66,
+          "up_ms": 67.411
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 8,
+      "up_calls": 317,
+      "up_hot_ms": 260.29,
+      "up_nbytes": 4456448,
+      "up_rows": 317,
+      "up_tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 382,
+      "down_hot_ms": 167.331,
+      "down_nbytes": 4456448,
+      "down_rows": 382,
+      "down_tensor": "blk.16.ffn_down_exps.weight",
+      "expert": 176,
+      "fused_calls": 382,
+      "hot_ms": 411.988,
+      "layer": 16,
+      "pair_key": "blk.16.expert.176",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 94,
+          "down_ms": 46.059,
+          "hot_ms": 105.092,
+          "up_calls": 94,
+          "up_ms": 59.033
+        },
+        "fibonacci": {
+          "down_calls": 35,
+          "down_ms": 14.867,
+          "hot_ms": 47.789,
+          "up_calls": 35,
+          "up_ms": 32.922
+        },
+        "france": {
+          "down_calls": 58,
+          "down_ms": 11.845,
+          "hot_ms": 41.442,
+          "up_calls": 58,
+          "up_ms": 29.597
+        },
+        "japan": {
+          "down_calls": 37,
+          "down_ms": 5.18,
+          "hot_ms": 14.207,
+          "up_calls": 37,
+          "up_ms": 9.027
+        },
+        "quantum": {
+          "down_calls": 158,
+          "down_ms": 89.38,
+          "hot_ms": 203.458,
+          "up_calls": 158,
+          "up_ms": 114.078
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 9,
+      "up_calls": 382,
+      "up_hot_ms": 244.657,
+      "up_nbytes": 4456448,
+      "up_rows": 382,
+      "up_tensor": "blk.16.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 299,
+      "down_hot_ms": 187.091,
+      "down_nbytes": 4456448,
+      "down_rows": 299,
+      "down_tensor": "blk.6.ffn_down_exps.weight",
+      "expert": 111,
+      "fused_calls": 299,
+      "hot_ms": 401.186,
+      "layer": 6,
+      "pair_key": "blk.6.expert.111",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 58,
+          "down_ms": 35.111,
+          "hot_ms": 62.016,
+          "up_calls": 58,
+          "up_ms": 26.905
+        },
+        "fibonacci": {
+          "down_calls": 37,
+          "down_ms": 18.575,
+          "hot_ms": 49.477,
+          "up_calls": 37,
+          "up_ms": 30.902
+        },
+        "france": {
+          "down_calls": 72,
+          "down_ms": 47.991,
+          "hot_ms": 94.758,
+          "up_calls": 72,
+          "up_ms": 46.767
+        },
+        "japan": {
+          "down_calls": 71,
+          "down_ms": 37.36,
+          "hot_ms": 95.146,
+          "up_calls": 71,
+          "up_ms": 57.786
+        },
+        "quantum": {
+          "down_calls": 61,
+          "down_ms": 48.054,
+          "hot_ms": 99.789,
+          "up_calls": 61,
+          "up_ms": 51.735
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 10,
+      "up_calls": 299,
+      "up_hot_ms": 214.095,
+      "up_nbytes": 4456448,
+      "up_rows": 299,
+      "up_tensor": "blk.6.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 347,
+      "down_hot_ms": 140.875,
+      "down_nbytes": 4456448,
+      "down_rows": 347,
+      "down_tensor": "blk.8.ffn_down_exps.weight",
+      "expert": 146,
+      "fused_calls": 347,
+      "hot_ms": 344.245,
+      "layer": 8,
+      "pair_key": "blk.8.expert.146",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 90,
+          "down_ms": 38.529,
+          "hot_ms": 100.729,
+          "up_calls": 90,
+          "up_ms": 62.2
+        },
+        "fibonacci": {
+          "down_calls": 9,
+          "down_ms": 8.395,
+          "hot_ms": 22.002,
+          "up_calls": 9,
+          "up_ms": 13.607
+        },
+        "france": {
+          "down_calls": 100,
+          "down_ms": 32.181,
+          "hot_ms": 85.881,
+          "up_calls": 100,
+          "up_ms": 53.7
+        },
+        "japan": {
+          "down_calls": 119,
+          "down_ms": 38.359,
+          "hot_ms": 93.579,
+          "up_calls": 119,
+          "up_ms": 55.22
+        },
+        "quantum": {
+          "down_calls": 29,
+          "down_ms": 23.411,
+          "hot_ms": 42.054,
+          "up_calls": 29,
+          "up_ms": 18.643
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 11,
+      "up_calls": 347,
+      "up_hot_ms": 203.37,
+      "up_nbytes": 4456448,
+      "up_rows": 347,
+      "up_tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 281,
+      "down_hot_ms": 139.441,
+      "down_nbytes": 4456448,
+      "down_rows": 281,
+      "down_tensor": "blk.20.ffn_down_exps.weight",
+      "expert": 112,
+      "fused_calls": 281,
+      "hot_ms": 342.037,
+      "layer": 20,
+      "pair_key": "blk.20.expert.112",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 106,
+          "down_ms": 46.079,
+          "hot_ms": 126.453,
+          "up_calls": 106,
+          "up_ms": 80.374
+        },
+        "fibonacci": {
+          "down_calls": 2,
+          "down_ms": 1.324,
+          "hot_ms": 5.217,
+          "up_calls": 2,
+          "up_ms": 3.893
+        },
+        "france": {
+          "down_calls": 60,
+          "down_ms": 21.139,
+          "hot_ms": 42.709,
+          "up_calls": 60,
+          "up_ms": 21.57
+        },
+        "japan": {
+          "down_calls": 61,
+          "down_ms": 22.171,
+          "hot_ms": 56.831,
+          "up_calls": 61,
+          "up_ms": 34.66
+        },
+        "quantum": {
+          "down_calls": 52,
+          "down_ms": 48.728,
+          "hot_ms": 110.827,
+          "up_calls": 52,
+          "up_ms": 62.099
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 12,
+      "up_calls": 281,
+      "up_hot_ms": 202.596,
+      "up_nbytes": 4456448,
+      "up_rows": 281,
+      "up_tensor": "blk.20.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 272,
+      "down_hot_ms": 134.885,
+      "down_nbytes": 4456448,
+      "down_rows": 272,
+      "down_tensor": "blk.20.ffn_down_exps.weight",
+      "expert": 60,
+      "fused_calls": 272,
+      "hot_ms": 331.883,
+      "layer": 20,
+      "pair_key": "blk.20.expert.60",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 81,
+          "down_ms": 32.566,
+          "hot_ms": 84.754,
+          "up_calls": 81,
+          "up_ms": 52.188
+        },
+        "fibonacci": {
+          "down_calls": 11,
+          "down_ms": 11.869,
+          "hot_ms": 30.8,
+          "up_calls": 11,
+          "up_ms": 18.931
+        },
+        "france": {
+          "down_calls": 69,
+          "down_ms": 38.06,
+          "hot_ms": 75.765,
+          "up_calls": 69,
+          "up_ms": 37.705
+        },
+        "japan": {
+          "down_calls": 92,
+          "down_ms": 34.543,
+          "hot_ms": 92.961,
+          "up_calls": 92,
+          "up_ms": 58.418
+        },
+        "quantum": {
+          "down_calls": 19,
+          "down_ms": 17.847,
+          "hot_ms": 47.603,
+          "up_calls": 19,
+          "up_ms": 29.756
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 13,
+      "up_calls": 272,
+      "up_hot_ms": 196.998,
+      "up_nbytes": 4456448,
+      "up_rows": 272,
+      "up_tensor": "blk.20.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 403,
+      "down_hot_ms": 139.081,
+      "down_nbytes": 4456448,
+      "down_rows": 403,
+      "down_tensor": "blk.14.ffn_down_exps.weight",
+      "expert": 1,
+      "fused_calls": 403,
+      "hot_ms": 323.657,
+      "layer": 14,
+      "pair_key": "blk.14.expert.1",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 79,
+          "down_ms": 31.329,
+          "hot_ms": 64.744,
+          "up_calls": 79,
+          "up_ms": 33.415
+        },
+        "fibonacci": {
+          "down_calls": 82,
+          "down_ms": 25.815,
+          "hot_ms": 61.782,
+          "up_calls": 82,
+          "up_ms": 35.967
+        },
+        "france": {
+          "down_calls": 88,
+          "down_ms": 26.417,
+          "hot_ms": 64.71,
+          "up_calls": 88,
+          "up_ms": 38.293
+        },
+        "japan": {
+          "down_calls": 101,
+          "down_ms": 27.131,
+          "hot_ms": 70.98,
+          "up_calls": 101,
+          "up_ms": 43.849
+        },
+        "quantum": {
+          "down_calls": 53,
+          "down_ms": 28.389,
+          "hot_ms": 61.441,
+          "up_calls": 53,
+          "up_ms": 33.052
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 14,
+      "up_calls": 403,
+      "up_hot_ms": 184.576,
+      "up_nbytes": 4456448,
+      "up_rows": 403,
+      "up_tensor": "blk.14.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 361,
+      "down_hot_ms": 123.582,
+      "down_nbytes": 4456448,
+      "down_rows": 361,
+      "down_tensor": "blk.34.ffn_down_exps.weight",
+      "expert": 246,
+      "fused_calls": 361,
+      "hot_ms": 310.078,
+      "layer": 34,
+      "pair_key": "blk.34.expert.246",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 81,
+          "down_ms": 30.885,
+          "hot_ms": 71.459,
+          "up_calls": 81,
+          "up_ms": 40.574
+        },
+        "fibonacci": {
+          "down_calls": 7,
+          "down_ms": 1.672,
+          "hot_ms": 3.162,
+          "up_calls": 7,
+          "up_ms": 1.49
+        },
+        "france": {
+          "down_calls": 118,
+          "down_ms": 41.489,
+          "hot_ms": 101.805,
+          "up_calls": 118,
+          "up_ms": 60.316
+        },
+        "japan": {
+          "down_calls": 124,
+          "down_ms": 40.124,
+          "hot_ms": 103.866,
+          "up_calls": 124,
+          "up_ms": 63.742
+        },
+        "quantum": {
+          "down_calls": 31,
+          "down_ms": 9.412,
+          "hot_ms": 29.786,
+          "up_calls": 31,
+          "up_ms": 20.374
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 15,
+      "up_calls": 361,
+      "up_hot_ms": 186.496,
+      "up_nbytes": 4456448,
+      "up_rows": 361,
+      "up_tensor": "blk.34.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 152,
+      "down_hot_ms": 111.667,
+      "down_nbytes": 4456448,
+      "down_rows": 152,
+      "down_tensor": "blk.10.ffn_down_exps.weight",
+      "expert": 40,
+      "fused_calls": 152,
+      "hot_ms": 304.768,
+      "layer": 10,
+      "pair_key": "blk.10.expert.40",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 25,
+          "down_ms": 14.152,
+          "hot_ms": 48.144,
+          "up_calls": 25,
+          "up_ms": 33.992
+        },
+        "fibonacci": {
+          "down_calls": 56,
+          "down_ms": 36.764,
+          "hot_ms": 107.188,
+          "up_calls": 56,
+          "up_ms": 70.424
+        },
+        "france": {
+          "down_calls": 23,
+          "down_ms": 11.918,
+          "hot_ms": 35.152,
+          "up_calls": 23,
+          "up_ms": 23.234
+        },
+        "japan": {
+          "down_calls": 20,
+          "down_ms": 13.594,
+          "hot_ms": 42.57,
+          "up_calls": 20,
+          "up_ms": 28.976
+        },
+        "quantum": {
+          "down_calls": 28,
+          "down_ms": 35.239,
+          "hot_ms": 71.714,
+          "up_calls": 28,
+          "up_ms": 36.475
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 16,
+      "up_calls": 152,
+      "up_hot_ms": 193.101,
+      "up_nbytes": 4456448,
+      "up_rows": 152,
+      "up_tensor": "blk.10.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 157,
+      "down_hot_ms": 116.877,
+      "down_nbytes": 4456448,
+      "down_rows": 157,
+      "down_tensor": "blk.9.ffn_down_exps.weight",
+      "expert": 242,
+      "fused_calls": 157,
+      "hot_ms": 289.592,
+      "layer": 9,
+      "pair_key": "blk.9.expert.242",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 29,
+          "down_ms": 20.423,
+          "hot_ms": 52.068,
+          "up_calls": 29,
+          "up_ms": 31.645
+        },
+        "fibonacci": {
+          "down_calls": 31,
+          "down_ms": 22.996,
+          "hot_ms": 62.631,
+          "up_calls": 31,
+          "up_ms": 39.635
+        },
+        "france": {
+          "down_calls": 31,
+          "down_ms": 11.08,
+          "hot_ms": 29.365,
+          "up_calls": 31,
+          "up_ms": 18.285
+        },
+        "japan": {
+          "down_calls": 25,
+          "down_ms": 16.148,
+          "hot_ms": 36.092,
+          "up_calls": 25,
+          "up_ms": 19.944
+        },
+        "quantum": {
+          "down_calls": 41,
+          "down_ms": 46.23,
+          "hot_ms": 109.436,
+          "up_calls": 41,
+          "up_ms": 63.206
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 17,
+      "up_calls": 157,
+      "up_hot_ms": 172.715,
+      "up_nbytes": 4456448,
+      "up_rows": 157,
+      "up_tensor": "blk.9.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 361,
+      "down_hot_ms": 127.053,
+      "down_nbytes": 4456448,
+      "down_rows": 361,
+      "down_tensor": "blk.28.ffn_down_exps.weight",
+      "expert": 142,
+      "fused_calls": 361,
+      "hot_ms": 287.835,
+      "layer": 28,
+      "pair_key": "blk.28.expert.142",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 103,
+          "down_ms": 43.519,
+          "hot_ms": 108.566,
+          "up_calls": 103,
+          "up_ms": 65.047
+        },
+        "fibonacci": {
+          "down_calls": 33,
+          "down_ms": 13.5,
+          "hot_ms": 24.764,
+          "up_calls": 33,
+          "up_ms": 11.264
+        },
+        "france": {
+          "down_calls": 49,
+          "down_ms": 15.988,
+          "hot_ms": 30.582,
+          "up_calls": 49,
+          "up_ms": 14.594
+        },
+        "japan": {
+          "down_calls": 52,
+          "down_ms": 14.821,
+          "hot_ms": 32.757,
+          "up_calls": 52,
+          "up_ms": 17.936
+        },
+        "quantum": {
+          "down_calls": 124,
+          "down_ms": 39.225,
+          "hot_ms": 91.166,
+          "up_calls": 124,
+          "up_ms": 51.941
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 18,
+      "up_calls": 361,
+      "up_hot_ms": 160.782,
+      "up_nbytes": 4456448,
+      "up_rows": 361,
+      "up_tensor": "blk.28.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 288,
+      "down_hot_ms": 108.21,
+      "down_nbytes": 4456448,
+      "down_rows": 288,
+      "down_tensor": "blk.12.ffn_down_exps.weight",
+      "expert": 122,
+      "fused_calls": 288,
+      "hot_ms": 282.463,
+      "layer": 12,
+      "pair_key": "blk.12.expert.122",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 59,
+          "down_ms": 29.749,
+          "hot_ms": 79.681,
+          "up_calls": 59,
+          "up_ms": 49.932
+        },
+        "fibonacci": {
+          "down_calls": 46,
+          "down_ms": 8.464,
+          "hot_ms": 31.786,
+          "up_calls": 46,
+          "up_ms": 23.322
+        },
+        "france": {
+          "down_calls": 67,
+          "down_ms": 25.193,
+          "hot_ms": 61.46,
+          "up_calls": 67,
+          "up_ms": 36.267
+        },
+        "japan": {
+          "down_calls": 78,
+          "down_ms": 31.989,
+          "hot_ms": 74.56,
+          "up_calls": 78,
+          "up_ms": 42.571
+        },
+        "quantum": {
+          "down_calls": 38,
+          "down_ms": 12.815,
+          "hot_ms": 34.976,
+          "up_calls": 38,
+          "up_ms": 22.161
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 19,
+      "up_calls": 288,
+      "up_hot_ms": 174.253,
+      "up_nbytes": 4456448,
+      "up_rows": 288,
+      "up_tensor": "blk.12.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 142,
+      "down_hot_ms": 106.765,
+      "down_nbytes": 4456448,
+      "down_rows": 142,
+      "down_tensor": "blk.23.ffn_down_exps.weight",
+      "expert": 244,
+      "fused_calls": 142,
+      "hot_ms": 276.906,
+      "layer": 23,
+      "pair_key": "blk.23.expert.244",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 142,
+          "down_ms": 106.765,
+          "hot_ms": 276.906,
+          "up_calls": 142,
+          "up_ms": 170.141
+        }
+      },
+      "prompt_count": 1,
+      "prompt_ids": [
+        "fibonacci"
+      ],
+      "rank": 20,
+      "up_calls": 142,
+      "up_hot_ms": 170.141,
+      "up_nbytes": 4456448,
+      "up_rows": 142,
+      "up_tensor": "blk.23.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 222,
+      "down_hot_ms": 116.904,
+      "down_nbytes": 4456448,
+      "down_rows": 222,
+      "down_tensor": "blk.17.ffn_down_exps.weight",
+      "expert": 112,
+      "fused_calls": 222,
+      "hot_ms": 275.854,
+      "layer": 17,
+      "pair_key": "blk.17.expert.112",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 58,
+          "down_ms": 26.312,
+          "hot_ms": 75.529,
+          "up_calls": 58,
+          "up_ms": 49.217
+        },
+        "france": {
+          "down_calls": 9,
+          "down_ms": 2.791,
+          "hot_ms": 8.891,
+          "up_calls": 9,
+          "up_ms": 6.1
+        },
+        "japan": {
+          "down_calls": 9,
+          "down_ms": 2.802,
+          "hot_ms": 10.456,
+          "up_calls": 9,
+          "up_ms": 7.654
+        },
+        "quantum": {
+          "down_calls": 146,
+          "down_ms": 84.999,
+          "hot_ms": 180.978,
+          "up_calls": 146,
+          "up_ms": 95.979
+        }
+      },
+      "prompt_count": 4,
+      "prompt_ids": [
+        "climate",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 21,
+      "up_calls": 222,
+      "up_hot_ms": 158.95,
+      "up_nbytes": 4456448,
+      "up_rows": 222,
+      "up_tensor": "blk.17.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 172,
+      "down_hot_ms": 92.502,
+      "down_nbytes": 4456448,
+      "down_rows": 172,
+      "down_tensor": "blk.28.ffn_down_exps.weight",
+      "expert": 23,
+      "fused_calls": 172,
+      "hot_ms": 275.324,
+      "layer": 28,
+      "pair_key": "blk.28.expert.23",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 172,
+          "down_ms": 92.502,
+          "hot_ms": 275.324,
+          "up_calls": 172,
+          "up_ms": 182.822
+        }
+      },
+      "prompt_count": 1,
+      "prompt_ids": [
+        "fibonacci"
+      ],
+      "rank": 22,
+      "up_calls": 172,
+      "up_hot_ms": 182.822,
+      "up_nbytes": 4456448,
+      "up_rows": 172,
+      "up_tensor": "blk.28.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 210,
+      "down_hot_ms": 106.484,
+      "down_nbytes": 4456448,
+      "down_rows": 210,
+      "down_tensor": "blk.5.ffn_down_exps.weight",
+      "expert": 86,
+      "fused_calls": 210,
+      "hot_ms": 266.805,
+      "layer": 5,
+      "pair_key": "blk.5.expert.86",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 34,
+          "down_ms": 19.548,
+          "hot_ms": 45.925,
+          "up_calls": 34,
+          "up_ms": 26.377
+        },
+        "france": {
+          "down_calls": 80,
+          "down_ms": 35.387,
+          "hot_ms": 91.484,
+          "up_calls": 80,
+          "up_ms": 56.097
+        },
+        "japan": {
+          "down_calls": 89,
+          "down_ms": 47.025,
+          "hot_ms": 113.133,
+          "up_calls": 89,
+          "up_ms": 66.108
+        },
+        "quantum": {
+          "down_calls": 7,
+          "down_ms": 4.524,
+          "hot_ms": 16.263,
+          "up_calls": 7,
+          "up_ms": 11.739
+        }
+      },
+      "prompt_count": 4,
+      "prompt_ids": [
+        "climate",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 23,
+      "up_calls": 210,
+      "up_hot_ms": 160.321,
+      "up_nbytes": 4456448,
+      "up_rows": 210,
+      "up_tensor": "blk.5.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 201,
+      "down_hot_ms": 120.142,
+      "down_nbytes": 4456448,
+      "down_rows": 201,
+      "down_tensor": "blk.11.ffn_down_exps.weight",
+      "expert": 232,
+      "fused_calls": 201,
+      "hot_ms": 262.712,
+      "layer": 11,
+      "pair_key": "blk.11.expert.232",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 41,
+          "down_ms": 22.601,
+          "hot_ms": 55.743,
+          "up_calls": 41,
+          "up_ms": 33.142
+        },
+        "fibonacci": {
+          "down_calls": 44,
+          "down_ms": 29.294,
+          "hot_ms": 52.414,
+          "up_calls": 44,
+          "up_ms": 23.12
+        },
+        "france": {
+          "down_calls": 48,
+          "down_ms": 19.958,
+          "hot_ms": 48.341,
+          "up_calls": 48,
+          "up_ms": 28.383
+        },
+        "japan": {
+          "down_calls": 40,
+          "down_ms": 20.133,
+          "hot_ms": 44.838,
+          "up_calls": 40,
+          "up_ms": 24.705
+        },
+        "quantum": {
+          "down_calls": 28,
+          "down_ms": 28.156,
+          "hot_ms": 61.376,
+          "up_calls": 28,
+          "up_ms": 33.22
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 24,
+      "up_calls": 201,
+      "up_hot_ms": 142.57,
+      "up_nbytes": 4456448,
+      "up_rows": 201,
+      "up_tensor": "blk.11.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 252,
+      "down_hot_ms": 111.763,
+      "down_nbytes": 4456448,
+      "down_rows": 252,
+      "down_tensor": "blk.15.ffn_down_exps.weight",
+      "expert": 104,
+      "fused_calls": 252,
+      "hot_ms": 261.895,
+      "layer": 15,
+      "pair_key": "blk.15.expert.104",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 45,
+          "down_ms": 17.069,
+          "hot_ms": 45.867,
+          "up_calls": 45,
+          "up_ms": 28.798
+        },
+        "fibonacci": {
+          "down_calls": 35,
+          "down_ms": 20.607,
+          "hot_ms": 48.474,
+          "up_calls": 35,
+          "up_ms": 27.867
+        },
+        "france": {
+          "down_calls": 62,
+          "down_ms": 18.69,
+          "hot_ms": 40.497,
+          "up_calls": 62,
+          "up_ms": 21.807
+        },
+        "japan": {
+          "down_calls": 69,
+          "down_ms": 24.711,
+          "hot_ms": 57.43,
+          "up_calls": 69,
+          "up_ms": 32.719
+        },
+        "quantum": {
+          "down_calls": 41,
+          "down_ms": 30.686,
+          "hot_ms": 69.627,
+          "up_calls": 41,
+          "up_ms": 38.941
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 25,
+      "up_calls": 252,
+      "up_hot_ms": 150.132,
+      "up_nbytes": 4456448,
+      "up_rows": 252,
+      "up_tensor": "blk.15.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 281,
+      "down_hot_ms": 111.656,
+      "down_nbytes": 4456448,
+      "down_rows": 281,
+      "down_tensor": "blk.16.ffn_down_exps.weight",
+      "expert": 96,
+      "fused_calls": 281,
+      "hot_ms": 257.251,
+      "layer": 16,
+      "pair_key": "blk.16.expert.96",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 59,
+          "down_ms": 23.164,
+          "hot_ms": 69.184,
+          "up_calls": 59,
+          "up_ms": 46.02
+        },
+        "fibonacci": {
+          "down_calls": 30,
+          "down_ms": 14.346,
+          "hot_ms": 40.696,
+          "up_calls": 30,
+          "up_ms": 26.35
+        },
+        "france": {
+          "down_calls": 63,
+          "down_ms": 20.341,
+          "hot_ms": 43.144,
+          "up_calls": 63,
+          "up_ms": 22.803
+        },
+        "japan": {
+          "down_calls": 87,
+          "down_ms": 25.696,
+          "hot_ms": 51.191,
+          "up_calls": 87,
+          "up_ms": 25.495
+        },
+        "quantum": {
+          "down_calls": 42,
+          "down_ms": 28.109,
+          "hot_ms": 53.036,
+          "up_calls": 42,
+          "up_ms": 24.927
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 26,
+      "up_calls": 281,
+      "up_hot_ms": 145.595,
+      "up_nbytes": 4456448,
+      "up_rows": 281,
+      "up_tensor": "blk.16.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 172,
+      "down_hot_ms": 122.345,
+      "down_nbytes": 4456448,
+      "down_rows": 172,
+      "down_tensor": "blk.19.ffn_down_exps.weight",
+      "expert": 181,
+      "fused_calls": 172,
+      "hot_ms": 250.118,
+      "layer": 19,
+      "pair_key": "blk.19.expert.181",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 33,
+          "down_ms": 27.15,
+          "hot_ms": 51.114,
+          "up_calls": 33,
+          "up_ms": 23.964
+        },
+        "fibonacci": {
+          "down_calls": 31,
+          "down_ms": 26.744,
+          "hot_ms": 47.526,
+          "up_calls": 31,
+          "up_ms": 20.782
+        },
+        "france": {
+          "down_calls": 44,
+          "down_ms": 27.567,
+          "hot_ms": 60.348,
+          "up_calls": 44,
+          "up_ms": 32.781
+        },
+        "japan": {
+          "down_calls": 38,
+          "down_ms": 13.905,
+          "hot_ms": 42.879,
+          "up_calls": 38,
+          "up_ms": 28.974
+        },
+        "quantum": {
+          "down_calls": 26,
+          "down_ms": 26.979,
+          "hot_ms": 48.251,
+          "up_calls": 26,
+          "up_ms": 21.272
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 27,
+      "up_calls": 172,
+      "up_hot_ms": 127.773,
+      "up_nbytes": 4456448,
+      "up_rows": 172,
+      "up_tensor": "blk.19.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 190,
+      "down_hot_ms": 99.571,
+      "down_nbytes": 4456448,
+      "down_rows": 190,
+      "down_tensor": "blk.39.ffn_down_exps.weight",
+      "expert": 159,
+      "fused_calls": 190,
+      "hot_ms": 249.857,
+      "layer": 39,
+      "pair_key": "blk.39.expert.159",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 36,
+          "down_ms": 18.991,
+          "hot_ms": 50.051,
+          "up_calls": 36,
+          "up_ms": 31.06
+        },
+        "france": {
+          "down_calls": 75,
+          "down_ms": 30.455,
+          "hot_ms": 86.781,
+          "up_calls": 75,
+          "up_ms": 56.326
+        },
+        "japan": {
+          "down_calls": 66,
+          "down_ms": 31.792,
+          "hot_ms": 67.03,
+          "up_calls": 66,
+          "up_ms": 35.238
+        },
+        "quantum": {
+          "down_calls": 13,
+          "down_ms": 18.333,
+          "hot_ms": 45.995,
+          "up_calls": 13,
+          "up_ms": 27.662
+        }
+      },
+      "prompt_count": 4,
+      "prompt_ids": [
+        "climate",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 28,
+      "up_calls": 190,
+      "up_hot_ms": 150.286,
+      "up_nbytes": 4456448,
+      "up_rows": 190,
+      "up_tensor": "blk.39.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 167,
+      "down_hot_ms": 111.572,
+      "down_nbytes": 4456448,
+      "down_rows": 167,
+      "down_tensor": "blk.31.ffn_down_exps.weight",
+      "expert": 126,
+      "fused_calls": 167,
+      "hot_ms": 248.026,
+      "layer": 31,
+      "pair_key": "blk.31.expert.126",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 3,
+          "down_ms": 4.017,
+          "hot_ms": 5.634,
+          "up_calls": 3,
+          "up_ms": 1.617
+        },
+        "france": {
+          "down_calls": 2,
+          "down_ms": 5.483,
+          "hot_ms": 7.131,
+          "up_calls": 2,
+          "up_ms": 1.648
+        },
+        "quantum": {
+          "down_calls": 162,
+          "down_ms": 102.072,
+          "hot_ms": 235.261,
+          "up_calls": 162,
+          "up_ms": 133.189
+        }
+      },
+      "prompt_count": 3,
+      "prompt_ids": [
+        "climate",
+        "france",
+        "quantum"
+      ],
+      "rank": 29,
+      "up_calls": 167,
+      "up_hot_ms": 136.454,
+      "up_nbytes": 4456448,
+      "up_rows": 167,
+      "up_tensor": "blk.31.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 182,
+      "down_hot_ms": 109.585,
+      "down_nbytes": 4456448,
+      "down_rows": 182,
+      "down_tensor": "blk.26.ffn_down_exps.weight",
+      "expert": 85,
+      "fused_calls": 182,
+      "hot_ms": 247.227,
+      "layer": 26,
+      "pair_key": "blk.26.expert.85",
+      "per_prompt_ms": {
+        "quantum": {
+          "down_calls": 182,
+          "down_ms": 109.585,
+          "hot_ms": 247.227,
+          "up_calls": 182,
+          "up_ms": 137.642
+        }
+      },
+      "prompt_count": 1,
+      "prompt_ids": [
+        "quantum"
+      ],
+      "rank": 30,
+      "up_calls": 182,
+      "up_hot_ms": 137.642,
+      "up_nbytes": 4456448,
+      "up_rows": 182,
+      "up_tensor": "blk.26.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 163,
+      "down_hot_ms": 95.253,
+      "down_nbytes": 4456448,
+      "down_rows": 163,
+      "down_tensor": "blk.31.ffn_down_exps.weight",
+      "expert": 58,
+      "fused_calls": 163,
+      "hot_ms": 239.685,
+      "layer": 31,
+      "pair_key": "blk.31.expert.58",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 154,
+          "down_ms": 91.6,
+          "hot_ms": 228.739,
+          "up_calls": 154,
+          "up_ms": 137.139
+        },
+        "france": {
+          "down_calls": 3,
+          "down_ms": 2.462,
+          "hot_ms": 8.582,
+          "up_calls": 3,
+          "up_ms": 6.12
+        },
+        "japan": {
+          "down_calls": 6,
+          "down_ms": 1.191,
+          "hot_ms": 2.364,
+          "up_calls": 6,
+          "up_ms": 1.173
+        }
+      },
+      "prompt_count": 3,
+      "prompt_ids": [
+        "climate",
+        "france",
+        "japan"
+      ],
+      "rank": 31,
+      "up_calls": 163,
+      "up_hot_ms": 144.432,
+      "up_nbytes": 4456448,
+      "up_rows": 163,
+      "up_tensor": "blk.31.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 140,
+      "down_hot_ms": 108.135,
+      "down_nbytes": 4456448,
+      "down_rows": 140,
+      "down_tensor": "blk.8.ffn_down_exps.weight",
+      "expert": 31,
+      "fused_calls": 140,
+      "hot_ms": 236.803,
+      "layer": 8,
+      "pair_key": "blk.8.expert.31",
+      "per_prompt_ms": {
+        "quantum": {
+          "down_calls": 140,
+          "down_ms": 108.135,
+          "hot_ms": 236.803,
+          "up_calls": 140,
+          "up_ms": 128.668
+        }
+      },
+      "prompt_count": 1,
+      "prompt_ids": [
+        "quantum"
+      ],
+      "rank": 32,
+      "up_calls": 140,
+      "up_hot_ms": 128.668,
+      "up_nbytes": 4456448,
+      "up_rows": 140,
+      "up_tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 123,
+      "down_hot_ms": 89.6,
+      "down_nbytes": 4456448,
+      "down_rows": 123,
+      "down_tensor": "blk.9.ffn_down_exps.weight",
+      "expert": 219,
+      "fused_calls": 123,
+      "hot_ms": 231.937,
+      "layer": 9,
+      "pair_key": "blk.9.expert.219",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 8,
+          "down_ms": 3.24,
+          "hot_ms": 13.335,
+          "up_calls": 8,
+          "up_ms": 10.095
+        },
+        "quantum": {
+          "down_calls": 115,
+          "down_ms": 86.36,
+          "hot_ms": 218.602,
+          "up_calls": 115,
+          "up_ms": 132.242
+        }
+      },
+      "prompt_count": 2,
+      "prompt_ids": [
+        "fibonacci",
+        "quantum"
+      ],
+      "rank": 33,
+      "up_calls": 123,
+      "up_hot_ms": 142.337,
+      "up_nbytes": 4456448,
+      "up_rows": 123,
+      "up_tensor": "blk.9.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 184,
+      "down_hot_ms": 87.633,
+      "down_nbytes": 4456448,
+      "down_rows": 184,
+      "down_tensor": "blk.7.ffn_down_exps.weight",
+      "expert": 140,
+      "fused_calls": 184,
+      "hot_ms": 227.465,
+      "layer": 7,
+      "pair_key": "blk.7.expert.140",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 44,
+          "down_ms": 24.741,
+          "hot_ms": 51.795,
+          "up_calls": 44,
+          "up_ms": 27.054
+        },
+        "fibonacci": {
+          "down_calls": 14,
+          "down_ms": 3.777,
+          "hot_ms": 17.1,
+          "up_calls": 14,
+          "up_ms": 13.323
+        },
+        "france": {
+          "down_calls": 45,
+          "down_ms": 14.868,
+          "hot_ms": 38.693,
+          "up_calls": 45,
+          "up_ms": 23.825
+        },
+        "japan": {
+          "down_calls": 42,
+          "down_ms": 16.952,
+          "hot_ms": 40.845,
+          "up_calls": 42,
+          "up_ms": 23.893
+        },
+        "quantum": {
+          "down_calls": 39,
+          "down_ms": 27.295,
+          "hot_ms": 79.032,
+          "up_calls": 39,
+          "up_ms": 51.737
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 34,
+      "up_calls": 184,
+      "up_hot_ms": 139.832,
+      "up_nbytes": 4456448,
+      "up_rows": 184,
+      "up_tensor": "blk.7.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 122,
+      "down_hot_ms": 97.683,
+      "down_nbytes": 4456448,
+      "down_rows": 122,
+      "down_tensor": "blk.21.ffn_down_exps.weight",
+      "expert": 155,
+      "fused_calls": 122,
+      "hot_ms": 225.572,
+      "layer": 21,
+      "pair_key": "blk.21.expert.155",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 22,
+          "down_ms": 19.219,
+          "hot_ms": 48.082,
+          "up_calls": 22,
+          "up_ms": 28.863
+        },
+        "fibonacci": {
+          "down_calls": 16,
+          "down_ms": 9.333,
+          "hot_ms": 41.374,
+          "up_calls": 16,
+          "up_ms": 32.041
+        },
+        "france": {
+          "down_calls": 22,
+          "down_ms": 9.072,
+          "hot_ms": 19.759,
+          "up_calls": 22,
+          "up_ms": 10.687
+        },
+        "japan": {
+          "down_calls": 13,
+          "down_ms": 12.268,
+          "hot_ms": 21.988,
+          "up_calls": 13,
+          "up_ms": 9.72
+        },
+        "quantum": {
+          "down_calls": 49,
+          "down_ms": 47.791,
+          "hot_ms": 94.369,
+          "up_calls": 49,
+          "up_ms": 46.578
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 35,
+      "up_calls": 122,
+      "up_hot_ms": 127.889,
+      "up_nbytes": 4456448,
+      "up_rows": 122,
+      "up_tensor": "blk.21.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 188,
+      "down_hot_ms": 102.469,
+      "down_nbytes": 4456448,
+      "down_rows": 188,
+      "down_tensor": "blk.32.ffn_down_exps.weight",
+      "expert": 205,
+      "fused_calls": 188,
+      "hot_ms": 223.918,
+      "layer": 32,
+      "pair_key": "blk.32.expert.205",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 120,
+          "down_ms": 85.494,
+          "hot_ms": 178.857,
+          "up_calls": 120,
+          "up_ms": 93.363
+        },
+        "france": {
+          "down_calls": 37,
+          "down_ms": 9.533,
+          "hot_ms": 18.146,
+          "up_calls": 37,
+          "up_ms": 8.613
+        },
+        "japan": {
+          "down_calls": 28,
+          "down_ms": 6.073,
+          "hot_ms": 17.191,
+          "up_calls": 28,
+          "up_ms": 11.118
+        },
+        "quantum": {
+          "down_calls": 3,
+          "down_ms": 1.369,
+          "hot_ms": 9.724,
+          "up_calls": 3,
+          "up_ms": 8.355
+        }
+      },
+      "prompt_count": 4,
+      "prompt_ids": [
+        "climate",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 36,
+      "up_calls": 188,
+      "up_hot_ms": 121.449,
+      "up_nbytes": 4456448,
+      "up_rows": 188,
+      "up_tensor": "blk.32.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 178,
+      "down_hot_ms": 90.89,
+      "down_nbytes": 4456448,
+      "down_rows": 178,
+      "down_tensor": "blk.32.ffn_down_exps.weight",
+      "expert": 77,
+      "fused_calls": 178,
+      "hot_ms": 223.254,
+      "layer": 32,
+      "pair_key": "blk.32.expert.77",
+      "per_prompt_ms": {
+        "france": {
+          "down_calls": 1,
+          "down_ms": 0.641,
+          "hot_ms": 5.522,
+          "up_calls": 1,
+          "up_ms": 4.881
+        },
+        "quantum": {
+          "down_calls": 177,
+          "down_ms": 90.249,
+          "hot_ms": 217.732,
+          "up_calls": 177,
+          "up_ms": 127.483
+        }
+      },
+      "prompt_count": 2,
+      "prompt_ids": [
+        "france",
+        "quantum"
+      ],
+      "rank": 37,
+      "up_calls": 178,
+      "up_hot_ms": 132.364,
+      "up_nbytes": 4456448,
+      "up_rows": 178,
+      "up_tensor": "blk.32.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 107,
+      "down_hot_ms": 69.645,
+      "down_nbytes": 4456448,
+      "down_rows": 107,
+      "down_tensor": "blk.39.ffn_down_exps.weight",
+      "expert": 175,
+      "fused_calls": 107,
+      "hot_ms": 222.53,
+      "layer": 39,
+      "pair_key": "blk.39.expert.175",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 107,
+          "down_ms": 69.645,
+          "hot_ms": 222.53,
+          "up_calls": 107,
+          "up_ms": 152.885
+        }
+      },
+      "prompt_count": 1,
+      "prompt_ids": [
+        "fibonacci"
+      ],
+      "rank": 38,
+      "up_calls": 107,
+      "up_hot_ms": 152.885,
+      "up_nbytes": 4456448,
+      "up_rows": 107,
+      "up_tensor": "blk.39.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 111,
+      "down_hot_ms": 88.172,
+      "down_nbytes": 4456448,
+      "down_rows": 111,
+      "down_tensor": "blk.30.ffn_down_exps.weight",
+      "expert": 219,
+      "fused_calls": 111,
+      "hot_ms": 217.158,
+      "layer": 30,
+      "pair_key": "blk.30.expert.219",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 92,
+          "down_ms": 66.113,
+          "hot_ms": 171.116,
+          "up_calls": 92,
+          "up_ms": 105.003
+        },
+        "france": {
+          "down_calls": 12,
+          "down_ms": 8.278,
+          "hot_ms": 21.971,
+          "up_calls": 12,
+          "up_ms": 13.693
+        },
+        "japan": {
+          "down_calls": 2,
+          "down_ms": 1.156,
+          "hot_ms": 4.485,
+          "up_calls": 2,
+          "up_ms": 3.329
+        },
+        "quantum": {
+          "down_calls": 5,
+          "down_ms": 12.625,
+          "hot_ms": 19.586,
+          "up_calls": 5,
+          "up_ms": 6.961
+        }
+      },
+      "prompt_count": 4,
+      "prompt_ids": [
+        "climate",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 39,
+      "up_calls": 111,
+      "up_hot_ms": 128.986,
+      "up_nbytes": 4456448,
+      "up_rows": 111,
+      "up_tensor": "blk.30.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 167,
+      "down_hot_ms": 102.232,
+      "down_nbytes": 4456448,
+      "down_rows": 167,
+      "down_tensor": "blk.6.ffn_down_exps.weight",
+      "expert": 53,
+      "fused_calls": 167,
+      "hot_ms": 213.916,
+      "layer": 6,
+      "pair_key": "blk.6.expert.53",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 31,
+          "down_ms": 11.626,
+          "hot_ms": 36.198,
+          "up_calls": 31,
+          "up_ms": 24.572
+        },
+        "fibonacci": {
+          "down_calls": 8,
+          "down_ms": 4.775,
+          "hot_ms": 9.607,
+          "up_calls": 8,
+          "up_ms": 4.832
+        },
+        "france": {
+          "down_calls": 68,
+          "down_ms": 41.717,
+          "hot_ms": 87.375,
+          "up_calls": 68,
+          "up_ms": 45.658
+        },
+        "japan": {
+          "down_calls": 39,
+          "down_ms": 18.945,
+          "hot_ms": 38.815,
+          "up_calls": 39,
+          "up_ms": 19.87
+        },
+        "quantum": {
+          "down_calls": 21,
+          "down_ms": 25.169,
+          "hot_ms": 41.921,
+          "up_calls": 21,
+          "up_ms": 16.752
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 40,
+      "up_calls": 167,
+      "up_hot_ms": 111.684,
+      "up_nbytes": 4456448,
+      "up_rows": 167,
+      "up_tensor": "blk.6.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 188,
+      "down_hot_ms": 74.456,
+      "down_nbytes": 4456448,
+      "down_rows": 188,
+      "down_tensor": "blk.25.ffn_down_exps.weight",
+      "expert": 53,
+      "fused_calls": 188,
+      "hot_ms": 212.172,
+      "layer": 25,
+      "pair_key": "blk.25.expert.53",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 23,
+          "down_ms": 6.623,
+          "hot_ms": 21.835,
+          "up_calls": 23,
+          "up_ms": 15.212
+        },
+        "quantum": {
+          "down_calls": 165,
+          "down_ms": 67.833,
+          "hot_ms": 190.337,
+          "up_calls": 165,
+          "up_ms": 122.504
+        }
+      },
+      "prompt_count": 2,
+      "prompt_ids": [
+        "fibonacci",
+        "quantum"
+      ],
+      "rank": 41,
+      "up_calls": 188,
+      "up_hot_ms": 137.716,
+      "up_nbytes": 4456448,
+      "up_rows": 188,
+      "up_tensor": "blk.25.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 100,
+      "down_hot_ms": 84.555,
+      "down_nbytes": 4456448,
+      "down_rows": 100,
+      "down_tensor": "blk.4.ffn_down_exps.weight",
+      "expert": 8,
+      "fused_calls": 100,
+      "hot_ms": 211.283,
+      "layer": 4,
+      "pair_key": "blk.4.expert.8",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 18,
+          "down_ms": 15.546,
+          "hot_ms": 42.981,
+          "up_calls": 18,
+          "up_ms": 27.435
+        },
+        "fibonacci": {
+          "down_calls": 19,
+          "down_ms": 19.996,
+          "hot_ms": 47.222,
+          "up_calls": 19,
+          "up_ms": 27.226
+        },
+        "france": {
+          "down_calls": 21,
+          "down_ms": 17.733,
+          "hot_ms": 41.198,
+          "up_calls": 21,
+          "up_ms": 23.465
+        },
+        "japan": {
+          "down_calls": 16,
+          "down_ms": 10.044,
+          "hot_ms": 26.989,
+          "up_calls": 16,
+          "up_ms": 16.945
+        },
+        "quantum": {
+          "down_calls": 26,
+          "down_ms": 21.236,
+          "hot_ms": 52.893,
+          "up_calls": 26,
+          "up_ms": 31.657
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 42,
+      "up_calls": 100,
+      "up_hot_ms": 126.728,
+      "up_nbytes": 4456448,
+      "up_rows": 100,
+      "up_tensor": "blk.4.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 214,
+      "down_hot_ms": 87.734,
+      "down_nbytes": 4456448,
+      "down_rows": 214,
+      "down_tensor": "blk.15.ffn_down_exps.weight",
+      "expert": 249,
+      "fused_calls": 214,
+      "hot_ms": 209.155,
+      "layer": 15,
+      "pair_key": "blk.15.expert.249",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 60,
+          "down_ms": 26.724,
+          "hot_ms": 61.907,
+          "up_calls": 60,
+          "up_ms": 35.183
+        },
+        "fibonacci": {
+          "down_calls": 6,
+          "down_ms": 3.793,
+          "hot_ms": 12.081,
+          "up_calls": 6,
+          "up_ms": 8.288
+        },
+        "france": {
+          "down_calls": 53,
+          "down_ms": 13.2,
+          "hot_ms": 36.232,
+          "up_calls": 53,
+          "up_ms": 23.032
+        },
+        "japan": {
+          "down_calls": 57,
+          "down_ms": 14.432,
+          "hot_ms": 38.947,
+          "up_calls": 57,
+          "up_ms": 24.515
+        },
+        "quantum": {
+          "down_calls": 38,
+          "down_ms": 29.585,
+          "hot_ms": 59.988,
+          "up_calls": 38,
+          "up_ms": 30.403
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 43,
+      "up_calls": 214,
+      "up_hot_ms": 121.421,
+      "up_nbytes": 4456448,
+      "up_rows": 214,
+      "up_tensor": "blk.15.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 225,
+      "down_hot_ms": 70.94,
+      "down_nbytes": 4456448,
+      "down_rows": 225,
+      "down_tensor": "blk.16.ffn_down_exps.weight",
+      "expert": 240,
+      "fused_calls": 225,
+      "hot_ms": 206.191,
+      "layer": 16,
+      "pair_key": "blk.16.expert.240",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 64,
+          "down_ms": 24.774,
+          "hot_ms": 69.668,
+          "up_calls": 64,
+          "up_ms": 44.894
+        },
+        "fibonacci": {
+          "down_calls": 4,
+          "down_ms": 1.624,
+          "hot_ms": 11.383,
+          "up_calls": 4,
+          "up_ms": 9.759
+        },
+        "france": {
+          "down_calls": 58,
+          "down_ms": 14.345,
+          "hot_ms": 43.154,
+          "up_calls": 58,
+          "up_ms": 28.809
+        },
+        "japan": {
+          "down_calls": 72,
+          "down_ms": 20.415,
+          "hot_ms": 60.295,
+          "up_calls": 72,
+          "up_ms": 39.88
+        },
+        "quantum": {
+          "down_calls": 27,
+          "down_ms": 9.782,
+          "hot_ms": 21.691,
+          "up_calls": 27,
+          "up_ms": 11.909
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 44,
+      "up_calls": 225,
+      "up_hot_ms": 135.251,
+      "up_nbytes": 4456448,
+      "up_rows": 225,
+      "up_tensor": "blk.16.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 105,
+      "down_hot_ms": 69.677,
+      "down_nbytes": 4456448,
+      "down_rows": 105,
+      "down_tensor": "blk.22.ffn_down_exps.weight",
+      "expert": 71,
+      "fused_calls": 105,
+      "hot_ms": 203.184,
+      "layer": 22,
+      "pair_key": "blk.22.expert.71",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 105,
+          "down_ms": 69.677,
+          "hot_ms": 203.184,
+          "up_calls": 105,
+          "up_ms": 133.507
+        }
+      },
+      "prompt_count": 1,
+      "prompt_ids": [
+        "fibonacci"
+      ],
+      "rank": 45,
+      "up_calls": 105,
+      "up_hot_ms": 133.507,
+      "up_nbytes": 4456448,
+      "up_rows": 105,
+      "up_tensor": "blk.22.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 89,
+      "down_hot_ms": 76.314,
+      "down_nbytes": 4456448,
+      "down_rows": 89,
+      "down_tensor": "blk.35.ffn_down_exps.weight",
+      "expert": 84,
+      "fused_calls": 89,
+      "hot_ms": 202.769,
+      "layer": 35,
+      "pair_key": "blk.35.expert.84",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 8,
+          "down_ms": 11.703,
+          "hot_ms": 24.582,
+          "up_calls": 8,
+          "up_ms": 12.879
+        },
+        "fibonacci": {
+          "down_calls": 22,
+          "down_ms": 19.579,
+          "hot_ms": 47.49,
+          "up_calls": 22,
+          "up_ms": 27.911
+        },
+        "france": {
+          "down_calls": 11,
+          "down_ms": 5.037,
+          "hot_ms": 19.634,
+          "up_calls": 11,
+          "up_ms": 14.597
+        },
+        "japan": {
+          "down_calls": 5,
+          "down_ms": 3.337,
+          "hot_ms": 10.187,
+          "up_calls": 5,
+          "up_ms": 6.85
+        },
+        "quantum": {
+          "down_calls": 43,
+          "down_ms": 36.658,
+          "hot_ms": 100.876,
+          "up_calls": 43,
+          "up_ms": 64.218
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 46,
+      "up_calls": 89,
+      "up_hot_ms": 126.455,
+      "up_nbytes": 4456448,
+      "up_rows": 89,
+      "up_tensor": "blk.35.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 92,
+      "down_hot_ms": 80.167,
+      "down_nbytes": 4456448,
+      "down_rows": 92,
+      "down_tensor": "blk.19.ffn_down_exps.weight",
+      "expert": 172,
+      "fused_calls": 92,
+      "hot_ms": 202.169,
+      "layer": 19,
+      "pair_key": "blk.19.expert.172",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 1,
+          "down_ms": 0.586,
+          "hot_ms": 1.187,
+          "up_calls": 1,
+          "up_ms": 0.601
+        },
+        "japan": {
+          "down_calls": 1,
+          "down_ms": 5.35,
+          "hot_ms": 6.036,
+          "up_calls": 1,
+          "up_ms": 0.686
+        },
+        "quantum": {
+          "down_calls": 90,
+          "down_ms": 74.231,
+          "hot_ms": 194.946,
+          "up_calls": 90,
+          "up_ms": 120.715
+        }
+      },
+      "prompt_count": 3,
+      "prompt_ids": [
+        "climate",
+        "japan",
+        "quantum"
+      ],
+      "rank": 47,
+      "up_calls": 92,
+      "up_hot_ms": 122.002,
+      "up_nbytes": 4456448,
+      "up_rows": 92,
+      "up_tensor": "blk.19.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 141,
+      "down_hot_ms": 87.543,
+      "down_nbytes": 4456448,
+      "down_rows": 141,
+      "down_tensor": "blk.31.ffn_down_exps.weight",
+      "expert": 10,
+      "fused_calls": 141,
+      "hot_ms": 201.806,
+      "layer": 31,
+      "pair_key": "blk.31.expert.10",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 22,
+          "down_ms": 7.962,
+          "hot_ms": 15.277,
+          "up_calls": 22,
+          "up_ms": 7.315
+        },
+        "fibonacci": {
+          "down_calls": 3,
+          "down_ms": 2.712,
+          "hot_ms": 15.495,
+          "up_calls": 3,
+          "up_ms": 12.783
+        },
+        "france": {
+          "down_calls": 58,
+          "down_ms": 48.345,
+          "hot_ms": 81.846,
+          "up_calls": 58,
+          "up_ms": 33.501
+        },
+        "japan": {
+          "down_calls": 35,
+          "down_ms": 17.453,
+          "hot_ms": 65.248,
+          "up_calls": 35,
+          "up_ms": 47.795
+        },
+        "quantum": {
+          "down_calls": 23,
+          "down_ms": 11.071,
+          "hot_ms": 23.94,
+          "up_calls": 23,
+          "up_ms": 12.869
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 48,
+      "up_calls": 141,
+      "up_hot_ms": 114.263,
+      "up_nbytes": 4456448,
+      "up_rows": 141,
+      "up_tensor": "blk.31.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 147,
+      "down_hot_ms": 82.19,
+      "down_nbytes": 4456448,
+      "down_rows": 147,
+      "down_tensor": "blk.5.ffn_down_exps.weight",
+      "expert": 225,
+      "fused_calls": 147,
+      "hot_ms": 200.772,
+      "layer": 5,
+      "pair_key": "blk.5.expert.225",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 147,
+          "down_ms": 82.19,
+          "hot_ms": 200.772,
+          "up_calls": 147,
+          "up_ms": 118.582
+        }
+      },
+      "prompt_count": 1,
+      "prompt_ids": [
+        "fibonacci"
+      ],
+      "rank": 49,
+      "up_calls": 147,
+      "up_hot_ms": 118.582,
+      "up_nbytes": 4456448,
+      "up_rows": 147,
+      "up_tensor": "blk.5.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 142,
+      "down_hot_ms": 77.343,
+      "down_nbytes": 4456448,
+      "down_rows": 142,
+      "down_tensor": "blk.6.ffn_down_exps.weight",
+      "expert": 146,
+      "fused_calls": 142,
+      "hot_ms": 200.416,
+      "layer": 6,
+      "pair_key": "blk.6.expert.146",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 140,
+          "down_ms": 76.39,
+          "hot_ms": 195.977,
+          "up_calls": 140,
+          "up_ms": 119.587
+        },
+        "quantum": {
+          "down_calls": 2,
+          "down_ms": 0.953,
+          "hot_ms": 4.439,
+          "up_calls": 2,
+          "up_ms": 3.486
+        }
+      },
+      "prompt_count": 2,
+      "prompt_ids": [
+        "fibonacci",
+        "quantum"
+      ],
+      "rank": 50,
+      "up_calls": 142,
+      "up_hot_ms": 123.073,
+      "up_nbytes": 4456448,
+      "up_rows": 142,
+      "up_tensor": "blk.6.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 279,
+      "down_hot_ms": 81.755,
+      "down_nbytes": 4456448,
+      "down_rows": 279,
+      "down_tensor": "blk.24.ffn_down_exps.weight",
+      "expert": 12,
+      "fused_calls": 279,
+      "hot_ms": 199.03,
+      "layer": 24,
+      "pair_key": "blk.24.expert.12",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 27,
+          "down_ms": 8.531,
+          "hot_ms": 24.465,
+          "up_calls": 27,
+          "up_ms": 15.934
+        },
+        "france": {
+          "down_calls": 124,
+          "down_ms": 37.562,
+          "hot_ms": 88.892,
+          "up_calls": 124,
+          "up_ms": 51.33
+        },
+        "japan": {
+          "down_calls": 128,
+          "down_ms": 35.662,
+          "hot_ms": 85.673,
+          "up_calls": 128,
+          "up_ms": 50.011
+        }
+      },
+      "prompt_count": 3,
+      "prompt_ids": [
+        "climate",
+        "france",
+        "japan"
+      ],
+      "rank": 51,
+      "up_calls": 279,
+      "up_hot_ms": 117.275,
+      "up_nbytes": 4456448,
+      "up_rows": 279,
+      "up_tensor": "blk.24.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 203,
+      "down_hot_ms": 78.317,
+      "down_nbytes": 4456448,
+      "down_rows": 203,
+      "down_tensor": "blk.17.ffn_down_exps.weight",
+      "expert": 93,
+      "fused_calls": 203,
+      "hot_ms": 193.426,
+      "layer": 17,
+      "pair_key": "blk.17.expert.93",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 1,
+          "down_ms": 0.774,
+          "hot_ms": 3.507,
+          "up_calls": 1,
+          "up_ms": 2.733
+        },
+        "fibonacci": {
+          "down_calls": 1,
+          "down_ms": 0.736,
+          "hot_ms": 1.275,
+          "up_calls": 1,
+          "up_ms": 0.539
+        },
+        "france": {
+          "down_calls": 99,
+          "down_ms": 37.673,
+          "hot_ms": 86.639,
+          "up_calls": 99,
+          "up_ms": 48.966
+        },
+        "japan": {
+          "down_calls": 102,
+          "down_ms": 39.134,
+          "hot_ms": 102.005,
+          "up_calls": 102,
+          "up_ms": 62.871
+        }
+      },
+      "prompt_count": 4,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan"
+      ],
+      "rank": 52,
+      "up_calls": 203,
+      "up_hot_ms": 115.109,
+      "up_nbytes": 4456448,
+      "up_rows": 203,
+      "up_tensor": "blk.17.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 161,
+      "down_hot_ms": 63.782,
+      "down_nbytes": 4456448,
+      "down_rows": 161,
+      "down_tensor": "blk.8.ffn_down_exps.weight",
+      "expert": 115,
+      "fused_calls": 161,
+      "hot_ms": 193.034,
+      "layer": 8,
+      "pair_key": "blk.8.expert.115",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 29,
+          "down_ms": 11.02,
+          "hot_ms": 23.811,
+          "up_calls": 29,
+          "up_ms": 12.791
+        },
+        "fibonacci": {
+          "down_calls": 36,
+          "down_ms": 15.901,
+          "hot_ms": 55.507,
+          "up_calls": 36,
+          "up_ms": 39.606
+        },
+        "france": {
+          "down_calls": 35,
+          "down_ms": 9.293,
+          "hot_ms": 29.984,
+          "up_calls": 35,
+          "up_ms": 20.691
+        },
+        "japan": {
+          "down_calls": 24,
+          "down_ms": 5.234,
+          "hot_ms": 16.064,
+          "up_calls": 24,
+          "up_ms": 10.83
+        },
+        "quantum": {
+          "down_calls": 37,
+          "down_ms": 22.334,
+          "hot_ms": 67.668,
+          "up_calls": 37,
+          "up_ms": 45.334
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 53,
+      "up_calls": 161,
+      "up_hot_ms": 129.252,
+      "up_nbytes": 4456448,
+      "up_rows": 161,
+      "up_tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 152,
+      "down_hot_ms": 66.548,
+      "down_nbytes": 4456448,
+      "down_rows": 152,
+      "down_tensor": "blk.32.ffn_down_exps.weight",
+      "expert": 72,
+      "fused_calls": 152,
+      "hot_ms": 189.829,
+      "layer": 32,
+      "pair_key": "blk.32.expert.72",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 152,
+          "down_ms": 66.548,
+          "hot_ms": 189.829,
+          "up_calls": 152,
+          "up_ms": 123.281
+        }
+      },
+      "prompt_count": 1,
+      "prompt_ids": [
+        "fibonacci"
+      ],
+      "rank": 54,
+      "up_calls": 152,
+      "up_hot_ms": 123.281,
+      "up_nbytes": 4456448,
+      "up_rows": 152,
+      "up_tensor": "blk.32.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 119,
+      "down_hot_ms": 67.645,
+      "down_nbytes": 4456448,
+      "down_rows": 119,
+      "down_tensor": "blk.15.ffn_down_exps.weight",
+      "expert": 176,
+      "fused_calls": 119,
+      "hot_ms": 188.141,
+      "layer": 15,
+      "pair_key": "blk.15.expert.176",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 13,
+          "down_ms": 3.781,
+          "hot_ms": 16.293,
+          "up_calls": 13,
+          "up_ms": 12.512
+        },
+        "fibonacci": {
+          "down_calls": 53,
+          "down_ms": 29.942,
+          "hot_ms": 86.047,
+          "up_calls": 53,
+          "up_ms": 56.105
+        },
+        "france": {
+          "down_calls": 21,
+          "down_ms": 12.358,
+          "hot_ms": 28.226,
+          "up_calls": 21,
+          "up_ms": 15.868
+        },
+        "japan": {
+          "down_calls": 11,
+          "down_ms": 4.049,
+          "hot_ms": 14.314,
+          "up_calls": 11,
+          "up_ms": 10.265
+        },
+        "quantum": {
+          "down_calls": 21,
+          "down_ms": 17.515,
+          "hot_ms": 43.261,
+          "up_calls": 21,
+          "up_ms": 25.746
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 55,
+      "up_calls": 119,
+      "up_hot_ms": 120.496,
+      "up_nbytes": 4456448,
+      "up_rows": 119,
+      "up_tensor": "blk.15.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 137,
+      "down_hot_ms": 72.22,
+      "down_nbytes": 4456448,
+      "down_rows": 137,
+      "down_tensor": "blk.39.ffn_down_exps.weight",
+      "expert": 125,
+      "fused_calls": 137,
+      "hot_ms": 186.405,
+      "layer": 39,
+      "pair_key": "blk.39.expert.125",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 128,
+          "down_ms": 63.129,
+          "hot_ms": 169.339,
+          "up_calls": 128,
+          "up_ms": 106.21
+        },
+        "japan": {
+          "down_calls": 7,
+          "down_ms": 7.227,
+          "hot_ms": 13.201,
+          "up_calls": 7,
+          "up_ms": 5.974
+        },
+        "quantum": {
+          "down_calls": 2,
+          "down_ms": 1.864,
+          "hot_ms": 3.865,
+          "up_calls": 2,
+          "up_ms": 2.001
+        }
+      },
+      "prompt_count": 3,
+      "prompt_ids": [
+        "climate",
+        "japan",
+        "quantum"
+      ],
+      "rank": 56,
+      "up_calls": 137,
+      "up_hot_ms": 114.185,
+      "up_nbytes": 4456448,
+      "up_rows": 137,
+      "up_tensor": "blk.39.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 105,
+      "down_hot_ms": 75.444,
+      "down_nbytes": 4456448,
+      "down_rows": 105,
+      "down_tensor": "blk.3.ffn_down_exps.weight",
+      "expert": 50,
+      "fused_calls": 105,
+      "hot_ms": 185.692,
+      "layer": 3,
+      "pair_key": "blk.3.expert.50",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 62,
+          "down_ms": 43.528,
+          "hot_ms": 113.805,
+          "up_calls": 62,
+          "up_ms": 70.277
+        },
+        "quantum": {
+          "down_calls": 43,
+          "down_ms": 31.916,
+          "hot_ms": 71.887,
+          "up_calls": 43,
+          "up_ms": 39.971
+        }
+      },
+      "prompt_count": 2,
+      "prompt_ids": [
+        "fibonacci",
+        "quantum"
+      ],
+      "rank": 57,
+      "up_calls": 105,
+      "up_hot_ms": 110.248,
+      "up_nbytes": 4456448,
+      "up_rows": 105,
+      "up_tensor": "blk.3.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 149,
+      "down_hot_ms": 82.382,
+      "down_nbytes": 4456448,
+      "down_rows": 149,
+      "down_tensor": "blk.7.ffn_down_exps.weight",
+      "expert": 238,
+      "fused_calls": 149,
+      "hot_ms": 185.235,
+      "layer": 7,
+      "pair_key": "blk.7.expert.238",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 149,
+          "down_ms": 82.382,
+          "hot_ms": 185.235,
+          "up_calls": 149,
+          "up_ms": 102.853
+        }
+      },
+      "prompt_count": 1,
+      "prompt_ids": [
+        "fibonacci"
+      ],
+      "rank": 58,
+      "up_calls": 149,
+      "up_hot_ms": 102.853,
+      "up_nbytes": 4456448,
+      "up_rows": 149,
+      "up_tensor": "blk.7.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 221,
+      "down_hot_ms": 82.132,
+      "down_nbytes": 4456448,
+      "down_rows": 221,
+      "down_tensor": "blk.29.ffn_down_exps.weight",
+      "expert": 45,
+      "fused_calls": 221,
+      "hot_ms": 184.283,
+      "layer": 29,
+      "pair_key": "blk.29.expert.45",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 50,
+          "down_ms": 30.589,
+          "hot_ms": 69.437,
+          "up_calls": 50,
+          "up_ms": 38.848
+        },
+        "france": {
+          "down_calls": 82,
+          "down_ms": 19.958,
+          "hot_ms": 44.026,
+          "up_calls": 82,
+          "up_ms": 24.068
+        },
+        "japan": {
+          "down_calls": 88,
+          "down_ms": 30.931,
+          "hot_ms": 69.4,
+          "up_calls": 88,
+          "up_ms": 38.469
+        },
+        "quantum": {
+          "down_calls": 1,
+          "down_ms": 0.654,
+          "hot_ms": 1.42,
+          "up_calls": 1,
+          "up_ms": 0.766
+        }
+      },
+      "prompt_count": 4,
+      "prompt_ids": [
+        "climate",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 59,
+      "up_calls": 221,
+      "up_hot_ms": 102.151,
+      "up_nbytes": 4456448,
+      "up_rows": 221,
+      "up_tensor": "blk.29.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 213,
+      "down_hot_ms": 81.199,
+      "down_nbytes": 4456448,
+      "down_rows": 213,
+      "down_tensor": "blk.11.ffn_down_exps.weight",
+      "expert": 9,
+      "fused_calls": 213,
+      "hot_ms": 183.598,
+      "layer": 11,
+      "pair_key": "blk.11.expert.9",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 19,
+          "down_ms": 5.752,
+          "hot_ms": 11.546,
+          "up_calls": 19,
+          "up_ms": 5.794
+        },
+        "fibonacci": {
+          "down_calls": 2,
+          "down_ms": 1.315,
+          "hot_ms": 5.305,
+          "up_calls": 2,
+          "up_ms": 3.99
+        },
+        "france": {
+          "down_calls": 93,
+          "down_ms": 25.44,
+          "hot_ms": 62.75,
+          "up_calls": 93,
+          "up_ms": 37.31
+        },
+        "japan": {
+          "down_calls": 62,
+          "down_ms": 20.789,
+          "hot_ms": 45.604,
+          "up_calls": 62,
+          "up_ms": 24.815
+        },
+        "quantum": {
+          "down_calls": 37,
+          "down_ms": 27.903,
+          "hot_ms": 58.393,
+          "up_calls": 37,
+          "up_ms": 30.49
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 60,
+      "up_calls": 213,
+      "up_hot_ms": 102.399,
+      "up_nbytes": 4456448,
+      "up_rows": 213,
+      "up_tensor": "blk.11.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 132,
+      "down_hot_ms": 72.134,
+      "down_nbytes": 4456448,
+      "down_rows": 132,
+      "down_tensor": "blk.11.ffn_down_exps.weight",
+      "expert": 188,
+      "fused_calls": 132,
+      "hot_ms": 182.823,
+      "layer": 11,
+      "pair_key": "blk.11.expert.188",
+      "per_prompt_ms": {
+        "quantum": {
+          "down_calls": 132,
+          "down_ms": 72.134,
+          "hot_ms": 182.823,
+          "up_calls": 132,
+          "up_ms": 110.689
+        }
+      },
+      "prompt_count": 1,
+      "prompt_ids": [
+        "quantum"
+      ],
+      "rank": 61,
+      "up_calls": 132,
+      "up_hot_ms": 110.689,
+      "up_nbytes": 4456448,
+      "up_rows": 132,
+      "up_tensor": "blk.11.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 81,
+      "down_hot_ms": 68.652,
+      "down_nbytes": 4456448,
+      "down_rows": 81,
+      "down_tensor": "blk.4.ffn_down_exps.weight",
+      "expert": 97,
+      "fused_calls": 81,
+      "hot_ms": 182.492,
+      "layer": 4,
+      "pair_key": "blk.4.expert.97",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 48,
+          "down_ms": 41.368,
+          "hot_ms": 120.98,
+          "up_calls": 48,
+          "up_ms": 79.612
+        },
+        "france": {
+          "down_calls": 1,
+          "down_ms": 0.51,
+          "hot_ms": 3.215,
+          "up_calls": 1,
+          "up_ms": 2.705
+        },
+        "japan": {
+          "down_calls": 1,
+          "down_ms": 0.461,
+          "hot_ms": 0.954,
+          "up_calls": 1,
+          "up_ms": 0.493
+        },
+        "quantum": {
+          "down_calls": 31,
+          "down_ms": 26.313,
+          "hot_ms": 57.343,
+          "up_calls": 31,
+          "up_ms": 31.03
+        }
+      },
+      "prompt_count": 4,
+      "prompt_ids": [
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "rank": 62,
+      "up_calls": 81,
+      "up_hot_ms": 113.84,
+      "up_nbytes": 4456448,
+      "up_rows": 81,
+      "up_tensor": "blk.4.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 309,
+      "down_hot_ms": 75.758,
+      "down_nbytes": 4456448,
+      "down_rows": 309,
+      "down_tensor": "blk.36.ffn_down_exps.weight",
+      "expert": 88,
+      "fused_calls": 309,
+      "hot_ms": 179.91,
+      "layer": 36,
+      "pair_key": "blk.36.expert.88",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 137,
+          "down_ms": 28.176,
+          "hot_ms": 65.81,
+          "up_calls": 137,
+          "up_ms": 37.634
+        },
+        "france": {
+          "down_calls": 89,
+          "down_ms": 27.633,
+          "hot_ms": 62.869,
+          "up_calls": 89,
+          "up_ms": 35.236
+        },
+        "japan": {
+          "down_calls": 83,
+          "down_ms": 19.949,
+          "hot_ms": 51.231,
+          "up_calls": 83,
+          "up_ms": 31.282
+        }
+      },
+      "prompt_count": 3,
+      "prompt_ids": [
+        "climate",
+        "france",
+        "japan"
+      ],
+      "rank": 63,
+      "up_calls": 309,
+      "up_hot_ms": 104.152,
+      "up_nbytes": 4456448,
+      "up_rows": 309,
+      "up_tensor": "blk.36.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 167,
+      "down_hot_ms": 77.465,
+      "down_nbytes": 4456448,
+      "down_rows": 167,
+      "down_tensor": "blk.12.ffn_down_exps.weight",
+      "expert": 94,
+      "fused_calls": 167,
+      "hot_ms": 179.565,
+      "layer": 12,
+      "pair_key": "blk.12.expert.94",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 2,
+          "down_ms": 4.906,
+          "hot_ms": 5.629,
+          "up_calls": 2,
+          "up_ms": 0.723
+        },
+        "quantum": {
+          "down_calls": 165,
+          "down_ms": 72.559,
+          "hot_ms": 173.936,
+          "up_calls": 165,
+          "up_ms": 101.377
+        }
+      },
+      "prompt_count": 2,
+      "prompt_ids": [
+        "climate",
+        "quantum"
+      ],
+      "rank": 64,
+      "up_calls": 167,
+      "up_hot_ms": 102.1,
+      "up_nbytes": 4456448,
+      "up_rows": 167,
+      "up_tensor": "blk.12.ffn_up_exps.weight"
+    }
+  ],
+  "payload_bytes": 570425344,
+  "payload_mib": 544.0,
+  "per_layer_pair_counts": {
+    "3": 2,
+    "4": 3,
+    "5": 2,
+    "6": 3,
+    "7": 2,
+    "8": 4,
+    "9": 2,
+    "10": 1,
+    "11": 3,
+    "12": 2,
+    "14": 1,
+    "15": 3,
+    "16": 3,
+    "17": 3,
+    "18": 2,
+    "19": 2,
+    "20": 2,
+    "21": 1,
+    "22": 2,
+    "23": 1,
+    "24": 1,
+    "25": 1,
+    "26": 1,
+    "27": 1,
+    "28": 2,
+    "29": 1,
+    "30": 1,
+    "31": 3,
+    "32": 3,
+    "34": 1,
+    "35": 1,
+    "36": 1,
+    "39": 3
+  },
+  "source": {
+    "branch": "vendor/deepseek-token-rate-16gb",
+    "head": "3f0b3bb6188abc311a0cc2a1474eb63812308cf0",
+    "input_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+    "prompt_scope": "calibration_dev_set_v1 only; held_out_test_set_v1_locked not used",
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "status": "?? .Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.offset_manifest.csv\n?? .Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.profile.json\n?? .Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.tsv\n?? .Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top64-updown-20260707.offset_manifest.csv\n?? .Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top64-updown-20260707.tsv\n?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json"
+  },
+  "top_n": 64
+}

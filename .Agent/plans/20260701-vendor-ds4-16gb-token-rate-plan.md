@@ -4370,3 +4370,27 @@
 - `decision`: reject，不进入 calibration/dev 或 held-out。虽然 token-rate 数字看起来接近/超过当前 dev baseline，但 France 正确率失败，不能作为 SOTA 或下一阶段泛化候选。
 - `cleanup`: 已删除本地 antirez 86.7GB GGUF 释放磁盘；sha256、ready validation、run dir、完整输出和 reject 记录已保留。
 - `next_direction`: alternate low-bit route 已连续暴露 load/correctness blocker（0xSero 缺 global hc、sleepy K128 gate shape、antirez correctness 失败）。下一步不应继续盲下大模型；若继续 alternate，需要先做 header+小样本 correctness proof 或回到 native source/dataflow 设计。
+
+## 2026-07-07 hard-bound：generalized sparse pair hotset route rejected
+
+- `attempt_id`: `20260707-generalized-sparse-pair-hard-bound`
+- `status`: `rejected_by_generalized_zero_overhead_bound_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-sparse-pair-profile-hard-bound-20260707.json`
+- `prompt_scope`: 只使用 `calibration_dev_set_v1` 五个 prompt 的 fallback CSV；没有使用 `held_out_test_set_v1_locked`，没有使用 prompt-specific France profile。
+- `generated_profiles`: 已生成 generalized top48/top64/top128/top256/top512 sparse pair profile、TSV 和 offset manifest，路径位于 `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top{N}-updown-20260707.*`。这些 profile 只作为可复现 hard-bound 输入，不是 SOTA。
+- `method`: 对五个 calibration/dev prompt 的 decode fallback CSV 按完整 `(layer, expert)` up/down pair 聚合，按总 decode fallback time 排序；对每个 topN 计算“选中 pair 的 fallback time 可零开销完全消失”时的 token-rate 上界。该上界忽略 staging、H2D/D2H、kernel launch、indexing、同步和 prompt/TTFT 开销，因此是乐观上界。
+- `topN_bound_43_layer_sensitivity`:
+  - top512：payload `4352.0 MiB`，mean `2.792 tok/s`，min `2.039 tok/s`，五个 dev prompt 全部低于 5。
+  - top1024：payload `8704.0 MiB`，mean `3.221 tok/s`，min `2.299 tok/s`，五个 dev prompt 全部低于 5。
+  - top2048：payload `17408.0 MiB`，mean `3.973 tok/s`，min `2.764 tok/s`，五个 dev prompt 全部低于 5。
+  - top3072：payload `26112.0 MiB`，mean `4.569 tok/s`，min `3.216 tok/s`，只有 France 超过 5；quantum/fibonacci/Japan/climate 仍低于 5。
+  - top4096：payload `34816.0 MiB`，mean `4.997 tok/s`，min `3.559 tok/s`，payload 本身已超过 32GB 5090 可用 VRAM 预算，quantum/fibonacci 仍低于 5。
+  - all 6485 observed complete pairs：payload `55122.5 MiB`，mean `5.433 tok/s`，min `3.919 tok/s`，Fibonacci 仍低于 5；这与 full up/down removal bound 中 Fibonacci 仍低于 5 的结论一致。
+- `decision`: generalized sparse pair/hotset staging 不能作为主路线。原因不是实现细节，而是 expert 命中在泛化 prompt 上过于分散：在可承受 VRAM payload 内覆盖不够；超过可承受 VRAM 后即使零开销也无法让最差 prompt 达到 5 tok/s。
+- `source_edit_allowed_by_this_artifact`: `false`。不能因为 France-only 或小 topN profile 看起来可行就写 runtime 行为改动；这会违反“不能 prompt-specific、必须泛化”的任务背景。
+- `next_plan`: 回到精确通用 dataflow，目标是消除/大幅压缩所有 prompt 的 up/down CPU fallback，而不是缓存少量历史热 expert。
+  1. 定位当前 fallback 的精确触发点：`batch_env_missing + one_name_filter`，确认 `selected_experts`/`weights` 已在 graph 中作为 tensor 传入 `build_expert_mix`，但当前 fused/hot route 没有使用这些 graph tensor 直接完成精确 gather/compute。
+  2. 设计 default-off probe：记录每层 decode 时 selected_experts/weights tensor 的 backend、shape、lifetime、是否可在 CUDA kernel 内读取；同时记录 up/down source tensor backend 和 fallback source path。probe 不能改变默认行为、输出或 token-rate。
+  3. 若 probe 证明 selected_experts/weights 可被 CUDA path 使用，则实现 compact exact-gather 原型：每 token 每层只为 topK selected experts 建立 compact id list，在 GPU 上直接对 up/down selected experts 做 MMVQ/compute，避免 CPU fallback 和全 expert/hotset staging。
+  4. 若 graph tensor 不能直接供 CUDA kernel 使用，则先实现最小 D2H selected id copy hard-bound：每层 topK id/weight 的数据量极小，计算 id copy 和调度开销上限，再决定是否把 selected ids 显式传给 vendor CUDA path。
+  5. 每个 source 改动前必须先写 plan；每个实验只用 calibration/dev；held-out locked test set 只在最终 candidate freeze 后运行。出现新的合规 generalized SOTA 时，必须详细记录复现信息并立刻 commit/push 到 `ssd/vendor/deepseek-token-rate-16gb`，随后从 pushed commit 复现。
