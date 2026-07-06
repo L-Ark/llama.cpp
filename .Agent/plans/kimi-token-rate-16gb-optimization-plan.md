@@ -89280,3 +89280,122 @@ Next design branch:
   - Q4_0 down CPU fallback.
 - The next source optimization must name the largest remaining bucket and
   compute an upper bound before implementation.
+
+## Phase GP3 - batched io_uring for unaligned GGUF alias reads
+
+Start time: `2026-07-06T22:35:00+0800`.
+
+Status:
+
+- Planned; no source edit yet.
+
+Problem:
+
+- GP2 removes pack misses and improves n96 dev mean token rate from
+  `0.404` to `0.833 tok/s`.
+- However the alias TSV entries point into original GGUF tensor payloads whose
+  offsets are not 4KiB aligned:
+  `unaligned_rows=69120`.
+- GP2 therefore uses a single-entry aligned bounce read for many alias reads.
+- Existing batched io_uring code still rejects unaligned entries:
+  it requires `entry->offset % 4096 == 0`.
+- The n32 alias diagnostic still shows large non-iouring copy wall:
+  - total profiled copy wall: `74820 ms`;
+  - iouring wall: `10094 ms`;
+  - non-iouring wall: `64726 ms`;
+  - pack miss wall: `0 ms`.
+- The n96 dev metrics show many direct reads and fewer batched io_uring reads,
+  for example:
+  - `dev_python_reverse`: `direct_reads=78377`, `iouring_reads=6275`;
+  - `dev_photosynthesis_factual`: `direct_reads=65030`,
+    `iouring_reads=11965`;
+  - `dev_mixed_summary`: `direct_reads=41371`, `iouring_reads=6079`.
+
+Hypothesis:
+
+- A large fraction of the remaining copy/stage time is the unbatched direct
+  bounce path for GGUF alias entries.
+- If batched io_uring can read aligned ranges into pinned staging slots and H2D
+  copy from `slot.host + prefix`, the runtime should:
+  - reduce exposed per-entry direct read overhead;
+  - increase iouring batch utilization;
+  - reduce non-iouring copy wall;
+  - improve decode token rate without changing model outputs.
+
+Theoretical bound:
+
+- In the n32 alias diagnostic, the immediately targetable non-iouring copy wall
+  is about `64726 ms`.
+- The same run's decode time is `58299.67 ms / 31`.
+- This bound is not additive because copy-profile H2D synchronization changes
+  timing, and some host copy overlaps compute.
+- Still, replacing a significant fraction of non-iouring alias reads with
+  batched io_uring is the largest remaining movement-side candidate exposed by
+  copy-profile.
+- A conservative first target is:
+  - reduce non-iouring copy wall by at least `25%`;
+  - increase iouring read count/bytes materially;
+  - improve n32 `dev_python_reverse` token rate beyond `0.53 tok/s` without
+    TTFT exceeding the same baseline cap.
+
+Design:
+
+1. Keep GP2 default-off alias behavior unchanged unless alias env is set.
+2. Extend `pinned_stage_slot` or the io_uring pending job metadata to track:
+   - aligned read offset;
+   - read size;
+   - payload prefix inside the staging slot.
+3. For unaligned entries in `expert_pack_iouring_copy_jobs`:
+   - aligned offset:
+     `floor(entry->offset / 4096) * 4096`;
+   - prefix:
+     `entry->offset - aligned_offset`;
+   - read size:
+     `align_up(prefix + expert_bytes, 4096)`.
+4. Ensure staging slots are allocated large enough for the maximum read size,
+   not only `expert_bytes`.
+5. Submit io_uring reads from aligned offsets into pinned staging slots.
+6. On completion, enqueue H2D from:
+   `((char *)slot.host + prefix)` for exactly `expert_bytes`.
+7. Preserve the existing aligned pack path fast case.
+8. Do not change CPU fallback mmap behavior.
+9. Add profiling fields or reuse copy/io batch profiles to prove:
+   - unaligned jobs entered batched io_uring;
+   - no pack misses were reintroduced;
+   - direct reads decreased;
+   - iouring reads/bytes increased.
+
+Risks:
+
+- H2D source pointer from `slot.host + prefix` may be unaligned but still inside
+  pinned memory. This should be legal for `cudaMemcpyAsync`, but must be
+  validated by n32 correctness and CUDA error checks.
+- Larger staging slots add at most a few KiB per expert slot, which should be
+  negligible versus 4-8 MiB expert payloads, but memory peak must still stay
+  within 16 GB.
+- Batched read size includes extra leading/trailing bytes, increasing SSD bytes
+  slightly. The upper overhead is under `8192` bytes per expert read, negligible
+  relative to multi-MiB experts.
+- If batch grouping mixes source files heavily, queue efficiency may remain
+  limited; use existing locality/io-batch profiles to verify.
+
+Acceptance gates:
+
+1. Plan committed and pushed before source edits.
+2. Remote CUDA build passes from a clean worktree.
+3. Alias coverage remains `100%` on dev route traces.
+4. N32 `dev_python_reverse` with alias:
+   - quality pass;
+   - memory peak within 16 GB;
+   - TTFT within `+20%` of the matching no-alias baseline;
+   - token rate greater than GP2 n32 `0.53 tok/s`, or if not, the profile must
+     explain why and the source change must be reverted.
+5. If n32 passes, rerun strict n96 dev.
+6. No held-out test run until n96 dev passes and the candidate is frozen.
+
+Rollback:
+
+- Revert if CUDA errors occur when H2D copies from `slot.host + prefix`.
+- Revert if n32 token rate regresses.
+- Revert if memory exceeds the 16 GB cgroup.
+- Revert if quality regresses.
