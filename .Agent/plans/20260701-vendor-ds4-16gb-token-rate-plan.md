@@ -4983,3 +4983,14 @@
 - result: stderr 仍显示 blk.0-3 down probe active、active=8，但 2min36s 无 down_mxfp4_probe.csv，被手动终止；fallback profile 仍 batch_accept=0。
 - interpretation: 慢点不在 CPU reference full compare loop；即使限制 compare rows/cols，也没有进入 report 写 CSV。问题更早，可能在 staging、launch_moe_mmvq_compact_batch、D2H 或 cudaStreamSynchronize。
 - decision: reject，不做 writeback。下一步若继续该路线，必须先写 stage-level timing/early-return probe，定位 batch=ON 在 report 前卡在哪里。
+
+
+## 2026-07-07 下一步 source-edit plan：down MXFP4 batch stage trace probe
+
+- attempt_id: 20260707-down-mxfp4-batch-stage-trace-probe
+- status: planned_before_source_edit
+- why_now: limited down MXFP4 parity probe 证明 slow point 不在 CPU reference compare；probe active 后在 report 前超时，说明需要定位 staging、H2D/meta copy、kernel launch、D2H enqueue 或 cudaStreamSynchronize 哪一段占用时间。
+- source_scope: 只改 ggml/src/ggml-cuda/moe_stream_batch.cu 的 diagnostic path；新增 default-off env GGML_MOE_STREAM_DOWN_MXFP4_STAGE_TRACE_OUT。未设置时无行为变化；设置时只在 mxfp4_down_probe_candidate 期间写阶段 CSV，不写回 logits、不改变 SOTA 默认路径。
+- implementation: 在 down batch path 中围绕 ensure_buffers/cache_get/stage_jobs/H2D enqueue/kernel launch/D2H enqueue/sync/report 前后写 wall-clock elapsed_ms、n_active、src0_bytes、src1/dst bytes、cache hit/miss 等。每行立即 close/flush，保证即使 run 被 timeout kill 也保留最后阶段。
+- validation: rebuild build-ds4-moe-stream-batch-on llama-cli llama-results；strict 16GB/no-swap France n1 calibration run with GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity, MAX_CALLS=1, MAX_ACTIVE=1, MAX_COLS=16, and STAGE_TRACE_OUT。目标是拿到 stage trace CSV，明确最后成功阶段和耗时；held-out 不使用，不是 SOTA。
+- decision_rule: 如果 trace 显示卡在 kernel/sync，下一步检查 MXFP4 mmvq batch kernel launch/support；如果卡在 staging/cache copy，则转向 staging/pool path；只有 parity 能快速完成且数值正确后，才允许 writeback/performance plan。
