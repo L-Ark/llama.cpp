@@ -4241,3 +4241,17 @@
 - `download_log`: `/root/lfz/runs/vendor-ds4-16gb/20260706T170631Z-0xsero-alt-gguf-download/download.log`。
 - `completion_gate`: `.aria2` sidecar 消失、`stat size == 52593532000`、记录 sha256、GGUF header/metadata validation 通过后，才允许进入 France strict 16GB correctness smoke。
 - `claim_rule`: 当前只是下载启动记录，没有 correctness、token-rate 或 SOTA 结论。France correctness 通过前禁止 benchmark/SOTA claim；calibration/dev 候选 freeze 前禁止使用 held-out test。
+
+## 2026-07-07 执行记录：0xSero alternate GGUF ready validation 通过
+
+- `attempt_id`: `20260707-0xsero-alt-gguf-ready-validation`
+- `status`: `ready_for_france_strict_smoke`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-0xsero-ready-validation-20260707.json`
+- `prompt_scope`: 未运行任何 prompt；未使用 `held_out_test_set_v1_locked`。
+- `model_path`: `/root/lfz/models/DeepSeek-V4-Flash-162B-GGUF/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`。
+- `size_and_sha256`: size `52593532000` bytes；sha256 `e917278028d7a9e25dfc9d04bf5848375dad7573c5aeab1720d6a83714352406`。
+- `download_correction`: aria2 起初因 `systemd --same-dir` 写入 repo root；下载完成后已把完整文件移动到 canonical `model_path`，repo root 的 partial file 和 `.aria2` sidecar 均已清理，未加入 git。
+- `header_validation`: GGUF version `3`，`n_kv=58`，`n_tensors=1328`，`general.architecture=deepseek4`，`general.file_type=19`，`deepseek4.block_count=43`，`deepseek4.expert_count=144`，`deepseek4.expert_used_count=6`，`deepseek4.nextn_predict_layers=1`。
+- `tensor_validation`: type counts 为 `F32=492`, `F16=359`, `Q8_0=345`, `IQ2_XXS=86`, `Q2_K=43`, `I32=3`；gate/up expert tensors 各 `43` 个，type `IQ2_XXS`，down expert tensors `43` 个，type `Q2_K`；`ffn_gate_tid2eid.weight` 为 `3` 个。
+- `next_action`: 运行 France strict 16GB correctness smoke。若 load 或 France correctness 失败，立即 reject，不做 calibration/dev token-rate benchmark；若通过，才进入 `calibration_dev_set_v1` strict cold no-prompt-specific baseline。
+- `claim_rule`: 当前只有下载和 metadata ready 结论，没有 correctness、token-rate 或 SOTA 结论。

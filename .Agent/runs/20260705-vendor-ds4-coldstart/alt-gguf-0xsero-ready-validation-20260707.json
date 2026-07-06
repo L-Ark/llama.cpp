@@ -1,0 +1,233 @@
+{
+  "aria2_sidecar_present": false,
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-0xsero-ready-validation-20260707.json",
+  "attempt_id": "20260707-0xsero-alt-gguf-ready-validation",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "claim_rule": "Ready validation only. No correctness, token-rate, or SOTA claim until strict 16GB France smoke passes, then calibration/dev, then frozen held-out test.",
+  "created_utc": "2026-07-06T17:25:16Z",
+  "download_log": "/root/lfz/runs/vendor-ds4-16gb/20260706T170631Z-0xsero-alt-gguf-download/download.log",
+  "download_unit": "ds4-0xsero-alt-gguf-download-20260706T170631Z.service",
+  "download_workdir_correction": "aria2 initially wrote into repo root because systemd --same-dir overrode WorkingDirectory; after completion the full file was moved to canonical model_path and repo root sidecar/file are absent.",
+  "expected_size_bytes": 52593532000,
+  "failures": [],
+  "first_expert_shapes": {
+    "down_exps": {
+      "dims": [
+        2048,
+        4096,
+        144
+      ],
+      "name": "blk.0.ffn_down_exps.weight",
+      "offset": 320735232,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    },
+    "gate_exps": {
+      "dims": [
+        4096,
+        2048,
+        144
+      ],
+      "name": "blk.0.ffn_gate_exps.weight",
+      "offset": 9308160,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    "up_exps": {
+      "dims": [
+        4096,
+        2048,
+        144
+      ],
+      "name": "blk.0.ffn_up_exps.weight",
+      "offset": 717096960,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    }
+  },
+  "first_expert_tensors": [
+    {
+      "dims": [
+        4096,
+        2048,
+        144
+      ],
+      "name": "blk.0.ffn_gate_exps.weight",
+      "offset": 9308160,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        144
+      ],
+      "name": "blk.0.ffn_down_exps.weight",
+      "offset": 320735232,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        144
+      ],
+      "name": "blk.0.ffn_up_exps.weight",
+      "offset": 717096960,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        144
+      ],
+      "name": "blk.1.ffn_gate_exps.weight",
+      "offset": 1028524032,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        144
+      ],
+      "name": "blk.1.ffn_down_exps.weight",
+      "offset": 1339951104,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        144
+      ],
+      "name": "blk.1.ffn_up_exps.weight",
+      "offset": 1736312832,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        144
+      ],
+      "name": "blk.2.ffn_gate_exps.weight",
+      "offset": 2047739904,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        144
+      ],
+      "name": "blk.2.ffn_down_exps.weight",
+      "offset": 2359166976,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        144
+      ],
+      "name": "blk.2.ffn_up_exps.weight",
+      "offset": 2755528704,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        144
+      ],
+      "name": "blk.3.ffn_gate_exps.weight",
+      "offset": 3066955776,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        144
+      ],
+      "name": "blk.3.ffn_down_exps.weight",
+      "offset": 3378382848,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        144
+      ],
+      "name": "blk.3.ffn_up_exps.weight",
+      "offset": 3774744576,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    }
+  ],
+  "gguf_header": {
+    "deepseek4.block_count": 43,
+    "deepseek4.embedding_length": 4096,
+    "deepseek4.expert_count": 144,
+    "deepseek4.expert_feed_forward_length": 2048,
+    "deepseek4.expert_used_count": 6,
+    "deepseek4.nextn_predict_layers": 1,
+    "general.architecture": "deepseek4",
+    "general.file_type": 19,
+    "general.name": "DeepSeek V4 Flash",
+    "general.size_label": "256x8.4B",
+    "magic": "GGUF",
+    "n_kv": 58,
+    "n_tensors": 1328,
+    "tokenizer.ggml.model": "gpt2",
+    "version": 3
+  },
+  "llama_gguf_read_n_log": "/root/lfz/runs/vendor-ds4-16gb/20260706T170631Z-0xsero-alt-gguf-download/llama-gguf-read-n.log",
+  "model_path": "/root/lfz/models/DeepSeek-V4-Flash-162B-GGUF/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+  "name_counts": {
+    "down_exps": 43,
+    "gate_exps": 43,
+    "tid2eid_weight": 3,
+    "up_exps": 43
+  },
+  "prompt_scope": "no prompt run; held_out_test_set_v1_locked not used",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "raw_type_id_counts": {
+    "0": 492,
+    "1": 359,
+    "10": 43,
+    "16": 86,
+    "26": 3,
+    "8": 345
+  },
+  "repo_root_partial_absent": true,
+  "repo_root_sidecar_absent": true,
+  "sha256": "e917278028d7a9e25dfc9d04bf5848375dad7573c5aeab1720d6a83714352406",
+  "sha256_log": "/root/lfz/runs/vendor-ds4-16gb/20260706T170631Z-0xsero-alt-gguf-download/sha256.txt",
+  "source_head_before_artifact": "205787276bbebcf7c459b6fb8a1fe97a62ca4138",
+  "stat_size_bytes": 52593532000,
+  "status": "ready_for_france_strict_smoke",
+  "tensor_info_end": 5333508,
+  "type_counts_by_current_enum_names": {
+    "F16": 359,
+    "F32": 492,
+    "I32": 3,
+    "IQ2_XXS": 86,
+    "Q2_K": 43,
+    "Q8_0": 345
+  }
+}
