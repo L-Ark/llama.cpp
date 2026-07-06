@@ -264,6 +264,41 @@ Conclusion:
 - It is still not a quality or token-rate claim; the next required step is
   building a weighted base and residual-rank curve on decoded experts.
 
+First residual-rank sample:
+
+- Tool: `.Agent/run-tools/kimi_d2moe_residual_rank.py`
+- Artifact: `.Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-sample.json`
+- Human summary: `.Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-sample.md`
+- Tensor: `blk.1.ffn_down_exps.weight`
+- Quant type: `Q3_K`
+- Expert sample: top 4 route-profile experts `116, 23, 160, 137`
+- Weighted base: route-count weighted mean over the sampled experts
+- Command:
+
+```bash
+python3 .Agent/run-tools/kimi_d2moe_residual_rank.py --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --phase0-plan .Agent/runs/20260706-kimi-d2moe-phase0/phase0-bound-input-plan.json --libggml-base build-cuda-batch/bin/libggml-base.so --out-json .Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-sample.json --out-md .Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-sample.md --preferred-kind down --max-experts 4 --ranks 16,32,64,128 --oversample 8 --niter 1 --torch-threads 8
+```
+
+Observed rank curve:
+
+- Rank16 BF16 delta is `4.68%` of the current quantized full expert bytes, but
+  leaves residual norm ratio around `0.992`.
+- Rank64 BF16 delta is `18.70%` of the current quantized full expert bytes, but
+  leaves residual norm ratio around `0.971`.
+- Rank128 BF16 delta is `37.40%` of the current quantized full expert bytes, but
+  leaves residual norm ratio around `0.946`.
+
+Interpretation:
+
+- For this sampled early-layer `down` tensor, residual energy is not
+  concentrated in low rank. Rank128 explains only about `10.3%-10.4%` of
+  residual energy.
+- Do not promote a down-only D2MoE runtime path from this result.
+- Before rejecting the whole D2MoE direction, run the same residual-rank bound
+  for `gate` and `up`, plus middle/late layers. The D2MoE idea is only worth
+  runtime work if some tensor classes or layer bands show much stronger
+  residual compression than this first `down` sample.
+
 1. Select a small but representative Kimi layer set:
    - at least one early sparse layer;
    - at least one middle high-traffic layer;
