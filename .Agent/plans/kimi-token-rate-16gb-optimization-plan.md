@@ -89079,3 +89079,85 @@ Next gate:
   - direct bounce read is slower than the old GGUF fallback;
   - memory peak exceeds the 16 GB cgroup;
   - output quality regresses.
+
+N32 diagnostic result:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260706-133600Z-gp2-alias-python-reverse-n32
+```
+
+Run shape:
+
+- clean worktree:
+  `/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c`;
+- commit:
+  `6b5c3a539`;
+- prompt:
+  `dev_python_reverse`;
+- `N=32`;
+- `PROFILE=1`;
+- `COPY_PROFILE=1`;
+- strict 16 GB cgroup;
+- cold start;
+- alias:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv`.
+
+Result:
+
+- exit:
+  `0`;
+- quality:
+  `pass`;
+- answer:
+  `Here's a Python function that returns the reverse of a string: ```python def reverse_string(s): return s[::-1] ``` **How it works`;
+- token rate:
+  `0.53 tok/s`;
+- TTFT:
+  `90800.03 ms`;
+- decode:
+  `58299.67 ms / 31`;
+- memory peak:
+  `15899996160`;
+- expert pack:
+  `hits=31545`, `misses=0`, `entries=69120`;
+- direct reads:
+  `27571`;
+- iouring reads:
+  `2238`;
+- iouring bytes:
+  `12742066176`;
+- current down overlap:
+  `missing_pack=0`.
+
+Comparison against the previous n32 `dev_python_reverse` copy-profile
+diagnostic without alias:
+
+| metric | no alias | GP2 alias | change |
+|---|---:|---:|---:|
+| token rate | `0.16 tok/s` | `0.53 tok/s` | `3.3x` |
+| TTFT | `77103.44 ms` | `90800.03 ms` | `+17.8%` |
+| decode | `198848.52 ms / 31` | `58299.67 ms / 31` | `-70.7%` |
+| pack-miss copy wall | `207424 ms` | `0 ms` | removed |
+| pack-miss bytes | `64.85 GiB` | `0.00 GiB` | removed |
+
+Local result copies:
+
+- `.Agent/runs/20260706-gp2-alias-python-reverse-n32/metrics.json`;
+- `.Agent/runs/20260706-gp2-alias-python-reverse-n32/metrics.txt`;
+- `.Agent/runs/20260706-gp2-alias-python-reverse-n32/answer.txt`;
+- `.Agent/runs/20260706-gp2-alias-python-reverse-n32/copy-profile-summary.md`.
+
+Decision:
+
+- Accept GP2 n32 as a successful diagnostic gate.
+- This is not final SOTA because:
+  - it is n32, not n96;
+  - it is a dev prompt, not held-out test;
+  - `COPY_PROFILE_H2D=1` means the diagnostic token rate is not directly
+    comparable to normal non-profile SOTA runs.
+- The result proves the primary GP1/GP2 hypothesis:
+  general-prompt pack coverage was a major bottleneck, and model-wide GGUF
+  alias coverage removes the pack-miss path without duplicating expert payload.
+- Next step:
+  run strict n96 dev evaluation with alias enabled and profiling sufficient to
+  verify quality, TTFT, memory, remaining copy wall, and remaining fallback.

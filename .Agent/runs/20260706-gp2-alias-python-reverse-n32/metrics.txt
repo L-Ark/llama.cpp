@@ -1,0 +1,41 @@
+run=/root/lfz/runs/vendor-kimi-token-rate/20260706-133600Z-gp2-alias-python-reverse-n32
+prompt_id=dev_python_reverse
+prompt=Write a Python function that returns the reverse of a string.
+exit=0
+quality=pass
+quality_reason=ok
+output=Here's a Python function that returns the reverse of a string: ```python def reverse_string(s): return s[::-1] ``` **How it works
+ttft_ms=90800.03
+prompt_tokens=21
+decode_ms=58299.67
+decode_runs=31
+token_rate=0.53
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=14953844736
+anon=454656
+file=14684663808
+kernel=266055680
+inactive_file=12941914112
+active_file=1742225408
+pgmajfault=1214814
+pgfault=3559520
+workingset_refault_file=162041
+expert_pack_0=31545 misses=0 read_failures=0 direct_reads=27571 direct_fallbacks=0 iouring_reads=2238 iouring_bytes=12742066176 iouring_fallbacks=0 iouring_submit_us=11328 iouring_wait_us=1772293 iouring_h2d_enqueues=2238 entries=69120
+expert_pack_iouring_0=batches=466 submit_calls=466 wait_calls=1297 cqes=2238 inflight_avg=3.96 inflight_max=8 batch_hist=1:18,2-4:216,5-8:232,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 6.02 MiB
+pinned_staging_1=: enabled, 12 slots of 4.48 MiB
+pinned_staging_2=: enabled, 12 slots of 7.44 MiB
+pinned_staging_3=: enabled, 12 slots of 5.36 MiB
+pinned_staging_4=: copies=21280 waits=21244 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=56.424 ms host_stage=41032.880 ms enqueue=537.938 ms h2d=4657.823 ms h2d_timed=21280
+pinned_staging_5= iouring: batches=361 jobs=1752 submit_calls=361 wait_calls=987 cqes=1752 inflight_avg=3.94 inflight_max=8 batch_hist=1:13,2-4:161,5-8:187,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=8529 waits=8505 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=24.049 ms host_stage=16836.377 ms enqueue=207.094 ms h2d=1789.405 ms h2d_timed=8529
+pinned_staging_7= gate iouring: batches=105 jobs=486 submit_calls=105 wait_calls=310 cqes=486 inflight_avg=4.04 inflight_max=8 batch_hist=1:5,2-4:55,5-8:45,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=992 planned_jobs=5091 completed_jobs=5091 cache_hits=2101 missing_tensor=93 missing_pack=0 submitted_batches=899 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=12304970 batch_hist=1:4,2-4:188,5-8:707,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=9004 misses=4116 preloads=5091 pinned=0 hit_rate=68.6%
+vram_down_1=slots=766 slot=7.44 MiB hits=9004 misses=4116 preloads=5091 pinned=0 hit_rate=68.6%
+vram_down_2=slots=766 slot=7.44 MiB hits=9004 misses=4116 preloads=5091 pinned=0 hit_rate=68.6%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=9206 misses=20570 preloads=0 pinned=0 hit_rate=30.9%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=9206 misses=20570 preloads=0 pinned=0 hit_rate=30.9%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=9206 misses=20570 preloads=0 pinned=0 hit_rate=30.9%
