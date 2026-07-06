@@ -4959,3 +4959,14 @@
 - result: stderr 证明真实 probe 触发：MXFP4 down batch probe active mode=parity，blk.0-3 ffn_down_exps call=0..3 active=8 ne01=4096 ne00=2048，并进入 batched decode path。run 3min53s 未写出 down_mxfp4_probe.csv，被手动终止。
 - interpretation: batch=ON build route 可用，但现有 mxfp4_down_probe_report 做全量 CPU reference compare，4 calls * active8 * 4096 columns * 2048 inputs 太重，不能作为快速 correctness gate。
 - decision: 不作为 SOTA，不写 writeback。下一步 source edit 必须先给 probe 加 compare 限制，例如 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE 和 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_COLS，默认保持全量；用 limited parity 先拿到 max_abs/mean_abs 证据。
+
+
+## 2026-07-07 下一步 source-edit plan：limited down MXFP4 parity probe
+
+- attempt_id: 20260707-limited-down-mxfp4-parity-probe
+- status: planned_before_source_edit
+- why_now: batch=ON build 已证明真实 MXFP4 down batch probe 可以触发，但现有 mxfp4_down_probe_report 全量比较过重，3min53s 无 CSV。为了判断 down MXFP4 batch kernel 是否数值正确，需要先把 parity gate 做成可快速运行的 limited compare。
+- source_scope: 只改 ggml/src/ggml-cuda/moe_stream_batch.cu 的 diagnostic probe；新增 env GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE 和 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_COLS。默认不设置时保持现有全量 compare 行为；不写回 logits，不改变默认 SOTA runtime。
+- implementation: 在 mxfp4_down_probe_report 中限制 active rows 和 output columns 的 compare loop；CSV 增加的 compared 字段自然反映实际比较量，不需要改 schema。invalid args 和原有 max_calls 行为保持不变。
+- validation: rebuild build-ds4-moe-stream-batch-on llama-cli llama-results；strict 16GB/no-swap run with GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity, MAX_CALLS=4, MAX_ACTIVE=1, MAX_COLS=128；要求 down_mxfp4_probe.csv 生成且 status=ok、compared>0，并记录 max_abs/mean_abs。held-out 不使用，不是 SOTA。
+- decision_rule: 若 limited parity max_abs 接近 0 或足够小，再写下一步 default-off MXFP4 down writeback plan；若误差大或仍 timeout，停止 down batch writeback 路线并记录 reject。
