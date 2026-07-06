@@ -87240,4 +87240,179 @@ Acceptance:
 
 Result:
 
+- Plan commit: `b08e8cd16`.
+- Server run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-012610Z-phase7or-residual-bound-audit`.
+- Exit code: `0`.
+- Source/model/asset changes: none.
+- Model inference: not run.
+- Pack output: none.
+- Execution note:
+  - an earlier script-materialization attempt failed because a Python heredoc was
+    embedded inside a single-quoted SSH command;
+  - the failed attempt only fast-forwarded the server checkout and did not
+    change source, model, pack, or data artifacts;
+  - the accepted run above used a new run directory and a literal heredoc.
+- Artifacts:
+  - `repo_state.txt`;
+  - `commands.log`;
+  - `phase7or_residual_bound_audit.py`;
+  - `baseline.tsv`;
+  - `component_bounds.tsv`;
+  - `storage_bounds.tsv`;
+  - `decision.md`;
+  - `summary.json`;
+  - `audit_stdout.txt`;
+  - `audit_stderr.txt`;
+  - `exit.txt`;
+  - `artifacts.txt`.
+
+Baseline:
+
+- 7OQ decode: `55800.110 ms / 77 runs = 1.380 tok/s`.
+- `5 tok/s` requires decode `<=15400.000 ms`.
+- Required saving from current baseline: `40400.110 ms`.
+- n96 expert-pack `iouring_wait_us`: `48336.684 ms`.
+- n96 expert-pack moved bytes: `293.720 GiB`.
+- Effective expert-pack movement throughput: `6.077 GiB/s`.
+
+Component upper bounds:
+
+| candidate | saving upper bound | projected decode | projected tok/s | status |
+|---|---:|---:|---:|---|
+| remove all expert-pack iouring wait | `48336.684 ms` | `7463.426 ms` | `10.317` | closed: no zero-wait source path |
+| current bytes at raw8 replay bandwidth | `25825.934 ms` | `29974.176 ms` | `2.569` | closed: pure IO path |
+| current bytes at raw12 replay bandwidth | `28988.798 ms` | `26811.312 ms` | `2.872` | closed: pure IO path |
+| remove scaled up/gate wall from 7OP | `15854.958 ms` | `39945.152 ms` | `1.928` | closed: IQ3/IQ2 scheduling/MMQ families |
+| remove scaled down stage from 7OP | `10273.105 ms` | `45527.005 ms` | `1.691` | closed: down/cache/RAM/Q4 families |
+| remove scaled down wall from 7OP | `11062.324 ms` | `44737.786 ms` | `1.721` | closed: not a valid narrow path |
+| remove scaled decode Q4 fallback | `6323.220 ms` | `49476.890 ms` | `1.556` | closed: Q4 fallback/GPU/cache/pinning |
+| remove profiled upgate+down+fallback sum | `33240.502 ms` | `22559.608 ms` | `3.413` | closed: mixed rejected families |
+| selected `IQ2_XXS` ratio at current effective IO | `15110.579 ms` | `40689.531 ms` | `1.892` | blocked/closed for current IQ3_S mixed runtime |
+| selected `IQ2_XXS` ratio plus raw8 bandwidth | `32863.042 ms` | `22937.068 ms` | `3.357` | blocked/closed for current IQ3_S mixed runtime |
+| selected `IQ2_XXS` ratio plus raw12 bandwidth | `35037.160 ms` | `20762.950 ms` | `3.709` | blocked/closed for current IQ3_S mixed runtime |
+
+Storage bounds:
+
+- `/root/lfz` free: `87.720 GiB`.
+- Selected `IQ2_XXS` pack estimate: `115.220 GiB`.
+- Selected `IQ2_XXS` direct temporary upper bound: `115.282 GiB`.
+- Selected `IQ2_XXS` one-shard temporary bound: `161.758 GiB`.
+- Missing for direct selected-pack build: `27.562 GiB`.
+- Missing for one-shard build: `74.038 GiB`.
+
+Decision:
+
+- Accept 7OR as the residual data-movement hard-bound audit.
+- Do not edit source from this evidence:
+  - no narrow source candidate remains that is both unclosed and likely to pass
+    the strict gates;
+  - current source/env/cache/scheduling families with enough bound have already
+    been rejected or are not valid source paths.
+- The remaining material route is lower-bit matching assets/storage or a new
+  algorithmic path outside the already closed cache/IO/scheduling families.
+- Because current `/root/lfz` is only short by about `27.6 GiB` for the direct
+  selected `IQ2_XXS` pack path, the next non-destructive step is to audit
+  available mounts and cleanup candidates. Do not delete anything without
+  explicit user approval.
+
+Reproduce result:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard b08e8cd16
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260706-012610Z-phase7or-residual-bound-audit
+python3 "$RUN/phase7or_residual_bound_audit.py"
+cat "$RUN/baseline.tsv"
+cat "$RUN/component_bounds.tsv"
+cat "$RUN/storage_bounds.tsv"
+cat "$RUN/decision.md"
+```
+
+## Phase 7OS - non-destructive storage feasibility audit
+
+Start time: `2026-07-06T09:27:06+0800` / `20260706-012706Z`.
+
+Purpose:
+
+- Follow 7OR's only remaining material path: enabling a matching lower-bit asset
+  or selected-pack experiment.
+- Determine whether the server already has a mount/path with enough free space
+  for selected `IQ2_XXS` pack construction without deleting historical assets.
+- If not, produce a precise cleanup/external-storage request with file-level
+  candidates and required GiB.
+
+Hard constraints:
+
+- Do not delete, move, truncate, or overwrite any existing file.
+- Do not download model shards.
+- Do not write `.expert-pack`.
+- Do not run model inference.
+- Do not edit source.
+
+Audit method:
+
+1. Create:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7os-storage-feasibility
+```
+
+2. Record:
+
+- `repo_state.txt`;
+- `commands.log`;
+- `phase7os_storage_feasibility.py`;
+- `mounts.tsv`;
+- `large_files.tsv`;
+- `required_assets.tsv`;
+- `cleanup_candidates.tsv`;
+- `decision.md`;
+- `summary.json`;
+- `audit_stdout.txt`;
+- `audit_stderr.txt`;
+- `exit.txt`;
+- `artifacts.txt`.
+
+3. Inspect:
+
+- `df -h` / `df -B1`;
+- `findmnt`;
+- top large files under:
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets`;
+  - `/root/lfz/runs/vendor-kimi-token-rate`;
+  - `/root/lfz/models`;
+- current production-required files:
+  - `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `kimi-iq3s-l1l2down-overlay.expert-pack`;
+  - current `IQ3_S` model shards.
+
+4. Classify large files as:
+
+- `required_current_runtime`;
+- `historical_artifact_do_not_delete_without_approval`;
+- `repro_run_artifact`;
+- `unknown_do_not_delete`;
+- `candidate_for_user_approved_cleanup`.
+
+Decision rule:
+
+- If an existing mount has at least `116 GiB` free and is writable, plan a
+  controlled selected `IQ2_XXS` direct-builder dry run next.
+- If no mount has enough space, record:
+  - exact missing GiB for direct selected-pack build;
+  - exact missing GiB for one-shard build;
+  - cleanup candidates that would reach the threshold only with explicit user
+    approval;
+  - or the external storage size needed.
+
+Acceptance:
+
+- Plan committed and pushed before running.
+- Audit exits `0`.
+- No file deletion/movement/download/model run/source edit.
+- Result appended here and pushed before any storage-consuming work.
+
+Result:
+
 - Pending.
