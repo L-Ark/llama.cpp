@@ -8,12 +8,30 @@
   - Host RAM（含 page cache、进程 RSS、cgroup 内所有 file/anon memory）`<= 16 GB`；
   - 尽可能用满 VRAM，但不能造成 CUDA OOM、cache 插入失败或正确率退化；
   - France prompt: `Please introduce France in a short paragraph.` 必须语义正确、连贯、非重复、非截断；
+  - 优化目标必须面向泛化 prompt，而不是 prompt-specific。任何 accepted 新 SOTA 不得依赖目标评测 prompt 本身生成的专用 trace、pack、admission profile、专家热集或参数；如需 profile/pack，只能来自与评测 prompt 分离的 calibration set，或来自 prompt-agnostic 的静态模型/张量信息；
+  - 在继续实现新的 token-rate 优化前，必须先跑出当前配置的 strict cold 泛化 baseline。baseline 至少覆盖固定五个 prompt：France、quantum computing、Python Fibonacci、Japan、climate change，并逐条记录 token rate、TTFT、16GB cgroup memory/page cache、输出文本和 correctness；
   - accepted SOTA 的 TTFT 不得高于当前 accepted baseline 的 `20%`；若 TTFT 超过 20% 但 token rate 有参考价值，只能标记为 `not accepted`，不得替代 SOTA。
 
 
+## 2026-07-06 新增限制：先建立泛化 prompt baseline
+
+- `constraint_id`: `20260706-general-prompt-first`
+- `status`: active_blocker_before_more_optimization
+- `reason`: 之前 accepted France-pack 路径使用 France-derived gate miss pack/profile，已证明对 France 单 prompt 可以达到 SOTA envelope，但不能代表泛化 prompt token rate。后续目标改为泛化 prompt 后，继续围绕 France trace 做优化会得到 prompt-specific 结果，不能作为 accepted SOTA。
+- `generalization_rule`: 后续 accepted 优化必须提升跨 prompt 的稳定表现。禁止把单个评测 prompt 的 route trace、answer trace、miss order、expert hot set、prompt-specific O_DIRECT pack、prompt-specific cache admit profile 用作 promoted 配置。任何 prompt-derived artifact 必须来自固定 calibration set，且 evaluation prompt set 必须分离；否则只能标为 diagnostic/prompt-specific，不得替代 accepted generalized SOTA。
+- `baseline_prompt_set`:
+  1. `Please introduce France in a short paragraph.`
+  2. `Explain quantum computing briefly.`
+  3. `Write a short Python function for Fibonacci.`
+  4. `Introduce Japan in a short paragraph.`
+  5. `Summarize climate change in one paragraph.`
+- `baseline_required_before_next_code_change`: run the current pushed source/config under strict cold `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`, page-cache accounting inside cgroup, and record each prompt's `eval_tok_s`, `prompt_tok_s`, `TTFT`, elapsed time, `memory_peak_bytes`, `memory_file_bytes`, OOM/swap status, exact env/CLI, answer text, and manual/automatic correctness note.
+- `promotion_update`: A future accepted generalized SOTA must beat the baseline on prompt-set aggregate and must not introduce a severe regression on any individual prompt. France correctness remains a mandatory sentinel, but France alone is no longer sufficient evidence for promotion.
+- `next_action`: pause W2/W3 implementation until the generalized baseline artifact is produced, written into this plan, committed, and pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+
 ## 2026-07-06 最新执行计划：消灭 up/down CPU fallback
 
-- `basis`: 当前有效优化方向来自 2026-07-06 重新 profile 当前 SOTA 配置，以及 Wafer/GLM-5.2 blog 的方法论复盘。Wafer 的可移用结论不是照搬 AMD/sglang/MTP，而是系统性识别 MoE fp4 路径是否 silently fallback 到慢路径，并为具体 shape 做 kernel mapping/tuning。当前 DeepSeek vendor 的同构问题更直接：decode 阶段 `ffn_up_exps`/`ffn_down_exps` 仍主要落在 CPU fallback。
+- `basis`: 当前有效优化方向来自 2026-07-06 重新 profile 当前 SOTA 配置，以及 Wafer/GLM-5.2 blog 的方法论复盘。Wafer 的可移用结论不是照搬 AMD/sglang/MTP，而是系统性识别 MoE fp4 路径是否 silently fallback 到慢路径，并为具体 shape 做 kernel mapping/tuning。当前 DeepSeek vendor 的同构问题更直接：decode 阶段 `ffn_up_exps`/`ffn_down_exps` 仍主要落在 CPU fallback。注意：该 profile 来自 France/n96 诊断，只能指导瓶颈方向；W2/W3 的 promoted 目标必须在泛化 prompt baseline 上验证。
 - `profile_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T084029Z-20260706-current-sota-n96-component-profile/france-n96-profile-cpu40-vram0gb`。
 - `profile_artifacts`:
   - `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-n96-component-profile-bottleneck-20260706.json`;
@@ -71,10 +89,10 @@
 - `attempt_id`: `20260706-ds4-updown-sparse-gpu-decode-path`
 - `attempt_kind`: `kernel-design-then-implementation`
 - `hypothesis`: 当前 gate 的 DS4 one-stream GPU path 已能数值对齐并高命中；up/down 需要按 DeepSeek DS4 的实际 decode shape 做专用 sparse MMV/grouped dispatch，而不是泛化地把全部 up/down expert 加进 gate stream cache。
-- `scope_first`: 第一版只覆盖当前 SOTA decode 热路径：`cpu_moe=40`, `KEEP_TOPK_UPDOWN=4`, `KEEP_TOPK_LAYER_RANGE=10-39`, `KEEP_TOPK_LAYER_VALUE=3`, DS4 MXFP4/F8 native GGUF，France prompt。prompt 阶段可先保留 CPU fallback，但 TTFT 不得超过 gate。
+- `scope_first`: 第一版只覆盖当前 SOTA decode 的跨 prompt 共同热路径：`cpu_moe=40`, `KEEP_TOPK_UPDOWN=4`, `KEEP_TOPK_LAYER_RANGE=10-39`, `KEEP_TOPK_LAYER_VALUE=3`, DS4 MXFP4/F8 native GGUF，以及 fixed prompt-set baseline 中共同出现的 up/down fallback shape。prompt 阶段可先保留 CPU fallback，但 TTFT 不得超过 gate。
 - `must_not_repeat`: 不重复 rejected 的 naive gate+up/gate+down 全量 streaming；历史上该路径造成 cache inserts 暴涨、page/refault 恶化和 token rate 下跌。
 - `design_requirements`: 写清 tensor size、per-expert bytes、active rows、row mapping、kernel choice、H2D/D2H bytes、workspace、sync 点、理论 IO/compute 上界后才能改代码。
-- `success_metric`: decode up/down fallback 明显下降，France 正确，RAM 合规，TTFT gate 合规。若只提升 trace 局部但 end-to-end token rate 不升，不能 promoted。
+- `success_metric`: decode up/down fallback 在 prompt set 上明显下降，France 正确且五个 baseline prompts 的语义/代码输出不退化，RAM 合规，TTFT gate 合规。若只提升单个 prompt 或 trace 局部但 prompt-set end-to-end token rate 不升，不能 promoted。
 
 ### Phase W4：up/down hot cache / pack / grouped dispatch
 
@@ -88,11 +106,12 @@
 
 ### 当前执行优先级覆盖
 
-1. 先做 W1 fallback reason profile，定位 up/down fallback 的可修比例。
-2. 若存在 guard/eligibility/kernel-selection 错误，先做 W2，小步修复并数值对齐。
-3. 若 fallback 主要是缺少正确 GPU compute path，进入 W3，做 DS4 shape-specific sparse GPU decode path。
-4. 只有 GPU path 正确并减 fallback 后，才做 W4 的 cache/pack/grouped dispatch。
-5. 暂不优先做 MTP/spec decode、KV cache、TP/DP、allreduce、泛化 prompt pack，除非 up/down fallback 已被压下。
+1. 先补跑当前 pushed source/config 的 fixed five-prompt strict cold 泛化 baseline，并写入本计划。
+2. 已完成的 W1 fallback reason profile 保留为瓶颈方向证据，但不作为泛化 SOTA 证据。
+3. 若 baseline 也显示 up/down fallback 是跨 prompt 共同瓶颈，则继续 W2，小步修复 guard/eligibility/kernel-selection 并做数值对齐。
+4. 若 fallback 主要是缺少正确 GPU compute path，进入 W3，做 DS4 shape-specific sparse GPU decode path，但 promoted 验证必须基于 prompt set。
+5. 只有 GPU path 正确并在 prompt set 上减 fallback 后，才做 W4 的 cache/pack/grouped dispatch。
+6. 暂不优先做 MTP/spec decode、KV cache、TP/DP、allreduce、prompt-specific pack，除非 up/down fallback 已被压下且 prompt-set baseline 证明收益泛化。
 
 ## 二次回退状态（2026-07-02）
 
