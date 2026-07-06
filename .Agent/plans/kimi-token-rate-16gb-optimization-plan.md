@@ -93618,3 +93618,107 @@ GP41 execution result:
   - keep existing v1 behavior unchanged;
   - do not build real selected IQ1_S payloads until the skeleton proves
     metadata and fallback behavior.
+
+## GP42: default-off GGMLMOEPACKv2 parser skeleton
+
+Timestamp: `2026-07-07T15:05:00+0800`.
+
+Status: planned before execution.
+
+Purpose:
+
+- GP41 found that selected IQ1_S expert payloads require per-entry type and row
+  metadata.
+- Before connecting mixed-type entries to runtime copy/compute, add a
+  default-off parser/lookup skeleton for a v2 pack format and a synthetic test.
+- This makes the next low-byte path concrete while keeping existing v1 packs
+  and current SOTA behavior unchanged.
+
+Scope:
+
+- Add `GGMLMOEPACKv2` metadata parser in
+  `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Add an env-gated path:
+  `GGML_MOE_EXPERT_PACK_V2=<path-or-list>`.
+- v2 entries are loaded into a separate metadata table.
+- v2 entries are not used by existing v1 `expert_pack_lookup()` or H2D/cuda
+  compute in this phase.
+- Add a test/debug lookup surface that can validate:
+  - tensor name;
+  - expert index;
+  - packed type;
+  - logical dims;
+  - `packed_nb01`;
+  - `packed_nbytes`.
+
+Synthetic format:
+
+- Header:
+  - magic: `GGMLMOEPACKv2\0\0\0`;
+  - version: `2`;
+  - header size;
+  - entry count;
+  - data start.
+- Entry:
+  - `tensor[128]`;
+  - `expert_idx`;
+  - `packed_type`;
+  - `offset`;
+  - `packed_nbytes`;
+  - `ne00`;
+  - `ne01`;
+  - `packed_nb01`;
+  - `reserved`.
+
+Validation:
+
+1. Local syntax/format check if applicable.
+2. Build or run the existing project command needed to compile the touched CUDA
+   source if practical.
+3. Add `.Agent/run-tools/kimi_moepack_v2_synthetic_test.py` that:
+   - writes a tiny synthetic v2 pack;
+   - invokes a lightweight parser validation path or standalone mirror parser;
+   - asserts metadata round-trip.
+4. Remote test from the synced worktree.
+
+Acceptance:
+
+- Existing v1 pack path remains byte-for-byte behavior-compatible unless the
+  new v2 env var is set.
+- Synthetic v2 metadata test passes.
+- No runtime mixed-type H2D or kernel path is enabled in this phase.
+- No held-out prompts are used.
+- No SOTA or token-rate claim is possible from this phase.
+
+GP42 execution result:
+
+- Timestamp: `2026-07-07T06:27:58+08:00`.
+- Record:
+  `.Agent/runs/20260707-gp42-moepack-v2-parser-skeleton/report.md`.
+- Implemented default-off `GGMLMOEPACKv2` metadata parsing and debug lookup:
+  - env gate: `GGML_MOE_EXPERT_PACK_V2`;
+  - separate v2 metadata state;
+  - per-entry tensor, expert, packed type, payload bytes, dims, and row stride;
+  - no connection to v1 lookup, H2D, fallback, or CUDA compute paths.
+- Added:
+  `.Agent/run-tools/kimi_moepack_v2_synthetic_test.py`.
+- Local validation:
+  - synthetic v2 round-trip passed with `entries=2`, `entry_size=184`;
+  - `python3 -m py_compile` passed;
+  - `git diff --check` passed.
+- Remote validation:
+  - synthetic v2 round-trip passed in
+    `/root/lfz/tmp/vendor-kimi-speculative-gp33`;
+  - CMake configure succeeded with
+    `/usr/local/cuda-12.9/bin/nvcc`;
+  - targeted CUDA compile of `moe_stream_batch.cu` with
+    `-DGGML_CUDA_MOE_STREAM_BATCH` succeeded and produced
+    `/tmp/moe_stream_batch_gp42_batch.cu.o` (`6.9M`);
+  - warnings were limited to existing unused/missing-declaration patterns plus
+    the new debug lookup missing declaration warning.
+- Decision:
+  - accepted as non-SOTA infrastructure progress;
+  - no held-out prompts were used;
+  - no token-rate or quality claim is made;
+  - next valid step is v2 lookup/handoff design for selected low-byte expert
+    payloads, still default-off and dev-only until correctness is proven.
