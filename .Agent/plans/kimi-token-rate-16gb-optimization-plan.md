@@ -91206,7 +91206,7 @@ Decision:
 
 Timestamp: `2026-07-07T03:20:00+0800`.
 
-Status: planned before code edit.
+Status: implemented and build-verified; no token-rate improvement claimed.
 
 Rationale:
 
@@ -91248,3 +91248,49 @@ Validation gate:
   2. run `n32` dev cold-start quality/token-rate smoke under 16 GB cgroup;
   3. verify the vendor stream path is active and not declining unsupported type;
   4. only then proceed to expert-pack adaptation and dev `n96`.
+
+Implementation:
+
+- Commit: `c5d83a754`.
+- Changed `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Added `GGML_TYPE_IQ2_XXS` and `GGML_TYPE_IQ2_XS` to
+  `moe_stream_type_supported()`.
+- Added the same types to `launch_moe_mmvq_compact_batch()` accepted-type
+  switch.
+
+Build verification:
+
+- Record:
+  `.Agent/runs/20260707-gp20-iq2-stream-compat/report.md`
+- Remote clean worktree:
+  `/root/lfz/tmp/gp20-iq2-compat-wt`
+- Remote build dir:
+  `/root/lfz/tmp/gp20-iq2-compat-build`
+- Command:
+
+```bash
+cmake -S /root/lfz/tmp/gp20-iq2-compat-wt \
+  -B /root/lfz/tmp/gp20-iq2-compat-build \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_SHARED_LIBS=ON \
+  -DGGML_CUDA=ON \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=120a-real
+cmake --build /root/lfz/tmp/gp20-iq2-compat-build --target ggml-cuda -j "$(nproc)"
+```
+
+- Result: pass.
+- Relevant compiled objects included:
+  - `moe_stream_batch.cu.o`;
+  - `mmvq.cu.o`;
+  - `mmq-instance-iq2_xxs.cu.o`;
+  - `mmq-instance-iq2_xs.cu.o`.
+
+Decision:
+
+- GP20 is a necessary compatibility patch for the lower-byte Kimi branch.
+- It is not an accepted SOTA speedup because no IQ2 model/token-rate quality
+  run has been performed.
+- The next material gate remains disk/artifact approval for the full lower-byte
+  GGUF candidate.
