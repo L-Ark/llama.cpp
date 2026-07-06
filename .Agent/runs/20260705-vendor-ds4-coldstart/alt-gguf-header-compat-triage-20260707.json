@@ -1,0 +1,237 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-header-compat-triage-20260707.json",
+  "attempt_id": "20260707-alt-gguf-header-compat-triage",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "candidate_summary": [
+    {
+      "architecture": "deepseek4",
+      "block_count": 43,
+      "expert_count": 256,
+      "expert_used_count": 6,
+      "file_type": 19,
+      "flags": {
+        "attn_kv": 43,
+        "attn_kv_latent": 0,
+        "compress": 0,
+        "compressor": 248,
+        "down": 43,
+        "gate": 43,
+        "hc_attn": 129,
+        "hc_ffn": 129,
+        "hc_head": 0,
+        "output_hc": 3,
+        "tid2eid_plain": 0,
+        "tid2eid_weight": 3,
+        "up": 43
+      },
+      "loader_header_compatible_by_name": true,
+      "n_tensors_in_probe": 1328,
+      "notes": "candidate has output_hc aliases and .weight tensor names; should use LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1 plus TID2EID alias",
+      "probe": "antirez_iq2xxs_chat_v2.head16m",
+      "split_count": null,
+      "split_no": null,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      }
+    },
+    {
+      "architecture": "deepseek4",
+      "block_count": 43,
+      "expert_count": 256,
+      "expert_used_count": 6,
+      "file_type": 19,
+      "flags": {
+        "attn_kv": 43,
+        "attn_kv_latent": 0,
+        "compress": 0,
+        "compressor": 248,
+        "down": 43,
+        "gate": 43,
+        "hc_attn": 129,
+        "hc_ffn": 129,
+        "hc_head": 0,
+        "output_hc": 3,
+        "tid2eid_plain": 0,
+        "tid2eid_weight": 3,
+        "up": 43
+      },
+      "loader_header_compatible_by_name": true,
+      "n_tensors_in_probe": 1328,
+      "notes": "candidate has output_hc aliases and .weight tensor names; should use LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1 plus TID2EID alias",
+      "probe": "antirez_q4k_f16hc_chat_v2.head16m",
+      "split_count": null,
+      "split_no": null,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "Q4_K": 129,
+        "Q8_0": 345
+      }
+    },
+    {
+      "architecture": "deepseek4",
+      "block_count": 43,
+      "expert_count": 256,
+      "expert_used_count": 6,
+      "file_type": 19,
+      "flags": {
+        "attn_kv": 43,
+        "attn_kv_latent": 0,
+        "compress": 0,
+        "compressor": 248,
+        "down": 43,
+        "gate": 43,
+        "hc_attn": 129,
+        "hc_ffn": 129,
+        "hc_head": 0,
+        "output_hc": 3,
+        "tid2eid_plain": 0,
+        "tid2eid_weight": 3,
+        "up": 43
+      },
+      "loader_header_compatible_by_name": true,
+      "n_tensors_in_probe": 1328,
+      "notes": "candidate has output_hc aliases and .weight tensor names; should use LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1 plus TID2EID alias",
+      "probe": "sleepy_reap_k128_uniform.head16m",
+      "split_count": null,
+      "split_no": null,
+      "type_counts": {
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "IQ2_XXS": 86,
+        "Q2_K": 43,
+        "Q8_0": 345
+      }
+    },
+    {
+      "architecture": "deepseek4",
+      "block_count": 43,
+      "expert_count": 256,
+      "expert_used_count": 6,
+      "file_type": 18,
+      "flags": {
+        "attn_kv": 0,
+        "attn_kv_latent": 0,
+        "compress": 0,
+        "compressor": 0,
+        "down": 0,
+        "gate": 0,
+        "hc_attn": 0,
+        "hc_ffn": 0,
+        "hc_head": 0,
+        "output_hc": 0,
+        "tid2eid_plain": 0,
+        "tid2eid_weight": 0,
+        "up": 0
+      },
+      "loader_header_compatible_by_name": false,
+      "n_tensors_in_probe": 0,
+      "notes": "missing output_hc or split header has no tensor table; not first choice",
+      "probe": "tarruda_q2k_part1.head16m",
+      "split_count": 3,
+      "split_no": 0,
+      "type_counts": {}
+    },
+    {
+      "architecture": "deepseek4",
+      "block_count": 43,
+      "expert_count": 256,
+      "expert_used_count": 6,
+      "file_type": 31,
+      "flags": {
+        "attn_kv": 34,
+        "attn_kv_latent": 0,
+        "compress": 0,
+        "compressor": 192,
+        "down": 33,
+        "gate": 33,
+        "hc_attn": 99,
+        "hc_ffn": 99,
+        "hc_head": 0,
+        "output_hc": 3,
+        "tid2eid_plain": 0,
+        "tid2eid_weight": 3,
+        "up": 33
+      },
+      "loader_header_compatible_by_name": true,
+      "n_tensors_in_probe": 1032,
+      "notes": "candidate has output_hc aliases and .weight tensor names; should use LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1 plus TID2EID alias",
+      "probe": "teamblobfish_iq1m_part1.head16m",
+      "split_count": 2,
+      "split_no": 0,
+      "type_counts": {
+        "F32": 416,
+        "I32": 3,
+        "IQ1_M": 329,
+        "Q2_K": 5,
+        "type_13": 279
+      }
+    }
+  ],
+  "created_utc": "2026-07-06T17:33:20Z",
+  "decision": {
+    "accepted_sota_changed": false,
+    "download_requires_cleanup": "delete rejected 0xSero 52.59GB local file after its reject artifact/sha256 are pushed",
+    "env_for_first_smoke": [
+      "LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1",
+      "LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1",
+      "GGML_MOE_STREAM=0"
+    ],
+    "held_out_used": false,
+    "next_candidate": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+    "why": "header-compatible by tensor names, single file, 50.44GB, same low-bit family as positive size-bound candidates, and smaller than antirez 86.72GB"
+  },
+  "head_sizes_observed": {
+    "antirez_iq2xxs_chat_v2": 86720111200,
+    "antirez_q4k_f16hc_chat_v2": 164633502304,
+    "sleepy_reap_k128_uniform": 50439361920,
+    "tarruda_q2k_part1": 5248448,
+    "teamblobfish_iq1m_part1": 49882725408
+  },
+  "next_allowed_work": [
+    "Remove the rejected local 0xSero model file to free disk; keep git artifacts and logs.",
+    "Download sleepy K128 uniform candidate, record size/sha256/header validation.",
+    "Run France strict 16GB load/correctness smoke only after validation.",
+    "Do not run held-out until a candidate is frozen after calibration/dev."
+  ],
+  "probe_files": {
+    "antirez_iq2xxs_chat_v2.head16m": {
+      "path": "/root/lfz/models/_gguf_header_probe/20260707-alt-candidates/antirez_iq2xxs_chat_v2.head16m",
+      "sha256": "bd7bd3980c2e2a8fe8bba7010d974e7c7bd33f6203ef0ddb602a450afe19bc66",
+      "size": 16777216
+    },
+    "antirez_q4k_f16hc_chat_v2.head16m": {
+      "path": "/root/lfz/models/_gguf_header_probe/20260707-alt-candidates/antirez_q4k_f16hc_chat_v2.head16m",
+      "sha256": "1ed32cd92ffb0dad4f6bd4a8d4b2b77f31a2bd95877032cc7480b64d981f588c",
+      "size": 16777216
+    },
+    "sleepy_reap_k128_uniform.head16m": {
+      "path": "/root/lfz/models/_gguf_header_probe/20260707-alt-candidates/sleepy_reap_k128_uniform.head16m",
+      "sha256": "4f95b8cbfefa1ff5139b229d54907f98a6665948a6ae55dd2e2ad230cdf860fb",
+      "size": 16777216
+    },
+    "tarruda_q2k_part1.head16m": {
+      "path": "/root/lfz/models/_gguf_header_probe/20260707-alt-candidates/tarruda_q2k_part1.head16m",
+      "sha256": "4354d44996e96581bac84aa592502897e291159cbb596f4746c2260605fd3eb9",
+      "size": 5248448
+    },
+    "teamblobfish_iq1m_part1.head16m": {
+      "path": "/root/lfz/models/_gguf_header_probe/20260707-alt-candidates/teamblobfish_iq1m_part1.head16m",
+      "sha256": "1122c247eb4e1bc19d0d2cb90a22ad32567bb06bf5e5937f8cd1f87e71f29b8a",
+      "size": 16777216
+    }
+  },
+  "prompt_scope": "no prompt run; calibration_dev_set_v1 and held_out_test_set_v1_locked were not used",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "range_probe_dir": "/root/lfz/models/_gguf_header_probe/20260707-alt-candidates",
+  "range_probe_rule": "curl --range 0-16777215 --max-filesize 20000000; full model download was not performed for these probes",
+  "source_head_before_artifact": "9d75a0f4237ea98e4e8153043b0db8a1336c5452",
+  "status": "completed_header_only_no_sota"
+}

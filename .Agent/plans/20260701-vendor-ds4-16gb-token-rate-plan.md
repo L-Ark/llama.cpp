@@ -4268,3 +4268,19 @@
 - `loader_error`: stderr 明确报 `missing tensor 'hc_head_base'`。0xSero header 中有 per-layer `blk.N.hc_attn_*` / `blk.N.hc_ffn_*`，但没有 vendor 当前期望的 global `hc_head_base/hc_head_fn/hc_head_scale`，也没有现有 alias 支持的 `output_hc_*`。
 - `decision`: reject，不进入 token-rate benchmark，不作为 SOTA。该问题是模型/loader/dataflow compatibility blocker，不是 RAM、TTFT 或 cache 参数问题。
 - `next_allowed_work`: 不使用 held-out。若继续 alternate GGUF 路线，必须先用 header-only probe 筛掉缺少 global `hc_head_*`/`output_hc_*` 或其他必需 tensor 的 candidate；或者单独写 loader/dataflow correctness 计划，证明 per-layer hc tensor 如何等价替代当前 global hc_head 后再改 source。
+
+## 2026-07-07 header triage：选择 sleepy K128 alternate GGUF 作为下一候选
+
+- `attempt_id`: `20260707-alt-gguf-header-compat-triage`
+- `status`: `completed_header_only_no_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-header-compat-triage-20260707.json`
+- `prompt_scope`: 未运行 prompt；未使用 `calibration_dev_set_v1` 或 `held_out_test_set_v1_locked`。
+- `method`: 对 sleepy、teamblobfish、antirez、tarruda 候选只做 `curl --range 0-16777215 --max-filesize 20000000` header probe；没有下载完整模型。
+- `key_finding`: 0xSero 失败的根因是缺 global `output_hc_*`/`hc_head_*`；sleepy 和 antirez 单文件候选都带 `output_hc_*`、`.weight` tensor aliases、`attn_kv.weight` 和 `compressor` 命名，理论上可用现有 default-off `LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1` + `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` 先做 load smoke。
+- `candidate_comparison`:
+  - sleepy `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`: size `50439361920`，single file，`expert_count=256`，`expert_used_count=6`，gate/up `IQ2_XXS`，down `Q2_K`，`output_hc=3`，作为下一候选。
+  - antirez IQ2XXS chat-v2: size `86720111200`，header-compatible，但更大，磁盘/下载成本更高，作为 fallback。
+  - teamblobfish IQ1_M split: part1 size `49882725408`，split_count `2`，header-compatible，但 split 加载和 IQ1_M path 风险更高，暂不优先。
+  - tarruda Q2_K split: first shard是 metadata-only，`n_tensors=0`，需要更多 split 处理，不作为下一步。
+- `next_action`: 删除已 rejected 的本地 0xSero 大文件释放磁盘（记录和 sha256 已 push），下载 sleepy K128 uniform，完成 size/sha256/header validation 后才允许 France strict 16GB smoke。
+- `claim_rule`: header triage 不是 correctness/token-rate/SOTA。sleepy 若 load 或 France correctness 失败，立即 reject，不进入 calibration/dev；若通过，才跑 calibration/dev，freeze 后才可使用 held-out。
