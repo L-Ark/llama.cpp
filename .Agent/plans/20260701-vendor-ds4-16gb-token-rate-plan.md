@@ -4314,3 +4314,16 @@
 - `first_smoke_env`: `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`、`LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`、`GGML_MOE_STREAM=0`。
 - `next_action`: 运行 France strict 16GB load/correctness smoke；如果 load 或 correctness 失败，立即 reject，不进入 token-rate benchmark。
 - `claim_rule`: 当前只有下载和 metadata ready 结论，没有 correctness/token-rate/SOTA 结论。
+
+## 2026-07-07 执行记录：sleepy K128 France load smoke rejected
+
+- `attempt_id`: `20260707-sleepy-k128-alt-gguf-france-load-smoke`
+- `status`: `rejected_load_incompatible_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-france-load-smoke-reject-20260707.json`
+- `prompt_scope`: 只运行 France smoke；未使用 `calibration_dev_set_v1` 调参，未使用 `held_out_test_set_v1_locked`。
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T174958Z-20260707-sleepy-k128-alt-gguf-france-strict-smoke/france-sleepy-k128-alt-cpu40-vram0gb-cpu40-vram0gb`。
+- `config`: strict 16GB cgroup、drop_caches、`cpu_moe=40`、`vram_cache=0`、`LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`、`LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`、`LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1`、`GGML_MOE_STREAM=0`。
+- `result`: exit status `1`，`eval_tok_s=None`，`prompt_tok_s=None`，`TTFT=None`，`memory_peak_bytes=393523200`，`ram_ok=true`；未进入真实推理。
+- `loader_error`: `blk.3.ffn_gate_inp.weight` shape mismatch，vendor 期望 `[4096,256]`，sleepy REAP K128 从 layer 3 开始是 `[4096,128]`。
+- `decision`: reject，不进入 token-rate benchmark。该问题是 REAP K128 gate/dataflow 结构差异，不是简单 alias、RAM 或 cache 参数问题。
+- `next_action`: 记录并 push 后删除本地 sleepy 大文件释放磁盘；下一候选改为 antirez IQ2XXS chat-v2，因为 header probe 显示其 `output_hc` alias 存在且 `ffn_gate_inp` 为 `[4096,256]`。
