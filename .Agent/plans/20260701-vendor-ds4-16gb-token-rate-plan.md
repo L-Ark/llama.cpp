@@ -3989,6 +3989,33 @@
 - `decision`: reject and do not expand to full dev set. Larger up hotsets still fail to convert fallback savings into token-rate improvement; stream/cache overhead and remaining down fallback cancel the gain.
 - `next_design`: close cache/hotset up streaming as a near-term path. Continue only with a non-cache grouped staging design if it can reduce launch/staging overhead by construction, or switch to model/representation/disk route.
 
+
+## 2026-07-06 执行记录：dev gate/up/down overlap trace
+
+- `attempt_id`: `20260706-dev-gate-updown-overlap-trace`
+- `status`: `completed_measurement_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/dev-gate-updown-overlap-trace-20260706.json`
+- `prompt_scope`: only `calibration_dev_set_v1`; `held_out_test_set_v1_locked` was not used.
+- `purpose`: Fill the missing gate overlap evidence called out by `updown-total-movement-hard-bound`. This measurement checks whether combined gate/up/down pack/read or staging can reuse route locality instead of repeating unrelated expert movement.
+- `runs`: strict cold 16GB cgroup with `GGML_MOE_STREAM_ONE_TRACE_OUT={case_dir}/one_trace.csv`, gate-only one-stream filter `ffn_gate_exps`, no prompt-specific pack/profile. France `2.5 tok/s`, quantum `1.9 tok/s`, Fibonacci `1.8 tok/s`, Japan `2.4 tok/s`, climate `2.2 tok/s`; all five had `memory_peak_bytes=16000000000`, `ram_ok=true`, `ram_limit_killed=false`, and heuristic correctness pass. These token rates include trace overhead and are not SOTA claims.
+- `aggregate_gate_trace`: gate unique `(layer,expert)` pairs `8621`, gate unique payload `35.781GiB`, calls `204420`, rows `210480`, gate cache hit rate `83.5%`, gate source-load time `167285.982ms` across the traced calibration runs.
+- `aggregate_updown_reference`: existing up/down fallback profile has `6683` unique `(layer,expert)` pairs but `55.474GiB` tensor payload because up and down are distinct tensors; calls `222040`, rows `228020`, fallback `216535.305ms`.
+- `overlap_result`: all observed up/down `(layer,expert)` pairs also appear in the gate trace: `6683/6683` up/down pairs, covering `100.0%` of up/down fallback time. These pairs are `77.52%` of gate pairs. The overlapping full gate+up+down tensor payload is `83.211GiB` (`27.737GiB` gate + `55.474GiB` up/down), far above VRAM and 16GB host RAM budgets.
+- `decision`: structural overlap is high enough to consider combined sequential pack/read or staging-window designs, but it is not evidence for another resident-cache attempt. A resident combined cache is impossible under the current payload size and would destroy gate cache. Any next implementation must preserve current gate cache residency and reduce scattered read/page-fault/staging overhead without storing full up/down tensors long-term.
+- `next_design`: draft a combined sequential pack/read hard-bound: for each routed `(layer,expert)`, estimate whether reading gate/up/down together from a compact pack can reduce page-cache refaults and source-load time while still streaming only the needed tensors. If the bound cannot beat the calibration baseline without gate-cache loss, reject before source changes. Continue to keep held-out prompts unused until a candidate is frozen.
+
+
+## 2026-07-06 hard-bound：combined gate/up/down pack-read rejected
+
+- `attempt_id`: `20260706-combined-gate-updown-pack-read-hard-bound`
+- `status`: `rejected_before_source_change`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/combined-gate-updown-pack-read-hard-bound-20260706.json`
+- `prompt_scope`: uses only calibration/dev artifacts and the new calibration gate traces; held-out test set was not used.
+- `basis`: gate/up/down overlap is structurally high (`100%` of up/down `(layer,expert)` pairs appear in gate trace), but full overlapping gate+up+down tensor payload is `83.211GiB`, so it cannot be resident in VRAM or host RAM under the target machine.
+- `streaming_lower_bound`: estimated gate miss source movement from the trace is `139.989GiB`; up/down repeated logical payload is `946.372GiB`; combined gate-miss + up/down stream amount is `1086.361GiB`. Pure transfer lower bound is `67.898s @16GiB/s`, `33.949s @32GiB/s`, `22.633s @48GiB/s`, `16.974s @64GiB/s`, or `11.316s @96GiB/s`, before GPU kernel, synchronization, D2H/scatter, page faults, and cache bookkeeping.
+- `decision`: reject combined sequential pack/read as a standalone generalized `>5 tok/s` route. It may improve locality for a narrower gate-miss problem, but it does not reduce up/down bytes or compute enough; if implemented naively it repeats the same failure pattern as up/down streaming and hotset cache probes.
+- `next_allowed_work`: do not write a runtime source patch for combined gate/up/down pack-read from current evidence. The next credible work must either reduce representation/payload, change dataflow so repeated up/down movement is avoided, or empirically validate a smaller model/representation route without using held-out prompts for tuning.
+
 ## 2026-07-06 执行记录：4Expert 磁盘释放与真实下载启动
 
 - `attempt_id`: `20260706-4expert-disk-release-download-start`
