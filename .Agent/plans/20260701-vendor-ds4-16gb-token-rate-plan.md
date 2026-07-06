@@ -4394,3 +4394,34 @@
   3. 若 probe 证明 selected_experts/weights 可被 CUDA path 使用，则实现 compact exact-gather 原型：每 token 每层只为 topK selected experts 建立 compact id list，在 GPU 上直接对 up/down selected experts 做 MMVQ/compute，避免 CPU fallback 和全 expert/hotset staging。
   4. 若 graph tensor 不能直接供 CUDA kernel 使用，则先实现最小 D2H selected id copy hard-bound：每层 topK id/weight 的数据量极小，计算 id copy 和调度开销上限，再决定是否把 selected ids 显式传给 vendor CUDA path。
   5. 每个 source 改动前必须先写 plan；每个实验只用 calibration/dev；held-out locked test set 只在最终 candidate freeze 后运行。出现新的合规 generalized SOTA 时，必须详细记录复现信息并立刻 commit/push 到 `ssd/vendor/deepseek-token-rate-16gb`，随后从 pushed commit 复现。
+
+## 2026-07-07 implementation plan：default-off MUL_MAT_ID exact dataflow probe
+
+- `attempt_id`: `20260707-ds4-exact-mmid-dataflow-probe`
+- `status`: `planned_before_source_edit`
+- `purpose`: 验证通用 exact up/down CPU fallback 修正是否可行，不做 prompt-specific hotset，不使用 held-out。
+- `source_scope`: 只在 `ggml/src/ggml-cuda/ggml-cuda.cu::ggml_cuda_mul_mat_id` 增加 default-off CSV probe；不改变默认路径、kernel 选择、logits、fallback 行为或 token-rate。
+- `env`: `DS4_EXACT_MMID_DATAFLOW_PROBE_OUT=<csv>`。未设置或为 `0` 时完全不写文件。
+- `csv_fields`: 记录每个 `GGML_OP_MUL_MAT_ID` 的 selected ids/source tensors 信息，包括 tensor name、role(gate/up/down)、chosen CUDA path(`mmvq/mmq/mmf/slow_sync`)、src0/src1/ids/dst backend buffer、type、shape、nbytes、ids bytes、ids 是否在 CUDA buffer、dst tokens/picks、是否 quantized、是否满足 CUDA graph fast path。
+- `success_gate`: 用 France calibration/dev smoke 打开 probe，输出必须正确、默认关闭时 build 不变；probe CSV 应能回答 selected experts ids 是否已在 CUDA 可读 buffer 内，以及 up/down fallback 是因为 source tensor placement/type/path 还是 ids/dataflow 不可用。
+- `claim_rule`: 该 probe 是诊断提交，不是 SOTA；若输出/性能异常则回退 probe 或标为 rejected。后续任何行为改变必须基于该 probe 的证据重新写 plan。
+
+## 2026-07-07 执行记录：exact MMID + CPU fallback source probe
+
+- `attempt_id`: `20260707-ds4-exact-mmid-cpu-source-probe-france-smoke`
+- `status`: `completed_probe_smoke_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/exact-mmid-cpu-source-probe-france-smoke-20260707.json`
+- `source_change`: 增加两个 default-off probe，不改变默认 logits/path：
+  - `DS4_EXACT_MMID_DATAFLOW_PROBE_OUT=<csv>`：记录 CUDA backend `GGML_OP_MUL_MAT_ID` 的 path、src0/src1/ids/dst backend/type/shape。
+  - `GGML_MOE_FALLBACK_SOURCE_PROBE_OUT=<csv>`：记录 CPU fallback 残留 rows 的 src0/src1/ids/dst backend/type/shape/reason，不改变既有 `fallback_reason_profile.csv` 格式。
+- `validation_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T184846Z-20260707-exact-mmid-cpu-source-probe-france/france-exact-mmid-cpu-source-probe-cpu40-vram0gb`
+- `config`: vendor DeepSeek native GGUF、strict cold 16GB cgroup、`cpu_moe=40`、`vram_cache=0`、gate one-stream cache only、`-n 96` France smoke；这是 calibration diagnostic，不是 SOTA，不使用 held-out。
+- `result`: exit `0`，`eval_tok_s=2.5`，`prompt_tok_s=0.9`，`TTFT=36704.18 ms`，`memory_peak_bytes=16000000000`，`memory_file_bytes=15062511616`，`ram_ok=true`，`correctness_ok=true`。France 输出语义正确但因 `-n 96` 被截断在一句中部；该 run 只验证 probe，不作为 SOTA。
+- `cuda_mmid_probe`: `882` rows，全部 `path=mmvq`，角色为 gate/up/down 各 `294`；所有观测到的 `src0_buft=CUDA0`、`ids_buft=CUDA0`。这说明 CUDA backend 只看到了已经被调度到 CUDA 的 MMID，不能代表 CPU fallback 残留。
+- `fallback_source_probe`: `6176` rows，残留耗时为 `up/decode=9880.61 ms`、`down/decode=6639.33 ms`、`up/prompt=3782.40 ms`、`down/prompt=4247.47 ms`；所有残留 rows 的 `src0_buft=CPU_Mapped`，`src1_buft=CUDA_Host`，`ids_buft=CUDA_Host`，`dst_buft=CUDA_Host`。
+- `bottleneck_update`: 当前合规路径的 up/down CPU fallback 不是因为 selected ids 在 CUDA graph 内完全不可得，而是因为这些 up/down tensor 没有被允许进入 one-stream CUDA path：`single_reason=one_name_filter`，`batch_reason=batch_env_missing`。gate 已通过 name_filter/cache 路线覆盖，up/down 被 name_filter 排除后落在 CPU_Mapped + CUDA_Host staging 的 CPU fallback。
+- `next_plan`: 先做 default-off up/down one-stream enablement hard-bound，而不是 prompt-specific hotset。
+  1. 在 calibration/dev 上用 `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps,ffn_down_exps` 或等价 role filter 运行小 smoke，观察 `fallback_source_probe` 是否显著下降，以及 correctness/TTFT/RAM 是否受影响。
+  2. 若 up/down 进入 one-stream 后 correctness 正常但 token-rate 不升或下降，继续拆分 one-stream 内部时间：CPU_Mapped expert read、H2D、src1 staging、kernel、D2H/scatter，确认是不是每 expert 单独搬运导致吞吐差。
+  3. 如果单 expert one-stream 对 up/down 太慢，再设计 compact exact gather/batched route：同一 layer 同一 token 的 topK up/down 统一处理，减少 per-expert launch/copy/scatter；理论上限按 fallback_source_probe 的 up/down decode ms 计算。
+  4. 所有实验仍只用 calibration/dev；held-out locked test set 只在 candidate freeze 后测试。若产生合规 generalized SOTA，必须完整记录复现信息并立刻 push 到 `ssd/vendor/deepseek-token-rate-16gb`。
