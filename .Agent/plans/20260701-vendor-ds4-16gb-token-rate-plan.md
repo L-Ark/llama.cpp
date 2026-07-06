@@ -4890,3 +4890,14 @@
 - q2_result: fixed ternary +-4 的 1.889x 压缩对应 mean_abs_error=1.567、rmse=2.319、max_abs_error=8，和实际 compare reject 一致。
 - q3_result: q3_sym_large 约 1.308x 压缩，mean_abs_error=0.656、rmse=1.159、max_abs_error=4；q3_opt7 约 1.308x 压缩，mean_abs_error=0.706、rmse=0.941、max_abs_error=2。虽然比 q2 好，但仍有系统性非零误差，且压缩比太低，不足以单独把 generalized token rate 推到目标。
 - decision: 暂不写 q3/q4 lossy writeback 或 token-rate benchmark。后续应优先转向非 lossy 或减少 fallback 次数/开销的路线，例如 CPU fallback batching/fusion、larger generalized exact resident coverage、prefetch/admission 改进，或带 correction 的表示；任何 lossy 表示必须先有 compare-only 数值证据，再进入性能路径。
+
+
+## 2026-07-07 下一步 config-profile plan：generalized up/down batch eligibility probe
+
+- attempt_id: 20260707-generalized-updown-batch-eligibility-probe
+- status: planned_before_experiment
+- why_now: post-q2 分析表明 naive lossy payload 不适合继续写回；历史 no-prompt fallback profile 显示 up/down fallback 的主要原因是 batch env missing 和 one_name_filter。当前代码中已经存在 Kimi merge 带来的 up_gate_batch、down_batch 和 MXFP4 probe/decline debug，因此下一步先用 default-off 配置实验确认它们在 DeepSeek vendor MXFP4 上是 accepted、declined 还是 accepted 后性能/正确率失败。
+- scope: config/profile only，不改源码；只用 calibration/dev prompt，不使用 held-out；不作为 SOTA。strict 16GB/no-swap，保持 no prompt-specific pack/profile。
+- env_under_test: 在 generalized baseline 基础上开启 GGML_MOE_STREAM_DOWN_BATCH=1、GGML_MOE_STREAM_DECLINE_DEBUG=1、GGML_KIMI_CPU_MOE_PROFILE=1、GGML_KIMI_CPU_MOE_NAME_PROFILE=1，并记录 fallback reason/profile；如果 up_gate batch 需要 prompt env，只作为诊断记录，不直接 promotion。
+- success_signal: profile 显示 up/down batch accepted 且 residual fallback 明显下降，同时输出正确、RAM 合格、TTFT 不异常；否则记录 decline reason 或 regression，作为下一步 source plan 输入。
+- reject_rule: 如果正确率失败、OOM、TTFT/性能明显退化，或 batch 全部 declined，则不进入 SOTA；只记录原因并回到具体 source fix 计划。
