@@ -1,0 +1,19 @@
+repo=/root/lfz/llama.cpp-vendor-kimi
+pwd=/root/lfz/llama.cpp-vendor-kimi
+branch=vendor/kimi-general-prompt-token-rate-16gb
+head=b2f8e07f392994f2d87234421ef198a5add1dc84
+short=b2f8e07f3
+status_short:
+ M ggml/src/ggml-cuda/moe_stream_batch.cu
+?? .Agent/run-tools/down-mirror-upgate-1000.csv
+?? .Agent/run-tools/down-mirror-upgate-600.csv
+?? .Agent/run-tools/down-mirror-upgate-800.csv
+?? .Agent/run-tools/kimi-general-prompt-sweep.sh
+?? .Agent/run-tools/kimi_expert_pack_iouring_bench
+?? .Agent/run-tools/kimi_expert_pack_iouring_bench.cpp
+?? .Agent/run-tools/kimi_make_down_mirror_profile.py
+?? .Agent/run-tools/kimi_pack_coverage_audit.py
+?? scripts/kimi-build-gguf-expert-alias-tsv.py
+diff_stat:
+ ggml/src/ggml-cuda/moe_stream_batch.cu | 311 ++++++++++++++++++++++++++-------
+ 1 file changed, 250 insertions(+), 61 deletions(-)

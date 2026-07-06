@@ -1,0 +1,41 @@
+run=/root/lfz/runs/vendor-kimi-token-rate/20260706-173500Z-gp3b-alias-dev-n96-profile/dev_photosynthesis_factual
+prompt_id=dev_photosynthesis_factual
+prompt=Explain photosynthesis briefly.
+exit=0
+quality=pass
+quality_reason=ok
+output=Photosynthesis is the process by which plants, algae, and some bacteria convert sunlight, water, and carbon dioxide into glucose (a sugar) and oxygen. It takes place mainly in the leaves of plants, using chlorophyll to capture light energy. The basic equation is: 6CO₂ + 6H₂O + light energy → C₆H₁₂O₆ + 6O₂ In short: plants use sunlight to make food and release oxygen.
+ttft_ms=66326.23
+prompt_tokens=14
+decode_ms=118019.29
+decode_runs=94
+token_rate=0.80
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=15141720064
+anon=450560
+file=14916812800
+kernel=220803072
+inactive_file=5114970112
+active_file=9801162752
+pgmajfault=842903
+pgfault=2688025
+workingset_refault_file=105542
+expert_pack_0=82259 misses=0 read_failures=0 direct_reads=65030 direct_fallbacks=0 iouring_reads=11965 iouring_bytes=67394109440 iouring_fallbacks=0 iouring_submit_us=58267 iouring_wait_us=11041217 iouring_h2d_enqueues=11965 entries=69120
+expert_pack_iouring_0=batches=2972 submit_calls=2972 wait_calls=9335 cqes=11965 inflight_avg=3.24 inflight_max=8 batch_hist=1:169,2-4:1785,5-8:1018,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 6.02 MiB
+pinned_staging_1=: enabled, 12 slots of 4.48 MiB
+pinned_staging_2=: enabled, 12 slots of 7.44 MiB
+pinned_staging_3=: enabled, 12 slots of 5.36 MiB
+pinned_staging_4=: copies=55163 waits=55127 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=191.592 ms host_stage=85589.722 ms enqueue=1040.451 ms h2d=12022.535 ms h2d_timed=55163
+pinned_staging_5= iouring: batches=2149 jobs=8799 submit_calls=2149 wait_calls=6873 cqes=8799 inflight_avg=3.25 inflight_max=8 batch_hist=1:115,2-4:1254,5-8:780,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=21832 waits=21808 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=78.330 ms host_stage=35376.352 ms enqueue=412.639 ms h2d=4615.291 ms h2d_timed=21832
+pinned_staging_7= gate iouring: batches=823 jobs=3166 submit_calls=823 wait_calls=2462 cqes=3166 inflight_avg=3.22 inflight_max=8 batch_hist=1:54,2-4:531,5-8:238,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=3008 planned_jobs=12435 completed_jobs=12435 cache_hits=9373 missing_tensor=282 missing_pack=0 submitted_batches=2719 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=21773974 batch_hist=1:55,2-4:1390,5-8:1274,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=28623 misses=11209 preloads=12435 pinned=0 hit_rate=71.9%
+vram_down_1=slots=766 slot=7.44 MiB hits=28623 misses=11209 preloads=12435 pinned=0 hit_rate=71.9%
+vram_down_2=slots=766 slot=7.44 MiB hits=28623 misses=11209 preloads=12435 pinned=0 hit_rate=71.9%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=36937 misses=53319 preloads=0 pinned=0 hit_rate=40.9%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=36937 misses=53319 preloads=0 pinned=0 hit_rate=40.9%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=36937 misses=53319 preloads=0 pinned=0 hit_rate=40.9%

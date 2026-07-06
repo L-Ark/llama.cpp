@@ -89399,3 +89399,147 @@ Rollback:
 - Revert if n32 token rate regresses.
 - Revert if memory exceeds the 16 GB cgroup.
 - Revert if quality regresses.
+
+GP3 interim results, `2026-07-06T23:55:00+0800`:
+
+- Source implementation was built in the clean remote worktree
+  `/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c`.
+- N96 dev sweep path:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-151000Z-gp3-alias-dev-n96-profile`.
+- N96 dev quality: `7/7 pass`.
+- N96 dev memory peak: `14.81 GiB` for all prompts.
+- N96 dev TTFT: all prompts remain within the formal no-alias baseline
+  `+20%` cap.
+- N96 dev token-rate comparison against GP2:
+
+| prompt | GP2 tok/s | GP3 tok/s | delta |
+|---|---:|---:|---:|
+| dev_france_regression | 1.37 | 1.35 | -0.02 |
+| dev_japan_factual | 1.01 | 1.02 | +0.01 |
+| dev_photosynthesis_factual | 0.76 | 0.78 | +0.02 |
+| dev_linear_equation | 0.47 | 0.60 | +0.13 |
+| dev_python_reverse | 0.67 | 0.71 | +0.04 |
+| dev_zh_france | 0.93 | 0.84 | -0.09 |
+| dev_mixed_summary | 0.62 | 0.71 | +0.09 |
+
+- Aggregate: mean `0.833 -> 0.859 tok/s`, median `0.76 -> 0.78`,
+  minimum `0.47 -> 0.60`.
+- Because `dev_zh_france` regressed and the first n32 copy-profile diagnostic
+  used extra H2D synchronization, GP3 is not accepted yet.
+
+Additional n32 gate without copy profile:
+
+- Run path:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-161500Z-gp3-alias-python-reverse-n32-no-copyprofile`.
+- Result: quality pass, `0.57 tok/s`, `TTFT=80168.41 ms`,
+  `decode=54613.95 ms / 31`, `memory.peak=15899996160`.
+- This passes the no-alias n32 TTFT cap and is slightly faster than GP2 n32
+  `0.53 tok/s`, but it exposes a remaining implementation gap:
+  `direct_reads=27139`, `iouring_reads=2178`.
+- The earlier n32 copy-profile run had `direct_reads=0`,
+  `iouring_reads=29809`, and `1.08 tok/s`, so the large speedup is not yet
+  representative of the normal production path.
+
+GP3b plan - partial batched io_uring instead of whole-batch fallback:
+
+- Bottleneck: normal no-copyprofile runs still spend large time in direct
+  host staging (`host_stage=42614 ms` for up and `16079 ms` for gate in the
+  n32 gate).
+- Current code returns `false` from `expert_pack_iouring_copy_jobs` when any
+  job in a batch is not eligible for batched io_uring. The caller then falls
+  back the whole batch to one-by-one direct reads.
+- Change `expert_pack_iouring_copy_jobs` to:
+  - classify jobs into `read_jobs` and `fallback_jobs`;
+  - keep valid aligned-plan jobs in the batched io_uring queue;
+  - copy only ineligible jobs through the existing per-job fallback path;
+  - return `true` only after every job has been copied or staged;
+  - preserve existing RAM-tier and host-prefetch fast paths.
+- Theoretical bound: in the n32 no-copyprofile gate, eliminating the whole
+  batch fallback can target up to `42614 + 16079 = 58693 ms` of host staging
+  wall. The realistic bound is lower because some fallback jobs may still be
+  ineligible and some time overlaps compute.
+- Acceptance:
+  - build passes;
+  - n32 no-copyprofile direct reads drop materially below `27139`;
+  - n32 quality pass, memory <= 16 GB, TTFT <= no-alias baseline +20%;
+  - n32 token rate improves beyond `0.57 tok/s`;
+  - if n32 passes, rerun n96 dev and require no material regression versus
+    GP3 interim, especially `dev_zh_france`.
+
+GP3b results, `2026-07-07T00:40:00+0800`:
+
+- Build path:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-171000Z-gp3b-partial-iouring-build`.
+- N32 no-copyprofile run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-172000Z-gp3b-python-reverse-n32-no-copyprofile`.
+- N32 result:
+  - quality pass;
+  - `0.64 tok/s`;
+  - `TTFT=78634.10 ms`;
+  - `decode=48728.34 ms / 31`;
+  - `memory.peak=15899996160`;
+  - `direct_reads=27139`;
+  - `iouring_reads=2178`.
+- N32 interpretation:
+  - token rate improved over the previous no-copyprofile GP3 n32 run
+    (`0.57 -> 0.64 tok/s`);
+  - TTFT remained within the no-alias n32 baseline +20% cap;
+  - however direct reads did not drop, so the intended partial-batch-fallback
+    mechanism did not address the dominant normal-path direct reads.
+- N96 dev run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-173500Z-gp3b-alias-dev-n96-profile`.
+
+| prompt | GP2 tok/s | GP3 tok/s | GP3b tok/s | GP3b-GP2 | GP3b-GP3 |
+|---|---:|---:|---:|---:|---:|
+| dev_france_regression | 1.37 | 1.35 | 1.37 | +0.00 | +0.02 |
+| dev_japan_factual | 1.01 | 1.02 | 1.00 | -0.01 | -0.02 |
+| dev_photosynthesis_factual | 0.76 | 0.78 | 0.80 | +0.04 | +0.02 |
+| dev_linear_equation | 0.47 | 0.60 | 0.52 | +0.05 | -0.08 |
+| dev_python_reverse | 0.67 | 0.71 | 0.70 | +0.03 | -0.01 |
+| dev_zh_france | 0.93 | 0.84 | 0.84 | -0.09 | +0.00 |
+| dev_mixed_summary | 0.62 | 0.71 | 0.74 | +0.12 | +0.03 |
+
+- Aggregate:
+  - GP2: mean `0.833`, median `0.76`, min `0.47`;
+  - GP3: mean `0.859`, median `0.78`, min `0.60`;
+  - GP3b: mean `0.853`, median `0.80`, min `0.52`.
+- Quality: `7/7 pass`.
+- Memory: `14.81 GiB` for all prompts.
+- TTFT: all prompts remain within formal no-alias baseline +20%.
+
+GP3b decision:
+
+- Reject GP3b source changes:
+  - direct reads did not materially drop, violating the GP3b acceptance gate;
+  - GP3b regressed the dev-set minimum versus GP3 (`0.60 -> 0.52`);
+  - `dev_zh_france` remains materially slower than GP2 (`0.93 -> 0.84`).
+- Revert the GP3b source patch and keep only the reproducible diagnostic
+  records.
+
+Updated bottleneck:
+
+- The remaining normal-path direct reads are not caused primarily by
+  whole-batch fallback inside `expert_pack_iouring_copy_jobs`.
+- The n32 GP3b `ttft-trace.csv` shows the largest exposed load wall as
+  `runtime_load pack_hit`, mainly:
+  - up: `17039 ms` at `4702208` bytes and `4375 ms` at `5619712` bytes;
+  - gate: `14594 ms` at `5619712` bytes and `7264 ms` at `4702208` bytes;
+  - down: `9761 ms` across `7798784` and `6307840` byte roles.
+- The code path still using single-entry `batch_cache_insert_slot(do_copy=true)`
+  is most likely prompt/prefill and non-parallel staging paths. Future work must
+  add role/path counters before another source optimization, so we can separate:
+  - prompt vs decode direct reads;
+  - `stage_tensor*` direct loads;
+  - profile preload loads;
+  - down runtime direct loads;
+  - host-prefetch/RAM-tier hits.
+
+Next implementation direction:
+
+- Add default-off counters for direct-read call sites and phase/role tagging.
+- Rerun n32 and one n96 slow prompt to identify which direct-read site accounts
+  for the remaining `direct_reads=27139`.
+- Only then design a targeted change, likely either:
+  - prompt/prefill same-type batched staging; or
+  - a batched replacement for `batch_cache_insert_slot(do_copy=true)`;
+  - not another blind modification of `expert_pack_iouring_copy_jobs`.
