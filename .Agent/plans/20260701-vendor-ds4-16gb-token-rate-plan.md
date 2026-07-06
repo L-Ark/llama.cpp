@@ -4817,3 +4817,19 @@
 - `result`: strict 16GB/no-swap cgroup 内 top1 exit `0`，`same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`memory_peak_bytes=1000103936`，无 OOM。
 - `partial_probe_result`: aggregate records `4246`，nonzero CSV rows `3786`，`compare_ran=3786`，`compare_ok=3786`，`diff_count=0`，`max_abs=0`。
 - `decision`: row0=0 与 row0=128 均通过，说明 partial exact loader 的 model offset、local column kernel 和 `dst[row0+col]` compare 映射可信。该结果仍只是 correctness/infrastructure 证据，不是 SOTA。
+
+## 2026-07-07 下一步 source-edit plan：sidecar repr payload correctness gate
+
+- `attempt_id`: `20260707-sidecar-repr-payload-correctness-gate`
+- `status`: `planned_before_source_edit`
+- `why_now`: partial exact row0/row128 已证明 row-range loader/kernel/compare 映射正确；但当前 repr pool 只能从 GGUF `model_offset` 读取原始 MXFP4 bytes，无法测试真实 compressed/approx payload。下一步先支持 sidecar payload 文件，才能在不改模型文件、不影响默认路径的前提下验证候选表示。
+- `scope`: diagnostic only，不是 SOTA，不允许 promotion；不写回 logits，不清空 CPU fallback counts。默认关闭，未设置新 env 时默认路径必须保持不变。
+- `new_env`:
+  - `GGML_MOE_STREAM_ONE_DIRECT_REPR_PAYLOAD`: 可选 sidecar payload 文件；设置后 repr pool 从 `compressed_offset` 读取 payload，否则保持从 `GGML_MOE_STREAM_ONE_DIRECT_MODEL` 的 `model_offset` 读取。
+  - 复用 `GGML_MOE_STREAM_ONE_DIRECT_REPR_MANIFEST`、`GGML_MOE_STREAM_ONE_DIRECT_REPR_POOL_MIB`、`GGML_MOE_STREAM_Q80_PARTIAL_REPR_PROBE_OUT`。
+- `validation_sequence`:
+  1. 生成 row128 exact sidecar payload 和 manifest，payload bytes 与 GGUF partial bytes 相同，只把来源换成 sidecar；strict 16GB top1 和 partial compare 必须仍 `diff_count=0`。
+  2. 再生成一个明确 lossy/approx sidecar payload（例如 MXFP4 nibble/coarse variant），只跑 compare-only，不写回；预期局部 `diff_count>0`，作为 rejected correctness baseline，证明 gate 能发现数值错误。
+- `pass_gate`: exact sidecar check exit `0`，top1 `same_top1=145/145`，partial compare `compare_ran>0` 且 `diff_count=0`，memory peak <=16GB，无 OOM。
+- `reject_gate`: lossy sidecar 如果 `diff_count>0`，必须记录为 rejected，不得进入 writeback 或 token-rate benchmark。
+- `decision_rule`: sidecar exact 通过后，下一步才允许针对具体 compressed format 设计 decode kernel；任何 approx format 必须先通过 op-level compare 和 fixed-text top1，再考虑性能。
