@@ -6038,6 +6038,43 @@ static void mxfp4_down_probe_write_csv(
     std::fclose(f);
 }
 
+static void mxfp4_down_stage_trace_write(
+        const char *name,
+        int call_id,
+        const char *stage,
+        int n_active,
+        int64_t ne01,
+        int64_t ne00,
+        size_t src0_all_bytes,
+        size_t src1_f32_bytes,
+        size_t src1_q8_bytes,
+        size_t dst_bytes,
+        int cache_hits,
+        int cache_misses,
+        bool use_handoff,
+        bool down_q8k_requested,
+        double elapsed_ms) {
+    const char *path = std::getenv("GGML_MOE_STREAM_DOWN_MXFP4_STAGE_TRACE_OUT");
+    if (!path || !path[0]) return;
+
+    static bool header_written = false;
+    std::lock_guard<std::mutex> lk(g_mxfp4_down_probe_out_mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "call,tensor,stage,active,ne01,ne00,src0_all_bytes,src1_f32_bytes,src1_q8_bytes,dst_bytes,"
+                "cache_hits,cache_misses,use_handoff,down_q8k_requested,elapsed_ms\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%d,%s,%s,%d,%ld,%ld,%zu,%zu,%zu,%zu,%d,%d,%d,%d,%.6f\n",
+            call_id, name ? name : "", stage ? stage : "", n_active, (long)ne01, (long)ne00,
+            src0_all_bytes, src1_f32_bytes, src1_q8_bytes, dst_bytes,
+            cache_hits, cache_misses, use_handoff ? 1 : 0, down_q8k_requested ? 1 : 0, elapsed_ms);
+    std::fclose(f);
+}
+
 static void mxfp4_down_probe_report(
         const char *name,
         int call_id,
@@ -8693,6 +8730,24 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const size_t ids_bytes = (size_t)n_active * sizeof(int32_t);
     const size_t bounds_bytes = (size_t)(n_active + 1) * sizeof(int32_t);
 
+    int down_profile_cache_hits = 0;
+    int down_profile_cache_misses = 0;
+    const auto mxfp4_stage_trace_t0 = std::chrono::steady_clock::now();
+    auto mxfp4_stage_elapsed_ms = [&]() -> double {
+        return std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - mxfp4_stage_trace_t0).count();
+    };
+    auto mxfp4_stage_trace = [&](const char *stage) {
+        if (mxfp4_probe_candidate) {
+            mxfp4_down_stage_trace_write(
+                    src0_name, mxfp4_probe_call, stage, n_active, ne01, ne00,
+                    src0_all_bytes, src1_f32_bytes, src1_q8_bytes, dst_bytes,
+                    down_profile_cache_hits, down_profile_cache_misses,
+                    use_handoff, down_q8k_requested, mxfp4_stage_elapsed_ms());
+        }
+    };
+    mxfp4_stage_trace("sizes");
+
     bool ok = ensure_dev(bc.d_src0, bc.d_src0_sz, src0_all_bytes)
         && (use_handoff || ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes))
         && ensure_dev(bc.d_src1_q8, bc.d_src1_q8_sz, src1_q8_bytes)
@@ -8704,14 +8759,22 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         && ensure_dev((void *&)bc.d_bounds, bc.d_bounds_sz, bounds_bytes)
         && (use_handoff || ensure_host_pinned(bc.h_src1, bc.h_src1_sz, src1_f32_bytes))
         && ensure_host_pinned(bc.h_dst, bc.h_dst_sz, dst_bytes);
-    if (!ok) return decline("ensure_buffers");
+    if (!ok) {
+        mxfp4_stage_trace("ensure_buffers_fail");
+        return decline("ensure_buffers");
+    }
+    mxfp4_stage_trace("ensure_buffers_ok");
     static std::atomic<int> first_down_q8k{0};
     if (down_q8k_requested && first_down_q8k.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream_batch] down Q3_K/IQ4_XS Q8_K-reference batch path active\n");
     }
 
     batch_vram_cache *cache = batch_cache_get(src0_bytes);
-    if (!cache) return decline("cache_get");
+    if (!cache) {
+        mxfp4_stage_trace("cache_get_fail");
+        return decline("cache_get");
+    }
+    mxfp4_stage_trace("cache_get_ok");
     preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, src0_bytes, st);
 
     if (profile) cudaEventRecord(bc.ev_start, st);
@@ -8768,8 +8831,6 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     std::vector<down_stage_copy_job> down_jobs_a;
     std::vector<down_stage_copy_job> down_jobs_b;
-    int down_profile_cache_hits = 0;
-    int down_profile_cache_misses = 0;
 
     for (int j = 0; j < n_active; ++j) {
         const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
@@ -8815,6 +8876,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         bc.h_bounds[j] = j;
     }
     bc.h_bounds[n_active] = n_active;
+    mxfp4_stage_trace("stage_jobs_done");
 
     if (down_parallel_stage && (!down_jobs_a.empty() || !down_jobs_b.empty())) {
         bool copy_a_ok = true;
@@ -8837,6 +8899,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         if (cudaStreamWaitEvent(st, bc.ev_up_done, 0) != cudaSuccess) return decline("wait_up_done");
         if (cudaStreamWaitEvent(st, bc.ev_gate_done, 0) != cudaSuccess) return decline("wait_gate_done");
     }
+    mxfp4_stage_trace("parallel_stage_done");
 
     if (!use_handoff && cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_src1_h2d");
     if (cudaMemcpyAsync(bc.d_ids_src1, bc.h_ids_src1, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_ids_src1_h2d");
@@ -8844,6 +8907,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (cudaMemcpyAsync(bc.d_x_ids, bc.h_x_ids, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_x_ids_h2d");
     if (cudaMemcpyAsync(bc.d_bounds, bc.h_bounds, bounds_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_bounds_h2d");
     if (cudaMemsetAsync(bc.d_dst, 0, dst_bytes, st) != cudaSuccess) return decline("memset_dst");
+    mxfp4_stage_trace("h2d_meta_enqueued");
     if (profile) cudaEventRecord(bc.ev_stage, st);
 
     if (use_handoff) {
@@ -8858,6 +8922,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const float *d_src1_run = use_handoff ? g_handoff.d_data : (const float *)bc.d_src1_f32;
     const int64_t src1_run_stride = use_handoff ? g_handoff.ne01 : ne00;
     const int32_t *src1_rows = use_handoff ? bc.h_ids_dst : nullptr;
+    mxfp4_stage_trace("pre_kernel");
     if (down_q8k_requested) {
         if (ne00 % QK_K != 0) return decline("down_q8k_bad_ne00");
         const int nblocks = (int)(n_active * (ne00 / QK_K));
@@ -8874,18 +8939,27 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                 (const char *)cache->pool, bc.h_x_ids, cache->slot_sz,
                 ne00, ne01, nb01, d_src1_run, src1_run_stride, src1_rows,
                 bc.d_src1_q8, (float *)bc.d_dst, n_active, st)) {
+            mxfp4_stage_trace("launch_moe_mmvq_compact_batch_fail");
             return decline("launch_moe_mmvq_compact_batch");
     }
+    mxfp4_stage_trace("kernel_enqueued");
     if (use_handoff) {
         g_handoff.host_ptr = nullptr;
         g_handoff.d_data = nullptr;
     }
     if (profile) cudaEventRecord(bc.ev_kernel, st);
     if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return decline("copy_dst_d2h");
+    mxfp4_stage_trace("d2h_enqueued");
     if (profile) cudaEventRecord(bc.ev_d2h, st);
-    if (cudaStreamSynchronize(st) != cudaSuccess) return decline("sync_stream");
+    mxfp4_stage_trace("pre_sync");
+    if (cudaStreamSynchronize(st) != cudaSuccess) {
+        mxfp4_stage_trace("sync_stream_fail");
+        return decline("sync_stream");
+    }
+    mxfp4_stage_trace("sync_done");
 
     if (mxfp4_probe_run) {
+        mxfp4_stage_trace("pre_report");
         mxfp4_down_probe_report(
                 src0_name, mxfp4_probe_call, src0_data, nb01, nb02, ne00, ne01,
                 src1_f32, src1_nb1, src1_nb2,

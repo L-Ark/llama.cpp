@@ -4994,3 +4994,30 @@
 - implementation: 在 down batch path 中围绕 ensure_buffers/cache_get/stage_jobs/H2D enqueue/kernel launch/D2H enqueue/sync/report 前后写 wall-clock elapsed_ms、n_active、src0_bytes、src1/dst bytes、cache hit/miss 等。每行立即 close/flush，保证即使 run 被 timeout kill 也保留最后阶段。
 - validation: rebuild build-ds4-moe-stream-batch-on llama-cli llama-results；strict 16GB/no-swap France n1 calibration run with GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity, MAX_CALLS=1, MAX_ACTIVE=1, MAX_COLS=16, and STAGE_TRACE_OUT。目标是拿到 stage trace CSV，明确最后成功阶段和耗时；held-out 不使用，不是 SOTA。
 - decision_rule: 如果 trace 显示卡在 kernel/sync，下一步检查 MXFP4 mmvq batch kernel launch/support；如果卡在 staging/cache copy，则转向 staging/pool path；只有 parity 能快速完成且数值正确后，才允许 writeback/performance plan。
+
+
+## 2026-07-07 执行记录：down MXFP4 batch stage trace probe
+
+- attempt_id: 20260707-down-mxfp4-batch-stage-trace-probe
+- status: diagnostic_complete_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/down-mxfp4-batch-stage-trace-probe-20260707.json
+- source_change: ggml/src/ggml-cuda/moe_stream_batch.cu 增加 default-off GGML_MOE_STREAM_DOWN_MXFP4_STAGE_TRACE_OUT；仅在 mxfp4_down_probe_candidate 下写 stage CSV，未设置 env 时默认路径不变，不写回 logits。
+- validation_build: build-ds4-moe-stream-batch-on rebuild llama-cli llama-results passed，GGML_CUDA_MOE_STREAM_BATCH=ON。
+- run: /root/lfz/runs/vendor-ds4-16gb/20260707T-down-mxfp4-stage-trace-probe/france-n1-stage-trace，strict 16GB/no-swap，cold drop_caches，France n1 calibration diagnostic only，held-out 未使用，不是 SOTA。
+- stage_trace: first MXFP4 down batch call active=12，src0_all_bytes=53477376，cache hits=6/misses=6；sizes->pre_report 总耗时约 33.004 ms，其中 stage_jobs_done 约 32.371 ms，kernel_enqueued 约 32.943 ms，sync_done 约 32.996 ms。
+- parity_probe: down_mxfp4_probe.csv 已生成，status=ok，compared=16，max_abs=0.00176076227，mean_abs=0.00069679527，worst expert=35 col=14。该误差不是 exact zero，因此 writeback 前必须扩大 compare/top1 correctness gate。
+- memory: memory_peak_bytes=16000000000，memory.events oom=0/oom_kill=0，page cache/进程内存仍在 16GB cgroup 内；本 run 因 90s diagnostic timeout exit=124，不是性能或正确率 benchmark。
+- interpretation: previous limited/full parity “无 CSV”不能解释为 MXFP4 down batch kernel/sync 卡死；首个 batch probe 能在约 33ms 到达 pre_report 并写 CSV。当前 batch_accept=0 是因为 probe path 故意 return false，CPU fallback 仍然执行。
+- decision: 不 promotion。下一步从“定位卡点”转为“default-off MXFP4 down batch writeback correctness gate”：先让 down batch 可选择写回，再用 fixed-text top1、语义输出和更大 compare coverage 证明不破坏正确率；只有通过后才允许 generalized token-rate benchmark。
+
+## 2026-07-07 下一步 source-edit plan：default-off MXFP4 down batch writeback correctness gate
+
+- attempt_id: 20260707-mxfp4-down-batch-writeback-correctness-gate
+- status: planned_before_source_edit
+- why_now: stage trace 证明 down MXFP4 batch 的首个 staging/kernel/sync 不是主要阻塞，且 limited parity 有小误差但可运行；当前 CPU fallback 的直接原因是 probe path 始终 return false，batch_accept=0。因此下一步必须在默认关闭 env 下验证“真正写回”是否保持 top1/语义正确。
+- product_scope: 仍服务于最终目标：16GB RAM + 32GB 5090 上随机/泛化 prompt 稳定 >5 tok/s。不得基于 France 或任何单 prompt 做 prompt-specific 优化；held-out test set 继续锁定，调试阶段只用 calibration/dev prompt。
+- source_scope: 只改 ggml/src/ggml-cuda/moe_stream_batch.cu 和必要 CPU 调用侧 gate；新增 default-off env（建议 GGML_MOE_STREAM_DOWN_MXFP4_WRITEBACK=1）允许 MXFP4 down batch 成功时返回 true 并写回 dst。未设置时保持当前 probe/fallback 行为。
+- correctness_gate: 先跑 fixed-text llama-results/top1（France calibration）和 expanded parity compare（至少 MAX_ACTIVE>=4、MAX_COLS>=512 或多 call 覆盖），记录 max_abs/mean_abs；若 top1 不全等、语义输出不正确、或误差放大导致输出不稳，立即 reject/回退。
+- performance_gate: correctness 通过后，只在 calibration/dev generalized prompt set 上跑 strict cold 16GB/no-swap benchmark；记录每个 prompt eval_tok_s、prompt_tok_s、TTFT、memory_peak/file bytes、answer。不得用 held-out test set 调参；最终 SOTA 必须再用 held-out test set 报告。
+- TTFT/RAM_gate: MemoryMax=16000000000、MemorySwapMax=0、page cache 计入 cgroup；TTFT 相对 accepted generalized baseline 不能升高超过 20%。超过 TTFT 可作为 rejected diagnostic commit，但不能 promotion。
+- push_rule: 若只是 diagnostic/reject，也要记录 artifact/plan 并 push；若出现符合所有要求的新 generalized SOTA，必须详细记录复现信息、立即 commit+push 到 ssd/vendor/deepseek-token-rate-16gb，并从 pushed commit 重新复现。
