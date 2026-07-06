@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260707-down-mxfp4-existing-parity-probe",
+  "binary_contains_mxfp4_probe_string": false,
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "cmake_batch_flag": "GGML_CUDA_MOE_STREAM_BATCH:BOOL=OFF",
+  "decision": "reject this run: existing parity env could not exercise real down batch because build-ds4-moe-stream was configured with GGML_CUDA_MOE_STREAM_BATCH=OFF, so moe_stream_batch.cu compiled the stub path",
+  "down_mxfp4_probe_csv_present": false,
+  "fallback_reason_aggregate": {
+    "down|decode|eligible|not_attempted_batch_path_selected|batch_declined_internal_no_single_retry": {
+      "batch_accepts": 0,
+      "batch_attempts": 1950,
+      "calls": 1950,
+      "fallback_us": 1685012,
+      "rows": 1950
+    },
+    "down|prompt|eligible|not_attempted_batch_path_selected|batch_declined_internal_no_single_retry": {
+      "batch_accepts": 0,
+      "batch_attempts": 1171,
+      "calls": 1171,
+      "fallback_us": 4454382,
+      "rows": 1820
+    },
+    "up|decode|batch_unsupported|one_name_filter|one_name_filter": {
+      "batch_accepts": 0,
+      "batch_attempts": 0,
+      "calls": 1950,
+      "fallback_us": 2490022,
+      "rows": 1950
+    },
+    "up|prompt|batch_unsupported|one_name_filter|one_name_filter": {
+      "batch_accepts": 0,
+      "batch_attempts": 0,
+      "calls": 1171,
+      "fallback_us": 3957419,
+      "rows": 1820
+    }
+  },
+  "moe_stream_batch_object_observation": "build-ds4-moe-stream/ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/moe_stream_batch.cu.o was 4912 bytes and llama-cli strings did not contain mxfp4_down_probe",
+  "next_step": "create a separate build with -DGGML_CUDA_MOE_STREAM_BATCH=ON, verify binary contains mxfp4_down_probe, then rerun the parity probe under strict 16GB before any source writeback change",
+  "profile_files": {
+    "fallback_reason_profile.csv": {
+      "bytes": 509220,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-down-mxfp4-existing-parity-probe/france-n16-mxfp4-down-parity/fallback_reason_profile.csv",
+      "sha256": "3e68b525d396f1a1880354974fb7259ff2a232a3bbe74a974582a14e92249018"
+    }
+  },
+  "prompt_scope": "France calibration diagnostic only; held-out not used; not SOTA",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-down-mxfp4-existing-parity-probe/france-n16-mxfp4-down-parity",
+  "source_head": "17bcdc36277d7fab6fd3807dc5ea11ee17cce9ec",
+  "status": "rejected_build_config_stub_timeout_not_sota",
+  "stdout_bytes": 284525760,
+  "systemd_runtime_before_kill": "2min19.308s"
+}

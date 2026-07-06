@@ -4924,3 +4924,15 @@
 - env_under_test: GGML_MOE_STREAM_DOWN_BATCH=1，GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity，GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_CALLS=4，GGML_MOE_STREAM_DOWN_MXFP4_PROBE_OUT 指向 run artifact，同时开启 fallback/profile 记录。
 - pass_signal: probe CSV status=ok，compared>0，max_abs/mean_abs 足够接近 CPU reference；top-level run 输出仍由 CPU fallback 完成且正确，strict 16GB/no-swap。
 - decision_rule: 若 parity 失败，不能写 writeback；若 parity 通过，再写下一轮 source-edit plan：default-off 允许 MXFP4 down batch writeback，并先跑 fixed-text correctness gate，再跑 calibration/dev generalized performance。
+
+
+## 2026-07-07 执行记录：down MXFP4 existing parity probe
+
+- attempt_id: 20260707-down-mxfp4-existing-parity-probe
+- status: rejected_build_config_stub_timeout_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/down-mxfp4-existing-parity-probe-20260707.json
+- run: /root/lfz/runs/vendor-ds4-16gb/20260707T-down-mxfp4-existing-parity-probe/france-n16-mxfp4-down-parity
+- result: -n16 strict run 超过 2min19s，被手动终止；没有生成 down_mxfp4_probe.csv，不能证明 MXFP4 down batch 数值正确。
+- root_cause: 当前 build-ds4-moe-stream 的 CMakeCache 为 GGML_CUDA_MOE_STREAM_BATCH:BOOL=OFF，moe_stream_batch.cu 编译的是 stub path；llama-cli strings 中没有 mxfp4_down_probe，moe_stream_batch.cu.o 只有约 4.9KB。因此本次 env probe 实际没有进入真实 batch implementation。
+- fallback_profile: 仍显示 down eligible but batch_accepts=0，up batch_unsupported + one_name_filter；该结果解释为 build config/stub mismatch，而不是 MXFP4 kernel parity 失败。
+- decision: reject，不作为 SOTA。下一步必须先单独创建 GGML_CUDA_MOE_STREAM_BATCH=ON 的实验 build，确认 binary 包含真实 mxfp4_down_probe，再重跑 parity；若 parity 通过，才允许写 default-off MXFP4 down batch writeback source plan。
