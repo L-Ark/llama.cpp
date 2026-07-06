@@ -4901,3 +4901,15 @@
 - env_under_test: 在 generalized baseline 基础上开启 GGML_MOE_STREAM_DOWN_BATCH=1、GGML_MOE_STREAM_DECLINE_DEBUG=1、GGML_KIMI_CPU_MOE_PROFILE=1、GGML_KIMI_CPU_MOE_NAME_PROFILE=1，并记录 fallback reason/profile；如果 up_gate batch 需要 prompt env，只作为诊断记录，不直接 promotion。
 - success_signal: profile 显示 up/down batch accepted 且 residual fallback 明显下降，同时输出正确、RAM 合格、TTFT 不异常；否则记录 decline reason 或 regression，作为下一步 source plan 输入。
 - reject_rule: 如果正确率失败、OOM、TTFT/性能明显退化，或 batch 全部 declined，则不进入 SOTA；只记录原因并回到具体 source fix 计划。
+
+
+## 2026-07-07 执行记录：generalized up/down batch eligibility probe
+
+- attempt_id: 20260707-generalized-updown-batch-eligibility-probe
+- status: rejected_timeout_and_batch_decline_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/generalized-updown-batch-eligibility-probe-20260707.json
+- run: /root/lfz/runs/vendor-ds4-16gb/20260707T-generalized-updown-batch-eligibility-probe/france-n96-batch-env
+- scope: France calibration diagnostic only，strict 16GB/no-swap，no prompt-specific pack/profile，held-out 未使用，不是 SOTA。
+- result: run 超过 4min 仍未完成 n96，被手动终止；systemd status 终止前显示 Memory 约 14.8G under 16GB max。stdout 497MB 未纳入 git。
+- fallback_profile: up/decode batch_unsupported + one_name_filter，calls=12350，fallback_us=9589467；up/prompt calls=1171，fallback_us=3654414。down/decode eligible but batch_accepts=0，calls=12350，fallback_us=6558052；down/prompt eligible but batch_accepts=0，calls=1171，fallback_us=4459693。
+- decision: reject。仅打开 GGML_MOE_STREAM_DOWN_BATCH 不会给 DeepSeek vendor generalized 路径带来可接受提升；down batch 进入 eligible 但内部 declined 且无 single retry，up 仍未被 batch 支持/被 gate-only name_filter 排除。下一步不能直接 promotion，必须先写 source-level decline reason/parity probe plan，定位 MXFP4 down batch 为什么 0 accept；up/gate 需要独立支持计划。
