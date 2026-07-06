@@ -5068,3 +5068,27 @@
 - correctness_sequence: 先 one-call/op-level compare against CPU dst，要求 max_abs=0 或 fixed-text top1 证明可接受；再 fixed France llama-results same_top1=145/145；最后才允许 calibration/dev generalized prompts。held-out 仍只用于最终 SOTA 测试。
 - performance_risk: Q8_0 path 可能需要从 CPU wdata/H2D 传 src1_q8_0，每 row 约 ne00 bytes 级别；必须批量/复用，不能退化为 per-expert serial copy。理论上 down expert 读仍是主成本，Q8_0 src1 copy 相对 expert bytes 小，但实现不当会吞掉收益。
 - promotion_gate: strict 16GB RAM including page cache、MemorySwapMax=0、TTFT <= generalized baseline * 1.2、correctness pass、泛化 calibration/dev 与最终 held-out test set；出现新 SOTA 立即详细记录复现信息并 push 到 ssd/vendor/deepseek-token-rate-16gb。
+
+
+## 2026-07-07 执行记录：CPU-compatible Q8_0 MXFP4 down batch v1
+
+- attempt_id: 20260707-cpucompat-q80-mxfp4-down-batch-design
+- status: rejected_performance_timeout_source_reverted
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/cpucompat-q80-mxfp4-down-batch-20260707.json
+- source_attempt: 扩展 CPU batch API，把 src1 Q8_0 wdata/row_size/ne1 传给 ggml_cuda_moe_stream_batch；在 moe_stream_batch.cu 增加 default-off GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH 路径，用 CPU-compatible MXFP4 x Q8_0 数学直接写 batch dst。该源码因性能失败已回退，不保留在最终分支。
+- build: build-ds4-moe-stream-batch-on rebuild llama-cli llama-results passed。
+- correctness_blk0: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-correctness/top1-blk0-only，strict 16GB/no-swap，France fixed-text top1，check exit=0，same_top1=145/145，first_mismatch_pos=-1，max_abs=0，mean_abs=0，batch_accept=145。
+- correctness_full_down: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-correctness/top1-full-down，strict 16GB/no-swap，France fixed-text top1，check exit=0，same_top1=145/145，first_mismatch_pos=-1，max_abs=0，mean_abs=0，batch_accept=5800，batch_decline=0。
+- performance_probe: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-perf/france-n96，strict cold drop_caches，16GB/no-swap，France n96；exit=124 after 420s timeout，未完成 generation timing，memory_peak_bytes=16000000000，oom=0/oom_kill=0。
+- decision: correctness breakthrough but performance reject。该 v1 证明 Q8_0 math/API 方向正确，但 naive one-thread-per-output-col kernel 和每 call Q8_0 H2D staging 太慢，不能 promotion，也不能进入 generalized benchmark。
+- rollback: 按性能严重下降规则，v1 source edit 已撤销；只保留 artifact/plan。下一步必须做 optimized Q8_0 down batch v2，而不是提交慢速 correctness scaffold。
+
+## 2026-07-07 下一步 source-design plan：optimized Q8_0 MXFP4 down batch v2
+
+- attempt_id: 20260707-optimized-q80-mxfp4-down-batch-v2
+- status: planned_before_source_edit
+- why_now: v1 full down fixed-text top1 已证明 CPU-compatible Q8_0 数学路径正确，但 n96 timeout 证明 naive kernel 性能不可接受。
+- source_scope: default-off，继续复用 v1 的 API 思路，但 kernel 必须改为 tiled/warp/rowtile 形式，参考 ggml/src/ggml-cuda/moe_stream.cu 里已有的 q80 hot-batch cpu_compat_warp2/rowtile kernels。未设置 env 时现有 SOTA/stage-trace 路径不变。
+- bottleneck_to_fix: v1 每个 output col 单线程串行 2048 dot，导致 GPU 并行度/访存效率差；还需要控制 active rows 的 Q8_0 H2D staging，避免 per-expert 小拷贝吞掉收益。
+- validation_sequence: build -> blk0 top1 -> full down top1 same_top1=145/145/max_abs=0 -> strict cold France n96 performance。只有 France n96 不 timeout且不明显低于 baseline，才继续 calibration/dev generalized prompt set；held-out 仍只用于最终 SOTA。
+- rejection_rule: 若 top1 失败或 n96 仍 timeout/明显慢于 CPU fallback，则回退源码并记录 artifact；不得 promotion。
