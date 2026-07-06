@@ -1,0 +1,1024 @@
+{
+  "schema": "vendor-ds4-bound-changing-route-refresh-v1",
+  "created_at_utc": "2026-07-06T01:52:13Z",
+  "source_state": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head": "5629f8360eee5bd9d17813b689a1d5ad77f98fa4",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "status_short": ""
+  },
+  "method": "Hugging Face model API search only; no weight downloads; relevant sibling filenames only.",
+  "queries": [
+    "DeepSeek-V4-Flash DFlash",
+    "DeepSeek-V4-Flash speculator",
+    "DeepSeek-V4-Flash EAGLE",
+    "DeepSeek-V4-Flash MTP",
+    "DeepSeek-V4-Flash draft",
+    "DeepSeek-V4-Flash sidecar",
+    "DeepSeek V4 Flash GGUF MTP"
+  ],
+  "errors": [],
+  "interesting_count": 18,
+  "interesting": [
+    {
+      "modelId": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "lastModified": "2026-07-02T12:34:53.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash DFlash",
+        "DeepSeek-V4-Flash speculator"
+      ],
+      "classification": [
+        "dflash",
+        "safetensors"
+      ],
+      "file_count_kept": 8,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "config.py"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "val_metrics.json"
+        },
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "config.py"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "val_metrics.json"
+        }
+      ],
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "custom_code",
+        "arxiv:2602.06036",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k",
+      "lastModified": "2026-07-02T06:05:47.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash DFlash",
+        "DeepSeek-V4-Flash speculator"
+      ],
+      "classification": [
+        "dflash",
+        "safetensors"
+      ],
+      "file_count_kept": 8,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "config.py"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "val_metrics.json"
+        },
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "config.py"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "val_metrics.json"
+        }
+      ],
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k",
+      "lastModified": "2026-06-27T18:25:36.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash DFlash",
+        "DeepSeek-V4-Flash speculator"
+      ],
+      "classification": [
+        "dflash",
+        "safetensors"
+      ],
+      "file_count_kept": 8,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "config.py"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "val_metrics.json"
+        },
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "config.py"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "val_metrics.json"
+        }
+      ],
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "lastModified": "2026-06-27T18:15:48.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash DFlash",
+        "DeepSeek-V4-Flash speculator"
+      ],
+      "classification": [
+        "dflash",
+        "safetensors"
+      ],
+      "file_count_kept": 8,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "config.py"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "val_metrics.json"
+        },
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "config.py"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "val_metrics.json"
+        }
+      ],
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "deepseek-v4-flash",
+        "draft-model",
+        "custom_code",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "inferencerlabs/DeepSeek-V4-Flash-MTP-MLX",
+      "lastModified": "2026-06-27T05:30:25.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash MTP"
+      ],
+      "classification": [
+        "mtp",
+        "safetensors"
+      ],
+      "file_count_kept": 2,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "model.safetensors"
+        }
+      ],
+      "tags": [
+        "mlx",
+        "safetensors",
+        "deepseek_v4_mtp",
+        "quantized",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "8-bit",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "ManiacLabs/DeepSeek-V4-Flash-EAGLE3.1",
+      "lastModified": "2026-06-07T22:41:31.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash EAGLE"
+      ],
+      "classification": [
+        "eagle"
+      ],
+      "file_count_kept": 2,
+      "files": [
+        {
+          "rfilename": "benchmark_results.json"
+        },
+        {
+          "rfilename": "config.json"
+        }
+      ],
+      "tags": [
+        "transformers",
+        "pytorch",
+        "llama",
+        "speculative-decoding",
+        "eagle3",
+        "eagle3.1",
+        "draft-model",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "text-generation-inference",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "metadata_actionability": "not_actionable_by_metadata"
+    },
+    {
+      "modelId": "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+      "lastModified": "2026-06-05T07:26:07.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash sidecar"
+      ],
+      "classification": [
+        "gguf",
+        "sidecar"
+      ],
+      "file_count_kept": 3,
+      "files": [
+        {
+          "rfilename": "dense/flashmoe-package.json"
+        },
+        {
+          "rfilename": "dense/model-dense.gguf"
+        },
+        {
+          "rfilename": "manifest.json"
+        }
+      ],
+      "tags": [
+        "gguf",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "metadata_actionability": "requires_header_check_if_deepseek4_and_standalone_or_supported_sidecar"
+    },
+    {
+      "modelId": "FoxlightAI/deepseek-v4-flash-mtp",
+      "lastModified": "2026-06-03T16:45:17.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash MTP"
+      ],
+      "classification": [
+        "mtp",
+        "safetensors"
+      ],
+      "file_count_kept": 1,
+      "files": [
+        {
+          "rfilename": "mtp.safetensors"
+        }
+      ],
+      "tags": [
+        "mtp-sidecar",
+        "skulk",
+        "foxlight",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "mlx-community/DeepSeek-V4-Flash-MTP-bf16",
+      "lastModified": "2026-06-01T20:30:53.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash MTP"
+      ],
+      "classification": [
+        "mtp",
+        "safetensors"
+      ],
+      "file_count_kept": 5,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "generation_config.json"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "tokenizer.json"
+        },
+        {
+          "rfilename": "tokenizer_config.json"
+        }
+      ],
+      "tags": [
+        "mlx",
+        "safetensors",
+        "deepseek_v4_mtp",
+        "mlx-vlm",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mtp",
+        "speculative-decoding",
+        "draft-model",
+        "bf16",
+        "8-bit",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "canada-quant/DeepSeek-V4-Flash-W4A16-FP8-MTP",
+      "lastModified": "2026-05-30T00:23:25.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash MTP"
+      ],
+      "classification": [
+        "mtp",
+        "safetensors"
+      ],
+      "file_count_kept": 9,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "generation_config.json"
+        },
+        {
+          "rfilename": "model-00001-of-00004.safetensors"
+        },
+        {
+          "rfilename": "model-00002-of-00004.safetensors"
+        },
+        {
+          "rfilename": "model-00003-of-00004.safetensors"
+        },
+        {
+          "rfilename": "model-00004-of-00004.safetensors"
+        },
+        {
+          "rfilename": "model.safetensors.index.json"
+        },
+        {
+          "rfilename": "tokenizer.json"
+        },
+        {
+          "rfilename": "tokenizer_config.json"
+        }
+      ],
+      "tags": [
+        "vllm",
+        "safetensors",
+        "deepseek_v4",
+        "deepseek",
+        "compressed-tensors",
+        "w4a16",
+        "gptq",
+        "fp8",
+        "mtp",
+        "speculative-decoding",
+        "mixture-of-experts",
+        "moe",
+        "text-generation",
+        "en",
+        "zh",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k",
+      "lastModified": "2026-05-29T13:58:52.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash DFlash",
+        "DeepSeek-V4-Flash speculator"
+      ],
+      "classification": [
+        "dflash",
+        "safetensors"
+      ],
+      "file_count_kept": 8,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "config.py"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "val_metrics.json"
+        },
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "config.py"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "val_metrics.json"
+        }
+      ],
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "canada-quant/DeepSeek-V4-Flash-NVFP4-FP8-MTP",
+      "lastModified": "2026-05-29T07:22:22.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash MTP"
+      ],
+      "classification": [
+        "mtp",
+        "safetensors"
+      ],
+      "file_count_kept": 40,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "generation_config.json"
+        },
+        {
+          "rfilename": "model-00001-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00002-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00003-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00004-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00005-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00006-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00007-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00008-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00009-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00010-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00011-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00012-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00013-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00014-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00015-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00016-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00017-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00018-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00019-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00020-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00021-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00022-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00023-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00024-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00025-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00026-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00027-of-00035.safetensors"
+        },
+        {
+          "rfilename": "model-00028-of-00035.safetensors"
+        }
+      ],
+      "tags": [
+        "vllm",
+        "safetensors",
+        "deepseek_v4",
+        "compressed-tensors",
+        "nvfp4",
+        "fp8",
+        "deepseek",
+        "mtp",
+        "speculative-decoding",
+        "mixture-of-experts",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "8-bit",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "lastModified": "2026-05-22T10:25:05.000Z",
+      "matched_queries": [
+        "DeepSeek V4 Flash GGUF MTP",
+        "DeepSeek-V4-Flash MTP"
+      ],
+      "classification": [
+        "gguf",
+        "mtp"
+      ],
+      "file_count_kept": 24,
+      "files": [
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-BF16.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_M.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_S.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_M.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_S.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q6_K.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q8_0.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-BF16.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_M.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_S.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_M.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_S.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q6_K.gguf"
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q8_0.gguf"
+        }
+      ],
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "metadata_actionability": "requires_header_check_if_deepseek4_and_standalone_or_supported_sidecar"
+    },
+    {
+      "modelId": "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF",
+      "lastModified": "2026-05-20T14:06:22.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash sidecar"
+      ],
+      "classification": [
+        "gguf",
+        "sidecar"
+      ],
+      "file_count_kept": 17,
+      "files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-KR-Full256-L10-HF-FP4.sidecar.gguf"
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-KR-ThinkTop128-L10-HF-FP4.sidecar.gguf"
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-KR-ThinkTop64-L10-HF-FP4.sidecar.gguf"
+        },
+        {
+          "rfilename": "artifacts/eval_summaries/kmmlu100_summary.json"
+        },
+        {
+          "rfilename": "artifacts/eval_summaries/kmmlu300_summary.json"
+        },
+        {
+          "rfilename": "artifacts/eval_summaries/longv2_summary.json"
+        },
+        {
+          "rfilename": "artifacts/eval_summaries/project_eval_summary.json"
+        },
+        {
+          "rfilename": "artifacts/eval_summaries/thinkmax30_summary.json"
+        },
+        {
+          "rfilename": "artifacts/manifests/l10_full256_source_hf_fp4.json"
+        },
+        {
+          "rfilename": "artifacts/manifests/l10_think_priority_top128_source_hf_fp4.json"
+        },
+        {
+          "rfilename": "artifacts/manifests/l10_think_priority_top64_source_hf_fp4.json"
+        },
+        {
+          "rfilename": "artifacts/plans/l10_full256_source_hf_fp4_sidecar_plan.json"
+        },
+        {
+          "rfilename": "artifacts/plans/l10_think_priority_top128_source_hf_fp4_sidecar_plan.json"
+        },
+        {
+          "rfilename": "artifacts/plans/l10_think_priority_top64_source_hf_fp4_sidecar_plan.json"
+        },
+        {
+          "rfilename": "artifacts/summaries/full256_l10_hf_fp4.summary.json"
+        },
+        {
+          "rfilename": "artifacts/summaries/thinktop128_l10_hf_fp4.summary.json"
+        },
+        {
+          "rfilename": "artifacts/summaries/thinktop64_l10_hf_fp4.summary.json"
+        }
+      ],
+      "tags": [
+        "gguf",
+        "deepseek-v4",
+        "ds4",
+        "sidecar",
+        "korean",
+        "private",
+        "license:other",
+        "region:us"
+      ],
+      "metadata_actionability": "requires_header_check_if_deepseek4_and_standalone_or_supported_sidecar"
+    },
+    {
+      "modelId": "LordNeel/DeepSeek-V4-Flash-Acti-MTP-W4A16-FP8",
+      "lastModified": "2026-05-11T00:59:31.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash MTP"
+      ],
+      "classification": [
+        "mtp",
+        "safetensors"
+      ],
+      "file_count_kept": 13,
+      "files": [
+        {
+          "rfilename": "MTP_QUANT_MANIFEST.json"
+        },
+        {
+          "rfilename": "MTP_QUANT_MANIFEST.md"
+        },
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "docker/apply_mtp_patches.py"
+        },
+        {
+          "rfilename": "generation_config.json"
+        },
+        {
+          "rfilename": "model-00001-of-00004.safetensors"
+        },
+        {
+          "rfilename": "model-00002-of-00004.safetensors"
+        },
+        {
+          "rfilename": "model-00003-of-00004.safetensors"
+        },
+        {
+          "rfilename": "model-00004-of-00004.safetensors"
+        },
+        {
+          "rfilename": "model-mtp-w4a16.safetensors"
+        },
+        {
+          "rfilename": "model.safetensors.index.json"
+        },
+        {
+          "rfilename": "tokenizer.json"
+        },
+        {
+          "rfilename": "tokenizer_config.json"
+        }
+      ],
+      "tags": [
+        "vllm",
+        "safetensors",
+        "deepseek_v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "moe",
+        "compressed-tensors",
+        "w4a16",
+        "gptq",
+        "fp8-block",
+        "mtp",
+        "speculative-decoding",
+        "multi-token-prediction",
+        "acti",
+        "blackwell",
+        "text-generation",
+        "en",
+        "zh",
+        "base_model:canada-quant/DeepSeek-V4-Flash-W4A16-FP8",
+        "base_model:quantized:canada-quant/DeepSeek-V4-Flash-W4A16-FP8",
+        "doi:10.57967/hf/8744",
+        "license:apache-2.0",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "fcobos/Qwen3.5-9B-DeepSeek-V4-Flash-oQ8-mtp",
+      "lastModified": "2026-05-08T20:53:17.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash MTP"
+      ],
+      "classification": [
+        "mtp",
+        "safetensors"
+      ],
+      "file_count_kept": 7,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "model-00001-of-00003.safetensors"
+        },
+        {
+          "rfilename": "model-00002-of-00003.safetensors"
+        },
+        {
+          "rfilename": "model-00003-of-00003.safetensors"
+        },
+        {
+          "rfilename": "model.safetensors.index.json"
+        },
+        {
+          "rfilename": "tokenizer.json"
+        },
+        {
+          "rfilename": "tokenizer_config.json"
+        }
+      ],
+      "tags": [
+        "mlx",
+        "safetensors",
+        "qwen3_5",
+        "oq",
+        "quantized",
+        "8-bit",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "fcobos/Qwen3.5-9B-DeepSeek-V4-Flash-oQ4-mtp",
+      "lastModified": "2026-05-08T20:52:59.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash MTP"
+      ],
+      "classification": [
+        "mtp",
+        "safetensors"
+      ],
+      "file_count_kept": 6,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "model-00001-of-00002.safetensors"
+        },
+        {
+          "rfilename": "model-00002-of-00002.safetensors"
+        },
+        {
+          "rfilename": "model.safetensors.index.json"
+        },
+        {
+          "rfilename": "tokenizer.json"
+        },
+        {
+          "rfilename": "tokenizer_config.json"
+        }
+      ],
+      "tags": [
+        "mlx",
+        "safetensors",
+        "qwen3_5",
+        "oq",
+        "quantized",
+        "4-bit",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    },
+    {
+      "modelId": "Arien0/Qwen3.5-9B-DeepSeek-V4-Flash-AWQ-BF16-INT8-UC-MTP",
+      "lastModified": "2026-05-03T13:35:09.000Z",
+      "matched_queries": [
+        "DeepSeek-V4-Flash MTP"
+      ],
+      "classification": [
+        "mtp",
+        "safetensors"
+      ],
+      "file_count_kept": 10,
+      "files": [
+        {
+          "rfilename": "config.json"
+        },
+        {
+          "rfilename": "generation_config.json"
+        },
+        {
+          "rfilename": "model.safetensors"
+        },
+        {
+          "rfilename": "model.safetensors.index.json"
+        },
+        {
+          "rfilename": "model_mtp.safetensors"
+        },
+        {
+          "rfilename": "preprocessor_config.json"
+        },
+        {
+          "rfilename": "processor_config.json"
+        },
+        {
+          "rfilename": "tokenizer.json"
+        },
+        {
+          "rfilename": "tokenizer_config.json"
+        },
+        {
+          "rfilename": "video_preprocessor_config.json"
+        }
+      ],
+      "tags": [
+        "safetensors",
+        "qwen3_5",
+        "AWQ",
+        "MTP",
+        "image-text-to-text",
+        "conversational",
+        "en",
+        "dataset:HuggingFaceH4/ultrachat_200k",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:apache-2.0",
+        "compressed-tensors",
+        "region:us"
+      ],
+      "metadata_actionability": "not_vendor_loadable_without_loader_or_converter"
+    }
+  ],
+  "preliminary_decision": "No source/benchmark decision from this refresh alone; any new GGUF MTP/draft/sidecar candidate still needs header compatibility, standalone/sidecar semantics, verifier cost, RAM/VRAM/TTFT/correctness proof before source changes. Safetensors DFlash/EAGLE/MTP artifacts remain non-vendor-loadable without loader/converter."
+}

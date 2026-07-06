@@ -2,6 +2,39 @@
 
 ## Summary
 
+### 2026-07-06 Latest Active Plan: Bound-Changing Route Triage After One-Stream Closure
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，本节没有产生新的 accepted performance result。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `elapsed_seconds=62.9`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Push target remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+New route triage artifacts:
+
+- `.Agent/runs/20260705-vendor-ds4-coldstart/bound-changing-route-refresh-after-onestream-20260706.json`
+- `.Agent/runs/20260705-vendor-ds4-coldstart/bound-changing-route-triage-after-onestream-20260706.json`
+
+Route triage result:
+
+- Latest Hugging Face metadata refresh found `18` interesting verifier/draft/sidecar-like repos, but no newly visible vendor-loadable DeepSeek4 draft/verifier/sidecar. The visible DFlash/EAGLE/MTP candidates remain safetensors or runtime-specific overlays, not current vendor-loadable GGUF routes. The known `shreyvish5678` sidecar remains non-direct and requires loader integration/correctness proof.
+- One-stream up/down is closed for `10 tok/s`: fixed shared-cache zero-overhead peak is `6.213 tok/s`; optimistic cpu41/gate-tradeoff peak is `8.095 tok/s`; env-only top-N is not a valid experiment because admit profiles do not restrict execution.
+- Direct/compact GGUF candidates remain below the `10 tok/s` metadata bound. The required expert-equivalent payload is about `11.879710 GiB`; current direct candidates are still too large or not vendor-loadable as complete models.
+- Sidecar/4Expert overlay remains closed without explicit disk approval or a deterministic split-loader proof. Current `/root` free space is about `1.1GB`, so no large download or pack build is allowed.
+- Verified draft/MTP/DFlash/EAGLE remains closed for current public artifacts: the high-acceptance verifier audit found no compatible path, and the DFlash oracle verifier window probe showed only about `1.013x` best elapsed speedup, below the needed sublinear verifier gate.
+- Batch/env route remains closed: accepted binary has no real batch path enabled, and env-only batch diagnostics are rejected.
+
+Updated next executable plan:
+
+1. Commit and push the route refresh/triage artifacts plus this plan update to `ssd/vendor/deepseek-token-rate-16gb` immediately.
+2. Do not touch runtime source and do not start a strict cold benchmark from the current evidence; no route has a hard-bound above `10 tok/s` with RAM/VRAM/TTFT/correctness support.
+3. Without disk approval, continue only metadata/header-level work: watch for a vendor-compatible high-acceptance verifier/draft, a complete representation with expert-equivalent payload near/below `11.879710 GiB`, or a new true-parallel/exact graph proof with margin above `10 tok/s`.
+4. With explicit disk cleanup/relocation approval, download and validate exactly one candidate at a time with full URL/path/size/SHA256/ETag records, loader metadata, France correctness, five-prompt correctness, strict 16GB cold cgroup, TTFT gate, immediate commit/push, and pushed-source reproduction.
+5. Do not delete or move accepted assets without explicit approval: native GGUF, gate pack, accepted SOTA run, current source branch, profile files, demo script, and reproduction artifacts.
+6. Promotion remains strict: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, and correct/coherent output.
+
 ### 2026-07-06 Latest Active Plan: One-Stream Up/Down Closed; Move to Bound-Changing Routes
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，本节没有产生新的 accepted performance result。

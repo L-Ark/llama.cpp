@@ -1,0 +1,123 @@
+{
+  "schema": "vendor-ds4-bound-changing-route-triage-v1",
+  "created_at_utc": "2026-07-06T01:53:44Z",
+  "status": "completed_no_runtime_patch_or_benchmark_authorized",
+  "source_state": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "head": "5629f8360eee5bd9d17813b689a1d5ad77f98fa4",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "status_short": "?? .Agent/runs/20260705-vendor-ds4-coldstart/bound-changing-route-refresh-after-onestream-20260706.json"
+  },
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "elapsed_seconds": 62.9,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "memory_max_events": 16879,
+    "pgmajfault": 272731,
+    "workingset_refault_file": 1638880,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "binary_version": "b14849-d9e56fcdf",
+    "binary_path": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli"
+  },
+  "input_artifacts": [
+    ".Agent/runs/20260705-vendor-ds4-coldstart/one-stream-updown-extension-bound-20260706.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/bound-changing-route-refresh-after-onestream-20260706.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/ten-toks-required-payload-bound-20260706.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/new-compact-under65-header-bound-20260706.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/external-artifact-hard-bound-20260706-after-header-admission.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/high-acceptance-verifier-draft-current-audit.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/4expert-sidecar-bypass-feasibility-audit.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/exact-compact-representation-closure-bound.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/batch-parallel-audit-20260706.json"
+  ],
+  "latest_metadata_refresh": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/bound-changing-route-refresh-after-onestream-20260706.json",
+    "interesting_count": 18,
+    "by_actionability": {
+      "not_vendor_loadable_without_loader_or_converter": [
+        "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+        "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k",
+        "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k",
+        "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+        "inferencerlabs/DeepSeek-V4-Flash-MTP-MLX",
+        "FoxlightAI/deepseek-v4-flash-mtp",
+        "mlx-community/DeepSeek-V4-Flash-MTP-bf16",
+        "canada-quant/DeepSeek-V4-Flash-W4A16-FP8-MTP",
+        "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k",
+        "canada-quant/DeepSeek-V4-Flash-NVFP4-FP8-MTP",
+        "LordNeel/DeepSeek-V4-Flash-Acti-MTP-W4A16-FP8",
+        "fcobos/Qwen3.5-9B-DeepSeek-V4-Flash-oQ8-mtp",
+        "fcobos/Qwen3.5-9B-DeepSeek-V4-Flash-oQ4-mtp",
+        "Arien0/Qwen3.5-9B-DeepSeek-V4-Flash-AWQ-BF16-INT8-UC-MTP"
+      ],
+      "not_actionable_by_metadata": [
+        "ManiacLabs/DeepSeek-V4-Flash-EAGLE3.1"
+      ],
+      "requires_header_check_if_deepseek4_and_standalone_or_supported_sidecar": [
+        "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+        "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+        "KCh3dRi4n/DeepSeek-V4-Flash-KR-L10-HF-FP4-Sidecar-GGUF"
+      ]
+    },
+    "decision": "No newly visible vendor-loadable DeepSeek4 draft/verifier/sidecar was found. DFlash/EAGLE/MTP candidates are safetensors or runtime-specific overlays; shreyvish sidecar remains non-direct and requires loader integration/correctness proof."
+  },
+  "route_matrix": [
+    {
+      "route": "one_stream_updown_extension",
+      "status": "closed_for_10tok",
+      "key_bound": "fixed shared-cache zero-overhead peak 6.213 tok/s; optimistic cpu41/gate-tradeoff peak 8.095 tok/s",
+      "next": "Do not run env-only topN; it cannot isolate topN execution."
+    },
+    {
+      "route": "direct_or_compact_gguf",
+      "status": "closed_for_10tok_metadata_bound",
+      "key_bound": "Required expert-equivalent payload is about 11.879710 GiB; best direct under-65GiB candidate remains 7.868002 tok/s optimistic.",
+      "next": "Only empirical >4.4 testing after explicit disk approval; not a 10 tok/s source route."
+    },
+    {
+      "route": "external_artifact_header_bound",
+      "status": "closed_for_10tok_current_candidates",
+      "key_bound": "Best full single metadata candidate 9.436 tok/s optimistic; strict cold benchmark disallowed without disk/correctness.",
+      "next": "Continue metadata watch only unless a new candidate has hard-bound >10 with margin."
+    },
+    {
+      "route": "sidecar_or_4expert_overlay",
+      "status": "closed_without_disk_or_loader_proof",
+      "key_bound": "no_safe_runtime_probe_without_full_or_split_loader",
+      "next": "Needs full GGUF download after disk approval or a deterministic split-loader proof; no source patch now."
+    },
+    {
+      "route": "exact_compact_representation",
+      "status": "closed_for_native_mxfp4",
+      "key_bound": "The first positive raw-hotset 10 tok/s bound requires top4096 at 17 GiB with about 1.009 s zero-overhead slack, while the only fitting extra pool is about 3.188 GiB. Native MXFP4 payload is already information-dense; measured and entropy-implied exact lossless reduction is about 1.04x, far below the required 5.33x. Therefore no current exact compact representation path can make top4096 fit without a fundamentally new model representation or a correctness-verified non-exact verifier.",
+      "next": "Reopen only with >5.33x effective payload reduction and fixed-text/top1 correctness proof."
+    },
+    {
+      "route": "verified_draft_mtp_dflash_eagle",
+      "status": "closed_current_public_artifacts",
+      "key_bound": "High-acceptance verifier audit: no_compatible_high_acceptance_verifier_or_draft_path_available_now; DFlash oracle best elapsed speedup 1.012985x.",
+      "next": "Reopen only with vendor-compatible artifact proving A>=7 or A>=5 plus measured sublinear target verification and full RAM/VRAM/TTFT/correctness accounting."
+    },
+    {
+      "route": "batch_or_true_parallel_env",
+      "status": "env_route_closed",
+      "key_bound": "Runtime env cannot activate batch in accepted binary; short diagnostic regresses generation to 3.4 tok/s and uses stub batch functions. Continue only with a new design/hard-bound, not env toggles.",
+      "next": "True parallel remains a future source-design route only if a new hard-bound proves sublinear expert execution and correctness."
+    }
+  ],
+  "decision": {
+    "accepted_sota_changed": false,
+    "runtime_source_edit_allowed_now": false,
+    "strict_cold_benchmark_allowed_now": false,
+    "download_allowed_now": false,
+    "reason": "After closing one-stream up/down and refreshing bound-changing artifacts, no current route has a hard-bound above 10 tok/s with RAM/VRAM/TTFT/correctness evidence. Disk free is insufficient for new model downloads or large packs.",
+    "next_executable_without_disk": "Continue metadata/header-only watch for a new vendor-compatible high-acceptance verifier/draft or <=11.879710 GiB expert-equivalent representation. Do not touch runtime source without a new hard-bound artifact.",
+    "next_executable_with_disk_approval": "Download and validate a candidate only after explicit cleanup/relocation approval, with per-file hashes, loader metadata, correctness gates, 16GB cgroup metrics, TTFT gate, immediate commit/push, and pushed-source reproduction."
+  }
+}
