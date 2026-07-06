@@ -3,8 +3,8 @@
   "date": "2026-07-06",
   "branch": "vendor/deepseek-token-rate-16gb",
   "remote": "wici/vendor/deepseek-token-rate-16gb",
-  "commit": "aba8fced5a9eaf5ad8c9f6db64f9154c2c521aa2",
-  "commit_subject": "vendor: restore kimi deepseek2 sota path",
+  "commit": "this_commit",
+  "commit_subject": "vendor: add kimi/deepseek guard regression coverage",
   "objective": "restore Kimi K2 SOTA support on the merged DeepSeek/Kimi vendor branch while preserving DeepSeek behavior",
   "source_fixes": [
     {
@@ -22,6 +22,10 @@
     {
       "file": "ggml/src/ggml-cuda/mmvq.cu",
       "summary": "Fix batched MMVQ to pass the per-active-expert device pointer d_src0_row instead of the base pointer d_src0."
+    },
+    {
+      "file": "src/llama-kimi-compat.h and tests/test-kimi-deepseek2-guards.cpp",
+      "summary": "Centralize the narrow Kimi-vs-DeepSeek guard predicates and add a model-free regression test that ordinary DeepSeek2 grouped routing, tensor placement, and YaRN graph scaling remain on the DeepSeek path."
     }
   ],
   "build_validation": {
@@ -89,6 +93,19 @@
         "token_rate": 1.36,
         "memory_peak": 15899996160,
         "iouring_wait_us": 49964973
+      },
+      {
+        "run": "/root/lfz/runs/vendor-kimi-token-rate/20260706-044538Z-kimi-guards-refactor-n96-verify",
+        "exit": 0,
+        "quality": "pass",
+        "quality_reason": "ok",
+        "ttft_ms": 77036.77,
+        "decode_ms": 57127.81,
+        "decode_runs": 77,
+        "token_rate": 1.35,
+        "memory_peak": 15899996160,
+        "iouring_wait_us": 51563967,
+        "reproduce": "RUN=/root/lfz/runs/vendor-kimi-token-rate/<new>-kimi-guards-refactor-n96-verify N=96 scripts/kimi-phase7og-priority-repro.sh"
       }
     ],
     "same_host_original_kimi_ab_baseline": {
@@ -110,6 +127,18 @@
   },
   "deepseek_validation": {
     "build_status": "pass",
+    "guard_selftest": {
+      "command": "cmake -S . -B build-cuda-batch && cmake --build build-cuda-batch --target test-kimi-deepseek2-guards -j$(nproc) && ./build-cuda-batch/bin/test-kimi-deepseek2-guards",
+      "status": "pass",
+      "coverage": [
+        "Kimi K2 arch=deepseek2 + model-name guard defers expert tensors under GPU offload",
+        "ordinary DeepSeek2 model names do not use the Kimi tensor-placement override",
+        "Kimi K2 384-expert single-group layout uses plain top-k",
+        "ordinary grouped DeepSeek2 keeps the argsort/grouped-routing path",
+        "Kimi graph YaRN uses the stored multiplier directly",
+        "ordinary DeepSeek2 graph YaRN keeps the upstream convert-factor correction"
+      ]
+    },
     "prior_merge_probe": ".Agent/runs/20260705-vendor-ds4-coldstart/kimi-preserving-merge-probe-20260706.json",
     "prior_merge_probe_status": "DeepSeek strict cold run passed correctness/RAM/TTFT constraints at the merge checkpoint, but was below the accepted 4.4 tok/s SOTA.",
     "current_host_asset_audit": {

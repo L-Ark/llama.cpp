@@ -4,6 +4,7 @@
 #include "llama-ext.h"
 #include "llama-hparams.h"
 #include "llama-impl.h"
+#include "llama-kimi-compat.h"
 #include "llama-mmap.h"
 #include "llama-cparams.h"
 #include "llama-model-loader.h"
@@ -20,13 +21,10 @@
 #include "ggml.h"
 #include "ggml-cpp.h"
 
-#include <algorithm>
 #include <cassert>
-#include <cctype>
 #include <cfloat>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <cmath>
 #include <functional>
 #include <map>
@@ -36,22 +34,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-static bool llama_string_contains_case_insensitive(const std::string & haystack, const char * needle) {
-    if (needle == nullptr || needle[0] == '\0') {
-        return true;
-    }
-
-    const char * needle_end = needle + std::strlen(needle);
-    const auto it = std::search(
-            haystack.begin(), haystack.end(),
-            needle, needle_end,
-            [](char a, char b) {
-                return std::tolower((unsigned char) a) == std::tolower((unsigned char) b);
-            });
-
-    return it != haystack.end();
-}
 
 struct ggml_backend_meta_split_state llama_meta_device_get_split_state(const struct ggml_tensor * tensor, void * userdata) {
     const llama_meta_device_get_split_state_userdata * ud = (const llama_meta_device_get_split_state_userdata *) userdata;
@@ -2017,7 +1999,7 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                 }
 
                 if (ml.get_key(LLM_KV_ROPE_SCALING_YARN_LOG_MUL, hparams.rope_yarn_log_mul, 0.0f) &&
-                        !llama_string_contains_case_insensitive(name, "kimi")) {
+                        !llama_model_name_is_kimi(name)) {
                     // [TAG_DEEPSEEK2_YARN_LOG_MUL_FIX]
                     // Cancel the factor from the convert script for DeepSeek2.
                     // Kimi K2 GGUFs also report deepseek2, but their accepted
@@ -3140,9 +3122,7 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
         LLAMA_LOG_WARN("%s: deferred expert loading disabled because tensor validation would fault expert pages eagerly\n", __func__);
         defer_expert_mmap = false;
     }
-    const bool defer_kimi_experts_on_gpu =
-            arch == LLM_ARCH_KIMI_LINEAR ||
-            (arch == LLM_ARCH_DEEPSEEK2 && llama_string_contains_case_insensitive(name, "kimi"));
+    const bool defer_kimi_experts_on_gpu = llama_should_defer_kimi_experts_on_gpu(arch, name);
     if (defer_expert_mmap && defer_kimi_experts_on_gpu && !devices.empty() && n_gpu_layers > 0) {
         deferred_expert_buft_override_patterns.reserve(n_layer);
         deferred_expert_buft_overrides.reserve(n_layer + 1);

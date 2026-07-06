@@ -1,5 +1,7 @@
 #include "models.h"
 
+#include "llama-kimi-compat.h"
+
 llm_build_deepseek2::llm_build_deepseek2(const llama_model & model, const llm_graph_params & params) :
     llm_graph_context(params) {
     // lite variants include DeepSeek-V2-Lite, GigaChat3-10B-A1.8B
@@ -24,16 +26,10 @@ llm_build_deepseek2::llm_build_deepseek2(const llama_model & model, const llm_gr
     GGML_ASSERT(ext_factor >= 0.0f);
     const float attn_factor_org = attn_factor * (1.0f + 0.1f * logf(1.0f / freq_scale));
 
-    const bool is_kimi_k2_deepseek2_layout =
-        model.arch == LLM_ARCH_DEEPSEEK2 &&
-        hparams.n_expert == 384 &&
-        hparams.n_expert_groups == 1;
-
     // Use the original attn_factor to pre-scale the kq_scale.
     // Kimi K2 GGUFs report deepseek2 but use the stored yarn multiplier as-is;
     // DeepSeek2 keeps the upstream fix that re-applies the convert factor here.
-    const float yarn_log_mul = is_kimi_k2_deepseek2_layout ?
-        hparams.rope_yarn_log_mul : 0.1f * hparams.rope_yarn_log_mul;
+    const float yarn_log_mul = llama_deepseek2_yarn_log_mul_for_graph(model.arch, hparams);
     const float mscale   = attn_factor_org * (1.0f + yarn_log_mul * logf(1.0f / freq_scale));
     const float kq_scale = 1.0f * mscale * mscale / sqrtf(float(n_embd_head_k));
 

@@ -160,6 +160,8 @@ if (NOT WIN32 OR NOT BUILD_SHARED_LIBS)
     llama_build_and_test(test-server-prompt-cache.cpp)
     target_include_directories(test-server-prompt-cache PRIVATE ${PROJECT_SOURCE_DIR}/tools/server)
     target_link_libraries(test-server-prompt-cache PRIVATE server-context)
+    llama_build_and_test(test-kimi-deepseek2-guards.cpp)
+    target_include_directories(test-kimi-deepseek2-guards PRIVATE ${PROJECT_SOURCE_DIR}/src)
     # TODO: disabled on loongarch64 because the ggml-ci node lacks Python 3.8
     if (NOT ${CMAKE_SYSTEM_PROCESSOR} MATCHES "loongarch64")
         llama_build_and_test(test-json-schema-to-grammar.cpp   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
