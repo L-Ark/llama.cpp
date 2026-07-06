@@ -92712,3 +92712,127 @@ Next step:
 
 - Write a cleanup/download/smoke plan before any destructive action.
 - Request explicit approval before deleting old non-SOTA packs.
+
+## GP33: i1-IQ1_S cleanup, download, and n32 smoke plan
+
+Timestamp: `2026-07-07T09:00:00+0800`.
+
+Status: planned; blocked on explicit deletion approval before execution.
+
+Purpose:
+
+- GP31 found `mradermacher/Kimi-K2.7-Code-i1-GGUF` `i1-IQ1_S`
+  (`190.39 GiB`, `0.504x` of current IQ3_S).
+- GP32 verified the header metadata:
+  - Kimi/deepseek2-compatible;
+  - `general.file_type=24` / `IQ1_S`;
+  - expert tensors are `177` IQ1_S and `3` Q2_K;
+  - current stream path plausibly supports those types.
+- GP33 is the first phase that would require disk cleanup and a full model
+  download. It must not execute until deletion approval is explicit.
+
+Must preserve:
+
+- Current IQ3_S model:
+  `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S`.
+- Current SOTA main pack:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`.
+- Current overlay pack:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`.
+- All committed `.Agent` run records.
+
+Deletion candidates, requiring explicit approval:
+
+```text
+/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack                  # ~160G, old pack
+/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-tracefirst-n64-20260630.expert-pack # ~75G, old trace pack
+/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack # ~7.2G, old overlay
+/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack       # ~4.7G, old overlay
+```
+
+Expected disk after deleting the first two old packs:
+
+- Current free: about `85G`.
+- Delete old `france.expert-pack`: `+160G`.
+- Delete old `tracefirst`: `+75G`.
+- Expected free: about `320G`.
+- Required final IQ1_S GGUF: `190.39 GiB`.
+- Expected remaining after final GGUF: about `129G`.
+
+Download method:
+
+- Do not store all five parts and the final GGUF simultaneously.
+- Stream-concatenate parts in order into a final file under:
+  `/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF/`.
+- Record:
+  - every source URL;
+  - output path;
+  - bytes written;
+  - SHA256 of the final concatenated file if feasible;
+  - per-part curl exit codes and byte counts.
+- If download fails:
+  - keep the partial final file only if resumable and clearly marked;
+  - otherwise delete the incomplete final file;
+  - do not delete any preserved SOTA assets.
+
+Initial smoke command shape:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-gp33-iq1s-france-n32
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO=<worktree> RUN=$RUN N=32 \
+      PROMPT_ID=dev_france_regression \
+      PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+      QUALITY_KEYWORDS="france,europe|paris|eiffel|louvre|riviera|bordeaux" \
+      PROFILE=1 COPY_PROFILE=0 \
+      MODEL_PATH=/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF/Kimi-K2.7-Code.i1-IQ1_S.gguf \
+      .Agent/run-tools/<iq1s-repro-wrapper>.sh
+```
+
+Implementation note:
+
+- Existing repro wrapper currently hardcodes the IQ3_S model path.
+- Before the smoke run, add or wrap a default-off `MODEL_PATH` override in the
+  repro script so IQ3_S SOTA reproduction remains unchanged.
+- This script change must be committed and pushed before the smoke run.
+
+n32 smoke pass gate:
+
+- `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Cold start.
+- France prompt quality pass.
+- No semantic collapse or repetition.
+- `TTFT <= current baseline * 1.20`.
+- Stream path activates for expert tensors:
+  - no unexpected `unsupported_type` declines for `IQ1_S`/`Q2_K`;
+  - CPU fallback recorded and explained if present.
+- Host RAM remains under 16GB including page cache.
+
+If n32 passes:
+
+- Run dev n96, not held-out test yet.
+- Compare:
+  - token rate;
+  - TTFT;
+  - output quality;
+  - memory peak;
+  - iouring bytes/wait;
+  - fallback by type.
+
+If n32 fails:
+
+- Do not run n96.
+- Record failure and decide whether failure is:
+  - quality risk inherent to IQ1_S;
+  - stream/runtime compatibility issue;
+  - prompt fallback/TTFT issue;
+  - disk/download corruption.
+- Revert any runtime/script changes unless they are default-off and useful for
+  reproducibility.
+
+Held-out test rule:
+
+- Held-out test prompts are still sealed.
+- They can only be run after an IQ1_S candidate passes France n32 and dev n96,
+  and after the candidate commit is frozen.
