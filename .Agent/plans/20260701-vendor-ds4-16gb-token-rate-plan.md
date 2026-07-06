@@ -5021,3 +5021,28 @@
 - performance_gate: correctness 通过后，只在 calibration/dev generalized prompt set 上跑 strict cold 16GB/no-swap benchmark；记录每个 prompt eval_tok_s、prompt_tok_s、TTFT、memory_peak/file bytes、answer。不得用 held-out test set 调参；最终 SOTA 必须再用 held-out test set 报告。
 - TTFT/RAM_gate: MemoryMax=16000000000、MemorySwapMax=0、page cache 计入 cgroup；TTFT 相对 accepted generalized baseline 不能升高超过 20%。超过 TTFT 可作为 rejected diagnostic commit，但不能 promotion。
 - push_rule: 若只是 diagnostic/reject，也要记录 artifact/plan 并 push；若出现符合所有要求的新 generalized SOTA，必须详细记录复现信息、立即 commit+push 到 ssd/vendor/deepseek-token-rate-16gb，并从 pushed commit 重新复现。
+
+
+## 2026-07-07 执行记录：default-off MXFP4 down batch writeback correctness gate
+
+- attempt_id: 20260707-mxfp4-down-batch-writeback-correctness-gate
+- status: rejected_top1_failed_source_reverted
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/mxfp4-down-batch-writeback-correctness-gate-20260707.json
+- source_attempt: 临时增加 default-off GGML_MOE_STREAM_DOWN_MXFP4_WRITEBACK 和可选 GGML_MOE_STREAM_DOWN_MXFP4_WRITEBACK_TENSOR，使 MXFP4 down batch 在 env 打开时不再 probe-return-false，而是进入已有 scatter/writeback/return true。该源码尝试因 correctness 失败已回退，未保留在最终分支。
+- build: build-ds4-moe-stream-batch-on rebuild llama-cli llama-results passed。
+- full_writeback_run: /root/lfz/runs/vendor-ds4-16gb/20260707T-mxfp4-down-writeback-correctness/top1-france，strict 16GB/no-swap，cold drop_caches，France fixed-text top1 calibration only，held-out 未使用。baseline exit=0，writeback check exit=1。
+- full_writeback_result: same_top1=141/145，first_mismatch_pos=9，max_abs=4.5455，mean_abs=0.159527；expanded parity probe 4 calls、每 call compared=2048，max_abs 范围约 0.002567-0.009435。结论：不能 promotion，不能 benchmark。
+- blk0_only_run: /root/lfz/runs/vendor-ds4-16gb/20260707T-mxfp4-down-writeback-correctness/top1-blk0-only，只设置 GGML_MOE_STREAM_DOWN_MXFP4_WRITEBACK_TENSOR=blk.0.ffn_down_exps.weight。check exit=1，same_top1=140/145，first_mismatch_pos=10，max_abs=5.79487，mean_abs=0.146093。
+- memory: 两个 run 均在 MemoryMax=16000000000、MemorySwapMax=0 下运行，oom=0/oom_kill=0，page cache 计入 cgroup；这是 rejected correctness diagnostic，不是 SOTA。
+- interpretation: 问题不是全层累积才出现；单层 blk.0 down writeback 已改变 top1。当前 MXFP4 down batch kernel/writeback 与 CPU fallback 数值语义不一致，必须先修算子数学/layout/parity，不能继续做 token-rate promotion。
+- rollback: 按准确率失败回退规则，writeback source edit 已撤销；分支只保留之前已 push 的 stage trace diagnostic。
+
+## 2026-07-07 下一步 design plan：MXFP4 down math/layout parity root-cause
+
+- attempt_id: 20260707-mxfp4-down-math-layout-parity-root-cause
+- status: planned_before_experiment
+- why_now: stage trace 说明 staging/kernel/sync 能跑通，writeback top1 说明数值不稳定；下一步 bottleneck 已不是 I/O，而是 GPU MXFP4 down kernel 与 CPU fallback 的数学/layout 一致性。
+- scope: diagnostic only；不写回 logits，不跑 token-rate benchmark，不使用 held-out。先在 deterministic small harness 或 one-call tensor compare 中缩小到单 expert、单 row、固定 col/k，比较 CPU dequant dot 与 launch_moe_mmvq_compact_batch 的同一输出。
+- checks: 验证 MXFP4 block layout、nb01/nb02 stride、col-major/row-major 解释、scale/exponent handling、accumulation order、src1 quantization path（d_src1_q8）是否与 CPU fallback 等价。优先找到导致 blk.0-only top1 失败的 >5 logit 差异来源。
+- pass_gate: small harness/op-level compare 必须能解释并修正当前 0.002-0.009 local dot error以及 top1 max_abs>5 的放大；只有 fixed-text top1 恢复 same_top1=145/145 后，才允许重新进入 writeback benchmark。
+- push_rule: root-cause analysis 和任何 rejected probe 都要记录 artifact/plan 并 push；出现 correctness pass 但性能未达标也需记录，不得使用 held-out 调参。
