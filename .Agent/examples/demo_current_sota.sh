@@ -13,12 +13,16 @@ set -euo pipefail
 #   .Agent/examples/demo_current_sota.sh
 #   .Agent/examples/demo_current_sota.sh --print-command
 #   .Agent/examples/demo_current_sota.sh --run-name my-demo
+#
+# Optional path overrides:
+#   ROOT=/path/to/checkout BINARY=/path/to/llama-cli MODEL=/path/to/model.gguf .Agent/examples/demo_current_sota.sh
 
-ROOT=/root/lfz/vendor/llama.cpp-deepseek-v4
+ROOT="${ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 RUNNER="$ROOT/.Agent/run-tools/strict_ds4_runner.py"
-BINARY="$ROOT/build-ds4-moe-stream/bin/llama-cli"
+BINARY="${BINARY:-$ROOT/build-cuda-batch/bin/llama-cli}"
 OUT_ROOT=/root/lfz/runs/vendor-ds4-16gb
 PROFILE="$ROOT/.Agent/profiles/vendor-ds4/current_sota_gate_freq_ge2.tsv"
+MODEL="${MODEL:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf}"
 PACK=/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack
 RUN_NAME="demo-current-sota"
 PRINT_COMMAND=0
@@ -47,7 +51,7 @@ done
 cd "$ROOT"
 
 missing=0
-for path in "$RUNNER" "$BINARY" "$PROFILE" "$PACK"; do
+for path in "$RUNNER" "$BINARY" "$MODEL" "$PROFILE" "$PACK"; do
   if [[ ! -e "$path" ]]; then
     echo "missing required artifact: $path" >&2
     missing=1
@@ -60,6 +64,7 @@ fi
 cmd=(
   python3 "$RUNNER"
   --binary "$BINARY"
+  --model "$MODEL"
   --out-root "$OUT_ROOT"
   --run-name "$RUN_NAME"
   --cpu-moe 40

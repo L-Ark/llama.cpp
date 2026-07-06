@@ -15,7 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-DEFAULT_BIN = Path("/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+DEFAULT_BIN = REPO_ROOT / "build-cuda-batch/bin/llama-cli"
 DEFAULT_MODEL = Path("/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf")
 DEFAULT_OUT_ROOT = Path("/root/lfz/runs/vendor-ds4-16gb")
 DEFAULT_PROMPT = "Please introduce France in a short paragraph."

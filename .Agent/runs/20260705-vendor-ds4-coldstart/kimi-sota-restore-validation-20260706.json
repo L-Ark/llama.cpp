@@ -160,8 +160,27 @@
     "current_host_asset_audit": {
       "deepseek_model_present": false,
       "accepted_gate_pack_present": false,
+      "audited_at": "2026-07-06T04:58Z",
+      "current_repo": "/root/lfz/llama.cpp-vendor-kimi",
+      "current_commit": "ddab16327213646ba040e9f2593d8984243a9f61",
+      "missing_model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
       "missing_pack": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "missing_native_pack": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+      "old_repo_present": false,
+      "old_repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
       "available_models": "Only Kimi-K2.7-Code-GGUF-IQ3_S was found under /root/lfz/models on the validation host."
+    },
+    "reproduction_entrypoint_fix": {
+      "files": [
+        ".Agent/run-tools/strict_ds4_runner.py",
+        ".Agent/examples/demo_current_sota.sh"
+      ],
+      "summary": "The strict DeepSeek reproduction entrypoints now default to the current checkout instead of the removed /root/lfz/vendor/llama.cpp-deepseek-v4 path. demo_current_sota.sh also checks the current binary, current profile, model GGUF, and accepted gate pack before launching.",
+      "validation": [
+        "python3 -m py_compile .Agent/run-tools/strict_ds4_runner.py",
+        ".Agent/run-tools/strict_ds4_runner.py --help",
+        ".Agent/examples/demo_current_sota.sh --print-command exits 2 on the validation host and reports the two actual missing artifacts: DeepSeek-V4-Flash-FP4-FP8-native.gguf and ds4-france-gate-miss-firstorder-20260702.pack"
+      ]
     },
     "direct_current_commit_deepseek_run": "not_run",
     "reason_not_run": "The validation host lacks the DeepSeek GGUF and accepted gate expert pack required by the strict DeepSeek SOTA runner.",
