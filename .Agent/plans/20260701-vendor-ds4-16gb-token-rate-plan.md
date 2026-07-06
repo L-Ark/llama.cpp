@@ -3788,3 +3788,18 @@
 - `P5_strict_cold_benchmark`: Run the exact cold-start benchmark under `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches`, page-cache accounting, no OOM/swap, and the same TTFT gate. Record token rate, prompt rate, TTFT, elapsed time, memory.peak, memory.stat file, faults/refaults, counters, answer, env, CLI, commit, binary hash, model hash, and pack/profile hashes.
 - `P6_promote_or_reject`: If `eval_tok_s > 4.4` and all gates pass, immediately commit and push source/records, then rerun from the pushed commit and record pushed-source reproduction. If token rate regresses, correctness fails, RAM exceeds 16GB, TTFT exceeds the accepted gate, or evidence is incomplete, mark the run rejected and keep `4.4 tok/s` as accepted SOTA.
 - `P7_fallback_if_4expert_underperforms_or_stays_blocked`: Return to native SOTA bottleneck work only after recording the 4Expert blocker. The next native work should focus on measured CPU fallback/page-refault cost and must avoid previously rejected large buffered down-pack or accidental batch enablement paths unless a new hard-bound analysis shows a clear ceiling above `4.4 tok/s`.
+
+
+## 2026-07-06 执行记录：down MXFP4 perf probe rejected
+
+- `attempt_id`: `20260706-down-mxfp4-perf-france-probe`
+- `status`: `rejected_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/down-mxfp4-perf-france-probe-rejection-20260706.json`
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T120136Z-down-mxfp4-perf-france-probe-20260706/france-cpu40-vram0gb`
+- `prompt_scope`: calibration/dev France only. `held_out_test_set_v1_locked` was not used.
+- `config`: no prompt-specific pack/profile; strict cold `drop_caches`; `MemoryMax=16000000000`; `MemorySwapMax=0`; `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=perf`; `GGML_MOE_STREAM_DOWN_BATCH=1`; conservative VRAM split with gate one-stream cache `8192MiB` and batch/down cache `512MiB`.
+- `metrics`: `eval_tok_s=1.7`, `prompt_tok_s=0.9`, `TTFT=38553.15988ms`, `elapsed_seconds=127.07`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15004889088`, `pgmajfault=156746`, `workingset_refault_file=8071289`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
+- `local_success`: down batch was accepted and down CPU fallback disappeared from `fallback_reason_profile`; remaining fallback rows were only `up`. Down profile printed `batch_accept=6320`, `batch_decline=0`.
+- `remaining_bottleneck`: up fallback still dominated (`up decode=19954.796ms`, `up prompt=4304.180ms`). Down batch also added staging/cache cost and required reducing gate cache headroom, so local down fallback removal did not translate into end-to-end gain.
+- `decision`: reject. This is slower than the no-prompt-specific calibration France baseline/profile (`~2.6-2.7 tok/s`) and cannot be promoted. Do not run held-out or claim generalized SOTA from this path.
+- `next_design`: prioritize prompt-general `ffn_up_exps` fallback reduction, or redesign down/offload only if it avoids sacrificing gate cache and has a hard-bound above the generalized baseline. Any future candidate must first improve the calibration/dev aggregate, then freeze before held-out testing.
