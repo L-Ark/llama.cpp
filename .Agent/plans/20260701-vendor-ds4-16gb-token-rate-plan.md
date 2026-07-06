@@ -4561,3 +4561,38 @@
 - `calibration_gate`: 先在 calibration/dev 至少覆盖 France、quantum、Fibonacci、Japan、climate；不得使用 held-out 调参。
 - `held_out_gate`: freeze 后只跑 held-out test set，一次性记录 photosynthesis、home office tips、JavaScript palindrome、exercise、Brazil。
 - `promotion_rule`: held-out min token rate 必须 `>5 tok/s`，所有 prompt correctness pass，TTFT 合格，RAM/page cache 合格，才允许 promotion 并立刻 push + pushed commit rerun。
+
+## 2026-07-07 hard-bound：generalized source movement + up/down fallback combination
+
+- `attempt_id`: `20260707-generalized-source-movement-combination-hard-bound`
+- `status`: `completed_hard_bound_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-source-movement-combination-hard-bound-20260707.json`
+- `prompt_scope`: calibration/dev only；held-out 未使用。
+- `input_profile`: generalized no-prompt-specific quantum profile `/root/lfz/runs/vendor-ds4-16gb/20260706T191925Z-20260707-generalized-quantum-full-decode-profile/quantum-full-decode-profile-cpu40-vram0gb`。
+- `observed`: quantum generalized `eval_tok_s=1.9`，decode 约 `526.32 ms/token`，up/down fallback 约 `259.29 ms/token`，gate one-stream/source movement 上界约 `213.12 ms/token`，graph sync 约 `0.81 ms/token`。
+- `bound_results`:
+  - 仅完美消除 up/down fallback：`267.03 ms/token`，约 `3.74 tok/s`，不足 5。
+  - 仅完美消除 gate source movement：`313.19 ms/token`，约 `3.19 tok/s`，不足 5。
+  - 两者同时零开销消除：`53.91 ms/token`，约 `18.55 tok/s`，这是极乐观组合上界，不含替代 H2D/kernel/scatter 成本。
+  - 同时削减 `50% + 50%`：约 `3.45 tok/s`，不足 5。
+  - 同时削减 `70% + 70%`：约 `5.11 tok/s`，刚过线但几乎没有真实实现 overhead 余量。
+  - 同时削减 `80% + 80%`：约 `6.74 tok/s`，才有较合理 overhead 余量。
+- `vram_constraints`: native gate/up/down 每个 role 各约 `45.69 GiB`，全部 experts 约 `137.06 GiB`；当前 accepted gate cache budget 约 `13.25 GiB`，只能容纳约 `29%` 的 exact gate role，或约 `4` 个完整 MoE layer 的 gate+up+down。32GB 5090 不可能 exact resident 全部 experts。
+- `decision`: 下一步不能只修 up/down fallback，也不能只做 generalized gate hotset；必须选择能同时压缩 gate cold source movement 和 up/down fallback 的方案。CUDA graph/sync 不是主线。
+
+## 2026-07-07 下一步实现选择：prompt-independent residency/representation probe
+
+- `objective`: 设计一个 default-off、prompt-independent 的 residency/representation probe，在不使用 held-out 和不使用单 prompt pack 的情况下，验证是否能同时减少：
+  1. gate one-stream cold source movement/page-cache refault；
+  2. up/down CPU fallback 的 per-token 耗时。
+- `first_candidate_to_design`: calibration/dev 聚合的 role-aware resident manifest，而不是 France-specific profile：
+  - gate: calibration/dev aggregate hotset，用于 prefill/admit，预算先以 `8-10 GiB` exact gate 为上限；
+  - up/down: 不做 per-expert one-stream 直接替换，先做 payload/coverage bound，判断 `3-5 GiB` exact 或 low-bit resident rows 是否能覆盖 quantum/Fibonacci 慢路径的主要 fallback；
+  - layer/tail: 单独算 late-layer full MoE exact residency，如果牺牲部分 gate cache，哪些 layer 的 combined saving 最大。
+- `implementation_gate`: 只有 hard-bound 显示某个 prompt-independent manifest 在 calibration/dev slow prompts 上有 `>5 tok/s` 且保留 overhead 余量，才写 runtime prototype。否则只记录 rejected bound。
+- `validation_sequence`:
+  1. 先写 manifest/coverage/bound artifact，不改 runtime；
+  2. 若 bound 通过，写 default-off runtime probe；
+  3. calibration/dev 全集跑 strict 16GB；
+  4. freeze 后才跑 held-out；
+  5. 合规 generalized SOTA 立即 commit/push 到 `ssd/vendor/deepseek-token-rate-16gb`，并从 pushed commit 复现。

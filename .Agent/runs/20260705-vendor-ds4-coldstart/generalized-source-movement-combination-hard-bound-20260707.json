@@ -1,0 +1,236 @@
+{
+  "bounds": [
+    {
+      "decode_ms_per_token_bound": 526.3157894736842,
+      "fallback_cut_fraction": 0,
+      "gate_source_cut_fraction": 0,
+      "note": "Observed no-prompt-specific quantum profile.",
+      "scenario": "baseline_observed",
+      "tok_s_bound": 1.9000000000000001
+    },
+    {
+      "decode_ms_per_token_bound": 267.0298470653077,
+      "fallback_cut_fraction": 1,
+      "gate_source_cut_fraction": 0,
+      "note": "Upper bound for perfect up/down fallback elimination only.",
+      "scenario": "remove_updown_fallback_only_zero_overhead",
+      "tok_s_bound": 3.744899721848057
+    },
+    {
+      "decode_ms_per_token_bound": 313.19450675119873,
+      "fallback_cut_fraction": 0,
+      "gate_source_cut_fraction": 1,
+      "note": "Upper bound for perfect gate source movement elimination only; one_stream_total includes prompt/decode context, so this is optimistic.",
+      "scenario": "remove_gate_one_stream_only_zero_overhead",
+      "tok_s_bound": 3.192904021124478
+    },
+    {
+      "decode_ms_per_token_bound": 53.908564342822274,
+      "fallback_cut_fraction": 1,
+      "gate_source_cut_fraction": 1,
+      "note": "Very optimistic combination bound; excludes replacement H2D/kernel/scatter costs.",
+      "scenario": "remove_fallback_and_gate_source_zero_overhead",
+      "tok_s_bound": 18.54992823850161
+    },
+    {
+      "decode_ms_per_token_bound": 290.1121769082532,
+      "fallback_cut_fraction": 0.5,
+      "gate_source_cut_fraction": 0.5,
+      "note": "Symmetric combination reduction target.",
+      "scenario": "combined_50pct_fallback_50pct_gate_source_cut",
+      "tok_s_bound": 3.4469425263602287
+    },
+    {
+      "decode_ms_per_token_bound": 195.63073188208082,
+      "fallback_cut_fraction": 0.7,
+      "gate_source_cut_fraction": 0.7,
+      "note": "Symmetric combination reduction target.",
+      "scenario": "combined_70pct_fallback_70pct_gate_source_cut",
+      "tok_s_bound": 5.111671312474382
+    },
+    {
+      "decode_ms_per_token_bound": 148.39000936899464,
+      "fallback_cut_fraction": 0.8,
+      "gate_source_cut_fraction": 0.8,
+      "note": "Symmetric combination reduction target.",
+      "scenario": "combined_80pct_fallback_80pct_gate_source_cut",
+      "tok_s_bound": 6.738998159325846
+    },
+    {
+      "decode_ms_per_token_bound": 101.14928685590846,
+      "fallback_cut_fraction": 0.9,
+      "gate_source_cut_fraction": 0.9,
+      "note": "Symmetric combination reduction target.",
+      "scenario": "combined_90pct_fallback_90pct_gate_source_cut",
+      "tok_s_bound": 9.88637716669761
+    }
+  ],
+  "calibration_no_prompt_specific_baseline": [
+    {
+      "correctness": "pass",
+      "eval_tok_s": 2.7,
+      "observed_ms_per_token": 370.3703703703703,
+      "prompt_id": "france",
+      "ram_ok": true,
+      "ttft_ms": 37923.003507
+    },
+    {
+      "correctness": "semantically mostly correct but truncated at token budget",
+      "eval_tok_s": 1.8,
+      "observed_ms_per_token": 555.5555555555555,
+      "prompt_id": "quantum",
+      "ram_ok": true,
+      "ttft_ms": 36302.576297
+    },
+    {
+      "correctness": "contains Python function; manual review required for exact style/truncation",
+      "eval_tok_s": 1.8,
+      "observed_ms_per_token": 555.5555555555555,
+      "prompt_id": "fibonacci",
+      "ram_ok": true,
+      "ttft_ms": 39690.826466
+    },
+    {
+      "correctness": "pass",
+      "eval_tok_s": 2.4,
+      "observed_ms_per_token": 416.6666666666667,
+      "prompt_id": "japan",
+      "ram_ok": true,
+      "ttft_ms": 40176.617912
+    },
+    {
+      "correctness": "pass",
+      "eval_tok_s": 2.2,
+      "observed_ms_per_token": 454.5454545454545,
+      "prompt_id": "climate",
+      "ram_ok": true,
+      "ttft_ms": 37774.874377
+    }
+  ],
+  "created_at_utc": "2026-07-06T19:27:25.081623Z",
+  "decision": {
+    "combination_required": true,
+    "cuda_graph_mainline": false,
+    "gate_source_alone_sufficient": false,
+    "minimum_practical_direction": "Need simultaneous generalized gate/source-movement reduction and up/down fallback reduction. A symmetric ~70% reduction of both is the first optimistic bound crossing 5 tok/s for quantum; after real overhead, target should be >=80% on one side or both.",
+    "runtime_prototype_gate": "Do not write a large source patch until a prompt-independent residency/representation design can plausibly cut both terms under 32GB VRAM and 16GB host RAM.",
+    "updown_fallback_alone_sufficient": false
+  },
+  "inputs": {
+    "generalized_baseline_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+    "profile_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/full-decode-bottleneck-profile-france-specialized-vs-quantum-generalized-20260707.json",
+    "quantum_profile_run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T191925Z-20260707-generalized-quantum-full-decode-profile/quantum-full-decode-profile-cpu40-vram0gb"
+  },
+  "next_experiment_plan": [
+    "Build a prompt-independent generalized gate hotset/prefill candidate from calibration/dev only, not France-specific, and benchmark on calibration/dev first.",
+    "In parallel, compute layer/tail exact-residency and low-bit residency payload bounds: how many full MoE layers or role-specific tensors can fit if gate cache is reduced.",
+    "Only if hard bound says >=5 tok/s after overhead, implement a default-off runtime candidate; otherwise keep it as rejected bound.",
+    "Held-out set remains locked until candidate freeze."
+  ],
+  "prompt_scope": "calibration/dev only; held-out unused",
+  "quantum_generalized_observed": {
+    "correctness_ok": true,
+    "decode_ms_per_token": 526.3157894736842,
+    "eval_tok_s": 1.9,
+    "fallback_decode_ms_per_token_counter": 259.28594240837646,
+    "gate_one_stream_total_ms_per_decode_token_upper_bound": 213.12128272248543,
+    "graph_sync_ms_per_token": 0.8083246073298429,
+    "memory_file_bytes": 14957862912,
+    "memory_peak_bytes": 16000000000,
+    "ram_ok": true,
+    "ttft_ms": 37988.804989
+  },
+  "required_cut_fractions_for_5tok_s_quantum": [
+    {
+      "fallback_cut_fraction": 0.0,
+      "feasible_fraction_range": false,
+      "required_gate_source_cut_fraction_for_5tok_s": 1.5311271840391194
+    },
+    {
+      "fallback_cut_fraction": 0.25,
+      "feasible_fraction_range": false,
+      "required_gate_source_cut_fraction_for_5tok_s": 1.226974146041028
+    },
+    {
+      "fallback_cut_fraction": 0.5,
+      "feasible_fraction_range": true,
+      "required_gate_source_cut_fraction_for_5tok_s": 0.9228211080429363
+    },
+    {
+      "fallback_cut_fraction": 0.7,
+      "feasible_fraction_range": true,
+      "required_gate_source_cut_fraction_for_5tok_s": 0.6794986776444631
+    },
+    {
+      "fallback_cut_fraction": 0.8,
+      "feasible_fraction_range": true,
+      "required_gate_source_cut_fraction_for_5tok_s": 0.5578374624452266
+    },
+    {
+      "fallback_cut_fraction": 0.9,
+      "feasible_fraction_range": true,
+      "required_gate_source_cut_fraction_for_5tok_s": 0.43617624724599
+    },
+    {
+      "fallback_cut_fraction": 1.0,
+      "feasible_fraction_range": true,
+      "required_gate_source_cut_fraction_for_5tok_s": 0.31451503204675346
+    },
+    {
+      "feasible_fraction_range": false,
+      "gate_source_cut_fraction": 0.0,
+      "required_fallback_cut_fraction_for_5tok_s": 1.2585170890589024
+    },
+    {
+      "feasible_fraction_range": false,
+      "gate_source_cut_fraction": 0.25,
+      "required_fallback_cut_fraction_for_5tok_s": 1.0530284297597237
+    },
+    {
+      "feasible_fraction_range": true,
+      "gate_source_cut_fraction": 0.5,
+      "required_fallback_cut_fraction_for_5tok_s": 0.847539770460545
+    },
+    {
+      "feasible_fraction_range": true,
+      "gate_source_cut_fraction": 0.7,
+      "required_fallback_cut_fraction_for_5tok_s": 0.6831488430212018
+    },
+    {
+      "feasible_fraction_range": true,
+      "gate_source_cut_fraction": 0.8,
+      "required_fallback_cut_fraction_for_5tok_s": 0.6009533793015304
+    },
+    {
+      "feasible_fraction_range": true,
+      "gate_source_cut_fraction": 0.9,
+      "required_fallback_cut_fraction_for_5tok_s": 0.518757915581859
+    },
+    {
+      "feasible_fraction_range": true,
+      "gate_source_cut_fraction": 1.0,
+      "required_fallback_cut_fraction_for_5tok_s": 0.43656245186218734
+    }
+  ],
+  "status": "hard_bound_not_sota",
+  "task_target": {
+    "gpu": "32GB RTX 5090",
+    "host_ram_limit_bytes_including_page_cache": 16000000000,
+    "target_max_decode_ms_per_token": 200.0,
+    "target_min_tok_s_random_prompt": 5.0
+  },
+  "vram_constraints": {
+    "accepted_gate_cache_budget_gib": 13.25,
+    "accepted_gate_cache_budget_mib": 13568,
+    "full_moe_layers_fit_exact_in_13_25gib_budget": 4,
+    "gate_fraction_fit_exact_in_current_cache_budget": 0.29001367989056087,
+    "native_all_experts_total_gib": 137.0625,
+    "native_down_exps_total_gib": 45.6875,
+    "native_gate_exps_total_gib": 45.6875,
+    "native_up_exps_total_gib": 45.6875,
+    "note": "Exact full gate/up/down residency cannot fit in 32GB; any generalized residency must be hotset, layer-selective, lower-bit, or partial-row/representation based.",
+    "per_layer_full_moe_gate_up_down_gib": 3.1875,
+    "per_layer_one_role_gib": 1.0625,
+    "rtx5090_observed_total_mib": 32109
+  }
+}
