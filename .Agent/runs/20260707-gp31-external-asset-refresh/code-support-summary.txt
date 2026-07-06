@@ -1,0 +1,10 @@
+Code support inspection from current branch:
+
+- include/llama.h declares ftypes for IQ1_S, IQ1_M, TQ1_0, and TQ2_0.
+- ggml CUDA has general IQ1_S/IQ1_M support in mmvq/mmq/convert paths.
+- ggml/src/ggml-cuda/moe_stream_batch.cu currently accepts only IQ1_S among the 1-bit/TQ candidates in moe_stream_type_supported().
+- launch_moe_mmvq_compact_batch() includes GGML_TYPE_IQ1_S but not IQ1_M, TQ1_0, or TQ2_0.
+- up/gate mixed pair allowance includes IQ1_S with IQ2_XXS, but not IQ1_M or TQ.
+- Therefore mradermacher i1-IQ1_S is the only newly found <=0.55x GGUF family that has a plausible direct vendor stream path today.
+- freakyskittle TQ1_0/TQ2_0 are attractive by size but are not direct stream candidates without adding TQ support to moe_stream_batch.
+- Draft models are not direct replacements for common speculative decoding: cm00cm DFlash/EAGLE3 are SGLang/transformers-style snapshots; novita Eagle3 MLA is documented for vLLM; freakyskittle DFlash GGUF targets Oxidize dflash-draft architecture.

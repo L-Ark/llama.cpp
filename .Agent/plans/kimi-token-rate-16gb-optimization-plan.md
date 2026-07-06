@@ -92520,3 +92520,62 @@ Decision rules:
   - expected byte ratio and upper token-rate bound;
   - cold-start n32 smoke gate;
   - n96 dev and held-out test gates.
+
+GP31 execution result:
+
+- Timestamp: `2026-07-07T08:15:00+0800`.
+- Status: completed metadata refresh; no large model downloaded.
+- Report:
+  `.Agent/runs/20260707-gp31-external-asset-refresh/report.md`.
+- Raw records:
+  - `.Agent/runs/20260707-gp31-external-asset-refresh/hf-asset-summary.txt`;
+  - `.Agent/runs/20260707-gp31-external-asset-refresh/hf-raw-metadata.json`;
+  - `.Agent/runs/20260707-gp31-external-asset-refresh/remote-disk-summary.txt`;
+  - `.Agent/runs/20260707-gp31-external-asset-refresh/code-support-summary.txt`.
+
+Current disk state:
+
+- `/dev/root`: `993G` total, `909G` used, `85G` available.
+- Required current reproduction assets:
+  - IQ3_S model: `378G`;
+  - current main expert pack: `164G`;
+  - current overlay pack: `4.6G`.
+- Potential cleanup candidates, not deleted:
+  - old `kimi-iq3s-france.expert-pack`: `160G`;
+  - old `kimi-iq3s-tracefirst-n64-20260630.expert-pack`: `75G`;
+  - old obsolete overlays: about `12G`.
+
+New asset findings:
+
+- `mradermacher/Kimi-K2.7-Code-i1-GGUF` `i1-IQ1_S`:
+  - `190.39 GiB`;
+  - `0.504x` of AesSedai IQ3_S `377.55 GiB`;
+  - plausible direct vendor stream candidate because current
+    `moe_stream_batch.cu` supports `GGML_TYPE_IQ1_S`.
+- `freakyskittle/kimi-k2.7-code-GGUF` `TQ1_0`:
+  - `203.37 GiB`;
+  - `0.539x`;
+  - not a direct stream candidate because current `moe_stream_batch.cu` does
+    not support TQ types.
+- `mradermacher` `i1-IQ1_M`:
+  - `212.28 GiB`;
+  - `0.562x`;
+  - current stream path lacks `IQ1_M`.
+- AesSedai/unsloth IQ2-family candidates remain too large versus GP10.
+- NVFP4/MXFP4 are larger than IQ3_S and not current GGUF/vendor-path assets.
+- DFlash/EAGLE3 draft assets exist in the `1-7 GiB` range, but are SGLang,
+  vLLM, or Oxidize style assets and are not immediate llama.cpp
+  `--model-draft` replacements for this vendor runtime.
+
+Decision:
+
+- The next plausible material branch is `mradermacher` `i1-IQ1_S`.
+- Do not download it yet:
+  - current free disk is only `85G`;
+  - full file requires `190.39 GiB`;
+  - deleting old packs requires explicit approval;
+  - quality risk is high because the provider labels the quant as
+    "for the desperate".
+- Before any cleanup/download, write GP32 and do a small header/range preflight
+  to verify metadata, split/concat handling, tensor types, and stream
+  compatibility.

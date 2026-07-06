@@ -1,0 +1,188 @@
+
+## AesSedai/Kimi-K2.7-Code-GGUF
+lastModified= 2026-06-17T18:51:15.000Z downloads= 6990 likes= 9 sha= d3b40c3f8a988660c19cae6e94994911d0129531
+Q4_X	files=14	GiB=543.62	GB=583.71
+Q3_K_L	files=12	GiB=459.95	GB=493.87
+IQ3_S	files=10	GiB=377.55	GB=405.39
+IQ2_S	files=8	GiB=311.80	GB=334.80
+IQ2_XXS	files=7	GiB=262.79	GB=282.17
+mmproj-Kimi-K2.7-Code-F32.gguf	files=1	GiB=1.76	GB=1.88
+imatrix.gguf	files=1	GiB=1.43	GB=1.53
+mmproj-Kimi-K2.7-Code-BF16.gguf	files=1	GiB=0.89	GB=0.95
+mmproj-Kimi-K2.7-Code-F16.gguf	files=1	GiB=0.89	GB=0.95
+mmproj-Kimi-K2.7-Code-Q8_0.gguf	files=1	GiB=0.60	GB=0.64
+kld_data	files=8	GiB=0.00	GB=0.00
+metadata	files=2	GiB=0.00	GB=0.00
+  file	IQ3_S/Kimi-K2.7-Code-IQ3_S-00006-of-00010.gguf	GiB=46.54
+  file	IQ3_S/Kimi-K2.7-Code-IQ3_S-00008-of-00010.gguf	GiB=46.54
+  file	IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00002-of-00007.gguf	GiB=46.54
+  file	IQ2_S/Kimi-K2.7-Code-IQ2_S-00002-of-00008.gguf	GiB=46.52
+  file	IQ2_S/Kimi-K2.7-Code-IQ2_S-00005-of-00008.gguf	GiB=46.38
+  file	IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00003-of-00007.gguf	GiB=46.36
+  file	IQ2_S/Kimi-K2.7-Code-IQ2_S-00007-of-00008.gguf	GiB=46.30
+  file	IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00005-of-00007.gguf	GiB=46.29
+
+## unsloth/Kimi-K2.7-Code-GGUF
+lastModified= 2026-06-19T10:51:39.000Z downloads= 291513 likes= 168 sha= 46352ca8dc32aa60f9754f5bd3fb778deeb9e430
+UD-Q8_K_XL	files=14	GiB=553.71	GB=594.54
+UD-Q4_K_XL	files=14	GiB=543.62	GB=583.71
+UD-IQ4_XS	files=12	GiB=461.08	GB=495.08
+UD-Q3_K_XL	files=11	GiB=432.04	GB=463.90
+UD-Q3_K_M	files=11	GiB=431.78	GB=463.62
+UD-IQ3_S	files=10	GiB=390.04	GB=418.81
+UD-Q2_K_XL	files=8	GiB=316.15	GB=339.46
+UD-IQ2_M	files=8	GiB=296.14	GB=317.97
+UD-IQ2_XXS	files=8	GiB=296.00	GB=317.83
+UD-IQ1_M	files=8	GiB=283.04	GB=303.91
+mmproj-F32.gguf	files=1	GiB=1.76	GB=1.88
+imatrix_unsloth.gguf	files=1	GiB=1.43	GB=1.53
+mmproj-BF16.gguf	files=1	GiB=0.89	GB=0.95
+mmproj-F16.gguf	files=1	GiB=0.89	GB=0.95
+metadata	files=3	GiB=0.00	GB=0.00
+  file	UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00007-of-00008.gguf	GiB=46.46
+  file	UD-Q2_K_XL/Kimi-K2.7-Code-UD-Q2_K_XL-00003-of-00008.gguf	GiB=46.45
+  file	UD-Q2_K_XL/Kimi-K2.7-Code-UD-Q2_K_XL-00004-of-00008.gguf	GiB=46.45
+  file	UD-Q2_K_XL/Kimi-K2.7-Code-UD-Q2_K_XL-00005-of-00008.gguf	GiB=46.45
+  file	UD-Q2_K_XL/Kimi-K2.7-Code-UD-Q2_K_XL-00006-of-00008.gguf	GiB=46.45
+  file	UD-Q2_K_XL/Kimi-K2.7-Code-UD-Q2_K_XL-00007-of-00008.gguf	GiB=46.45
+  file	UD-IQ2_M/Kimi-K2.7-Code-UD-IQ2_M-00002-of-00008.gguf	GiB=46.40
+  file	UD-IQ2_M/Kimi-K2.7-Code-UD-IQ2_M-00005-of-00008.gguf	GiB=46.31
+
+## mradermacher/Kimi-K2.7-Code-GGUF
+lastModified= 2026-07-01T17:43:45.000Z downloads= 445 likes= 2 sha= 0e14ff9a99885b6e6597c71355f965b79489d1f5
+Kimi-K2.7-Code.Q4_K_M.gguf	files=13	GiB=577.94	GB=620.56
+Kimi-K2.7-Code.Q4_K_S.gguf	files=13	GiB=542.52	GB=582.52
+Kimi-K2.7-Code.IQ4_XS.gguf	files=12	GiB=513.65	GB=551.53
+Kimi-K2.7-Code.Q3_K_L.gguf	files=11	GiB=494.08	GB=530.51
+Kimi-K2.7-Code.Q3_K_M.gguf	files=12	GiB=455.50	GB=489.09
+Kimi-K2.7-Code.Q3_K_S.gguf	files=10	GiB=411.76	GB=442.13
+Kimi-K2.7-Code.Q2_K.gguf	files=8	GiB=347.26	GB=372.86
+Kimi-K2.7-Code.mmproj-f16.gguf	files=1	GiB=0.89	GB=0.95
+Kimi-K2.7-Code.mmproj-Q8_0.gguf	files=1	GiB=0.60	GB=0.64
+metadata	files=2	GiB=0.00	GB=0.00
+  file	Kimi-K2.7-Code.Q3_K_L.gguf.part01of11	GiB=45.00
+  file	Kimi-K2.7-Code.Q3_K_L.gguf.part02of11	GiB=45.00
+  file	Kimi-K2.7-Code.Q3_K_L.gguf.part03of11	GiB=45.00
+  file	Kimi-K2.7-Code.Q3_K_L.gguf.part04of11	GiB=45.00
+  file	Kimi-K2.7-Code.Q3_K_L.gguf.part05of11	GiB=45.00
+  file	Kimi-K2.7-Code.Q3_K_L.gguf.part06of11	GiB=45.00
+  file	Kimi-K2.7-Code.Q3_K_L.gguf.part07of11	GiB=45.00
+  file	Kimi-K2.7-Code.Q3_K_L.gguf.part08of11	GiB=45.00
+
+## mradermacher/Kimi-K2.7-Code-i1-GGUF
+lastModified= 2026-07-03T18:00:15.000Z downloads= 1129 likes= 0 sha= 06671d52123acf7ad3dad395d3628c96d8b690a8
+Kimi-K2.7-Code.i1-Q4_1.gguf	files=14	GiB=598.19	GB=642.30
+Kimi-K2.7-Code.i1-Q4_K_M.gguf	files=13	GiB=577.94	GB=620.56
+Kimi-K2.7-Code.i1-Q4_K_S.gguf	files=13	GiB=542.52	GB=582.52
+Kimi-K2.7-Code.i1-Q4_0.gguf	files=13	GiB=540.51	GB=580.36
+Kimi-K2.7-Code.i1-IQ4_XS.gguf	files=12	GiB=508.70	GB=546.21
+Kimi-K2.7-Code.i1-Q3_K_L.gguf	files=11	GiB=494.08	GB=530.51
+Kimi-K2.7-Code.i1-Q3_K_M.gguf	files=12	GiB=455.50	GB=489.09
+Kimi-K2.7-Code.i1-IQ3_M.gguf	files=10	GiB=416.42	GB=447.12
+Kimi-K2.7-Code.i1-IQ3_S.gguf	files=10	GiB=411.76	GB=442.13
+Kimi-K2.7-Code.i1-Q3_K_S.gguf	files=10	GiB=411.76	GB=442.13
+Kimi-K2.7-Code.i1-IQ3_XS.gguf	files=10	GiB=389.06	GB=417.75
+Kimi-K2.7-Code.i1-IQ3_XXS.gguf	files=9	GiB=367.09	GB=394.16
+Kimi-K2.7-Code.i1-Q2_K.gguf	files=8	GiB=347.26	GB=372.86
+Kimi-K2.7-Code.i1-Q2_K_S.gguf	files=8	GiB=322.26	GB=346.02
+Kimi-K2.7-Code.i1-IQ2_M.gguf	files=7	GiB=309.45	GB=332.27
+Kimi-K2.7-Code.i1-IQ2_S.gguf	files=7	GiB=280.26	GB=300.93
+Kimi-K2.7-Code.i1-IQ2_XS.gguf	files=7	GiB=278.07	GB=298.57
+Kimi-K2.7-Code.i1-IQ2_XXS.gguf	files=6	GiB=248.77	GB=267.12
+Kimi-K2.7-Code.i1-IQ1_M.gguf	files=5	GiB=212.28	GB=227.94
+Kimi-K2.7-Code.i1-IQ1_S.gguf	files=5	GiB=190.39	GB=204.43
+Kimi-K2.7-Code.imatrix.gguf	files=1	GiB=1.43	GB=1.53
+metadata	files=2	GiB=0.00	GB=0.00
+  file	Kimi-K2.7-Code.i1-IQ2_M.gguf.part1of7	GiB=45.00
+  file	Kimi-K2.7-Code.i1-IQ2_M.gguf.part2of7	GiB=45.00
+  file	Kimi-K2.7-Code.i1-IQ2_M.gguf.part3of7	GiB=45.00
+  file	Kimi-K2.7-Code.i1-IQ2_M.gguf.part4of7	GiB=45.00
+  file	Kimi-K2.7-Code.i1-IQ2_M.gguf.part5of7	GiB=45.00
+  file	Kimi-K2.7-Code.i1-IQ2_M.gguf.part6of7	GiB=45.00
+  file	Kimi-K2.7-Code.i1-Q3_K_L.gguf.part01of11	GiB=45.00
+  file	Kimi-K2.7-Code.i1-Q3_K_L.gguf.part02of11	GiB=45.00
+
+## Edmon02/Kimi-K2.7-Code-GGUF
+lastModified= 2026-06-14T09:30:00.000Z downloads= 4422 likes= 1 sha= efcfe3e574300f8c91a402a19b452452a693b9ab
+UD-Q4_K_XL	files=14	GiB=543.62	GB=583.71
+mmproj-F16.gguf	files=1	GiB=0.89	GB=0.95
+metadata	files=4	GiB=0.00	GB=0.00
+  file	UD-Q4_K_XL/Kimi-K2.7-Code-UD-Q4_K_XL-00004-of-00014.gguf	GiB=45.07
+  file	UD-Q4_K_XL/Kimi-K2.7-Code-UD-Q4_K_XL-00005-of-00014.gguf	GiB=45.07
+  file	UD-Q4_K_XL/Kimi-K2.7-Code-UD-Q4_K_XL-00006-of-00014.gguf	GiB=45.07
+  file	UD-Q4_K_XL/Kimi-K2.7-Code-UD-Q4_K_XL-00007-of-00014.gguf	GiB=45.07
+  file	UD-Q4_K_XL/Kimi-K2.7-Code-UD-Q4_K_XL-00008-of-00014.gguf	GiB=45.07
+  file	UD-Q4_K_XL/Kimi-K2.7-Code-UD-Q4_K_XL-00009-of-00014.gguf	GiB=45.07
+  file	UD-Q4_K_XL/Kimi-K2.7-Code-UD-Q4_K_XL-00010-of-00014.gguf	GiB=45.07
+  file	UD-Q4_K_XL/Kimi-K2.7-Code-UD-Q4_K_XL-00011-of-00014.gguf	GiB=45.07
+
+## freakyskittle/kimi-k2.7-code-GGUF
+lastModified= 2026-06-14T19:55:33.000Z downloads= 6687 likes= 5 sha= 60e63585d430ea392e9954ec561d21573afc12ad
+BF16	files=61	GiB=1912.15	GB=2053.16
+Q8_0	files=61	GiB=1016.12	GB=1091.05
+Q4_K_M	files=61	GiB=577.94	GB=620.56
+TQ2_0	files=1	GiB=248.05	GB=266.35
+TQ1_0	files=1	GiB=203.37	GB=218.36
+metadata	files=3	GiB=0.00	GB=0.00
+  file	TQ2_0/kimi-k2.7-code-TQ2_0.gguf	GiB=248.05
+  file	TQ1_0/kimi-k2.7-code-TQ1_0.gguf	GiB=203.37
+  file	BF16/kimi-k2.7-code-BF16-00001-of-00061.gguf	GiB=32.65
+  file	BF16/kimi-k2.7-code-BF16-00002-of-00061.gguf	GiB=31.50
+  file	BF16/kimi-k2.7-code-BF16-00003-of-00061.gguf	GiB=31.50
+  file	BF16/kimi-k2.7-code-BF16-00004-of-00061.gguf	GiB=31.50
+  file	BF16/kimi-k2.7-code-BF16-00005-of-00061.gguf	GiB=31.50
+  file	BF16/kimi-k2.7-code-BF16-00006-of-00061.gguf	GiB=31.50
+
+## decart-ai/Kimi-K2.7-Code-NVFP4
+lastModified= 2026-06-19T20:20:54.000Z downloads= 352463 likes= 2 sha= b16b4af9d9255c114bf3d5f124dc1ba12cbf812c
+safetensors	files=60	GiB=554.31	GB=595.19
+metadata	files=21	GiB=0.03	GB=0.03
+  file	model-00024-of-00060.safetensors	GiB=9.31
+  file	model-00025-of-00060.safetensors	GiB=9.31
+  file	model-00013-of-00060.safetensors	GiB=9.31
+  file	model-00016-of-00060.safetensors	GiB=9.31
+  file	model-00019-of-00060.safetensors	GiB=9.31
+  file	model-00022-of-00060.safetensors	GiB=9.31
+  file	model-00039-of-00060.safetensors	GiB=9.31
+  file	model-00042-of-00060.safetensors	GiB=9.31
+
+## amd/Kimi-K2.7-Code-MXFP4
+lastModified= 2026-06-22T14:49:32.000Z downloads= 1683 likes= 2 sha= 7c86fb37b24dffd50ad2cb52d9af75689703219d
+safetensors	files=64	GiB=514.87	GB=552.84
+metadata	files=20	GiB=0.02	GB=0.02
+  file	model-00011-of-000064.safetensors	GiB=8.49
+  file	model-00012-of-000064.safetensors	GiB=8.49
+  file	model-00013-of-000064.safetensors	GiB=8.49
+  file	model-00014-of-000064.safetensors	GiB=8.49
+  file	model-00015-of-000064.safetensors	GiB=8.49
+  file	model-00016-of-000064.safetensors	GiB=8.49
+  file	model-00017-of-000064.safetensors	GiB=8.49
+  file	model-00018-of-000064.safetensors	GiB=8.49
+
+## cm00cm/Kimi-K2.7-Code-DFlash
+lastModified= 2026-06-29T03:11:22.000Z downloads= 2179 likes= 1 sha= 07290209664305eae6c119a3c0ab5c1c8743a40b
+safetensors	files=1	GiB=6.48	GB=6.96
+metadata	files=4	GiB=0.00	GB=0.00
+  file	model.safetensors	GiB=6.48
+
+## cm00cm/Kimi-K2.7-Code-EAGLE3
+lastModified= 2026-06-29T11:24:10.000Z downloads= 580 likes= 1 sha= d55cc99a8cdc010e659f1f0ae8d7ca7da67d46d5
+safetensors	files=1	GiB=2.70	GB=2.90
+metadata	files=3	GiB=0.00	GB=0.00
+  file	model.safetensors	GiB=2.70
+
+## novita/kimi-k2.7-code-eagle3-mla
+lastModified= 2026-06-30T08:22:00.000Z downloads= 424 likes= 2 sha= 043833aed00af25b042befd88590efcd960cf627
+safetensors	files=1	GiB=3.43	GB=3.68
+metadata	files=3	GiB=0.00	GB=0.00
+  file	model.safetensors	GiB=3.43
+
+## freakyskittle/Kimi-K2.7-Code-Dflash
+lastModified= 2026-06-13T22:38:57.000Z downloads= 855 likes= 6 sha= 3e3be07617b28a8154b6939530c954248f0c46d9
+Kimi-K2.7-Code-DFlash-full-F32.gguf	files=1	GiB=7.38	GB=7.93
+Kimi-K2.7-Code-DFlash-full-Q4_0.gguf	files=1	GiB=1.04	GB=1.12
+metadata	files=2	GiB=0.00	GB=0.00
+  file	Kimi-K2.7-Code-DFlash-full-F32.gguf	GiB=7.38
+  file	Kimi-K2.7-Code-DFlash-full-Q4_0.gguf	GiB=1.04
+
+raw_metadata= .Agent/runs/20260707-gp31-external-asset-refresh/hf-raw-metadata.json
