@@ -90762,3 +90762,61 @@ Updated next direction:
   3. change the hardware/data path assumption;
   4. explicitly document why the current uncalibrated IQ3_S pack cannot reach
      stable `5 tok/s` on `16GB RAM + 32GB VRAM` without model-side changes.
+
+## GP13: local lower-byte Kimi asset inventory
+
+Timestamp: `2026-07-07T02:41:32+0800`.
+
+Status: completed inventory; no runnable lower-byte variant found.
+
+Rationale:
+
+- GP12 leaves only larger changes:
+  - calibrated lower-byte Kimi expert/model pack;
+  - smaller/lower-byte Kimi variant;
+  - changed hardware/data path.
+- Before generating or downloading anything large, check whether the server
+  already has a runnable lower-byte Kimi GGUF or expert pack.
+
+Commands:
+
+```bash
+find /root/lfz/models -maxdepth 3 -type f \
+  \( -iname "*Kimi*gguf" -o -iname "*.gguf" \) -printf "%s %p\n"
+
+find /root/lfz/runs /root/lfz/models -maxdepth 5 -type f \
+  \( -iname "*kimi*expert-pack" -o -iname "*.expert-pack" \) -printf "%s %p\n"
+
+find /root/lfz -maxdepth 6 \
+  \( -iname "*kimi*iq2*" -o -iname "*kimi*nvfp4*" -o \
+     -iname "*kimi*q2*" -o -iname "*kimi*q3*" -o \
+     -iname "*kimi*q4*" -o -iname "*hot-upgate-pair*" \) \
+  -printf "%y %s %p\n"
+```
+
+Record:
+
+- `.Agent/runs/20260707-gp13-kimi-asset-inventory/report.md`
+
+Findings:
+
+- Current runnable model assets are only the existing IQ3_S shards:
+  - `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf`;
+  - shards `00002-of-00010` through `00010-of-00010`.
+- Existing Kimi expert packs are IQ3_S-derived packs/overlays.
+- A historical q2_k conversion log exists and reports success:
+  - `/root/lfz/runs/ik_llama/convert-logs/kimi-k27-full-q2_k-fast-20260623-012612Z.rc` is `0`;
+  - the log says it exported to `/root/lfz/models/Kimi-K2.7-Code-GGUF/`.
+- That q2_k export directory is not present now:
+  - `/root/lfz/models/Kimi-K2.7-Code-GGUF` does not exist.
+- A q4_0 conversion log exists, but rc is `143` and the log ends with
+  `Terminated`.
+- No local NVFP4 Kimi GGUF or expert pack was found.
+
+Decision:
+
+- There is no available lower-byte Kimi variant that can be tested immediately.
+- The next implementation-grade path requires obtaining or generating a
+  calibrated lower-byte Kimi model/expert pack, especially for up/gate experts.
+- Without that, the current IQ3_S uncalibrated runtime path is bounded far below
+  stable `5 tok/s` by GP10-GP12 evidence.
