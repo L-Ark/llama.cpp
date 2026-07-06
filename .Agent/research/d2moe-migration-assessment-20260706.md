@@ -299,6 +299,41 @@ Interpretation:
   runtime work if some tensor classes or layer bands show much stronger
   residual compression than this first `down` sample.
 
+Cross-tensor residual-rank samples:
+
+- Artifacts:
+  - `.Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-blk1-gate.json`
+  - `.Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-blk1-up.json`
+  - `.Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-blk56-down.json`
+  - `.Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-blk56-gate.json`
+  - `.Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-blk56-up.json`
+- Reproduce by running `.Agent/run-tools/kimi_d2moe_residual_rank.py` with the
+  same arguments as each artifact's `reproduce_command`.
+
+Rank128 summary:
+
+| tensor | type | rank128 residual norm avg | rank128 delta/full quant |
+| --- | --- | ---: | ---: |
+| `blk.1.ffn_gate_exps.weight` | `IQ2_S` | `0.9457` | `0.5017` |
+| `blk.1.ffn_up_exps.weight` | `IQ2_S` | `0.9457` | `0.5017` |
+| `blk.56.ffn_down_exps.weight` | `Q3_K` | `0.9469` | `0.3740` |
+| `blk.56.ffn_gate_exps.weight` | `IQ3_XXS` | `0.9453` | `0.4198` |
+| `blk.56.ffn_up_exps.weight` | `IQ3_XXS` | `0.9473` | `0.4198` |
+
+Decision:
+
+- These early/late and up/gate/down samples are consistent with the first
+  `down` sample: rank128 still leaves about `94.5%-94.7%` residual norm.
+- Under the current strict semantic-correctness requirement, this is not strong
+  enough to justify implementing a D2MoE runtime path for Kimi now.
+- The expected token-rate upside from smaller deltas is likely offset by quality
+  risk and new compute/pack complexity unless a much higher rank is used; at
+  that point the payload is already `37%-50%` of current quantized full expert
+  bytes for these samples.
+- Recommendation: keep the offline tools and artifacts, but pause D2MoE runtime
+  implementation. Continue token-rate work on scheduling/transfer paths where
+  the optimization is exact and does not alter expert weights.
+
 1. Select a small but representative Kimi layer set:
    - at least one early sparse layer;
    - at least one middle high-traffic layer;

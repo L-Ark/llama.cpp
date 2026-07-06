@@ -1,0 +1,181 @@
+{
+  "expert_bytes": 6307840,
+  "experts": [
+    {
+      "count": 6,
+      "curve": {
+        "fro_norm": 75.0561638666339,
+        "ranks": [
+          {
+            "explained_energy_ratio": 0.015016983560221405,
+            "rank": 16,
+            "residual_norm_ratio": 0.9924631058330474
+          },
+          {
+            "explained_energy_ratio": 0.02925369628490647,
+            "rank": 32,
+            "residual_norm_ratio": 0.9852645856393568
+          },
+          {
+            "explained_energy_ratio": 0.055956196488594345,
+            "rank": 64,
+            "residual_norm_ratio": 0.9716191658831178
+          },
+          {
+            "explained_energy_ratio": 0.10317038014225215,
+            "rank": 128,
+            "residual_norm_ratio": 0.9470108868739302
+          }
+        ],
+        "svd_q": 136
+      },
+      "dequant_elapsed_s": 0.14911732997279614,
+      "expert_idx": 320,
+      "fallback_us": 27456.0,
+      "weight": 0.12
+    },
+    {
+      "count": 34,
+      "curve": {
+        "fro_norm": 25.218909734624233,
+        "ranks": [
+          {
+            "explained_energy_ratio": 0.015054924772430556,
+            "rank": 16,
+            "residual_norm_ratio": 0.9924439909776115
+          },
+          {
+            "explained_energy_ratio": 0.02932394178721235,
+            "rank": 32,
+            "residual_norm_ratio": 0.985228936954649
+          },
+          {
+            "explained_energy_ratio": 0.056072840263966355,
+            "rank": 64,
+            "residual_norm_ratio": 0.9715591385685349
+          },
+          {
+            "explained_energy_ratio": 0.10344527354589911,
+            "rank": 128,
+            "residual_norm_ratio": 0.946865738346309
+          }
+        ],
+        "svd_q": 136
+      },
+      "dequant_elapsed_s": 0.1549346239771694,
+      "expert_idx": 202,
+      "fallback_us": 22880.0,
+      "weight": 0.68
+    },
+    {
+      "count": 5,
+      "curve": {
+        "fro_norm": 77.74144597237049,
+        "ranks": [
+          {
+            "explained_energy_ratio": 0.015037717639755286,
+            "rank": 16,
+            "residual_norm_ratio": 0.9924526600096575
+          },
+          {
+            "explained_energy_ratio": 0.029322661955131075,
+            "rank": 32,
+            "residual_norm_ratio": 0.9852295864644286
+          },
+          {
+            "explained_energy_ratio": 0.05617130115424974,
+            "rank": 64,
+            "residual_norm_ratio": 0.9715084656583031
+          },
+          {
+            "explained_energy_ratio": 0.10357853936364216,
+            "rank": 128,
+            "residual_norm_ratio": 0.946795363653814
+          }
+        ],
+        "svd_q": 136
+      },
+      "dequant_elapsed_s": 0.15339892089832574,
+      "expert_idx": 337,
+      "fallback_us": 22880.0,
+      "weight": 0.1
+    },
+    {
+      "count": 5,
+      "curve": {
+        "fro_norm": 78.83813892043305,
+        "ranks": [
+          {
+            "explained_energy_ratio": 0.014941954338850864,
+            "rank": 16,
+            "residual_norm_ratio": 0.9925009046147762
+          },
+          {
+            "explained_energy_ratio": 0.029110870942395173,
+            "rank": 32,
+            "residual_norm_ratio": 0.9853370636780111
+          },
+          {
+            "explained_energy_ratio": 0.05577866218470442,
+            "rank": 64,
+            "residual_norm_ratio": 0.971710521613971
+          },
+          {
+            "explained_energy_ratio": 0.10302723350621082,
+            "rank": 128,
+            "residual_norm_ratio": 0.9470864619947796
+          }
+        ],
+        "svd_q": 136
+      },
+      "dequant_elapsed_s": 0.1504334199707955,
+      "expert_idx": 7,
+      "fallback_us": 18304.0,
+      "weight": 0.1
+    }
+  ],
+  "generated_at": "2026-07-06T06:48:04+0000",
+  "inventory": ".Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv",
+  "kind": "kimi_d2moe_residual_rank_sample",
+  "layer": 56,
+  "libggml_base": "build-cuda-batch/bin/libggml-base.so",
+  "phase0_plan": ".Agent/runs/20260706-kimi-d2moe-phase0/phase0-bound-input-plan.json",
+  "rank_byte_estimates": [
+    {
+      "bf16_delta_bytes": 294912,
+      "delta_vs_full_quant": 0.046753246753246755,
+      "rank": 16
+    },
+    {
+      "bf16_delta_bytes": 589824,
+      "delta_vs_full_quant": 0.09350649350649351,
+      "rank": 32
+    },
+    {
+      "bf16_delta_bytes": 1179648,
+      "delta_vs_full_quant": 0.18701298701298702,
+      "rank": 64
+    },
+    {
+      "bf16_delta_bytes": 2359296,
+      "delta_vs_full_quant": 0.37402597402597404,
+      "rank": 128
+    }
+  ],
+  "ranks": [
+    16,
+    32,
+    64,
+    128
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_d2moe_residual_rank.py --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --phase0-plan .Agent/runs/20260706-kimi-d2moe-phase0/phase0-bound-input-plan.json --libggml-base build-cuda-batch/bin/libggml-base.so --out-json .Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-blk56-down.json --out-md .Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-blk56-down.md --tensor blk.56.ffn_down_exps.weight --max-experts 4 --ranks 16,32,64,128 --oversample 8 --niter 1 --torch-threads 8",
+  "shape": [
+    2048,
+    7168,
+    384
+  ],
+  "tensor": "blk.56.ffn_down_exps.weight",
+  "tensor_kind": "down",
+  "torch_threads": 8,
+  "type": "Q3_K"
+}
