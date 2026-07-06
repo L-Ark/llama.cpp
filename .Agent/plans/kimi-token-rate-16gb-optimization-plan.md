@@ -90658,3 +90658,107 @@ Updated next direction:
   options against the 16GB RAM + 32GB VRAM constraint, because the exhausted
   implementation probes are now consistently below the required byte/time
   delta.
+
+## GP12: fused up/gate expert-pack IO bound
+
+Timestamp: `2026-07-07T02:39:32+0800`.
+
+Status: completed dev-only diagnostic.
+
+Rationale:
+
+- GP10 and GP11 reject naive byte reduction, but current decode still does not
+  sustain the pure IO bench bandwidth.
+- A possible non-compression path is to repack same-layer same-expert up+gate
+  tensors as one larger contiguous IO unit:
+  - selected expert indices are shared between up and gate;
+  - current profile shows both up and gate are often staged together;
+  - larger IO jobs might reduce per-job overhead and improve queue utilization.
+- This does not reduce semantic bytes, so it needs a hard upper bound before
+  building a new pack/runtime path.
+
+Dev diagnostic run:
+
+- Remote run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-183432Z-gp12-fused-upgate-bound-dev-france-n32`.
+- Local record:
+  `.Agent/runs/20260707-gp12-fused-upgate-bound`.
+- Prompt:
+  `dev_france_regression`.
+- Command shape:
+
+```bash
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --repo /root/lfz/llama.cpp-vendor-kimi-gp2-6b5c \
+  --prompt-file .Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root <run> \
+  --mode dev \
+  --n 32 \
+  --profile \
+  --max-prompts 1 \
+  --runtime-max-sec 900 \
+  --extra-runtime-env "GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1"
+```
+
+Implemented script:
+
+- `.Agent/run-tools/kimi_fused_upgate_io_bound.py`
+
+Analysis command:
+
+```bash
+.Agent/run-tools/kimi_fused_upgate_io_bound.py \
+  --run-dir .Agent/runs/20260707-gp12-fused-upgate-bound/dev_france_regression \
+  --out .Agent/runs/20260707-gp12-fused-upgate-bound/report.md \
+  --peak-gib-s 10.4
+```
+
+Result:
+
+- Quality: pass.
+- 16GB cgroup gate:
+  - `memory.peak=15899996160`.
+- Current dev n32 profile:
+  - token rate `1.28 tok/s`;
+  - decode `24175.55 ms / 31 tokens`;
+  - up+gate staged bytes `38.08 GiB`;
+  - current up+gate staged jobs `8109`;
+  - fused up+gate jobs `4055`;
+  - job reduction `4054`, about `50.0%`;
+  - rows with both up and gate staged: `867/867`, `100%`;
+  - current exposed up+gate bandwidth `6.27 GiB/s`;
+  - current exposed up+gate time `6069.18 ms`.
+- Optimistic bound if fused up+gate reaches pure IO peak `10.4 GiB/s` and all
+  saved time comes off decode:
+  - ideal up+gate time `3661.39 ms`;
+  - ideal saved decode time `2407.79 ms`;
+  - ideal token rate `1.42 tok/s`.
+
+Decision:
+
+- Reject fused up/gate pack as a primary path to `5 tok/s`.
+- It is technically attractive for cleanup because it halves up/gate IO job
+  count, but it does not reduce bytes.
+- Even the optimistic upper bound only improves `1.28 -> 1.42 tok/s` on the
+  dev n32 diagnostic.
+- It may be revisited later as a small additive optimization, but it cannot be
+  the next main implementation target under the 16GB RAM + 32GB VRAM + random
+  prompt target.
+
+Updated next direction:
+
+- The evidence now excludes:
+  - deeper io_uring queue settings;
+  - more VRAM cache under current placement;
+  - LFU/LRU policy;
+  - read coalescing on the current layout;
+  - simple route prediction;
+  - naive lower-bit up/gate re-encoding;
+  - fused up/gate IO as a primary solution.
+- Remaining work should focus on a decision-level branch:
+  1. build or obtain a calibrated lower-byte Kimi expert pack, especially for
+     up/gate;
+  2. test a smaller/lower-byte Kimi variant that still satisfies quality;
+  3. change the hardware/data path assumption;
+  4. explicitly document why the current uncalibrated IQ3_S pack cannot reach
+     stable `5 tok/s` on `16GB RAM + 32GB VRAM` without model-side changes.

@@ -1,0 +1,7 @@
+repo=/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c
+pwd=/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c
+branch=vendor/kimi-general-prompt-token-rate-16gb
+head=ba88a44b4c4db42746cabba8ebee02c06884bb28
+short=ba88a44b4
+status_short:
+diff_stat:
