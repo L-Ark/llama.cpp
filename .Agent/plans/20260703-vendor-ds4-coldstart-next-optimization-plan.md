@@ -2,6 +2,46 @@
 
 ## Summary
 
+### 2026-07-06 Latest Active Plan: Broader Header Refresh Completed, Validate Sharded Compact GGUF
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，本次 broader Hugging Face header refresh 只产生候选验证路线，没有产生新的 accepted SOTA。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `elapsed_seconds=62.9`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `memory_max_events=16879`, `pgmajfault=272731`, `workingset_refault_file=1638880`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Config: vendor DeepSeek native GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, O_DIRECT France gate pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+- Actual accepted binary path/version: `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli`, `b14849-d9e56fcdf`.
+- Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+New broader external metadata/header artifact:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/broader-external-header-refresh-20260706.json`
+- Method: Hugging Face API broad search plus HTTP Range GGUF header parsing only; no full model files downloaded; no model files deleted or moved.
+- Search scope: 11 query variants over DeepSeek-V4-Flash / GGUF / REAP / 4Expert / Q2 / IQ2 / MTP / DS4 naming.
+- Result scope: `55` repos, `268` GGUF file entries, `50` parsed header candidates.
+- Decision field: `found_metadata_route_above_10=true`, but this is only an optimistic metadata screener. It is not an accepted performance result and cannot be promoted without full-shard download/loader/correctness/strict cold reproduction.
+
+Important candidate interpretation:
+
+- `lovedheart/DeepSeek-V4-Flash-GGUF`, `Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf`: first-shard header parses as `deepseek4`, `expert_used_count=6`, first shard `4.119 GiB`, first-shard projection `23.0 tok/s`. The artifact API view currently sees `19` `Q2_K` shards totaling `79.118 GiB`, while filenames claim `00001-of-00023`; therefore the next step is manifest verification, not download or SOTA promotion. Projection is likely inflated because it is based on shard-1 header/tensor coverage (`39` tensors, `3` expert tensors), not a full multi-shard load.
+- `setar007/DeepSeek-V4-Flash-Q8xQ5-GGUF`, `DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00001-of-00011.gguf`: first-shard header parses as `deepseek4`, `expert_used_count=6`, `11` shards totaling `184.744 GiB`, first-shard projection `23.0 tok/s`. This is lower priority because it needs far more disk and the projection is also first-shard optimistic.
+- Other parsed full-file or hybrid candidates are below the `10 tok/s` metadata bound: `antirez` hybrid `90.889 GiB` projects about `7.423 tok/s`; `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF` and `teto3/DeepSeek-V4-Flash-Base-Q4KExperts` project about `4.815 tok/s`.
+- The broader refresh does not justify another blind runtime/source patch. The only new actionable route is validating whether a compact sharded DeepSeek4 GGUF is complete, loadable, semantically correct, and actually faster under strict cold 16GB.
+
+Updated next executable plan:
+
+1. Commit and push this broader metadata/header artifact plus this plan update to `ssd/vendor/deepseek-token-rate-16gb` immediately.
+2. Before any large download, validate the `lovedheart` Q2_K manifest without consuming model-sized disk: confirm whether shards `00020`-`00023` exist, collect all shard URLs/sizes/ETags or LFS hashes, compute expected total size, and verify vendor `llama-cli` supports loading the first shard as a multi-shard GGUF.
+3. If the `lovedheart` manifest is incomplete, mark it rejected in a small artifact and do not download it. Then return to metadata-only discovery or a new compact-representation hard-bound.
+4. If the `lovedheart` manifest is complete, request/confirm disk plan before download. Required free space target is at least `100 GiB` for the full Q2_K shard set plus SHA256/run artifacts; do not delete or move accepted native GGUF, accepted gate pack, SOTA run, current source branch, profile files, demo script, or pushed-source reproduction artifacts without explicit approval.
+5. After disk approval and download, record for every shard: URL, path, size, SHA256, ETag/LFS metadata if available, download time, and total directory size. Then run loader metadata validation before any benchmark: architecture must be `deepseek4`, tokenizer/chat template must be sane, `expert_used_count` must match expectation, and the loader must not silently skip shards.
+6. Correctness gates come before performance claims: France prompt must be semantically correct and coherent, then run the five-prompt set (`France`, `quantum computing`, `Python Fibonacci`, `Japan`, `climate change`) and record exact outputs.
+7. Only after correctness passes, run strict cold France benchmark under the same hard gates: `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, `TTFT <= 33617.688744 ms`, `eval_tok_s > 4.4`, and full metric/counter capture.
+8. If a compliant new SOTA appears, immediately record full reproduction metadata, commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted. Future rollback must be able to reproduce the exact metric from the remote branch.
+9. If token rate improves but TTFT exceeds the gate, commit and push it only as a rejected diagnostic marked `not accepted`; then plan a TTFT recovery step before any promotion.
+10. Defer `setar007` Q8xQ5 until after `lovedheart` is closed or promoted, because it needs about `185 GiB` just for shards and therefore has a larger disk/runtime cost.
+
 ### 2026-07-06 Latest Active Plan: External Metadata Refresh After CPU Bound
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。在 CPU fallback hard-bound 之后，完成了一轮无大文件下载的 Hugging Face metadata refresh；没有发现可直接支撑 `10 tok/s` 的新 vendor DeepSeek cold-start 路线。
