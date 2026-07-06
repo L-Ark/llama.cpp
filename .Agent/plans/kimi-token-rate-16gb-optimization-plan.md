@@ -90283,3 +90283,152 @@ Updated next direction:
     substantially above the ~31% previous-token recall;
   - or a dense/attention placement experiment only if it frees enough VRAM and
     its CPU cost is bounded before implementation.
+
+## GP9: prompt-agnostic route predictor feasibility bound
+
+Timestamp: `2026-07-07T02:19:52+0800`.
+
+Status: planned diagnostic before source changes.
+
+Task alignment:
+
+- The final target remains stable `>5 tok/s` for random user prompts on a
+  `16GB` Host RAM + `32GB` RTX 5090 machine.
+- This GP9 diagnostic may use only dev route traces. Held-out test prompts
+  remain unused until a candidate is frozen.
+- The purpose is to decide whether a stronger route predictor can create
+  enough lookahead to keep io_uring queues fuller without making the
+  optimization prompt-specific.
+
+Current bottleneck to attack:
+
+- GP4 SOTA is still dominated by expert movement:
+  - held-out median token rate: `1.385 tok/s`;
+  - typical io_uring throughput: `~5.7-6.3 GiB/s`;
+  - pure IO bench can reach `~10.0-10.4 GiB/s`;
+  - immediate routed batches expose only about `3-4` average in-flight jobs,
+    with max around `8`.
+- A predictor is useful only if it can safely issue future expert reads before
+  the exact next layer route is known. If it predicts too many wrong experts,
+  it adds bytes and hurts the already movement-dominated decode path.
+
+Diagnostic design:
+
+- Add an offline script:
+  `.Agent/run-tools/kimi_route_predictor_bound.py`.
+- Inputs:
+  - `--runs-root <dev-profile-run-root>` containing prompt subdirectories with
+    `route-trace.csv` and `metrics.json`;
+  - optional `--out <report.md>`.
+- It reconstructs token/layer steps from route-trace ordering:
+  - a step key is `(token_index, layer, role_group)`;
+  - `role_group=upgate` combines `up` and `gate` experts;
+  - `role_group=down` uses down experts.
+- It evaluates only prompt-agnostic predictors that can be derived from prior
+  dev prompts or from the same request history before the current token:
+  1. `previous_same_layer`: experts from the previous token at the same layer
+     and role group;
+  2. `history_lfu`: top-K experts from the current request history for the same
+     layer and role group, excluding the current step;
+  3. `dev_global_lfu`: top-K experts from other dev prompts only, leaving the
+     evaluated prompt out;
+  4. `hybrid_lfu`: union of `history_lfu` and leave-one-prompt-out
+     `dev_global_lfu`.
+- It reports:
+  - predicted bytes per real byte;
+  - event recall;
+  - byte recall;
+  - exact-step full coverage rate;
+  - useful bytes that are real future experts;
+  - extra bytes that would be wasted;
+  - net bound versus current miss bytes.
+
+Hard implementation gate:
+
+- Do not implement runtime predictor/prefetch unless dev diagnostics show all
+  of the following:
+  - byte recall on current-request future experts is at least `65%` for the
+    slow dev prompts;
+  - predicted/read byte overhead is at most `1.35x`;
+  - exact-step full coverage is high enough to remove meaningful wait gaps
+    (`>=40%` for the bottleneck role group);
+  - estimated net moved bytes do not increase;
+  - the predicted saved movement time can plausibly lift token rate by at
+    least `20%` before held-out testing.
+- If GP9 fails these gates, reject route prediction as the next implementation
+  target and move to real byte reduction: lower-byte expert representation,
+  residual/base expert compression, or GPU-side reconstruction.
+
+Reproducibility requirement:
+
+- Record exact command, input run root, output report path, git commit, and
+  decision in this plan.
+- If an implementation follows later and passes all constraints, immediately
+  commit and push both code and reproducible run records.
+
+GP9 result, `2026-07-07T02:24:00+0800`:
+
+- Implemented offline diagnostic script:
+  `.Agent/run-tools/kimi_route_predictor_bound.py`.
+- Command:
+
+```bash
+.Agent/run-tools/kimi_route_predictor_bound.py \
+  --runs-root .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct \
+  --out .Agent/runs/20260707-gp9-route-predictor-bound/report.md
+```
+
+- Input:
+  - GP4 correct dev n96 route traces only;
+  - no held-out test prompt was used.
+- Output:
+  `.Agent/runs/20260707-gp9-route-predictor-bound/report.md`.
+- Syntax check:
+
+```bash
+python3 -m py_compile .Agent/run-tools/kimi_route_predictor_bound.py
+```
+
+- Aggregate result under the required `<=1.35x` predicted-byte overhead:
+  - `previous_same_layer`, upgate:
+    - byte recall `33.6%`;
+    - full-step coverage `0.1%`;
+    - predicted/actual bytes `0.99x`;
+    - hit `748.60 GiB`;
+    - wasted `1445.14 GiB`.
+  - `previous_same_layer`, down:
+    - byte recall `33.9%`;
+    - full-step coverage `0.1%`;
+    - predicted/actual bytes `0.99x`;
+    - hit `433.99 GiB`;
+    - wasted `828.55 GiB`.
+  - `history_lfu k=8`, upgate:
+    - byte recall `29.9%`;
+    - full-step coverage `0.0%`;
+    - predicted/actual bytes `0.99x`.
+  - `history_lfu k=8`, down:
+    - byte recall `29.9%`;
+    - full-step coverage `0.0%`;
+    - predicted/actual bytes `0.99x`.
+- Larger K values increase recall but fail byte-overhead constraints:
+  - `k=16`: only about `40%` byte recall at about `1.95-2.00x` bytes;
+  - `k=32`: only about `52%` byte recall at about `3.79-4.00x` bytes.
+- Decision:
+  - reject GP9 runtime route predictor/prefetch implementation;
+  - it misses the hard gate of `>=65%` byte recall and `>=40%` full-step
+    coverage by a wide margin;
+  - full-step coverage near zero means it cannot remove enough exposed
+    per-layer wait even if the predicted reads were scheduled earlier;
+  - the next implementation target must reduce bytes per expert or change the
+    representation/layout, not simply guess future routes.
+
+Updated next direction:
+
+- Prioritize byte reduction over prediction:
+  1. evaluate lower-byte expert representation that preserves Kimi quality;
+  2. evaluate cluster/base + residual expert decomposition on sampled tensors;
+  3. evaluate GPU-side reconstruction only if the offline error/byte bound is
+     strong enough before runtime integration;
+  4. keep dense/attention CPU-offload as a bounded diagnostic only, because GP6
+     showed expert cache is clamped by available VRAM after current model
+     placement and naive split changes regress.
