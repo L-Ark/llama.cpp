@@ -1,0 +1,126 @@
+gguf_ex_read_0: version:      3
+gguf_ex_read_0: alignment:   32
+gguf_ex_read_0: data offset: 6912768
+gguf_ex_read_0: n_kv: 57
+gguf_ex_read_0: kv[0]: key = general.architecture
+gguf_ex_read_0: kv[1]: key = general.type
+gguf_ex_read_0: kv[2]: key = general.name
+gguf_ex_read_0: kv[3]: key = general.size_label
+gguf_ex_read_0: kv[4]: key = general.license
+gguf_ex_read_0: kv[5]: key = general.license.name
+gguf_ex_read_0: kv[6]: key = general.tags
+gguf_ex_read_0: kv[7]: key = deepseek2.block_count
+gguf_ex_read_0: kv[8]: key = deepseek2.context_length
+gguf_ex_read_0: kv[9]: key = deepseek2.embedding_length
+gguf_ex_read_0: kv[10]: key = deepseek2.feed_forward_length
+gguf_ex_read_0: kv[11]: key = deepseek2.attention.head_count
+gguf_ex_read_0: kv[12]: key = deepseek2.attention.head_count_kv
+gguf_ex_read_0: kv[13]: key = deepseek2.rope.scaling.type
+gguf_ex_read_0: kv[14]: key = deepseek2.rope.scaling.factor
+gguf_ex_read_0: kv[15]: key = deepseek2.rope.scaling.original_context_length
+gguf_ex_read_0: kv[16]: key = deepseek2.rope.scaling.yarn_beta_fast
+gguf_ex_read_0: kv[17]: key = deepseek2.rope.scaling.yarn_beta_slow
+gguf_ex_read_0: kv[18]: key = deepseek2.rope.freq_base
+gguf_ex_read_0: kv[19]: key = deepseek2.attention.layer_norm_rms_epsilon
+gguf_ex_read_0: kv[20]: key = deepseek2.expert_used_count
+gguf_ex_read_0: kv[21]: key = deepseek2.expert_group_count
+gguf_ex_read_0: kv[22]: key = deepseek2.expert_group_used_count
+gguf_ex_read_0: kv[23]: key = deepseek2.expert_gating_func
+gguf_ex_read_0: kv[24]: key = deepseek2.leading_dense_block_count
+gguf_ex_read_0: kv[25]: key = deepseek2.vocab_size
+gguf_ex_read_0: kv[26]: key = deepseek2.attention.q_lora_rank
+gguf_ex_read_0: kv[27]: key = deepseek2.attention.kv_lora_rank
+gguf_ex_read_0: kv[28]: key = deepseek2.attention.key_length
+gguf_ex_read_0: kv[29]: key = deepseek2.attention.value_length
+gguf_ex_read_0: kv[30]: key = deepseek2.attention.key_length_mla
+gguf_ex_read_0: kv[31]: key = deepseek2.attention.value_length_mla
+gguf_ex_read_0: kv[32]: key = deepseek2.expert_feed_forward_length
+gguf_ex_read_0: kv[33]: key = deepseek2.expert_count
+gguf_ex_read_0: kv[34]: key = deepseek2.expert_shared_count
+gguf_ex_read_0: kv[35]: key = deepseek2.expert_weights_scale
+gguf_ex_read_0: kv[36]: key = deepseek2.expert_weights_norm
+gguf_ex_read_0: kv[37]: key = deepseek2.rope.dimension_count
+gguf_ex_read_0: kv[38]: key = deepseek2.rope.scaling.yarn_log_multiplier
+gguf_ex_read_0: kv[39]: key = tokenizer.ggml.model
+gguf_ex_read_0: kv[40]: key = tokenizer.ggml.pre
+gguf_ex_read_0: kv[41]: key = tokenizer.ggml.tokens
+gguf_ex_read_0: kv[42]: key = tokenizer.ggml.token_type
+gguf_ex_read_0: kv[43]: key = tokenizer.ggml.merges
+gguf_ex_read_0: kv[44]: key = tokenizer.ggml.bos_token_id
+gguf_ex_read_0: kv[45]: key = tokenizer.ggml.eos_token_id
+gguf_ex_read_0: kv[46]: key = tokenizer.ggml.padding_token_id
+gguf_ex_read_0: kv[47]: key = tokenizer.chat_template
+gguf_ex_read_0: kv[48]: key = general.quantization_version
+gguf_ex_read_0: kv[49]: key = general.file_type
+gguf_ex_read_0: kv[50]: key = quantize.imatrix.file
+gguf_ex_read_0: kv[51]: key = quantize.imatrix.dataset
+gguf_ex_read_0: kv[52]: key = quantize.imatrix.entries_count
+gguf_ex_read_0: kv[53]: key = quantize.imatrix.chunks_count
+gguf_ex_read_0: kv[54]: key = split.no
+gguf_ex_read_0: kv[55]: key = split.tensors.count
+gguf_ex_read_0: kv[56]: key = split.count
+gguf_ex_read_0: find key: some.parameter.string not found.
+gguf_ex_read_0: n_tensors: 0
+gguf_ex_read_1: version:      3
+gguf_ex_read_1: alignment:   32
+gguf_ex_read_1: data offset: 6912768
+gguf_ex_read_1: n_kv: 57
+gguf_ex_read_1: kv[0]: key = general.architecture
+gguf_ex_read_1: kv[1]: key = general.type
+gguf_ex_read_1: kv[2]: key = general.name
+gguf_ex_read_1: kv[3]: key = general.size_label
+gguf_ex_read_1: kv[4]: key = general.license
+gguf_ex_read_1: kv[5]: key = general.license.name
+gguf_ex_read_1: kv[6]: key = general.tags
+gguf_ex_read_1: kv[7]: key = deepseek2.block_count
+gguf_ex_read_1: kv[8]: key = deepseek2.context_length
+gguf_ex_read_1: kv[9]: key = deepseek2.embedding_length
+gguf_ex_read_1: kv[10]: key = deepseek2.feed_forward_length
+gguf_ex_read_1: kv[11]: key = deepseek2.attention.head_count
+gguf_ex_read_1: kv[12]: key = deepseek2.attention.head_count_kv
+gguf_ex_read_1: kv[13]: key = deepseek2.rope.scaling.type
+gguf_ex_read_1: kv[14]: key = deepseek2.rope.scaling.factor
+gguf_ex_read_1: kv[15]: key = deepseek2.rope.scaling.original_context_length
+gguf_ex_read_1: kv[16]: key = deepseek2.rope.scaling.yarn_beta_fast
+gguf_ex_read_1: kv[17]: key = deepseek2.rope.scaling.yarn_beta_slow
+gguf_ex_read_1: kv[18]: key = deepseek2.rope.freq_base
+gguf_ex_read_1: kv[19]: key = deepseek2.attention.layer_norm_rms_epsilon
+gguf_ex_read_1: kv[20]: key = deepseek2.expert_used_count
+gguf_ex_read_1: kv[21]: key = deepseek2.expert_group_count
+gguf_ex_read_1: kv[22]: key = deepseek2.expert_group_used_count
+gguf_ex_read_1: kv[23]: key = deepseek2.expert_gating_func
+gguf_ex_read_1: kv[24]: key = deepseek2.leading_dense_block_count
+gguf_ex_read_1: kv[25]: key = deepseek2.vocab_size
+gguf_ex_read_1: kv[26]: key = deepseek2.attention.q_lora_rank
+gguf_ex_read_1: kv[27]: key = deepseek2.attention.kv_lora_rank
+gguf_ex_read_1: kv[28]: key = deepseek2.attention.key_length
+gguf_ex_read_1: kv[29]: key = deepseek2.attention.value_length
+gguf_ex_read_1: kv[30]: key = deepseek2.attention.key_length_mla
+gguf_ex_read_1: kv[31]: key = deepseek2.attention.value_length_mla
+gguf_ex_read_1: kv[32]: key = deepseek2.expert_feed_forward_length
+gguf_ex_read_1: kv[33]: key = deepseek2.expert_count
+gguf_ex_read_1: kv[34]: key = deepseek2.expert_shared_count
+gguf_ex_read_1: kv[35]: key = deepseek2.expert_weights_scale
+gguf_ex_read_1: kv[36]: key = deepseek2.expert_weights_norm
+gguf_ex_read_1: kv[37]: key = deepseek2.rope.dimension_count
+gguf_ex_read_1: kv[38]: key = deepseek2.rope.scaling.yarn_log_multiplier
+gguf_ex_read_1: kv[39]: key = tokenizer.ggml.model
+gguf_ex_read_1: kv[40]: key = tokenizer.ggml.pre
+gguf_ex_read_1: kv[41]: key = tokenizer.ggml.tokens
+gguf_ex_read_1: kv[42]: key = tokenizer.ggml.token_type
+gguf_ex_read_1: kv[43]: key = tokenizer.ggml.merges
+gguf_ex_read_1: kv[44]: key = tokenizer.ggml.bos_token_id
+gguf_ex_read_1: kv[45]: key = tokenizer.ggml.eos_token_id
+gguf_ex_read_1: kv[46]: key = tokenizer.ggml.padding_token_id
+gguf_ex_read_1: kv[47]: key = tokenizer.chat_template
+gguf_ex_read_1: kv[48]: key = general.quantization_version
+gguf_ex_read_1: kv[49]: key = general.file_type
+gguf_ex_read_1: kv[50]: key = quantize.imatrix.file
+gguf_ex_read_1: kv[51]: key = quantize.imatrix.dataset
+gguf_ex_read_1: kv[52]: key = quantize.imatrix.entries_count
+gguf_ex_read_1: kv[53]: key = quantize.imatrix.chunks_count
+gguf_ex_read_1: kv[54]: key = split.no
+gguf_ex_read_1: kv[55]: key = split.tensors.count
+gguf_ex_read_1: kv[56]: key = split.count
+gguf_ex_read_1: n_tensors: 0
+gguf_ex_read_1: ctx_data size: 368

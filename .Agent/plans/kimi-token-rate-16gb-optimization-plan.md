@@ -90994,3 +90994,76 @@ Decision:
 - It may still be insufficient for building a complete derived IQ2 expert pack
   alongside the downloaded GGUF; extra disk or staged build strategy may be
   needed after initial dev n32 smoke.
+
+## GP17: AesSedai IQ2_XXS GGUF header preflight
+
+Timestamp: `2026-07-07T02:53:41+0800`.
+
+Status: completed metadata-only preflight.
+
+Rationale:
+
+- GP15 identified AesSedai `IQ2_XXS` as the smallest direct GGUF candidate.
+- GP16 showed full download is blocked by disk space.
+- Before asking for cleanup/download, verify that the candidate header is
+  readable by this checkout and has compatible Kimi/deepseek2 metadata.
+
+Record:
+
+- `.Agent/runs/20260707-gp17-iq2xxs-header-preflight/report.md`
+- Additional raw outputs:
+  - `metadata-decoded.txt`;
+  - `metadata.txt`;
+  - `llama-gguf-rn.txt`.
+
+Downloaded temporary shard:
+
+- URL:
+  `https://huggingface.co/AesSedai/Kimi-K2.7-Code-GGUF/resolve/main/IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00001-of-00007.gguf`
+- Server temp path:
+  `/root/lfz/tmp/gp17-iq2xxs-header/Kimi-K2.7-Code-IQ2_XXS-00001-of-00007.gguf`
+- Size: `6.6 MiB`.
+- SHA256:
+  `d89b9a9945205f70dbe5bce6f79ff1047b6295efc98237b0936637dc34052298`.
+- The binary GGUF shard is not committed to git.
+
+Header/tool result:
+
+- `build-cuda-batch/bin/llama-gguf <shard> r n` can read the header.
+- GGUF version `3`, alignment `32`.
+- Metadata keys are present; first shard contains `0` tensors.
+
+Decoded metadata:
+
+- `general.architecture='deepseek2'`.
+- `general.name='Kimi K2.7 Code'`.
+- `general.size_label='384x14B'`.
+- `deepseek2.block_count=61`.
+- `deepseek2.expert_count=384`.
+- `deepseek2.expert_used_count=8`.
+- `deepseek2.expert_feed_forward_length=2048`.
+- `deepseek2.leading_dense_block_count=1`.
+- `split.no=0`.
+- `split.count=7`.
+- `split.tensors.count=1096`.
+- `general.quantization_version=2`.
+
+Compatibility notes:
+
+- The architecture and MoE metadata match the current Kimi/deepseek2 loader
+  family.
+- Source inspection shows current ggml/CUDA has support for both
+  `GGML_TYPE_IQ2_XXS` and `GGML_TYPE_IQ2_XS`, including CUDA MMQ/MMVQ and
+  `moe_stream_batch` handling.
+- Important caveat:
+  - folder/file path says `IQ2_XXS`;
+  - `general.file_type=20`, which maps to `LLAMA_FTYPE_MOSTLY_IQ2_XS`;
+  - therefore exact tensor quantization must be verified after full download
+    from tensor metadata/runtime logs, not inferred from path name.
+
+Decision:
+
+- The candidate is not blocked at metadata/header level.
+- The remaining blocker is still disk space:
+  - full candidate size from GP15: `262.79 GiB`;
+  - current free space from GP16: `86G` unless cleanup is approved.

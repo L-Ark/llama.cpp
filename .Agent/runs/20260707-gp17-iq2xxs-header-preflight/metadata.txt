@@ -1,0 +1,16 @@
+fields 60
+tensors 0
+general.architecture memmap([100, 101, 101, 112, 115, 101, 101, 107,  50], dtype=uint8)
+general.name memmap([ 75, 105, 109, 105,  32,  75,  50,  46,  55,  32,  67, 111, 100,
+        101], dtype=uint8)
+general.size_label memmap([ 51,  56,  52, 120,  49,  52,  66], dtype=uint8)
+general.file_type memmap([20], dtype=uint32)
+deepseek2.block_count memmap([61], dtype=uint32)
+deepseek2.expert_count memmap([384], dtype=uint32)
+deepseek2.expert_used_count memmap([8], dtype=uint32)
+deepseek2.expert_feed_forward_length memmap([2048], dtype=uint32)
+deepseek2.leading_dense_block_count memmap([1], dtype=uint32)
+split.no memmap([0], dtype=uint16)
+split.count memmap([7], dtype=uint16)
+split.tensors.count memmap([1096], dtype=int32)
+general.quantization_version memmap([2], dtype=uint32)

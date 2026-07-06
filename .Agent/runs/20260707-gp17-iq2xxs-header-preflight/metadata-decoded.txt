@@ -1,0 +1,15 @@
+general.architecture='deepseek2'
+general.name='Kimi K2.7 Code'
+general.size_label='384x14B'
+general.file_type=20
+deepseek2.block_count=61
+deepseek2.expert_count=384
+deepseek2.expert_used_count=8
+deepseek2.expert_feed_forward_length=2048
+deepseek2.leading_dense_block_count=1
+split.no=0
+split.count=7
+split.tensors.count=1096
+general.quantization_version=2
+n_tensors=0
+n_fields=60
