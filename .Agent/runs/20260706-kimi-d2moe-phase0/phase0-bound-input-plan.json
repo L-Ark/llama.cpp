@@ -1,0 +1,5521 @@
+{
+  "aggregate": {
+    "by_layer": [
+      {
+        "count": 1152,
+        "fallback_us": 1688616.0,
+        "layer": 13,
+        "tensors": {
+          "blk.13.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 714584.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.13.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 507144.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.13.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 466888.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6033506304
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1576036.0,
+        "layer": 27,
+        "tensors": {
+          "blk.27.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 743790.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.27.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 397943.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.27.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 434303.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6033506304
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1558253.0,
+        "layer": 26,
+        "tensors": {
+          "blk.26.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 729967.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.26.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 428038.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.26.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 400248.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6606028800
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1473718.0,
+        "layer": 15,
+        "tensors": {
+          "blk.15.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 910876.0,
+            "weighted_bytes": 3170893824
+          },
+          "blk.15.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 274789.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.15.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 288053.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6782189568
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1450086.0,
+        "layer": 57,
+        "tensors": {
+          "blk.57.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 681264.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.57.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 400257.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.57.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 368565.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 7310671872
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1449268.0,
+        "layer": 56,
+        "tensors": {
+          "blk.56.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 622336.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.56.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 391862.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.56.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 435070.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 6738149376
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1420204.0,
+        "layer": 52,
+        "tensors": {
+          "blk.52.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 590138.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.52.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 440682.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.52.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 389384.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1419533.0,
+        "layer": 58,
+        "tensors": {
+          "blk.58.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 658967.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.58.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 372920.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.58.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 387646.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 7310671872
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1417257.0,
+        "layer": 9,
+        "tensors": {
+          "blk.9.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 841329.0,
+            "weighted_bytes": 3170893824
+          },
+          "blk.9.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 273129.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.9.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 302799.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 7134511104
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1412545.0,
+        "layer": 44,
+        "tensors": {
+          "blk.44.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 609600.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.44.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 445809.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.44.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 357136.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1375971.0,
+        "layer": 28,
+        "tensors": {
+          "blk.28.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 548766.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.28.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 465257.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.28.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 361948.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1366074.0,
+        "layer": 50,
+        "tensors": {
+          "blk.50.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 566576.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.50.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 432398.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.50.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 367100.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1361697.0,
+        "layer": 14,
+        "tensors": {
+          "blk.14.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 439008.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.14.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 539577.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.14.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 383112.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1359274.0,
+        "layer": 35,
+        "tensors": {
+          "blk.35.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 533259.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.35.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 396898.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.35.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 429117.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1341416.0,
+        "layer": 47,
+        "tensors": {
+          "blk.47.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 564264.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.47.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 407201.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.47.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 369951.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1312090.0,
+        "layer": 49,
+        "tensors": {
+          "blk.49.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 527290.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.49.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 435644.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.49.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 349156.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1304227.0,
+        "layer": 24,
+        "tensors": {
+          "blk.24.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 638118.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.24.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 325102.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.24.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 341007.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6606028800
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1301835.0,
+        "layer": 10,
+        "tensors": {
+          "blk.10.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 885915.0,
+            "weighted_bytes": 3170893824
+          },
+          "blk.10.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 217612.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.10.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 198308.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6782189568
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1284405.0,
+        "layer": 37,
+        "tensors": {
+          "blk.37.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 538567.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.37.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 420649.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.37.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 325189.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1278271.0,
+        "layer": 8,
+        "tensors": {
+          "blk.8.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 848888.0,
+            "weighted_bytes": 3170893824
+          },
+          "blk.8.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 216648.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.8.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 212735.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 7134511104
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1273468.0,
+        "layer": 32,
+        "tensors": {
+          "blk.32.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 456332.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.32.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 395913.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.32.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 421223.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1271006.0,
+        "layer": 30,
+        "tensors": {
+          "blk.30.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 519656.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.30.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 384237.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.30.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 367113.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1267084.0,
+        "layer": 39,
+        "tensors": {
+          "blk.39.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 513948.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.39.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 397589.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.39.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 355547.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1265805.0,
+        "layer": 51,
+        "tensors": {
+          "blk.51.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 535045.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.51.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 409653.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.51.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 321107.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1265800.0,
+        "layer": 36,
+        "tensors": {
+          "blk.36.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 502531.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.36.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 405453.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.36.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 357816.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1264649.0,
+        "layer": 40,
+        "tensors": {
+          "blk.40.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 547732.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.40.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 401337.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.40.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 315580.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1263072.0,
+        "layer": 21,
+        "tensors": {
+          "blk.21.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 581400.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.21.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 322632.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.21.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 359040.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6606028800
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1263066.0,
+        "layer": 18,
+        "tensors": {
+          "blk.18.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 768842.0,
+            "weighted_bytes": 3170893824
+          },
+          "blk.18.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 247520.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.18.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 246704.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6782189568
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1262882.0,
+        "layer": 7,
+        "tensors": {
+          "blk.7.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 823182.0,
+            "weighted_bytes": 3170893824
+          },
+          "blk.7.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 211900.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.7.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 227800.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 7134511104
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1260216.0,
+        "layer": 25,
+        "tensors": {
+          "blk.25.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 605536.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.25.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 343448.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.25.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 311232.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6606028800
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1257408.0,
+        "layer": 29,
+        "tensors": {
+          "blk.29.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 490435.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.29.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 413317.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.29.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 353656.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1250492.0,
+        "layer": 54,
+        "tensors": {
+          "blk.54.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 571386.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.54.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 350649.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.54.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 328457.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1246849.0,
+        "layer": 46,
+        "tensors": {
+          "blk.46.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 513128.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.46.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 366520.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.46.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 367201.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1243323.0,
+        "layer": 48,
+        "tensors": {
+          "blk.48.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 584860.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.48.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 349024.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.48.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 309439.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1241473.0,
+        "layer": 38,
+        "tensors": {
+          "blk.38.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 544680.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.38.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 370329.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.38.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 326464.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1220982.0,
+        "layer": 55,
+        "tensors": {
+          "blk.55.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 512095.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.55.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 406286.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.55.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 302601.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1218826.0,
+        "layer": 59,
+        "tensors": {
+          "blk.59.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 497805.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.59.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 355798.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.59.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 365223.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 6738149376
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1213528.0,
+        "layer": 23,
+        "tensors": {
+          "blk.23.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 629728.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.23.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 245116.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.23.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 338684.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6606028800
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1212132.0,
+        "layer": 34,
+        "tensors": {
+          "blk.34.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 533416.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.34.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 358245.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.34.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 320471.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1198958.0,
+        "layer": 42,
+        "tensors": {
+          "blk.42.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 531352.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.42.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 375419.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.42.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 292187.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1192766.0,
+        "layer": 41,
+        "tensors": {
+          "blk.41.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 522792.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.41.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 387194.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.41.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 282780.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1175325.0,
+        "layer": 16,
+        "tensors": {
+          "blk.16.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 597993.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.16.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 305320.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.16.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 272012.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6606028800
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1167944.0,
+        "layer": 31,
+        "tensors": {
+          "blk.31.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 507284.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.31.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 366175.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.31.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 294485.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1159900.0,
+        "layer": 6,
+        "tensors": {
+          "blk.6.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 756714.0,
+            "weighted_bytes": 3170893824
+          },
+          "blk.6.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 201430.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.6.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 201756.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 7486832640
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1152552.0,
+        "layer": 53,
+        "tensors": {
+          "blk.53.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 505113.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.53.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 349715.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.53.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 297724.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1137646.0,
+        "layer": 33,
+        "tensors": {
+          "blk.33.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 477637.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.33.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 344761.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.33.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 315248.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1128940.0,
+        "layer": 20,
+        "tensors": {
+          "blk.20.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 549048.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.20.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 287301.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.20.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 292591.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6606028800
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1105626.0,
+        "layer": 22,
+        "tensors": {
+          "blk.22.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 561978.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.22.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 244807.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.22.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 298841.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6606028800
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1103375.0,
+        "layer": 19,
+        "tensors": {
+          "blk.19.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 545115.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.19.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 283629.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.19.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 274631.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6606028800
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1083579.0,
+        "layer": 43,
+        "tensors": {
+          "blk.43.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 449891.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.43.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 332992.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.43.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 300696.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1082751.0,
+        "layer": 45,
+        "tensors": {
+          "blk.45.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 453437.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.45.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 348314.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.45.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 281000.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6385827840
+      },
+      {
+        "count": 1152,
+        "fallback_us": 1033976.0,
+        "layer": 17,
+        "tensors": {
+          "blk.17.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 451951.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.17.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 307418.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.17.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 274607.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6033506304
+      },
+      {
+        "count": 1152,
+        "fallback_us": 984296.0,
+        "layer": 12,
+        "tensors": {
+          "blk.12.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 438192.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.12.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 261809.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.12.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 284295.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6033506304
+      },
+      {
+        "count": 1152,
+        "fallback_us": 968216.0,
+        "layer": 3,
+        "tensors": {
+          "blk.3.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 481360.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.3.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 244040.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.3.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 242816.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 6738149376
+      },
+      {
+        "count": 1152,
+        "fallback_us": 889193.0,
+        "layer": 4,
+        "tensors": {
+          "blk.4.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 393720.0,
+            "weighted_bytes": 2994733056
+          },
+          "blk.4.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 262094.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.4.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 233379.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 7310671872
+      },
+      {
+        "count": 1152,
+        "fallback_us": 789809.0,
+        "layer": 1,
+        "tensors": {
+          "blk.1.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 378533.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.1.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 214609.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.1.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 196667.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6033506304
+      },
+      {
+        "count": 1152,
+        "fallback_us": 789360.0,
+        "layer": 5,
+        "tensors": {
+          "blk.5.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 340309.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.5.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 223910.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.5.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 225141.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 6738149376
+      },
+      {
+        "count": 1152,
+        "fallback_us": 737002.0,
+        "layer": 11,
+        "tensors": {
+          "blk.11.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 326349.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.11.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 202266.0,
+            "weighted_bytes": 1805647872
+          },
+          "blk.11.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 208387.0,
+            "weighted_bytes": 1805647872
+          }
+        },
+        "weighted_bytes": 6033506304
+      },
+      {
+        "count": 1152,
+        "fallback_us": 655086.0,
+        "layer": 2,
+        "tensors": {
+          "blk.2.ffn_down_exps.weight": {
+            "count": 384,
+            "fallback_us": 298529.0,
+            "weighted_bytes": 2422210560
+          },
+          "blk.2.ffn_gate_exps.weight": {
+            "count": 384,
+            "fallback_us": 178775.0,
+            "weighted_bytes": 2157969408
+          },
+          "blk.2.ffn_up_exps.weight": {
+            "count": 384,
+            "fallback_us": 177782.0,
+            "weighted_bytes": 2157969408
+          }
+        },
+        "weighted_bytes": 6738149376
+      },
+      {
+        "count": 768,
+        "fallback_us": 0.0,
+        "layer": 60,
+        "tensors": {
+          "blk.60.ffn_down_exps.weight": {
+            "count": 256,
+            "fallback_us": 0.0,
+            "weighted_bytes": 1614807040
+          },
+          "blk.60.ffn_gate_exps.weight": {
+            "count": 256,
+            "fallback_us": 0.0,
+            "weighted_bytes": 1438646272
+          },
+          "blk.60.ffn_up_exps.weight": {
+            "count": 256,
+            "fallback_us": 0.0,
+            "weighted_bytes": 1438646272
+          }
+        },
+        "weighted_bytes": 4492099584
+      }
+    ],
+    "missing_tensors": {},
+    "top_keys": [
+      {
+        "count": 25,
+        "expert_bytes": 8257536,
+        "expert_idx": 127,
+        "fallback_us": 72217.0,
+        "kind": "down",
+        "layer": 10,
+        "tensor": "blk.10.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 20,
+        "expert_bytes": 8257536,
+        "expert_idx": 356,
+        "fallback_us": 63572.0,
+        "kind": "down",
+        "layer": 8,
+        "tensor": "blk.8.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 20,
+        "expert_bytes": 6307840,
+        "expert_idx": 246,
+        "fallback_us": 60075.0,
+        "kind": "down",
+        "layer": 38,
+        "tensor": "blk.38.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 19,
+        "expert_bytes": 6307840,
+        "expert_idx": 259,
+        "fallback_us": 57315.0,
+        "kind": "down",
+        "layer": 30,
+        "tensor": "blk.30.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 13,
+        "expert_bytes": 6307840,
+        "expert_idx": 326,
+        "fallback_us": 52363.0,
+        "kind": "down",
+        "layer": 40,
+        "tensor": "blk.40.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 13,
+        "expert_bytes": 7798784,
+        "expert_idx": 299,
+        "fallback_us": 51614.0,
+        "kind": "down",
+        "layer": 24,
+        "tensor": "blk.24.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 6307840,
+        "expert_idx": 5,
+        "fallback_us": 51611.0,
+        "kind": "down",
+        "layer": 48,
+        "tensor": "blk.48.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 11,
+        "expert_bytes": 7798784,
+        "expert_idx": 373,
+        "fallback_us": 50096.0,
+        "kind": "down",
+        "layer": 57,
+        "tensor": "blk.57.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 27,
+        "expert_bytes": 8257536,
+        "expert_idx": 35,
+        "fallback_us": 49853.0,
+        "kind": "down",
+        "layer": 10,
+        "tensor": "blk.10.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 18,
+        "expert_bytes": 8257536,
+        "expert_idx": 211,
+        "fallback_us": 49618.0,
+        "kind": "down",
+        "layer": 8,
+        "tensor": "blk.8.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 14,
+        "expert_bytes": 8257536,
+        "expert_idx": 331,
+        "fallback_us": 47799.0,
+        "kind": "down",
+        "layer": 9,
+        "tensor": "blk.9.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 16,
+        "expert_bytes": 8257536,
+        "expert_idx": 39,
+        "fallback_us": 47771.0,
+        "kind": "down",
+        "layer": 7,
+        "tensor": "blk.7.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 6307840,
+        "expert_idx": 42,
+        "fallback_us": 47522.0,
+        "kind": "down",
+        "layer": 37,
+        "tensor": "blk.37.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 6307840,
+        "expert_idx": 355,
+        "fallback_us": 47291.0,
+        "kind": "down",
+        "layer": 13,
+        "tensor": "blk.13.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 13,
+        "expert_bytes": 6307840,
+        "expert_idx": 227,
+        "fallback_us": 46882.0,
+        "kind": "down",
+        "layer": 29,
+        "tensor": "blk.29.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 18,
+        "expert_bytes": 6307840,
+        "expert_idx": 317,
+        "fallback_us": 46526.0,
+        "kind": "down",
+        "layer": 17,
+        "tensor": "blk.17.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 33,
+        "expert_bytes": 7798784,
+        "expert_idx": 270,
+        "fallback_us": 46306.0,
+        "kind": "down",
+        "layer": 23,
+        "tensor": "blk.23.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 7798784,
+        "expert_idx": 82,
+        "fallback_us": 46306.0,
+        "kind": "down",
+        "layer": 23,
+        "tensor": "blk.23.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 6307840,
+        "expert_idx": 249,
+        "fallback_us": 45191.0,
+        "kind": "down",
+        "layer": 55,
+        "tensor": "blk.55.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 8257536,
+        "expert_idx": 336,
+        "fallback_us": 44452.0,
+        "kind": "down",
+        "layer": 15,
+        "tensor": "blk.15.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 11,
+        "expert_bytes": 7798784,
+        "expert_idx": 122,
+        "fallback_us": 44093.0,
+        "kind": "down",
+        "layer": 19,
+        "tensor": "blk.19.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 17,
+        "expert_bytes": 6307840,
+        "expert_idx": 64,
+        "fallback_us": 43754.0,
+        "kind": "down",
+        "layer": 27,
+        "tensor": "blk.27.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 17,
+        "expert_bytes": 8257536,
+        "expert_idx": 155,
+        "fallback_us": 43550.0,
+        "kind": "down",
+        "layer": 8,
+        "tensor": "blk.8.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 17,
+        "expert_bytes": 6307840,
+        "expert_idx": 97,
+        "fallback_us": 43146.0,
+        "kind": "down",
+        "layer": 34,
+        "tensor": "blk.34.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 20,
+        "expert_bytes": 8257536,
+        "expert_idx": 152,
+        "fallback_us": 43097.0,
+        "kind": "down",
+        "layer": 18,
+        "tensor": "blk.18.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 19,
+        "expert_bytes": 5619712,
+        "expert_idx": 259,
+        "fallback_us": 42382.0,
+        "kind": "gate",
+        "layer": 30,
+        "tensor": "blk.30.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      },
+      {
+        "count": 29,
+        "expert_bytes": 8257536,
+        "expert_idx": 211,
+        "fallback_us": 42159.0,
+        "kind": "down",
+        "layer": 18,
+        "tensor": "blk.18.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 17,
+        "expert_bytes": 6307840,
+        "expert_idx": 203,
+        "fallback_us": 42036.0,
+        "kind": "down",
+        "layer": 13,
+        "tensor": "blk.13.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 6307840,
+        "expert_idx": 99,
+        "fallback_us": 42017.0,
+        "kind": "down",
+        "layer": 54,
+        "tensor": "blk.54.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 26,
+        "expert_bytes": 8257536,
+        "expert_idx": 15,
+        "fallback_us": 41807.0,
+        "kind": "down",
+        "layer": 15,
+        "tensor": "blk.15.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 23,
+        "expert_bytes": 7798784,
+        "expert_idx": 105,
+        "fallback_us": 41675.0,
+        "kind": "down",
+        "layer": 23,
+        "tensor": "blk.23.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 14,
+        "expert_bytes": 8257536,
+        "expert_idx": 232,
+        "fallback_us": 41134.0,
+        "kind": "down",
+        "layer": 18,
+        "tensor": "blk.18.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 6307840,
+        "expert_idx": 231,
+        "fallback_us": 41032.0,
+        "kind": "down",
+        "layer": 31,
+        "tensor": "blk.31.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 20,
+        "expert_bytes": 5619712,
+        "expert_idx": 246,
+        "fallback_us": 40846.0,
+        "kind": "gate",
+        "layer": 38,
+        "tensor": "blk.38.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      },
+      {
+        "count": 19,
+        "expert_bytes": 4702208,
+        "expert_idx": 259,
+        "fallback_us": 40496.0,
+        "kind": "up",
+        "layer": 30,
+        "tensor": "blk.30.ffn_up_exps.weight",
+        "type": "IQ2_S"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 7798784,
+        "expert_idx": 215,
+        "fallback_us": 40373.0,
+        "kind": "down",
+        "layer": 20,
+        "tensor": "blk.20.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 13,
+        "expert_bytes": 5619712,
+        "expert_idx": 227,
+        "fallback_us": 39511.0,
+        "kind": "gate",
+        "layer": 29,
+        "tensor": "blk.29.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      },
+      {
+        "count": 10,
+        "expert_bytes": 6307840,
+        "expert_idx": 198,
+        "fallback_us": 39344.0,
+        "kind": "down",
+        "layer": 51,
+        "tensor": "blk.51.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 10,
+        "expert_bytes": 6307840,
+        "expert_idx": 298,
+        "fallback_us": 39344.0,
+        "kind": "down",
+        "layer": 51,
+        "tensor": "blk.51.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 11,
+        "expert_bytes": 8257536,
+        "expert_idx": 105,
+        "fallback_us": 39134.0,
+        "kind": "down",
+        "layer": 10,
+        "tensor": "blk.10.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 8,
+        "expert_bytes": 7798784,
+        "expert_idx": 372,
+        "fallback_us": 38765.0,
+        "kind": "down",
+        "layer": 58,
+        "tensor": "blk.58.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 15,
+        "expert_bytes": 6307840,
+        "expert_idx": 225,
+        "fallback_us": 38664.0,
+        "kind": "down",
+        "layer": 12,
+        "tensor": "blk.12.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 8257536,
+        "expert_idx": 18,
+        "fallback_us": 38497.0,
+        "kind": "down",
+        "layer": 15,
+        "tensor": "blk.15.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 11,
+        "expert_bytes": 7798784,
+        "expert_idx": 82,
+        "fallback_us": 38475.0,
+        "kind": "down",
+        "layer": 21,
+        "tensor": "blk.21.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 10,
+        "expert_bytes": 6307840,
+        "expert_idx": 1,
+        "fallback_us": 38443.0,
+        "kind": "down",
+        "layer": 41,
+        "tensor": "blk.41.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 13,
+        "expert_bytes": 5619712,
+        "expert_idx": 326,
+        "fallback_us": 38364.0,
+        "kind": "gate",
+        "layer": 40,
+        "tensor": "blk.40.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      },
+      {
+        "count": 7,
+        "expert_bytes": 6307840,
+        "expert_idx": 365,
+        "fallback_us": 38284.0,
+        "kind": "down",
+        "layer": 27,
+        "tensor": "blk.27.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 21,
+        "expert_bytes": 8257536,
+        "expert_idx": 8,
+        "fallback_us": 38264.0,
+        "kind": "down",
+        "layer": 7,
+        "tensor": "blk.7.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 36,
+        "expert_bytes": 6307840,
+        "expert_idx": 378,
+        "fallback_us": 37791.0,
+        "kind": "down",
+        "layer": 39,
+        "tensor": "blk.39.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 15,
+        "expert_bytes": 6307840,
+        "expert_idx": 84,
+        "fallback_us": 37791.0,
+        "kind": "down",
+        "layer": 39,
+        "tensor": "blk.39.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 6307840,
+        "expert_idx": 332,
+        "fallback_us": 37341.0,
+        "kind": "down",
+        "layer": 47,
+        "tensor": "blk.47.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 8257536,
+        "expert_idx": 167,
+        "fallback_us": 37247.0,
+        "kind": "down",
+        "layer": 9,
+        "tensor": "blk.9.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 10,
+        "expert_bytes": 7798784,
+        "expert_idx": 16,
+        "fallback_us": 37191.0,
+        "kind": "down",
+        "layer": 22,
+        "tensor": "blk.22.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 5619712,
+        "expert_idx": 42,
+        "fallback_us": 37117.0,
+        "kind": "gate",
+        "layer": 37,
+        "tensor": "blk.37.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 8257536,
+        "expert_idx": 304,
+        "fallback_us": 36904.0,
+        "kind": "down",
+        "layer": 10,
+        "tensor": "blk.10.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 16,
+        "expert_bytes": 6307840,
+        "expert_idx": 31,
+        "fallback_us": 36782.0,
+        "kind": "down",
+        "layer": 13,
+        "tensor": "blk.13.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 8257536,
+        "expert_idx": 338,
+        "fallback_us": 36651.0,
+        "kind": "down",
+        "layer": 15,
+        "tensor": "blk.15.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 19,
+        "expert_bytes": 8257536,
+        "expert_idx": 335,
+        "fallback_us": 36606.0,
+        "kind": "down",
+        "layer": 7,
+        "tensor": "blk.7.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 15,
+        "expert_bytes": 6307840,
+        "expert_idx": 322,
+        "fallback_us": 36556.0,
+        "kind": "down",
+        "layer": 17,
+        "tensor": "blk.17.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 18,
+        "expert_bytes": 7798784,
+        "expert_idx": 55,
+        "fallback_us": 36335.0,
+        "kind": "down",
+        "layer": 20,
+        "tensor": "blk.20.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 13,
+        "expert_bytes": 7798784,
+        "expert_idx": 214,
+        "fallback_us": 36335.0,
+        "kind": "down",
+        "layer": 20,
+        "tensor": "blk.20.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 10,
+        "expert_bytes": 6307840,
+        "expert_idx": 361,
+        "fallback_us": 36063.0,
+        "kind": "down",
+        "layer": 29,
+        "tensor": "blk.29.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 20,
+        "expert_bytes": 4702208,
+        "expert_idx": 246,
+        "fallback_us": 36013.0,
+        "kind": "up",
+        "layer": 38,
+        "tensor": "blk.38.ffn_up_exps.weight",
+        "type": "IQ2_S"
+      },
+      {
+        "count": 17,
+        "expert_bytes": 6307840,
+        "expert_idx": 345,
+        "fallback_us": 35999.0,
+        "kind": "down",
+        "layer": 11,
+        "tensor": "blk.11.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 8,
+        "expert_bytes": 6307840,
+        "expert_idx": 41,
+        "fallback_us": 35863.0,
+        "kind": "down",
+        "layer": 44,
+        "tensor": "blk.44.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 5619712,
+        "expert_idx": 249,
+        "fallback_us": 35854.0,
+        "kind": "gate",
+        "layer": 55,
+        "tensor": "blk.55.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      },
+      {
+        "count": 15,
+        "expert_bytes": 8257536,
+        "expert_idx": 17,
+        "fallback_us": 35850.0,
+        "kind": "down",
+        "layer": 6,
+        "tensor": "blk.6.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 39,
+        "expert_bytes": 6307840,
+        "expert_idx": 111,
+        "fallback_us": 35641.0,
+        "kind": "down",
+        "layer": 37,
+        "tensor": "blk.37.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 8,
+        "expert_bytes": 7798784,
+        "expert_idx": 165,
+        "fallback_us": 35622.0,
+        "kind": "down",
+        "layer": 25,
+        "tensor": "blk.25.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 8,
+        "expert_bytes": 7798784,
+        "expert_idx": 2,
+        "fallback_us": 35177.0,
+        "kind": "down",
+        "layer": 16,
+        "tensor": "blk.16.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 7798784,
+        "expert_idx": 317,
+        "fallback_us": 35067.0,
+        "kind": "down",
+        "layer": 57,
+        "tensor": "blk.57.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 7,
+        "expert_bytes": 7798784,
+        "expert_idx": 186,
+        "fallback_us": 35067.0,
+        "kind": "down",
+        "layer": 57,
+        "tensor": "blk.57.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 8257536,
+        "expert_idx": 8,
+        "fallback_us": 34809.0,
+        "kind": "down",
+        "layer": 15,
+        "tensor": "blk.15.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 23,
+        "expert_bytes": 7798784,
+        "expert_idx": 79,
+        "fallback_us": 34740.0,
+        "kind": "down",
+        "layer": 4,
+        "tensor": "blk.4.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 15,
+        "expert_bytes": 6307840,
+        "expert_idx": 62,
+        "fallback_us": 34717.0,
+        "kind": "down",
+        "layer": 52,
+        "tensor": "blk.52.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 11,
+        "expert_bytes": 6307840,
+        "expert_idx": 64,
+        "fallback_us": 34598.0,
+        "kind": "down",
+        "layer": 41,
+        "tensor": "blk.41.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 11,
+        "expert_bytes": 8257536,
+        "expert_idx": 216,
+        "fallback_us": 34149.0,
+        "kind": "down",
+        "layer": 18,
+        "tensor": "blk.18.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 7,
+        "expert_bytes": 7798784,
+        "expert_idx": 232,
+        "fallback_us": 33920.0,
+        "kind": "down",
+        "layer": 58,
+        "tensor": "blk.58.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 13,
+        "expert_bytes": 4702208,
+        "expert_idx": 227,
+        "fallback_us": 33810.0,
+        "kind": "up",
+        "layer": 29,
+        "tensor": "blk.29.ffn_up_exps.weight",
+        "type": "IQ2_S"
+      },
+      {
+        "count": 8,
+        "expert_bytes": 6307840,
+        "expert_idx": 56,
+        "fallback_us": 33613.0,
+        "kind": "down",
+        "layer": 54,
+        "tensor": "blk.54.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 6307840,
+        "expert_idx": 215,
+        "fallback_us": 33571.0,
+        "kind": "down",
+        "layer": 31,
+        "tensor": "blk.31.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 4702208,
+        "expert_idx": 355,
+        "fallback_us": 33561.0,
+        "kind": "gate",
+        "layer": 13,
+        "tensor": "blk.13.ffn_gate_exps.weight",
+        "type": "IQ2_S"
+      },
+      {
+        "count": 10,
+        "expert_bytes": 6307840,
+        "expert_idx": 242,
+        "fallback_us": 33081.0,
+        "kind": "down",
+        "layer": 43,
+        "tensor": "blk.43.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 7798784,
+        "expert_idx": 103,
+        "fallback_us": 33059.0,
+        "kind": "down",
+        "layer": 22,
+        "tensor": "blk.22.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 7798784,
+        "expert_idx": 331,
+        "fallback_us": 33059.0,
+        "kind": "down",
+        "layer": 22,
+        "tensor": "blk.22.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 7798784,
+        "expert_idx": 334,
+        "fallback_us": 33059.0,
+        "kind": "down",
+        "layer": 22,
+        "tensor": "blk.22.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 11,
+        "expert_bytes": 8257536,
+        "expert_idx": 142,
+        "fallback_us": 32940.0,
+        "kind": "down",
+        "layer": 10,
+        "tensor": "blk.10.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 18,
+        "expert_bytes": 6307840,
+        "expert_idx": 126,
+        "fallback_us": 32457.0,
+        "kind": "down",
+        "layer": 29,
+        "tensor": "blk.29.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 10,
+        "expert_bytes": 7798784,
+        "expert_idx": 244,
+        "fallback_us": 32414.0,
+        "kind": "down",
+        "layer": 23,
+        "tensor": "blk.23.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 14,
+        "expert_bytes": 8257536,
+        "expert_idx": 356,
+        "fallback_us": 32234.0,
+        "kind": "down",
+        "layer": 6,
+        "tensor": "blk.6.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 6307840,
+        "expert_idx": 248,
+        "fallback_us": 32223.0,
+        "kind": "down",
+        "layer": 40,
+        "tensor": "blk.40.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 10,
+        "expert_bytes": 6307840,
+        "expert_idx": 344,
+        "fallback_us": 32220.0,
+        "kind": "down",
+        "layer": 12,
+        "tensor": "blk.12.ffn_down_exps.weight",
+        "type": "Q3_K"
+      },
+      {
+        "count": 8,
+        "expert_bytes": 7798784,
+        "expert_idx": 293,
+        "fallback_us": 32207.0,
+        "kind": "down",
+        "layer": 26,
+        "tensor": "blk.26.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 7,
+        "expert_bytes": 7798784,
+        "expert_idx": 342,
+        "fallback_us": 32207.0,
+        "kind": "down",
+        "layer": 26,
+        "tensor": "blk.26.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 8,
+        "expert_bytes": 7798784,
+        "expert_idx": 189,
+        "fallback_us": 32067.0,
+        "kind": "down",
+        "layer": 19,
+        "tensor": "blk.19.ffn_down_exps.weight",
+        "type": "IQ4_XS"
+      },
+      {
+        "count": 21,
+        "expert_bytes": 8257536,
+        "expert_idx": 14,
+        "fallback_us": 31914.0,
+        "kind": "down",
+        "layer": 7,
+        "tensor": "blk.7.ffn_down_exps.weight",
+        "type": "Q4_0"
+      },
+      {
+        "count": 10,
+        "expert_bytes": 5619712,
+        "expert_idx": 117,
+        "fallback_us": 31742.0,
+        "kind": "gate",
+        "layer": 14,
+        "tensor": "blk.14.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      },
+      {
+        "count": 9,
+        "expert_bytes": 5619712,
+        "expert_idx": 131,
+        "fallback_us": 31742.0,
+        "kind": "gate",
+        "layer": 14,
+        "tensor": "blk.14.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      },
+      {
+        "count": 18,
+        "expert_bytes": 4702208,
+        "expert_idx": 317,
+        "fallback_us": 31650.0,
+        "kind": "gate",
+        "layer": 17,
+        "tensor": "blk.17.ffn_gate_exps.weight",
+        "type": "IQ2_S"
+      },
+      {
+        "count": 12,
+        "expert_bytes": 6307840,
+        "expert_idx": 376,
+        "fallback_us": 31609.0,
+        "kind": "down",
+        "layer": 33,
+        "tensor": "blk.33.ffn_down_exps.weight",
+        "type": "Q3_K"
+      }
+    ]
+  },
+  "inputs": {
+    "bytes_per_value": 2,
+    "inventory_tsv": ".Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv",
+    "profile_csv": [
+      "/root/lfz/runs/vendor-kimi-token-rate/20260706-005556Z-phase7op-current-head-n32-profile/route-profile.csv",
+      "/root/lfz/runs/vendor-kimi-token-rate/20260706-005556Z-phase7op-current-head-n32-profile/fallback-profile.csv"
+    ],
+    "ranks": [
+      16,
+      32,
+      64,
+      96,
+      128,
+      192,
+      256
+    ]
+  },
+  "kind": "kimi_d2moe_phase0_bound_input_plan",
+  "limitations": [
+    "This is a payload and input-selection bound only; it does not dequantize tensors or compute residual SVD yet.",
+    "Rank byte estimates assume BF16 low-rank U/V factors.",
+    "A real quality decision requires residual reconstruction and Kimi cold-start semantic validation."
+  ],
+  "plan": {
+    "base_resident_bytes_bf16": 880803840,
+    "base_resident_gib_bf16": 0.8203125,
+    "selected_layers": [
+      1,
+      13,
+      15,
+      26,
+      27,
+      29,
+      31,
+      56,
+      57,
+      60
+    ],
+    "selected_tensors": [
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 6307840,
+        "kind": "down",
+        "layer": 1,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.046753246753246755,
+            "full_expert_bytes": 6307840,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.09350649350649351,
+            "full_expert_bytes": 6307840,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.18701298701298702,
+            "full_expert_bytes": 6307840,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.2805194805194805,
+            "full_expert_bytes": 6307840,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.37402597402597404,
+            "full_expert_bytes": 6307840,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.561038961038961,
+            "full_expert_bytes": 6307840,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.7480519480519481,
+            "full_expert_bytes": 6307840,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          2048,
+          7168,
+          384
+        ],
+        "source": {
+          "data_offset": 3131770912,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00002-of-00010.gguf"
+        },
+        "tensor": "blk.1.ffn_down_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 28,
+            "expert_idx": 116,
+            "fallback_us": 30619.0
+          },
+          {
+            "count": 18,
+            "expert_idx": 23,
+            "fallback_us": 25052.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 160,
+            "fallback_us": 16701.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 137,
+            "fallback_us": 13917.0
+          },
+          {
+            "count": 14,
+            "expert_idx": 93,
+            "fallback_us": 11134.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 12,
+            "fallback_us": 11134.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 45,
+            "fallback_us": 11134.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 234,
+            "fallback_us": 11134.0
+          }
+        ],
+        "type": "Q3_K"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "gate",
+        "layer": 1,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 5569579040,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00002-of-00010.gguf"
+        },
+        "tensor": "blk.1.ffn_gate_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 28,
+            "expert_idx": 116,
+            "fallback_us": 17359.0
+          },
+          {
+            "count": 18,
+            "expert_idx": 23,
+            "fallback_us": 14202.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 160,
+            "fallback_us": 9468.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 137,
+            "fallback_us": 7890.0
+          },
+          {
+            "count": 14,
+            "expert_idx": 93,
+            "fallback_us": 6312.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 12,
+            "fallback_us": 6312.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 45,
+            "fallback_us": 6312.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 234,
+            "fallback_us": 6312.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "up",
+        "layer": 1,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 7401863200,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00002-of-00010.gguf"
+        },
+        "tensor": "blk.1.ffn_up_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 28,
+            "expert_idx": 116,
+            "fallback_us": 15909.0
+          },
+          {
+            "count": 18,
+            "expert_idx": 23,
+            "fallback_us": 13016.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 160,
+            "fallback_us": 8677.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 137,
+            "fallback_us": 7231.0
+          },
+          {
+            "count": 14,
+            "expert_idx": 93,
+            "fallback_us": 5785.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 12,
+            "fallback_us": 5785.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 45,
+            "fallback_us": 5785.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 234,
+            "fallback_us": 5785.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 6307840,
+        "kind": "down",
+        "layer": 13,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.046753246753246755,
+            "full_expert_bytes": 6307840,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.09350649350649351,
+            "full_expert_bytes": 6307840,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.18701298701298702,
+            "full_expert_bytes": 6307840,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.2805194805194805,
+            "full_expert_bytes": 6307840,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.37402597402597404,
+            "full_expert_bytes": 6307840,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.561038961038961,
+            "full_expert_bytes": 6307840,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.7480519480519481,
+            "full_expert_bytes": 6307840,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          2048,
+          7168,
+          384
+        ],
+        "source": {
+          "data_offset": 38058124640,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00003-of-00010.gguf"
+        },
+        "tensor": "blk.13.ffn_down_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 9,
+            "expert_idx": 355,
+            "fallback_us": 47291.0
+          },
+          {
+            "count": 17,
+            "expert_idx": 203,
+            "fallback_us": 42036.0
+          },
+          {
+            "count": 16,
+            "expert_idx": 31,
+            "fallback_us": 36782.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 43,
+            "fallback_us": 31527.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 208,
+            "fallback_us": 26272.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 174,
+            "fallback_us": 26272.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 10,
+            "fallback_us": 21018.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 169,
+            "fallback_us": 21018.0
+          }
+        ],
+        "type": "Q3_K"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "gate",
+        "layer": 13,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 40495932768,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00003-of-00010.gguf"
+        },
+        "tensor": "blk.13.ffn_gate_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 9,
+            "expert_idx": 355,
+            "fallback_us": 33561.0
+          },
+          {
+            "count": 17,
+            "expert_idx": 203,
+            "fallback_us": 29832.0
+          },
+          {
+            "count": 16,
+            "expert_idx": 31,
+            "fallback_us": 26103.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 43,
+            "fallback_us": 22374.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 208,
+            "fallback_us": 18645.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 174,
+            "fallback_us": 18645.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 10,
+            "fallback_us": 14916.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 169,
+            "fallback_us": 14916.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "up",
+        "layer": 13,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 42328216928,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00003-of-00010.gguf"
+        },
+        "tensor": "blk.13.ffn_up_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 9,
+            "expert_idx": 355,
+            "fallback_us": 30897.0
+          },
+          {
+            "count": 17,
+            "expert_idx": 203,
+            "fallback_us": 27464.0
+          },
+          {
+            "count": 16,
+            "expert_idx": 31,
+            "fallback_us": 24031.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 43,
+            "fallback_us": 20598.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 208,
+            "fallback_us": 17165.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 174,
+            "fallback_us": 17165.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 10,
+            "fallback_us": 13732.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 169,
+            "fallback_us": 13732.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 8257536,
+        "kind": "down",
+        "layer": 15,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.03571428571428571,
+            "full_expert_bytes": 8257536,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.07142857142857142,
+            "full_expert_bytes": 8257536,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.14285714285714285,
+            "full_expert_bytes": 8257536,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.21428571428571427,
+            "full_expert_bytes": 8257536,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.2857142857142857,
+            "full_expert_bytes": 8257536,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.42857142857142855,
+            "full_expert_bytes": 8257536,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.5714285714285714,
+            "full_expert_bytes": 8257536,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          2048,
+          7168,
+          384
+        ],
+        "source": {
+          "data_offset": 1928735104,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00004-of-00010.gguf"
+        },
+        "tensor": "blk.15.ffn_down_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 12,
+            "expert_idx": 336,
+            "fallback_us": 44452.0
+          },
+          {
+            "count": 26,
+            "expert_idx": 15,
+            "fallback_us": 41807.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 18,
+            "fallback_us": 38497.0
+          },
+          {
+            "count": 12,
+            "expert_idx": 338,
+            "fallback_us": 36651.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 8,
+            "fallback_us": 34809.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 257,
+            "fallback_us": 31594.0
+          },
+          {
+            "count": 16,
+            "expert_idx": 130,
+            "fallback_us": 23997.0
+          },
+          {
+            "count": 16,
+            "expert_idx": 119,
+            "fallback_us": 22418.0
+          }
+        ],
+        "type": "Q4_0"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "gate",
+        "layer": 15,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 5115226496,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00004-of-00010.gguf"
+        },
+        "tensor": "blk.15.ffn_gate_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 12,
+            "expert_idx": 336,
+            "fallback_us": 18186.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 18,
+            "fallback_us": 18186.0
+          },
+          {
+            "count": 12,
+            "expert_idx": 338,
+            "fallback_us": 16166.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 8,
+            "fallback_us": 16166.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 257,
+            "fallback_us": 14145.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 321,
+            "fallback_us": 8083.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 107,
+            "fallback_us": 8083.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 368,
+            "fallback_us": 8083.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "up",
+        "layer": 15,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 6947510656,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00004-of-00010.gguf"
+        },
+        "tensor": "blk.15.ffn_up_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 12,
+            "expert_idx": 336,
+            "fallback_us": 19063.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 18,
+            "fallback_us": 19063.0
+          },
+          {
+            "count": 12,
+            "expert_idx": 338,
+            "fallback_us": 16945.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 8,
+            "fallback_us": 16945.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 257,
+            "fallback_us": 14827.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 321,
+            "fallback_us": 8472.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 107,
+            "fallback_us": 8472.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 368,
+            "fallback_us": 8472.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 7798784,
+        "kind": "down",
+        "layer": 26,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.037815126050420166,
+            "full_expert_bytes": 7798784,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.07563025210084033,
+            "full_expert_bytes": 7798784,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.15126050420168066,
+            "full_expert_bytes": 7798784,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.226890756302521,
+            "full_expert_bytes": 7798784,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.3025210084033613,
+            "full_expert_bytes": 7798784,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.453781512605042,
+            "full_expert_bytes": 7798784,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.6050420168067226,
+            "full_expert_bytes": 7798784,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          2048,
+          7168,
+          384
+        ],
+        "source": {
+          "data_offset": 27085371648,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00005-of-00010.gguf"
+        },
+        "tensor": "blk.26.ffn_down_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 8,
+            "expert_idx": 293,
+            "fallback_us": 32207.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 342,
+            "fallback_us": 32207.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 301,
+            "fallback_us": 26839.0
+          },
+          {
+            "count": 18,
+            "expert_idx": 355,
+            "fallback_us": 21471.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 313,
+            "fallback_us": 21471.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 116,
+            "fallback_us": 21471.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 210,
+            "fallback_us": 21471.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 17,
+            "fallback_us": 21471.0
+          }
+        ],
+        "type": "IQ4_XS"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "gate",
+        "layer": 26,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 30095702272,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00005-of-00010.gguf"
+        },
+        "tensor": "blk.26.ffn_gate_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 8,
+            "expert_idx": 293,
+            "fallback_us": 18886.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 342,
+            "fallback_us": 18886.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 301,
+            "fallback_us": 15738.0
+          },
+          {
+            "count": 18,
+            "expert_idx": 355,
+            "fallback_us": 12590.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 313,
+            "fallback_us": 12590.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 116,
+            "fallback_us": 12590.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 210,
+            "fallback_us": 12590.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 17,
+            "fallback_us": 12590.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "up",
+        "layer": 26,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 31927986432,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00005-of-00010.gguf"
+        },
+        "tensor": "blk.26.ffn_up_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 8,
+            "expert_idx": 293,
+            "fallback_us": 17658.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 342,
+            "fallback_us": 17658.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 301,
+            "fallback_us": 14715.0
+          },
+          {
+            "count": 18,
+            "expert_idx": 355,
+            "fallback_us": 11772.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 313,
+            "fallback_us": 11772.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 116,
+            "fallback_us": 11772.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 210,
+            "fallback_us": 11772.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 17,
+            "fallback_us": 11772.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 6307840,
+        "kind": "down",
+        "layer": 27,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.046753246753246755,
+            "full_expert_bytes": 6307840,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.09350649350649351,
+            "full_expert_bytes": 6307840,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.18701298701298702,
+            "full_expert_bytes": 6307840,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.2805194805194805,
+            "full_expert_bytes": 6307840,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.37402597402597404,
+            "full_expert_bytes": 6307840,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.561038961038961,
+            "full_expert_bytes": 6307840,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.7480519480519481,
+            "full_expert_bytes": 6307840,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          2048,
+          7168,
+          384
+        ],
+        "source": {
+          "data_offset": 33856712448,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00005-of-00010.gguf"
+        },
+        "tensor": "blk.27.ffn_down_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 17,
+            "expert_idx": 64,
+            "fallback_us": 43754.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 365,
+            "fallback_us": 38284.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 270,
+            "fallback_us": 27346.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 269,
+            "fallback_us": 21877.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 142,
+            "fallback_us": 21877.0
+          },
+          {
+            "count": 32,
+            "expert_idx": 280,
+            "fallback_us": 16407.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 1,
+            "fallback_us": 16407.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 99,
+            "fallback_us": 16407.0
+          }
+        ],
+        "type": "Q3_K"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "gate",
+        "layer": 27,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 36294520576,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00005-of-00010.gguf"
+        },
+        "tensor": "blk.27.ffn_gate_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 17,
+            "expert_idx": 64,
+            "fallback_us": 23410.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 365,
+            "fallback_us": 20484.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 270,
+            "fallback_us": 14631.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 269,
+            "fallback_us": 11705.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 142,
+            "fallback_us": 11705.0
+          },
+          {
+            "count": 32,
+            "expert_idx": 280,
+            "fallback_us": 8778.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 1,
+            "fallback_us": 8778.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 99,
+            "fallback_us": 8778.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "up",
+        "layer": 27,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 38126804736,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00005-of-00010.gguf"
+        },
+        "tensor": "blk.27.ffn_up_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 17,
+            "expert_idx": 64,
+            "fallback_us": 25550.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 365,
+            "fallback_us": 22356.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 270,
+            "fallback_us": 15968.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 269,
+            "fallback_us": 12775.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 142,
+            "fallback_us": 12775.0
+          },
+          {
+            "count": 32,
+            "expert_idx": 280,
+            "fallback_us": 9581.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 1,
+            "fallback_us": 9581.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 99,
+            "fallback_us": 9581.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 6307840,
+        "kind": "down",
+        "layer": 29,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.046753246753246755,
+            "full_expert_bytes": 6307840,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.09350649350649351,
+            "full_expert_bytes": 6307840,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.18701298701298702,
+            "full_expert_bytes": 6307840,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.2805194805194805,
+            "full_expert_bytes": 6307840,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.37402597402597404,
+            "full_expert_bytes": 6307840,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.561038961038961,
+            "full_expert_bytes": 6307840,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.7480519480519481,
+            "full_expert_bytes": 6307840,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          2048,
+          7168,
+          384
+        ],
+        "source": {
+          "data_offset": 46606670592,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00005-of-00010.gguf"
+        },
+        "tensor": "blk.29.ffn_down_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 13,
+            "expert_idx": 227,
+            "fallback_us": 46882.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 361,
+            "fallback_us": 36063.0
+          },
+          {
+            "count": 18,
+            "expert_idx": 126,
+            "fallback_us": 32457.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 273,
+            "fallback_us": 25244.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 208,
+            "fallback_us": 21638.0
+          },
+          {
+            "count": 11,
+            "expert_idx": 242,
+            "fallback_us": 14425.0
+          },
+          {
+            "count": 12,
+            "expert_idx": 363,
+            "fallback_us": 10819.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 200,
+            "fallback_us": 10819.0
+          }
+        ],
+        "type": "Q3_K"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 5619712,
+        "kind": "gate",
+        "layer": 29,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.052478134110787174,
+            "full_expert_bytes": 5619712,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.10495626822157435,
+            "full_expert_bytes": 5619712,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2099125364431487,
+            "full_expert_bytes": 5619712,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.31486880466472306,
+            "full_expert_bytes": 5619712,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.4198250728862974,
+            "full_expert_bytes": 5619712,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.6297376093294461,
+            "full_expert_bytes": 5619712,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.8396501457725948,
+            "full_expert_bytes": 5619712,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 9344,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00006-of-00010.gguf"
+        },
+        "tensor": "blk.29.ffn_gate_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 13,
+            "expert_idx": 227,
+            "fallback_us": 39511.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 361,
+            "fallback_us": 30393.0
+          },
+          {
+            "count": 18,
+            "expert_idx": 126,
+            "fallback_us": 27353.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 273,
+            "fallback_us": 21275.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 208,
+            "fallback_us": 18235.0
+          },
+          {
+            "count": 11,
+            "expert_idx": 242,
+            "fallback_us": 12157.0
+          },
+          {
+            "count": 12,
+            "expert_idx": 363,
+            "fallback_us": 9117.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 200,
+            "fallback_us": 9117.0
+          }
+        ],
+        "type": "IQ3_XXS"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "up",
+        "layer": 29,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 2184615040,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00006-of-00010.gguf"
+        },
+        "tensor": "blk.29.ffn_up_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 13,
+            "expert_idx": 227,
+            "fallback_us": 33810.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 361,
+            "fallback_us": 26007.0
+          },
+          {
+            "count": 18,
+            "expert_idx": 126,
+            "fallback_us": 23407.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 273,
+            "fallback_us": 18205.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 208,
+            "fallback_us": 15604.0
+          },
+          {
+            "count": 11,
+            "expert_idx": 242,
+            "fallback_us": 10403.0
+          },
+          {
+            "count": 12,
+            "expert_idx": 363,
+            "fallback_us": 7802.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 200,
+            "fallback_us": 7802.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 6307840,
+        "kind": "down",
+        "layer": 31,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.046753246753246755,
+            "full_expert_bytes": 6307840,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.09350649350649351,
+            "full_expert_bytes": 6307840,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.18701298701298702,
+            "full_expert_bytes": 6307840,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.2805194805194805,
+            "full_expert_bytes": 6307840,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.37402597402597404,
+            "full_expert_bytes": 6307840,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.561038961038961,
+            "full_expert_bytes": 6307840,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.7480519480519481,
+            "full_expert_bytes": 6307840,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          2048,
+          7168,
+          384
+        ],
+        "source": {
+          "data_offset": 10664480896,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00006-of-00010.gguf"
+        },
+        "tensor": "blk.31.ffn_down_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 12,
+            "expert_idx": 231,
+            "fallback_us": 41032.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 215,
+            "fallback_us": 33571.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 50,
+            "fallback_us": 18651.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 42,
+            "fallback_us": 14920.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 174,
+            "fallback_us": 14920.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 70,
+            "fallback_us": 14920.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 147,
+            "fallback_us": 14920.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 168,
+            "fallback_us": 14920.0
+          }
+        ],
+        "type": "Q3_K"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 5619712,
+        "kind": "gate",
+        "layer": 31,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.052478134110787174,
+            "full_expert_bytes": 5619712,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.10495626822157435,
+            "full_expert_bytes": 5619712,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2099125364431487,
+            "full_expert_bytes": 5619712,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.31486880466472306,
+            "full_expert_bytes": 5619712,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.4198250728862974,
+            "full_expert_bytes": 5619712,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.6297376093294461,
+            "full_expert_bytes": 5619712,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.8396501457725948,
+            "full_expert_bytes": 5619712,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 13102289024,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00006-of-00010.gguf"
+        },
+        "tensor": "blk.31.ffn_gate_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 12,
+            "expert_idx": 231,
+            "fallback_us": 29622.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 215,
+            "fallback_us": 24236.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 50,
+            "fallback_us": 13464.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 42,
+            "fallback_us": 10771.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 174,
+            "fallback_us": 10771.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 70,
+            "fallback_us": 10771.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 147,
+            "fallback_us": 10771.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 168,
+            "fallback_us": 10771.0
+          }
+        ],
+        "type": "IQ3_XXS"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 4702208,
+        "kind": "up",
+        "layer": 31,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.0627177700348432,
+            "full_expert_bytes": 4702208,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.1254355400696864,
+            "full_expert_bytes": 4702208,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2508710801393728,
+            "full_expert_bytes": 4702208,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.37630662020905925,
+            "full_expert_bytes": 4702208,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.5017421602787456,
+            "full_expert_bytes": 4702208,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.7526132404181185,
+            "full_expert_bytes": 4702208,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 1.0034843205574913,
+            "full_expert_bytes": 4702208,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 15286894720,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00006-of-00010.gguf"
+        },
+        "tensor": "blk.31.ffn_up_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 12,
+            "expert_idx": 231,
+            "fallback_us": 23822.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 215,
+            "fallback_us": 19490.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 50,
+            "fallback_us": 10828.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 42,
+            "fallback_us": 8662.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 174,
+            "fallback_us": 8662.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 70,
+            "fallback_us": 8662.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 147,
+            "fallback_us": 8662.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 168,
+            "fallback_us": 8662.0
+          }
+        ],
+        "type": "IQ2_S"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 6307840,
+        "kind": "down",
+        "layer": 56,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.046753246753246755,
+            "full_expert_bytes": 6307840,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.09350649350649351,
+            "full_expert_bytes": 6307840,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.18701298701298702,
+            "full_expert_bytes": 6307840,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.2805194805194805,
+            "full_expert_bytes": 6307840,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.37402597402597404,
+            "full_expert_bytes": 6307840,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.561038961038961,
+            "full_expert_bytes": 6307840,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.7480519480519481,
+            "full_expert_bytes": 6307840,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          2048,
+          7168,
+          384
+        ],
+        "source": {
+          "data_offset": 26204567680,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00009-of-00010.gguf"
+        },
+        "tensor": "blk.56.ffn_down_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 6,
+            "expert_idx": 320,
+            "fallback_us": 27456.0
+          },
+          {
+            "count": 34,
+            "expert_idx": 202,
+            "fallback_us": 22880.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 337,
+            "fallback_us": 22880.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 7,
+            "fallback_us": 18304.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 13,
+            "fallback_us": 18304.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 208,
+            "fallback_us": 18304.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 36,
+            "fallback_us": 13728.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 270,
+            "fallback_us": 13728.0
+          }
+        ],
+        "type": "Q3_K"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 5619712,
+        "kind": "gate",
+        "layer": 56,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.052478134110787174,
+            "full_expert_bytes": 5619712,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.10495626822157435,
+            "full_expert_bytes": 5619712,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2099125364431487,
+            "full_expert_bytes": 5619712,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.31486880466472306,
+            "full_expert_bytes": 5619712,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.4198250728862974,
+            "full_expert_bytes": 5619712,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.6297376093294461,
+            "full_expert_bytes": 5619712,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.8396501457725948,
+            "full_expert_bytes": 5619712,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 28642375808,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00009-of-00010.gguf"
+        },
+        "tensor": "blk.56.ffn_gate_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 6,
+            "expert_idx": 320,
+            "fallback_us": 17291.0
+          },
+          {
+            "count": 34,
+            "expert_idx": 202,
+            "fallback_us": 14409.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 337,
+            "fallback_us": 14409.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 7,
+            "fallback_us": 11527.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 13,
+            "fallback_us": 11527.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 208,
+            "fallback_us": 11527.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 36,
+            "fallback_us": 8645.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 270,
+            "fallback_us": 8645.0
+          }
+        ],
+        "type": "IQ3_XXS"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 5619712,
+        "kind": "up",
+        "layer": 56,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.052478134110787174,
+            "full_expert_bytes": 5619712,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.10495626822157435,
+            "full_expert_bytes": 5619712,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2099125364431487,
+            "full_expert_bytes": 5619712,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.31486880466472306,
+            "full_expert_bytes": 5619712,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.4198250728862974,
+            "full_expert_bytes": 5619712,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.6297376093294461,
+            "full_expert_bytes": 5619712,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.8396501457725948,
+            "full_expert_bytes": 5619712,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 30826981504,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00009-of-00010.gguf"
+        },
+        "tensor": "blk.56.ffn_up_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 6,
+            "expert_idx": 320,
+            "fallback_us": 19195.0
+          },
+          {
+            "count": 34,
+            "expert_idx": 202,
+            "fallback_us": 15996.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 337,
+            "fallback_us": 15996.0
+          },
+          {
+            "count": 5,
+            "expert_idx": 7,
+            "fallback_us": 12797.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 13,
+            "fallback_us": 12797.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 208,
+            "fallback_us": 12797.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 36,
+            "fallback_us": 9597.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 270,
+            "fallback_us": 9597.0
+          }
+        ],
+        "type": "IQ3_XXS"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 7798784,
+        "kind": "down",
+        "layer": 57,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.037815126050420166,
+            "full_expert_bytes": 7798784,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.07563025210084033,
+            "full_expert_bytes": 7798784,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.15126050420168066,
+            "full_expert_bytes": 7798784,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.226890756302521,
+            "full_expert_bytes": 7798784,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.3025210084033613,
+            "full_expert_bytes": 7798784,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.453781512605042,
+            "full_expert_bytes": 7798784,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.6050420168067226,
+            "full_expert_bytes": 7798784,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          2048,
+          7168,
+          384
+        ],
+        "source": {
+          "data_offset": 33108029056,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00009-of-00010.gguf"
+        },
+        "tensor": "blk.57.ffn_down_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 11,
+            "expert_idx": 373,
+            "fallback_us": 50096.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 317,
+            "fallback_us": 35067.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 186,
+            "fallback_us": 35067.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 353,
+            "fallback_us": 25048.0
+          },
+          {
+            "count": 14,
+            "expert_idx": 46,
+            "fallback_us": 20038.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 312,
+            "fallback_us": 20038.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 152,
+            "fallback_us": 15028.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 335,
+            "fallback_us": 15028.0
+          }
+        ],
+        "type": "IQ4_XS"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 5619712,
+        "kind": "gate",
+        "layer": 57,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.052478134110787174,
+            "full_expert_bytes": 5619712,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.10495626822157435,
+            "full_expert_bytes": 5619712,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2099125364431487,
+            "full_expert_bytes": 5619712,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.31486880466472306,
+            "full_expert_bytes": 5619712,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.4198250728862974,
+            "full_expert_bytes": 5619712,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.6297376093294461,
+            "full_expert_bytes": 5619712,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.8396501457725948,
+            "full_expert_bytes": 5619712,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 36118359680,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00009-of-00010.gguf"
+        },
+        "tensor": "blk.57.ffn_gate_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 11,
+            "expert_idx": 373,
+            "fallback_us": 29432.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 317,
+            "fallback_us": 20603.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 186,
+            "fallback_us": 20603.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 353,
+            "fallback_us": 14716.0
+          },
+          {
+            "count": 14,
+            "expert_idx": 46,
+            "fallback_us": 11773.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 312,
+            "fallback_us": 11773.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 152,
+            "fallback_us": 8829.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 335,
+            "fallback_us": 8829.0
+          }
+        ],
+        "type": "IQ3_XXS"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 5619712,
+        "kind": "up",
+        "layer": 57,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.052478134110787174,
+            "full_expert_bytes": 5619712,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.10495626822157435,
+            "full_expert_bytes": 5619712,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2099125364431487,
+            "full_expert_bytes": 5619712,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.31486880466472306,
+            "full_expert_bytes": 5619712,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.4198250728862974,
+            "full_expert_bytes": 5619712,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.6297376093294461,
+            "full_expert_bytes": 5619712,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.8396501457725948,
+            "full_expert_bytes": 5619712,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 38302965376,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00009-of-00010.gguf"
+        },
+        "tensor": "blk.57.ffn_up_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 11,
+            "expert_idx": 373,
+            "fallback_us": 27102.0
+          },
+          {
+            "count": 9,
+            "expert_idx": 317,
+            "fallback_us": 18971.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 186,
+            "fallback_us": 18971.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 353,
+            "fallback_us": 13551.0
+          },
+          {
+            "count": 14,
+            "expert_idx": 46,
+            "fallback_us": 10840.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 312,
+            "fallback_us": 10840.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 152,
+            "fallback_us": 8130.0
+          },
+          {
+            "count": 4,
+            "expert_idx": 335,
+            "fallback_us": 8130.0
+          }
+        ],
+        "type": "IQ3_XXS"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 6307840,
+        "kind": "down",
+        "layer": 60,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.046753246753246755,
+            "full_expert_bytes": 6307840,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.09350649350649351,
+            "full_expert_bytes": 6307840,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.18701298701298702,
+            "full_expert_bytes": 6307840,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.2805194805194805,
+            "full_expert_bytes": 6307840,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.37402597402597404,
+            "full_expert_bytes": 6307840,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.561038961038961,
+            "full_expert_bytes": 6307840,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.7480519480519481,
+            "full_expert_bytes": 6307840,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          2048,
+          7168,
+          384
+        ],
+        "source": {
+          "data_offset": 6903463200,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00010-of-00010.gguf"
+        },
+        "tensor": "blk.60.ffn_down_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 15,
+            "expert_idx": 79,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 15,
+            "expert_idx": 115,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 12,
+            "expert_idx": 161,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 251,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 172,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 362,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 64,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 126,
+            "fallback_us": 0.0
+          }
+        ],
+        "type": "Q3_K"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 5619712,
+        "kind": "gate",
+        "layer": 60,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.052478134110787174,
+            "full_expert_bytes": 5619712,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.10495626822157435,
+            "full_expert_bytes": 5619712,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2099125364431487,
+            "full_expert_bytes": 5619712,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.31486880466472306,
+            "full_expert_bytes": 5619712,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.4198250728862974,
+            "full_expert_bytes": 5619712,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.6297376093294461,
+            "full_expert_bytes": 5619712,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.8396501457725948,
+            "full_expert_bytes": 5619712,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 9341271328,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00010-of-00010.gguf"
+        },
+        "tensor": "blk.60.ffn_gate_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 15,
+            "expert_idx": 79,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 15,
+            "expert_idx": 115,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 12,
+            "expert_idx": 161,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 251,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 172,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 362,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 64,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 126,
+            "fallback_us": 0.0
+          }
+        ],
+        "type": "IQ3_XXS"
+      },
+      {
+        "base_resident_bytes_bf16": 29360128,
+        "expert_bytes": 5619712,
+        "kind": "up",
+        "layer": 60,
+        "rank_estimates": [
+          {
+            "delta_bytes_bf16": 294912,
+            "delta_vs_full_ratio": 0.052478134110787174,
+            "full_expert_bytes": 5619712,
+            "rank": 16
+          },
+          {
+            "delta_bytes_bf16": 589824,
+            "delta_vs_full_ratio": 0.10495626822157435,
+            "full_expert_bytes": 5619712,
+            "rank": 32
+          },
+          {
+            "delta_bytes_bf16": 1179648,
+            "delta_vs_full_ratio": 0.2099125364431487,
+            "full_expert_bytes": 5619712,
+            "rank": 64
+          },
+          {
+            "delta_bytes_bf16": 1769472,
+            "delta_vs_full_ratio": 0.31486880466472306,
+            "full_expert_bytes": 5619712,
+            "rank": 96
+          },
+          {
+            "delta_bytes_bf16": 2359296,
+            "delta_vs_full_ratio": 0.4198250728862974,
+            "full_expert_bytes": 5619712,
+            "rank": 128
+          },
+          {
+            "delta_bytes_bf16": 3538944,
+            "delta_vs_full_ratio": 0.6297376093294461,
+            "full_expert_bytes": 5619712,
+            "rank": 192
+          },
+          {
+            "delta_bytes_bf16": 4718592,
+            "delta_vs_full_ratio": 0.8396501457725948,
+            "full_expert_bytes": 5619712,
+            "rank": 256
+          }
+        ],
+        "shape": [
+          7168,
+          2048,
+          384
+        ],
+        "source": {
+          "data_offset": 11525877024,
+          "shard_path": "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00010-of-00010.gguf"
+        },
+        "tensor": "blk.60.ffn_up_exps.weight",
+        "top_profile_experts": [
+          {
+            "count": 15,
+            "expert_idx": 79,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 15,
+            "expert_idx": 115,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 12,
+            "expert_idx": 161,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 10,
+            "expert_idx": 251,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 8,
+            "expert_idx": 172,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 7,
+            "expert_idx": 362,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 64,
+            "fallback_us": 0.0
+          },
+          {
+            "count": 6,
+            "expert_idx": 126,
+            "fallback_us": 0.0
+          }
+        ],
+        "type": "IQ3_XXS"
+      }
+    ]
+  },
+  "repo_head": "1072f177d5d5cbba6e329779385d78e638ec3eaf"
+}
