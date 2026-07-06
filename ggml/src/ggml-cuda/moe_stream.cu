@@ -316,6 +316,24 @@ static bool moe_stream_one_require_cache_admit(const char * tensor) {
     return require_filter && require_filter[0] && moe_stream_cache_admit_name_matches(require_filter, tensor);
 }
 
+static int moe_stream_cache_partition_tail_slots() {
+    static int slots = [] {
+        const char * env = std::getenv("GGML_MOE_STREAM_CACHE_PARTITION_TAIL_SLOTS");
+        return (env && env[0]) ? std::atoi(env) : 0;
+    }();
+    return slots;
+}
+
+static bool moe_stream_cache_partition_tail_matches(const char * tensor) {
+    static const char * filter = std::getenv("GGML_MOE_STREAM_CACHE_PARTITION_TAIL_FILTER");
+    return filter && filter[0] && moe_stream_cache_admit_name_matches(filter, tensor);
+}
+
+static bool moe_stream_cache_partition_enabled() {
+    static const char * filter = std::getenv("GGML_MOE_STREAM_CACHE_PARTITION_TAIL_FILTER");
+    return filter && filter[0] && moe_stream_cache_partition_tail_slots() > 0;
+}
+
 static bool moe_stream_cache_admit_allows(const char * tensor, int64_t expert) {
     static const char * name_filter = std::getenv("GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER");
     if (name_filter && name_filter[0] && !moe_stream_cache_admit_name_matches(name_filter, tensor)) {
@@ -420,11 +438,27 @@ static void *vram_cache_lookup(uintptr_t key) {
 }
 
 // Insert expert into cache. LRU eviction of slot's previous owner.
-static void *vram_cache_insert_impl(uintptr_t key, const void *host_data, size_t sz, cudaStream_t st, bool count_miss) {
+static void *vram_cache_insert_impl(uintptr_t key, const void *host_data, size_t sz, cudaStream_t st, bool count_miss, const char * tensor) {
     if (!g_vcache.pool || g_vcache.n_slots == 0 || sz > g_vcache.slot_sz) return nullptr;
+    int range_begin = 0;
+    int range_end = g_vcache.n_slots;
+    if (moe_stream_cache_partition_enabled()) {
+        int tail_slots = moe_stream_cache_partition_tail_slots();
+        if (tail_slots < 0) tail_slots = 0;
+        if (tail_slots > g_vcache.n_slots) tail_slots = g_vcache.n_slots;
+        const int tail_begin = g_vcache.n_slots - tail_slots;
+        if (moe_stream_cache_partition_tail_matches(tensor)) {
+            range_begin = tail_begin;
+            range_end = g_vcache.n_slots;
+        } else {
+            range_begin = 0;
+            range_end = tail_begin;
+        }
+        if (range_end <= range_begin) return nullptr;
+    }
     int slot = -1;
     uint64_t oldest = UINT64_MAX;
-    for (int i = 0; i < g_vcache.n_slots; ++i) {
+    for (int i = range_begin; i < range_end; ++i) {
         if (g_vcache.slot_key[i] == 0) {
             slot = i;
             break;
@@ -448,8 +482,8 @@ static void *vram_cache_insert_impl(uintptr_t key, const void *host_data, size_t
     return dst;
 }
 
-static void *vram_cache_insert(uintptr_t key, const void *host_data, size_t sz, cudaStream_t st) {
-    return vram_cache_insert_impl(key, host_data, sz, st, true);
+static void *vram_cache_insert(uintptr_t key, const void *host_data, size_t sz, cudaStream_t st, const char * tensor) {
+    return vram_cache_insert_impl(key, host_data, sz, st, true, tensor);
 }
 
 // === Pool of GPU stream slots ==============================================
@@ -1610,7 +1644,7 @@ static void one_prefill_maybe(slot_ctx & ctx, cudaStream_t st, size_t src0_bytes
             continue;
         }
         const uintptr_t key = one_named_cache_key(e.tensor.c_str(), e.expert);
-        if (vram_cache_insert_impl(key, ctx.h_src0_pack, src0_bytes, st, false)) {
+        if (vram_cache_insert_impl(key, ctx.h_src0_pack, src0_bytes, st, false, e.tensor.c_str())) {
             g_one_prefill.inserted++;
             g_one_prefill.bytes += src0_bytes;
         } else {
@@ -3709,7 +3743,7 @@ extern "C" bool ggml_cuda_moe_stream_one(
             return false;
         }
         if (cache_admit) {
-            inserted = vram_cache_insert(cache_key, copy_src, src0_bytes, st);
+            inserted = vram_cache_insert(cache_key, copy_src, src0_bytes, st, src0_name);
         } else {
             g_vcache.misses.fetch_add(1, std::memory_order_relaxed);
         }

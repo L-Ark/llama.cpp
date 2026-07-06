@@ -1,0 +1,49 @@
+{
+  "artifact_id": "20260706-up-hot1g-tailpart240-n64-rejection",
+  "candidate_run": {
+    "correctness_ok": true,
+    "eval_tok_s": 2.2,
+    "fallback_summary": {
+      "down_decode_ms": 5166.689,
+      "down_prompt_ms": 4227.603,
+      "up_decode_ms": 6781.241,
+      "up_prompt_ms": 3493.415
+    },
+    "memory_file_bytes": 15083732992,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 0.9,
+    "ram_ok": true,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T124712Z-20260706T-up-hot1g-tailpart240-n64-smoke/france-up-hot1g-tailpart240-cpu40-vram0gb",
+    "ttft_ms": 37196.590433,
+    "vram_cache": "hits=15512 misses=10997 hit_rate=58.5%"
+  },
+  "decision": "Do not promote or expand to full dev set. Tail partition kept default-off behavior safe but did not improve n64 token rate over gate-only control. The remaining path likely requires a non-cache grouped staging design or a model/representation change.",
+  "defaultoff_control": {
+    "correctness_ok": false,
+    "correctness_reason": "unfinished_sentence due n64 truncation",
+    "eval_tok_s": 2.2,
+    "fallback_summary": {
+      "down_decode_ms": 4768.847,
+      "down_prompt_ms": 4271.215,
+      "up_decode_ms": 7407.229,
+      "up_prompt_ms": 3807.891
+    },
+    "memory_file_bytes": 15089000448,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 0.9,
+    "ram_ok": true,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T124907Z-20260706T-tailpart-defaultoff-gate-only-n64-control/france-tailpart-defaultoff-gate-only-n64-cpu40-vram0gb",
+    "ttft_ms": 37936.18688,
+    "vram_cache": "hits=13435 misses=3716 hit_rate=78.3%"
+  },
+  "held_out_used": false,
+  "source_change": {
+    "default_behavior": "unchanged when envs are unset; default-off gate-only n64 control remained 2.2 tok/s and 78.3% cache hit rate",
+    "default_off_envs": [
+      "GGML_MOE_STREAM_CACHE_PARTITION_TAIL_FILTER",
+      "GGML_MOE_STREAM_CACHE_PARTITION_TAIL_SLOTS"
+    ],
+    "file": "ggml/src/ggml-cuda/moe_stream.cu"
+  },
+  "status": "rejected_tie_not_sota"
+}

@@ -3924,3 +3924,18 @@
 - `implementation`: add default-off tail partition controls in `moe_stream.cu`: `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_FILTER=<names>` and `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_SLOTS=<N>`. Matching tensors evict only in the tail slot range; nonmatching tensors evict only in the main range. Lookup still scans all slots. Unset env keeps existing behavior.
 - `first_probe`: use existing calibration-only `up hot1g` profile with `tail_slots=240` under strict `n64` France smoke. Total slots are about `3192`; this leaves about `2952` gate slots and gives up hotset about `1.0GiB`. Do not use held-out.
 - `acceptance`: proceed to full calibration/dev only if the n64 smoke beats the gate-only `2.2 tok/s` control and does not break RAM/TTFT/correctness. If it ties or regresses, record rejected and do not expand.
+
+
+## 2026-07-06 执行记录：up hot1g tail partition rejected/tie
+
+- `attempt_id`: `20260706-up-hot1g-tailpart240-n64`
+- `status`: `rejected_tie_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-hot1g-tailpart240-n64-rejection-20260706.json`
+- `source_change`: implemented default-off `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_FILTER` and `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_SLOTS` in `moe_stream.cu`. Matching tensors insert only into the tail slot range; nonmatching tensors insert only into the main range; lookup still scans all slots.
+- `candidate_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T124712Z-20260706T-up-hot1g-tailpart240-n64-smoke/france-up-hot1g-tailpart240-cpu40-vram0gb`.
+- `candidate_config`: calibration France n64 only, no held-out, existing `up hot1g` profile, `tail_filter=ffn_up_exps`, `tail_slots=240`, strict 16GB cgroup.
+- `candidate_metrics`: `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `TTFT=37196.590433ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15083732992`, `ram_ok=true`, `correctness_ok=true` for short n64 smoke.
+- `candidate_effect`: fallback moved in the expected direction (`up decode=6781.241ms`, `up prompt=3493.415ms`) but total VRAM cache counter still reported `hits=15512`, `misses=10997`, `hit_rate=58.5%`, and token rate only tied.
+- `defaultoff_control`: `/root/lfz/runs/vendor-ds4-16gb/20260706T124907Z-20260706T-tailpart-defaultoff-gate-only-n64-control/france-tailpart-defaultoff-gate-only-n64-cpu40-vram0gb`, `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `memory_peak_bytes=16000000000`, `ram_ok=true`, cache `hits=13435`, `misses=3716`, `hit_rate=78.3%`; correctness false only due n64 truncation.
+- `decision`: reject/tie. Tail partition is safe as a default-off diagnostic but does not create a measurable speed improvement. Do not expand to full dev set.
+- `next_design`: stop cache-based up hotset experiments unless a new metric separates gate hits from denied up misses and shows a strong path. The remaining credible route is non-cache grouped staging or a model/representation change; both require hard-bound proof before another cold benchmark.
