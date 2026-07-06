@@ -192,6 +192,43 @@ Promotion criterion for runtime work:
 If this bound fails, FineMoE should be rejected for Kimi and kept only as a
 research note.
 
+Initial Phase 0 result:
+
+- Tool: `.Agent/run-tools/kimi_finemoe_route_prefix_bound.py`
+- Input trace: `.Agent/runs/20260706-kimi-finemoe-phase0/route_trace.csv`
+- Source run: `/root/lfz/runs/ik_llama/kimi-iq3s-16gb-accepted-default-fulltrace-n64-001-20260627-011039Z/route_trace.csv`
+- Artifact: `.Agent/runs/20260706-kimi-finemoe-phase0/route-prefix-bound.json`
+- Human summary: `.Agent/runs/20260706-kimi-finemoe-phase0/route-prefix-bound.md`
+- Reproduce:
+
+```bash
+python3 .Agent/run-tools/kimi_finemoe_route_prefix_bound.py --trace .Agent/runs/20260706-kimi-finemoe-phase0/route_trace.csv --out-json .Agent/runs/20260706-kimi-finemoe-phase0/route-prefix-bound.json --out-md .Agent/runs/20260706-kimi-finemoe-phase0/route-prefix-bound.md --max-distance 8
+```
+
+The accepted fulltrace contains `64` raw segments; after dropping the initial
+single-layer warm segment, `63` decode-like segments are used for the bound.
+
+Summary:
+
+| distance | prefix predictor byte recall | prefix useful/false-positive | global hotset byte recall | global useful/false-positive |
+| ---: | ---: | ---: | ---: | ---: |
+| `1` | `0.4330` | `0.764` | `0.3471` | `0.532` |
+| `2` | `0.4324` | `0.762` | `0.3486` | `0.536` |
+| `4` | `0.4312` | `0.758` | `0.3507` | `0.541` |
+| `8` | `0.4285` | `0.750` | `0.3541` | `0.549` |
+
+Interpretation:
+
+- Route-prefix nearest-neighbor prediction beats the global hotset baseline by
+  roughly `7.4-8.6` byte-recall percentage points on this trace.
+- However, useful/false-positive bytes are only about `0.75x`, far below the
+  `3x` promotion threshold.
+- A speculative prefetch queue based on this predictor would likely waste more
+  bytes than it helps under the strict 16GB cold-start budget.
+- Do not implement FineMoE-style runtime prefetch/protection from this bound.
+  Keep it as a research artifact unless a richer multi-prompt trace set shows a
+  much stronger predictor.
+
 ## Runtime Plan If Phase 0 Passes
 
 1. Add route-trace export for exact selected experts per token/layer if the
