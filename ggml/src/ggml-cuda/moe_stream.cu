@@ -772,6 +772,364 @@ struct one_direct_manifest_state {
 
 static one_direct_manifest_state g_one_direct_manifest;
 
+
+struct one_direct_repr_entry {
+    char tensor[128] = {};
+    int32_t expert_idx = -1;
+    uint64_t row0 = 0;
+    uint64_t row_count = 0;
+    uint64_t model_offset = 0;
+    uint64_t compressed_offset = 0;
+    uint64_t compressed_nbytes = 0;
+    uint64_t original_nbytes = 0;
+    char repr_type[32] = {};
+    char flags[64] = {};
+};
+
+struct one_direct_repr_state {
+    bool inited = false;
+    bool enabled = false;
+    std::vector<one_direct_repr_entry> entries;
+    std::mutex mu;
+    std::mutex report_mu;
+    FILE * report_fp = nullptr;
+    uint64_t compressed_bytes = 0;
+    uint64_t original_bytes = 0;
+    uint64_t exact_entries = 0;
+    uint64_t partial_entries = 0;
+    uint64_t compressed_entries = 0;
+    std::atomic<uint64_t> hits{0};
+    std::atomic<uint64_t> misses{0};
+};
+
+static one_direct_repr_state g_one_direct_repr;
+
+static char * one_direct_repr_trim(char * s) {
+    while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') {
+        ++s;
+    }
+    char * e = s + std::strlen(s);
+    while (e > s && (e[-1] == ' ' || e[-1] == '\t' || e[-1] == '\r' || e[-1] == '\n')) {
+        *--e = '\0';
+    }
+    return s;
+}
+
+static bool one_direct_repr_parse_u64(const char * s, uint64_t & out) {
+    if (!s || !s[0]) {
+        return false;
+    }
+    char * end = nullptr;
+    const unsigned long long v = std::strtoull(s, &end, 10);
+    if (end == s || (end && *one_direct_repr_trim(end) != '\0')) {
+        return false;
+    }
+    out = (uint64_t) v;
+    return true;
+}
+
+static bool one_direct_repr_parse_i32(const char * s, int32_t & out) {
+    if (!s || !s[0]) {
+        return false;
+    }
+    char * end = nullptr;
+    const long v = std::strtol(s, &end, 10);
+    if (end == s || v < 0 || v > INT32_MAX || (end && *one_direct_repr_trim(end) != '\0')) {
+        return false;
+    }
+    out = (int32_t) v;
+    return true;
+}
+
+static bool one_direct_repr_is_exact(const one_direct_repr_entry & e) {
+    return std::strcmp(e.repr_type, "exact_mxfp4") == 0 && e.compressed_nbytes == e.original_nbytes;
+}
+
+static FILE * one_direct_repr_report_fp() {
+    std::lock_guard<std::mutex> lk(g_one_direct_repr.report_mu);
+    if (g_one_direct_repr.report_fp) {
+        return g_one_direct_repr.report_fp;
+    }
+    const char * path = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_REPR_REPORT");
+    if (!path || !path[0]) {
+        return nullptr;
+    }
+    g_one_direct_repr.report_fp = std::fopen(path, "w");
+    if (!g_one_direct_repr.report_fp) {
+        std::fprintf(stderr, "[moe_stream] one direct repr manifest: failed to open report: %s\n", path);
+        return nullptr;
+    }
+    std::setvbuf(g_one_direct_repr.report_fp, nullptr, _IOLBF, 0);
+    std::fprintf(g_one_direct_repr.report_fp,
+            "event,seq,tensor,expert,row0,row_count,compressed_nbytes,original_nbytes,repr_type,flags,"
+            "rows_total,repr_experts,repr_rows,repr_exact_rows,repr_partial_rows,repr_compressed_rows,"
+            "repr_src0_bytes_projected,repr_resident_original_bytes,repr_resident_compressed_bytes\n");
+    return g_one_direct_repr.report_fp;
+}
+
+static void one_direct_repr_report_entry(const one_direct_repr_entry & e) {
+    if (FILE * fp = one_direct_repr_report_fp()) {
+        flockfile(fp);
+        std::fprintf(fp,
+                "entry,0,%s,%d,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%s,%s,0,0,0,0,0,0,0,0,0\n",
+                e.tensor,
+                e.expert_idx,
+                e.row0,
+                e.row_count,
+                e.compressed_nbytes,
+                e.original_nbytes,
+                e.repr_type,
+                e.flags);
+        funlockfile(fp);
+    }
+}
+
+static void one_direct_repr_report_probe(
+        uint64_t seq,
+        const char * tensor,
+        int64_t rows_total,
+        int64_t repr_experts,
+        int64_t repr_rows,
+        int64_t repr_exact_rows,
+        int64_t repr_partial_rows,
+        int64_t repr_compressed_rows,
+        uint64_t repr_src0_bytes_projected,
+        uint64_t repr_resident_original_bytes,
+        uint64_t repr_resident_compressed_bytes) {
+    if (FILE * fp = one_direct_repr_report_fp()) {
+        flockfile(fp);
+        std::fprintf(fp,
+                "probe,%" PRIu64 ",%s,-1,0,0,0,0,,,%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n",
+                seq,
+                tensor ? tensor : "",
+                rows_total,
+                repr_experts,
+                repr_rows,
+                repr_exact_rows,
+                repr_partial_rows,
+                repr_compressed_rows,
+                repr_src0_bytes_projected,
+                repr_resident_original_bytes,
+                repr_resident_compressed_bytes);
+        funlockfile(fp);
+    }
+}
+
+static void one_direct_repr_manifest_report_atexit() {
+    if (!g_one_direct_repr.enabled) {
+        return;
+    }
+    std::fprintf(stderr,
+            "[moe_stream] one direct repr manifest: entries=%zu compressed_bytes=%lu original_bytes=%lu"
+            " exact_entries=%lu partial_entries=%lu compressed_entries=%lu hits=%lu misses=%lu\n",
+            g_one_direct_repr.entries.size(),
+            g_one_direct_repr.compressed_bytes,
+            g_one_direct_repr.original_bytes,
+            g_one_direct_repr.exact_entries,
+            g_one_direct_repr.partial_entries,
+            g_one_direct_repr.compressed_entries,
+            g_one_direct_repr.hits.load(),
+            g_one_direct_repr.misses.load());
+    if (g_one_direct_repr.report_fp) {
+        std::fclose(g_one_direct_repr.report_fp);
+        g_one_direct_repr.report_fp = nullptr;
+    }
+}
+
+static bool one_direct_repr_manifest_parse_row(char * line, one_direct_repr_entry & entry) {
+    char * tokens[16] = {};
+    int ntok = 0;
+    char * save = nullptr;
+    for (char * tok = ::strtok_r(line, ",", &save); tok && ntok < 16; tok = ::strtok_r(nullptr, ",", &save)) {
+        tokens[ntok++] = one_direct_repr_trim(tok);
+    }
+    if (ntok == 0 || !tokens[0][0] || tokens[0][0] == '#') {
+        return false;
+    }
+    if (std::strcmp(tokens[0], "tensor") == 0) {
+        return false;
+    }
+
+    entry = one_direct_repr_entry{};
+    std::snprintf(entry.tensor, sizeof(entry.tensor), "%s", tokens[0]);
+    if (!one_direct_repr_parse_i32(ntok > 1 ? tokens[1] : nullptr, entry.expert_idx)) {
+        return false;
+    }
+
+    if (ntok == 4) {
+        uint64_t offset = 0;
+        uint64_t nbytes = 0;
+        if (!one_direct_repr_parse_u64(tokens[2], offset) || !one_direct_repr_parse_u64(tokens[3], nbytes) || nbytes == 0) {
+            return false;
+        }
+        entry.row0 = 0;
+        entry.row_count = 0;
+        entry.model_offset = offset;
+        entry.compressed_offset = offset;
+        entry.compressed_nbytes = nbytes;
+        entry.original_nbytes = nbytes;
+        std::snprintf(entry.repr_type, sizeof(entry.repr_type), "exact_mxfp4");
+        std::snprintf(entry.flags, sizeof(entry.flags), "legacy_direct");
+        return true;
+    }
+
+    if (ntok < 9) {
+        return false;
+    }
+    if (!one_direct_repr_parse_u64(tokens[2], entry.row0) ||
+            !one_direct_repr_parse_u64(tokens[3], entry.row_count) ||
+            !one_direct_repr_parse_u64(tokens[4], entry.model_offset) ||
+            !one_direct_repr_parse_u64(tokens[5], entry.compressed_offset) ||
+            !one_direct_repr_parse_u64(tokens[6], entry.compressed_nbytes) ||
+            !one_direct_repr_parse_u64(tokens[7], entry.original_nbytes) ||
+            entry.compressed_nbytes == 0 || entry.original_nbytes == 0) {
+        return false;
+    }
+    std::snprintf(entry.repr_type, sizeof(entry.repr_type), "%s", tokens[8]);
+    std::snprintf(entry.flags, sizeof(entry.flags), "%s", ntok > 9 ? tokens[9] : "");
+    return entry.repr_type[0] != '\0';
+}
+
+static void one_direct_repr_manifest_init_once() {
+    std::lock_guard<std::mutex> lk(g_one_direct_repr.mu);
+    if (g_one_direct_repr.inited) {
+        return;
+    }
+    g_one_direct_repr.inited = true;
+
+    const char * manifest_path = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_REPR_MANIFEST");
+    if (!manifest_path || !manifest_path[0]) {
+        return;
+    }
+
+    FILE * fp = std::fopen(manifest_path, "r");
+    if (!fp) {
+        std::fprintf(stderr, "[moe_stream] one direct repr manifest: failed to open manifest %s\n", manifest_path);
+        return;
+    }
+
+    std::vector<one_direct_repr_entry> entries;
+    char line[4096];
+    while (std::fgets(line, sizeof(line), fp)) {
+        one_direct_repr_entry entry;
+        if (!one_direct_repr_manifest_parse_row(line, entry)) {
+            continue;
+        }
+        g_one_direct_repr.compressed_bytes += entry.compressed_nbytes;
+        g_one_direct_repr.original_bytes += entry.original_nbytes;
+        if (one_direct_repr_is_exact(entry)) {
+            g_one_direct_repr.exact_entries++;
+        } else if (entry.row_count > 0) {
+            g_one_direct_repr.partial_entries++;
+        } else {
+            g_one_direct_repr.compressed_entries++;
+        }
+        entries.push_back(entry);
+    }
+    std::fclose(fp);
+
+    if (entries.empty()) {
+        std::fprintf(stderr, "[moe_stream] one direct repr manifest: no entries loaded from %s\n", manifest_path);
+        return;
+    }
+
+    std::sort(entries.begin(), entries.end(), [](const one_direct_repr_entry & a, const one_direct_repr_entry & b) {
+        const int name_cmp = std::strcmp(a.tensor, b.tensor);
+        if (name_cmp != 0) {
+            return name_cmp < 0;
+        }
+        if (a.expert_idx != b.expert_idx) {
+            return a.expert_idx < b.expert_idx;
+        }
+        if (a.row0 != b.row0) {
+            return a.row0 < b.row0;
+        }
+        return std::strcmp(a.repr_type, b.repr_type) < 0;
+    });
+
+    g_one_direct_repr.entries = std::move(entries);
+    g_one_direct_repr.enabled = true;
+    std::atexit(one_direct_repr_manifest_report_atexit);
+    std::fprintf(stderr,
+            "[moe_stream] one direct repr manifest: loaded %zu entries compressed_bytes=%lu original_bytes=%lu from %s\n",
+            g_one_direct_repr.entries.size(),
+            g_one_direct_repr.compressed_bytes,
+            g_one_direct_repr.original_bytes,
+            manifest_path);
+    for (const one_direct_repr_entry & e : g_one_direct_repr.entries) {
+        one_direct_repr_report_entry(e);
+    }
+}
+
+struct one_direct_repr_probe_match {
+    int entries = 0;
+    bool has_exact = false;
+    bool has_partial = false;
+    bool has_compressed = false;
+    uint64_t resident_compressed_bytes = 0;
+    uint64_t resident_original_bytes = 0;
+    uint64_t src0_bytes_projected = 0;
+};
+
+static bool one_direct_repr_manifest_match(
+        const char * tensor_name,
+        int64_t expert_idx,
+        int64_t ne01,
+        size_t nb01,
+        int64_t cne1,
+        one_direct_repr_probe_match & match) {
+    one_direct_repr_manifest_init_once();
+    if (!g_one_direct_repr.enabled || !tensor_name || !tensor_name[0]) {
+        return false;
+    }
+    one_direct_repr_entry key;
+    std::snprintf(key.tensor, sizeof(key.tensor), "%s", tensor_name);
+    key.expert_idx = (int32_t) expert_idx;
+    auto less_key = [](const one_direct_repr_entry & a, const one_direct_repr_entry & b) {
+        const int name_cmp = std::strcmp(a.tensor, b.tensor);
+        if (name_cmp != 0) {
+            return name_cmp < 0;
+        }
+        if (a.expert_idx != b.expert_idx) {
+            return a.expert_idx < b.expert_idx;
+        }
+        if (a.row0 != b.row0) {
+            return a.row0 < b.row0;
+        }
+        return std::strcmp(a.repr_type, b.repr_type) < 0;
+    };
+    bool found = false;
+    auto it = std::lower_bound(g_one_direct_repr.entries.begin(), g_one_direct_repr.entries.end(), key, less_key);
+    for (; it != g_one_direct_repr.entries.end(); ++it) {
+        const one_direct_repr_entry & e = *it;
+        if (std::strcmp(e.tensor, tensor_name) != 0 || e.expert_idx != expert_idx) {
+            break;
+        }
+        found = true;
+        match.entries++;
+        match.resident_compressed_bytes += e.compressed_nbytes;
+        match.resident_original_bytes += e.original_nbytes;
+        const uint64_t cols = e.row_count == 0 ? (uint64_t) ne01 : std::min<uint64_t>((uint64_t) ne01, e.row_count);
+        match.src0_bytes_projected += (uint64_t) cne1 * cols * (uint64_t) nb01;
+        if (one_direct_repr_is_exact(e)) {
+            match.has_exact = true;
+        } else if (e.row_count > 0) {
+            match.has_partial = true;
+        } else {
+            match.has_compressed = true;
+        }
+        if (e.compressed_nbytes < e.original_nbytes || std::strcmp(e.repr_type, "exact_mxfp4") != 0) {
+            match.has_compressed = true;
+        }
+    }
+    if (found) {
+        ++g_one_direct_repr.hits;
+    } else {
+        ++g_one_direct_repr.misses;
+    }
+    return found;
+}
+
 static void one_direct_manifest_report_atexit() {
     if (!g_one_direct_manifest.enabled) {
         return;
@@ -2883,6 +3241,8 @@ static FILE * moe_stream_q80_hot_batch_probe_fp() {
                 std::fprintf(fp,
                     "seq,tensor,n_as,ne01,ne00,rows_total,ready_rows,not_in_manifest_rows,not_ready_rows,"
                     "ready_experts,src0_bytes_projected,q80_bytes_projected,out_bytes_projected,"
+                    "repr_experts,repr_rows,repr_exact_rows,repr_partial_rows,repr_compressed_rows,"
+                    "repr_src0_bytes_projected,repr_resident_original_bytes,repr_resident_compressed_bytes,"
                     "pool_ready,async_started,async_done,compare_enabled,compare_ran,compare_ok,"
                     "max_abs,mean_abs,diff_count,alloc_us,h2d_us,kernel_us,d2h_us,compare_us,free_us,elapsed_us\n");
             } else {
@@ -2971,6 +3331,14 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
     uint64_t src0_bytes_projected = 0;
     uint64_t q80_bytes_projected = 0;
     uint64_t out_bytes_projected = 0;
+    int64_t repr_experts = 0;
+    int64_t repr_rows = 0;
+    int64_t repr_exact_rows = 0;
+    int64_t repr_partial_rows = 0;
+    int64_t repr_compressed_rows = 0;
+    uint64_t repr_src0_bytes_projected = 0;
+    uint64_t repr_resident_original_bytes = 0;
+    uint64_t repr_resident_compressed_bytes = 0;
     bool any_pool_ready = false;
     std::vector<const char *> h_src0_rows;
     std::vector<const float *> h_dst_rows;
@@ -2991,6 +3359,23 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
             continue;
         }
         rows_total += cne1;
+        one_direct_repr_probe_match repr_match;
+        if (one_direct_repr_manifest_match(src0_name, expert, ne01, nb01, cne1, repr_match)) {
+            repr_experts++;
+            repr_rows += cne1;
+            if (repr_match.has_exact) {
+                repr_exact_rows += cne1;
+            }
+            if (repr_match.has_partial) {
+                repr_partial_rows += cne1;
+            }
+            if (repr_match.has_compressed) {
+                repr_compressed_rows += cne1;
+            }
+            repr_src0_bytes_projected += repr_match.src0_bytes_projected;
+            repr_resident_original_bytes += repr_match.resident_original_bytes;
+            repr_resident_compressed_bytes += repr_match.resident_compressed_bytes;
+        }
         bool pool_ready = false;
         const void * d_src0 = one_direct_hot_pool_lookup_dev_ptr(src0_name, expert, &pool_ready);
         any_pool_ready = any_pool_ready || pool_ready;
@@ -3224,7 +3609,9 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
         flockfile(fp);
         std::fprintf(fp,
             "%" PRIu64 ",%s,%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64
-            ",%" PRId64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%d,%d,%d,%d,%d,%d,%.9g,%.9g,%" PRIu64
+            ",%" PRId64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64
+            ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64
+            ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%d,%d,%d,%d,%d,%d,%.9g,%.9g,%" PRIu64
             ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n",
             seq,
             src0_name,
@@ -3239,6 +3626,14 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
             src0_bytes_projected,
             q80_bytes_projected,
             out_bytes_projected,
+            repr_experts,
+            repr_rows,
+            repr_exact_rows,
+            repr_partial_rows,
+            repr_compressed_rows,
+            repr_src0_bytes_projected,
+            repr_resident_original_bytes,
+            repr_resident_compressed_bytes,
             any_pool_ready ? 1 : 0,
             g_one_direct_hot_pool.async_started.load(std::memory_order_acquire) ? 1 : 0,
             g_one_direct_hot_pool.async_done.load(std::memory_order_acquire) ? 1 : 0,
@@ -3257,6 +3652,18 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
             elapsed_us);
         funlockfile(fp);
     }
+    one_direct_repr_report_probe(
+            seq,
+            src0_name,
+            rows_total,
+            repr_experts,
+            repr_rows,
+            repr_exact_rows,
+            repr_partial_rows,
+            repr_compressed_rows,
+            repr_src0_bytes_projected,
+            repr_resident_original_bytes,
+            repr_resident_compressed_bytes);
 }
 
 static FILE * moe_stream_q80_skip_report_fp() {

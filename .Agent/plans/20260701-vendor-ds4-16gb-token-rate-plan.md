@@ -4665,7 +4665,7 @@
 - `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-q80-cpucompat-all-updown-revalidation-20260707.json`
 - `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T193647Z-20260707-current-head-q80-cpucompat-all-updown-revalidation/top1`
 - `source_head`: `b3b1cbddf` at build/run time。
-- `build`: `cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2` passed。
+- `build`: `cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2` passed；final lookup optimization 后复跑验证。
 - `prompt_scope`: fixed France text top1 verifier only；held-out 未使用；不是 token-rate benchmark，不是 SOTA。
 - `config`: baseline 与 check 均在 strict `MemoryMax=16000000000`、`MemorySwapMax=0` cgroup 内运行；check 增加 `GGML_MOE_STREAM_Q80_CPU_COMPAT=1`、`GGML_MOE_STREAM_Q80_ALLOW_DOWN=1`、`GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER=ffn_`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1=1`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS=0`。
 - `top1_result`: baseline exit `0`，check exit `0`，`same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`mean_abs=0`。
@@ -4765,3 +4765,16 @@
 - `runtime_behavior`: 默认路径 bit-for-bit 不变；开启 repr manifest 时仅加载/排序/统计 metadata，probe CSV 增加 ready rows 中 exact/partial/compressed 覆盖计数。compare-only mode 仍以 CPU fallback dst 为真值，不清空 fallback counts。
 - `validation_gate`: build `llama-cli` + `llama-results`；跑 default-off fixed-text top1 self-check；跑 repr-manifest report-only smoke，要求 strict 16GB/no-swap、top1 `same_top1 == n_tokens`、无 OOM、report 能证明 parser 生效且 logits 未变。
 - `promotion_rule`: 本轮不是 SOTA，不允许性能 promotion；通过后才进入 compressed payload 生成与 kernel/compare 设计。
+
+## 2026-07-07 执行记录：compressed/partial manifest report-only parser
+
+- `attempt_id`: `20260707-compressed-partial-manifest-report-only-parser`
+- `status`: `passed_report_only_probe_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/compressed-partial-manifest-parser-validation-20260707.json`
+- `source_change`: 在 `ggml/src/ggml-cuda/moe_stream.cu` 增加 default-off `GGML_MOE_STREAM_ONE_DIRECT_REPR_MANIFEST` 与 `GGML_MOE_STREAM_ONE_DIRECT_REPR_REPORT`；只解析/统计 representation metadata，不改变旧 direct manifest/hot pool lookup，不写回 logits。
+- `manifest`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.repr_manifest.csv`，由 calibration/dev top48 up/down manifest 派生，`96` entries，`q80_report_only`，compressed payload proxy `106954752` bytes，original bytes `427819008`。held-out 未使用。
+- `build`: `cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2` passed；final lookup optimization 后复跑验证。
+- `default_off_gate`: strict 16GB/no-swap cgroup 内 fixed France top1 check exit `0`，`same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`mean_abs=0`，`memory_peak_bytes=16000000000`，无 OOM。
+- `repr_report_gate`: strict 16GB/no-swap cgroup 内开启旧 exact hot pool compare + 新 repr manifest/report，top1 exit `0`，`same_top1=145/145`，`max_abs=0`，`memory_peak_bytes=7547629568`，无 OOM。
+- `probe_result`: hot-batch compare `compare_ran=3786`，`compare_ok=3786`，`diff_count=0`，`max_abs=0`；repr metadata hit/coverage rows `4246/37700`，`repr_src0_bytes_projected=18922078208`，`repr_resident_original_bytes=18922078208`，`repr_resident_compressed_bytes=4730519552` in aggregate probe records。
+- `decision`: 该改动只是 compressed/partial representation 的 parser/report scaffold，不是 SOTA，也不允许 promotion。下一步必须生成真实 compressed/partial payload，并在 compare-only mode 下验证 loader/kernel mapping 后，才能考虑写回或性能 benchmark。
