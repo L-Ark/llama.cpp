@@ -4913,3 +4913,14 @@
 - result: run 超过 4min 仍未完成 n96，被手动终止；systemd status 终止前显示 Memory 约 14.8G under 16GB max。stdout 497MB 未纳入 git。
 - fallback_profile: up/decode batch_unsupported + one_name_filter，calls=12350，fallback_us=9589467；up/prompt calls=1171，fallback_us=3654414。down/decode eligible but batch_accepts=0，calls=12350，fallback_us=6558052；down/prompt eligible but batch_accepts=0，calls=1171，fallback_us=4459693。
 - decision: reject。仅打开 GGML_MOE_STREAM_DOWN_BATCH 不会给 DeepSeek vendor generalized 路径带来可接受提升；down batch 进入 eligible 但内部 declined 且无 single retry，up 仍未被 batch 支持/被 gate-only name_filter 排除。下一步不能直接 promotion，必须先写 source-level decline reason/parity probe plan，定位 MXFP4 down batch 为什么 0 accept；up/gate 需要独立支持计划。
+
+
+## 2026-07-07 下一步 config-profile plan：down MXFP4 existing parity probe
+
+- attempt_id: 20260707-down-mxfp4-existing-parity-probe
+- status: planned_before_experiment
+- why_now: generalized up/down batch eligibility probe 显示 down 在 CPU 侧 eligible 但 batch_accepts=0。代码检查发现 CPU supports_down_batch 把 MXFP4 视为 supported，而 CUDA batch 的普通 moe_stream_type_supported 不包含 MXFP4；现有 GGML_MOE_STREAM_DOWN_MXFP4_PROBE 可以绕过 unsupported_type、执行 MXFP4 down batch kernel、和 CPU 结果做 parity report，然后故意 return false。必须先用它验证数值，再决定是否写 source edit 让 MXFP4 down batch 可写回。
+- scope: config/profile only，不改源码；只用 France calibration fixed smoke，不使用 held-out；probe 返回 false，不写回 logits，不作为 SOTA。
+- env_under_test: GGML_MOE_STREAM_DOWN_BATCH=1，GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity，GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_CALLS=4，GGML_MOE_STREAM_DOWN_MXFP4_PROBE_OUT 指向 run artifact，同时开启 fallback/profile 记录。
+- pass_signal: probe CSV status=ok，compared>0，max_abs/mean_abs 足够接近 CPU reference；top-level run 输出仍由 CPU fallback 完成且正确，strict 16GB/no-swap。
+- decision_rule: 若 parity 失败，不能写 writeback；若 parity 通过，再写下一轮 source-edit plan：default-off 允许 MXFP4 down batch writeback，并先跑 fixed-text correctness gate，再跑 calibration/dev generalized performance。
