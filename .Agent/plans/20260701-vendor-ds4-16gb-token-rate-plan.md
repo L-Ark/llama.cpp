@@ -3884,3 +3884,17 @@
 - `decision`: simple persistent up/down hotset is not a credible immediate path unless capped to a very small payload and proven to preserve gate cache. Even 50% fallback coverage needs `7.7GiB`, which would steal too much of the `13.2GiB` observed gate cache or exceed available 32GB VRAM headroom; prior reduced-gate-cache probes already regressed.
 - `closed_by_bound`: do not run another naive up/down one-stream, small down-batch cache, or broad up/down resident-hotset sweep without a new mechanism that reduces total movement. The data explains why the previous probes regressed: they removed CPU fallback locally but replaced it with repeated expert movement and cache pressure.
 - `next_design_choice`: focus on `candidate_C grouped staging / paired up-down scheduling` before source implementation. The design must show how it reduces repeated movement versus `946GiB` logical bytes, how much temporary workspace it needs, and why it will not evict gate cache. If combined gate/up/down pack is considered, first run a calibration-only gate trace to measure overlap; do not use held-out.
+
+
+## 2026-07-06 设计：hotset-gated up/down stream
+
+- `attempt_id`: `20260706-hotset-gated-updown-stream-design`
+- `status`: `ready_for_default_off_implementation`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/hotset-gated-stream-design-20260706.json`
+- `reason`: full up/down movement is too large (`55.474GiB` unique, `946.372GiB` repeated logical bytes). But a bounded calibration hotset might recover a small part of fallback without the huge regression seen when every up/down expert streams through GPU.
+- `cap_bound`: top `0.5GiB` covers only `8.8%` fallback; top `1.0GiB` covers `14.0%`; top `2.0GiB` covers `22.0%`; top `3.0GiB` covers `28.4%`; top `8.0GiB` covers `51.1%`. Therefore this is an incremental probe, not a complete `>5 tok/s` solution.
+- `implementation`: add two default-off controls in `moe_stream.cu`:
+  - `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE_APPLIES_FILTER=<names>`: cache admission profile applies only to matching tensor names; nonmatching tensors keep default admission. This preserves gate cache while using a hotset profile for up/down.
+  - `GGML_MOE_STREAM_ONE_REQUIRE_CACHE_ADMIT_FILTER=<names>`: for matching tensors, if a `(tensor,expert)` is not admitted by the profile and not already cached, one-stream returns `false`, leaving that route on CPU fallback instead of uncached GPU streaming.
+- `first_probe`: generate calibration-only top hotset TSV from existing dev fallback CSVs, start with `0.5-1.0GiB`, and test only calibration/dev prompts. Do not use held-out and do not promote unless dev-set min/mean improves over no-prompt-specific baseline (`mean=2.18`, `min=1.8`) with correctness/RAM/TTFT gates.
+- `rollback`: if default-off guard changes existing gate-only behavior, if hotset profile causes gate cache miss cliff, or if end-to-end token rate regresses, reject and keep only diagnostic records if default-off behavior is proven safe.
