@@ -91985,3 +91985,45 @@ Acceptance:
 - Do not modify runtime prefetch behavior until this analysis shows a plausible
   prompt-agnostic route to higher IO queue depth under the 16 GB RAM and TTFT
   constraints.
+
+GP27 execution result:
+
+- Timestamp: `2026-07-07T05:55:00+0800`.
+- Report:
+  `.Agent/runs/20260707-gp27-route-predictability/report.md`.
+- Analyzer:
+  `.Agent/run-tools/kimi_route_window_predictability.py`.
+- Metrics:
+  `.Agent/runs/20260707-gp27-route-predictability/window-predictability.json`.
+  `.Agent/runs/20260707-gp27-route-predictability/window-predictability.csv`.
+
+Command:
+
+```bash
+python3 .Agent/run-tools/kimi_route_window_predictability.py \
+  --traces-glob '.Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/*/route-trace.csv' \
+  --out-json .Agent/runs/20260707-gp27-route-predictability/window-predictability.json \
+  --out-csv .Agent/runs/20260707-gp27-route-predictability/window-predictability.csv
+```
+
+Results:
+
+- Data source: dev route traces only.
+- Held-out test prompts: not used.
+- Passing settings: none.
+- Best byte coverage setting:
+  - `window_size=2048`;
+  - `history_depth=4`;
+  - byte coverage: `0.531`;
+  - minimum prompt byte coverage: `0.461`;
+  - false-prefetch byte ratio: `2.004`;
+  - net byte multiplier: `3.004`.
+
+Decision:
+
+- Reject simple recent-window expert prefetch as the next primary runtime path.
+- Coverage is below the `0.60` gate and false-prefetch bytes are far above the
+  `0.25` gate.
+- Do not implement this predictor in runtime.
+- Stronger route work requires explicit token/layer route instrumentation or a
+  much smaller predictor candidate set; otherwise it will add too much IO.
