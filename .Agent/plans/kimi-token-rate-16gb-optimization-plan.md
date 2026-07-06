@@ -92859,3 +92859,32 @@ Validation:
 
 - Run `bash -n .Agent/run-tools/kimi-general-prompt-repro.sh`.
 - Do not run IQ1_S smoke until deletion/download approval is explicit.
+
+GP33 remote preparation and disk gate result:
+
+- Timestamp: `2026-07-07T09:35:00+0800`.
+- Commit pushed:
+  `bf9a2ae31c1a6f0cc165db65b52ff1a5a52ab0cf`
+  (`tools: allow kimi repro model override`).
+- Branch:
+  `vendor/kimi-speculative-general-token-rate-16gb`.
+- Remote temp worktree prepared at:
+  `/root/lfz/tmp/vendor-kimi-speculative-gp33`.
+- Remote temp worktree commit:
+  `bf9a2ae31c1a6f0cc165db65b52ff1a5a52ab0cf`.
+- Remote validation:
+  `bash -n .Agent/run-tools/kimi-general-prompt-repro.sh`.
+- Verified script markers:
+  - `MODEL_PATH` default is the current IQ3_S first shard;
+  - `llama-completion` receives `-m "$MODEL_PATH"`;
+  - `MODEL_PATH` is recorded in `command.txt`.
+- Remote free disk after validation:
+  about `84 GiB`.
+- Full IQ1_S target size:
+  about `190.39 GiB`.
+- Decision:
+  - Do not start IQ1_S full download because it cannot complete
+    non-destructively with the current free space.
+  - Do not delete any old expert packs without explicit approval.
+  - Next executable action is either explicit deletion approval for the listed
+    old non-SOTA packs, or attaching/providing additional disk space.
