@@ -4646,3 +4646,14 @@
   4. 如果 up/down 低位 top1 不稳定，停止该表示路线，回到 exact/partial row 或 layer-level 方案。
 - `required_metrics`: same_top1/n_tokens、first_mismatch_pos、max_abs/mean_abs、affected tensor/expert rows、extra VRAM、extra TTFT、strict cgroup memory peak、France semantic output（仅 smoke）。
 - `promotion_blocker`: 在 held-out freeze 前，所有 low-bit probe 都只能是 diagnostic/rejected/candidate；不得作为 SOTA。
+
+## 2026-07-07 practice plan：current-head Q8_0 CPU-compatible correctness revalidation
+
+- `attempt_id`: `20260707-current-head-q80-cpucompat-all-updown-revalidation`
+- `status`: `planned_before_practice`
+- `why_now`: low-bit coverage bound 显示只有压缩/低位 representation 有足够 generalized coverage；在写任何新的 low-bit runtime 前，必须确认当前 head 上已有 Q8_0 CPU-compatible pre-fallback skip 仍 token-stable。
+- `source_change`: none；只使用已有 default-off env，不改变默认路径。
+- `prompt_scope`: fixed France text correctness verifier only；不是 SOTA，不使用 held-out，不用于 prompt-specific 优化。
+- `run_method`: 在 strict 16GB/no-swap cgroup 内先生成 current-head baseline `result.gguf`，再用 `GGML_MOE_STREAM_Q80_CPU_COMPAT=1`、`GGML_MOE_STREAM_Q80_ALLOW_DOWN=1`、`GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER=ffn_`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1=1`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS=0` 运行 `llama-results --check --top1-report --top1-fail-on-mismatch`。
+- `pass_gate`: `llama-results` exit `0`，`same_top1 == n_tokens`，`first_mismatch_pos == -1`，`memory.peak <= 16000000000`，no OOM/no swap；记录 skip report、top1 report、memory.stat/events、exact command/env。
+- `decision_rule`: 通过则作为下一步 low-bit/partial representation correctness scaffold 的 current-head 证据；失败则停止 Q8_0 skip 扩展，转向 exact/partial-row 或重新定位数值差异。
