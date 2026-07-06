@@ -49,6 +49,34 @@
 - `baseline_result_20260706_dev_reference`: completed no-prompt-specific strict cold baseline on `calibration_dev_set_v1`, not held-out SOTA. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`. Config excludes `GGML_MOE_STREAM_ONE_EXPERT_PACK`, `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE`, `GGML_MOE_STREAM_ONE_PREFILL_PROFILE`, and prompt-derived packs/profiles. Results: France `2.7 tok/s`, quantum `1.8 tok/s`, Fibonacci `1.8 tok/s`, Japan `2.4 tok/s`, climate `2.2 tok/s`; mean `2.18 tok/s`, min `1.8 tok/s`, all runs `memory_peak_bytes=16000000000`, all `ram_ok=true`, no prompt-specific env detected. This is a dev/reference baseline only; final SOTA must be measured on `held_out_test_set_v1_locked`.
 - `invalidated_result`: `/root/lfz/runs/vendor-ds4-16gb/20260706T105534Z-general-prompt-baseline-current-config-20260706` used France-derived gate pack/profile and is invalid as a generalized baseline. It must not be used for SOTA or target progress.
 
+## 2026-07-06 下一步主线：泛化 CPU fallback 修正
+
+- `next_focus`: CPU fallback 修正仍然是下一步主线。之前的 n96 profile 已显示 `ffn_up_exps`/`ffn_down_exps` CPU fallback 是最大瓶颈；新增泛化要求后，执行方式改为先在 `calibration_dev_set_v1` 上证明它是跨 prompt 共同瓶颈，再修通用 GPU path。
+- `why_not_prompt_pack`: 当前目标是随机用户 prompt 稳定 `>5 tok/s`。France-derived gate pack/profile 可以提高 France 单 prompt，但不能泛化；因此后续不得用 prompt-specific pack/profile 作为主要优化方向，也不得用 held-out test prompt 生成任何 hotset。
+- `step_1_dev_fallback_profile`:
+  - 使用当前 no-prompt-specific baseline 配置；
+  - 只使用 `calibration_dev_set_v1`，禁止使用 `held_out_test_set_v1_locked`；
+  - 开启 default-off profile：fallback reason、CPU fallback time、name profile、component timing；
+  - 每个 prompt 记录 `per-token total time`, `expert read/page fault`, `gate stream`, `up CPU fallback`, `down CPU fallback`, `H2D/D2H`, `CUDA kernel`, `memory_file_bytes`, `workingset_refault_file`；
+  - 输出按 prompt 和 aggregate 汇总，确认 up/down fallback 是否是共同主瓶颈。
+- `step_2_down_mxfp4_fallback_fix`:
+  - 先修 `ffn_down_exps` 的明确 eligibility mismatch：CPU 侧 `ggml_cuda_moe_stream_supports_down_batch()` 允许 MXFP4/type39，但 CUDA batch wrapper 的 `moe_stream_type_supported()` / `launch_moe_mmvq_compact_batch()` 拒绝 MXFP4，导致 `unsupported_type` 后回到 CPU；
+  - 实现必须 default-off，例如 `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=1`；
+  - 先做 compact-row CPU vs GPU parity/row-mapping 验证，记录 `max_abs`, `mean_abs`, `max_rel`, active experts, dst/token row mapping；
+  - parity 通过后才跑 `calibration_dev_set_v1` performance probe；
+  - promoted 条件：down fallback 时间下降、输出正确、16GB RAM/page cache 合规、TTFT 不超 gate、dev set token rate 有稳定提升。否则 revert source，只保留 rejected 记录。
+- `step_3_up_fallback_fix`:
+  - `ffn_up_exps` 当前主要因 `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps` 被排除而回到 CPU；
+  - 不能简单把 up 加进 France gate cache 或复用 France route hotset；
+  - 需要设计 prompt-general DS4 up sparse/grouped GPU decode path，或 up/gate grouped path；
+  - 第一版只在 `calibration_dev_set_v1` 上调试和验证，不碰 held-out test；
+  - 只有 up fallback 下降且 dev set end-to-end 提升后，才冻结候选跑 held-out test。
+- `step_4_candidate_freeze_and_heldout_test`:
+  - 当 down/up fallback 修正候选在 calibration/dev set 上稳定后，冻结源码、env、profile/calibration artifacts 和参数；
+  - 之后才运行 `held_out_test_set_v1_locked`；
+  - final SOTA 必须报告 held-out test 的 per-prompt metrics、min/mean tok/s、TTFT、RAM/page-cache、正确性和完整输出；
+  - 若 held-out test 未稳定 `>5 tok/s`，该结果只能算阶段性 dev improvement，不算最终任务完成。
+
 ## 2026-07-06 最新执行计划：消灭 up/down CPU fallback
 
 - `basis`: 当前有效优化方向来自 2026-07-06 重新 profile 当前 SOTA 配置，以及 Wafer/GLM-5.2 blog 的方法论复盘。Wafer 的可移用结论不是照搬 AMD/sglang/MTP，而是系统性识别 MoE fp4 路径是否 silently fallback 到慢路径，并为具体 shape 做 kernel mapping/tuning。当前 DeepSeek vendor 的同构问题更直接：decode 阶段 `ffn_up_exps`/`ffn_down_exps` 仍主要落在 CPU fallback。注意：该 profile 来自 France/n96 诊断，只能指导瓶颈方向；W2/W3 的 promoted 目标必须在泛化 prompt baseline 上验证。
