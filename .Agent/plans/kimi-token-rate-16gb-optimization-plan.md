@@ -5,9 +5,28 @@
 Continue optimizing Kimi IQ3_S decode throughput in the ik_llama-compatible
 vendor path while preserving stable, semantically correct output.
 
+## Task background and primary target
+
+The real deployment target is not a prompt-specific benchmark. The required
+system is:
+
+- Host RAM: 16 GB total hard limit, including process memory, allocator
+  overhead, pinned buffers, mmap-resident pages, file page cache, kernel cgroup
+  memory, and helper processes.
+- GPU: one RTX 5090-class card with 32 GB VRAM.
+- Workload: a user can enter an arbitrary prompt, not only the historical
+  France prompt or any prompt used to build an expert pack/profile.
+- Required behavior: stable, semantically correct output at more than
+  `5 tok/s` for random/general prompts under cold start.
+
+All future Kimi optimization work serves this deployment target. A result that
+only improves a prompt-specific expert pack/profile, or only improves one known
+prompt while degrading random prompt behavior, is diagnostic only and cannot be
+promoted as accepted SOTA.
+
 Hard target:
 
-- Maximize token rate.
+- Maximize general-prompt token rate toward the required `>5 tok/s` target.
 - Every reported result must be reproducible from the recorded commit, branch,
   command, env, cgroup setup, cold-start method, model/expert-pack paths, and
   exact prompt. Non-reproducible speedups are treated as rejected results.
@@ -16,13 +35,190 @@ Hard target:
 - Use as much VRAM as possible without causing graph/cache instability, and
   prefer GPU compute/cache over host RAM tiers whenever both are viable.
 - Keep TTFT increase within 20% of the current cold-start baseline.
-- Every accepted step must pass the fixed semantic quality gate:
+- Every accepted step must pass both the fixed France regression prompt and the
+  general-prompt quality suite:
 
 ```text
 Please introduce France in a short paragraph.
 ```
 
-The answer must be coherent, about France, and semantically correct.
+The France answer must remain coherent, about France, and semantically correct.
+The general-prompt suite must also produce coherent and semantically correct
+answers for unrelated prompts, because the product target is random user input.
+
+## Mandatory generalization baseline
+
+Before any further optimization patch is designed or implemented, rerun and
+record a strict cold-start generalization baseline under the final deployment
+constraints:
+
+- `MemoryMax <= 16 GB`, `MemorySwapMax=0`, with page cache charged to the same
+  cgroup.
+- One RTX 5090 / 32 GB VRAM, with VRAM usage recorded.
+- Cold start per prompt: process restart plus dropped filesystem cache or an
+  equivalent recorded cold-cache proof.
+- `-n 96`, deterministic sampling, same model and runtime as the candidate.
+- At least five prompts that are not all used to build the expert pack/profile,
+  including:
+  - `Please introduce France in a short paragraph.` as a regression prompt;
+  - at least two unrelated English factual prompts;
+  - at least one coding prompt;
+  - at least one Chinese prompt.
+
+Use a fixed prompt split for all future work:
+
+- `dev` prompts are allowed for profiling, route analysis, expert-pack design,
+  cache-policy tuning, regression debugging, and intermediate optimization.
+- `test` prompts are held out. They must not be used to build expert packs,
+  route profiles, hotsets, cache allocation rules, layer policies, compression
+  dictionaries, prompt classifiers, or any tuning decision.
+- The final accepted SOTA must be judged by held-out `test` prompt metrics, not
+  by the dev prompts and not by the historical France prompt alone.
+- If a held-out prompt is accidentally inspected or used for tuning, move it to
+  dev, mark the contamination in this plan, and add a new unseen replacement
+  test prompt before any SOTA claim.
+- Do not repeatedly tune against failed test results. A test evaluation may
+  reject a candidate; the next design step must return to dev/profile evidence
+  and only run the held-out test again after a materially new candidate exists.
+
+Record for every prompt: output text, quality verdict, token rate, TTFT,
+decode time, total elapsed time, host RAM/page-cache breakdown, VRAM cache hit
+rates, expert-pack bytes, iouring wait, pinned staging stats, H2D/copy stats
+where available, CPU fallback, and run path.
+
+Baseline and SOTA reporting must include separate `dev` and `test` tables:
+
+- `dev`: useful for diagnosis and iteration, but cannot promote SOTA.
+- `test`: authoritative for final SOTA; report mean, median, minimum token
+  rate, per-prompt quality, TTFT, memory peak, and failure/timeout count.
+- The primary optimization target is the held-out test-set minimum token rate,
+  because the deployment goal is stable random-prompt behavior.
+
+Prompt split handling:
+
+- Store dev prompts in `.Agent/evals/kimi-general-dev-prompts.jsonl`.
+- Store held-out test prompts in `.Agent/evals/kimi-general-test-prompts.jsonl`
+  and treat this file as sealed during optimization. Do not open it for route
+  analysis, hotset design, or parameter tuning.
+- Store only the test-set hash and category summary in normal planning notes
+  until final evaluation:
+  - English factual/general knowledge;
+  - English reasoning/math;
+  - coding;
+  - Chinese factual/instruction;
+  - mixed instruction style.
+- Final SOTA record may reveal the test prompts and outputs, but only after the
+  candidate is frozen and the run has completed.
+
+Current measured warning baseline from the general-prompt sweep started on
+2026-07-06:
+
+- `Please introduce Japan in a short paragraph.` completed with semantic
+  quality pass, `0.45 tok/s`, `TTFT=71487.12 ms`,
+  `decode=188047.31 ms / 85 runs`, `memory.peak=15899996160`, up/gate hit
+  `44.7%`, down hit `73.3%`, and `iouring_bytes=146811420672`.
+- `Explain photosynthesis briefly.` produced semantically correct partial
+  output but did not complete before manual stop after about 7 minutes; systemd
+  had already recorded about `402.9G` read and the 16 GB cgroup was full.
+
+This means the previous France-oriented SOTA is prompt-specific and is not an
+accepted answer to the deployment target. The next accepted baseline must be the
+general-prompt baseline above, not the prompt-specific France run.
+
+## Next phase: generalized dev baseline and route entropy analysis
+
+Status: planned.
+
+Purpose:
+
+- Stop optimizing against the historical France-specific hotset.
+- Establish the first strict general-prompt dev baseline under the real
+  deployment constraints.
+- Measure whether Kimi has enough cross-prompt expert reuse for a fixed
+  prompt-agnostic expert pack / VRAM cache policy to matter.
+- If fixed hotsets are not enough, identify which layers need runtime-adaptive
+  cache, larger batched IO, route prediction, compression, or byte-reduction
+  work instead.
+
+Step 1 - create the prompt split:
+
+- Create `.Agent/evals/kimi-general-dev-prompts.jsonl`.
+- Create `.Agent/evals/kimi-general-test-prompts.jsonl` and treat it as sealed
+  during optimization.
+- Dev prompts must cover at least:
+  - France regression;
+  - unrelated English factual prompts;
+  - English reasoning/math;
+  - coding;
+  - Chinese factual/instruction;
+  - mixed instruction style.
+- Test prompts must cover the same broad categories but must not be used for
+  route-profile, pack, hotset, cache, classifier, or policy tuning.
+
+Step 2 - run the dev cold-start baseline:
+
+- Run every dev prompt independently with:
+  - `MemoryMax <= 16 GB`;
+  - `MemorySwapMax=0`;
+  - cold process start;
+  - dropped filesystem cache or equivalent recorded cold-cache proof;
+  - one RTX 5090 / 32 GB VRAM;
+  - `-n 96`, deterministic sampling, same model/runtime as the current Kimi
+    candidate.
+- Record for each prompt:
+  - output and semantic quality verdict;
+  - token rate, TTFT, decode time, total elapsed time;
+  - cgroup `memory.peak`, `memory.stat`, page-cache breakdown, swap/OOM events;
+  - VRAM allocation and cache hit rates by up/gate/down;
+  - expert-pack bytes, iouring submit/wait, batch depth, pinned staging, H2D;
+  - CPU fallback by tensor type;
+  - route trace sufficient for per-layer expert frequency analysis.
+
+Step 3 - analyze route entropy and reuse:
+
+- For each layer and tensor role, compute:
+  - per-prompt expert frequency;
+  - cross-prompt overlap of top-K experts;
+  - entropy / concentration of expert access;
+  - miss cost in bytes, iouring wait, H2D, and exposed decode time;
+  - worst-prompt behavior, not only mean behavior.
+- Classify layers into:
+  - stable low-entropy layers: good candidates for prompt-agnostic VRAM cache
+    and general expert-pack coverage;
+  - prompt-local stable layers: candidates for runtime-adaptive cache/prefetch
+    based on early generated tokens;
+  - high-entropy layers: poor candidates for fixed hotsets; optimize via larger
+    batched IO, route prediction, compression, lower-byte formats, or other
+    movement reduction.
+
+Step 4 - choose the first optimization branch:
+
+- If cross-prompt overlap is high for expensive layers:
+  - design a layer-aware general expert pack and VRAM-cache reallocation;
+  - prioritize held-out worst-prompt improvement and miss-byte reduction over
+    France-only token rate.
+- If only prompt-local stability exists:
+  - design a default-off runtime-adaptive cache/prefetch experiment;
+  - use only dev prompts to decide adaptation logic;
+  - do not touch held-out test prompts until the candidate is frozen.
+- If most expensive layers are high entropy:
+  - stop spending effort on fixed hotsets;
+  - move to byte-reduction work: larger IO batches where exposed latency allows,
+    expert compression, lower-bit expert formats, speculative route/prefetch, or
+    other mechanisms that reduce bytes/token independent of prompt.
+
+Acceptance for this phase:
+
+- No SOTA promotion is possible from dev-only results.
+- The phase is complete only when there is a written report containing:
+  - dev prompt list and sealed test-set hash/category summary;
+  - per-prompt baseline table;
+  - per-layer entropy/overlap/miss-cost table;
+  - explicit branch decision for the next implementation;
+  - reproduction commands and run paths.
+- Any implementation after this phase must update this plan before code edits,
+  state the theoretical speed bound, and define the held-out test evaluation
+  gate before running test prompts.
 
 ## Current correctness base
 
@@ -98,10 +294,17 @@ that violates any one gate is rejected even if token rate improves.
    - Leave explicit graph reserve and safety margins in the run record.
 5. Output quality gate.
    - Output quality is checked at every step.
-   - The France prompt must produce a coherent short paragraph.
-   - The answer must be semantically correct, about France, and free of repeated
-     malformed clauses, tokenizer artifacts, role/template leakage, and unrelated
-     drift.
+   - The France prompt must produce a coherent short paragraph and remains a
+     regression check.
+   - The general-prompt suite must produce coherent answers that are
+     semantically correct for each prompt and free of repeated malformed
+     clauses, tokenizer artifacts, role/template leakage, and unrelated drift.
+   - Prompt-specific improvements are not accepted. Any expert pack, route
+     profile, hotset, cache allocation, or prefetch rule trained/tuned on one
+     prompt must be evaluated on the general-prompt suite before it can be used
+     for SOTA claims.
+   - Held-out test prompts must stay unseen during tuning. Final accepted SOTA
+     requires semantic quality pass on the held-out test suite.
    - Large token-rate jumps require the same three-run `-n 96` gate as the
      correctness plan.
 6. TTFT gate.
