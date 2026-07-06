@@ -87638,7 +87638,7 @@ Result:
 - New script:
   `scripts/kimi-make-remote-pack-manifest.py`.
 - Server run:
-  `/root/lfz/runs/vendor-kimi-token-rate/20260706-014131Z-phase7ot-remote-pack-manifest`.
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-014334Z-phase7ot-remote-pack-manifest`.
 - Exit code: `0`.
 - Source changes: tooling only.
 - Model inference: not run.
@@ -87706,7 +87706,7 @@ Reproduce result:
 ```bash
 cd /root/lfz/llama.cpp-vendor-kimi
 git reset --hard 022369d6a
-RUN=/root/lfz/runs/vendor-kimi-token-rate/20260706-014131Z-phase7ot-remote-pack-manifest
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260706-014334Z-phase7ot-remote-pack-manifest
 PLAN=/root/lfz/runs/vendor-kimi-token-rate/20260706-001309Z-phase7om-iq2xxs-hotkey-size
 python3 scripts/kimi-make-remote-pack-manifest.py \
   --plan-json "$PLAN/hotkey-pack-plan.json" \
@@ -87717,3 +87717,91 @@ python3 scripts/kimi-make-remote-pack-manifest.py \
 cat "$RUN/manifest-summary.json"
 head -5 "$RUN/manifest.tsv"
 ```
+
+## Phase 7OU - direct remote-pack builder dry-run and range smoke
+
+Start time: `2026-07-06T09:48:08+0800` / `20260706-014808Z`.
+
+Purpose:
+
+- Continue preparing the lower-bit path without requiring cleanup/external
+  storage yet.
+- Add the direct-builder tool that will eventually consume the 7OT manifest and
+  write `GGMLMOEPACKv1` from remote HTTP ranges.
+- Validate only the safe parts now:
+  - manifest loading;
+  - output index/layout computation;
+  - disk preflight;
+  - small bounded HTTP Range smoke reads into memory;
+  - no `.expert-pack` output on current filesystem.
+
+Hard constraints:
+
+- Do not delete, move, truncate, or overwrite existing files.
+- Do not write the full selected lower-bit `.expert-pack`.
+- Do not run model inference.
+- Do not change production runtime env.
+- Do not download full shards.
+- The smoke test may download only a tiny bounded subset of selected expert
+  ranges, controlled by `--smoke-entries`, and must record exact bytes.
+
+Implementation plan:
+
+1. Add:
+
+```text
+scripts/kimi-build-remote-pack-from-manifest.py
+```
+
+2. Script modes:
+
+- default `--dry-run`:
+  - parse manifest TSV;
+  - verify `remote_range_valid`;
+  - verify future pack offsets are aligned and monotonic;
+  - compute `GGMLMOEPACKv1` header/index/data sizes;
+  - preflight output filesystem free bytes;
+  - write only summary JSON.
+- optional `--smoke-entries N`:
+  - perform HTTP Range GET for the first `N` selected entries;
+  - validate response length equals `remote_nbytes`;
+  - compute SHA256 for each fetched payload;
+  - do not write payload to disk unless an explicit small `--smoke-dir` is
+    supplied; this phase will not supply `--smoke-dir`.
+- future guarded write mode:
+  - require `--execute`;
+  - require enough output filesystem free bytes;
+  - write pack atomically to `<output>.tmp` then rename;
+  - not exercised in this phase.
+
+3. Dry-run server validation:
+
+- Use 7OT manifest:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260706-014334Z-phase7ot-remote-pack-manifest/manifest.tsv
+```
+
+- Run:
+  - `--dry-run`;
+  - `--smoke-entries 2`;
+  - output summary JSON in a new 7OU run directory.
+
+Acceptance:
+
+- Plan committed and pushed before source edit.
+- Script passes `python3 -m py_compile`.
+- Server dry-run exits `0`.
+- Smoke download bytes are small and recorded.
+- No `.expert-pack` output is created.
+- Summary reports:
+  - manifest entries `31599`;
+  - full pack would not fit current filesystem;
+  - current `IQ3_S` runtime compatibility remains false because of nbytes
+    mismatch inherited from manifest;
+  - smoke HTTP ranges returned exact expected byte counts.
+- Result appended here and pushed.
+
+Result:
+
+- Pending.
