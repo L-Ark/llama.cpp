@@ -32,6 +32,7 @@ def write_sweep_metadata(out_root: pathlib.Path, prompt_file: pathlib.Path, prom
         "memory_max": args.memory_max,
         "memory_swap_max": 0,
         "runtime_max_sec": args.runtime_max_sec,
+        "extra_runtime_env": args.extra_runtime_env,
         "cold_start": "per prompt: repro script sync + drop_caches inside each systemd cgroup",
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
@@ -80,6 +81,7 @@ def run_one(repo: pathlib.Path, out_root: pathlib.Path, row, args):
         f"PROMPT_ID={row['id']}",
         f"PROMPT_USER_TEXT={row['prompt']}",
         f"QUALITY_KEYWORDS={row['quality_keywords']}",
+        f"EXTRA_RUNTIME_ENV={args.extra_runtime_env}",
         ".Agent/run-tools/kimi-general-prompt-repro.sh",
     ]
     print(f"=== {row['id']} ===", flush=True)
@@ -157,6 +159,7 @@ def main():
     parser.add_argument("--threads", default="32")
     parser.add_argument("--pinned-slots", default="12")
     parser.add_argument("--upgate-pct", default="62")
+    parser.add_argument("--extra-runtime-env", default="")
     args = parser.parse_args()
 
     if args.mode == "dev" and "test" in args.prompt_file.name:
