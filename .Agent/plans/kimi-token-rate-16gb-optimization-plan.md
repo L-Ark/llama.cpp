@@ -94118,6 +94118,94 @@ GP46 execution result:
   - no runtime behavior changed;
   - no token-rate or output-quality claim is made.
 
+## GP48: dev-only static expert-prior prefetch analysis
+
+Timestamp: `2026-07-07T07:24:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- GP47 showed previous-call same-tensor prediction has only `~0.338` recall and
+  is not worth runtime integration.
+- Another possible predictor is prompt-agnostic static priors: for each tensor,
+  prefetch the experts most frequently seen on other general prompts.
+- This must be evaluated with leave-one-prompt-out on dev traces so the result
+  measures cross-prompt generalization rather than memorizing one prompt.
+
+Theory and upper bound:
+
+- Static top-K per tensor can be known before routing, so it could fill IO
+  queues early and reduce queue starvation.
+- However, it overfetches `K / active_experts_per_call` experts on every tensor
+  call. If recall requires large K, the extra SSD/H2D traffic can exceed the
+  benefit.
+- For each held-out dev prompt, train top-K expert lists per tensor from the
+  other dev prompts and measure:
+  - recall;
+  - precision;
+  - byte recall;
+  - predicted/actual byte ratio.
+
+Scope:
+
+- Add `.Agent/run-tools/kimi_static_prior_predictability.py`.
+- Inputs:
+  - committed dev-only N96 route traces;
+  - no held-out test traces.
+- Outputs:
+  - CSV/JSON/Markdown top-K static prior sweep.
+- No runtime code changes.
+
+Validation:
+
+1. Run locally with top-K sizes such as `8,16,32,64,128`.
+2. Run remotely in `/root/lfz/tmp/vendor-kimi-speculative-gp33`.
+3. Confirm local and remote headline metrics match.
+4. No token-rate or SOTA claim.
+
+Acceptance:
+
+- The result states whether static top-K priors have enough recall per byte to
+  justify runtime prefetch.
+- If recall is low at small K and high recall requires large overfetch, runtime
+  integration is rejected for now.
+
+GP48 execution result:
+
+- Timestamp: `2026-07-07T07:00:00+08:00`.
+- Record:
+  `.Agent/runs/20260707-gp48-static-prior-predictability/report.md`.
+- Added:
+  `.Agent/run-tools/kimi_static_prior_predictability.py`.
+- Inputs:
+  - seven committed dev-only N96 `route-trace.csv` files from
+    `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile`;
+  - no held-out test traces were used.
+- Leave-one-prompt-out static top-K result:
+  - top-8: recall `0.123625`, predicted/actual bytes `1.000000`;
+  - top-16: recall `0.192504`, predicted/actual bytes `2.000000`;
+  - top-32: recall `0.284690`, predicted/actual bytes `4.000000`;
+  - top-64: recall `0.416953`, predicted/actual bytes `8.000000`;
+  - top-128: recall `0.601030`, predicted/actual bytes `16.000000`.
+- Interpretation:
+  - static per-tensor expert priors are not viable for runtime prefetch;
+  - small K has too little recall, while useful recall requires prohibitive
+    overfetch;
+  - next prediction work needs a stronger draft/route predictor, or the next
+    scheduling work needs to increase independent known jobs without guessing
+    many wrong experts.
+- Validation:
+  - local analyzer run passed;
+  - local `python3 -m py_compile` passed;
+  - local `git diff --check` passed;
+  - remote analyzer run produced matching headline metrics;
+  - remote `python3 -m py_compile` and `git diff --check` passed.
+- Decision:
+  - accepted as non-SOTA planning evidence;
+  - no runtime behavior changed;
+  - no token-rate or output-quality claim is made.
+
 ## GP47: dev-only expert route predictability analysis
 
 Timestamp: `2026-07-07T07:12:00+08:00`.
