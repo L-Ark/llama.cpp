@@ -4712,3 +4712,14 @@
   4. 默认不写回 logits；如果未来启用写回，必须先 fixed-text top1 pass。
 - `source_edit_gate`: 先写更细的 source-edit plan 并确认 code insertion point；只允许 default-off env，例如 `GGML_MOE_RESIDENT_Q80_PROBE_MANIFEST` / `GGML_MOE_RESIDENT_Q80_PROBE_OUT`。未设置 env 时默认路径必须 bit-for-bit 不变。
 - `validation_gate`: build `llama-cli llama-results`，default-off top1 self-check，probe-on fixed-text report；strict 16GB/no-swap；不跑 SOTA benchmark。
+
+## 2026-07-07 practice plan：current-head resident hot-batch probe smoke
+
+- `attempt_id`: `20260707-current-head-q80-hot-batch-top48-smoke`
+- `status`: `planned_before_practice`
+- `source_change`: none；现有 `GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_OUT`、`GGML_MOE_STREAM_ONE_DIRECT_MANIFEST`、hot pool 和 row-tile compare skeleton 已存在。本轮只验证 current head 可运行性。
+- `prompt_scope`: fixed France text verifier only；使用 calibration-derived `calib-dev-sparse-pair-top48-updown` manifest；held-out 未使用；不是 SOTA。
+- `manifest`: 由 `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.offset_manifest.csv` 转成 direct-manifest 兼容格式 `tensor,expert,model_offset,nbytes`。
+- `run_method`: strict 16GB/no-swap cgroup，`llama-results --check --top1-report --top1-fail-on-mismatch`，开启 `GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB`、`GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_OUT`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE=1`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_ROW_TILE=1`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_TRANSPOSE=1`，compare record limit 小范围 smoke。
+- `pass_gate`: check exit `0`，top1 `same_top1 == n_tokens`，probe CSV 有 `compare_ran>0` 且 `diff_count=0` for compared rows，memory peak <=16GB，无 OOM/swap。
+- `decision_rule`: 通过则说明 existing skeleton 可作为下一步 resident/batched low-bit prototype base；若性能/coverage 不足仍不可 promotion。失败则先修 skeleton/manifest，而不是进入性能 benchmark。
