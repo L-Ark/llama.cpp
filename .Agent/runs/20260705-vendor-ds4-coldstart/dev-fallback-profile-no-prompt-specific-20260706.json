@@ -1,0 +1,1075 @@
+{
+  "aggregate": {
+    "all_correctness_heuristic_ok": true,
+    "all_memory_peak_bytes": [
+      16000000000
+    ],
+    "all_ram_ok": true,
+    "max_eval_tok_s": 2.6,
+    "mean_eval_tok_s": 2.1799999999999997,
+    "min_eval_tok_s": 1.7
+  },
+  "aggregate_fallback_by_reason": {
+    "down|decode|batch_env_missing|one_name_filter|one_name_filter": {
+      "calls": 105300,
+      "fallback_ms": 72208.338,
+      "logical_gib": 437.036,
+      "rows": 105300
+    },
+    "down|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+      "calls": 5720,
+      "fallback_ms": 20852.934,
+      "logical_gib": 23.74,
+      "rows": 8710
+    },
+    "up|decode|batch_env_missing|one_name_filter|one_name_filter": {
+      "calls": 105300,
+      "fallback_ms": 104413.945,
+      "logical_gib": 437.036,
+      "rows": 105300
+    },
+    "up|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+      "calls": 5720,
+      "fallback_ms": 19060.088,
+      "logical_gib": 23.74,
+      "rows": 8710
+    }
+  },
+  "artifact_id": "20260706-dev-fallback-profile-no-prompt-specific",
+  "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli",
+  "binary_sha256": "c70c4f28f972fb7d1b443076961a653d7d05e9d472effb253dcd23311c843f62",
+  "conclusion": {
+    "dominant_shared_bottleneck": "up/down CPU fallback remains prompt-general across calibration_dev_set_v1; all up/down rows are blocked by batch_env_missing and one_name_filter under the no-prompt-specific config.",
+    "down_fallback_ms_total": 93061.272,
+    "gate_fallback_ms_total": 0,
+    "next_step": "Implement default-off down MXFP4 batch/parity probe, then run calibration/dev performance probe if parity passes. Do not use held-out test until candidate is frozen.",
+    "up_fallback_ms_total": 123474.033
+  },
+  "config_summary": "no prompt-specific pack/profile; calibration_dev_set_v1 only; strict cold drop_caches; MemoryMax=16000000000; MemorySwapMax=0; gate one-stream name_filter=ffn_gate_exps cache_mib=13568; KEEP_TOPK_UPDOWN=4 layer_range=10-39 layer_value=3; fallback reason/name profiles enabled",
+  "git_status": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "held_out_test_used": false,
+  "results": [
+    {
+      "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T112616Z-dev-fallback-profile-no-prompt-specific-20260706/france-cpu40-vram0gb",
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "counters": {
+        "has_one_expert_pack_counter": false
+      },
+      "elapsed_seconds": 88.52,
+      "eval_tok_s": 2.6,
+      "fallback_by_reason": {
+        "down|decode|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 17940,
+          "fallback_ms": 9706.409,
+          "logical_gib": 74.458,
+          "rows": 17940
+        },
+        "down|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 1171,
+          "fallback_ms": 4199.564,
+          "logical_gib": 4.86,
+          "rows": 1820
+        },
+        "up|decode|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 17940,
+          "fallback_ms": 13454.805,
+          "logical_gib": 74.458,
+          "rows": 17940
+        },
+        "up|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 1171,
+          "fallback_ms": 3872.435,
+          "logical_gib": 4.86,
+          "rows": 1820
+        }
+      },
+      "fallback_by_role": {
+        "down": {
+          "calls": 19111,
+          "fallback_ms": 13905.973,
+          "logical_gib": 79.318,
+          "rows": 19760
+        },
+        "up": {
+          "calls": 19111,
+          "fallback_ms": 17327.24,
+          "logical_gib": 79.318,
+          "rows": 19760
+        }
+      },
+      "fallback_by_role_phase": {
+        "down/decode": {
+          "calls": 17940,
+          "fallback_ms": 9706.409,
+          "logical_gib": 74.458,
+          "rows": 17940
+        },
+        "down/prompt": {
+          "calls": 1171,
+          "fallback_ms": 4199.564,
+          "logical_gib": 4.86,
+          "rows": 1820
+        },
+        "up/decode": {
+          "calls": 17940,
+          "fallback_ms": 13454.805,
+          "logical_gib": 74.458,
+          "rows": 17940
+        },
+        "up/prompt": {
+          "calls": 1171,
+          "fallback_ms": 3872.435,
+          "logical_gib": 4.86,
+          "rows": 1820
+        }
+      },
+      "fallback_logical_gib": 158.636,
+      "fallback_total_calls": 38222,
+      "fallback_total_ms": 31233.213,
+      "fallback_total_rows": 39520,
+      "memory_file_bytes": 15018795008,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 289116,
+      "profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260706T112616Z-dev-fallback-profile-no-prompt-specific-20260706/france-cpu40-vram0gb/fallback_reason_profile.csv",
+      "profile_csv_sha256": "7d6afb36d996231770043bd55b9aaef18e779e26c80040510101de7811cf0379",
+      "prompt_id": "france",
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "top_fallback_entries": [
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "117",
+          "expert_idx": "253",
+          "fallback_us": "78089",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.30.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "128",
+          "expert_idx": "135",
+          "fallback_us": "71519",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.25.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "101",
+          "expert_idx": "101",
+          "fallback_us": "70251",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.3.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "134",
+          "expert_idx": "162",
+          "fallback_us": "69814",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.37.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "125",
+          "expert_idx": "56",
+          "fallback_us": "69802",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.29.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "134",
+          "expert_idx": "162",
+          "fallback_us": "67175",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "down",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.37.ffn_down_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "116",
+          "expert_idx": "152",
+          "fallback_us": "63830",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.27.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "127",
+          "expert_idx": "24",
+          "fallback_us": "61914",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.27.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "101",
+          "expert_idx": "101",
+          "fallback_us": "61715",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "down",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.3.ffn_down_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "128",
+          "expert_idx": "124",
+          "fallback_us": "61608",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.32.ffn_up_exps.weight"
+        }
+      ],
+      "ttft_estimate_ms": 37516.648734,
+      "workingset_refault_file": 3459278
+    },
+    {
+      "answer": "and**Quantum computing** is a type of computing that uses the principles of quantum mechanics to process information. Unlike classical computers, which use bits (0 or 1), quantum computers use **qubits** (quantum bits). Qubits can exist in a state of 0, 1, or both simultaneously (superposition). This, along with other quantum phenomena like entanglement, allows quantum computers to solve certain problems much faster than classical computers.\n\n**Key Concepts:**\n\n- **Superposition:** A qubit can be in a combination of 0 and 1 at the same time, unlike a classical bit which is either 0 or 1. This allows for parallel computation.\n- **Entanglement:** A pair of qubits can be linked in such a way that the state of one instantly influences the other, regardless of distance. This enables complex calculations.\n- **Quantum Interference:** Quantum algorithms manipulate the probabilities of qubits' states to amplify",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T112751Z-dev-fallback-profile-no-prompt-specific-20260706/quantum-cpu40-vram0gb",
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "counters": {
+        "has_one_expert_pack_counter": false
+      },
+      "elapsed_seconds": 135.36,
+      "eval_tok_s": 1.9,
+      "fallback_by_reason": {
+        "down|decode|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 24830,
+          "fallback_ms": 21084.471,
+          "logical_gib": 103.054,
+          "rows": 24830
+        },
+        "down|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 1005,
+          "fallback_ms": 3398.299,
+          "logical_gib": 4.171,
+          "rows": 1430
+        },
+        "up|decode|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 24830,
+          "fallback_ms": 28547.34,
+          "logical_gib": 103.054,
+          "rows": 24830
+        },
+        "up|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 1005,
+          "fallback_ms": 3322.644,
+          "logical_gib": 4.171,
+          "rows": 1430
+        }
+      },
+      "fallback_by_role": {
+        "down": {
+          "calls": 25835,
+          "fallback_ms": 24482.77,
+          "logical_gib": 107.225,
+          "rows": 26260
+        },
+        "up": {
+          "calls": 25835,
+          "fallback_ms": 31869.984,
+          "logical_gib": 107.225,
+          "rows": 26260
+        }
+      },
+      "fallback_by_role_phase": {
+        "down/decode": {
+          "calls": 24830,
+          "fallback_ms": 21084.471,
+          "logical_gib": 103.054,
+          "rows": 24830
+        },
+        "down/prompt": {
+          "calls": 1005,
+          "fallback_ms": 3398.299,
+          "logical_gib": 4.171,
+          "rows": 1430
+        },
+        "up/decode": {
+          "calls": 24830,
+          "fallback_ms": 28547.34,
+          "logical_gib": 103.054,
+          "rows": 24830
+        },
+        "up/prompt": {
+          "calls": 1005,
+          "fallback_ms": 3322.644,
+          "logical_gib": 4.171,
+          "rows": 1430
+        }
+      },
+      "fallback_logical_gib": 214.451,
+      "fallback_total_calls": 51670,
+      "fallback_total_ms": 56352.754,
+      "fallback_total_rows": 52520,
+      "memory_file_bytes": 14954758144,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 444367,
+      "profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260706T112751Z-dev-fallback-profile-no-prompt-specific-20260706/quantum-cpu40-vram0gb/fallback_reason_profile.csv",
+      "profile_csv_sha256": "be551c9b653334f9dc87dd3ead3e6e039723c79c4caff6a71646b750b1e7ea67",
+      "prompt_id": "quantum",
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "top_fallback_entries": [
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "132",
+          "expert_idx": "66",
+          "fallback_us": "143509",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.22.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "182",
+          "expert_idx": "85",
+          "fallback_us": "137642",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.26.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "90",
+          "expert_idx": "101",
+          "fallback_us": "134060",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.3.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "162",
+          "expert_idx": "126",
+          "fallback_us": "133189",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.31.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "115",
+          "expert_idx": "219",
+          "fallback_us": "132242",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.9.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "140",
+          "expert_idx": "31",
+          "fallback_us": "128668",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.8.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "177",
+          "expert_idx": "77",
+          "fallback_us": "127483",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.32.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "165",
+          "expert_idx": "53",
+          "fallback_us": "122504",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.25.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "90",
+          "expert_idx": "172",
+          "fallback_us": "120715",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.19.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "158",
+          "expert_idx": "176",
+          "fallback_us": "114078",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.16.ffn_up_exps.weight"
+        }
+      ],
+      "ttft_estimate_ms": 36335.945769,
+      "workingset_refault_file": 13244939
+    },
+    {
+      "answer": "that's a classic! Here's a short Python function that computes the Fibonacci sequence:\n\n```python\ndef fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        yield a\n        a, b = b, a + b\n```\n\nThis is a generator function that yields Fibonacci numbers up to the nth term. It's memory-efficient and works well for large values of n.\n\nIf you prefer a more compact version that returns a list:\n\n```python\ndef fib(n):\n    a, b = 0, 1\n    return [a if i == 0 else a := b for i in range(n) for b in [a+b]][:n]\n```\n\nBut the generator version is generally preferred for its memory efficiency, especially when n is large.\n\nHere's a simpler version that returns a list:\n\n```python\ndef fib_list(n):\n    a, b = 0, 1",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T113014Z-dev-fallback-profile-no-prompt-specific-20260706/fibonacci-cpu40-vram0gb",
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "counters": {
+        "has_one_expert_pack_counter": false
+      },
+      "elapsed_seconds": 145.19,
+      "eval_tok_s": 1.7,
+      "fallback_by_reason": {
+        "down|decode|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 24830,
+          "fallback_ms": 18727.004,
+          "logical_gib": 103.054,
+          "rows": 24830
+        },
+        "down|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 1186,
+          "fallback_ms": 4325.713,
+          "logical_gib": 4.922,
+          "rows": 1820
+        },
+        "up|decode|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 24830,
+          "fallback_ms": 29358.358,
+          "logical_gib": 103.054,
+          "rows": 24830
+        },
+        "up|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 1186,
+          "fallback_ms": 3939.911,
+          "logical_gib": 4.922,
+          "rows": 1820
+        }
+      },
+      "fallback_by_role": {
+        "down": {
+          "calls": 26016,
+          "fallback_ms": 23052.717,
+          "logical_gib": 107.977,
+          "rows": 26650
+        },
+        "up": {
+          "calls": 26016,
+          "fallback_ms": 33298.269,
+          "logical_gib": 107.977,
+          "rows": 26650
+        }
+      },
+      "fallback_by_role_phase": {
+        "down/decode": {
+          "calls": 24830,
+          "fallback_ms": 18727.004,
+          "logical_gib": 103.054,
+          "rows": 24830
+        },
+        "down/prompt": {
+          "calls": 1186,
+          "fallback_ms": 4325.713,
+          "logical_gib": 4.922,
+          "rows": 1820
+        },
+        "up/decode": {
+          "calls": 24830,
+          "fallback_ms": 29358.358,
+          "logical_gib": 103.054,
+          "rows": 24830
+        },
+        "up/prompt": {
+          "calls": 1186,
+          "fallback_ms": 3939.911,
+          "logical_gib": 4.922,
+          "rows": 1820
+        }
+      },
+      "fallback_logical_gib": 215.953,
+      "fallback_total_calls": 52032,
+      "fallback_total_ms": 56350.986,
+      "fallback_total_rows": 53300,
+      "memory_file_bytes": 14944878592,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 445969,
+      "profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260706T113014Z-dev-fallback-profile-no-prompt-specific-20260706/fibonacci-cpu40-vram0gb/fallback_reason_profile.csv",
+      "profile_csv_sha256": "aab73977f8828a6dddde9303b0a6c7a2125093cb91b966d7554e49b8713fee4e",
+      "prompt_id": "fibonacci",
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "top_fallback_entries": [
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "172",
+          "expert_idx": "23",
+          "fallback_us": "182822",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.28.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "142",
+          "expert_idx": "244",
+          "fallback_us": "170141",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.23.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "107",
+          "expert_idx": "175",
+          "fallback_us": "152885",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.39.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "105",
+          "expert_idx": "71",
+          "fallback_us": "133507",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.22.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "152",
+          "expert_idx": "72",
+          "fallback_us": "123281",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.32.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "140",
+          "expert_idx": "146",
+          "fallback_us": "119587",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.6.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "147",
+          "expert_idx": "225",
+          "fallback_us": "118582",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.5.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "102",
+          "expert_idx": "108",
+          "fallback_us": "107480",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.31.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "142",
+          "expert_idx": "244",
+          "fallback_us": "106765",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "down",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.23.ffn_down_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "113",
+          "expert_idx": "84",
+          "fallback_us": "106759",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.16.ffn_up_exps.weight"
+        }
+      ],
+      "ttft_estimate_ms": 39047.801183,
+      "workingset_refault_file": 14017152
+    },
+    {
+      "answer": "Japan is an island nation in East Asia, known for its unique blend of ancient traditions and cutting-edge modernity. It is renowned for its rich cultural heritage, including tea ceremonies, kimono, and traditional temples, alongside its technological advancements and bustling cities like Tokyo and Osaka. The country is famous for its cuisine, such as sushi and ramen, and its natural beauty, from Mount Fuji to cherry blossoms. With a strong economy and a high standard of living, Japan is also known for its politeness, efficiency, and innovation in fields like robotics and electronics. Its culture deeply values respect, honor, and community, making it a fascinating blend of old and new.",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T113247Z-dev-fallback-profile-no-prompt-specific-20260706/japan-cpu40-vram0gb",
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "counters": {
+        "has_one_expert_pack_counter": false
+      },
+      "elapsed_seconds": 90.72,
+      "eval_tok_s": 2.4,
+      "fallback_by_reason": {
+        "down|decode|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 17550,
+          "fallback_ms": 9858.454,
+          "logical_gib": 72.839,
+          "rows": 17550
+        },
+        "down|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 1179,
+          "fallback_ms": 4407.483,
+          "logical_gib": 4.893,
+          "rows": 1820
+        },
+        "up|decode|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 17550,
+          "fallback_ms": 14711.024,
+          "logical_gib": 72.839,
+          "rows": 17550
+        },
+        "up|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 1179,
+          "fallback_ms": 4004.806,
+          "logical_gib": 4.893,
+          "rows": 1820
+        }
+      },
+      "fallback_by_role": {
+        "down": {
+          "calls": 18729,
+          "fallback_ms": 14265.937,
+          "logical_gib": 77.733,
+          "rows": 19370
+        },
+        "up": {
+          "calls": 18729,
+          "fallback_ms": 18715.83,
+          "logical_gib": 77.733,
+          "rows": 19370
+        }
+      },
+      "fallback_by_role_phase": {
+        "down/decode": {
+          "calls": 17550,
+          "fallback_ms": 9858.454,
+          "logical_gib": 72.839,
+          "rows": 17550
+        },
+        "down/prompt": {
+          "calls": 1179,
+          "fallback_ms": 4407.483,
+          "logical_gib": 4.893,
+          "rows": 1820
+        },
+        "up/decode": {
+          "calls": 17550,
+          "fallback_ms": 14711.024,
+          "logical_gib": 72.839,
+          "rows": 17550
+        },
+        "up/prompt": {
+          "calls": 1179,
+          "fallback_ms": 4004.806,
+          "logical_gib": 4.893,
+          "rows": 1820
+        }
+      },
+      "fallback_logical_gib": 155.465,
+      "fallback_total_calls": 37458,
+      "fallback_total_ms": 32981.767,
+      "fallback_total_rows": 38740,
+      "memory_file_bytes": 15030689792,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 304354,
+      "profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260706T113247Z-dev-fallback-profile-no-prompt-specific-20260706/japan-cpu40-vram0gb/fallback_reason_profile.csv",
+      "profile_csv_sha256": "87968bbb180171e0f6d6cfb25c0f7eb0c7914f46abd779403033536851c2474c",
+      "prompt_id": "japan",
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "top_fallback_entries": [
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "124",
+          "expert_idx": "66",
+          "fallback_us": "105268",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.22.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "114",
+          "expert_idx": "24",
+          "fallback_us": "96443",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.31.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "116",
+          "expert_idx": "101",
+          "fallback_us": "90103",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.3.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "118",
+          "expert_idx": "54",
+          "fallback_us": "82139",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.37.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "133",
+          "expert_idx": "4",
+          "fallback_us": "81090",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.27.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "135",
+          "expert_idx": "187",
+          "fallback_us": "80318",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.36.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "119",
+          "expert_idx": "2",
+          "fallback_us": "79305",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.12.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "134",
+          "expert_idx": "161",
+          "fallback_us": "79203",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.28.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "123",
+          "expert_idx": "16",
+          "fallback_us": "74388",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.32.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "120",
+          "expert_idx": "152",
+          "fallback_us": "71733",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.27.ffn_up_exps.weight"
+        }
+      ],
+      "ttft_estimate_ms": 38760.496441,
+      "workingset_refault_file": 4104390
+    },
+    {
+      "answer": "Climate change refers to the long-term, large-scale alteration of Earth's climate patterns, primarily driven by human activities such as burning fossil fuels, deforestation, and industrial processes that release greenhouse gases like carbon dioxide, methane, and nitrous oxide into the atmosphere. These gases trap heat, leading to a rise in global average temperatures, a phenomenon known as global warming. The consequences are far-reaching and include more frequent and severe weather events like hurricanes, droughts, and floods; rising sea levels; melting polar ice and glaciers; and disruptions to ecosystems and biodiversity. While natural factors have historically influenced the climate, the current rapid change is overwhelmingly attributed to human actions, and its effects are already being observed worldwide, threatening both natural environments and human societies with the challenges of adaptation and mitigation.",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T113425Z-dev-fallback-profile-no-prompt-specific-20260706/climate-cpu40-vram0gb",
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "counters": {
+        "has_one_expert_pack_counter": false
+      },
+      "elapsed_seconds": 105.17,
+      "eval_tok_s": 2.3,
+      "fallback_by_reason": {
+        "down|decode|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 20150,
+          "fallback_ms": 12832.0,
+          "logical_gib": 83.63,
+          "rows": 20150
+        },
+        "down|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 1179,
+          "fallback_ms": 4521.875,
+          "logical_gib": 4.893,
+          "rows": 1820
+        },
+        "up|decode|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 20150,
+          "fallback_ms": 18342.418,
+          "logical_gib": 83.63,
+          "rows": 20150
+        },
+        "up|prompt|batch_env_missing|one_name_filter|one_name_filter": {
+          "calls": 1179,
+          "fallback_ms": 3920.292,
+          "logical_gib": 4.893,
+          "rows": 1820
+        }
+      },
+      "fallback_by_role": {
+        "down": {
+          "calls": 21329,
+          "fallback_ms": 17353.875,
+          "logical_gib": 88.524,
+          "rows": 21970
+        },
+        "up": {
+          "calls": 21329,
+          "fallback_ms": 22262.71,
+          "logical_gib": 88.524,
+          "rows": 21970
+        }
+      },
+      "fallback_by_role_phase": {
+        "down/decode": {
+          "calls": 20150,
+          "fallback_ms": 12832.0,
+          "logical_gib": 83.63,
+          "rows": 20150
+        },
+        "down/prompt": {
+          "calls": 1179,
+          "fallback_ms": 4521.875,
+          "logical_gib": 4.893,
+          "rows": 1820
+        },
+        "up/decode": {
+          "calls": 20150,
+          "fallback_ms": 18342.418,
+          "logical_gib": 83.63,
+          "rows": 20150
+        },
+        "up/prompt": {
+          "calls": 1179,
+          "fallback_ms": 3920.292,
+          "logical_gib": 4.893,
+          "rows": 1820
+        }
+      },
+      "fallback_logical_gib": 177.047,
+      "fallback_total_calls": 42658,
+      "fallback_total_ms": 39616.585,
+      "fallback_total_rows": 43940,
+      "memory_file_bytes": 14999969792,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 349239,
+      "profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260706T113425Z-dev-fallback-profile-no-prompt-specific-20260706/climate-cpu40-vram0gb/fallback_reason_profile.csv",
+      "profile_csv_sha256": "2e928b240e0acd9c417350d685a7078b9bc2e7ed8749c89d12d90856939aaa64",
+      "prompt_id": "climate",
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "top_fallback_entries": [
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "154",
+          "expert_idx": "58",
+          "fallback_us": "137139",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.31.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "128",
+          "expert_idx": "125",
+          "fallback_us": "106210",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.39.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "92",
+          "expert_idx": "219",
+          "fallback_us": "105003",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.30.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "147",
+          "expert_idx": "176",
+          "fallback_us": "99719",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.23.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "132",
+          "expert_idx": "66",
+          "fallback_us": "95892",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.22.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "120",
+          "expert_idx": "205",
+          "fallback_us": "93363",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.32.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "154",
+          "expert_idx": "58",
+          "fallback_us": "91600",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "down",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.31.ffn_down_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "112",
+          "expert_idx": "101",
+          "fallback_us": "90179",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "down",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.3.ffn_down_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "112",
+          "expert_idx": "3",
+          "fallback_us": "88663",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "up",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.17.ffn_up_exps.weight"
+        },
+        {
+          "batch_reason": "batch_env_missing",
+          "calls": "120",
+          "expert_idx": "205",
+          "fallback_us": "85494",
+          "final_reason": "one_name_filter",
+          "phase": "decode",
+          "role": "down",
+          "single_reason": "one_name_filter",
+          "tensor": "blk.32.ffn_down_exps.weight"
+        }
+      ],
+      "ttft_estimate_ms": 39247.277955,
+      "workingset_refault_file": 6236627
+    }
+  ],
+  "source_commit": "cb5c9e1ed48175160142176c431f7cacb6a8a033",
+  "status": "diagnostic_only_calibration_dev_not_heldout_sota"
+}
