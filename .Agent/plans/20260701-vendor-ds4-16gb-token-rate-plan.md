@@ -3949,3 +3949,16 @@
 - `profile_summary`: selects `722` up pairs, payload `2.997GiB`, covers `51854.272ms` or `42.0%` of aggregate up fallback.
 - `theory`: 1GiB up hotset tied because fallback savings were too small. With tail partition active, 3GiB may recover more up fallback while bounding up entries to the tail partition. It sacrifices about `722` gate slots, so promote only if n64 smoke clearly beats the `2.2 tok/s` gate-only control.
 - `scope`: run only calibration France `n64` smoke first; no held-out; do not expand to full dev set unless it beats control and remains RAM/TTFT/correctness safe.
+
+
+## 2026-07-06 执行记录：up hot3g tail partition rejected/tie
+
+- `attempt_id`: `20260706-up-hot3g-tailpart722-n64`
+- `status`: `rejected_tie_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-hot3g-tailpart722-n64-rejection-20260706.json`
+- `profile`: `.Agent/profiles/vendor-ds4/calib-dev-up-hot3g-20260706.tsv`, calibration/dev only, no held-out; selects `722` up pairs, payload `2.997GiB`, covering `42.0%` of aggregate up fallback.
+- `candidate_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T125410Z-20260706T-up-hot3g-tailpart722-n64-smoke/france-up-hot3g-tailpart722-cpu40-vram0gb`.
+- `candidate_metrics`: `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `TTFT=39035.413654ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15063531520`, `ram_ok=true`; correctness false only because n64 truncates the answer.
+- `candidate_effect`: up fallback dropped materially (`up decode=5879.531ms`, `up prompt=2520.818ms`) and cache hit rate was `65.9%`, but end-to-end token rate still tied the `2.2 tok/s` gate-only control while TTFT worsened.
+- `decision`: reject and do not expand to full dev set. Larger up hotsets still fail to convert fallback savings into token-rate improvement; stream/cache overhead and remaining down fallback cancel the gain.
+- `next_design`: close cache/hotset up streaming as a near-term path. Continue only with a non-cache grouped staging design if it can reduce launch/staging overhead by construction, or switch to model/representation/disk route.
