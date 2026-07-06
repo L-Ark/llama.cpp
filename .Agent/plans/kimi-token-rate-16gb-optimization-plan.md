@@ -88849,3 +88849,117 @@ Decision update:
   without requiring a `365.500 GiB` duplicated pack.
 - A broad prompt-independent selected pack remains possible only as a secondary
   diagnostic if the alias source proves too risky.
+
+## Phase GP2 - default-off GGUF-offset expert alias source
+
+Start time: `2026-07-06T21:20:00+0800`.
+
+Purpose:
+
+- Remove the general-prompt `pack_hit=0` path without creating a duplicated
+  `365.500 GiB` all-expert pack.
+- Keep the optimization prompt-independent by deriving the alias from GGUF
+  model metadata only, not from dev/test route traces.
+- Preserve all existing expert-pack behavior when the new env is unset.
+
+Theory:
+
+- The GGUF shards already contain every expert tensor byte.
+- The current expert-pack fast path only requires:
+  - a lookup key `(tensor, expert_idx, nbytes)`;
+  - a readable source file descriptor;
+  - a byte offset and length;
+  - alignment compatible with direct/io_uring reads.
+- If an alias index maps every expert key to the original GGUF shard path and
+  absolute byte range, a VRAM miss can be staged via the same direct/io_uring
+  code path as an expert pack miss would use, without storing another copy of
+  the payload.
+- Expected first-order benefit:
+  - converts general dev pack-miss bytes from GGUF fallback materialization to
+    the existing optimized expert source path;
+  - targets up to `1047.24 GiB` of routed dev miss bytes measured in GP1;
+  - should improve unrelated prompts much more than France, because France
+    already has `99.4%` pack coverage.
+- Upper bound remains below `5 tok/s` until measured, because GP1 only proves
+  pack coverage is a large bottleneck, not the only bottleneck.
+
+Design:
+
+1. Add a generator script:
+   `scripts/kimi-build-gguf-expert-alias-tsv.py`.
+2. Input:
+   - current IQ3_S GGUF shard glob;
+   - `--n-experts 384`;
+   - optional `--include-kind up,gate,down`.
+3. Output TSV fields:
+   - `tensor`;
+   - `expert_idx`;
+   - `nbytes`;
+   - `source_path`;
+   - `offset`;
+   - `kind`;
+   - `layer`;
+   - `type`.
+4. Offset rule:
+   - use GGUF tensor payload base offset from `GGUFReader`;
+   - per-expert offset is `base + expert_idx * expert_bytes`;
+   - require `tensor.n_bytes % n_experts == 0`;
+   - require `offset % 4096 == 0` and `nbytes` direct-read compatible, or mark
+     the row as incompatible and fail by default.
+5. Runtime env:
+   - `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=/path/to/alias.tsv`;
+   - unset by default;
+   - can be combined after current expert packs so existing pack entries remain
+     preferred and alias fills only missing keys.
+6. Runtime loading:
+   - parse TSV during `expert_pack_init_once`;
+   - open each unique `source_path` as an expert source with the same direct /
+     io_uring backend policy as pack files;
+   - append alias entries to the same `g_expert_pack.entries` vector;
+   - reuse existing duplicate-key rules, with current pack entries before alias
+     entries so current optimized pack order is preserved.
+7. Safety:
+   - exact `nbytes` remains part of the key;
+   - no mixed-quant reinterpretation;
+   - no mmap of the full GGUF shard;
+   - no extra host RAM tier by default;
+   - no changes to default behavior unless env is set.
+
+Implementation steps:
+
+1. Commit this plan before source edits.
+2. Add the alias TSV generator and local syntax checks.
+3. Patch `ggml/src/ggml-cuda/moe_stream_batch.cu`:
+   - add source ownership close handling if needed;
+   - add alias TSV parser;
+   - add source interning by path;
+   - append alias entries after pack sources;
+   - preserve current duplicate replacement behavior.
+4. Remote build:
+   `cmake --build build-cuda-batch -j$(nproc)`.
+5. Generate model-wide alias TSV on the server.
+6. Run a no-inference alias coverage audit:
+   - current packs only;
+   - current packs plus alias;
+   - expected pack coverage should become nearly `100%` for dev route traces.
+7. Run n32 dev diagnostic first:
+   - same strict 16 GB cgroup;
+   - cold start;
+   - `PROFILE=1`;
+   - no held-out test prompts.
+8. Accept only if:
+   - no OOM;
+   - answer quality passes;
+   - TTFT increase is `<=20%`;
+   - pack miss count/bytes materially drop;
+   - token rate improves or the remaining bottleneck is explicitly measured.
+9. If n32 passes, run strict n96 dev baseline.
+10. Only after candidate freeze, run held-out test.
+
+Rejection/rollback:
+
+- Revert if default behavior changes with env unset.
+- Revert if alias TSV loading mmaps or reads full GGUF shards at startup.
+- Revert if alias TSV parsing causes startup memory to exceed the 16 GB budget.
+- Revert if n32 quality regresses or TTFT exceeds the allowed bound.
+- Do not promote SOTA from GP2 until n96 dev and held-out test gates pass.
