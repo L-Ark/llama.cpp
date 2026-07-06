@@ -10,6 +10,80 @@
   - France prompt: `Please introduce France in a short paragraph.` 必须语义正确、连贯、非重复、非截断；
   - accepted SOTA 的 TTFT 不得高于当前 accepted baseline 的 `20%`；若 TTFT 超过 20% 但 token rate 有参考价值，只能标记为 `not accepted`，不得替代 SOTA。
 
+
+## 2026-07-06 最新执行计划：消灭 up/down CPU fallback
+
+- `basis`: 当前有效优化方向来自 2026-07-06 重新 profile 当前 SOTA 配置，以及 Wafer/GLM-5.2 blog 的方法论复盘。Wafer 的可移用结论不是照搬 AMD/sglang/MTP，而是系统性识别 MoE fp4 路径是否 silently fallback 到慢路径，并为具体 shape 做 kernel mapping/tuning。当前 DeepSeek vendor 的同构问题更直接：decode 阶段 `ffn_up_exps`/`ffn_down_exps` 仍主要落在 CPU fallback。
+- `profile_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T084029Z-20260706-current-sota-n96-component-profile/france-n96-profile-cpu40-vram0gb`。
+- `profile_artifacts`:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-n96-component-profile-bottleneck-20260706.json`;
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-n96-cpu-chunk-analysis-20260706.json`;
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-n96-name-profile-analysis-20260706.json`.
+- `profile_status`: diagnostic only, not accepted SOTA。`n96` 截断 France 输出，结尾停在 `European Union and`，因此 `correctness_ok=false`。该 run 只用于瓶颈拆分，不替代当前 accepted SOTA。
+- `profile_metrics`: `eval_tok_s=4.2`, `prompt_tok_s=1.8`, `TTFT=32484.00542ms`, `elapsed=54.80s`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15126450176`, `ram_ok=true`, VRAM peak 约 `31874MiB`。
+- `decode_gap`: 首 token 后 decode window 约 `22315.995ms`。若 `n96` 达到 `10 tok/s`，decode 目标时间为 `9600ms`，差额约 `12715.995ms`。
+- `component_breakdown`:
+  - decode up/down CPU fallback：`13958.513ms`，其中 `up=7088.894ms`, `down=6869.619ms`；这是最大瓶颈，单项已经大于距离 `10 tok/s` 的差额。
+  - gate one-stream excluding first prefill marker：`2445.603ms`；其中 gate expert read/cache handling `1506.058ms`，activation pinned staging/H2D `113.851ms`，gate kernel `225.747ms`，D2H/sync/scatter/dontneed 合计 `596.260ms`。
+  - cold gate prefill：`4654.732ms`，主要影响 TTFT，不是 decode token rate 的主瓶颈。
+  - gate pack/cache 状态：expert pack `hits=4308 misses=0 reads=4308 bytes=19198377984 direct_reads=4308`；VRAM cache `hits=23523 misses=1308 hit_rate=94.7%`。
+  - CPU chunk trace：`sum_chunk_ms=398898.148`, 20 线程理想摊平 `19944.907ms`, `max_thread_ms=21156.170ms`，尾部不均衡约 `1.2s`，不是主要矛盾。
+- `current_conclusion`: gate O_DIRECT pack、gate VRAM cache 和 activation H2D 已不是优先瓶颈。要接近 `10 tok/s`，必须正面解决 decode up/down CPU fallback；继续只优化 gate read、page cache 或 H2D 的理论收益不足。
+
+### Wafer/GLM 方法可移用点
+
+- `applicable`: 采用 Wafer 式的 MoE fp4 slow-path audit：逐条记录 up/down 为什么没有进入 GPU path，确认是否存在 silently fallback、guard 误判、kernel selection 缺失或 shape mapping 缺失。
+- `not_directly_applicable`: AMD MI355X、ROCm preprocessor guard、sglang、TP/DP、allreduce fusion、FP8 KV cache、MTP/spec decode 不能直接移用到当前 CUDA/vendor/单卡/16GB host RAM 约束。MTP 必须排在 up/down GPU path 跑通之后，否则会放大 CPU fallback。
+- `main_transfer`: 对 DeepSeek DS4 的 MXFP4/F8 up/down shape 做类似 GLM fp4 MoE kernel mapping/tuning，避免合法的 fp4 MoE 路径落回 CPU 或慢 kernel。
+
+### Phase W1：up/down fallback reason profile（先做，禁止跳过）
+
+- `attempt_id`: `20260706-wafer-style-updown-fallback-reason-profile`
+- `attempt_kind`: `measurement-design`
+- `hypothesis`: 当前 `13.958s/n96` decode up/down fallback 中，可能混有三类：必须 CPU 算的 fallback、本应走 GPU 但被 eligibility/guard 拒绝的 fallback、以及 GPU path 存在但由于 cache/shape/kernel selection 不满足而 silently fallback 的路径。只有先定量分类，后续代码优化才不会硬猜。
+- `required_output`: 对每次 up/down fallback 记录并汇总：`tensor`, `layer`, `role`, `expert_id`, `src0_type`, `phase`, `cne1`, `expert_bytes`, `fallback_ms`, `GPU eligible?`, `decline_reason`, `cache status`, `kernel path`, `row mapping mode`。
+- `minimum_summary`: 按 role/layer/reason 输出 calls、fallback_ms、bytes、decode/prompt split；标出 top fallback reasons 和 top tensors。
+- `implementation_rule`: 所有 instrumentation 必须 default-off；trace run 不替代 SOTA。不得改变默认计算路径。
+- `acceptance`: 产出诊断 JSON 和 plan 记录即可；性能指标只作参考。
+
+### Phase W2：修复可修的 eligibility / guard / kernel selection
+
+- `attempt_id`: `20260706-updown-gpu-eligibility-fix`
+- `attempt_kind`: `implementation-probe`
+- `hypothesis`: 如果 Phase W1 显示大量 up/down 是因为 name filter、type allowlist、kernel switch、cache lookup、shape guard、Kimi/DeepSeek guard 或 row mapping 判定而 fallback，则先修这些明确原因。Wafer blog 的核心启发是不要接受 fp4 MoE silently 走慢路径。
+- `theoretical_bound`: `n96` decode fallback 总计 `13958.513ms`。若修复 eligibility 后能把其中 `X ms` 迁到 GPU，decode tok/s 上界约为 `96 / ((22315.995 - X + gpu_overhead_ms)/1000)`。要达到 `10 tok/s`，净减少量需要约 `12716ms`，所以小于数秒的修复只能算阶段性收益。
+- `safety`: 任何 allowlist/switch 改动都必须先做数值对齐，再做性能 run。不能只让 batch_accept 增加；必须证明 CPU fallback profile 下降、输出正确且 token rate 不退化。
+- `correctness`: 对同一 expert/row 做 CPU vs GPU `max_abs/mean_abs/max_rel` 对齐；France 输出必须完整、语义正确、连贯。
+- `rollback`: 正确性失败、token rate 退化、TTFT 超 gate、RAM 超 16GB、或 fallback 未下降，全部 revert source，只保留 rejected 记录。
+
+### Phase W3：DS4 shape-specific up/down sparse GPU decode path
+
+- `attempt_id`: `20260706-ds4-updown-sparse-gpu-decode-path`
+- `attempt_kind`: `kernel-design-then-implementation`
+- `hypothesis`: 当前 gate 的 DS4 one-stream GPU path 已能数值对齐并高命中；up/down 需要按 DeepSeek DS4 的实际 decode shape 做专用 sparse MMV/grouped dispatch，而不是泛化地把全部 up/down expert 加进 gate stream cache。
+- `scope_first`: 第一版只覆盖当前 SOTA decode 热路径：`cpu_moe=40`, `KEEP_TOPK_UPDOWN=4`, `KEEP_TOPK_LAYER_RANGE=10-39`, `KEEP_TOPK_LAYER_VALUE=3`, DS4 MXFP4/F8 native GGUF，France prompt。prompt 阶段可先保留 CPU fallback，但 TTFT 不得超过 gate。
+- `must_not_repeat`: 不重复 rejected 的 naive gate+up/gate+down 全量 streaming；历史上该路径造成 cache inserts 暴涨、page/refault 恶化和 token rate 下跌。
+- `design_requirements`: 写清 tensor size、per-expert bytes、active rows、row mapping、kernel choice、H2D/D2H bytes、workspace、sync 点、理论 IO/compute 上界后才能改代码。
+- `success_metric`: decode up/down fallback 明显下降，France 正确，RAM 合规，TTFT gate 合规。若只提升 trace 局部但 end-to-end token rate 不升，不能 promoted。
+
+### Phase W4：up/down hot cache / pack / grouped dispatch
+
+- `attempt_id`: `20260706-updown-hot-cache-pack-grouped-dispatch`
+- `attempt_kind`: `optimization-after-gpu-path`
+- `precondition`: 只有 W2/W3 证明 up/down GPU 计算数值正确且能减少 fallback 后，才进入本阶段。
+- `hypothesis`: 如果 GPU up/down path 跑通后被 IO/H2D/launch/sync 卡住，则用 profile-selected hot expert cache、O_DIRECT pack、pinned staging 和 grouped dispatch 降低搬运及 launch overhead。
+- `ranking_rule`: up/down cache 不能按 calls 粗排，必须按 `fallback_ms_saved_per_byte` 排序，并验证不会破坏 gate cache hit rate。需要 sweep gate cache 让出 `0.5/1/2GiB` 给 up/down 的代价。
+- `theoretical_check`: 每个 up/down expert 约 `4.25MiB`；若仍按每次 miss 读，`n96` decode up/down logical calls `24700` 对应 `~102.5GiB` logical expert bytes，单靠直接读取不可能接近 `10 tok/s`。必须依赖缓存、复用、grouped dispatch 或减少 CPU fallback 工作量。
+- `acceptance`: 同 SOTA gate；accepted 新 SOTA 必须立即记录完整复现信息、commit、push 到 `ssd/vendor/deepseek-token-rate-16gb`，并从 pushed commit clean rebuild/rerun。
+
+### 当前执行优先级覆盖
+
+1. 先做 W1 fallback reason profile，定位 up/down fallback 的可修比例。
+2. 若存在 guard/eligibility/kernel-selection 错误，先做 W2，小步修复并数值对齐。
+3. 若 fallback 主要是缺少正确 GPU compute path，进入 W3，做 DS4 shape-specific sparse GPU decode path。
+4. 只有 GPU path 正确并减 fallback 后，才做 W4 的 cache/pack/grouped dispatch。
+5. 暂不优先做 MTP/spec decode、KV cache、TP/DP、allreduce、泛化 prompt pack，除非 up/down fallback 已被压下。
+
 ## 二次回退状态（2026-07-02）
 
 - 已执行回退：当前源码分支重置到 `5d65239a74c9512967eb557743dc3cb5d1cf6c76`（`vendor-ds4: record odirect pack sota`）。
