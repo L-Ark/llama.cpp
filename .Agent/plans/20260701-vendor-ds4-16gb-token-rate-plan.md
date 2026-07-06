@@ -3865,3 +3865,22 @@
   - `candidate_D`: alternate GGUF / smaller expert model route remains blocked by disk unless explicit cleanup/storage approval is available.
 - `acceptance_rule`: Before held-out testing, a candidate must improve `calibration_dev_set_v1` min/mean token rate versus no-prompt-specific baseline (`mean=2.18`, `min=1.8`) without correctness regression and with all runs inside 16GB including page cache. After candidate freeze, run `held_out_test_set_v1_locked`; only held-out metrics can be claimed as generalized SOTA.
 - `next_action`: produce the calibration up/down movement bound artifact from existing `dev-fallback-profile-no-prompt-specific-20260706` data if sufficient; otherwise run only the missing calibration profiles. Do not run held-out or build another large pack before the bound proves a plausible route above `5 tok/s`.
+
+
+## 2026-07-06 执行记录：up/down 总搬运 hard-bound
+
+- `attempt_id`: `20260706-updown-total-movement-hard-bound`
+- `status`: `completed_measurement_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-total-movement-hard-bound-20260706.json`
+- `source`: existing `calibration_dev_set_v1` fallback profiles from `.Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json`; no held-out prompt was used.
+- `aggregate_updown`: `13366` unique `(role,tensor,expert)` pairs, `55.474GiB` unique payload, `946.372GiB` repeated logical expert bytes, `216535.305ms` fallback across the five calibration prompts.
+- `by_role`: up has `6683` unique pairs, `27.737GiB` unique payload, `473.186GiB` repeated bytes, `123474.033ms` fallback; down has the same unique/repeated byte footprint and `93061.272ms` fallback.
+- `coverage_50`: top fallback rows covering `50.01%` of fallback still require `1857` unique pairs, `7.707GiB` unique payload, and account for `482.022GiB` repeated logical bytes.
+- `coverage_70`: `3587` unique pairs, `14.887GiB` unique payload, `657.937GiB` repeated logical bytes.
+- `coverage_90`: `6881` unique pairs, `28.559GiB` unique payload, `836.885GiB` repeated logical bytes.
+- `transfer_lower_bound`: if all repeated up/down bytes were moved over H2D every time, the pure transfer lower bound is `59.15s @16GiB/s`, `29.57s @32GiB/s`, `19.72s @48GiB/s`, or `14.79s @64GiB/s`, before kernel, synchronization, D2H/scatter, page faults, and cache bookkeeping.
+- `overlap_up_down`: all observed up layer/expert pairs also appear in down (`6683/6683`). This supports investigating paired up/down scheduling, but does not by itself solve payload size or transfer cost.
+- `missing_gate_overlap`: the source dev fallback runs did not include gate per-expert trace, so this artifact cannot claim gate/up/down overlap. A calibration gate trace is justified only if the next design needs combined gate/up/down pack/read evidence.
+- `decision`: simple persistent up/down hotset is not a credible immediate path unless capped to a very small payload and proven to preserve gate cache. Even 50% fallback coverage needs `7.7GiB`, which would steal too much of the `13.2GiB` observed gate cache or exceed available 32GB VRAM headroom; prior reduced-gate-cache probes already regressed.
+- `closed_by_bound`: do not run another naive up/down one-stream, small down-batch cache, or broad up/down resident-hotset sweep without a new mechanism that reduces total movement. The data explains why the previous probes regressed: they removed CPU fallback locally but replaced it with repeated expert movement and cache pressure.
+- `next_design_choice`: focus on `candidate_C grouped staging / paired up-down scheduling` before source implementation. The design must show how it reduces repeated movement versus `946GiB` logical bytes, how much temporary workspace it needs, and why it will not evict gate cache. If combined gate/up/down pack is considered, first run a calibration-only gate trace to measure overlap; do not use held-out.
