@@ -2,7 +2,7 @@
 
 ## Summary
 
-### 2026-07-06 Latest Active Plan: Lovedheart Q2_K Manifest Complete, Disk-Gated Validation
+### 2026-07-06 Latest Active Plan: Direct GGUF Metadata Bounds Closed for 10 tok/s
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，本节没有产生新的性能结果或 SOTA。
 
@@ -48,6 +48,16 @@ Full-shard hard-bound for `lovedheart` Q2_K:
 - Optimistic decode-only bound: using the current accepted profile basis (`138` decode tokens, `31.1806s` decode window, prior all decode up/down fallback bound `19.03s`), if fallback time scaled perfectly with expert payload, the projected decode rate is only about `5.706 tok/s`. This is not a benchmark, but it is enough to reject `lovedheart` Q2_K as a hard `10 tok/s` route.
 - Revised decision: `lovedheart` Q2_K may still be a disk-gated empirical candidate for improving above `4.4 tok/s`, but it is no longer the preferred route to the `10 tok/s` goal unless new math shows a mechanism beyond linear payload reduction.
 
+REAP and required-payload bounds:
+
+- REAP artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/reap-candidate-header-bound-20260706.json`
+- Method: HTTP Range parse single-file REAP GGUF headers for `sleepyeldrazi` Q2 uniform, Q2/Q4 mixed, and K128/K150/K180 NVFP4 candidates; infer payload by offsets; no full model downloads.
+- Best REAP metadata result: `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf`, file size `46.975316 GiB`, expert payload `38.812500 GiB`, expert/native ratio `0.283`, optimistic decode bound `7.868 tok/s`. It is below the `10 tok/s` target.
+- Other REAP bounds: Q2/Q4 mixed `43.875 GiB` expert payload and `7.565 tok/s`; K128 NVFP4 `66.844 GiB` and `6.439 tok/s`; K150 NVFP4 `76.834 GiB` and `6.048 tok/s`; K180 NVFP4 `90.457 GiB` and `5.585 tok/s`. All are below `10 tok/s`.
+- Required-payload artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ten-toks-required-payload-bound-20260706.json`
+- Derived requirement from current accepted profile: with `138` decode tokens, current decode window `31.1806s`, and all decode up/down fallback bound `19.03s`, `10 tok/s` requires decode window `13.8s`. If only fallback payload scales, the required expert/native payload ratio is `0.086674`, or about `11.879710 GiB` expert-equivalent payload versus native `137.062500 GiB`.
+- Conclusion: no current direct GGUF candidate found by metadata satisfies the `10 tok/s` payload bound. The best current metadata candidate is still about `3.27x` too large in expert-equivalent payload (`38.8125 / 11.8797`).
+
 Updated next executable plan:
 
 1. Commit and push this manifest validation artifact plus this plan update to `ssd/vendor/deepseek-token-rate-16gb` immediately.
@@ -56,7 +66,7 @@ Updated next executable plan:
 4. Correctness gates come before performance claims: France prompt must be semantically correct and coherent, then run the five-prompt set (`France`, `quantum computing`, `Python Fibonacci`, `Japan`, `climate change`) and record exact outputs.
 5. Only after correctness passes, run strict cold France benchmark under the same hard gates: `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, `TTFT <= 33617.688744 ms`, `eval_tok_s > 4.4`, and full metric/counter capture.
 6. If a compliant new SOTA appears, immediately record full reproduction metadata, commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted.
-7. For the 10 tok/s target, prioritize a new compact-representation hard-bound or a complete model whose full-shard expert payload is far below `86.671875 GiB`. If disk remains unavailable, continue metadata-only discovery; do not repeat rejected runtime patches without new math.
+7. For the 10 tok/s target, prioritize either a complete representation with expert-equivalent payload near or below `11.879710 GiB`, or a mechanism that changes the bound (true parallel expert execution, verified speculation/MTP, or another path that reduces the `19.03s` decode fallback term without correctness loss). If disk remains unavailable, continue metadata-only discovery; do not repeat rejected runtime patches without new math.
 
 ### 2026-07-06 Latest Active Plan: Broader Header Refresh Completed, Validate Sharded Compact GGUF
 

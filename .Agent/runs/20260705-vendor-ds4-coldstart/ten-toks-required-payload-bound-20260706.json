@@ -1,0 +1,89 @@
+{
+  "basis": {
+    "current_decode_window_s": 31.1806,
+    "current_eval_tok_s": 4.425828880778433,
+    "decode_tokens": 138,
+    "full_decode_updown_fallback_s": 19.03,
+    "nonfallback_decode_window_s": 12.150599999999997,
+    "target_decode_window_s": 13.8,
+    "target_tok_s": 10.0
+  },
+  "candidate_comparison": [
+    {
+      "expert_payload_gib": 38.8125,
+      "gap_to_required_ratio": 3.2671251180008682,
+      "name": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "optimistic_tok_s": 7.868001763877491,
+      "passes_10_payload_bound": false,
+      "ratio": 0.28317373461012313,
+      "source": ".Agent/runs/20260705-vendor-ds4-coldstart/reap-candidate-header-bound-20260706.json"
+    },
+    {
+      "expert_payload_gib": 43.875,
+      "gap_to_required_ratio": 3.693271872522721,
+      "name": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF/DeepSeek-V4-Flash-REAP-K128.gguf",
+      "optimistic_tok_s": 7.564842779008189,
+      "passes_10_payload_bound": false,
+      "ratio": 0.320109439124487,
+      "source": ".Agent/runs/20260705-vendor-ds4-coldstart/reap-candidate-header-bound-20260706.json"
+    },
+    {
+      "expert_payload_gib": 66.843794,
+      "gap_to_required_ratio": 5.6267191737698665,
+      "name": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4/DeepSeek-V4-Flash-REAP-K128-hybrid.gguf",
+      "optimistic_tok_s": 6.439176891328944,
+      "passes_10_payload_bound": false,
+      "ratio": 0.48768841856101086,
+      "source": ".Agent/runs/20260705-vendor-ds4-coldstart/reap-candidate-header-bound-20260706.json"
+    },
+    {
+      "expert_payload_gib": 76.834035,
+      "gap_to_required_ratio": 6.467669100457868,
+      "name": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4/DeepSeek-V4-Flash-REAP-K150-hybrid.gguf",
+      "optimistic_tok_s": 6.047757984079002,
+      "passes_10_payload_bound": false,
+      "ratio": 0.5605766376403168,
+      "source": ".Agent/runs/20260705-vendor-ds4-coldstart/reap-candidate-header-bound-20260706.json"
+    },
+    {
+      "expert_payload_gib": 86.671875,
+      "gap_to_required_ratio": 7.295790269545416,
+      "name": "lovedheart Q2_K",
+      "optimistic_tok_s": 5.70618683456704,
+      "passes_10_payload_bound": false,
+      "ratio": 0.6323529411764706,
+      "source": ".Agent/runs/20260705-vendor-ds4-coldstart/lovedheart-q2k-full-shard-header-bound-20260706.json"
+    },
+    {
+      "expert_payload_gib": 90.457092,
+      "gap_to_required_ratio": 7.614418982242057,
+      "name": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4/DeepSeek-V4-Flash-REAP-K180-hybrid.gguf",
+      "optimistic_tok_s": 5.584823567811267,
+      "passes_10_payload_bound": false,
+      "ratio": 0.6599696620761994,
+      "source": ".Agent/runs/20260705-vendor-ds4-coldstart/reap-candidate-header-bound-20260706.json"
+    },
+    {
+      "expert_payload_gib": 137.0625,
+      "gap_to_required_ratio": 11.537528798350891,
+      "name": "native accepted model",
+      "optimistic_tok_s": 4.425828880778433,
+      "passes_10_payload_bound": false,
+      "ratio": 1.0,
+      "source": ".Agent/runs/20260705-vendor-ds4-coldstart/native-vs-lovedheart-q2k-header-bound-20260706.json"
+    }
+  ],
+  "created_at_utc": "2026-07-06T01:08:43.705670Z",
+  "decision": {
+    "result": "No current metadata-only direct GGUF candidate satisfies the 10 tok/s payload bound. Need a representation/effective route at roughly <=11.9 GiB expert-equivalent payload, or a non-payload mechanism such as true parallelism/speculation that changes the bound.",
+    "sota_changed": false
+  },
+  "derived_requirement_if_only_fallback_payload_scales": {
+    "native_expert_payload_gib": 137.0625,
+    "required_expert_payload_bytes": 12755741833.81762,
+    "required_expert_payload_gib": 11.87971032580139,
+    "required_expert_payload_ratio_vs_native": 0.08667367314766176,
+    "required_scaled_fallback_s": 1.6494000000000035
+  },
+  "schema": "vendor-ds4-ten-toks-required-payload-bound-v1"
+}
