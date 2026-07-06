@@ -142,6 +142,19 @@
 - `w2_finding`: CPU-side eligibility and CUDA-side support disagree. `ggml-cpu.c` permits MXFP4/type39 for down batch through `ggml_cuda_moe_stream_supports_down_batch()`, but `ggml/src/ggml-cuda/moe_stream_batch.cu::moe_stream_type_supported()` and `launch_moe_mmvq_compact_batch()` exclude `GGML_TYPE_MXFP4`, so every attempted MXFP4 down batch is rejected internally before compute.
 - `w2_next_action`: do not promote naive MXFP4 allowlist changes. Historical large down-pack/batch probes regressed token rate despite correctness fixes. The next implementation must be default-off and guarded: first enable an MXFP4 down-batch probe behind an env flag, then add CPU-vs-GPU numerical validation/row-mapping checks for compact rows before any strict performance run. Only if fallback time falls and end-to-end France correctness/RAM/TTFT gates pass can it be considered for SOTA promotion.
 
+
+### 2026-07-06 up one-stream 诊断（rejected）
+
+- `attempt_id`: `20260706-up-one-stream-gpuonly-diagnostic`
+- `attempt_kind`: calibration-only diagnostic; held-out test set was not used.
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-one-stream-diagnostics-20260706.json`.
+- `question`: 普通 `ffn_up_exps` 是否可以简单加入 `GGML_MOE_STREAM_ONE_NAME_FILTER`，从而消灭 up CPU fallback。
+- `gate_only_reference_n32`: `/root/lfz/runs/vendor-ds4-16gb/20260706T153652Z-20260706-upgate-decline-diagnostic-n32/france-upgate-decline-cpu40-vram0gb`; no prompt-specific pack/profile; `eval_tok_s=1.9`, `prompt_tok_s=0.9`, `TTFT=38349.266845ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, truncated answer so not correctness/SOTA; fallback aggregate: up decode `4583.853ms`, up prompt `3893.623ms`, down decode `2980.180ms`, down prompt `4347.132ms`; VRAM cache hit rate `69.0%`.
+- `up_cached_gpuonly_n16`: `/root/lfz/runs/vendor-ds4-16gb/20260706T153940Z-20260706-up-one-gpuonly-diagnostic-n16/france-up-one-gpuonly-cpu40-vram0gb`; `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps`, `GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER=ffn_up_exps`; run exited `0`, proving up one-stream can take all up rows in this short calibration path; `eval_tok_s=1.6`, `prompt_tok_s=0.8`, `TTFT=38811.285754ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, truncated answer; remaining fallback is down only; VRAM cache hit rate fell to `56.7%`.
+- `up_no_cache_admit_n32`: `/root/lfz/runs/vendor-ds4-16gb/20260706T154122Z-20260706-up-one-no-cache-admit-diagnostic-n32/france-up-one-nocache-cpu40-vram0gb`; same up GPU-only fail-fast, plus `GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER=ffn_gate_exps` so up does not occupy cache slots; run exited `0`, `eval_tok_s=1.5`, `prompt_tok_s=0.8`, `TTFT=40705.368092ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, truncated answer; remaining fallback is down only; VRAM cache hit rate `44.6%`, showing no-cache up still pays too much per-expert H2D/sync cost.
+- `conclusion`: simple widening of `GGML_MOE_STREAM_ONE_NAME_FILTER` to include `ffn_up_exps` is rejected. It eliminates up CPU fallback under fail-fast, but worsens end-to-end token rate because one-stream up performs many per-expert H2D/cuda sync/cache operations and either pollutes the gate cache or repeatedly copies up experts. This path must not be promoted and should not be repeated as a SOTA attempt.
+- `next_plan_update`: move W3 priority from simple one-stream up to grouped/batched MXFP4 up decode or true fused/grouped up-gate path. Required next design must compute rows/expert bytes/H2D bytes/launch count and prove CPU-vs-GPU parity before performance runs. Down-only MXFP4 remains rejected unless paired with an up solution because previous down perf removed down fallback but did not improve token rate.
+
 ### Phase W3：DS4 shape-specific up/down sparse GPU decode path
 
 - `attempt_id`: `20260706-ds4-updown-sparse-gpu-decode-path`
