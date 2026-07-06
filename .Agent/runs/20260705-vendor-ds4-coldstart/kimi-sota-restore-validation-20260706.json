@@ -1,0 +1,111 @@
+{
+  "kind": "kimi_sota_restore_validation",
+  "date": "2026-07-06",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "remote": "wici/vendor/deepseek-token-rate-16gb",
+  "commit": "aba8fced5a9eaf5ad8c9f6db64f9154c2c521aa2",
+  "commit_subject": "vendor: restore kimi deepseek2 sota path",
+  "objective": "restore Kimi K2 SOTA support on the merged DeepSeek/Kimi vendor branch while preserving DeepSeek behavior",
+  "source_fixes": [
+    {
+      "file": "src/llama-model.cpp",
+      "summary": "Allow Kimi K2 GGUFs that report arch=deepseek2 and have a Kimi model name to keep deferred expert tensors on CPU while applying GPU layers."
+    },
+    {
+      "file": "src/llama-graph.cpp",
+      "summary": "Restore Kimi K2 top-k expert selection for the deepseek2 384-expert single-group layout without changing ordinary DeepSeek2 grouped routing."
+    },
+    {
+      "file": "src/llama-model.cpp and src/models/deepseek2.cpp",
+      "summary": "Keep Kimi K2 YaRN yarn_log_multiplier semantics at the stored 0.1000 value while preserving the DeepSeek2 conversion-factor correction for non-Kimi models."
+    },
+    {
+      "file": "ggml/src/ggml-cuda/mmvq.cu",
+      "summary": "Fix batched MMVQ to pass the per-active-expert device pointer d_src0_row instead of the base pointer d_src0."
+    }
+  ],
+  "build_validation": {
+    "host": "92.180.27.82",
+    "repo": "/root/lfz/llama.cpp-vendor-kimi",
+    "command": "cmake --build build-cuda-batch -j$(nproc)",
+    "status": "pass",
+    "binary": "build-cuda-batch/bin/llama-completion"
+  },
+  "kimi_validation": {
+    "command": "N=96 MIN_PROFILE=1 RUN=<run> scripts/kimi-phase7og-priority-repro.sh",
+    "strict_cold_start": true,
+    "memory_max": 15899996160,
+    "memory_swap_max": 0,
+    "accepted_reference": {
+      "run": "/root/lfz/runs/vendor-kimi-token-rate/20260706-010831Z-phase7oq-current-head-n96-minprofile",
+      "decode_ms": 55800.11,
+      "decode_runs": 77,
+      "token_rate": 1.38,
+      "quality": "pass"
+    },
+    "failed_before_fix": [
+      {
+        "run": "/root/lfz/runs/vendor-kimi-token-rate/20260706-035113Z-deepseek-branch-kimi-n96-verify",
+        "status": "load_oom",
+        "reason": "deferred expert GPU override did not apply to Kimi K2 arch=deepseek2, causing a 385415.44 MiB CUDA allocation attempt"
+      },
+      {
+        "run": "/root/lfz/runs/vendor-kimi-token-rate/20260706-040137Z-deepseek-branch-kimi-n96-topk-fixed-verify",
+        "status": "quality_fail",
+        "output": "France!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+        "reason": "batched MMVQ used the wrong expert pointer; YaRN/top-k/defer fixes alone were insufficient"
+      }
+    ],
+    "passing_runs": [
+      {
+        "run": "/root/lfz/runs/vendor-kimi-token-rate/20260706-041013Z-deepseek-branch-kimi-n96-mmvq-fixed-verify",
+        "exit": 0,
+        "quality": "pass",
+        "ttft_ms": 75790.51,
+        "decode_ms": 57557.16,
+        "decode_runs": 77,
+        "token_rate": 1.34,
+        "memory_peak": 15899996160,
+        "iouring_wait_us": 52344866
+      },
+      {
+        "run": "/root/lfz/runs/vendor-kimi-token-rate/20260706-041321Z-deepseek-branch-kimi-n96-mmvq-fixed-repeat",
+        "exit": 0,
+        "quality": "pass",
+        "ttft_ms": 76162.92,
+        "decode_ms": 56707.96,
+        "decode_runs": 77,
+        "token_rate": 1.36,
+        "memory_peak": 15899996160,
+        "iouring_wait_us": 51176609
+      },
+      {
+        "run": "/root/lfz/runs/vendor-kimi-token-rate/20260706-042046Z-pushed-kimi-n96-final-repeat",
+        "exit": 0,
+        "quality": "pass",
+        "ttft_ms": 76546.36,
+        "decode_ms": 56492.05,
+        "decode_runs": 77,
+        "token_rate": 1.36,
+        "memory_peak": 15899996160,
+        "iouring_wait_us": 49964973
+      }
+    ],
+    "latest_output": "France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]",
+    "decision": "Kimi correctness, 16GB RAM, TTFT, deferred expert loading, YaRN semantics, and SOTA-shaped expert-pack counters are restored. The pushed-state repeat is in the prior accepted 1.36 tok/s band but did not reproduce the fastest 1.38 tok/s run on this host; the remaining delta is dominated by iouring_wait_us variance."
+  },
+  "deepseek_validation": {
+    "build_status": "pass",
+    "prior_merge_probe": ".Agent/runs/20260705-vendor-ds4-coldstart/kimi-preserving-merge-probe-20260706.json",
+    "prior_merge_probe_status": "DeepSeek strict cold run passed correctness/RAM/TTFT constraints at the merge checkpoint, but was below the accepted 4.4 tok/s SOTA.",
+    "current_host_asset_audit": {
+      "deepseek_model_present": false,
+      "accepted_gate_pack_present": false,
+      "missing_pack": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "available_models": "Only Kimi-K2.7-Code-GGUF-IQ3_S was found under /root/lfz/models on the validation host."
+    },
+    "direct_current_commit_deepseek_run": "not_run",
+    "reason_not_run": "The validation host lacks the DeepSeek GGUF and accepted gate expert pack required by the strict DeepSeek SOTA runner.",
+    "preservation_scope": "The Kimi-specific graph/model changes are guarded by Kimi model name or by the Kimi K2 384-expert single-group layout. Ordinary DeepSeek2 grouped routing and the non-Kimi YaRN correction remain on the merged DeepSeek path. The MMVQ pointer fix is a correctness fix for batched expert rows."
+  }
+}
