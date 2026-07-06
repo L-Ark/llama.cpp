@@ -4453,3 +4453,16 @@
 - `key_finding`: up/down one-stream 变慢的根因不是 CUDA kernel 算慢，也不是 D2H/sync 主导，而是每个 expert call 都在 `src0` source movement / cache insert / host copy 上付出约 `1.37-1.52 ms`。打开 up/down 后 call 数从 gate-only 扩大到 gate+up+down，source movement 成为绝对瓶颈。
 - `decision`: reject 单 expert one-stream 扩展路线。下一步不能继续简单扩大 name_filter 或 hotset；必须做 layer-level compact/batched exact route，让同一 layer/token 的 selected up/down experts 批量搬运/计算，或把输出留在 GPU，减少 per-expert source movement 次数。
 - `next_plan`: 设计 compact exact route 的硬上界：以当前 trace 的 up/down calls、平均 cne1、expert bytes 计算，如果把每层 selected experts 合并为一次 batched transfer/compute，理论上可减少多少 src0 movement 次数和时间；只有硬上界能接近/超过 5 tok/s，才写 runtime 原型。
+
+## 2026-07-07 执行记录：up/down direct-H2D gate-cache smoke rejected
+
+- `attempt_id`: `20260707-updown-direct-h2d-gate-cache-france-smoke`
+- `status`: `rejected_slower_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-direct-h2d-gate-cache-france-smoke-reject-20260707.json`
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T190300Z-20260707-updown-direct-h2d-gate-cache-smoke-france/france-updown-direct-h2d-gate-cache-cpu40-vram0gb`
+- `prompt_scope`: France calibration trace only，`-n 64`，未使用 held-out，不是 SOTA。
+- `config_delta`: one-stream 允许 gate/up/down，但 `GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER=ffn_gate_exps`，因此 up/down 不插入 VRAM cache、只走 direct H2D；开启 `GGML_MOE_STREAM_ONE_TRACE_OUT` 和 fallback source probe。
+- `result`: exit `0`，`eval_tok_s=1.4`，`prompt_tok_s=0.7`，`TTFT=43201.89 ms`，`memory_peak_bytes=16000000000`，`ram_ok=true`，`correctness_ok=true`，`fallback_source_rows=0`。
+- `trace`: up/down `cache_hit=0`、`cache_inserted=0`，但 `src0_ms` 仍为主因：up 平均 `2.057 ms/call`、down 平均 `2.058 ms/call`；总 stage share 中 `src0_ms=91.61%`。
+- `decision`: reject。禁止 up/down cache insert 没有改善，反而从 all-cache up/down 的 `1.7 tok/s` 降到 `1.4 tok/s`。瓶颈不是单纯 cache 抖动，而是每 expert source movement 本身太贵。
+- `next_plan`: 只剩 compact/batched exact route 值得继续：同一 layer/token 的 topK experts 必须合并搬运/计算，减少 `9357 up + 9357 down` 这类 per-expert calls；否则即使 CPU fallback 归零，token rate 也会下降。
