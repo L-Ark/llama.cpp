@@ -4866,3 +4866,15 @@
 - memory: memory_peak_bytes=1008803840，memory_current_bytes=7364608，oom=0，oom_kill=0，因此 strict RAM gate pass。
 - partial_compare_result: records 4246，compare rows 3786，diff_count=67936，max_abs=9.40296984，mean_abs_max=2.49075008；q2 payload 的 src0 compressed bytes aggregate 58696704，q80 bytes 13858944。
 - decision: reject。naive q2 ternary 丢失 magnitude 信息，op-level partial compare 出现大量非零误差，不能进入 writeback 或 token-rate benchmark，也不能作为 generalized SOTA。后续 compressed candidate 必须先在 compare-only gate 下证明数值误差可接受，再谈性能。
+
+
+## 2026-07-07 下一步 design-analysis plan：post-q2 MXFP4 codebook feasibility
+
+- attempt_id: 20260707-post-q2-mxfp4-codebook-feasibility
+- status: planned_before_experiment
+- why_now: q2 ternary partial compressed candidate 已被 op-level compare 拒绝，说明盲目压低到 2-bit 会破坏 up/down 数值。继续写 q3/q4 kernel 前，必须先用现有 exact sidecar payload 量化 MXFP4 nibble/value 分布、候选 codebook 的理论误差和可达压缩比，避免继续做低收益 source edit。
+- scope: analysis only，不改源码、不写回 logits、不跑 token-rate promotion；只读取 calibration/dev derived exact partial sidecar payload，held-out locked test set 仍不使用。
+- input_payload: .Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.partial_exact_payload.bin
+- candidate_metrics: 统计 nibble/value 频率、zero/nonzero 比例、按 up/down tensor 分组；评估 q2 ternary、q3 small-codebook、q3 magnitude-codebook、sparse-zero/keep-top-magnitude 等候选的 per-weight absolute/squared error proxy 和 payload bytes/block。
+- decision_rule: 若低位候选的 value-level 误差仍明显大，不能再进入 writeback 或 token-rate benchmark；只有当理论误差显著小于 q2 且压缩比足以减少 CPU fallback/host movement，才允许写下一轮 default-off compare kernel。否则转向非 lossy 路线，例如更高覆盖的 exact resident layout、CPU fallback batching/fusion、或减少 fallback 次数的 routing/cache 策略。
+- push_rule: 该 analysis 结果也必须记录 artifact 和 plan，并 push 到 ssd/vendor/deepseek-token-rate-16gb。
