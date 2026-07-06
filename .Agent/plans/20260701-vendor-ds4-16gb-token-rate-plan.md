@@ -3898,3 +3898,18 @@
   - `GGML_MOE_STREAM_ONE_REQUIRE_CACHE_ADMIT_FILTER=<names>`: for matching tensors, if a `(tensor,expert)` is not admitted by the profile and not already cached, one-stream returns `false`, leaving that route on CPU fallback instead of uncached GPU streaming.
 - `first_probe`: generate calibration-only top hotset TSV from existing dev fallback CSVs, start with `0.5-1.0GiB`, and test only calibration/dev prompts. Do not use held-out and do not promote unless dev-set min/mean improves over no-prompt-specific baseline (`mean=2.18`, `min=1.8`) with correctness/RAM/TTFT gates.
 - `rollback`: if default-off guard changes existing gate-only behavior, if hotset profile causes gate cache miss cliff, or if end-to-end token rate regresses, reject and keep only diagnostic records if default-off behavior is proven safe.
+
+
+## 2026-07-06 执行记录：up hot1g gated stream rejected/tie
+
+- `attempt_id`: `20260706-up-hot1g-gated-stream-n64`
+- `status`: `rejected_tie_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-hot1g-gated-stream-n64-rejection-20260706.json`
+- `source_change`: implemented default-off `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE_APPLIES_FILTER` and `GGML_MOE_STREAM_ONE_REQUIRE_CACHE_ADMIT_FILTER` in `moe_stream.cu`. Unset behavior is unchanged; default-off gate-only control matched prior `n64` behavior.
+- `profile`: `.Agent/profiles/vendor-ds4/calib-dev-up-hot1g-20260706.tsv`, derived only from `calibration_dev_set_v1`, no held-out. It selects `240` up `(tensor,expert)` pairs, `0.996GiB` payload, covering `26574.059ms` or `21.5%` of aggregate up fallback.
+- `candidate_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T123541Z-20260706T-up-hot1g-gated-stream-n64-smoke/france-up-hot1g-gated-cpu40-vram0gb`.
+- `candidate_metrics`: `eval_tok_s=2.2`, `prompt_tok_s=1.0`, `TTFT=36769.252077ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15074291712`, `ram_ok=true`, `correctness_ok=true` for short n64 smoke.
+- `candidate_effect`: up fallback decreased versus default-off control (`up decode 7643.444ms -> 7201.154ms`, `up prompt 3953.053ms -> 3271.456ms`), but VRAM cache hit rate dropped from `78.3%` to `58.5%`, so end-to-end token rate only tied.
+- `defaultoff_control`: `/root/lfz/runs/vendor-ds4-16gb/20260706T123731Z-20260706T-hotset-gated-defaultoff-gate-only-n64-control/france-defaultoff-gate-only-n64-cpu40-vram0gb`, `eval_tok_s=2.2`, `prompt_tok_s=1.0`, `memory_peak_bytes=16000000000`, `ram_ok=true`; correctness false only due n64 truncation.
+- `decision`: reject 1GiB up hotset as performance candidate and do not expand to full dev set. The mechanism is useful as default-off diagnostic/control, but a small resident up hotset still steals enough cache/movement budget to erase fallback savings.
+- `next_design`: do not try larger up hotsets unless a gate-cache partition or separate pool prevents hit-rate collapse. The next credible route is a cache-partitioned experiment or a non-cache grouped staging design; both need a hard bound before another full cold benchmark.

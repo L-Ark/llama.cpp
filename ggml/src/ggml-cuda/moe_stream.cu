@@ -306,10 +306,23 @@ static bool moe_stream_cache_admit_name_matches(const char * filter, const char 
     return false;
 }
 
+static bool moe_stream_cache_admit_profile_applies(const char * tensor) {
+    static const char * applies_filter = std::getenv("GGML_MOE_STREAM_CACHE_ADMIT_PROFILE_APPLIES_FILTER");
+    return !applies_filter || !applies_filter[0] || moe_stream_cache_admit_name_matches(applies_filter, tensor);
+}
+
+static bool moe_stream_one_require_cache_admit(const char * tensor) {
+    static const char * require_filter = std::getenv("GGML_MOE_STREAM_ONE_REQUIRE_CACHE_ADMIT_FILTER");
+    return require_filter && require_filter[0] && moe_stream_cache_admit_name_matches(require_filter, tensor);
+}
+
 static bool moe_stream_cache_admit_allows(const char * tensor, int64_t expert) {
     static const char * name_filter = std::getenv("GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER");
     if (name_filter && name_filter[0] && !moe_stream_cache_admit_name_matches(name_filter, tensor)) {
         return false;
+    }
+    if (!moe_stream_cache_admit_profile_applies(tensor)) {
+        return true;
     }
 
     static std::mutex mu;
@@ -3689,7 +3702,13 @@ extern "C" bool ggml_cuda_moe_stream_one(
             }
         }
         void *inserted = nullptr;
-        if (moe_stream_cache_admit_allows(src0_name, expert_index)) {
+        const bool cache_admit = moe_stream_cache_admit_allows(src0_name, expert_index);
+        if (!cache_admit && moe_stream_one_require_cache_admit(src0_name)) {
+            g_vcache.misses.fetch_add(1, std::memory_order_relaxed);
+            release_slot(s);
+            return false;
+        }
+        if (cache_admit) {
             inserted = vram_cache_insert(cache_key, copy_src, src0_bytes, st);
         } else {
             g_vcache.misses.fetch_add(1, std::memory_order_relaxed);
