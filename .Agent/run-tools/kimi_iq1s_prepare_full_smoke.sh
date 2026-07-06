@@ -21,8 +21,9 @@ set -euo pipefail
 : "${VALIDATE_PARTS:=1}"
 : "${RESUME_DOWNLOAD:=1}"
 : "${MIN_FREE_AFTER_DOWNLOAD_GIB:=20}"
+: "${CURL_BIN:=curl}"
 
-IQ1S_BYTES=204430872480
+: "${IQ1S_BYTES:=204430872480}"
 GIB=1073741824
 MIN_FREE_AFTER_DOWNLOAD_BYTES=$((MIN_FREE_AFTER_DOWNLOAD_GIB * GIB))
 
@@ -54,6 +55,14 @@ PART_BYTES=(
   41875931136
   36927147936
 )
+
+if [ "${KIMI_IQ1S_SYNTHETIC_DOWNLOAD_TEST:-0}" = "1" ]; then
+  IQ1S_BYTES="${KIMI_IQ1S_SYNTHETIC_IQ1S_BYTES:-16}"
+  PART_URLS=("synthetic://iq1s-part1")
+  PART_BYTES=("$IQ1S_BYTES")
+  PRESERVE_PATHS=()
+  DELETE_CANDIDATES=()
+fi
 
 log() {
   printf '[kimi_iq1s_prepare] %s\n' "$*"
@@ -281,10 +290,10 @@ download_model() {
     local curl_rc
     set +e
     if [ "$part_offset" -gt 0 ]; then
-      curl -L --fail --retry 5 --retry-delay 5 -r "${part_offset}-" "${PART_URLS[$i]}" >> "$tmp_path"
+      "$CURL_BIN" -L --fail --retry 5 --retry-delay 5 -r "${part_offset}-" "${PART_URLS[$i]}" >> "$tmp_path"
       curl_rc=$?
     else
-      curl -L --fail --retry 5 --retry-delay 5 "${PART_URLS[$i]}" >> "$tmp_path"
+      "$CURL_BIN" -L --fail --retry 5 --retry-delay 5 "${PART_URLS[$i]}" >> "$tmp_path"
       curl_rc=$?
     fi
     set -e

@@ -93362,3 +93362,53 @@ GP38 execution result:
   - full IQ1_S n32 smoke remains gated by disk capacity or explicit deletion
     approval;
   - no SOTA or token-rate claim is possible from this phase.
+
+## GP39: synthetic test for IQ1_S resumable curl rollback
+
+Timestamp: `2026-07-07T14:10:00+0800`.
+
+Status: planned before execution.
+
+Purpose:
+
+- GP38 implemented rollback for partial bytes written by a failed `curl`, but
+  the default dry-run cannot exercise that branch.
+- Before using `EXECUTE=1` on the real 204430872480-byte IQ1_S asset, create a
+  small synthetic test that proves:
+  - a failing transfer can append partial bytes;
+  - the script detects non-zero curl exit;
+  - the temp file is truncated back to its pre-request size;
+  - the command exits non-zero and leaves no corrupt resume offset.
+
+Implementation:
+
+- Add test-only knobs to
+  `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`:
+  - `CURL_BIN`, defaulting to `curl`;
+  - `KIMI_IQ1S_SYNTHETIC_DOWNLOAD_TEST=1`, which replaces the real part list
+    with one tiny synthetic part and clears preserve/delete inventories;
+  - `KIMI_IQ1S_SYNTHETIC_IQ1S_BYTES`, defaulting to a small byte count for the
+    synthetic part.
+- Add `.Agent/run-tools/kimi_iq1s_test_curl_rollback.sh`:
+  - creates a temp model directory;
+  - injects a fake curl that writes partial stdout and exits non-zero;
+  - runs the prepare script with `EXECUTE=1`, `VALIDATE_PARTS=0`,
+    `RUN_SMOKE=0`, and synthetic mode;
+  - asserts the command failed for the expected reason;
+  - asserts `MODEL_PATH.tmp` size is exactly `0` after rollback.
+
+Validation:
+
+1. Local syntax:
+   `bash -n .Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+2. Local syntax:
+   `bash -n .Agent/run-tools/kimi_iq1s_test_curl_rollback.sh`.
+3. Remote synthetic rollback test:
+   `.Agent/run-tools/kimi_iq1s_test_curl_rollback.sh`.
+
+Acceptance:
+
+- If the synthetic rollback test passes, commit and push the test hook and test
+  script as reproducibility infrastructure.
+- If it fails, fix the downloader before any real IQ1_S download attempt.
+- No SOTA or token-rate claim is possible from this phase.
