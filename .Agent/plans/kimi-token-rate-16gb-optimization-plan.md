@@ -91713,3 +91713,137 @@ Decision:
 - The next primary branch must reduce bytes more aggressively than AesSedai
   `IQ2_XXS`, avoid reading most expert bytes, or use a verified speculative /
   draft-token mechanism.
+
+## GP26: prompt-agnostic prediction / speculative decode feasibility
+
+Timestamp: `2026-07-07T05:35:00+0800`.
+
+Status: planned; execute only on branch
+`vendor/kimi-speculative-general-token-rate-16gb`.
+
+Branch rule:
+
+- Continue Kimi work on a branch whose name starts with `vendor` and contains
+  `kimi`.
+- Current branch for this phase:
+  `vendor/kimi-speculative-general-token-rate-16gb`.
+- Push every accepted plan/result/code commit to:
+  `wici/vendor/kimi-speculative-general-token-rate-16gb`.
+
+Rationale:
+
+- GP25 showed that a prompt-agnostic selected lower-byte hotset is still far
+  from the byte reduction needed for `>5 tok/s`.
+- The current decode bottleneck remains dependent expert movement. Pure IO can
+  reach about `10.0-10.4 GiB/s` in deeper standalone benches, but the runtime
+  stream stalls because each layer only exposes the next exact expert set after
+  the preceding token/layer computation.
+- If a draft/prediction mechanism can accurately expose one or more future
+  tokens, it can also expose likely future route/expert demand earlier. This
+  may increase sustained IO queue depth, prefetch more experts before they are
+  on the critical path, and potentially let multiple accepted tokens amortize
+  one expensive Kimi forward pass.
+
+Hard constraints for this phase:
+
+- Use `dev` prompts only for tuning and feasibility analysis.
+- Do not inspect or tune on held-out `test` prompts during GP26 exploration.
+- Keep all proposed runtime experiments cold-start and under the same
+  `MemoryMax <= 16 GB`, `MemorySwapMax=0` constraints before claiming any
+  result.
+- Any candidate promoted from GP26 must still pass:
+  - France semantic regression;
+  - general-prompt quality suite;
+  - TTFT increase <= 20%;
+  - total host RAM <= 16 GB including page cache;
+  - reproducible command, commit, cgroup, prompt, model paths, and output.
+- A failed or low-acceptance exploration is useful evidence, but is not SOTA
+  and must not be presented as a speedup.
+
+Design step 1: inspect available prediction mechanisms
+
+- Inspect upstream llama.cpp vendor code paths already present in this tree:
+  - `examples/speculative`;
+  - `examples/speculative-simple`;
+  - `examples/lookup`;
+  - `examples/lookahead`;
+  - `common/ngram-cache.*`;
+  - `common/ngram-map.*`.
+- Record which mechanisms require an external draft model and which can run
+  without downloading additional models.
+- Current asset state to verify before implementation:
+  - remote `/root/lfz/models` has the Kimi IQ3_S assets;
+  - no known Kimi-compatible draft model is present locally;
+  - no lower-byte full GGUF is present locally.
+
+Design step 2: acceptance-rate bound before runtime changes
+
+- Build a small, reproducible dev-only analyzer that estimates ngram/lookup
+  draft acceptance from existing generated dev outputs.
+- Inputs:
+  - dev prompt outputs already recorded under `.Agent/runs`;
+  - generated token text, or token ids if available;
+  - no held-out test outputs.
+- Metrics:
+  - average accepted draft length;
+  - distribution of accepted run lengths;
+  - estimated accepted tokens per Kimi verify step;
+  - prompt-by-prompt acceptance variability;
+  - whether acceptance is high enough to plausibly move from `~1.38 tok/s`
+    toward `>5 tok/s`.
+- Theoretical gate:
+  - To reach `5 tok/s` from `1.385 tok/s`, the end-to-end improvement factor is
+    about `3.61x`.
+  - If speculative verification has no extra IO/compute cost, this requires
+    roughly `3.6` accepted output tokens per expensive Kimi step.
+  - With realistic draft overhead, verification overhead, route/prefetch
+    overhead, and rejection cost, the practical required average accepted length
+    is higher. Treat `<3 accepted tokens/step` as unlikely to reach the target
+    by itself.
+
+Design step 3: model-based draft option
+
+- If no draft model exists, do not download one without first recording:
+  - expected disk size;
+  - host RAM impact;
+  - VRAM impact;
+  - TTFT impact;
+  - whether it can run under 16 GB host RAM and 32 GB VRAM together with Kimi.
+- If a draft model is added later, run a cold-start dev-only acceptance
+  experiment before integrating it with expert prefetch.
+- Reject model-based speculation if the draft model consumes enough VRAM to
+  reduce Kimi expert cache capacity and the net predicted rate is below the
+  current SOTA.
+
+Design step 4: route-prediction / IO-depth option
+
+- If text-level acceptance is too low for full speculative decoding, evaluate
+  whether predicted future tokens/routes can still improve expert prefetch.
+- Bound calculation:
+  - required extra lookahead in layers/tokens;
+  - expected queue depth increase;
+  - expected sustained SSD-to-VRAM throughput compared with current runtime;
+  - additional false-prefetch bytes and VRAM churn.
+- Reject this route if false-prefetch bytes push total transferred bytes above
+  the current SOTA path or if TTFT rises by more than 20%.
+
+Execution records for GP26:
+
+- Plan/report directory:
+  `.Agent/runs/20260707-gp26-speculative-feasibility/`.
+- Required files:
+  - `report.md`;
+  - analyzer script path and exact command;
+  - JSON/CSV metrics for acceptance-rate estimates;
+  - remote asset inventory;
+  - code-path inspection notes;
+  - decision: continue to runtime prototype, obtain draft asset, or reject.
+
+Acceptance / commit rule:
+
+- Commit and push this plan before running new GP26 experiments.
+- Commit and push GP26 exploratory tooling/results if they are reproducible,
+  even when they reject an approach, because the rejection prevents repeated
+  dead-end work.
+- Do not modify runtime decode behavior until the GP26 report shows a plausible
+  route to `>5 tok/s` under the hard constraints.
