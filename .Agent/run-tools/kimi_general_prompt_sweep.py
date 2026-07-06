@@ -43,6 +43,9 @@ def write_sweep_metadata(out_root: pathlib.Path, prompt_file: pathlib.Path, prom
 
 def run_one(repo: pathlib.Path, out_root: pathlib.Path, row, args):
     run_dir = out_root / row["id"]
+    if args.skip_existing and ((run_dir / "metrics.json").exists() or (run_dir / "failed.json").exists()):
+        print(f"=== {row['id']} skipped_existing ===", flush=True)
+        return 0
     cmd = [
         "systemd-run",
         "--wait",
@@ -147,6 +150,7 @@ def main():
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("--max-prompts", type=int, default=0)
     parser.add_argument("--keep-going", action="store_true")
+    parser.add_argument("--skip-existing", action="store_true")
     parser.add_argument("--memory-max", default="15900000000")
     parser.add_argument("--runtime-max-sec", default="900")
     parser.add_argument("--vram-mib", default="15000")
