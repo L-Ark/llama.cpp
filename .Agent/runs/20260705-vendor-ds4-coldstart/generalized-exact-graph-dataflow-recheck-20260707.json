@@ -1,0 +1,106 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-exact-graph-dataflow-recheck-20260707.json",
+  "date": "2026-07-07",
+  "decision": {
+    "next_allowed_work": "Do not write a graph/dataflow runtime patch from current evidence. The remaining plausible classes are external verifier/speculative decoding with high acceptance, or a representation/model route with correctness/top1 proof. If those are unavailable, record that generalized >5 needs a new dataflow interface rather than local stream/cache tuning.",
+    "required_reopen_proof": [
+      "A source/dataflow probe showing graph_gate_output_input_available > 0 or equivalent retained CUDA gate/topk/weights path in accepted graph.",
+      "A joint bound showing gate source + up/down movement are removed/hidden enough for all calibration prompts to exceed 5 tok/s with overhead margin.",
+      "Fixed-text top1/correctness proof before any strict cold candidate run.",
+      "16GB cgroup and 32GB VRAM accounting including gate cache/page cache/workspace."
+    ],
+    "runtime_source_patch_allowed_now": false,
+    "sota_changed": false,
+    "strict_cold_benchmark_allowed_now": false,
+    "summary": "Current DeepSeek4 graph/dataflow cannot be reopened for generalized >5 as-is. The graph still does not expose a retained gate output to build_expert_mix; DS4_HOT recomputes gate and carries extra hot tensor payload. Since up/down-only removal is not enough for generalized 5, this missing retained-gate/source-reuse interface is a hard blocker, not an implementation detail."
+  },
+  "generalized_target_evidence": {
+    "full_updown_aggregate": {
+      "40": {
+        "max_zero_overhead_tok_s_if_decode_updown_removed": 5.6164196510621895,
+        "mean_margin_ms_after_reaching_5": -1660.134613487604,
+        "mean_zero_overhead_tok_s_if_decode_updown_removed": 4.916419052318928,
+        "min_margin_ms_after_reaching_5": -12163.902705882138,
+        "min_zero_overhead_tok_s_if_decode_updown_removed": 3.59218660228526,
+        "prompts_below_5_even_with_decode_updown_removed": [
+          "quantum",
+          "fibonacci"
+        ]
+      },
+      "43": {
+        "max_zero_overhead_tok_s_if_decode_updown_removed": 6.151691258760012,
+        "mean_margin_ms_after_reaching_5": 920.1857037324713,
+        "mean_zero_overhead_tok_s_if_decode_updown_removed": 5.432916872694881,
+        "min_margin_ms_after_reaching_5": -7960.465633378699,
+        "min_zero_overhead_tok_s_if_decode_updown_removed": 3.919371077693945,
+        "prompts_below_5_even_with_decode_updown_removed": [
+          "fibonacci"
+        ]
+      }
+    },
+    "residual_decision": {
+      "next_allowed_work": "Run no source edits until a joint hard-bound exists. Evaluate exact graph/dataflow routes for retaining gate results and computing up/down without repeated source movement, or a representation route with top1/correctness proof. If neither has a hard bound above generalized 5 with overhead margin, record the blocker.",
+      "reason": "A runtime patch that only moves up/down fallback to a new exact path is unlikely to produce stable generalized >5 tok/s. The next candidate must remove or hide both up/down and gate/source/residual costs, or reduce model/representation payload while preserving correctness.",
+      "source_edit_allowed_now": false,
+      "summary": "Generalized 5 tok/s requires more than a narrow up/down fallback implementation. Ideal decode up/down removal leaves quantum/fibonacci below target under the stricter 40-layer bound and leaves fibonacci below target even under 43-layer sensitivity. Gate source/cache time is a same-order bottleneck in trace data."
+    }
+  },
+  "inputs": {
+    "generalized_full_updown_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json",
+    "generalized_residual_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-residual-bottleneck-after-updown-bound-20260707.json",
+    "previous_france_exact_graph_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/exact-graph-dataflow-current-hard-bound.json"
+  },
+  "old_graph_bound_reused_facts": {
+    "reason": "The current exact graph/dataflow candidates all fail a hard gate: current DS4 graph has no retained gate output, current DS4_HOT recomputes gate and inflates payload, sparse retained top64 has only 18.947 ms theoretical margin and no dataflow proof, exact hot/full kernels are 3-5x too slow for the relevant bounds, and full payload/layer placement violates VRAM or gate-cache tradeoffs.",
+    "reopen_conditions": [
+      "A placement probe must show a real retained CUDA gate/up/down path in the accepted DeepSeek4 graph: graph_gate_output_input_available > 0, hot_active/hot_ready > 0, and hidden scheduler copies counted.",
+      "A compact sparse branch must prove final combine/scheduler/launch/sync overhead with meaningful margin above the 18.947 ms paper bound; a one-copy lower bound that leaves only 1.75 ms margin is not enough.",
+      "An exact kernel route must demonstrate fixed-text top1 and measured effective bandwidth above the relevant threshold, e.g. >246 GiB/s for top128 before integration overhead, with H2D/D2H/scatter/sync included.",
+      "A full-MoE route must provide a new payload/VRAM/RAM proof; current 21.806 GiB unique up/down payload and 16GB page-cache limit reject full residency.",
+      "Any reopened source probe must be default-off, pass fixed-text top1 under strict 16GB/no-swap cgroup, preserve the default accepted path, and only then proceed to strict cold France benchmarking."
+    ],
+    "runtime_patch_allowed_now": false
+  },
+  "prompt_scope": "No new prompt run; uses calibration-only generalized bounds and source audit. held_out_test_set_v1_locked not used.",
+  "source_commit": "54cb3318a8ab950a8cb84d228348c6af5e4ec3b2",
+  "source_dataflow_evidence": {
+    "src/llama-deepseek4-hot.cpp": [
+      {
+        "line": 276,
+        "text": "hot manager adds gate/up/down tensors from profile rather than reusing retained graph gate output"
+      },
+      {
+        "line": 447,
+        "text": "extract_subset builds hot gate/up/down tensor subsets, adding payload pressure"
+      }
+    ],
+    "src/models/deepseek4.cpp": [
+      {
+        "line": 222,
+        "text": "build_expert_mix receives selected IDs and weights, not a retained gate output tensor. Current DS4_HOT_DISPATCH therefore computes gate again."
+      },
+      {
+        "line": 224,
+        "text": "const bool graph_gate_output_input_available = false;"
+      },
+      {
+        "line": 468,
+        "text": "const bool graph_gate_output_input_available = false;"
+      },
+      {
+        "line": 979,
+        "text": "build_expert_mix(cur_ffn, selected_experts, weights, layer, il)"
+      },
+      {
+        "line": 1156,
+        "text": "hot/full path computes gate_up or gate/up from expert weights inside build_expert_mix"
+      },
+      {
+        "line": 1225,
+        "text": "selected_experts = ggml_top_k(ctx0, selection, n_expert_used); weights derived after selection"
+      }
+    ]
+  },
+  "status": "rejected_before_source_change",
+  "why_recheck_needed": "The active target is generalized random prompts >5 tok/s, not France-only 10 tok/s. New generalized bounds show up/down-only removal is insufficient, so exact graph/dataflow would need to jointly remove or hide gate source and up/down movement."
+}

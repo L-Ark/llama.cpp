@@ -4196,3 +4196,15 @@
 - `observation`: gate/source trace 与 up/down fallback 同量级。示例：`fibonacci` 的 gate `src0_ms` trace total 为 `48157.035 ms`，decode up/down fallback 为约 `48085.4 ms`；`quantum` gate `src0_ms=38041.296 ms`，decode up/down fallback 约 `49631.8 ms`。注意 gate trace 未按 phase 分离且有 instrumentation，只能作为 bottleneck 量级，不直接从 eval decode window 扣除。
 - `decision`: 不允许写只替换 up/down fallback 的 runtime patch 来 claim generalized `>5 tok/s`。下一步必须先做 joint hard-bound：要么 exact graph/dataflow 证明可以同时减少/隐藏 gate source + up/down movement，要么 representation/top1 proof 证明能整体减少 payload 并保持 correctness。
 - `next_allowed_work`: 评估 current graph 是否能保留 gate results 并避免 up/down repeated source movement；若当前 graph 不具备该数据流，则记录为 generalized 5 的 blocker。另一条可重开路线是 representation，但必须先有 fixed-text top1/correctness proof；4Expert 已因 correctness 失败暂时关闭。
+
+## 2026-07-07 hard-bound：generalized exact graph/dataflow recheck rejected
+
+- `attempt_id`: `20260707-generalized-exact-graph-dataflow-recheck`
+- `status`: `rejected_before_source_change`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-exact-graph-dataflow-recheck-20260707.json`
+- `prompt_scope`: 未运行新 prompt；使用 calibration-only generalized bounds 和 source audit；未使用 held-out。
+- `why_recheck`: 当前目标是随机/generalized prompt 在 16GB RAM + 32GB 5090 上稳定 `>5 tok/s`，不是 France-only 10 tok/s。新的 generalized bound 证明 up/down-only removal 不足，因此 graph/dataflow 若要重开，必须同时减少/隐藏 gate source 和 up/down movement。
+- `source_audit`: `src/models/deepseek4.cpp` 仍然 hardcode `graph_gate_output_input_available=false`，`build_expert_mix` 接收的是 `selected_experts` 和 `weights`，不是可复用 retained gate output；当前 `DS4_HOT_DISPATCH` 会重新计算 gate/up/down，并通过 hot tensor subset 增加 payload/VRAM 压力。
+- `decision`: 不允许从当前证据写 exact graph/dataflow runtime patch。因为 generalized 5 需要 joint gate/source + up/down reduction，而当前图缺少 retained-gate/source-reuse 接口；这不是调参问题，而是数据流 blocker。
+- `reopen_condition`: 需要先有 source/dataflow probe 证明 accepted graph 中存在 retained CUDA gate/topk/weights path，或者新增接口后有 hard-bound 证明所有 calibration prompt 在计入 overhead、16GB page cache、gate cache、workspace 后仍 `>5 tok/s`，并且 fixed-text top1/correctness 先过。
+- `next_allowed_work`: 剩余可行类别转为 external verifier/speculative decoding 高接受率路线，或 representation/model 路线的 correctness/top1 proof。若这些也没有证据，则应记录 generalized `>5 tok/s` 需要新的 dataflow interface，而不是继续 stream/cache 局部调优。
