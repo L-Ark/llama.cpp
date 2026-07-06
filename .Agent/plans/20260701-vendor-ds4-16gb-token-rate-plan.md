@@ -4778,3 +4778,18 @@
 - `repr_report_gate`: strict 16GB/no-swap cgroup 内开启旧 exact hot pool compare + 新 repr manifest/report，top1 exit `0`，`same_top1=145/145`，`max_abs=0`，`memory_peak_bytes=7547629568`，无 OOM。
 - `probe_result`: hot-batch compare `compare_ran=3786`，`compare_ok=3786`，`diff_count=0`，`max_abs=0`；repr metadata hit/coverage rows `4246/37700`，`repr_src0_bytes_projected=18922078208`，`repr_resident_original_bytes=18922078208`，`repr_resident_compressed_bytes=4730519552` in aggregate probe records。
 - `decision`: 该改动只是 compressed/partial representation 的 parser/report scaffold，不是 SOTA，也不允许 promotion。下一步必须生成真实 compressed/partial payload，并在 compare-only mode 下验证 loader/kernel mapping 后，才能考虑写回或性能 benchmark。
+
+## 2026-07-07 下一步 source-edit plan：partial exact row-range compare probe
+
+- `attempt_id`: `20260707-partial-exact-rowrange-compare-probe`
+- `status`: `planned_before_source_edit`
+- `why_now`: report-only parser 已证明 extended manifest 可以在 strict 16GB 内不改 logits 地统计 coverage。下一步需要验证真正小 payload resident 的 loader/kernel 映射；由于 DeepSeek expert 权重已经是 MXFP4，不能直接假设 4x/8x 低位压缩正确，先用 exact row-range partial payload 建立正确的 row offset、pool、kernel、compare 基础设施。
+- `scope`: diagnostic only，不是 SOTA，不允许 promotion；不写回 logits，不清空 CPU fallback counts。默认关闭，未设置新 env 时默认路径必须保持不变。
+- `candidate_env`:
+  - `GGML_MOE_STREAM_ONE_DIRECT_REPR_POOL_MIB`: partial/exact repr pool 预算；未设置则只做 metadata report。
+  - `GGML_MOE_STREAM_ONE_DIRECT_REPR_PREFILL_LIMIT`: 限制 prefill entry 数量，先小范围 smoke。
+  - `GGML_MOE_STREAM_Q80_PARTIAL_REPR_PROBE_OUT`: partial compare CSV。
+- `manifest_semantics`: 使用现有 extended manifest；`repr_type=exact_mxfp4_partial` 表示 `model_offset` 已指向 partial row payload 起点，`row0/row_count` 表示输出列范围，`compressed_nbytes == original_nbytes == row_count * nb01`。本轮不做 q80/lowbit payload 写回。
+- `kernel_mapping`: 对每个命中的 expert/token row，只计算 `row_count` 个输出列；GPU 输出的 local col `c` 对应 CPU fallback dst 的 global col `row0 + c`。compare-only 只比较该范围，`max_abs` 必须为 `0`。
+- `validation_gate`: build `llama-results`；default-off fixed-text top1 pass；partial exact repr smoke strict 16GB/no-swap，top1 `same_top1=145/145`，partial compare `diff_count=0`，memory peak <=16GB，无 OOM。
+- `decision_rule`: 如果 partial exact compare 失败，先修 row stride/offset/transpose 映射；如果通过，再设计真实 compressed payload 或 lowbit approximation 的 op-level correctness gate。partial exact 本身不用于 token-rate benchmark，因为它不能替代完整 up/down fallback。
