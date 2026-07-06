@@ -165,6 +165,19 @@
 - `design_requirements`: 写清 tensor size、per-expert bytes、active rows、row mapping、kernel choice、H2D/D2H bytes、workspace、sync 点、理论 IO/compute 上界后才能改代码。
 - `success_metric`: decode up/down fallback 在 prompt set 上明显下降，France 正确且五个 baseline prompts 的语义/代码输出不退化，RAM 合规，TTFT gate 合规。若只提升单个 prompt 或 trace 局部但 prompt-set end-to-end token rate 不升，不能 promoted。
 
+
+### 2026-07-06 up MXFP4 batch probe（rejected, source reverted）
+
+- `attempt_id`: `20260706-up-mxfp4-batch-probe`
+- `attempt_kind`: default-off implementation probe; calibration-only; held-out test set was not used.
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-batch-probe-rejected-20260706.json`.
+- `source_status`: rejected source diff was saved inside the artifact and then reverted. No promoted code path remains from this attempt.
+- `design`: temporarily added `GGML_MOE_STREAM_UP_BATCH_PROBE` to allow ordinary `ffn_up_exps` MXFP4 tensors through the existing compact batch wrapper. `parity` mode ran GPU batch and returned `false` so CPU fallback remained final output; `perf` mode returned GPU output.
+- `cache_get_finding`: without `GGML_MOE_VRAM_CACHE_MIB`, batch cache is disabled by runner `--vram-cache-gb 0`; up batch declined with `cache_get`. Batch cache is separate from one-stream `GGML_MOE_STREAM_ONE_CACHE_MIB`.
+- `parity_vram512_n16`: `/root/lfz/runs/vendor-ds4-16gb/20260706T155054Z-20260706-up-batch-parity-probe-vram512-n16/france-up-batch-parity-vram512-cpu40-vram0gb`; `GGML_MOE_VRAM_CACHE_MIB=512`, `GGML_MOE_STREAM_ONE_CACHE_MIB=8192`, `GGML_MOE_STREAM_UP_BATCH_PROBE=parity`; first 8 up batch calls wrote parity rows with `max_abs` range about `0.0138201907..0.0305707154`, `mean_abs` about `0.00246..0.00362`; RAM stayed at `16000000000`, no cgroup kill. This validates the small sampled math path only, not promotion.
+- `perf_vram512_n32`: `/root/lfz/runs/vendor-ds4-16gb/20260706T155257Z-20260706-up-batch-perf-probe-vram512-n32/france-up-batch-perf-vram512-cpu40-vram0gb`; `eval_tok_s=1.3`, `prompt_tok_s=0.8`, `TTFT=42110.430142ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, but `correctness_ok=false` with incoherent/repetitive output (`that: France is a nation of independent...`). Batch cache hit rate was only `10.6%` (`hits=621 misses=5229`); up fallback disappeared, but cache churn/H2D/sync and/or insufficient parity coverage made the result slower and incorrect.
+- `conclusion`: removing up CPU fallback with this simple compact batch wrapper is not enough and is rejected. The next design must avoid small up batch cache churn and must not D2H/scatter intermediate up results if it can be fused with gate. Candidate directions are prompt-general up hot admission/ranking with a proven gate-cache budget, true fused up/gate grouped compute, or larger grouped schedule with expanded parity before any perf run.
+
 ### Phase W4：up/down hot cache / pack / grouped dispatch
 
 - `attempt_id`: `20260706-updown-hot-cache-pack-grouped-dispatch`
