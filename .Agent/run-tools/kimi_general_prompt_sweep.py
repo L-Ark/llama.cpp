@@ -31,6 +31,7 @@ def write_sweep_metadata(out_root: pathlib.Path, prompt_file: pathlib.Path, prom
         "profile": args.profile,
         "memory_max": args.memory_max,
         "memory_swap_max": 0,
+        "runtime_max_sec": args.runtime_max_sec,
         "cold_start": "per prompt: repro script sync + drop_caches inside each systemd cgroup",
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
@@ -51,6 +52,8 @@ def run_one(repo: pathlib.Path, out_root: pathlib.Path, row, args):
         f"MemoryMax={args.memory_max}",
         "-p",
         "MemorySwapMax=0",
+        "-p",
+        f"RuntimeMaxSec={args.runtime_max_sec}",
         "-p",
         "IOAccounting=yes",
         "-p",
@@ -81,24 +84,46 @@ def run_one(repo: pathlib.Path, out_root: pathlib.Path, row, args):
     run_dir.parent.mkdir(parents=True, exist_ok=True)
     proc = subprocess.run(cmd, cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     (out_root / f"{row['id']}.systemd.txt").write_text(proc.stdout, encoding="utf-8", errors="replace")
+    if proc.returncode != 0:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "failed.json").write_text(
+            json.dumps({
+                "prompt_id": row["id"],
+                "returncode": proc.returncode,
+                "runtime_max_sec": args.runtime_max_sec,
+                "reason": "systemd-run returned nonzero; inspect *.systemd.txt, stdout.txt, stderr.txt, and cgroup files",
+            }, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     if proc.returncode != 0 and not args.keep_going:
         raise SystemExit(proc.returncode)
     return proc.returncode
 
 
-def summarize(out_root: pathlib.Path):
-    rows = []
+def summarize(out_root: pathlib.Path, prompts):
+    by_id = {}
     for metrics_path in sorted(out_root.glob("*/metrics.json")):
         metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
-        rows.append(metrics)
-    if not rows:
+        by_id[metrics.get("prompt_id", metrics_path.parent.name)] = metrics
+    if not prompts:
         return
     summary = out_root / "summary.md"
     with summary.open("w", encoding="utf-8") as f:
         f.write("# Kimi general prompt dev baseline\n\n")
         f.write("| prompt | quality | tok/s | TTFT ms | decode ms/runs | memory peak GiB | output |\n")
         f.write("|---|---:|---:|---:|---:|---:|---|\n")
-        for row in rows:
+        for prompt in prompts:
+            row = by_id.get(prompt["id"])
+            if row is None:
+                failed = out_root / prompt["id"] / "failed.json"
+                quality = "missing"
+                output = "no metrics"
+                if failed.exists():
+                    quality = "failed"
+                    output = failed.read_text(encoding="utf-8", errors="replace").replace("\n", " ")[:180]
+                output = output.replace("|", "\\|")
+                f.write(f"| {prompt['id']} | {quality} |  |  | / |  | {output} |\n")
+                continue
             mem = row.get("memory.peak")
             mem_gib = ""
             if isinstance(mem, int):
@@ -123,6 +148,7 @@ def main():
     parser.add_argument("--max-prompts", type=int, default=0)
     parser.add_argument("--keep-going", action="store_true")
     parser.add_argument("--memory-max", default="15900000000")
+    parser.add_argument("--runtime-max-sec", default="900")
     parser.add_argument("--vram-mib", default="15000")
     parser.add_argument("--threads", default="32")
     parser.add_argument("--pinned-slots", default="12")
@@ -142,7 +168,7 @@ def main():
     failures = 0
     for row in prompts:
         failures += 1 if run_one(args.repo, args.out_root, row, args) != 0 else 0
-    summarize(args.out_root)
+    summarize(args.out_root, prompts)
     return 1 if failures else 0
 
 
