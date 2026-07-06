@@ -1,0 +1,63 @@
+{
+  "candidate": "AesSedai IQ2_XXS GGUF",
+  "files": [
+    {
+      "bytes": 6912768,
+      "etag": "bee8615c17aa48f4f375f1228551f394f91f6f199bb828d61f6dc57bdff43905",
+      "gib": 0.006438016891479492,
+      "path": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00001-of-00007.gguf",
+      "url": "https://huggingface.co/AesSedai/Kimi-K2.7-Code-GGUF/resolve/main/IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00001-of-00007.gguf"
+    },
+    {
+      "bytes": 49970132416,
+      "etag": "02f8452459fcd83a65ed01cd85ff635bdfc54fcd56338e1c2a960ebfd454ef42",
+      "gib": 46.5383123755455,
+      "path": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00002-of-00007.gguf",
+      "url": "https://huggingface.co/AesSedai/Kimi-K2.7-Code-GGUF/resolve/main/IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00002-of-00007.gguf"
+    },
+    {
+      "bytes": 49778214080,
+      "etag": "75be4b92e81db65044a6c743f01d4d95fcbf259b01b007d33ff05fc32c467523",
+      "gib": 46.35957449674606,
+      "path": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00003-of-00007.gguf",
+      "url": "https://huggingface.co/AesSedai/Kimi-K2.7-Code-GGUF/resolve/main/IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00003-of-00007.gguf"
+    },
+    {
+      "bytes": 49611094976,
+      "etag": "0e5427500fa4428513875c78a84de90d844990624bdd76ca518ab446b25c0cba",
+      "gib": 46.20393270254135,
+      "path": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00004-of-00007.gguf",
+      "url": "https://huggingface.co/AesSedai/Kimi-K2.7-Code-GGUF/resolve/main/IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00004-of-00007.gguf"
+    },
+    {
+      "bytes": 49707537344,
+      "etag": "f6aaf3416962d6718b5ccccf4cf1a6251d049dcfd333104b7cd99eec6b4665de",
+      "gib": 46.293751657009125,
+      "path": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00005-of-00007.gguf",
+      "url": "https://huggingface.co/AesSedai/Kimi-K2.7-Code-GGUF/resolve/main/IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00005-of-00007.gguf"
+    },
+    {
+      "bytes": 47956968512,
+      "etag": "ce8a585323038cbc5d012120f19ba7f7eda66fbd0c2ea42ef476678017e4e487",
+      "gib": 44.663407385349274,
+      "path": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00006-of-00007.gguf",
+      "url": "https://huggingface.co/AesSedai/Kimi-K2.7-Code-GGUF/resolve/main/IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00006-of-00007.gguf"
+    },
+    {
+      "bytes": 35136819712,
+      "etag": "9101e0d28cecced6d7b7afec539f7d574afd51ebbc0c288ce11828e1fb4d9638",
+      "gib": 32.723713397979736,
+      "path": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00007-of-00007.gguf",
+      "url": "https://huggingface.co/AesSedai/Kimi-K2.7-Code-GGUF/resolve/main/IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00007-of-00007.gguf"
+    }
+  ],
+  "first_shard_sha256": "d89b9a9945205f70dbe5bce6f79ff1047b6295efc98237b0936637dc34052298",
+  "generated_at": "2026-07-07T02:55:27+0800",
+  "kind": "kimi_iq2xxs_download_manifest",
+  "notes": [
+    "No model bytes are stored in git; this manifest contains URLs and sizes only."
+  ],
+  "repo": "AesSedai/Kimi-K2.7-Code-GGUF",
+  "total_bytes": 282167679808,
+  "total_gib": 262.78913003206253
+}

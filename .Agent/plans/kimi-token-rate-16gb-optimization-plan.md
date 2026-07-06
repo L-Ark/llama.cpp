@@ -91067,3 +91067,77 @@ Decision:
 - The remaining blocker is still disk space:
   - full candidate size from GP15: `262.79 GiB`;
   - current free space from GP16: `86G` unless cleanup is approved.
+
+## GP18: IQ2_XXS download preparation
+
+Timestamp: `2026-07-07T03:03:00+0800`.
+
+Status: completed non-destructive preparation; cleanup/download not executed.
+
+Rationale:
+
+- GP15-GP17 show that AesSedai `IQ2_XXS` is the best direct lower-byte GGUF
+  candidate currently identified, but the remote server needs disk cleanup
+  before the full artifact can be downloaded.
+- Because the current objective requires every result to be reproducible, the
+  cleanup/download path must be scripted and recorded before any destructive or
+  multi-hundred-GiB action is attempted.
+
+Record:
+
+- `.Agent/runs/20260707-gp18-iq2xxs-download-prep/report.md`
+- `.Agent/runs/20260707-gp18-iq2xxs-download-prep/download-manifest.json`
+- `.Agent/run-tools/kimi_iq2xxs_prepare_download.sh`
+
+Manifest:
+
+- Repository: `AesSedai/Kimi-K2.7-Code-GGUF`.
+- Candidate: `IQ2_XXS`.
+- Shards: `7`.
+- Total size: `282167679808` bytes, `262.789 GiB`.
+- First shard SHA256:
+  `d89b9a9945205f70dbe5bce6f79ff1047b6295efc98237b0936637dc34052298`.
+
+Safety and reproduction:
+
+- Default dry run:
+
+```bash
+.Agent/run-tools/kimi_iq2xxs_prepare_download.sh
+```
+
+- Cleanup is disabled unless explicitly enabled:
+
+```bash
+KIMI_IQ2_CLEANUP_OLD_PACKS=YES \
+  .Agent/run-tools/kimi_iq2xxs_prepare_download.sh
+```
+
+- Download is disabled unless explicitly enabled and at least `290 GiB` is
+  free on `/root/lfz`:
+
+```bash
+KIMI_IQ2_DOWNLOAD=YES \
+  .Agent/run-tools/kimi_iq2xxs_prepare_download.sh
+```
+
+Verification:
+
+- Script syntax check:
+
+```bash
+bash -n .Agent/run-tools/kimi_iq2xxs_prepare_download.sh
+```
+
+- Result: pass.
+
+Decision:
+
+- No token-rate improvement is claimed in GP18.
+- The next material optimization branch is lower-byte Kimi evaluation, but it
+  requires explicit approval to free disk or attach enough additional storage.
+- After the artifact exists locally, the next gate is:
+  1. full tensor metadata verification;
+  2. cold-start `n32` dev quality/token-rate smoke under the 16 GB cgroup;
+  3. if quality passes, expert-pack adaptation/rebuild and dev `n96`;
+  4. held-out test only after the candidate is frozen.
