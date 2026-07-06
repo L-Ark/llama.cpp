@@ -4596,3 +4596,26 @@
   3. calibration/dev 全集跑 strict 16GB；
   4. freeze 后才跑 held-out；
   5. 合规 generalized SOTA 立即 commit/push 到 `ssd/vendor/deepseek-token-rate-16gb`，并从 pushed commit 复现。
+
+## 2026-07-07 hard-bound：prompt-independent exact residency coverage rejected
+
+- `attempt_id`: `20260707-generalized-role-aware-residency-coverage-bound`
+- `status`: `completed_hard_bound_rejected_exact_hotset_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-role-aware-residency-coverage-bound-20260707.json`
+- `prompt_scope`: calibration/dev only；held-out 未使用。
+- `method`: 使用五个 no-prompt-specific calibration/dev traces：gate 用 `one_trace.csv` 的 `src0_ms`，up/down 用 decode `fallback_profile.csv` 的 `fallback_us`；按 aggregate ms/byte 贪心选择 prompt-independent manifest。总 payload 固定为当前可用约 `13.25 GiB`，在 gate exact entries 和 up/down exact entries 之间扫分配。projection 是极乐观零开销：被选中的 gate source movement 和 up/down fallback 完全消失，不计替代 H2D/kernel/scatter。
+- `inventory`: calibration/dev 中 gate unique entries `8621`，exact payload 约 `35.78 GiB`；up/down unique entries `12970`，exact payload 约 `53.83 GiB`。两者远超当前可用 `13.25 GiB`。
+- `best_split`: gate `6 GiB` + up/down `7.25 GiB`，zero-overhead projection 的 calibration min 只有 `2.77 tok/s`，mean `3.19 tok/s`。
+- `other_splits`: gate-only `13.25 GiB` min 约 `2.31 tok/s`；gate `8 GiB` + up/down `5.25 GiB` min 约 `2.75 tok/s`；均远低于 `>5 tok/s`。
+- `decision`: reject prompt-independent exact hotset/residency 作为主路线。它的 coverage 太低，即使零开销也达不到目标；不能写 exact hotset runtime 原型。
+- `implication`: 下一步必须提高同样 VRAM payload 下的 coverage density：低位/压缩 representation、partial-row representation、或 layer-level 结构性放置。任何方案必须先给出 payload GiB、coverage 和 ms/token bound，再允许 runtime source edit。
+
+## 2026-07-07 下一步计划：low-bit / partial representation bound before code
+
+- `objective`: 在不使用 held-out、不使用 prompt-specific pack 的情况下，评估是否存在可在 32GB VRAM 中覆盖足够专家 payload 的低位/partial representation，使 generalized slow prompts 的 bound 至少达到 `>5 tok/s` 且有 overhead 余量。
+- `candidate_bounds`:
+  1. `gate_lowbit_resident`: gate experts 使用低位或 source-layout 变换表示驻留，目标是在 `8-10 GiB` 内覆盖接近全部 calibration/dev gate unique entries，减少 cold `src0_ms`。
+  2. `updown_lowbit_resident`: up/down selected experts 或 rows 用低位/partial representation 驻留，目标是在 `3-5 GiB` 内覆盖慢 prompt 的主要 fallback rows；必须先做 fixed-text/top1 correctness bound。
+  3. `late_layer_full_or_lowbit`: late layers 的 gate/up/down 同层放置，优先选择 aggregate saving/byte 最大的 layer；如果 exact 只能放 4 层且 bound 不足，则只保留为 rejected exact layer bound。
+- `math_required`: 对每个 candidate 先计算：compression ratio、covered bytes/entries、estimated saved ms/token、replacement compute/H2D overhead、TTFT 增量、VRAM headroom、16GB cgroup page-cache影响。
+- `source_edit_gate`: 只有某 candidate 的 calibration/dev min bound 明显超过 `5 tok/s`（建议 `>=6 tok/s` 作为 overhead buffer），才进行 default-off runtime prototype。否则仅提交 rejected bound。
