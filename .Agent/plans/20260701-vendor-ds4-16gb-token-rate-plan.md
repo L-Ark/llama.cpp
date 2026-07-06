@@ -3,6 +3,8 @@
 ## 目标
 
 - 在 `vendor` 实现上继续优化 DeepSeek V4 Flash cold-start 解码速度；最终结果必须体现在 `vendor`，`ik_llama` 只能作为参考。
+- 任务背景：最终部署目标是一台只有 `16GB host RAM` 和 `32GB RTX 5090 VRAM` 的机器；真实用户会随机输入 prompt，因此优化目标是让随机/泛化 prompt 的输出稳定达到 `>5 tok/s`，而不是让某个固定 prompt 达到高 token rate。
+- 最终验收口径：在 strict cold-start、16GB cgroup（含 page cache）、32GB 5090 VRAM 约束下，一个与调优 prompt 分离的 evaluation prompt set 必须稳定达到 `eval_tok_s > 5`。至少固定五 prompt baseline 中每个 prompt 都要接近或超过该线；若扩展为更大随机 prompt holdout，则以 per-prompt 明细和低分位数为准，不能只报平均值或 France 单项。
 - 当前分支已回退到 accepted O_DIRECT expert-pack SOTA 记录点 `5d65239a7`，后续优化必须从该点重新设计和推进。
 - 严格保持：
   - Host RAM（含 page cache、进程 RSS、cgroup 内所有 file/anon memory）`<= 16 GB`；
@@ -19,6 +21,8 @@
 - `status`: active_blocker_before_more_optimization
 - `reason`: 之前 accepted France-pack 路径使用 France-derived gate miss pack/profile，已证明对 France 单 prompt 可以达到 SOTA envelope，但不能代表泛化 prompt token rate。后续目标改为泛化 prompt 后，继续围绕 France trace 做优化会得到 prompt-specific 结果，不能作为 accepted SOTA。
 - `generalization_rule`: 后续 accepted 优化必须提升跨 prompt 的稳定表现。禁止把单个评测 prompt 的 route trace、answer trace、miss order、expert hot set、prompt-specific O_DIRECT pack、prompt-specific cache admit profile 用作 promoted 配置。任何 prompt-derived artifact 必须来自固定 calibration set，且 evaluation prompt set 必须分离；否则只能标为 diagnostic/prompt-specific，不得替代 accepted generalized SOTA。
+- `machine_target`: `16GB host RAM + 32GB RTX 5090 VRAM`; all optimization, profiling, caching, packing, prefetching, and kernel work serves the product requirement that arbitrary user prompts should generate at a stable `>5 tok/s` under this hardware envelope.
+- `not_a_goal`: France-only SOTA、prompt-specific expert pack、单 prompt cache hotset、不可泛化 route trace、warm page-cache steady-state、或只在某个演示 prompt 上有效的 token-rate 提升，都不能算完成任务。
 - `baseline_prompt_set`:
   1. `Please introduce France in a short paragraph.`
   2. `Explain quantum computing briefly.`
