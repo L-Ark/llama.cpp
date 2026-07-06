@@ -675,6 +675,108 @@ struct expert_pack_state {
 
 static expert_pack_state g_expert_pack;
 
+struct direct_read_site_stat {
+    uint64_t calls = 0;
+    uint64_t failures = 0;
+    uint64_t bytes = 0;
+    double wall_ms = 0.0;
+};
+
+static std::mutex g_direct_read_site_mu;
+static std::unordered_map<std::string, direct_read_site_stat> g_direct_read_site_stats;
+static std::atomic<bool> g_direct_read_site_registered{false};
+static thread_local const char *g_direct_read_site_op = nullptr;
+static thread_local const char *g_direct_read_site_tensor = nullptr;
+
+struct direct_read_site_context_scope {
+    const char *prev_op = nullptr;
+    const char *prev_tensor = nullptr;
+
+    direct_read_site_context_scope(const char *op, const char *tensor) {
+        prev_op = g_direct_read_site_op;
+        prev_tensor = g_direct_read_site_tensor;
+        g_direct_read_site_op = op;
+        g_direct_read_site_tensor = tensor;
+    }
+
+    ~direct_read_site_context_scope() {
+        g_direct_read_site_op = prev_op;
+        g_direct_read_site_tensor = prev_tensor;
+    }
+};
+
+static const char *direct_read_site_profile_path() {
+    static std::once_flag once;
+    static const char *cached_path = nullptr;
+    std::call_once(once, []() {
+        const char *path = std::getenv("GGML_MOE_DIRECT_READ_SITE_PROFILE_OUT");
+        if (path && path[0]) {
+            cached_path = ::strdup(path);
+            return;
+        }
+        const char *ttft_path = std::getenv("GGML_MOE_TTFT_TRACE_OUT");
+        if (ttft_path && ttft_path[0]) {
+            std::string derived_path = ttft_path;
+            const size_t slash = derived_path.find_last_of('/');
+            if (slash == std::string::npos) {
+                derived_path = "direct-read-site-profile.csv";
+            } else {
+                derived_path.resize(slash + 1);
+                derived_path += "direct-read-site-profile.csv";
+            }
+            cached_path = ::strdup(derived_path.c_str());
+        }
+    });
+    return cached_path;
+}
+
+static const char *direct_read_site_role(const char *tensor) {
+    if (!tensor) return "unknown";
+    if (std::strstr(tensor, "ffn_up")) return "up";
+    if (std::strstr(tensor, "ffn_gate")) return "gate";
+    if (std::strstr(tensor, "ffn_down")) return "down";
+    return "other";
+}
+
+static void direct_read_site_profile_write() {
+    const char *path = direct_read_site_profile_path();
+    if (!path) return;
+    std::lock_guard<std::mutex> lk(g_direct_read_site_mu);
+    FILE *f = std::fopen(path, "w");
+    if (!f) return;
+    std::fprintf(f, "op,role,tensor,expert_bytes,calls,failures,bytes,wall_ms\n");
+    for (const auto &it : g_direct_read_site_stats) {
+        const direct_read_site_stat &s = it.second;
+        std::fprintf(f, "%s,%lu,%lu,%lu,%.3f\n",
+                it.first.c_str(),
+                (unsigned long)s.calls,
+                (unsigned long)s.failures,
+                (unsigned long)s.bytes,
+                s.wall_ms);
+    }
+    std::fclose(f);
+}
+
+static void direct_read_site_profile_record(
+        const char *op, const char *tensor, size_t nbytes, bool ok, double wall_ms) {
+    if (!direct_read_site_profile_path()) return;
+    if (!g_direct_read_site_registered.exchange(true)) {
+        std::atexit(direct_read_site_profile_write);
+    }
+    char key[384];
+    std::snprintf(key, sizeof(key), "%s,%s,%s,%lu",
+            op && op[0] ? op : "unknown",
+            direct_read_site_role(tensor),
+            tensor && tensor[0] ? tensor : "",
+            (unsigned long)nbytes);
+    std::lock_guard<std::mutex> lk(g_direct_read_site_mu);
+    direct_read_site_stat &s = g_direct_read_site_stats[key];
+    ++s.calls;
+    if (!ok) ++s.failures;
+    if (ok) s.bytes += nbytes;
+    s.wall_ms += wall_ms;
+}
+
 static void batch_profile_report_atexit() {
     if (!g_bprof.enabled || g_bprof.calls == 0) return;
     const double calls = (double)g_bprof.calls;
@@ -2348,6 +2450,12 @@ static void current_down_overlap_report_atexit() {
 
 static void expert_pack_report_atexit() {
     if (!g_expert_pack.enabled) return;
+    if (const char *direct_path = direct_read_site_profile_path()) {
+        std::lock_guard<std::mutex> lk(g_direct_read_site_mu);
+        std::fprintf(stderr,
+                "[moe_stream_batch] direct read site profile requested: path=%s entries=%zu\n",
+                direct_path, g_direct_read_site_stats.size());
+    }
     std::fprintf(stderr,
                  "[moe_stream_batch] expert pack: hits=%lu misses=%lu read_failures=%lu direct_reads=%lu direct_fallbacks=%lu "
                  "iouring_reads=%lu iouring_bytes=%lu iouring_fallbacks=%lu iouring_submit_us=%lu iouring_wait_us=%lu iouring_h2d_enqueues=%lu entries=%zu\n",
@@ -3264,7 +3372,15 @@ static void host_prefetch_worker() {
             }
             const expert_pack_source *source = expert_pack_source_for_entry(entry);
             if (source && source->fd_direct >= 0) {
+                const bool profile_direct = direct_read_site_profile_path() != nullptr;
+                const auto direct_start = profile_direct ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                 ok = expert_pack_direct_read_entry_to_host(entry, slot_ptr->host, e.expert_bytes);
+                if (profile_direct) {
+                    const auto direct_end = std::chrono::steady_clock::now();
+                    direct_read_site_profile_record(
+                            "host_prefetch", e.tensor, e.expert_bytes, ok,
+                            std::chrono::duration<double, std::milli>(direct_end - direct_start).count());
+                }
             } else if (source && source->file) {
                 std::lock_guard<std::mutex> lk(g_expert_pack.mu);
                 ok = ::fseeko(source->file, (off_t)entry->offset, SEEK_SET) == 0 &&
@@ -3718,7 +3834,19 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
         }
     }
     if ((g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) && source->fd_direct >= 0) {
-        if (expert_pack_direct_read_entry_to_host(entry, dst, sz)) {
+        const bool profile_direct = direct_read_site_profile_path() != nullptr;
+        const auto direct_start = profile_direct ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        const bool direct_ok = expert_pack_direct_read_entry_to_host(entry, dst, sz);
+        if (profile_direct) {
+            const auto direct_end = std::chrono::steady_clock::now();
+            direct_read_site_profile_record(
+                    g_direct_read_site_op ? g_direct_read_site_op : "expert_pack_read_entry",
+                    g_direct_read_site_tensor ? g_direct_read_site_tensor : entry->tensor,
+                    sz,
+                    direct_ok,
+                    std::chrono::duration<double, std::milli>(direct_end - direct_start).count());
+        }
+        if (direct_ok) {
             ++g_expert_pack.direct_reads;
             return true;
         }
@@ -4313,7 +4441,9 @@ static bool batch_cache_copy_h2d(
             const bool measure_host = profile_stage || profile_copy;
             const auto host_start = measure_host ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if (pack_entry) {
-                if (!expert_pack_read_entry(pack_entry, slot.host, sz)) {
+                direct_read_site_context_scope direct_scope(trace_op, tensor_name);
+                const bool read_ok = expert_pack_read_entry(pack_entry, slot.host, sz);
+                if (!read_ok) {
                     return false;
                 }
             } else {

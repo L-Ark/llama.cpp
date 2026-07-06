@@ -89543,3 +89543,78 @@ Next implementation direction:
   - prompt/prefill same-type batched staging; or
   - a batched replacement for `batch_cache_insert_slot(do_copy=true)`;
   - not another blind modification of `expert_pack_iouring_copy_jobs`.
+
+Direct-read-site diagnostic result, `2026-07-06T23:35:00+0800`:
+
+- Instrumentation:
+  - added default profile-output counters around the expert-pack direct-read
+    path;
+  - when `GGML_MOE_DIRECT_READ_SITE_PROFILE_OUT` is set, or when normal
+    `PROFILE=1` sets `GGML_MOE_TTFT_TRACE_OUT`, the runtime writes
+    `direct-read-site-profile.csv`;
+  - normal non-profile runs do not allocate or record these counters.
+- Main n32 diagnostic run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-211000Z-direct-read-site-python-reverse-n32-v8`.
+- Local copied record:
+  `.Agent/runs/20260706-direct-read-site-python-reverse-n32-v8`.
+- Run config:
+  - `REPO=/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c`;
+  - `N=32`, `PROFILE=1`, `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - `PROMPT_ID=dev_python_reverse`;
+  - alias TSV:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv`.
+- Result:
+  - quality pass;
+  - `0.65 tok/s`;
+  - `TTFT=81997.63 ms`;
+  - `decode=48044.29 ms / 31`;
+  - `memory.peak=15899996160`;
+  - `direct_reads=27139`;
+  - `iouring_reads=2178`;
+  - `iouring_bytes=12379422720`;
+  - direct-read-site totals:
+    - total calls: `27139`;
+    - total bytes: `140.955 GiB`;
+    - summed direct-read wall: `52467.929 ms`.
+- Aggregated direct-read sites:
+
+| op | role | calls | bytes GiB | wall ms | failures |
+|---|---:|---:|---:|---:|---:|
+| `runtime_load` | gate | 9463 | 46.951 | 18405.525 | 0 |
+| `runtime_load` | up | 9463 | 43.189 | 17848.115 | 0 |
+| `current_down_overlap` | down | 4824 | 28.339 | 9306.550 | 0 |
+| `runtime_load` | down | 3389 | 22.475 | 6907.739 | 0 |
+
+- Role totals:
+  - gate: `9463` calls, `46.951 GiB`, `18405.525 ms`;
+  - up: `9463` calls, `43.189 GiB`, `17848.115 ms`;
+  - down: `8213` calls, `50.814 GiB`, `16214.289 ms`.
+- Path smoke after fixing the atexit path cache:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-213000Z-direct-read-site-path-smoke-n16`.
+  The log now records the correct CSV path:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-213000Z-direct-read-site-path-smoke-n16/direct-read-site-profile.csv`.
+
+Interpretation:
+
+- The remaining `direct_reads=27139` are not dominated by failed io_uring
+  batches or expert-pack misses.
+- Most of the exposed direct-read wall is normal `runtime_load` for up/gate:
+  `36.254 s` summed wall and `90.140 GiB` read in the n32
+  `dev_python_reverse` diagnostic.
+- Down is still material, but `current_down_overlap` already covers part of
+  it; optimizing only down cannot close the current general-prompt gap.
+- The next source optimization should target one of:
+  - replacing single-entry `runtime_load` up/gate direct reads with real
+    same-layer/type batched io_uring staging where routing dependencies allow;
+  - reducing up/gate bytes per active expert;
+  - using measured dev-route locality for runtime-adaptive prefetch, but only
+    if the candidate is prompt-agnostic and later evaluated on held-out test.
+
+Next required design step:
+
+- Before changing source behavior, update this plan with:
+  - the selected runtime_load up/gate batching or byte-reduction mechanism;
+  - a hard upper bound from the measured `90.140 GiB / 36.254 s` up/gate
+    direct-read cost and the observed n32 decode time;
+  - acceptance gates against the formal n96 dev baseline and held-out test
+    protocol.
