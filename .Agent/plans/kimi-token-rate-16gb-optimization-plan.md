@@ -93457,3 +93457,81 @@ GP39 execution result:
   - `smoke_ready=0`;
   - default real IQ1_S preparation behavior is unchanged by the synthetic test
     hook.
+
+## GP40: non-destructive remote storage audit for full IQ1_S smoke
+
+Timestamp: `2026-07-07T14:25:00+0800`.
+
+Status: planned before execution.
+
+Purpose:
+
+- GP35-GP39 made the full IQ1_S cleanup/download/smoke path guarded and
+  reproducible, but `/root/lfz/models` still lacks enough free bytes.
+- Before asking for deletion approval again, verify whether the remote machine
+  has another filesystem or directory that can store the full
+  `204430872480`-byte IQ1_S model with the required 20 GiB reserve.
+- If another mount exists, the next valid step can use `MODEL_DIR`/`MODEL_PATH`
+  override without deleting old Kimi expert packs.
+
+Hard safety constraints:
+
+- Read-only audit only.
+- Do not delete, move, truncate, download, or smoke.
+- Do not inspect held-out test prompts.
+- Keep the current accepted SOTA unchanged.
+
+Commands:
+
+1. Sync remote worktree to current branch head.
+2. Run:
+   - `df -B1 -T`;
+   - `findmnt -b -o TARGET,SOURCE,FSTYPE,SIZE,AVAIL,OPTIONS`;
+   - `lsblk -b -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINTS`;
+   - size probes for likely roots:
+     `/root`, `/root/lfz`, `/root/lfz/models`, `/root/lfz/runs`,
+     `/mnt`, `/data`, `/workspace`, `/tmp`;
+   - top-level `/root/lfz` disk consumers with `du -x -B1 -d1`.
+
+Acceptance:
+
+- If any writable mount has at least `225905708960` available bytes, write the
+  next plan to run IQ1_S guarded download/smoke with `MODEL_DIR` on that mount.
+- If none exists, keep the IQ1_S full smoke gate as disk/deletion approval and
+  continue only with non-destructive preparation or another byte-reduction path.
+- Record exact available bytes and candidate decision.
+- No SOTA or token-rate claim is possible from this phase.
+
+GP40 execution result:
+
+- Timestamp: `2026-07-07T06:10:50+0800`.
+- Commit audited on remote:
+  `8257e4afccd6ce12d9c5b5d8e566358c51b6d5a4`.
+- Record:
+  `.Agent/runs/20260707-gp40-remote-storage-audit/report.md`.
+- Raw output:
+  `.Agent/runs/20260707-gp40-remote-storage-audit/raw.txt`.
+- Required bytes:
+  - IQ1_S final GGUF: `204430872480`;
+  - IQ1_S plus 20 GiB reserve: `225905708960`.
+- Filesystem finding:
+  - relevant writable persistent storage is only `/dev/vda1` mounted at `/`;
+  - `/` available bytes: `89639956480`;
+  - `/root`, `/root/lfz`, `/root/lfz/models`, `/root/lfz/runs`, `/mnt`, and
+    `/tmp` all resolve to the same `/` filesystem;
+  - `/data` does not exist;
+  - `/workspace` does not exist;
+  - tmpfs mounts have at most `35369054208` bytes available and cannot hold
+    the full IQ1_S GGUF.
+- Main disk consumers:
+  - `/root/lfz/models`: `405392715776` bytes;
+  - `/root/lfz/runs`: `469723262976` bytes;
+  - `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S`: `405392306176` bytes;
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets`: `444499689472` bytes.
+- Decision:
+  - no alternate mounted filesystem can hold full IQ1_S with 20 GiB reserve;
+  - `MODEL_DIR` override cannot bypass the disk gate on this machine;
+  - full IQ1_S n32 smoke still requires explicit deletion approval, external
+    storage, or a different byte-reduction path;
+  - no deletion/download/move/truncate/smoke was performed;
+  - no SOTA or token-rate claim is possible from this phase.

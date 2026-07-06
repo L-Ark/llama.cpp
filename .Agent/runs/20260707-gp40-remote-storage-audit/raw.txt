@@ -1,0 +1,164 @@
+repo_head=8257e4afccd6ce12d9c5b5d8e566358c51b6d5a4
+date=2026-07-06T22:10:50+00:00
+required_iq1s_bytes=204430872480
+required_with_20gib_reserve=225905708960
+
+[df -B1 -T]
+Filesystem     Type         1B-blocks         Used   Available Use% Mounted on
+/dev/root      ext4     1065418129408 975761395712 89639956480  92% /
+tmpfs          tmpfs      35369054208            0 35369054208   0% /dev/shm
+tmpfs          tmpfs      14147624960      1839104 14145785856   1% /run
+tmpfs          tmpfs          5242880            0     5242880   0% /run/lock
+efivarfs       efivarfs        262044        31596      225328  13% /sys/firmware/efi/efivars
+/dev/vda15     vfat         109395456      6342144   103053312   6% /boot/efi
+tmpfs          tmpfs       7073808384        57344  7073751040   1% /run/user/1000
+tmpfs          tmpfs       7073808384        36864  7073771520   1% /run/user/0
+tmpfs          tmpfs      35369054208            0 35369054208   0% /run/qemu
+
+[findmnt]
+TARGET                                        SOURCE                 FSTYPE               SIZE       AVAIL OPTIONS
+/                                             /dev/vda1              ext4        1065418129408 89639956480 rw,relatime,discard,errors=remount-ro
+├─/dev                                        devtmpfs               devtmpfs      35365322752 35365322752 rw,nosuid,noexec,relatime,size=34536448k,nr_inodes=8634112,mode=755,inode64
+│ ├─/dev/shm                                  tmpfs                  tmpfs         35369054208 35369054208 rw,nosuid,nodev,inode64
+│ ├─/dev/pts                                  devpts                 devpts                  0           0 rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000
+│ ├─/dev/hugepages                            hugetlbfs              hugetlbfs               0           0 rw,relatime,pagesize=2M
+│ └─/dev/mqueue                               mqueue                 mqueue                  0           0 rw,nosuid,nodev,noexec,relatime
+├─/proc                                       proc                   proc                    0           0 rw,nosuid,nodev,noexec,relatime
+│ └─/proc/sys/fs/binfmt_misc                  systemd-1              autofs                  0           0 rw,relatime,fd=29,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=7190
+│   └─/proc/sys/fs/binfmt_misc                binfmt_misc            binfmt_misc             0           0 rw,nosuid,nodev,noexec,relatime
+├─/sys                                        sysfs                  sysfs                   0           0 rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/kernel/security                      securityfs             securityfs              0           0 rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/fs/cgroup                            cgroup2                cgroup2                 0           0 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot
+│ ├─/sys/fs/pstore                            pstore                 pstore                  0           0 rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/firmware/efi/efivars                 efivarfs               efivarfs           262044      225328 rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/fs/bpf                               bpf                    bpf                     0           0 rw,nosuid,nodev,noexec,relatime,mode=700
+│ ├─/sys/kernel/debug                         debugfs                debugfs                 0           0 rw,nosuid,nodev,noexec,relatime
+│ │ └─/sys/kernel/debug/tracing               tracefs                tracefs                 0           0 rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/kernel/tracing                       tracefs                tracefs                 0           0 rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/fs/fuse/connections                  fusectl                fusectl                 0           0 rw,nosuid,nodev,noexec,relatime
+│ └─/sys/kernel/config                        configfs               configfs                0           0 rw,nosuid,nodev,noexec,relatime
+├─/run                                        tmpfs                  tmpfs         14147624960 14145785856 rw,nosuid,nodev,size=13816040k,nr_inodes=819200,mode=755,inode64
+│ ├─/run/lock                                 tmpfs                  tmpfs             5242880     5242880 rw,nosuid,nodev,noexec,relatime,size=5120k,inode64
+│ ├─/run/credentials/systemd-sysusers.service ramfs                  ramfs                   0           0 ro,nosuid,nodev,noexec,relatime,mode=700
+│ ├─/run/user/0                               tmpfs                  tmpfs          7073808384  7073771520 rw,nosuid,nodev,relatime,size=6908016k,nr_inodes=1727004,mode=700,inode64
+│ ├─/run/snapd/ns                             tmpfs[/snapd/ns]       tmpfs         14147624960 14145785856 rw,nosuid,nodev,size=13816040k,nr_inodes=819200,mode=755,inode64
+│ │ ├─/run/snapd/ns/lxd.mnt                   nsfs[mnt:[4026533259]] nsfs                    0           0 rw
+│ │ └─/run/snapd/ns/firefox.mnt               nsfs[mnt:[4026533333]] nsfs                    0           0 rw
+│ ├─/run/user/1000                            tmpfs                  tmpfs          7073808384  7073751040 rw,nosuid,nodev,relatime,size=6908016k,nr_inodes=1727004,mode=700,uid=1000,gid=100,inode64
+│ └─/run/qemu                                 tmpfs                  tmpfs         35369054208 35369054208 rw,nosuid,nodev,relatime,mode=755,inode64
+├─/snap/bare/5                                /dev/loop0             squashfs           131072           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/core20/2682                           /dev/loop1             squashfs         66977792           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/core20/2866                           /dev/loop2             squashfs         66977792           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/core22/2163                           /dev/loop3             squashfs         77594624           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/core22/2411                           /dev/loop4             squashfs         77594624           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/core24/1643                           /dev/loop5             squashfs         70123520           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/firefox/8585                          /dev/loop7             squashfs        265027584           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/gnome-42-2204/247                     /dev/loop9             squashfs        557187072           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/gnome-46-2404/153                     /dev/loop10            squashfs        635568128           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/gtk-common-themes/1535                /dev/loop11            squashfs         96206848           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/lxd/36558                             /dev/loop12            squashfs         95944704           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/lxd/38800                             /dev/loop13            squashfs         96206848           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/mesa-2404/1781                        /dev/loop14            squashfs        421527552           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/snapd/25577                           /dev/loop15            squashfs         53477376           0 ro,nodev,relatime,errors=continue,threads=single
+├─/snap/snapd/26865                           /dev/loop16            squashfs         51773440           0 ro,nodev,relatime,errors=continue,threads=single
+├─/boot/efi                                   /dev/vda15             vfat            109395456   103053312 rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro
+├─/snap/firefox/8580                          /dev/loop6             squashfs        265027584           0 ro,nodev,relatime,errors=continue,threads=single
+└─/snap/gnome-42-2204/263                     /dev/loop17            squashfs        557318144           0 ro,nodev,relatime,errors=continue,threads=single
+
+[lsblk]
+NAME    TYPE          SIZE FSTYPE   MOUNTPOINTS
+loop0   loop          4096 squashfs /snap/bare/5
+loop1   loop      66871296 squashfs /snap/core20/2682
+loop2   loop      66879488 squashfs /snap/core20/2866
+loop3   loop      77545472 squashfs /snap/core22/2163
+loop4   loop      77574144 squashfs /snap/core22/2411
+loop5   loop      70049792 squashfs /snap/core24/1643
+loop6   loop     265007104 squashfs /snap/firefox/8580
+loop7   loop     265015296 squashfs /snap/firefox/8585
+loop9   loop     557187072 squashfs /snap/gnome-42-2204/247
+loop10  loop     635518976 squashfs /snap/gnome-46-2404/153
+loop11  loop      96141312 squashfs /snap/gtk-common-themes/1535
+loop12  loop      95842304 squashfs /snap/lxd/36558
+loop13  loop      96129024 squashfs /snap/lxd/38800
+loop14  loop     421507072 squashfs /snap/mesa-2404/1781
+loop15  loop      53399552 squashfs /snap/snapd/25577
+loop16  loop      51654656 squashfs /snap/snapd/26865
+loop17  loop     557309952 squashfs /snap/gnome-42-2204/263
+vda     disk 1099511627776          
+├─vda1  part 1099395218944 ext4     /
+├─vda14 part       4194304          
+└─vda15 part     111149056 vfat     /boot/efi
+vdb     disk        376832 iso9660  
+
+[path probes]
+path=/root exists=1 /          ext4 1065418129408 89639956480
+path=/root/lfz exists=1 /          ext4 1065418129408 89639956480
+path=/root/lfz/models exists=1 /          ext4 1065418129408 89639956480
+path=/root/lfz/runs exists=1 /          ext4 1065418129408 89639956480
+path=/mnt exists=1 /          ext4 1065418129408 89639956480
+path=/data exists=0
+path=/workspace exists=0
+path=/tmp exists=1 /          ext4 1065418129408 89639956480
+
+[root_lfz_du_x_depth1]
+102400	/root/lfz/backups
+312279040	/root/lfz/llama.cpp-vendor-kimi-a87
+497770496	/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c
+505413632	/root/lfz/refs
+965812224	/root/lfz/ik_llama-overlap-5tps
+972320768	/root/lfz/ik_llama-clean-fcc7906e
+973344768	/root/lfz/ik_llama-clean-69ae4707
+1267929088	/root/lfz/ik_llama
+2145038336	/root/lfz/tmp
+2337955840	/root/lfz/llama.cpp-vendor-kimi
+405392715776	/root/lfz/models
+469723262976	/root/lfz/runs
+885094043648	/root/lfz
+
+[root_lfz_models_du_x_depth1]
+16384	/root/lfz/models/Kimi-K2.7-Code-first-shard-test
+389120	/root/lfz/models/Kimi-K2.7-Code-layer1-test
+405392306176	/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S
+405392715776	/root/lfz/models
+
+[root_lfz_runs_du_x_depth2_top40]
+32718848	/root/lfz/runs/ik_llama/kimi-k27-code-20260623-111146Z
+32718848	/root/lfz/runs/ik_llama/kimi-k27-code-20260623-120057Z
+32718848	/root/lfz/runs/ik_llama/kimi-k27-code-20260623-122300Z
+32718848	/root/lfz/runs/ik_llama/kimi-k27-code-20260623-135714Z-hostprefetch-start200k
+32727040	/root/lfz/runs/ik_llama/kimi-k27-code-20260623-101324Z
+32727040	/root/lfz/runs/ik_llama/kimi-k27-code-20260623-104529Z
+32735232	/root/lfz/runs/ik_llama/kimi-k27-code-20260623-122021Z
+32743424	/root/lfz/runs/ik_llama/kimi-k27-code-20260623-103353Z
+32825344	/root/lfz/runs/ik_llama/kimi-k27-code-20260623-095807Z
+32960512	/root/lfz/runs/ik_llama/kimi-k27-code-20260623-090318Z
+33083392	/root/lfz/runs/vendor-kimi-token-rate/20260705-060730Z-phase7lh-perf-record-n32
+37343232	/root/lfz/runs/ik_llama/453-20260628-212743Z
+45920256	/root/lfz/runs/vendor-kimi/20260701-073102Z-n32-raw-wrapper-fitoff
+51265536	/root/lfz/runs/vendor-kimi-token-rate/20260702-020000Z-phase3zt-n96-promotion
+73883648	/root/lfz/runs/ik_llama/kimi-iq3s-16gb-disable-wrapper-prefetch-n64-001-20260626-132249Z
+74240000	/root/lfz/runs/ik_llama/kimi-iq3s-16gb-wrapper-thread-profile-n64-001-20260626-131706Z
+85987328	/root/lfz/runs/vendor-kimi-token-rate/20260707-gp30-route-detail-dev-n32
+115253248	/root/lfz/runs/vendor-kimi-token-rate/20260706-225500Z-gp4-aligned-alias-dev-n96-profile
+115273728	/root/lfz/runs/vendor-kimi-token-rate/20260706-151000Z-gp3-alias-dev-n96-profile
+115286016	/root/lfz/runs/vendor-kimi-token-rate/20260706-173500Z-gp3b-alias-dev-n96-profile
+115306496	/root/lfz/runs/vendor-kimi-token-rate/20260706-135000Z-gp2-alias-dev-n96-profile
+116244480	/root/lfz/runs/vendor-kimi-token-rate/20260706-114204Z-general-dev-baseline-n96-profile
+116637696	/root/lfz/runs/vendor-kimi-token-rate/20260706-233500Z-gp4-aligned-alias-test-n96-profile
+116785152	/root/lfz/runs/vendor-kimi-token-rate/20260707-004500Z-gp4-aligned-alias-dev-n96-profile-correct
+117579776	/root/lfz/runs/vendor-kimi-token-rate/20260707-012000Z-gp4-aligned-alias-test-n96-profile-correct
+117587968	/root/lfz/runs/vendor-kimi-token-rate/20260707-020500Z-gp4-postcommit-test-n96-profile
+126124032	/root/lfz/runs/vendor-kimi/20260701-092512Z-n32-ik-wrapper-cli-baseline
+243908608	/root/lfz/runs/vendor-kimi-token-rate/20260705-7kl-perf-record-n32
+447959040	/root/lfz/runs/vendor-kimi-token-rate/20260703-060657Z-n32-phase7bj-7as-perf
+650129408	/root/lfz/runs/vendor-kimi-token-rate/20260703-190249Z-phase7dh-ptx-baseline
+650129408	/root/lfz/runs/vendor-kimi-token-rate/20260703-190353Z-phase7dh-ptx-7dg
+690860032	/root/lfz/runs/vendor-kimi/20260701-065549Z-n96-defer-cpu-experts
+735031296	/root/lfz/runs/llama.cpp-vendor-kimi/vendor-n16-nocnv-20260701-041900Z
+737402880	/root/lfz/runs/llama.cpp-vendor-kimi
+864358400	/root/lfz/runs/vendor-kimi
+4844658688	/root/lfz/runs/vendor-kimi-token-rate/20260705-7ir-overlay-firstuse
+10061496320	/root/lfz/runs/vendor-kimi-token-rate
+444499689472	/root/lfz/runs/ik_llama/kimi-iq3s-assets
+458060001280	/root/lfz/runs/ik_llama
+469723262976	/root/lfz/runs
