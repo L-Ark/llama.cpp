@@ -4936,3 +4936,14 @@
 - root_cause: 当前 build-ds4-moe-stream 的 CMakeCache 为 GGML_CUDA_MOE_STREAM_BATCH:BOOL=OFF，moe_stream_batch.cu 编译的是 stub path；llama-cli strings 中没有 mxfp4_down_probe，moe_stream_batch.cu.o 只有约 4.9KB。因此本次 env probe 实际没有进入真实 batch implementation。
 - fallback_profile: 仍显示 down eligible but batch_accepts=0，up batch_unsupported + one_name_filter；该结果解释为 build config/stub mismatch，而不是 MXFP4 kernel parity 失败。
 - decision: reject，不作为 SOTA。下一步必须先单独创建 GGML_CUDA_MOE_STREAM_BATCH=ON 的实验 build，确认 binary 包含真实 mxfp4_down_probe，再重跑 parity；若 parity 通过，才允许写 default-off MXFP4 down batch writeback source plan。
+
+
+## 2026-07-07 下一步 build-config plan：batch=ON down MXFP4 parity build
+
+- attempt_id: 20260707-batch-on-down-mxfp4-parity-build
+- status: planned_before_experiment
+- why_now: down MXFP4 existing parity probe 失败的根因是当前 build-ds4-moe-stream 配置 GGML_CUDA_MOE_STREAM_BATCH=OFF，真实 moe_stream_batch.cu implementation 没有进入 binary。要判断 Kimi batch 优化是否能迁移到 DeepSeek，必须先用独立 build 打开该 flag，而不是修改默认 SOTA build。
+- scope: build/config experiment only，不改源码，不改变当前 pushed SOTA/rejected artifacts；新 build 目录为 build-ds4-moe-stream-batch-on。held-out 不使用，不作为 SOTA。
+- build_command: cmake -S . -B build-ds4-moe-stream-batch-on with GGML_CUDA=ON, GGML_CUDA_MOE_STREAM=ON, GGML_CUDA_MOE_STREAM_BATCH=ON, matching existing build options where practical；then cmake --build build-ds4-moe-stream-batch-on --target llama-cli llama-results -j2。
+- validation: binary strings 必须包含 mxfp4_down_probe；CMakeCache 必须 GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON。之后才允许 rerun GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity strict 16GB smoke。
+- decision_rule: 若 batch=ON 编译失败或 binary 仍为 stub，记录 reject 并不写 source edit；若 parity 通过，再写下一轮 source-edit plan 允许 default-off MXFP4 down batch writeback；若 parity 失败，记录数值错误并停止该路线。
