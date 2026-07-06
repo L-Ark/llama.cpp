@@ -1,0 +1,11 @@
+{
+  "cold_start": "per prompt: repro script sync + drop_caches inside each systemd cgroup",
+  "memory_max": "15900000000",
+  "memory_swap_max": 0,
+  "mode": "dev",
+  "n": 16,
+  "profile": true,
+  "prompt_count": 2,
+  "prompt_file": ".Agent/evals/kimi-general-dev-prompts.jsonl",
+  "started_at": "2026-07-06T11:34:03Z"
+}

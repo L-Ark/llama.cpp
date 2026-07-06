@@ -1,0 +1,6 @@
+{"id":"test_english_factual_01","category":"english_factual","prompt":"Give a short overview of Brazil.","quality_keywords":"brazil,south america|amazon|portuguese|rio","notes":"Held-out; do not use for tuning."}
+{"id":"test_english_factual_02","category":"english_factual","prompt":"Briefly explain why the Moon has phases.","quality_keywords":"moon,phase|phases,sun|sunlight|earth","notes":"Held-out; do not use for tuning."}
+{"id":"test_reasoning_math_01","category":"english_reasoning_math","prompt":"A train leaves at 3 PM and arrives 2 hours and 15 minutes later. What time does it arrive?","quality_keywords":"5:15|5 15|five fifteen","notes":"Held-out; do not use for tuning."}
+{"id":"test_coding_01","category":"coding","prompt":"Write a JavaScript function that returns the largest number in an array.","quality_keywords":"function|=>|javascript,array,largest|max","notes":"Held-out; do not use for tuning."}
+{"id":"test_chinese_01","category":"chinese_factual_instruction","prompt":"用中文简要说明为什么要节约用水。","quality_keywords":"水,节约|节省,资源|环境","notes":"Held-out; do not use for tuning."}
+{"id":"test_mixed_instruction_01","category":"mixed_instruction","prompt":"List three practical tips for preparing a home office for remote work.","quality_keywords":"office|work,chair|desk|lighting|internet|quiet","notes":"Held-out; do not use for tuning."}

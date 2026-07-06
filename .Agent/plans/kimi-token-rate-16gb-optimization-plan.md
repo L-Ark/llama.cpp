@@ -127,7 +127,7 @@ general-prompt baseline above, not the prompt-specific France run.
 
 ## Next phase: generalized dev baseline and route entropy analysis
 
-Status: planned.
+Status: in progress.
 
 Purpose:
 
@@ -219,6 +219,42 @@ Acceptance for this phase:
 - Any implementation after this phase must update this plan before code edits,
   state the theoretical speed bound, and define the held-out test evaluation
   gate before running test prompts.
+
+Smoke validation on 2026-07-06:
+
+- Tooling added:
+  - `.Agent/evals/kimi-general-dev-prompts.jsonl`;
+  - `.Agent/evals/kimi-general-test-prompts.jsonl`;
+  - `.Agent/evals/kimi-general-test-sealed.md`;
+  - `.Agent/run-tools/kimi-general-prompt-repro.sh`;
+  - `.Agent/run-tools/kimi_general_prompt_sweep.py`;
+  - `.Agent/run-tools/kimi_route_entropy_analysis.py`.
+- Held-out test prompt file SHA256:
+  `8eaa1285f02b94fa94ae7a9f77cc4fc4758e3c1791ba898ff8e4358abbd17b7e`.
+- Remote smoke run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-113403Z-general-dev-smoke2-n16`.
+- Local copied record:
+  `.Agent/runs/20260706-kimi-general-dev-smoke2-n16`.
+- Scope: `n16`, `PROFILE=1`, first two dev prompts only. This is a tooling
+  smoke, not the formal `n96` dev baseline and not a SOTA result.
+- Results:
+  - `dev_france_regression`: quality pass, `1.15 tok/s`,
+    `TTFT=77948.97 ms`, decode `13084.03 ms / 15`, memory peak `14.81 GiB`;
+  - `dev_japan_factual`: quality pass, `0.58 tok/s`,
+    `TTFT=76647.05 ms`, decode `25762.63 ms / 15`, memory peak `14.81 GiB`.
+- Route/profile artifacts were generated for both prompts:
+  `metrics.json`, `answer.txt`, `route-profile.csv`, `route-trace.csv`, and
+  entropy outputs under `entropy/`.
+- Early smoke finding:
+  - Even at `n16`, Japan is roughly `2x` slower than France under the current
+    France-oriented pack/cache path.
+  - Cross-prompt top-8 overlap has many high-entropy or low-overlap
+    layer/role entries, especially in expensive down/up/gate regions. This
+    supports the plan requirement to run the full dev baseline before designing
+    a fixed prompt-agnostic hotset.
+- Next required action:
+  - Run the full `n96`, `PROFILE=1`, strict 16GB cold-start dev baseline over
+    all dev prompts, then rerun route entropy analysis on the full dev set.
 
 ## Current correctness base
 
