@@ -4227,3 +4227,17 @@
 - `disk_and_head_audit`: 当前 `/root` 可用约 `111G`，不删除 native SOTA evidence 也足够下载一个 `52,593,532,000 bytes` 的 0xSero candidate；HEAD 当前返回 `x-linked-size=52593532000`，`x-linked-etag=e917278028d7a9e25dfc9d04bf5848375dad7573c5aeab1720d6a83714352406`，final `ETag=7f4deb0dc07cdbc01ff88ae11e616fd8d2d1d8263efec15b034c5d731fe83070`。
 - `next_action`: 先记录并 push 本计划；之后只下载这一条 candidate，记录 size/sha256 和 metadata/header validation。France strict 16GB correctness 通过前禁止 token-rate SOTA claim；calibration/dev 通过并 freeze 前禁止使用 held-out test。
 - `promotion_rule`: 如果 alternate candidate 在 `calibration_dev_set_v1` 上形成候选，必须冻结 model sha256、source commit、env/CLI 和参数后，再运行 `held_out_test_set_v1_locked`。accepted generalized SOTA 必须报告 held-out per-prompt `eval_tok_s`、TTFT、RAM/page-cache、correctness 和完整输出，并立即 commit/push 到 `ssd/vendor/deepseek-token-rate-16gb` 后从 pushed commit 复现。
+
+## 2026-07-07 执行记录：0xSero alternate GGUF 下载启动
+
+- `attempt_id`: `20260707-0xsero-alt-gguf-download-start`
+- `status`: `download_started_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-0xsero-download-start-20260707.json`
+- `prompt_scope`: 未运行任何 prompt；未使用 `held_out_test_set_v1_locked`。
+- `candidate`: `0xSero/DeepSeek-V4-Flash-162B-GGUF` / `DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`。
+- `download_path`: `/root/lfz/models/DeepSeek-V4-Flash-162B-GGUF/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`。
+- `expected_size_bytes`: `52593532000`。
+- `download_unit`: `ds4-0xsero-alt-gguf-download-20260706T170631Z.service`。
+- `download_log`: `/root/lfz/runs/vendor-ds4-16gb/20260706T170631Z-0xsero-alt-gguf-download/download.log`。
+- `completion_gate`: `.aria2` sidecar 消失、`stat size == 52593532000`、记录 sha256、GGUF header/metadata validation 通过后，才允许进入 France strict 16GB correctness smoke。
+- `claim_rule`: 当前只是下载启动记录，没有 correctness、token-rate 或 SOTA 结论。France correctness 通过前禁止 benchmark/SOTA claim；calibration/dev 候选 freeze 前禁止使用 held-out test。
