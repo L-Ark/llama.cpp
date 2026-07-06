@@ -5092,3 +5092,27 @@
 - bottleneck_to_fix: v1 每个 output col 单线程串行 2048 dot，导致 GPU 并行度/访存效率差；还需要控制 active rows 的 Q8_0 H2D staging，避免 per-expert 小拷贝吞掉收益。
 - validation_sequence: build -> blk0 top1 -> full down top1 same_top1=145/145/max_abs=0 -> strict cold France n96 performance。只有 France n96 不 timeout且不明显低于 baseline，才继续 calibration/dev generalized prompt set；held-out 仍只用于最终 SOTA。
 - rejection_rule: 若 top1 失败或 n96 仍 timeout/明显慢于 CPU fallback，则回退源码并记录 artifact；不得 promotion。
+
+## 2026-07-07 实施前计划补充：optimized Q8_0 MXFP4 down batch v2 rowtile
+
+- attempt_id: 20260707-optimized-q80-mxfp4-down-batch-v2-rowtile
+- status: planned_before_source_edit
+- task_context: 目标仍是 vendor DeepSeek 在 16GB host RAM（含 page cache）+ 32GB RTX 5090 上，对用户随机/泛化 prompt 稳定达到 >5 tok/s；不得做 prompt-specific 优化，调试只用 calibration/dev prompt，held-out 仅用于最终 SOTA 验证。
+- bottleneck_target: 当前 DS4 的 MXFP4 down 在 cache miss/unsupported writeback 时仍会走 CPU fallback；v1 证明 CPU-compatible Q8_0 数学可保持 fixed-text top1 全等，但 naive one-thread-per-output-col kernel 使 n96 超时。因此 v2 只解决 down CPU fallback 的计算内核并行度，不改变 up/gate/Kimi 既有功能。
+- source_scope: default-off env `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=2`。扩展 `ggml_cuda_moe_stream_batch` ABI 传入 CPU fallback 已生成的 `src1_q8_0`、row_size、ne1；在 CUDA batch path 中复用现有 workspace：`bc.d_src0` 做 device pointer array、`bc.d_src1_q8` 做 Q8_0 rows、`bc.h_src1` 做 pinned Q8_0 staging；新增 MXFP4 x Q8_0 rowtile kernel。未设置 env 时必须保持当前 SOTA 路径和 Kimi 功能不变。
+- theory: 每个 active route 的 down expert 约 `ne01 * nb01` 字节，Q8_0 src1 row 约 `ne00 * sizeof(block_q8_0)/QK8_0`，Q8_0 row 相比 expert bytes 小得多；只要 rowtile kernel 不串行 2048 dot，理论瓶颈应回到 expert H2D/cache 与 output D2H，而不是 CPU fallback compute。若 full down fallback 秒数可被 GPU rowtile 覆盖，token rate 有机会从当前 generalized 2 tok/s 级向 5 tok/s 接近。
+- validation_sequence: build `llama-cli llama-results` -> France fixed-text blk0-only top1 -> full down top1 same_top1=145/145/max_abs=0 -> strict cold France n96 performance under 16GB/no-swap -> calibration/dev prompt set。held-out test set 不参与调参。
+- accept_gate: RAM peak <=16000000000 including page cache, MemorySwapMax=0, correctness semantic/top1 pass, TTFT <= generalized accepted baseline * 1.2, generalized prompt metrics improve. 新 SOTA 必须详细记录复现信息并立即 commit/push 到 `ssd/vendor/deepseek-token-rate-16gb`，再从 pushed commit 复现。
+- reject_rule: 任一 correctness 失败、n96 timeout、明显慢于现有 CPU fallback、TTFT 超限或 RAM 超限，立即回退源码，仅保留 rejected artifact/plan 并 push 记录。
+
+## 2026-07-07 执行记录：optimized Q8_0 MXFP4 down batch v2 rowtile
+
+- attempt_id: 20260707-optimized-q80-mxfp4-down-batch-v2-rowtile
+- status: rejected_correctness_crash_source_reverted
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/optimized-q80-mxfp4-down-batch-v2-rowtile-reject-20260707.json
+- source_attempt: 扩展 batch ABI 传入 CPU fallback 已生成的 Q8_0 wdata，并新增 default-off `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=2` MXFP4 x Q8_0 rowtile kernel；第一次复用 `bc.d_src0` 做 pointer array，第二次改为独立 `d_src0_rows` workspace。
+- build: `cmake --build build-ds4-moe-stream-batch-on --target llama-cli llama-results -j2` passed。
+- correctness_blk0_r1: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-rowtile-v2-correctness/top1-blk0-only，strict 16GB/no-swap，France fixed-text，`GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR=blk.0.ffn_down_exps.weight`，exit_status=139，signal 11，未写出 top1-check.json。
+- correctness_blk0_r2: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-rowtile-v2-correctness/top1-blk0-only-r2，独立 `d_src0_rows` 后复跑，仍 exit_status=139，未写出 top1-check.json。
+- memory: 两次 run 的 cgroup `memory.peak=16000000000`，`memory.events` 中 `oom=0`、`oom_kill=0`；page cache 计入 cgroup。崩溃不是可接受结果，不能进入 full-down top1 或 performance benchmark。
+- decision: v2 rowtile 方向目前没有通过最小 correctness gate。按规则回退源码，只保留 rejected artifact/plan。下一步不应继续堆性能测试，应先做小型 op-level harness/cuda-memcheck，定位 signal 11 是 Q8_0 wdata layout、kernel bounds、还是 CUDA async error 在 host 侧延迟爆出。
