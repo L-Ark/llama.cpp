@@ -6307,7 +6307,8 @@ static bool prompt_up_gate_stream_enabled() {
 }
 
 static bool moe_stream_type_supported(ggml_type type) {
-    return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ3_S || type == GGML_TYPE_IQ2_S ||
+    return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ3_S ||
+        type == GGML_TYPE_IQ2_XXS || type == GGML_TYPE_IQ2_XS || type == GGML_TYPE_IQ2_S ||
         type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }
 
@@ -6791,6 +6792,8 @@ static bool launch_moe_mmvq_compact_batch(
     switch (src0_type) {
         case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q3_K:
+        case GGML_TYPE_IQ2_XXS:
+        case GGML_TYPE_IQ2_XS:
         case GGML_TYPE_IQ3_XXS:
         case GGML_TYPE_IQ3_S:
         case GGML_TYPE_IQ2_S:

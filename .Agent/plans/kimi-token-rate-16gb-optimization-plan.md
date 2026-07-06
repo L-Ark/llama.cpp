@@ -91201,3 +91201,50 @@ Decision:
 - The next step requires explicit approval to delete the listed old packs, or
   an external storage expansion.
 - No token-rate improvement is claimed in GP19.
+
+## GP20: IQ2_XXS/IQ2_XS vendor MoE stream compatibility gate
+
+Timestamp: `2026-07-07T03:20:00+0800`.
+
+Status: planned before code edit.
+
+Rationale:
+
+- GP17 verified the AesSedai lower-byte candidate has compatible deepseek2/Kimi
+  metadata, but only the first shard was inspected.
+- A source audit after GP19 found that the generic CUDA quantized matmul stack
+  supports `GGML_TYPE_IQ2_XXS` and `GGML_TYPE_IQ2_XS`, but the vendor
+  `moe_stream_batch` gate still rejects these types in
+  `moe_stream_type_supported()`.
+- If left unchanged, a downloaded IQ2_XXS/IQ2_XS model may decline the vendor
+  MoE stream path and fall back to slower behavior, making the lower-byte
+  artifact unusable for the `>5 tok/s` objective even before quality testing.
+
+Theory and expected bound:
+
+- This compatibility patch does not reduce bytes/token by itself and must not
+  be counted as a token-rate improvement.
+- It is required to preserve the existing stream/expert-pack path after moving
+  from IQ3_S to a lower-byte IQ2 candidate.
+- The performance upper bound remains the byte-reduction bound from GP10:
+  roughly `0.39-0.55x` bytes/token is required before `5 tok/s` is plausible.
+  GP20 only removes a software gate that would otherwise prevent measuring that
+  bound.
+
+Implementation scope:
+
+- Add `GGML_TYPE_IQ2_XXS` and `GGML_TYPE_IQ2_XS` to
+  `moe_stream_type_supported()`.
+- Add the same two types to the compact MMVQ batch launcher type switch.
+- Do not alter IQ3_S cache policy, current-down overlap, IO depth, or SOTA
+  runtime env defaults.
+
+Validation gate:
+
+- Local source check and remote CUDA build must pass.
+- No SOTA promotion is allowed from this patch alone.
+- After the IQ2 candidate exists locally:
+  1. verify full tensor metadata and actual tensor types;
+  2. run `n32` dev cold-start quality/token-rate smoke under 16 GB cgroup;
+  3. verify the vendor stream path is active and not declining unsupported type;
+  4. only then proceed to expert-pack adaptation and dev `n96`.
