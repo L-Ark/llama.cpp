@@ -92027,3 +92027,65 @@ Decision:
 - Do not implement this predictor in runtime.
 - Stronger route work requires explicit token/layer route instrumentation or a
   much smaller predictor candidate set; otherwise it will add too much IO.
+
+## GP28: exact route detail instrumentation
+
+Timestamp: `2026-07-07T06:15:00+0800`.
+
+Status: planned; instrumentation only, default off.
+
+Branch: `vendor/kimi-speculative-general-token-rate-16gb`.
+
+Rationale:
+
+- GP27 could only analyze ordered movement windows because existing
+  `route-trace.csv` lacks explicit token/layer/kind context.
+- That evidence is enough to reject a simple recent-window prefetcher, but not
+  enough to decide whether a tighter per-layer/per-token route predictor is
+  possible.
+- The up/gate batched route entry already has `active_experts`, `dst_ids`,
+  `flat_dst_ids`, and `token_ids`. Capturing those in a separate detail trace
+  can measure true route stability without changing compute behavior.
+
+Design:
+
+- Add a new env-gated CSV output, separate from `GGML_MOE_ROUTE_TRACE_OUT`, so
+  existing trace-prefetch parsers remain compatible.
+- Proposed env:
+  `GGML_MOE_ROUTE_DETAIL_OUT`.
+- Proposed CSV fields:
+  - `seq`;
+  - `call`;
+  - `mode` (`prompt` or `decode`);
+  - `kind` (`up`, `gate`, later optionally `down`);
+  - `tensor`;
+  - `layer`;
+  - `active_index`;
+  - `expert_idx`;
+  - `dst_id`;
+  - `flat_dst_id`;
+  - `token_id`;
+  - `n_active`;
+  - `expert_bytes`;
+  - `src0_type`;
+  - `ne01`;
+  - `ne00`.
+- Keep default behavior unchanged unless `GGML_MOE_ROUTE_DETAIL_OUT` is set.
+- Do not alter `route-trace.csv` format.
+
+Validation:
+
+- Local compile or remote clean-worktree compile for `ggml-cuda`.
+- No runtime SOTA claim.
+- If compile passes, record:
+  `.Agent/runs/20260707-gp28-route-detail-instrumentation/report.md`.
+
+Follow-up analysis gate:
+
+- After a detail trace exists, compute:
+  - same-layer next-token top-k route overlap;
+  - per-layer expert persistence;
+  - minimal candidate set size needed for byte coverage >= `0.60`;
+  - false candidate byte ratio.
+- Only if that analysis passes a stricter gate should a runtime prefetcher be
+  implemented.
