@@ -19,6 +19,7 @@ set -euo pipefail
 : "${DOWNLOAD:=1}"
 : "${RUN_SMOKE:=1}"
 : "${VALIDATE_PARTS:=1}"
+: "${RESUME_DOWNLOAD:=1}"
 : "${MIN_FREE_AFTER_DOWNLOAD_GIB:=20}"
 
 IQ1S_BYTES=204430872480
@@ -78,7 +79,7 @@ path_size_bytes() {
 
 print_inventory() {
   log "date=$(date -Is)"
-  log "execute=$EXECUTE delete_old_packs=$DELETE_OLD_PACKS download=$DOWNLOAD run_smoke=$RUN_SMOKE validate_parts=$VALIDATE_PARTS"
+  log "execute=$EXECUTE delete_old_packs=$DELETE_OLD_PACKS download=$DOWNLOAD run_smoke=$RUN_SMOKE validate_parts=$VALIDATE_PARTS resume_download=$RESUME_DOWNLOAD"
   log "repo=$REPO"
   if [ -d "$REPO/.git" ]; then
     log "repo_branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
@@ -228,32 +229,65 @@ download_model() {
   if [ "$EXECUTE" != "1" ]; then
     log "dry-run download command:"
     log "  mkdir -p '$MODEL_DIR'"
-    log "  stream ${#PART_URLS[@]} parts into '$MODEL_PATH'"
+    log "  resumable stream ${#PART_URLS[@]} parts into '$MODEL_PATH' via '$MODEL_PATH.tmp'"
     return
   fi
 
   mkdir -p "$MODEL_DIR"
   local tmp_path="$MODEL_PATH.tmp"
-  if [ -e "$tmp_path" ]; then
-    log "ERROR temporary model already exists: $tmp_path"
-    return 1
-  fi
   if [ -e "$MODEL_PATH" ]; then
     log "ERROR model path already exists with unexpected size: $MODEL_PATH"
     return 1
   fi
 
-  : > "$tmp_path"
-  local i before after got expected
+  local tmp_size
+  if [ -e "$tmp_path" ]; then
+    tmp_size="$(stat -c '%s' "$tmp_path")"
+    if [ "$tmp_size" -gt "$IQ1S_BYTES" ]; then
+      log "ERROR temporary model is larger than expected: tmp_size=$tmp_size expected=$IQ1S_BYTES path=$tmp_path"
+      return 1
+    fi
+    if [ "$RESUME_DOWNLOAD" != "1" ]; then
+      log "ERROR temporary model exists but RESUME_DOWNLOAD is disabled: $tmp_path"
+      return 1
+    fi
+    log "resume temporary model: path=$tmp_path bytes=$tmp_size"
+  else
+    : > "$tmp_path"
+    tmp_size=0
+  fi
+
+  if [ "$tmp_size" -eq "$IQ1S_BYTES" ]; then
+    log "temporary model already complete; finalizing"
+    mv "$tmp_path" "$MODEL_PATH"
+    sha256sum "$MODEL_PATH" > "$MODEL_PATH.sha256"
+    return
+  fi
+
+  local i before after got expected part_offset completed_prefix
+  completed_prefix="$tmp_size"
   for i in "${!PART_URLS[@]}"; do
+    expected="${PART_BYTES[$i]}"
+    if [ "$completed_prefix" -ge "$expected" ]; then
+      log "skip completed part $((i + 1)) bytes=$expected"
+      completed_prefix=$((completed_prefix - expected))
+      continue
+    fi
+    part_offset="$completed_prefix"
+    completed_prefix=0
+    expected=$((expected - part_offset))
     before="$(stat -c '%s' "$tmp_path")"
-    log "download part $((i + 1)) expected=${PART_BYTES[$i]} url=${PART_URLS[$i]}"
-    curl -L --fail --retry 5 --retry-delay 5 "${PART_URLS[$i]}" >> "$tmp_path"
+    log "download part $((i + 1)) offset=$part_offset append_expected=$expected url=${PART_URLS[$i]}"
+    if [ "$part_offset" -gt 0 ]; then
+      curl -L --fail --retry 5 --retry-delay 5 -r "${part_offset}-" "${PART_URLS[$i]}" >> "$tmp_path"
+    else
+      curl -L --fail --retry 5 --retry-delay 5 "${PART_URLS[$i]}" >> "$tmp_path"
+    fi
     after="$(stat -c '%s' "$tmp_path")"
     got=$((after - before))
-    expected="${PART_BYTES[$i]}"
     if [ "$got" -ne "$expected" ]; then
       log "ERROR part $((i + 1)) size mismatch got=$got expected=$expected"
+      truncate -s "$before" "$tmp_path"
       return 1
     fi
   done

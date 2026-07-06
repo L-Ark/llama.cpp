@@ -93220,3 +93220,46 @@ GP36 execution result:
   - IQ1_S part metadata gate passes;
   - full IQ1_S n32 smoke remains gated only by disk capacity or explicit
     deletion approval.
+
+## GP37: resumable IQ1_S stream download guard
+
+Timestamp: `2026-07-07T11:25:00+0800`.
+
+Status: planned before execution.
+
+Purpose:
+
+- The full IQ1_S artifact is `204430872480` bytes.
+- A failed network transfer should not force a full restart.
+- The downloader still must not store all five parts plus the final GGUF at the
+  same time.
+- Add resumable streaming into `MODEL_PATH.tmp`:
+  - if no temp file exists, start from byte `0`;
+  - if temp file exists and `RESUME_DOWNLOAD=1`, compute which source part and
+    byte offset correspond to the current temp size;
+  - skip fully completed parts;
+  - resume the current part with HTTP `Range`;
+  - append later parts in order;
+  - validate final size before renaming to `MODEL_PATH`;
+  - keep dry-run as the default.
+
+Safety requirements:
+
+- Default remains:
+  `EXECUTE=0`.
+- Resume is enabled by default only for incomplete `.tmp` files:
+  `RESUME_DOWNLOAD=1`.
+- If `MODEL_PATH.tmp` is larger than the expected final size, fail.
+- If `MODEL_PATH.tmp` exists and `RESUME_DOWNLOAD=0`, fail instead of
+  overwriting.
+- No deletion behavior changes.
+- No SOTA or token-rate claim is possible from this phase.
+
+Validation:
+
+1. Local syntax:
+   `bash -n .Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+2. Remote dry-run:
+   `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+3. Confirm dry-run prints the resumable download command shape and still stops
+   at the current disk gate.
