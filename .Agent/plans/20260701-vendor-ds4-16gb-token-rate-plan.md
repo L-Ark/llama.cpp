@@ -4970,3 +4970,16 @@
 - implementation: 在 mxfp4_down_probe_report 中限制 active rows 和 output columns 的 compare loop；CSV 增加的 compared 字段自然反映实际比较量，不需要改 schema。invalid args 和原有 max_calls 行为保持不变。
 - validation: rebuild build-ds4-moe-stream-batch-on llama-cli llama-results；strict 16GB/no-swap run with GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity, MAX_CALLS=4, MAX_ACTIVE=1, MAX_COLS=128；要求 down_mxfp4_probe.csv 生成且 status=ok、compared>0，并记录 max_abs/mean_abs。held-out 不使用，不是 SOTA。
 - decision_rule: 若 limited parity max_abs 接近 0 或足够小，再写下一步 default-off MXFP4 down writeback plan；若误差大或仍 timeout，停止 down batch writeback 路线并记录 reject。
+
+
+## 2026-07-07 执行记录：limited down MXFP4 parity probe
+
+- attempt_id: 20260707-limited-down-mxfp4-parity-probe
+- status: rejected_probe_still_times_out_before_csv_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/limited-down-mxfp4-parity-probe-20260707.json
+- source_change: ggml/src/ggml-cuda/moe_stream_batch.cu 的 mxfp4_down_probe_report 新增 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE 与 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_COLS；默认未设置时保持原 full compare 行为。该改动只影响 diagnostic probe，不写回 logits。
+- validation_build: build-ds4-moe-stream-batch-on rebuild llama-cli llama-results passed。
+- run: /root/lfz/runs/vendor-ds4-16gb/20260707T-limited-down-mxfp4-parity-probe/france-n1-active1-cols128，strict 16GB/no-swap，MAX_CALLS=4，MAX_ACTIVE=1，MAX_COLS=128，France n1 calibration only，不是 SOTA。
+- result: stderr 仍显示 blk.0-3 down probe active、active=8，但 2min36s 无 down_mxfp4_probe.csv，被手动终止；fallback profile 仍 batch_accept=0。
+- interpretation: 慢点不在 CPU reference full compare loop；即使限制 compare rows/cols，也没有进入 report 写 CSV。问题更早，可能在 staging、launch_moe_mmvq_compact_batch、D2H 或 cudaStreamSynchronize。
+- decision: reject，不做 writeback。下一步若继续该路线，必须先写 stage-level timing/early-return probe，定位 batch=ON 在 report 前卡在哪里。

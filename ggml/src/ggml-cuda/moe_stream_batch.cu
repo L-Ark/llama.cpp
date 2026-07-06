@@ -6076,12 +6076,31 @@ static void mxfp4_down_probe_report(
     int64_t worst_col = -1;
     int64_t compared = 0;
 
-    for (int j = 0; j < n_active; ++j) {
+    auto env_limit_i64 = [](const char *env_name, int64_t fallback) -> int64_t {
+        const char *env = std::getenv(env_name);
+        if (!env || !env[0]) {
+            return fallback;
+        }
+        char *end = nullptr;
+        const long long value = std::strtoll(env, &end, 10);
+        if (end == env || value <= 0) {
+            return fallback;
+        }
+        return (int64_t)value;
+    };
+    const int active_limit = (int)std::min<int64_t>(
+            (int64_t)n_active,
+            env_limit_i64("GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE", (int64_t)n_active));
+    const int64_t col_limit = std::min<int64_t>(
+            ne01,
+            env_limit_i64("GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_COLS", ne01));
+
+    for (int j = 0; j < active_limit; ++j) {
         const char *expert_base = (const char *)src0_data + (size_t)active_experts[j] * nb02;
         const float *src_row = (const float *)((const char *)src1_f32 +
                 (size_t)dst_ids[j] * src1_nb1 + (size_t)token_ids[j] * src1_nb2);
         const float *gpu_row = gpu_rows + (size_t)j * (size_t)ne01;
-        for (int64_t col = 0; col < ne01; ++col) {
+        for (int64_t col = 0; col < col_limit; ++col) {
             const block_mxfp4 *qrow = (const block_mxfp4 *)(expert_base + (size_t)col * nb01);
             dequantize_row_mxfp4(qrow, deq.data(), ne00);
             double cpu = 0.0;
