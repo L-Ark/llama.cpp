@@ -4793,3 +4793,17 @@
 - `kernel_mapping`: 对每个命中的 expert/token row，只计算 `row_count` 个输出列；GPU 输出的 local col `c` 对应 CPU fallback dst 的 global col `row0 + c`。compare-only 只比较该范围，`max_abs` 必须为 `0`。
 - `validation_gate`: build `llama-results`；default-off fixed-text top1 pass；partial exact repr smoke strict 16GB/no-swap，top1 `same_top1=145/145`，partial compare `diff_count=0`，memory peak <=16GB，无 OOM。
 - `decision_rule`: 如果 partial exact compare 失败，先修 row stride/offset/transpose 映射；如果通过，再设计真实 compressed payload 或 lowbit approximation 的 op-level correctness gate。partial exact 本身不用于 token-rate benchmark，因为它不能替代完整 up/down fallback。
+
+## 2026-07-07 执行记录：partial exact row-range compare probe
+
+- `attempt_id`: `20260707-partial-exact-rowrange-compare-probe`
+- `status`: `passed_compare_probe_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/partial-exact-rowrange-compare-probe-20260707.json`
+- `source_change`: 在 `ggml/src/ggml-cuda/moe_stream.cu` 增加 default-off partial/exact repr CUDA pool、`exact_mxfp4_partial` row-range loader、`GGML_MOE_STREAM_Q80_PARTIAL_REPR_PROBE_OUT` compare-only CSV，以及 local-col -> `dst[row0 + col]` 的 partial exact kernel。默认 env 未设置时不改变路径。
+- `manifest`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row0-16-20260707.partial_exact_manifest.csv`，由 calibration/dev top48 direct manifest 派生，`96` entries，每个 selected expert 只取 `row0=0,row_count=16`，payload `2506752` bytes。held-out 未使用。
+- `build`: `cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2` passed。
+- `default_off_gate`: strict 16GB/no-swap cgroup 内 fixed France top1 check exit `0`，`same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`mean_abs=0`，`memory_peak_bytes=989667328`，无 OOM。
+- `partial_smoke_gate`: strict 16GB/no-swap cgroup 内开启 old exact hot pool + new partial repr pool，top1 exit `0`，`same_top1=145/145`，`max_abs=0`，`memory_peak_bytes=1000108032`，无 OOM。
+- `repr_pool`: allocated `16 MiB`，attempted `96`，inserted `96`，payload bytes `2506752`，read `42.784 ms`，H2D `0.786 ms`，direct I/O enabled。
+- `partial_probe_result`: aggregate records `4246`，nonzero CSV rows `3786`，`compare_ran=3786`，`compare_ok=3786`，`diff_count=0`，`max_abs=0`，`src0_bytes=110871552`，`q80_bytes=13858944`，`out_bytes=271744`。
+- `decision`: row-range loader/kernel/compare 映射已通过 fixed-text correctness gate；但 partial exact 只验证局部输出列，不能替代完整 up/down fallback，不是 token-rate SOTA。下一步只能在此 compare-only 基础上测试真实 compressed/approx payload 的数值正确性，再决定是否进入性能路径。

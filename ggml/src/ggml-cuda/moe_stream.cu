@@ -790,14 +790,31 @@ struct one_direct_repr_state {
     bool inited = false;
     bool enabled = false;
     std::vector<one_direct_repr_entry> entries;
+    std::vector<size_t> pool_offsets;
+    std::vector<uint8_t> pool_ready;
     std::mutex mu;
+    std::mutex pool_mu;
     std::mutex report_mu;
     FILE * report_fp = nullptr;
+    int fd = -1;
+    int fd_direct = -1;
+    bool direct_enabled = false;
+    void * pool = nullptr;
+    size_t pool_sz = 0;
+    bool pool_inited = false;
+    bool pool_enabled = false;
     uint64_t compressed_bytes = 0;
     uint64_t original_bytes = 0;
     uint64_t exact_entries = 0;
     uint64_t partial_entries = 0;
     uint64_t compressed_entries = 0;
+    uint64_t pool_attempted = 0;
+    uint64_t pool_inserted = 0;
+    uint64_t pool_read_failures = 0;
+    uint64_t pool_copy_failures = 0;
+    uint64_t pool_bytes = 0;
+    double pool_read_ms = 0.0;
+    double pool_h2d_ms = 0.0;
     std::atomic<uint64_t> hits{0};
     std::atomic<uint64_t> misses{0};
 };
@@ -843,6 +860,19 @@ static bool one_direct_repr_parse_i32(const char * s, int32_t & out) {
 
 static bool one_direct_repr_is_exact(const one_direct_repr_entry & e) {
     return std::strcmp(e.repr_type, "exact_mxfp4") == 0 && e.compressed_nbytes == e.original_nbytes;
+}
+
+static bool one_direct_repr_is_partial_exact(const one_direct_repr_entry & e) {
+    return std::strcmp(e.repr_type, "exact_mxfp4_partial") == 0 &&
+        e.compressed_nbytes == e.original_nbytes && e.row_count > 0;
+}
+
+static uint64_t one_direct_repr_env_u64(const char * name, uint64_t fallback) {
+    const char * env = std::getenv(name);
+    if (!env || !env[0]) {
+        return fallback;
+    }
+    return (uint64_t) std::strtoull(env, nullptr, 10);
 }
 
 static FILE * one_direct_repr_report_fp() {
@@ -921,7 +951,9 @@ static void one_direct_repr_manifest_report_atexit() {
     }
     std::fprintf(stderr,
             "[moe_stream] one direct repr manifest: entries=%zu compressed_bytes=%lu original_bytes=%lu"
-            " exact_entries=%lu partial_entries=%lu compressed_entries=%lu hits=%lu misses=%lu\n",
+            " exact_entries=%lu partial_entries=%lu compressed_entries=%lu hits=%lu misses=%lu"
+            " pool_enabled=%d pool_sz=%zu pool_attempted=%lu pool_inserted=%lu pool_bytes=%lu"
+            " pool_read_failures=%lu pool_copy_failures=%lu pool_read_ms=%.3f pool_h2d_ms=%.3f direct_enabled=%d\n",
             g_one_direct_repr.entries.size(),
             g_one_direct_repr.compressed_bytes,
             g_one_direct_repr.original_bytes,
@@ -929,7 +961,17 @@ static void one_direct_repr_manifest_report_atexit() {
             g_one_direct_repr.partial_entries,
             g_one_direct_repr.compressed_entries,
             g_one_direct_repr.hits.load(),
-            g_one_direct_repr.misses.load());
+            g_one_direct_repr.misses.load(),
+            g_one_direct_repr.pool_enabled ? 1 : 0,
+            g_one_direct_repr.pool_sz,
+            g_one_direct_repr.pool_attempted,
+            g_one_direct_repr.pool_inserted,
+            g_one_direct_repr.pool_bytes,
+            g_one_direct_repr.pool_read_failures,
+            g_one_direct_repr.pool_copy_failures,
+            g_one_direct_repr.pool_read_ms,
+            g_one_direct_repr.pool_h2d_ms,
+            g_one_direct_repr.direct_enabled ? 1 : 0);
     if (g_one_direct_repr.report_fp) {
         std::fclose(g_one_direct_repr.report_fp);
         g_one_direct_repr.report_fp = nullptr;
@@ -1048,6 +1090,8 @@ static void one_direct_repr_manifest_init_once() {
     });
 
     g_one_direct_repr.entries = std::move(entries);
+    g_one_direct_repr.pool_offsets.assign(g_one_direct_repr.entries.size(), (size_t) -1);
+    g_one_direct_repr.pool_ready.assign(g_one_direct_repr.entries.size(), 0);
     g_one_direct_repr.enabled = true;
     std::atexit(one_direct_repr_manifest_report_atexit);
     std::fprintf(stderr,
@@ -1058,6 +1102,192 @@ static void one_direct_repr_manifest_init_once() {
             manifest_path);
     for (const one_direct_repr_entry & e : g_one_direct_repr.entries) {
         one_direct_repr_report_entry(e);
+    }
+}
+
+
+static bool one_direct_repr_read_direct_aligned(int fd, const one_direct_repr_entry & entry, void * dst, size_t sz) {
+#if defined(__linux__) && defined(O_DIRECT)
+    const uint64_t align = 4096;
+    const uint64_t prefix = entry.model_offset & (align - 1);
+    const uint64_t read_off = entry.model_offset - prefix;
+    const size_t read_sz = (size_t) (((prefix + sz + align - 1) / align) * align);
+    void * bounce = nullptr;
+    if (posix_memalign(&bounce, (size_t) align, read_sz) != 0 || bounce == nullptr) {
+        return false;
+    }
+    const bool ok = one_pack_read_exact_fd(fd, bounce, read_sz, read_off);
+    if (ok) {
+        std::memcpy(dst, (const char *) bounce + prefix, sz);
+    }
+    std::free(bounce);
+    return ok;
+#else
+    (void) fd;
+    (void) entry;
+    (void) dst;
+    (void) sz;
+    return false;
+#endif
+}
+
+static bool one_direct_repr_read_entry(const one_direct_repr_entry & entry, void * dst, size_t sz) {
+    if (g_one_direct_repr.fd < 0 || entry.compressed_nbytes != (uint64_t) sz) {
+        return false;
+    }
+    if (g_one_direct_repr.fd_direct >= 0) {
+        if (one_direct_repr_read_direct_aligned(g_one_direct_repr.fd_direct, entry, dst, sz)) {
+            return true;
+        }
+    }
+    return one_pack_read_exact_fd(g_one_direct_repr.fd, dst, sz, entry.model_offset);
+}
+
+static void one_direct_repr_pool_init_once() {
+    one_direct_repr_manifest_init_once();
+    std::lock_guard<std::mutex> lk(g_one_direct_repr.pool_mu);
+    if (g_one_direct_repr.pool_inited) {
+        return;
+    }
+    g_one_direct_repr.pool_inited = true;
+
+    if (!g_one_direct_repr.enabled || g_one_direct_repr.entries.empty()) {
+        return;
+    }
+    const uint64_t budget_mib = one_direct_repr_env_u64("GGML_MOE_STREAM_ONE_DIRECT_REPR_POOL_MIB", 0);
+    if (budget_mib == 0) {
+        return;
+    }
+    const char * model_path = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_MODEL");
+    if (!model_path || !model_path[0]) {
+        std::fprintf(stderr, "[moe_stream] one direct repr pool: GGML_MOE_STREAM_ONE_DIRECT_MODEL is required\n");
+        return;
+    }
+
+    const int fd = ::open(model_path, O_RDONLY);
+    if (fd < 0) {
+        std::fprintf(stderr, "[moe_stream] one direct repr pool: model open failed: %s\n", model_path);
+        return;
+    }
+    g_one_direct_repr.fd = fd;
+    const char * io_env = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_IO");
+    if (io_env && (std::strcmp(io_env, "direct") == 0 || std::strcmp(io_env, "odirect") == 0)) {
+#if defined(__linux__) && defined(O_DIRECT)
+        g_one_direct_repr.fd_direct = ::open(model_path, O_RDONLY | O_DIRECT);
+        if (g_one_direct_repr.fd_direct >= 0) {
+            g_one_direct_repr.direct_enabled = true;
+        }
+#endif
+    }
+
+    const size_t budget = (size_t) budget_mib * 1024ULL * 1024ULL;
+    void * pool = nullptr;
+    if (cudaSetDevice(0) != cudaSuccess || cudaMalloc(&pool, budget) != cudaSuccess) {
+        std::fprintf(stderr, "[moe_stream] one direct repr pool: cudaMalloc failed for %.2f MiB\n",
+                budget / (1024.0 * 1024.0));
+        return;
+    }
+    g_one_direct_repr.pool = pool;
+    g_one_direct_repr.pool_sz = budget;
+    g_one_direct_repr.pool_enabled = true;
+
+    uint64_t limit = one_direct_repr_env_u64("GGML_MOE_STREAM_ONE_DIRECT_REPR_PREFILL_LIMIT", 0);
+    if (limit == 0) {
+        limit = UINT64_MAX;
+    }
+    size_t used = 0;
+    void * h_tmp = nullptr;
+    size_t h_tmp_sz = 0;
+    for (size_t i = 0; i < g_one_direct_repr.entries.size() && g_one_direct_repr.pool_attempted < limit; ++i) {
+        const one_direct_repr_entry & e = g_one_direct_repr.entries[i];
+        if (!one_direct_repr_is_partial_exact(e)) {
+            continue;
+        }
+        g_one_direct_repr.pool_attempted++;
+        const size_t sz = (size_t) e.compressed_nbytes;
+        if (sz == 0 || used + sz > budget) {
+            break;
+        }
+        if (h_tmp_sz < sz) {
+            std::free(h_tmp);
+            h_tmp = std::malloc(sz);
+            h_tmp_sz = h_tmp ? sz : 0;
+        }
+        if (!h_tmp) {
+            g_one_direct_repr.pool_read_failures++;
+            continue;
+        }
+        const auto t_read0 = std::chrono::steady_clock::now();
+        if (!one_direct_repr_read_entry(e, h_tmp, sz)) {
+            g_one_direct_repr.pool_read_failures++;
+            continue;
+        }
+        const auto t_read1 = std::chrono::steady_clock::now();
+        g_one_direct_repr.pool_read_ms += std::chrono::duration<double, std::milli>(t_read1 - t_read0).count();
+        const auto t_h2d0 = std::chrono::steady_clock::now();
+        if (cudaMemcpy((char *) g_one_direct_repr.pool + used, h_tmp, sz, cudaMemcpyHostToDevice) != cudaSuccess) {
+            g_one_direct_repr.pool_copy_failures++;
+            continue;
+        }
+        const auto t_h2d1 = std::chrono::steady_clock::now();
+        g_one_direct_repr.pool_h2d_ms += std::chrono::duration<double, std::milli>(t_h2d1 - t_h2d0).count();
+        g_one_direct_repr.pool_offsets[i] = used;
+        g_one_direct_repr.pool_ready[i] = 1;
+        g_one_direct_repr.pool_inserted++;
+        g_one_direct_repr.pool_bytes += sz;
+        used += sz;
+    }
+    std::free(h_tmp);
+    std::fprintf(stderr,
+            "[moe_stream] one direct repr pool: allocated %.2f MiB attempted=%lu inserted=%lu bytes=%lu read_ms=%.3f h2d_ms=%.3f direct_enabled=%d\n",
+            budget / (1024.0 * 1024.0),
+            g_one_direct_repr.pool_attempted,
+            g_one_direct_repr.pool_inserted,
+            g_one_direct_repr.pool_bytes,
+            g_one_direct_repr.pool_read_ms,
+            g_one_direct_repr.pool_h2d_ms,
+            g_one_direct_repr.direct_enabled ? 1 : 0);
+}
+
+struct one_direct_repr_partial_hit {
+    const one_direct_repr_entry * entry = nullptr;
+    const char * d_src0 = nullptr;
+};
+
+static void one_direct_repr_find_partial_hits(
+        const char * tensor_name,
+        int64_t expert_idx,
+        std::vector<one_direct_repr_partial_hit> & hits) {
+    one_direct_repr_pool_init_once();
+    if (!g_one_direct_repr.pool_enabled || !g_one_direct_repr.pool || !tensor_name || !tensor_name[0]) {
+        return;
+    }
+    one_direct_repr_entry key;
+    std::snprintf(key.tensor, sizeof(key.tensor), "%s", tensor_name);
+    key.expert_idx = (int32_t) expert_idx;
+    auto less_key = [](const one_direct_repr_entry & a, const one_direct_repr_entry & b) {
+        const int name_cmp = std::strcmp(a.tensor, b.tensor);
+        if (name_cmp != 0) {
+            return name_cmp < 0;
+        }
+        if (a.expert_idx != b.expert_idx) {
+            return a.expert_idx < b.expert_idx;
+        }
+        if (a.row0 != b.row0) {
+            return a.row0 < b.row0;
+        }
+        return std::strcmp(a.repr_type, b.repr_type) < 0;
+    };
+    auto it = std::lower_bound(g_one_direct_repr.entries.begin(), g_one_direct_repr.entries.end(), key, less_key);
+    for (; it != g_one_direct_repr.entries.end(); ++it) {
+        const one_direct_repr_entry & e = *it;
+        if (std::strcmp(e.tensor, tensor_name) != 0 || e.expert_idx != expert_idx) {
+            break;
+        }
+        const size_t idx = (size_t) (it - g_one_direct_repr.entries.begin());
+        if (one_direct_repr_is_partial_exact(e) && idx < g_one_direct_repr.pool_ready.size() && g_one_direct_repr.pool_ready[idx]) {
+            hits.push_back({&e, (const char *) g_one_direct_repr.pool + g_one_direct_repr.pool_offsets[idx]});
+        }
     }
 }
 
@@ -2885,6 +3115,67 @@ static __global__ void moe_stream_q80_hot_batch_cpu_compat_rowtile_kernel(
     }
 }
 
+static __global__ void moe_stream_q80_partial_exact_rowrange_kernel(
+        const char * const * __restrict__ src0_rows,
+        const uint32_t * __restrict__ row_counts,
+        size_t nb01,
+        const char * __restrict__ q80,
+        size_t q80_row_size,
+        int64_t ne00,
+        int records,
+        int max_cols,
+        float * __restrict__ out) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int total = records * max_cols;
+    if (idx >= total) {
+        return;
+    }
+    const int row = idx / max_cols;
+    const int local_col = idx - row * max_cols;
+    if (local_col >= (int) row_counts[row]) {
+        return;
+    }
+
+    const char * src0 = src0_rows[row];
+    const block_mxfp4 * x = (const block_mxfp4 *) (src0 + (size_t) local_col * nb01);
+    const block_q8_0 * y = (const block_q8_0 *) (q80 + (size_t) row * q80_row_size);
+    const int64_t nb = ne00 / QK_MXFP4;
+
+    float acc1[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    float acc2[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+
+    int64_t ib = 0;
+    for (; ib + 1 < nb; ib += 2) {
+        int p1[8];
+        int p2[8];
+        moe_stream_q80_cpu_compat_block_lanes(x[ib + 0], y[ib + 0], p1);
+        moe_stream_q80_cpu_compat_block_lanes(x[ib + 1], y[ib + 1], p2);
+
+        const float scale0 = __half2float(y[ib + 0].d) * (ggml_cuda_e8m0_to_fp32(x[ib + 0].e) * 0.5f);
+        const float scale1 = __half2float(y[ib + 1].d) * (ggml_cuda_e8m0_to_fp32(x[ib + 1].e) * 0.5f);
+#pragma unroll
+        for (int lane = 0; lane < 8; ++lane) {
+            acc1[lane] = fmaf(scale0, (float) p1[lane], acc1[lane]);
+            acc2[lane] = fmaf(scale1, (float) p2[lane], acc2[lane]);
+        }
+    }
+
+    float sum = moe_stream_q80_cpu_compat_hsum8(acc1, acc2);
+    for (; ib < nb; ++ib) {
+        int sumi1 = 0;
+        int sumi2 = 0;
+#pragma unroll
+        for (int j = 0; j < QK_MXFP4/2; ++j) {
+            const uint8_t q = x[ib].qs[j];
+            sumi1 += y[ib].qs[j] * moe_stream_mxfp4_value_dev(q & 0x0F);
+            sumi2 += y[ib].qs[j + QK_MXFP4/2] * moe_stream_mxfp4_value_dev(q >> 4);
+        }
+        const float scale = __half2float(y[ib].d) * (ggml_cuda_e8m0_to_fp32(x[ib].e) * 0.5f);
+        sum = fmaf(scale, (float) (sumi1 + sumi2), sum);
+    }
+    out[(size_t) row * (size_t) max_cols + (size_t) local_col] = sum;
+}
+
 extern "C" void ggml_cuda_moe_stream_q80_probe(
     int src0_type_int,
     const char *src0_name,
@@ -3225,6 +3516,30 @@ static bool moe_stream_q80_skip_name_allows(const char * name) {
         std::strstr(name, "ffn_down_exps") != nullptr;
 }
 
+static FILE * moe_stream_q80_partial_repr_probe_fp() {
+    static FILE * fp = nullptr;
+    static int initialized = 0;
+    static std::mutex mu;
+
+    std::lock_guard<std::mutex> lk(mu);
+    if (!initialized) {
+        initialized = 1;
+        const char * path = std::getenv("GGML_MOE_STREAM_Q80_PARTIAL_REPR_PROBE_OUT");
+        if (path && path[0]) {
+            fp = std::fopen(path, "w");
+            if (fp) {
+                std::setvbuf(fp, nullptr, _IOLBF, 0);
+                std::fprintf(fp,
+                    "seq,tensor,records,matched_experts,rows_total,max_cols,src0_bytes,q80_bytes,out_bytes,"
+                    "compare_ran,compare_ok,max_abs,mean_abs,diff_count,alloc_us,h2d_us,kernel_us,d2h_us,compare_us,free_us,elapsed_us\n");
+            } else {
+                std::fprintf(stderr, "[moe_stream_q80_partial_repr_probe] failed to open report: %s\n", path);
+            }
+        }
+    }
+    return fp;
+}
+
 static FILE * moe_stream_q80_hot_batch_probe_fp() {
     static FILE * fp = nullptr;
     static int initialized = 0;
@@ -3352,6 +3667,17 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
     const bool mmvq_probe_can_gather = mmvq_probe_enabled && src1_f32 && src1_nb1 > 0 && src1_nb2 > 0;
     std::vector<float> h_src1_f32;
     std::vector<mmvq_hot_group> mmvq_groups;
+    std::vector<const char *> h_partial_src0_rows;
+    std::vector<const float *> h_partial_dst_rows;
+    std::vector<uint8_t> h_partial_q80;
+    std::vector<uint32_t> h_partial_row0;
+    std::vector<uint32_t> h_partial_row_count;
+    int64_t partial_matched_experts = 0;
+    uint32_t partial_max_cols = 0;
+    uint64_t partial_src0_bytes = 0;
+    uint64_t partial_q80_bytes = 0;
+    uint64_t partial_out_bytes = 0;
+    const bool partial_probe_enabled = moe_stream_q80_partial_repr_probe_fp() != nullptr;
 
     for (int64_t expert = 0; expert < n_as; ++expert) {
         const int64_t cne1 = matrix_row_counts[expert];
@@ -3390,6 +3716,13 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
         int64_t expert_ready_rows = 0;
         const int64_t expert_start = (int64_t) h_src0_rows.size();
         const ggml_moe_row_mapping * rows = matrix_rows + expert * rows_per_expert;
+        std::vector<one_direct_repr_partial_hit> partial_hits;
+        if (partial_probe_enabled) {
+            one_direct_repr_find_partial_hits(src0_name, expert, partial_hits);
+            if (!partial_hits.empty()) {
+                partial_matched_experts++;
+            }
+        }
         for (int64_t k = 0; k < cne1; ++k) {
             int64_t i11 = rows[k].i1 % src1_ne1;
             if (i11 < 0) {
@@ -3406,6 +3739,23 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
             const size_t old = h_q80.size();
             h_q80.resize(old + src1_q8_0_row_size);
             std::memcpy(h_q80.data() + old, q80_row, src1_q8_0_row_size);
+            for (const one_direct_repr_partial_hit & hit : partial_hits) {
+                if (!hit.entry || !hit.d_src0 || hit.entry->row_count == 0 ||
+                        hit.entry->row0 + hit.entry->row_count > (uint64_t) ne01) {
+                    continue;
+                }
+                h_partial_src0_rows.push_back(hit.d_src0);
+                h_partial_dst_rows.push_back(dst_row);
+                h_partial_row0.push_back((uint32_t) hit.entry->row0);
+                h_partial_row_count.push_back((uint32_t) hit.entry->row_count);
+                partial_max_cols = std::max<uint32_t>(partial_max_cols, (uint32_t) hit.entry->row_count);
+                const size_t partial_old = h_partial_q80.size();
+                h_partial_q80.resize(partial_old + src1_q8_0_row_size);
+                std::memcpy(h_partial_q80.data() + partial_old, q80_row, src1_q8_0_row_size);
+                partial_src0_bytes += hit.entry->compressed_nbytes;
+                partial_q80_bytes += src1_q8_0_row_size;
+                partial_out_bytes += hit.entry->row_count * sizeof(float);
+            }
             if (mmvq_probe_can_gather) {
                 const char * f32_row = (const char *) src1_f32 + (size_t) i11 * src1_nb1 + (size_t) i12 * src1_nb2;
                 const size_t old_f32 = h_src1_f32.size();
@@ -3599,6 +3949,123 @@ extern "C" void ggml_cuda_moe_stream_q80_hot_batch_probe(
         d2h_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_d2h - t_kernel).count();
         compare_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_compare - t_d2h).count();
         free_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_free - t_compare).count();
+    }
+
+    bool partial_compare_ran = false;
+    bool partial_compare_ok = false;
+    double partial_max_abs = 0.0;
+    double partial_mean_abs = 0.0;
+    uint64_t partial_diff_count = 0;
+    uint64_t partial_alloc_us = 0;
+    uint64_t partial_h2d_us = 0;
+    uint64_t partial_kernel_us = 0;
+    uint64_t partial_d2h_us = 0;
+    uint64_t partial_compare_us = 0;
+    uint64_t partial_free_us = 0;
+    const auto t_partial0 = std::chrono::steady_clock::now();
+
+    if (partial_probe_enabled && !h_partial_src0_rows.empty() && partial_max_cols > 0 && partial_max_cols <= (uint32_t) ne01) {
+        const auto t_alloc0 = std::chrono::steady_clock::now();
+        const int partial_records = (int) h_partial_src0_rows.size();
+        const size_t ptr_bytes = (size_t) partial_records * sizeof(const char *);
+        const size_t row_meta_bytes = (size_t) partial_records * sizeof(uint32_t);
+        const size_t q80_bytes = h_partial_q80.size();
+        const size_t out_elems = (size_t) partial_records * (size_t) partial_max_cols;
+        const size_t out_bytes = out_elems * sizeof(float);
+        const char ** d_src0_rows = nullptr;
+        uint32_t * d_row_count = nullptr;
+        void * d_q80 = nullptr;
+        float * d_out = nullptr;
+        std::vector<float> h_out(out_elems, 0.0f);
+        bool ok = cudaSetDevice(0) == cudaSuccess &&
+            cudaMalloc((void **) &d_src0_rows, ptr_bytes) == cudaSuccess &&
+            cudaMalloc((void **) &d_row_count, row_meta_bytes) == cudaSuccess &&
+            cudaMalloc(&d_q80, q80_bytes) == cudaSuccess &&
+            cudaMalloc((void **) &d_out, out_bytes) == cudaSuccess;
+        const auto t_alloc1 = std::chrono::steady_clock::now();
+        if (ok) {
+            ok = cudaMemcpy(d_src0_rows, h_partial_src0_rows.data(), ptr_bytes, cudaMemcpyHostToDevice) == cudaSuccess &&
+                cudaMemcpy(d_row_count, h_partial_row_count.data(), row_meta_bytes, cudaMemcpyHostToDevice) == cudaSuccess &&
+                cudaMemcpy(d_q80, h_partial_q80.data(), q80_bytes, cudaMemcpyHostToDevice) == cudaSuccess &&
+                cudaMemset(d_out, 0, out_bytes) == cudaSuccess;
+        }
+        const auto t_h2d = std::chrono::steady_clock::now();
+        if (ok) {
+            const int threads = 128;
+            const int blocks = (int) ((out_elems + (size_t) threads - 1) / (size_t) threads);
+            moe_stream_q80_partial_exact_rowrange_kernel<<<blocks, threads>>>(
+                    d_src0_rows, d_row_count, nb01,
+                    (const char *) d_q80, src1_q8_0_row_size,
+                    ne00, partial_records, (int) partial_max_cols, d_out);
+            ok = cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess;
+        }
+        const auto t_kernel = std::chrono::steady_clock::now();
+        if (ok) {
+            ok = cudaMemcpy(h_out.data(), d_out, out_bytes, cudaMemcpyDeviceToHost) == cudaSuccess;
+        }
+        const auto t_d2h = std::chrono::steady_clock::now();
+        if (ok) {
+            double sum_abs = 0.0;
+            uint64_t compared = 0;
+            for (int row = 0; row < partial_records; ++row) {
+                const float * dst_row = h_partial_dst_rows[(size_t) row];
+                const uint32_t row0 = h_partial_row0[(size_t) row];
+                const uint32_t row_count = h_partial_row_count[(size_t) row];
+                const float * out_row = h_out.data() + (size_t) row * (size_t) partial_max_cols;
+                for (uint32_t col = 0; col < row_count; ++col) {
+                    const double diff = std::fabs((double) out_row[col] - (double) dst_row[row0 + col]);
+                    if (diff != 0.0) {
+                        partial_diff_count++;
+                    }
+                    sum_abs += diff;
+                    partial_max_abs = std::max(partial_max_abs, diff);
+                    compared++;
+                }
+            }
+            partial_mean_abs = compared ? sum_abs / (double) compared : 0.0;
+        }
+        const auto t_compare = std::chrono::steady_clock::now();
+        if (d_src0_rows) cudaFree(d_src0_rows);
+        if (d_row_count) cudaFree(d_row_count);
+        if (d_q80) cudaFree(d_q80);
+        if (d_out) cudaFree(d_out);
+        const auto t_free = std::chrono::steady_clock::now();
+        partial_compare_ran = true;
+        partial_compare_ok = ok;
+        partial_alloc_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_alloc1 - t_alloc0).count();
+        partial_h2d_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_h2d - t_alloc1).count();
+        partial_kernel_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_kernel - t_h2d).count();
+        partial_d2h_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_d2h - t_kernel).count();
+        partial_compare_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_compare - t_d2h).count();
+        partial_free_us = (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_free - t_compare).count();
+    }
+    const auto t_partial1 = std::chrono::steady_clock::now();
+    if (FILE * fp = moe_stream_q80_partial_repr_probe_fp()) {
+        flockfile(fp);
+        std::fprintf(fp,
+                "%" PRIu64 ",%s,%zu,%" PRId64 ",%" PRId64 ",%u,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%d,%d,%.9g,%.9g,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n",
+                seq,
+                src0_name,
+                h_partial_src0_rows.size(),
+                partial_matched_experts,
+                rows_total,
+                partial_max_cols,
+                partial_src0_bytes,
+                partial_q80_bytes,
+                partial_out_bytes,
+                partial_compare_ran ? 1 : 0,
+                partial_compare_ok ? 1 : 0,
+                partial_max_abs,
+                partial_mean_abs,
+                partial_diff_count,
+                partial_alloc_us,
+                partial_h2d_us,
+                partial_kernel_us,
+                partial_d2h_us,
+                partial_compare_us,
+                partial_free_us,
+                (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(t_partial1 - t_partial0).count());
+        funlockfile(fp);
     }
 
     const auto t1 = std::chrono::steady_clock::now();

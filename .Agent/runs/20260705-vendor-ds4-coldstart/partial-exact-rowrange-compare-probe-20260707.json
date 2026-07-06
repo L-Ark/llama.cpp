@@ -1,0 +1,117 @@
+{
+  "attempt_id": "20260707-partial-exact-rowrange-compare-probe",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "build": "cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2 passed",
+  "created_at_utc": "2026-07-06T20:29:30.104097Z",
+  "decision": {
+    "next_step": "Use the validated row-range loader/compare path to test compressed or approximate payload formats with fixed-text top1 gates before any performance benchmark.",
+    "promotion_allowed": false,
+    "reason": "Partial exact row-range compare validates resident partial payload mapping but only computes a small output-column slice after CPU fallback; it cannot replace full up/down fallback and is not a token-rate SOTA."
+  },
+  "manifest": {
+    "entries": 96,
+    "partial_exact_manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row0-16-20260707.partial_exact_manifest.csv",
+    "payload_bytes": 2506752,
+    "row0": 0,
+    "row_count": 16,
+    "sha256": "fba1e79cb6b3cd40c9e5aded3002d54d1a1c516ad15325a35d6762735706b616",
+    "source_direct_manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.direct_manifest.csv"
+  },
+  "new_env": {
+    "GGML_MOE_STREAM_ONE_DIRECT_REPR_POOL_MIB": "allocates default-off partial/exact repr CUDA pool",
+    "GGML_MOE_STREAM_ONE_DIRECT_REPR_PREFILL_LIMIT": "limits partial repr pool prefill entries",
+    "GGML_MOE_STREAM_Q80_PARTIAL_REPR_PROBE_OUT": "writes partial exact row-range compare CSV"
+  },
+  "prompt_scope": "fixed France text verifier only; calibration-derived top48 partial exact manifest; held-out unused; not SOTA",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "runs": {
+    "default-off": {
+      "exit_status": 0,
+      "hashes": {
+        "environment.txt": "2b78ecaa2f423d0c5a1df2ff8997601383b19a539c2ededa675b17d043e43a56",
+        "run_case.sh": "b141b21ff7f758a453fd3ac2cf68859e7e2689bee38083922009aa6ca441b36b",
+        "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_peak_bytes": 989667328,
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T202659Z-20260707-partial-exact-rowrange-compare-probe/default-off",
+      "top1": {
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "n_tokens": 145,
+        "same_top1": 145,
+        "same_top1_ratio": 1
+      }
+    },
+    "partial-smoke": {
+      "exit_status": 0,
+      "hashes": {
+        "environment.txt": "074671d2f063d505e93a3fd62bbb15cc5631feb2d42f0aec91cc031f48a2fa3a",
+        "run_case.sh": "629b39e3ea715f28eb4bd71481a0811ac3766485011d9f1275f6cc2e512c80d5",
+        "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "hashes_extra": {
+        "hot-batch-probe.csv": "01ec0fb4e312b29d7ac8d335c1041e3ab8ef460644d0e7e47a295917c5017fe3",
+        "partial-repr-probe.csv": "dcd53bfccf6678bef4f573bf9274abe26f42d825f4c3ebf625ca27c87a09120e",
+        "repr-report.csv": "a76fb3dac3a4fd46f138c160d6b13e7c4602aec6b92a5e15d294cf7a72e3a71b"
+      },
+      "hot_batch_probe_aggregate": {
+        "compare_ok": 3786,
+        "compare_ran": 3786,
+        "diff_count": 0,
+        "max_abs": 0.0,
+        "ready_rows": 4246,
+        "rows": 11600,
+        "rows_total": 37700
+      },
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_peak_bytes": 1000108032,
+      "partial_probe_aggregate": {
+        "alloc_us": 29850,
+        "compare_ok": 3786,
+        "compare_ran": 3786,
+        "d2h_us": 28355,
+        "diff_count": 0,
+        "elapsed_us": 2842823,
+        "free_us": 37018,
+        "h2d_us": 55418,
+        "kernel_us": 2683349,
+        "matched_experts": 4246,
+        "max_abs": 0.0,
+        "mean_abs_weighted_sum": 0.0,
+        "nonzero_rows": 3786,
+        "out_bytes": 271744,
+        "q80_bytes": 13858944,
+        "records": 4246,
+        "rows": 11600,
+        "src0_bytes": 110871552
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T202659Z-20260707-partial-exact-rowrange-compare-probe/partial-smoke",
+      "top1": {
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "n_tokens": 145,
+        "same_top1": 145,
+        "same_top1_ratio": 1
+      }
+    }
+  },
+  "source_head_before_commit": "cfe28a12c6f16501be553da049a5d130ec7cb64e",
+  "status": "passed_compare_probe_not_sota"
+}
