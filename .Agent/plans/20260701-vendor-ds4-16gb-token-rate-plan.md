@@ -4284,3 +4284,19 @@
   - tarruda Q2_K split: first shard是 metadata-only，`n_tensors=0`，需要更多 split 处理，不作为下一步。
 - `next_action`: 删除已 rejected 的本地 0xSero 大文件释放磁盘（记录和 sha256 已 push），下载 sleepy K128 uniform，完成 size/sha256/header validation 后才允许 France strict 16GB smoke。
 - `claim_rule`: header triage 不是 correctness/token-rate/SOTA。sleepy 若 load 或 France correctness 失败，立即 reject，不进入 calibration/dev；若通过，才跑 calibration/dev，freeze 后才可使用 held-out。
+
+## 2026-07-07 执行记录：sleepy K128 alternate GGUF 下载启动
+
+- `attempt_id`: `20260707-sleepy-k128-alt-gguf-download-start`
+- `status`: `download_started_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-download-start-20260707.json`
+- `prompt_scope`: 未运行 prompt；未使用 `held_out_test_set_v1_locked`。
+- `cleanup`: 已删除本地 rejected 0xSero GGUF 大文件 `/root/lfz/models/DeepSeek-V4-Flash-162B-GGUF/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf` 释放磁盘；该 candidate 的 sha256、ready validation、reject 记录已 push。
+- `candidate`: `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF` / `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`。
+- `download_path`: `/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf`。
+- `expected_size_bytes`: `50439361920`。
+- `download_unit`: `ds4-sleepy-k128-alt-gguf-download-20260706T173353Z.service`。
+- `download_log`: `/root/lfz/runs/vendor-ds4-16gb/20260706T173353Z-sleepy-k128-alt-gguf-download/download.log`。
+- `working_directory`: `/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF`，本次不使用 `systemd-run --same-dir`，避免写入 repo root。
+- `completion_gate`: `.aria2` sidecar 消失、`stat size == 50439361920`、sha256/header validation 通过后，才允许 France strict 16GB smoke。
+- `claim_rule`: 当前只有下载启动记录，没有 correctness/token-rate/SOTA 结论。
