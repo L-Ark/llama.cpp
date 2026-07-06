@@ -44,7 +44,12 @@
 - `required_output`: 对每次 up/down fallback 记录并汇总：`tensor`, `layer`, `role`, `expert_id`, `src0_type`, `phase`, `cne1`, `expert_bytes`, `fallback_ms`, `GPU eligible?`, `decline_reason`, `cache status`, `kernel path`, `row mapping mode`。
 - `minimum_summary`: 按 role/layer/reason 输出 calls、fallback_ms、bytes、decode/prompt split；标出 top fallback reasons 和 top tensors。
 - `implementation_rule`: 所有 instrumentation 必须 default-off；trace run 不替代 SOTA。不得改变默认计算路径。
-- `acceptance`: 产出诊断 JSON 和 plan 记录即可；性能指标只作参考。
+- `result_20260706`: implemented default-off `GGML_MOE_FALLBACK_REASON_PROFILE_OUT` in `ggml/src/ggml-cpu/ggml-cpu.c`. It records final CPU fallback rows by role/tensor/phase/expert/type, batch eligibility reason, one-stream reason, final reason, rows/calls/fallback time, and attempt counters. Default behavior is unchanged when the env is unset.
+- `validation_short`: `/root/lfz/runs/vendor-ds4-16gb/20260706T103131Z-20260706-wafer-updown-fallback-reason-short/france-n32-fallback-reason-cpu40-vram0gb`; `eval_tok_s=3.5`, `TTFT=33651.457186ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `correctness_ok=false` because `n32` truncates the answer. This run verified CSV generation.
+- `validation_n96`: `/root/lfz/runs/vendor-ds4-16gb/20260706T103309Z-20260706-wafer-updown-fallback-reason-n96/france-n96-fallback-reason-cpu40-vram0gb`; `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=30986.922549ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15119908864`, `ram_ok=true`, `correctness_ok=false` because `n96` truncates the answer. Diagnostic only, not accepted SOTA.
+- `result_artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/wafer-updown-fallback-reason-n96-20260706.json`.
+- `reason_result`: all recorded up/down fallback in the n96 diagnostic is classified as `batch_env_missing + one_name_filter -> one_name_filter`. Decode split: `up=6348.759ms`, `down=6201.186ms`; prompt split: `up=3091.818ms`, `down=4490.175ms`. Total classified fallback: `20131.938ms`, `27042` calls, `112.235GiB` logical expert-call bytes.
+- `interpretation`: `batch_env_missing` means `GGML_MOE_STREAM_DOWN_BATCH` is not enabled in the accepted SOTA env. `one_name_filter` means `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps` intentionally prevents `ffn_up_exps` and `ffn_down_exps` from entering the one-stream path. Therefore the current bottleneck is not an unknown page-cache issue; it is an explicit routing/policy gap: up/down have no accepted GPU path under the SOTA config. The next step is W2/W3: enable or implement a correct up/down GPU path with numerical validation, not broaden one-stream naively.
 
 ### Phase W2：修复可修的 eligibility / guard / kernel selection
 

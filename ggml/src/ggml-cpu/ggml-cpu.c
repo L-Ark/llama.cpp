@@ -375,6 +375,40 @@ struct ggml_kimi_cpu_moe_fallback_profile_state {
 
 static struct ggml_kimi_cpu_moe_fallback_profile_state ggml_kimi_cpu_moe_fallback_profile;
 
+#define GGML_MOE_FALLBACK_REASON_PROFILE_MAX 32768
+#define GGML_MOE_FALLBACK_REASON_LEN 64
+
+struct ggml_moe_fallback_reason_profile_entry {
+    char tensor[GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN];
+    char role[16];
+    char phase[8];
+    char batch_reason[GGML_MOE_FALLBACK_REASON_LEN];
+    char single_reason[GGML_MOE_FALLBACK_REASON_LEN];
+    char final_reason[GGML_MOE_FALLBACK_REASON_LEN];
+    int expert_idx;
+    int src0_type;
+    size_t expert_bytes;
+    uint64_t rows;
+    uint64_t calls;
+    uint64_t fallback_us;
+    uint64_t batch_attempts;
+    uint64_t batch_accepts;
+    uint64_t single_attempts;
+    uint64_t single_accepts;
+};
+
+struct ggml_moe_fallback_reason_profile_state {
+    bool initialized;
+    bool registered;
+    bool enabled;
+    const char * out;
+    struct ggml_moe_fallback_reason_profile_entry entries[GGML_MOE_FALLBACK_REASON_PROFILE_MAX];
+    int n_entries;
+    uint64_t dropped;
+};
+
+static struct ggml_moe_fallback_reason_profile_state ggml_moe_fallback_reason_profile;
+
 struct ggml_kimi_cpu_fallback_pack_mmap_state {
     bool initialized;
     bool enabled;
@@ -574,6 +608,177 @@ static bool ggml_kimi_cpu_moe_fallback_profile_enabled(void) {
     }
 
     return ggml_kimi_cpu_moe_fallback_profile.enabled;
+}
+
+static const char * ggml_kimi_cpu_moe_eligibility_reason_name(enum ggml_kimi_cpu_moe_eligibility_reason reason) {
+    switch (reason) {
+        case GGML_KIMI_CPU_MOE_ELIGIBLE: return "eligible";
+        case GGML_KIMI_CPU_MOE_INELIG_ENV: return "batch_env_missing";
+        case GGML_KIMI_CPU_MOE_INELIG_BATCH_FN: return "batch_fn_missing";
+        case GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FN: return "available_fn_missing";
+        case GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FALSE: return "stream_available_false";
+        case GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED: return "batch_unsupported";
+        case GGML_KIMI_CPU_MOE_INELIG_SRC1_TYPE: return "src1_not_f32";
+        case GGML_KIMI_CPU_MOE_INELIG_NE13: return "ne13_not1";
+        case GGML_KIMI_CPU_MOE_INELIG_DST_TYPE: return "dst_not_f32";
+        default: return "unknown";
+    }
+}
+
+static bool ggml_moe_stream_one_name_filter_would_allow(const char * name) {
+    const char * filter = getenv("GGML_MOE_STREAM_ONE_NAME_FILTER");
+    if (!filter || !filter[0]) {
+        return true;
+    }
+    return name && strstr(name, filter) != NULL;
+}
+
+static void ggml_moe_fallback_reason_profile_report(void) {
+    if (!ggml_moe_fallback_reason_profile.enabled ||
+            !ggml_moe_fallback_reason_profile.out ||
+            !ggml_moe_fallback_reason_profile.out[0]) {
+        return;
+    }
+
+    FILE * f = fopen(ggml_moe_fallback_reason_profile.out, "w");
+    if (!f) {
+        fprintf(stderr,
+                "[moe_fallback_reason_profile] open failed: %s\n",
+                ggml_moe_fallback_reason_profile.out);
+        return;
+    }
+
+    fprintf(f, "rank,role,tensor,phase,expert_idx,src0_type,expert_bytes,rows,calls,fallback_us,batch_reason,single_reason,final_reason,batch_attempts,batch_accepts,single_attempts,single_accepts\n");
+    for (int i = 0; i < ggml_moe_fallback_reason_profile.n_entries; ++i) {
+        const struct ggml_moe_fallback_reason_profile_entry * e =
+            &ggml_moe_fallback_reason_profile.entries[i];
+        fprintf(f,
+                "%d,%s,%s,%s,%d,%d,%zu,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%s,%s,%s,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n",
+                i + 1,
+                e->role,
+                e->tensor,
+                e->phase,
+                e->expert_idx,
+                e->src0_type,
+                e->expert_bytes,
+                e->rows,
+                e->calls,
+                e->fallback_us,
+                e->batch_reason,
+                e->single_reason,
+                e->final_reason,
+                e->batch_attempts,
+                e->batch_accepts,
+                e->single_attempts,
+                e->single_accepts);
+    }
+    fclose(f);
+
+    fprintf(stderr,
+            "[moe_fallback_reason_profile] written: %s entries=%d dropped=%" PRIu64 "\n",
+            ggml_moe_fallback_reason_profile.out,
+            ggml_moe_fallback_reason_profile.n_entries,
+            ggml_moe_fallback_reason_profile.dropped);
+}
+
+static bool ggml_moe_fallback_reason_profile_enabled(void) {
+    if (!ggml_moe_fallback_reason_profile.initialized) {
+        ggml_moe_fallback_reason_profile.initialized = true;
+        ggml_moe_fallback_reason_profile.out = getenv("GGML_MOE_FALLBACK_REASON_PROFILE_OUT");
+        ggml_moe_fallback_reason_profile.enabled =
+            ggml_moe_fallback_reason_profile.out &&
+            ggml_moe_fallback_reason_profile.out[0];
+        if (ggml_moe_fallback_reason_profile.enabled &&
+                !ggml_moe_fallback_reason_profile.registered) {
+            ggml_moe_fallback_reason_profile.registered = true;
+            atexit(ggml_moe_fallback_reason_profile_report);
+        }
+    }
+
+    return ggml_moe_fallback_reason_profile.enabled;
+}
+
+static void ggml_moe_fallback_reason_profile_record(
+        const char * role,
+        const char * tensor,
+        int src0_type,
+        bool prompt_phase,
+        int expert_idx,
+        int64_t rows,
+        size_t expert_bytes,
+        uint64_t fallback_us,
+        const char * batch_reason,
+        const char * single_reason,
+        const char * final_reason,
+        bool batch_attempted,
+        bool batch_accepted,
+        bool single_attempted,
+        bool single_accepted) {
+    if (!ggml_moe_fallback_reason_profile_enabled() || rows <= 0) {
+        return;
+    }
+
+    const char * safe_role = role ? role : "unknown";
+    const char * safe_tensor = tensor ? tensor : "<unnamed>";
+    const char * safe_phase = prompt_phase ? "prompt" : "decode";
+    const char * safe_batch_reason = batch_reason ? batch_reason : "unknown";
+    const char * safe_single_reason = single_reason ? single_reason : "unknown";
+    const char * safe_final_reason = final_reason ? final_reason : "unknown";
+    int idx = -1;
+
+    for (int i = 0; i < ggml_moe_fallback_reason_profile.n_entries; ++i) {
+        struct ggml_moe_fallback_reason_profile_entry * e =
+            &ggml_moe_fallback_reason_profile.entries[i];
+        if (e->expert_idx == expert_idx &&
+                e->src0_type == src0_type &&
+                e->expert_bytes == expert_bytes &&
+                strcmp(e->role, safe_role) == 0 &&
+                strcmp(e->phase, safe_phase) == 0 &&
+                strncmp(e->tensor, safe_tensor, GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN) == 0 &&
+                strncmp(e->batch_reason, safe_batch_reason, GGML_MOE_FALLBACK_REASON_LEN) == 0 &&
+                strncmp(e->single_reason, safe_single_reason, GGML_MOE_FALLBACK_REASON_LEN) == 0 &&
+                strncmp(e->final_reason, safe_final_reason, GGML_MOE_FALLBACK_REASON_LEN) == 0) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx < 0) {
+        if (ggml_moe_fallback_reason_profile.n_entries >= GGML_MOE_FALLBACK_REASON_PROFILE_MAX) {
+            ggml_moe_fallback_reason_profile.dropped++;
+            return;
+        }
+        idx = ggml_moe_fallback_reason_profile.n_entries++;
+        struct ggml_moe_fallback_reason_profile_entry * e =
+            &ggml_moe_fallback_reason_profile.entries[idx];
+        snprintf(e->tensor, GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN, "%s", safe_tensor);
+        snprintf(e->role, sizeof(e->role), "%s", safe_role);
+        snprintf(e->phase, sizeof(e->phase), "%s", safe_phase);
+        snprintf(e->batch_reason, GGML_MOE_FALLBACK_REASON_LEN, "%s", safe_batch_reason);
+        snprintf(e->single_reason, GGML_MOE_FALLBACK_REASON_LEN, "%s", safe_single_reason);
+        snprintf(e->final_reason, GGML_MOE_FALLBACK_REASON_LEN, "%s", safe_final_reason);
+        e->expert_idx = expert_idx;
+        e->src0_type = src0_type;
+        e->expert_bytes = expert_bytes;
+    }
+
+    struct ggml_moe_fallback_reason_profile_entry * e =
+        &ggml_moe_fallback_reason_profile.entries[idx];
+    e->rows += (uint64_t) rows;
+    e->calls++;
+    e->fallback_us += fallback_us;
+    if (batch_attempted) {
+        e->batch_attempts++;
+    }
+    if (batch_accepted) {
+        e->batch_accepts++;
+    }
+    if (single_attempted) {
+        e->single_attempts++;
+    }
+    if (single_accepted) {
+        e->single_accepts++;
+    }
 }
 
 static void ggml_kimi_cpu_moe_fallback_profile_record(
@@ -3607,6 +3812,8 @@ static void ggml_compute_forward_mul_mat_id(
     const bool use_gpu_stream_batch =
         kimi_cpu_moe_batch_reason == GGML_KIMI_CPU_MOE_ELIGIBLE;
     bool kimi_cpu_moe_batch_done = false;
+    int64_t kimi_cpu_moe_single_attempts = 0;
+    int64_t kimi_cpu_moe_single_accepts = 0;
 
     if (use_gpu_stream_batch) {
         if (ith == 0) {
@@ -3671,6 +3878,7 @@ static void ggml_compute_forward_mul_mat_id(
 
                 const char * src0_cur = (const char *) src0->data + cur_a * nb02;
                 const uint64_t kimi_cpu_moe_cuda_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;
+                kimi_cpu_moe_single_attempts++;
                 const bool done = ggml_cuda_moe_stream_one(
                     src0->type,
                     src0->name,
@@ -3695,6 +3903,7 @@ static void ggml_compute_forward_mul_mat_id(
                 }
 
                 if (done) {
+                    kimi_cpu_moe_single_accepts++;
                     if (ggml_moe_stream_compare_cpu_enabled()) {
                         ggml_moe_stream_compare_cpu_result(
                             dst, src0, src1, cur_a, cne1,
@@ -3833,7 +4042,9 @@ static void ggml_compute_forward_mul_mat_id(
         ggml_barrier(params->threadpool);
     }
 
+    const bool moe_fallback_reason_profile = ggml_moe_fallback_reason_profile_enabled();
     const uint64_t kimi_cpu_moe_fallback_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
+    const uint64_t moe_fallback_reason_start = (moe_fallback_reason_profile && ith == 0) ? ggml_time_us() : 0;
     const uint64_t ds4_sparse_fused_mmvq_fallback_start =
         (ds4_sparse_fused_mmvq_membership && ith == 0) ? ggml_time_us() : 0;
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
@@ -4016,6 +4227,76 @@ static void ggml_compute_forward_mul_mat_id(
                     sink);
             }
             ggml_barrier(params->threadpool);
+        }
+    }
+    if (moe_fallback_reason_profile && ith == 0) {
+        const uint64_t moe_fallback_reason_us = ggml_time_us() - moe_fallback_reason_start;
+        int64_t fallback_rows = 0;
+        for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+            fallback_rows += matrix_row_counts[cur_a];
+        }
+        const char * batch_reason_name = ggml_kimi_cpu_moe_eligibility_reason_name(kimi_cpu_moe_batch_reason);
+        const char * single_reason_name = "not_attempted";
+        const char * final_reason_name = "cpu_fallback";
+        if (use_gpu_stream_batch) {
+            single_reason_name = "not_attempted_batch_path_selected";
+            final_reason_name = kimi_cpu_moe_batch_done ? "post_batch_residual" : "batch_declined_internal_no_single_retry";
+        } else if (getenv("GGML_MOE_STREAM_BATCH_ONLY") != NULL) {
+            single_reason_name = "stream_batch_only";
+            final_reason_name = "batch_only_cpu_fallback";
+        } else if (!ggml_cuda_moe_stream_one) {
+            single_reason_name = "one_fn_missing";
+            final_reason_name = "one_fn_missing";
+        } else if (!ggml_cuda_moe_stream_available) {
+            single_reason_name = "available_fn_missing";
+            final_reason_name = "available_fn_missing";
+        } else if (!ggml_cuda_moe_stream_available()) {
+            single_reason_name = "stream_available_false";
+            final_reason_name = "stream_available_false";
+        } else if (!ggml_cuda_moe_stream_supports_one_type(src0->type)) {
+            single_reason_name = "one_unsupported_type";
+            final_reason_name = "one_unsupported_type";
+        } else if (src1->type != GGML_TYPE_F32) {
+            single_reason_name = "src1_not_f32";
+            final_reason_name = "src1_not_f32";
+        } else if (ne13 != 1) {
+            single_reason_name = "ne13_not1";
+            final_reason_name = "ne13_not1";
+        } else if (dst->type != GGML_TYPE_F32) {
+            single_reason_name = "dst_not_f32";
+            final_reason_name = "dst_not_f32";
+        } else if (!ggml_moe_stream_one_name_filter_would_allow(src0->name)) {
+            single_reason_name = "one_name_filter";
+            final_reason_name = "one_name_filter";
+        } else {
+            single_reason_name = "one_declined_internal";
+            final_reason_name = "one_declined_internal";
+        }
+        if (fallback_rows > 0) {
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                const int64_t cne1 = matrix_row_counts[cur_a];
+                if (cne1 == 0) {
+                    continue;
+                }
+                const uint64_t expert_fallback_us =
+                    (uint64_t) (((double) moe_fallback_reason_us * (double) cne1) / (double) fallback_rows);
+                ggml_moe_fallback_reason_profile_record(
+                        ggml_moe_tensor_role(src0->name),
+                        src0->name,
+                        src0->type,
+                        ids->ne[1] > 1,
+                        cur_a,
+                        cne1,
+                        (size_t) nb02,
+                        expert_fallback_us,
+                        batch_reason_name,
+                        single_reason_name,
+                        final_reason_name,
+                        use_gpu_stream_batch,
+                        kimi_cpu_moe_batch_done,
+                        kimi_cpu_moe_single_attempts > 0,
+                        false);
+            }
         }
     }
     if (ds4_sparse_fused_mmvq_membership && ith == 0) {
@@ -4462,7 +4743,9 @@ static void ggml_compute_forward_moe_up_gate(
     const size_t row_size = ggml_row_size(vec_dot_type, ne10);
     const enum ggml_unary_op op = (enum ggml_unary_op) ggml_get_op_params_i32(dst, 0);
 
+    const bool moe_fallback_reason_profile = ggml_moe_fallback_reason_profile_enabled();
     const uint64_t kimi_cpu_moe_fallback_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
+    const uint64_t moe_fallback_reason_start = (moe_fallback_reason_profile && ith == 0) ? ggml_time_us() : 0;
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
         const int64_t cne1 = matrix_row_counts[cur_a];
 
@@ -4539,6 +4822,41 @@ static void ggml_compute_forward_moe_up_gate(
             }
 
             current_chunk = atomic_fetch_add_explicit(current_chunk_ctr, 1, memory_order_relaxed);
+        }
+    }
+    if (moe_fallback_reason_profile && ith == 0) {
+        const uint64_t moe_fallback_reason_us = ggml_time_us() - moe_fallback_reason_start;
+        int64_t fallback_rows = 0;
+        for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+            fallback_rows += matrix_row_counts[cur_a];
+        }
+        const char * batch_reason_name = use_gpu_stream ? "eligible" : "upgate_batch_precondition_failed";
+        const char * final_reason_name = use_gpu_stream ? "upgate_batch_declined_internal" : "upgate_batch_not_attempted";
+        if (fallback_rows > 0) {
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                const int64_t cne1 = matrix_row_counts[cur_a];
+                if (cne1 == 0) {
+                    continue;
+                }
+                const uint64_t expert_fallback_us =
+                    (uint64_t) (((double) moe_fallback_reason_us * (double) cne1) / (double) fallback_rows);
+                ggml_moe_fallback_reason_profile_record(
+                        "up_gate",
+                        src0_up->name,
+                        src0_up->type,
+                        ids->ne[1] > 1,
+                        cur_a,
+                        cne1,
+                        (size_t) ne01 * nb01 + (size_t) src0_gate->ne[1] * src0_gate->nb[1],
+                        expert_fallback_us,
+                        batch_reason_name,
+                        "not_applicable",
+                        final_reason_name,
+                        use_gpu_stream,
+                        false,
+                        false,
+                        false);
+            }
         }
     }
     if (kimi_cpu_moe_profile && ith == 0) {
