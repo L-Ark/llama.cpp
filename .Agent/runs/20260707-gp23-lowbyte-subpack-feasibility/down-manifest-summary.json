@@ -1,0 +1,56 @@
+{
+  "direct_range_temp_upper_bound_bytes": 123783221248,
+  "entries": 10822,
+  "fits_output_fs": true,
+  "hf_repo": "AesSedai/Kimi-K2.7-Code-GGUF",
+  "hf_revision": "main",
+  "missing_bytes": 0,
+  "missing_gib": 0.0,
+  "one_shard_streaming_temp_bytes": 173686244800,
+  "output_fs_free_bytes": 91932213248,
+  "output_fs_free_gib": 85.61854553222656,
+  "output_fs_path": "/root/lfz/runs/ik_llama",
+  "output_pack": "/root/lfz/runs/ik_llama/kimi-iq2xs-assets/kimi-aessedai-iq2-down-selected.expert-pack",
+  "pack": {
+    "alignment": 4096,
+    "by_kind": {
+      "down": {
+        "bytes": 57357303808,
+        "entries": 10822
+      }
+    },
+    "by_remote_type": {
+      "IQ2_S": {
+        "bytes": 14369947648,
+        "entries": 3056
+      },
+      "IQ2_XS": {
+        "bytes": 1629487104,
+        "entries": 384
+      },
+      "IQ3_XXS": {
+        "bytes": 40596799488,
+        "entries": 7224
+      },
+      "Q2_K": {
+        "bytes": 761069568,
+        "entries": 158
+      }
+    },
+    "current_iq3_runtime_compatible": false,
+    "data_start": 1646592,
+    "entry_bytes": 152,
+    "estimated_pack_bytes": 57358950400,
+    "header_bytes": 40,
+    "invalid_remote_range_count": 0,
+    "padding_bytes": 1608,
+    "payload_bytes": 57357303808,
+    "runtime_nbytes_mismatch_count": 10822
+  },
+  "plan_json": "/root/lfz/tmp/gp21-remote-range-pack/out/plan.json",
+  "plan_tsv": "/root/lfz/tmp/gp21-remote-range-pack/subsets/down-plan.tsv",
+  "remote_prefix": "IQ2_XXS/",
+  "remote_shards": 6,
+  "repo_head": "unknown",
+  "selected_tensors": 60
+}

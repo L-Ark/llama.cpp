@@ -1,0 +1,81 @@
+{
+  "dry_run": true,
+  "execute": false,
+  "fits_output_fs": true,
+  "manifest_tsv": "/root/lfz/tmp/gp21-remote-range-pack/subsets/down-manifest.tsv",
+  "missing_bytes": 0,
+  "missing_gib": 0.0,
+  "output_fs_free_bytes": 91932213248,
+  "output_fs_free_gib": 85.61854553222656,
+  "output_fs_path": "/root/lfz/runs/ik_llama",
+  "output_pack": "/root/lfz/runs/ik_llama/kimi-iq2xs-assets/kimi-aessedai-iq2-down-selected.expert-pack",
+  "pack": {
+    "alignment": 4096,
+    "bad_pack_offset_count": 0,
+    "by_kind": {
+      "down": {
+        "bytes": 57357303808,
+        "entries": 10822
+      }
+    },
+    "by_remote_type": {
+      "IQ2_S": {
+        "bytes": 14369947648,
+        "entries": 3056
+      },
+      "IQ2_XS": {
+        "bytes": 1629487104,
+        "entries": 384
+      },
+      "IQ3_XXS": {
+        "bytes": 40596799488,
+        "entries": 7224
+      },
+      "Q2_K": {
+        "bytes": 761069568,
+        "entries": 158
+      }
+    },
+    "current_iq3_runtime_compatible": false,
+    "data_start": 1646592,
+    "entries": 10822,
+    "entry_bytes": 152,
+    "estimated_pack_bytes": 57358950400,
+    "header_bytes": 40,
+    "invalid_remote_range_count": 0,
+    "payload_bytes": 57357303808,
+    "remote_shards": 6,
+    "runtime_nbytes_mismatch_count": 10822,
+    "selected_tensors": 60
+  },
+  "pack_written": false,
+  "repo_head": "unknown",
+  "smoke": [
+    {
+      "bytes_per_second": 2868948.8120035087,
+      "entry_idx": 0,
+      "expert_idx": 0,
+      "remote_nbytes": 4243456,
+      "remote_range_header": "bytes=3131775424-3136018879",
+      "remote_shard_name": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00002-of-00007.gguf",
+      "seconds": 1.479097843170166,
+      "sha256": "787446317323198397c3590a5a8ba3eae0527b95fb79f949fe556088ec392fb8",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "bytes_per_second": 3094614.5524439034,
+      "entry_idx": 1,
+      "expert_idx": 1,
+      "remote_nbytes": 4243456,
+      "remote_range_header": "bytes=3136018880-3140262335",
+      "remote_shard_name": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00002-of-00007.gguf",
+      "seconds": 1.3712389469146729,
+      "sha256": "45b8cfc0c8ac38bb692688f09c2b011e0d367a6b9656b13842441bd393fe5e3a",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    }
+  ],
+  "smoke_bytes": 8486912,
+  "smoke_entries_completed": 2,
+  "smoke_entries_requested": 2,
+  "write_summary": null
+}

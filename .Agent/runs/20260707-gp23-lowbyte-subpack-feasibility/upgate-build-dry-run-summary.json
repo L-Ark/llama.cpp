@@ -1,0 +1,77 @@
+{
+  "dry_run": true,
+  "execute": false,
+  "fits_output_fs": true,
+  "manifest_tsv": "/root/lfz/tmp/gp21-remote-range-pack/subsets/upgate-manifest.tsv",
+  "missing_bytes": 0,
+  "missing_gib": 0.0,
+  "output_fs_free_bytes": 91932217344,
+  "output_fs_free_gib": 85.61854934692383,
+  "output_fs_path": "/root/lfz/runs/ik_llama",
+  "output_pack": "/root/lfz/runs/ik_llama/kimi-iq2xs-assets/kimi-aessedai-iq2-upgate-selected.expert-pack",
+  "pack": {
+    "alignment": 4096,
+    "bad_pack_offset_count": 0,
+    "by_kind": {
+      "gate": {
+        "bytes": 35015163904,
+        "entries": 10388
+      },
+      "up": {
+        "bytes": 31338840064,
+        "entries": 10389
+      }
+    },
+    "by_remote_type": {
+      "IQ1_S": {
+        "bytes": 38377472000,
+        "entries": 13385
+      },
+      "IQ2_XXS": {
+        "bytes": 27976531968,
+        "entries": 7392
+      }
+    },
+    "current_iq3_runtime_compatible": false,
+    "data_start": 3162112,
+    "entries": 20777,
+    "entry_bytes": 152,
+    "estimated_pack_bytes": 66357166080,
+    "header_bytes": 40,
+    "invalid_remote_range_count": 0,
+    "payload_bytes": 66354003968,
+    "remote_shards": 6,
+    "runtime_nbytes_mismatch_count": 20777,
+    "selected_tensors": 120
+  },
+  "pack_written": false,
+  "repo_head": "unknown",
+  "smoke": [
+    {
+      "bytes_per_second": 1960632.5637691387,
+      "entry_idx": 0,
+      "expert_idx": 0,
+      "remote_nbytes": 2867200,
+      "remote_range_header": "bytes=4776860096-4779727295",
+      "remote_shard_name": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00002-of-00007.gguf",
+      "seconds": 1.4623851776123047,
+      "sha256": "c69e173f2ec1e752a27e05c6500999321363d6c9771620444654a3b5b002fc46",
+      "tensor": "blk.1.ffn_gate_exps.weight"
+    },
+    {
+      "bytes_per_second": 2632261.0560949915,
+      "entry_idx": 1,
+      "expert_idx": 2,
+      "remote_nbytes": 2867200,
+      "remote_range_header": "bytes=4782594496-4785461695",
+      "remote_shard_name": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00002-of-00007.gguf",
+      "seconds": 1.0892536640167236,
+      "sha256": "542526801e281638b9b175ed23d0940977f8689ed9eaaad50428996ff17821bc",
+      "tensor": "blk.1.ffn_gate_exps.weight"
+    }
+  ],
+  "smoke_bytes": 5734400,
+  "smoke_entries_completed": 2,
+  "smoke_entries_requested": 2,
+  "write_summary": null
+}

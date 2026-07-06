@@ -91482,3 +91482,61 @@ Decision:
 - It is not an accepted SOTA speedup.
 - Future lower-byte `n32`/`n96` runs can now verify actual stream activation
   instead of failing at the type gate.
+
+## GP23: lower-byte selected subpack feasibility
+
+Timestamp: `2026-07-07T04:20:00+0800`.
+
+Status: completed non-destructive dry-run; no pack written.
+
+Rationale:
+
+- GP21 showed the full selected lower-byte pack estimate is `115.220 GiB`,
+  which does not fit in the current `~86 GiB` free disk.
+- Test whether a split lower-byte artifact can fit without deleting old packs:
+  - `up+gate`;
+  - `down`.
+
+Record:
+
+- `.Agent/runs/20260707-gp23-lowbyte-subpack-feasibility/report.md`
+- `.Agent/runs/20260707-gp23-lowbyte-subpack-feasibility/upgate-manifest-summary.json`
+- `.Agent/runs/20260707-gp23-lowbyte-subpack-feasibility/upgate-build-dry-run-summary.json`
+- `.Agent/runs/20260707-gp23-lowbyte-subpack-feasibility/down-manifest-summary.json`
+- `.Agent/runs/20260707-gp23-lowbyte-subpack-feasibility/down-build-dry-run-summary.json`
+
+Method:
+
+- Filtered GP21 `plan.tsv` into `upgate-plan.tsv` and `down-plan.tsv`.
+- Rebuilt each manifest from the filtered plan so pack offsets are contiguous.
+- Ran dry-run builder with `--smoke-entries 2`.
+- Did not write output packs.
+
+Results:
+
+- `up+gate` subset:
+  - entries: `20777`;
+  - selected tensors: `120`;
+  - estimated pack: `61.800 GiB`;
+  - current free space at run time: `85.619 GiB`;
+  - fits current filesystem: yes;
+  - smoke bytes: `5734400`;
+  - pack written: no.
+- `down` subset:
+  - entries: `10822`;
+  - selected tensors: `60`;
+  - estimated pack: `53.420 GiB`;
+  - current free space at run time: `85.619 GiB`;
+  - fits current filesystem: yes;
+  - smoke bytes: `8486912`;
+  - pack written: no.
+
+Decision:
+
+- Each subpack can fit individually under current disk state.
+- The full selected lower-byte pack still needs about `30 GiB` more free space.
+- The subpacks are not directly runnable with the current IQ3_S GGUF because
+  all entries have remote/current nbytes mismatch; using them requires either:
+  - the real lower-byte GGUF, or
+  - a future explicit lower-byte expert override path.
+- No token-rate improvement is claimed.
