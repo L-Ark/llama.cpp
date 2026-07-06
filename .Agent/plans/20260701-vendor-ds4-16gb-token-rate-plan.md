@@ -3837,3 +3837,31 @@
 - `matched_controls`: gate-only `n64` control was `2.2 tok/s`; `gate+up` shared-cache probe was `1.9 tok/s`; gate-cache-only up stream was worse at `1.7 tok/s`.
 - `decision`: reject. The bottleneck is not just up evicting gate cache; naive up GPU streaming has too much repeated expert movement/synchronization cost and leaves down fallback untouched.
 - `next_design`: stop simple up one-stream/admission sweeps. The next credible path needs a hard-bound design that reduces total expert movement, e.g. prompt-general persistent residency, combined up/down scheduling with bounded VRAM footprint, or a kernel path that reuses already-staged expert data across projections. Continue using calibration/dev prompts only until a candidate is frozen.
+
+
+## 2026-07-06 下一阶段计划：up/down 总搬运 hard-bound
+
+- `plan_id`: `20260706-updown-total-movement-hard-bound`
+- `status`: `next_active_plan`
+- `push_target`: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+- `why_new_plan`: 最近三组实验证明，单点把 `ffn_up_exps` 或 `ffn_down_exps` 搬到现有 GPU stream 路径并不能提升泛化 token rate。down MXFP4 batch 能消掉 down fallback 但端到端 `1.7 tok/s`；gate+up shared cache 消掉 up fallback 但 `n64` 从 gate-only `2.2` 掉到 `1.9`；gate-only cache + uncached up stream 进一步掉到 `1.7`。问题不是单个 eligibility guard，而是总 expert movement/cache/staging 成本超过 CPU fallback savings。
+- `closed_paths_now`:
+  - naive `ffn_up_exps` one-stream with shared gate cache: rejected;
+  - naive `ffn_up_exps` one-stream with `ffn_gate_exps`-only cache admission: rejected;
+  - down MXFP4 batch with small separate cache: rejected;
+  - promptset union gate pack: historical best non-France only about `2.8 tok/s`, France regresses to `3.1-3.2`, not enough for generalized `>5`;
+  - extra full MoE GPU layers via lower `cpu_moe`: rejected by existing hard-bound and historical `cpu_moe=39/38` regressions.
+- `next_measurement_required`: Build a prompt-general up/down route inventory from `calibration_dev_set_v1` only, not held-out. For each prompt and aggregate, record unique `(tensor,expert)` for up/down, call counts, rows, fallback ms, expert bytes, repeated bytes, and overlap between gate/up/down. This must estimate how much data must move if we try to stream, cache, pack, or persist up/down experts.
+- `hard_bound_questions`:
+  1. What is the minimum unique up/down payload needed to cover 50/70/90 percent of fallback time across the calibration set?
+  2. How much of that payload can fit in available VRAM after reserving enough gate cache to avoid the observed miss cliff?
+  3. If not resident, what is the repeated H2D/direct-read lower bound per output token, and is it mathematically compatible with `>5 tok/s`?
+  4. Is there meaningful overlap between gate and up/down experts that permits a combined pack/read to reuse one disk read or one pinned staging buffer?
+  5. Can a calibration-derived artifact improve dev set min/mean without using held-out prompts?
+- `implementation_candidates_after_bound`:
+  - `candidate_A`: prompt-general small persistent up/down hotset, capped by VRAM after gate reservation. Only attempt if the bound shows hotset payload is small enough and covers enough fallback time.
+  - `candidate_B`: combined gate/up/down pack/read for overlapping experts, but only if overlap is high and pack size/page-cache behavior remains valid under 16GB cgroup.
+  - `candidate_C`: grouped up/down compute with a staging reuse window that batches multiple active rows per tensor without inserting every up/down expert into the long-lived gate cache.
+  - `candidate_D`: alternate GGUF / smaller expert model route remains blocked by disk unless explicit cleanup/storage approval is available.
+- `acceptance_rule`: Before held-out testing, a candidate must improve `calibration_dev_set_v1` min/mean token rate versus no-prompt-specific baseline (`mean=2.18`, `min=1.8`) without correctness regression and with all runs inside 16GB including page cache. After candidate freeze, run `held_out_test_set_v1_locked`; only held-out metrics can be claimed as generalized SOTA.
+- `next_action`: produce the calibration up/down movement bound artifact from existing `dev-fallback-profile-no-prompt-specific-20260706` data if sufficient; otherwise run only the missing calibration profiles. Do not run held-out or build another large pack before the bound proves a plausible route above `5 tok/s`.
