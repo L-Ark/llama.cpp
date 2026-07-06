@@ -85996,6 +85996,136 @@ cat "$RUN/stdout.txt"
 test ! -e "$RUN"/*.expert-pack
 ```
 
+## Phase 7ON - mixed-quant expert-pack v2 feasibility audit
+
+Status: planned.
+
+Timestamp: 2026-07-06 11:35 CST.
+
+Reason:
+
+- Phase 7OM proved an exact selected `IQ2_XXS` hot-key payload would reduce
+  selected expert bytes from `167.613 GiB` to `115.215 GiB`, about `31.26%`.
+- Phase 7OM also proved the current pack/runtime cannot use this as a direct
+  replacement with the current `IQ3_S` GGUF model:
+  - expert-pack lookup key includes `nbytes`;
+  - runtime kernel dispatch and expert stride come from the model tensor's
+    `ggml_type`;
+  - pack entries do not carry quant type, shape, or decode metadata.
+- The next low-bit path therefore requires either:
+  - a matching `IQ2_XXS` target GGUF model plus selected expert pack; or
+  - a new mixed-quant expert-pack/runtime format that can safely override expert
+    quant type per entry while the rest of the model remains `IQ3_S`.
+- Before any source work, the second path needs a source-level feasibility audit
+  so we do not implement an invalid byte-only pack hack.
+
+Goal:
+
+- Determine whether a mixed-quant `GGMLMOEPACKv2` path is a narrow runtime
+  extension or a broad model-format/kernel rewrite.
+- Identify exact blockers across:
+  - pack index schema;
+  - lookup key and duplicate semantics;
+  - VRAM cache keying and slot sizing;
+  - pinned staging and io_uring copy;
+  - up/gate compact MMVQ dispatch;
+  - down compact/batch dispatch;
+  - exact prompt `Q8_K` path;
+  - CPU fallback;
+  - graph scheduler/model tensor metadata;
+  - quality validation and asset generation.
+- Do not edit source in this phase.
+- Do not run model inference.
+- Do not write any `.expert-pack`.
+- Do not download large model shards.
+
+Inputs:
+
+- Phase 7OM result:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-001309Z-phase7om-iq2xxs-hotkey-size/hotkey-pack-plan.json`
+- Current source:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - `ggml/src/ggml-cuda/mmvq.cu`;
+  - `ggml/src/ggml-cuda/mmq.cu`;
+  - `ggml/src/ggml-cuda/vecdotq.cuh`;
+  - `ggml/src/ggml-backend.cpp`;
+  - `src/llama-model-loader.cpp`;
+  - `src/llama-graph.cpp` where relevant.
+- Current production packs:
+  - `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `kimi-iq3s-l1l2down-overlay.expert-pack`.
+
+Theory and hard bound:
+
+- If mixed-quant v2 could safely route the current selected hot keys through
+  `IQ2_XXS` decode kernels, the first-order exposed-read reduction is bounded
+  by the 7OM payload ratio:
+
+```text
+remote/current = 115.215 GiB / 167.613 GiB = 0.687389
+```
+
+- This is not enough for `5 tok/s` at current effective bandwidth, but it could
+  be a meaningful step only if:
+  - the runtime does not add significant dequant/type-dispatch overhead;
+  - quality remains semantically correct;
+  - TTFT does not rise by more than 20%;
+  - host RAM remains below 16GB including page cache;
+  - and future raw-I/O throughput work can recover the remaining gap.
+- If the audit finds that mixed-quant requires graph-level virtual tensor
+  metadata or per-entry shape/type changes through common ggml ops, the path is
+  a broad model-format rewrite and should not be the next implementation.
+
+Audit method:
+
+1. Create:
+   `/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7on-mixed-quant-pack-v2-audit`
+2. Record:
+   - `repo_state.txt`;
+   - `commands.log`;
+   - `phase7on_mixed_quant_audit.py`;
+   - `source_evidence.tsv`;
+   - `gate_matrix.tsv`;
+   - `pack_v2_schema.md`;
+   - `bounds.tsv`;
+   - `decision.md`.
+3. Inspect source for authoritative evidence:
+   - pack entry struct and loader;
+   - lookup comparator and `nbytes` keying;
+   - `expert_pack_lookup_any_size` debug-only behavior;
+   - route/profile/cache keys that include `expert_bytes`;
+   - cache pool selection by `expert_bytes`;
+   - compact MMVQ launch signatures that take `ggml_type`;
+   - prompt exact `Q8_K` launch support for `IQ2_XXS`;
+   - down batch launch support and CPU fallback behavior.
+4. Classify each gate as:
+   - `small_local_change`;
+   - `medium_runtime_change`;
+   - `requires_new_pack_schema`;
+   - `requires_new_kernel_or_graph_contract`;
+   - `requires_asset_quality_validation`;
+   - `blocked`.
+5. Use the 7OM JSON to record exact byte-bound and disk-bound implications.
+
+Decision rule:
+
+- Only plan a source implementation next if the audit proves all of these:
+  - no graph scheduler/model-loader contract change is required;
+  - all decode/prompt kernels already support the target per-entry type;
+  - VRAM cache can be keyed safely by `(tensor, expert, quant_type, nbytes)`;
+  - CPU fallback can either be disabled for mixed entries or made type-correct;
+  - pack v2 schema is backward-compatible and default-off;
+  - there is a reproducible asset builder plan and strict quality gate.
+- If any of those is false, do not implement mixed-quant runtime next. Record
+  the blocker and choose either matching-model `IQ2_XXS` with disk/external
+  storage, or return to same-quant `IQ3_S` optimizations.
+
+Reproducibility:
+
+- Commit and push this plan before running the audit.
+- Store the audit script and raw outputs in the run directory.
+- Commit and push the result before any mixed-quant source, pack, or asset work.
+
 ## Phase 7OM - remote IQ2_XXS hot-key pack size probe
 
 Status: completed.
