@@ -5046,3 +5046,25 @@
 - checks: 验证 MXFP4 block layout、nb01/nb02 stride、col-major/row-major 解释、scale/exponent handling、accumulation order、src1 quantization path（d_src1_q8）是否与 CPU fallback 等价。优先找到导致 blk.0-only top1 失败的 >5 logit 差异来源。
 - pass_gate: small harness/op-level compare 必须能解释并修正当前 0.002-0.009 local dot error以及 top1 max_abs>5 的放大；只有 fixed-text top1 恢复 same_top1=145/145 后，才允许重新进入 writeback benchmark。
 - push_rule: root-cause analysis 和任何 rejected probe 都要记录 artifact/plan 并 push；出现 correctness pass 但性能未达标也需记录，不得使用 held-out 调参。
+
+
+## 2026-07-07 执行记录：MXFP4 down math/layout parity root-cause
+
+- attempt_id: 20260707-mxfp4-down-math-layout-parity-root-cause
+- status: analysis_complete_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/mxfp4-down-math-layout-parity-root-cause-20260707.json
+- method: static source audit after rejected writeback top1 failure；不改源码，不使用 held-out，不是 SOTA。
+- root_cause: CPU fallback 对 GGML_TYPE_MXFP4 的 type_traits 使用 vec_dot_type=GGML_TYPE_Q8_0 和 ggml_vec_dot_mxfp4_q8_0；而 moe_stream_batch down path 调用 ggml_cuda_moe_stream_mmvq_dev，内部 quantize_row_q8_1_cuda(src1_f32) 并使用 vec_dot_mxfp4_q8_1。因此当前 down batch writeback 不是 CPU fallback 的同一数学路径。
+- why_this_matches_results: expanded parity 只有局部 0.002-0.009 误差，但 fixed-text top1 已漂移；这符合 Q8_1 vs Q8_0 量化/scale/accumulation 差异在多层传播后改变 logits 的现象。单层 blk.0 也失败，说明不是仅全层累积问题。
+- reusable_code: ggml/src/ggml-cuda/moe_stream.cu 已有 Q8_0 CPU-compatible MXFP4 kernels/probes（GGML_MOE_STREAM_Q80_CPU_COMPAT、Q80_WRITE、hot-batch probes），可以作为 correctness scaffold；缺口是 moe_stream_batch.cu 的 runtime batch API 当前只接 src1_f32，未接 CPU fallback 已经生成的 src1_q8_0/wdata。
+- decision: 不再尝试 Q8_1 MXFP4 down writeback promotion；下一步必须做 CPU-compatible Q8_0 down batch path，或先证明 Q8_1 近似在 top1/语义上稳定（当前证据已否定）。
+
+## 2026-07-07 下一步 source-design plan：CPU-compatible Q8_0 MXFP4 down batch
+
+- attempt_id: 20260707-cpucompat-q80-mxfp4-down-batch-design
+- status: planned_before_source_edit
+- goal: 在不牺牲正确率的前提下减少 down CPU fallback。正确路径必须与 CPU fallback 的 MXFP4 x Q8_0 数学一致，而不是当前 Q8_1 mmvq path。
+- source_scope: default-off。扩展 CPU 调用侧和 ggml_cuda_moe_stream_batch API，使 down batch 可接收 src1_q8_0/wdata row pointer、row_size、src1_ne1；在 CUDA 侧新增/复用 Q8_0 CPU-compatible batched kernel。未设置 env 时现有 SOTA/stage-trace 路径不变。
+- correctness_sequence: 先 one-call/op-level compare against CPU dst，要求 max_abs=0 或 fixed-text top1 证明可接受；再 fixed France llama-results same_top1=145/145；最后才允许 calibration/dev generalized prompts。held-out 仍只用于最终 SOTA 测试。
+- performance_risk: Q8_0 path 可能需要从 CPU wdata/H2D 传 src1_q8_0，每 row 约 ne00 bytes 级别；必须批量/复用，不能退化为 per-expert serial copy。理论上 down expert 读仍是主成本，Q8_0 src1 copy 相对 expert bytes 小，但实现不当会吞掉收益。
+- promotion_gate: strict 16GB RAM including page cache、MemorySwapMax=0、TTFT <= generalized baseline * 1.2、correctness pass、泛化 calibration/dev 与最终 held-out test set；出现新 SOTA 立即详细记录复现信息并 push 到 ssd/vendor/deepseek-token-rate-16gb。
