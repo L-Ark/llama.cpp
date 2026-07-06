@@ -87503,3 +87503,134 @@ cat "$RUN/mounts.tsv"
 cat "$RUN/cleanup_candidates.tsv"
 cat "$RUN/decision.md"
 ```
+
+## Phase 7OT - selected lower-bit remote-pack manifest preflight
+
+Start time: `2026-07-06T09:37:29+0800` / `20260706-013729Z`.
+
+Purpose:
+
+- Continue the lower-bit path without consuming disk or deleting historical
+  artifacts.
+- Convert the existing 7OM selected `IQ2_XXS` remote-pack plan into an explicit
+  direct-builder manifest:
+  - one row per selected expert;
+  - remote URL;
+  - remote HTTP Range start/end;
+  - future output pack offset;
+  - current-vs-remote byte compatibility flags.
+- Add a reusable preflight tool so that once external storage or cleanup
+  approval exists, the direct builder can use a deterministic manifest rather
+  than re-discovering layout.
+
+Hard constraints:
+
+- Do not delete, move, truncate, or overwrite existing model/pack artifacts.
+- Do not write `.expert-pack`.
+- Do not download model shard payloads.
+- Do not run model inference.
+- Tool must default to metadata/manifest only.
+- Any output must be small TSV/JSON artifacts in a run directory.
+
+Implementation plan:
+
+1. Add a new script:
+
+```text
+scripts/kimi-make-remote-pack-manifest.py
+```
+
+2. Inputs:
+
+- `--plan-json`: JSON from `scripts/kimi-plan-hotkey-remote-pack.py`;
+- `--plan-tsv`: selected-entry TSV from that same planner;
+- `--output-pack`: intended future `.expert-pack` path, used only for
+  filesystem preflight and manifest metadata;
+- `--manifest-tsv`: output manifest path;
+- `--summary-json`: output summary path.
+
+3. Script behavior:
+
+- Read 7OM `summary.json` and selected-entry TSV.
+- Build shard `data_offset` map from `remote_metadata`.
+- Build HuggingFace resolve URLs from `hf_repo`, `hf_revision`, and
+  `remote_shard_name`.
+- For each selected expert, compute:
+
+```text
+remote_abs_start = shard_data_offset + remote_tensor_offset
+                   + expert_idx * remote_nbytes
+remote_abs_end   = remote_abs_start + remote_nbytes - 1
+```
+
+- Compute future `GGMLMOEPACKv1` output layout:
+  - header bytes;
+  - index bytes;
+  - aligned `data_start`;
+  - aligned per-entry pack offsets;
+  - total pack bytes.
+- Verify:
+  - tensor name fits the v1 `128` byte index field;
+  - `remote_nbytes > 0`;
+  - remote ranges are within shard size;
+  - per-entry `remote_nbytes == current_nbytes` is false for the lower-bit
+    selected pack, so current `IQ3_S` runtime compatibility remains false.
+- Preflight available bytes on the output path's filesystem, without creating
+  the pack.
+
+4. Outputs:
+
+- manifest TSV fields:
+  - `entry_idx`;
+  - `tensor`;
+  - `expert_idx`;
+  - `kind`;
+  - `layer`;
+  - `remote_type`;
+  - `current_nbytes`;
+  - `remote_nbytes`;
+  - `runtime_nbytes_match`;
+  - `remote_shard_name`;
+  - `remote_url`;
+  - `remote_abs_start`;
+  - `remote_abs_end`;
+  - `pack_offset`;
+  - `source_pack`.
+- summary JSON:
+  - total entries;
+  - payload bytes;
+  - estimated pack bytes;
+  - output filesystem free bytes;
+  - whether the intended output path has enough free space;
+  - whether current `IQ3_S` runtime can consume the manifest directly;
+  - missing bytes/GiB.
+
+Server dry-run:
+
+- Use the existing 7OM artifacts:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260706-001309Z-phase7om-iq2xxs-hotkey-size
+```
+
+- Produce a new 7OT run directory with:
+  - `manifest.tsv`;
+  - `manifest-summary.json`;
+  - `decision.md`;
+  - exact commands and repo state.
+
+Acceptance:
+
+- Plan committed and pushed before editing source.
+- Script passes `python3 -m py_compile`.
+- Server dry-run exits `0`.
+- Dry-run creates only small manifest/summary artifacts.
+- Dry-run reports:
+  - current filesystem does not fit selected pack;
+  - current `IQ3_S` runtime compatibility is false;
+  - manifest ranges are internally valid.
+- Result appended here and pushed.
+
+Result:
+
+- Pending.
