@@ -1,0 +1,190 @@
+{
+  "attempt_id": "20260707-current-head-q80-hot-batch-top48-smoke",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "commit": "53bc1cc0daf8a68fd585edc077e2dbfeebc4f0e9",
+  "created_at_utc": "2026-07-06T19:54:15.072075Z",
+  "decision": {
+    "correctness_gate_passed": true,
+    "promotion_allowed": false,
+    "reason": "Existing resident hot-batch probe can load a prompt-independent top48 up/down manifest into a 408MiB transposed CUDA hot pool and compare row-tile Q80 outputs with max_abs=0 under strict 16GB. Coverage is only 4246/37700 rows for this fixed text and exact hotset is already hard-bound rejected, so this is only a skeleton validation for future compressed/partial representation.",
+    "skeleton_usable_current_head": true
+  },
+  "git_status": "?? .Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.direct_manifest.csv\n?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "manifest": {
+    "direct_manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.direct_manifest.csv",
+    "entries": 96,
+    "payload_bytes": 427819008,
+    "sha256": "1187b90345b4b3bf7ddc4fd948b4b03900bf80ca18ee2fa72c4c88fc2a2208b6",
+    "source_offset_manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.offset_manifest.csv"
+  },
+  "next_plan": [
+    "Use this existing skeleton rather than adding a duplicate source path.",
+    "Next source work should add a manifest/representation layer for compressed or partial rows, keeping the same top1 and hot-batch compare gates.",
+    "Before any performance benchmark, verify VRAM budget split with gate cache reduced to leave room for resident payload."
+  ],
+  "prompt_scope": "fixed France text verifier; calibration-derived top48 manifest; held-out unused; not SOTA",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "runs": {
+    "first_top48_smoke_compare_limited": {
+      "elapsed": "2:32.72",
+      "exit_status": 0,
+      "hashes": {
+        "environment.txt": "9105370db153fe7ab83a5db31a6c857728a6da95ee99a986a5d633ab6d75c735",
+        "hot-batch-probe.csv": "f8e9e7339935ac436c88714a05a8584e89491c6ae89e1f248ca3495f06b62773",
+        "run_case.sh": "299a23381c096711a699faa5beb4eb1cea8e9fc7b2d259e9a884fcff2a46c833",
+        "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "hot_pool": {
+        "attempted": 96,
+        "bytes": 427819008,
+        "elapsed_ms": 203.539,
+        "h2d_ms": 15.746,
+        "inserted": 96,
+        "read_ms": 182.485,
+        "transform_ms": 3.902,
+        "transposed": true
+      },
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 40522,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_peak_bytes": 16000000000,
+      "memory_stat_relevant": {
+        "active_file": 2802819072,
+        "anon": 434176,
+        "file": 14932262912,
+        "inactive_file": 12128845824,
+        "kernel": 161632256,
+        "pgmajfault": 238114,
+        "slab": 161081752,
+        "workingset_refault_file": 13789719
+      },
+      "probe_aggregate": {
+        "alloc_us": 0,
+        "compare_ok": 0,
+        "compare_ran": 0,
+        "compare_us": 0,
+        "d2h_us": 0,
+        "diff_count": 0,
+        "elapsed_us": 45904,
+        "free_us": 0,
+        "h2d_us": 0,
+        "kernel_us": 0,
+        "max_abs": 0.0,
+        "mean_abs_avg": 0.0,
+        "not_in_manifest_rows": 33454,
+        "not_ready_rows": 0,
+        "out_bytes_projected": 52174848,
+        "q80_bytes_projected": 13858944,
+        "ready_records": 3786,
+        "ready_rows": 4246,
+        "rows": 11600,
+        "rows_total": 37700,
+        "src0_bytes_projected": 18922078208
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T194743Z-20260707-current-head-q80-hot-batch-top48-smoke/top48-smoke",
+      "top1": {
+        "base_top1_matches_next_token": 119,
+        "calc_top1_matches_next_token": 119,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "mismatches_preview": [],
+        "n_tokens": 145,
+        "n_vocab": 129280,
+        "next_token_positions": 144,
+        "same_top1": 145,
+        "same_top1_ratio": 1
+      },
+      "vram_cache": {
+        "allocated": false
+      }
+    },
+    "top48_compareall_gate13056": {
+      "elapsed": "1:26.18",
+      "exit_status": 0,
+      "hashes": {
+        "environment.txt": "1dd95db894b9067143a5d29442811dfa8a4a19cc0849cec8bf9df49114058aee",
+        "hot-batch-probe.csv": "713d37e3af71447b4da9509fbc4c2f20ef4fd57b28622eb69263451c7f849a88",
+        "run_case.sh": "a2066289a26b79e3d5b9c8929062d9a6112879b9ef6cc2f4b2211788d55a5d5e",
+        "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "hot_pool": {
+        "attempted": 96,
+        "bytes": 427819008,
+        "elapsed_ms": 215.968,
+        "h2d_ms": 15.841,
+        "inserted": 96,
+        "read_ms": 194.635,
+        "transform_ms": 3.949,
+        "transposed": true
+      },
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 25668,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_peak_bytes": 16000000000,
+      "memory_stat_relevant": {
+        "active_file": 14500638720,
+        "anon": 442368,
+        "file": 14913593344,
+        "inactive_file": 412422144,
+        "kernel": 161431552,
+        "pgmajfault": 202618,
+        "slab": 160955344,
+        "workingset_refault_file": 3639227
+      },
+      "probe_aggregate": {
+        "alloc_us": 62015,
+        "compare_ok": 3786,
+        "compare_ran": 3786,
+        "compare_us": 41375,
+        "d2h_us": 38138,
+        "diff_count": 0,
+        "elapsed_us": 627268,
+        "free_us": 36296,
+        "h2d_us": 49007,
+        "kernel_us": 349894,
+        "max_abs": 0.0,
+        "mean_abs_avg": 0.0,
+        "not_in_manifest_rows": 33454,
+        "not_ready_rows": 0,
+        "out_bytes_projected": 52174848,
+        "q80_bytes_projected": 13858944,
+        "ready_records": 3786,
+        "ready_rows": 4246,
+        "rows": 11600,
+        "rows_total": 37700,
+        "src0_bytes_projected": 18922078208
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T195132Z-20260707-current-head-q80-hot-batch-top48-compareall/top48-compareall",
+      "top1": {
+        "base_top1_matches_next_token": 119,
+        "calc_top1_matches_next_token": 119,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "mismatches_preview": [],
+        "n_tokens": 145,
+        "n_vocab": 129280,
+        "next_token_positions": 144,
+        "same_top1": 145,
+        "same_top1_ratio": 1
+      },
+      "vram_cache": {
+        "allocated": true,
+        "gib": 12.8,
+        "slots": 3072
+      }
+    }
+  },
+  "status": "passed_probe_smoke_not_sota"
+}

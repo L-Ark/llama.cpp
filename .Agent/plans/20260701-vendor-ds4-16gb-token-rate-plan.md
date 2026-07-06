@@ -4723,3 +4723,31 @@
 - `run_method`: strict 16GB/no-swap cgroup，`llama-results --check --top1-report --top1-fail-on-mismatch`，开启 `GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB`、`GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_OUT`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE=1`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_ROW_TILE=1`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_TRANSPOSE=1`，compare record limit 小范围 smoke。
 - `pass_gate`: check exit `0`，top1 `same_top1 == n_tokens`，probe CSV 有 `compare_ran>0` 且 `diff_count=0` for compared rows，memory peak <=16GB，无 OOM/swap。
 - `decision_rule`: 通过则说明 existing skeleton 可作为下一步 resident/batched low-bit prototype base；若性能/coverage 不足仍不可 promotion。失败则先修 skeleton/manifest，而不是进入性能 benchmark。
+
+## 2026-07-07 执行记录：current-head Q80 hot-batch top48 smoke
+
+- `attempt_id`: `20260707-current-head-q80-hot-batch-top48-smoke`
+- `status`: `passed_probe_smoke_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-q80-hot-batch-top48-smoke-20260707.json`
+- `direct_manifest`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.direct_manifest.csv`，由 calibration/dev top48 up/down offset manifest 转换，`96` entries，payload `427819008` bytes。
+- `prompt_scope`: fixed France text verifier；manifest 来自 calibration/dev aggregate；held-out 未使用；不是 SOTA。
+- `first_run_note`: `/root/lfz/runs/vendor-ds4-16gb/20260706T194743Z-20260707-current-head-q80-hot-batch-top48-smoke/top48-smoke` 中 compare limit 设为 `96`，前 96 个 probe seq 都没有 ready rows，因此 `compare_ran=0`；同时 512MiB hot pool 抢占显存导致 `ONE_CACHE_MIB=13568` gate cache cudaMalloc 失败。该 run 只作为配置诊断。
+- `accepted_probe_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T195132Z-20260707-current-head-q80-hot-batch-top48-compareall/top48-compareall`
+- `config_fix`: `ONE_CACHE_MIB=13056` 给 408MiB hot pool 留显存；`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE_MAX_RECORDS=0` 让所有 ready rows compare。
+- `result`: check exit `0`，top1 `same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`mean_abs=0`；strict cgroup `memory_peak_bytes=16000000000`，`oom=0`，`oom_kill=0`。
+- `hot_pool`: direct O_DIRECT reads enabled；hot pool allocated `408.00 MiB`，prefill `96/96` inserted，elapsed `215.968 ms`，read `194.635 ms`，H2D `15.841 ms`，transpose `3.949 ms`。
+- `gate_cache`: with reduced budget, gate cache allocated `12.8 GiB` / `3072` slots and hit rate `85.9%` in verifier。
+- `probe_coverage`: `rows_total=37700`，`ready_rows=4246`，`not_in_manifest_rows=33454`；compare ran `3786` records, `compare_ok=3786`，`diff_count=0`。
+- `probe_timing`: for compared ready rows, aggregate `kernel_us=349894`，`h2d_us=49007`，`d2h_us=38138`，`alloc_us=62015`，`free_us=36296`。This confirms row-tile hot-batch correctness but also shows exact top48 coverage is too small for performance。
+- `decision`: existing hot-batch skeleton is usable on current head; no duplicate source path should be written. Next source work should extend this skeleton with compressed/partial representation support and maintain the same top1/compare gates. Exact top48/top512 hotsets remain non-SOTA due coverage hard bounds。
+
+## 2026-07-07 下一步 source-edit direction：compressed/partial manifest layer
+
+- `objective`: 在现有 hot-batch skeleton 上增加 default-off representation layer，而不是新建 per-call path。
+- `required_design_before_edit`:
+  1. 明确 compressed/partial manifest 格式，包含 tensor、expert、row/block range、compressed offset、compressed bytes、原始 nbytes、representation type；
+  2. 定义 loader 如何把 compressed/partial payload 放入 hot pool，并如何映射到 row-tile kernel；
+  3. 定义 compare-only mode：不写回 logits，只和 CPU fallback dst 比较；
+  4. 定义 writeback mode 的 top1 gate，默认关闭；
+  5. 给出 VRAM split：gate cache + resident payload + workspace 必须在 32GB 5090 下同时成功。
+- `first_edit_allowed`: 只允许先写 manifest parser + report-only loader/probe，不允许默认写回；未设置 env 时默认路径必须保持不变。
