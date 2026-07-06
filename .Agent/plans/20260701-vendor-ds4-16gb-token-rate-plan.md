@@ -3962,3 +3962,19 @@
 - `candidate_effect`: up fallback dropped materially (`up decode=5879.531ms`, `up prompt=2520.818ms`) and cache hit rate was `65.9%`, but end-to-end token rate still tied the `2.2 tok/s` gate-only control while TTFT worsened.
 - `decision`: reject and do not expand to full dev set. Larger up hotsets still fail to convert fallback savings into token-rate improvement; stream/cache overhead and remaining down fallback cancel the gain.
 - `next_design`: close cache/hotset up streaming as a near-term path. Continue only with a non-cache grouped staging design if it can reduce launch/staging overhead by construction, or switch to model/representation/disk route.
+
+## 2026-07-06 执行记录：4Expert 磁盘释放与真实下载启动
+
+- `attempt_id`: `20260706-4expert-disk-release-download-start`
+- `status`: `download_in_progress_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-disk-release-download-start-20260706.json`
+- `prompt_scope`: 未运行任何 prompt，未使用 held-out test set。
+- `action`: 按此前已授权的 GLM 实验清理，只删除 `/root/lfz/models/GLM-5.2-UD-IQ3_XXS`，释放完整 4Expert GGUF 所需磁盘空间；未触碰 DeepSeek SOTA native GGUF、gate pack、SOTA run 目录或 pushed-source repro run。
+- `disk_after_cleanup`: 根分区可用空间从约 `1.9GB` 提升到约 `265GB`；aria2 目标文件预分配后当前根分区仍保留约 `112GB` 可用空间。
+- `candidate_4expert_url`: `https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf`
+- `expected_size_bytes`: `164465760544`
+- `head_etag`: `96bcd717ee6a3715d4ba1fd7946d9ee8a1eabb1247737afd009931f0318f000b`
+- `download_path`: `/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf`
+- `download_service`: `ds4-4expert-download.service`，使用单个 systemd transient service 运行 `aria2c -c -x8 -s8 -k16M --file-allocation=none`，避免 SSH 断开导致下载中断。
+- `completion_gate`: `.aria2` sidecar 消失，且 `stat size == 164465760544`；随后必须计算并记录 `sha256`，再做 load/correctness/perf。由于 aria2 会预分配文件，不能用 `ls -lh` 判断下载完成。
+- `decision`: 当前没有任何正确性或性能结论，不能作为 SOTA。下载完成后继续执行 plan 中 `P3_load_validation_before_benchmark`、`P4_correctness_smoke`、`P5_strict_cold_benchmark`。
