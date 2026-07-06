@@ -4937,6 +4937,22 @@ static bool batch_cache_copy_h2d(
 }
 
 template <typename Job>
+static bool expert_pack_iouring_job_eligible(const Job &job, size_t expert_bytes) {
+#if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
+    if (g_expert_pack.io_backend != 2 || !job.pack_entry ||
+            job.pack_entry->nbytes != expert_bytes) {
+        return false;
+    }
+    const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
+    return source && source->fd_direct >= 0;
+#else
+    (void)job;
+    (void)expert_bytes;
+    return false;
+#endif
+}
+
+template <typename Job>
 static bool expert_pack_iouring_copy_jobs(
         const std::vector<Job> &jobs,
         size_t expert_bytes,
@@ -7932,7 +7948,26 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (uniform_bytes && expert_pack_iouring_copy_jobs(jobs, copy_bytes, run_stream, ring, "runtime_load")) {
             return cudaGetLastError() == cudaSuccess;
         }
-        for (const stage_copy_job &job : jobs) {
+        const std::vector<stage_copy_job> *fallback_jobs = &jobs;
+        std::vector<stage_copy_job> partial_iouring_jobs;
+        std::vector<stage_copy_job> partial_fallback_jobs;
+        if (uniform_bytes && !jobs.empty() && g_expert_pack.io_backend == 2) {
+            partial_iouring_jobs.reserve(jobs.size());
+            partial_fallback_jobs.reserve(jobs.size());
+            for (const stage_copy_job &job : jobs) {
+                if (expert_pack_iouring_job_eligible(job, copy_bytes)) {
+                    partial_iouring_jobs.push_back(job);
+                } else {
+                    partial_fallback_jobs.push_back(job);
+                }
+            }
+            if (!partial_iouring_jobs.empty() && partial_iouring_jobs.size() < jobs.size() &&
+                    expert_pack_iouring_copy_jobs(partial_iouring_jobs, copy_bytes, run_stream, ring, "runtime_load")) {
+                if (cudaGetLastError() != cudaSuccess) return false;
+                fallback_jobs = &partial_fallback_jobs;
+            }
+        }
+        for (const stage_copy_job &job : *fallback_jobs) {
             const size_t job_bytes = job.nbytes != 0 ? job.nbytes : src0_bytes;
             batch_copy_trace copy_trace;
             const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
@@ -9385,7 +9420,26 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         if (expert_pack_iouring_copy_jobs(jobs, src0_bytes, run_stream, ring, "runtime_load")) {
             return cudaGetLastError() == cudaSuccess;
         }
-        for (const down_stage_copy_job &job : jobs) {
+        const std::vector<down_stage_copy_job> *fallback_jobs = &jobs;
+        std::vector<down_stage_copy_job> partial_iouring_jobs;
+        std::vector<down_stage_copy_job> partial_fallback_jobs;
+        if (!jobs.empty() && g_expert_pack.io_backend == 2) {
+            partial_iouring_jobs.reserve(jobs.size());
+            partial_fallback_jobs.reserve(jobs.size());
+            for (const down_stage_copy_job &job : jobs) {
+                if (expert_pack_iouring_job_eligible(job, src0_bytes)) {
+                    partial_iouring_jobs.push_back(job);
+                } else {
+                    partial_fallback_jobs.push_back(job);
+                }
+            }
+            if (!partial_iouring_jobs.empty() && partial_iouring_jobs.size() < jobs.size() &&
+                    expert_pack_iouring_copy_jobs(partial_iouring_jobs, src0_bytes, run_stream, ring, "runtime_load")) {
+                if (cudaGetLastError() != cudaSuccess) return false;
+                fallback_jobs = &partial_fallback_jobs;
+            }
+        }
+        for (const down_stage_copy_job &job : *fallback_jobs) {
             batch_copy_trace copy_trace;
             const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             if (!batch_cache_copy_h2d(ring, job.dst, job.host_data, src0_bytes, run_stream, job.pack_entry, &copy_trace,

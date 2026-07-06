@@ -94118,6 +94118,125 @@ GP46 execution result:
   - no runtime behavior changed;
   - no token-rate or output-quality claim is made.
 
+## GP50: partial batched iouring for mixed valid/fallback job batches
+
+Timestamp: `2026-07-07T07:42:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- GP49 showed general dev prompts have high direct-read fallback:
+  `direct_read_ratio=0.572328` and aggregate iouring throughput only
+  `0.342567 GiB/s`.
+- Source inspection found that `expert_pack_iouring_copy_jobs()` is all-or-nothing:
+  if any job in a batch lacks a valid pack entry, source fd, or byte-size match,
+  it returns `false`; the caller then loads the entire batch job-by-job through
+  `batch_cache_copy_h2d()`, which uses direct reads under `io_backend=2`.
+- This means a single fallback job can prevent otherwise valid jobs from using
+  batched iouring.
+
+Theory and upper bound:
+
+- If a batch has `N` jobs and `M` valid pack jobs, current behavior sends all
+  `N` jobs to fallback when any invalid job exists.
+- Partial batching can send the `M` valid jobs through iouring and only fallback
+  the `N-M` invalid jobs.
+- Upper-bound benefit is proportional to the valid-job fraction in mixed
+  batches and is capped by:
+  - number of genuinely missing pack entries;
+  - iouring depth and batch size;
+  - H2D staging time;
+  - compute and cache-hit time.
+- Correctness should be unchanged because each expert slot receives the same
+  bytes as before; only the transport path changes.
+
+Scope:
+
+- Add a helper that identifies whether a copy job is eligible for batched
+  iouring:
+  - has `pack_entry`;
+  - `pack_entry->nbytes == expected_bytes`;
+  - source exists and has `fd_direct >= 0`.
+- In up/gate `copy_stage_jobs()` and down `copy_down_stage_jobs()`:
+  - try full batch iouring first as today;
+  - if full batch fails, partition valid jobs and fallback jobs;
+  - run iouring only on the valid subset;
+  - copy only the invalid subset through the existing fallback loop;
+  - if partial iouring itself fails, fall back to the original full fallback
+    loop.
+- Do not change routing, cache placement, expert bytes, compute kernels, or
+  output.
+
+Validation:
+
+1. Compile `moe_stream_batch.cu` on the remote with
+   `-DGGML_CUDA_MOE_STREAM_BATCH`.
+2. Run at least one dev smoke/profile with cold-start settings and France
+   semantic correctness if runtime build is available.
+3. Compare `direct_read_ratio`, `iouring_read_ratio`, token rate, TTFT, and
+   answer quality against the existing dev baseline.
+4. Accept only if output remains semantically correct and TTFT does not exceed
+   the baseline by more than 20%.
+
+Acceptance:
+
+- If compile fails, revert/fix before committing.
+- If runtime smoke shows worse token rate, wrong output, or TTFT > +20%, revert
+  the runtime change and keep only analysis notes.
+- If runtime smoke improves or is neutral while reducing direct fallback, commit
+  and push with reproducible commands and metrics.
+
+GP50 execution result:
+
+- Timestamp: `2026-07-07T07:58:00+08:00`.
+- Runtime build:
+  - configured with `-DGGML_CUDA=ON`,
+    `-DGGML_CUDA_LIGHTNING_INDEXER=OFF`,
+    `-DGGML_CUDA_MOE_STREAM_BATCH=ON`,
+    `-DLLAMA_CURL=OFF`, `-DCMAKE_BUILD_TYPE=Release`;
+  - verified `ggml-cuda` flags include `-DGGML_CUDA_MOE_STREAM_BATCH`.
+- Validation command shape:
+  - `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0`;
+  - `N=32 PROFILE=1 COPY_PROFILE=1`;
+  - prompt: `Please introduce France in a short paragraph.`;
+  - cold start through `.Agent/run-tools/kimi-general-prompt-repro.sh`.
+- Baseline run:
+  - repo: `/root/lfz/llama.cpp-vendor-kimi`;
+  - run dir:
+    `/root/lfz/tmp/runs/20260707-gp50-partial-iouring/baseline_dev_france_n32`;
+  - quality: pass;
+  - TTFT: `69178.25 ms`;
+  - decode: `24749.49 ms / 31 runs`;
+  - token rate: `1.25 tok/s`;
+  - peak RAM: `15899996160` bytes;
+  - expert-pack reads: `direct_reads=671`, `iouring_reads=22647`,
+    `iouring_bytes=126391910400`.
+- GP50 run:
+  - repo: `/root/lfz/tmp/vendor-kimi-speculative-gp33`;
+  - run dir:
+    `/root/lfz/tmp/runs/20260707-gp50-partial-iouring/dev_france_n32_batch_on`;
+  - quality: pass;
+  - TTFT: `68671.81 ms`;
+  - decode: `24792.35 ms / 31 runs`;
+  - token rate: `1.25 tok/s`;
+  - peak RAM: `15899996160` bytes;
+  - expert-pack reads: `direct_reads=133`, `iouring_reads=23185`,
+    `iouring_bytes=129268056064`.
+- Output quality check:
+  - `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- Decision:
+  - accept GP50 as a transport-path cleanup, not as a token-rate SOTA improvement;
+  - token rate is neutral in this n32 France smoke;
+  - TTFT did not regress;
+  - direct expert-pack reads dropped by `538` while equivalent jobs moved to
+    iouring;
+  - the next bottleneck is not the remaining small mixed-batch direct leakage on
+    this prompt; continue with larger uncovered fallback sources and sustained
+    iouring queue-depth work.
+- Reproducibility report:
+  `.Agent/runs/20260707-gp50-partial-iouring/report.md`.
+
 ## GP49: dev-only IO queue and backend utilization analysis
 
 Timestamp: `2026-07-07T07:34:00+08:00`.
