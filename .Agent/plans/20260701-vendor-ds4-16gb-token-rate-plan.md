@@ -3978,3 +3978,13 @@
 - `download_service`: `ds4-4expert-download.service`，使用单个 systemd transient service 运行 `aria2c -c -x8 -s8 -k16M --file-allocation=none`，避免 SSH 断开导致下载中断。
 - `completion_gate`: `.aria2` sidecar 消失，且 `stat size == 164465760544`；随后必须计算并记录 `sha256`，再做 load/correctness/perf。由于 aria2 会预分配文件，不能用 `ls -lh` 判断下载完成。
 - `decision`: 当前没有任何正确性或性能结论，不能作为 SOTA。下载完成后继续执行 plan 中 `P3_load_validation_before_benchmark`、`P4_correctness_smoke`、`P5_strict_cold_benchmark`。
+
+## 2026-07-06 执行记录：4Expert load 前置源码检查
+
+- `attempt_id`: `20260706-4expert-load-preflight-source-check`
+- `status`: `completed_preflight_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-load-preflight-source-check-20260706.json`
+- `prompt_scope`: 未运行任何 prompt，未使用 held-out test set。
+- `tid2eid_alias`: 当前分支在 `src/llama-model.cpp` 中已有 default-off `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`；当原始 `blk.%d.ffn_gate_tid2eid` metadata 不存在而 `.weight` alias 存在时，会选择 `.weight` tensor 创建 `layer.ffn_gate_tid2eid`。
+- `q4k_stream_one`: 当前分支在 `ggml/src/ggml-cpu/ggml-cpu.c` 和 `ggml/src/ggml-cuda/moe_stream.cu` 中已有 default-off `GGML_MOE_STREAM_ONE_Q4K=1` admission；未设置时不改变原 MXFP4/F8_E4M3_B128 SOTA 路径。
+- `decision`: 前置源码条件已满足，但这不是正确性或性能结果。完整真实 GGUF 下载完成后，必须先记录 size/sha256，再用 `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` 和 `GGML_MOE_STREAM_ONE_Q4K=1` 做 P3 load validation；通过后才允许进入严格 16GB correctness/perf benchmark。
