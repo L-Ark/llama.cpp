@@ -85995,3 +85995,125 @@ python3 scripts/kimi-build-expert-pack-from-gguf.py \
 cat "$RUN/stdout.txt"
 test ! -e "$RUN"/*.expert-pack
 ```
+
+## Phase 7OM - remote IQ2_XXS hot-key pack size probe
+
+Status: planned.
+
+Timestamp: 2026-07-06 10:45 CST.
+
+Reason:
+
+- Phase 7OL proved that a full all-expert pack is too large for the current
+  disk state.
+- The runtime SOTA does not use a full all-expert pack. It uses the currently
+  required hot-key assets:
+  - main up/gate pack:
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - down overlay:
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`.
+- The next token-rate path is to reduce expert movement bytes by replacing the
+  same hot-key set with lower-bit `IQ2_XXS` tensors. Before any large download
+  or pack write, we need exact `IQ2_XXS` tensor metadata and exact selected-key
+  output size.
+
+Hypothesis:
+
+- If `IQ2_XXS` keeps the same tensor names and expert count, the current hot
+  key set can be rematerialized with lower per-expert byte counts.
+- Expected benefit is bounded by movement reduction:
+
+```text
+new_decode_wait_lower_bound ~= old_iouring_wait * selected_iq2_bytes / selected_iq3_bytes
+```
+
+- This does not prove quality. It only determines whether the asset-generation
+  path is feasible enough to justify a later small-pack build and quality gate.
+
+Selected change:
+
+- Add a metadata-only planner:
+
+```text
+scripts/kimi-plan-hotkey-remote-pack.py
+```
+
+- Inputs:
+  - one or more existing `GGMLMOEPACKv1` packs whose index defines the hot key
+    set;
+  - HuggingFace repo id and file prefix for `IQ2_XXS` GGUF shards;
+  - optional local GGUF glob for cross-checking.
+- Behavior:
+  - read only pack indexes from existing local packs;
+  - fetch only remote GGUF metadata prefixes via HTTP Range;
+  - parse GGUF header/KV/tensor-info without touching tensor payload;
+  - match `blk.<layer>.ffn_{up,gate,down}_exps.weight`;
+  - compute exact per-expert bytes for selected hot keys from remote metadata;
+  - estimate selected-pack output size, largest required remote shard, and
+    streaming temporary space;
+  - emit JSON and TSV artifacts.
+
+Hard restrictions:
+
+- Do not download a complete `IQ2_XXS` shard.
+- Do not write `.expert-pack`.
+- Do not delete or move existing assets.
+- Abort if the HTTP server does not honor Range requests with status `206`.
+- Abort if the configured prefix length is too small to parse complete metadata.
+- Keep fetched data bounded by `--range-mib`; default `64 MiB` per shard.
+
+Experiment:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7om-iq2xxs-hotkey-size
+mkdir -p "$RUN"
+python3 scripts/kimi-plan-hotkey-remote-pack.py \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  --hf-repo AesSedai/Kimi-K2.7-Code-GGUF \
+  --remote-prefix IQ2_XXS/ \
+  --range-mib 64 \
+  --json "$RUN/hotkey-pack-plan.json" \
+  --tsv "$RUN/hotkey-pack-plan.tsv" \
+  > "$RUN/stdout.txt" 2> "$RUN/stderr.txt"
+```
+
+Acceptance:
+
+- Plan is committed and pushed before implementation.
+- Script passes `python3 -m py_compile`.
+- Server run exits `0`.
+- No `.expert-pack` is created.
+- Artifacts include:
+  - git state;
+  - command;
+  - `hotkey-pack-plan.json`;
+  - `hotkey-pack-plan.tsv`;
+  - stdout/stderr;
+  - exit code.
+- Results record:
+  - hot-key count and current IQ3 selected bytes;
+  - exact remote `IQ2_XXS` selected bytes;
+  - selected pack estimated size;
+  - largest required remote shard;
+  - bounded streaming temporary space;
+  - whether current free disk can fit a later selected-pack build without
+    deletion.
+
+Decision rule:
+
+- If selected `IQ2_XXS` output plus largest shard/prefix-bound staging fits
+  current free disk with margin, plan the next phase as a controlled selected
+  pack builder and then run n32/n96 quality gates.
+- If selected output does not fit current disk, do not build. Use the exact
+  size to decide between explicit cleanup approval, external storage, or a
+  smaller hot-key subset.
+- If metadata parsing fails or tensor names do not match, fix the planner first
+  and keep low-bit replacement blocked.
+
+Reproducibility:
+
+- Commit and push this plan before editing scripts.
+- Commit and push the script before server execution.
+- Commit and push the 7OM result before any pack builder or download phase.
