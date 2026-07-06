@@ -551,6 +551,7 @@ struct one_expert_pack_state {
     int fd = -1;
     int fd_direct = -1;
     bool direct_enabled = false;
+    bool payload_sidecar_enabled = false;
     std::vector<one_expert_pack_entry> entries;
     bool inited = false;
     bool enabled = false;
@@ -799,6 +800,7 @@ struct one_direct_repr_state {
     int fd = -1;
     int fd_direct = -1;
     bool direct_enabled = false;
+    bool payload_sidecar_enabled = false;
     void * pool = nullptr;
     size_t pool_sz = 0;
     bool pool_inited = false;
@@ -953,7 +955,7 @@ static void one_direct_repr_manifest_report_atexit() {
             "[moe_stream] one direct repr manifest: entries=%zu compressed_bytes=%lu original_bytes=%lu"
             " exact_entries=%lu partial_entries=%lu compressed_entries=%lu hits=%lu misses=%lu"
             " pool_enabled=%d pool_sz=%zu pool_attempted=%lu pool_inserted=%lu pool_bytes=%lu"
-            " pool_read_failures=%lu pool_copy_failures=%lu pool_read_ms=%.3f pool_h2d_ms=%.3f direct_enabled=%d\n",
+            " pool_read_failures=%lu pool_copy_failures=%lu pool_read_ms=%.3f pool_h2d_ms=%.3f direct_enabled=%d sidecar=%d\n",
             g_one_direct_repr.entries.size(),
             g_one_direct_repr.compressed_bytes,
             g_one_direct_repr.original_bytes,
@@ -971,7 +973,8 @@ static void one_direct_repr_manifest_report_atexit() {
             g_one_direct_repr.pool_copy_failures,
             g_one_direct_repr.pool_read_ms,
             g_one_direct_repr.pool_h2d_ms,
-            g_one_direct_repr.direct_enabled ? 1 : 0);
+            g_one_direct_repr.direct_enabled ? 1 : 0,
+            g_one_direct_repr.payload_sidecar_enabled ? 1 : 0);
     if (g_one_direct_repr.report_fp) {
         std::fclose(g_one_direct_repr.report_fp);
         g_one_direct_repr.report_fp = nullptr;
@@ -1106,11 +1109,11 @@ static void one_direct_repr_manifest_init_once() {
 }
 
 
-static bool one_direct_repr_read_direct_aligned(int fd, const one_direct_repr_entry & entry, void * dst, size_t sz) {
+static bool one_direct_repr_read_direct_aligned(int fd, uint64_t offset, void * dst, size_t sz) {
 #if defined(__linux__) && defined(O_DIRECT)
     const uint64_t align = 4096;
-    const uint64_t prefix = entry.model_offset & (align - 1);
-    const uint64_t read_off = entry.model_offset - prefix;
+    const uint64_t prefix = offset & (align - 1);
+    const uint64_t read_off = offset - prefix;
     const size_t read_sz = (size_t) (((prefix + sz + align - 1) / align) * align);
     void * bounce = nullptr;
     if (posix_memalign(&bounce, (size_t) align, read_sz) != 0 || bounce == nullptr) {
@@ -1124,7 +1127,7 @@ static bool one_direct_repr_read_direct_aligned(int fd, const one_direct_repr_en
     return ok;
 #else
     (void) fd;
-    (void) entry;
+    (void) offset;
     (void) dst;
     (void) sz;
     return false;
@@ -1135,12 +1138,13 @@ static bool one_direct_repr_read_entry(const one_direct_repr_entry & entry, void
     if (g_one_direct_repr.fd < 0 || entry.compressed_nbytes != (uint64_t) sz) {
         return false;
     }
+    const uint64_t offset = g_one_direct_repr.payload_sidecar_enabled ? entry.compressed_offset : entry.model_offset;
     if (g_one_direct_repr.fd_direct >= 0) {
-        if (one_direct_repr_read_direct_aligned(g_one_direct_repr.fd_direct, entry, dst, sz)) {
+        if (one_direct_repr_read_direct_aligned(g_one_direct_repr.fd_direct, offset, dst, sz)) {
             return true;
         }
     }
-    return one_pack_read_exact_fd(g_one_direct_repr.fd, dst, sz, entry.model_offset);
+    return one_pack_read_exact_fd(g_one_direct_repr.fd, dst, sz, offset);
 }
 
 static void one_direct_repr_pool_init_once() {
@@ -1158,22 +1162,26 @@ static void one_direct_repr_pool_init_once() {
     if (budget_mib == 0) {
         return;
     }
+    const char * payload_path = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_REPR_PAYLOAD");
+    const bool use_payload = payload_path && payload_path[0];
     const char * model_path = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_MODEL");
-    if (!model_path || !model_path[0]) {
-        std::fprintf(stderr, "[moe_stream] one direct repr pool: GGML_MOE_STREAM_ONE_DIRECT_MODEL is required\n");
+    const char * source_path = use_payload ? payload_path : model_path;
+    if (!source_path || !source_path[0]) {
+        std::fprintf(stderr, "[moe_stream] one direct repr pool: GGML_MOE_STREAM_ONE_DIRECT_MODEL or GGML_MOE_STREAM_ONE_DIRECT_REPR_PAYLOAD is required\n");
         return;
     }
 
-    const int fd = ::open(model_path, O_RDONLY);
+    const int fd = ::open(source_path, O_RDONLY);
     if (fd < 0) {
-        std::fprintf(stderr, "[moe_stream] one direct repr pool: model open failed: %s\n", model_path);
+        std::fprintf(stderr, "[moe_stream] one direct repr pool: payload/model open failed: %s\n", source_path);
         return;
     }
     g_one_direct_repr.fd = fd;
+    g_one_direct_repr.payload_sidecar_enabled = use_payload;
     const char * io_env = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_IO");
     if (io_env && (std::strcmp(io_env, "direct") == 0 || std::strcmp(io_env, "odirect") == 0)) {
 #if defined(__linux__) && defined(O_DIRECT)
-        g_one_direct_repr.fd_direct = ::open(model_path, O_RDONLY | O_DIRECT);
+        g_one_direct_repr.fd_direct = ::open(source_path, O_RDONLY | O_DIRECT);
         if (g_one_direct_repr.fd_direct >= 0) {
             g_one_direct_repr.direct_enabled = true;
         }
@@ -1239,14 +1247,15 @@ static void one_direct_repr_pool_init_once() {
     }
     std::free(h_tmp);
     std::fprintf(stderr,
-            "[moe_stream] one direct repr pool: allocated %.2f MiB attempted=%lu inserted=%lu bytes=%lu read_ms=%.3f h2d_ms=%.3f direct_enabled=%d\n",
+            "[moe_stream] one direct repr pool: allocated %.2f MiB attempted=%lu inserted=%lu bytes=%lu read_ms=%.3f h2d_ms=%.3f direct_enabled=%d sidecar=%d\n",
             budget / (1024.0 * 1024.0),
             g_one_direct_repr.pool_attempted,
             g_one_direct_repr.pool_inserted,
             g_one_direct_repr.pool_bytes,
             g_one_direct_repr.pool_read_ms,
             g_one_direct_repr.pool_h2d_ms,
-            g_one_direct_repr.direct_enabled ? 1 : 0);
+            g_one_direct_repr.direct_enabled ? 1 : 0,
+            g_one_direct_repr.payload_sidecar_enabled ? 1 : 0);
 }
 
 struct one_direct_repr_partial_hit {

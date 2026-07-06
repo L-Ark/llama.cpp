@@ -4833,3 +4833,13 @@
 - `pass_gate`: exact sidecar check exit `0`，top1 `same_top1=145/145`，partial compare `compare_ran>0` 且 `diff_count=0`，memory peak <=16GB，无 OOM。
 - `reject_gate`: lossy sidecar 如果 `diff_count>0`，必须记录为 rejected，不得进入 writeback 或 token-rate benchmark。
 - `decision_rule`: sidecar exact 通过后，下一步才允许针对具体 compressed format 设计 decode kernel；任何 approx format 必须先通过 op-level compare 和 fixed-text top1，再考虑性能。
+
+## 2026-07-07 执行记录：sidecar repr payload correctness gate
+
+- `attempt_id`: `20260707-sidecar-repr-payload-correctness-gate`
+- `status`: `passed_exact_sidecar_and_rejected_zero_sidecar_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/sidecar-repr-payload-correctness-gate-20260707.json`
+- `source_change`: 在 `ggml/src/ggml-cuda/moe_stream.cu` 增加 default-off `GGML_MOE_STREAM_ONE_DIRECT_REPR_PAYLOAD`；设置时 repr pool 从 sidecar payload 的 `compressed_offset` 读取，未设置时保持原来的 GGUF `model_offset` 读取。
+- `exact_sidecar`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.partial_exact_payload.bin` + sidecar manifest；payload bytes `2506752`。strict 16GB/no-swap cgroup 内 top1 `same_top1=145/145`，partial compare `compare_ran=3786`，`diff_count=0`，`max_abs=0`，`memory_peak_bytes=1001168896`。
+- `zero_sidecar_reject`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.zero_payload.bin` + sidecar manifest；top1 仍 `145/145` 因为 compare-only 不写回，但 partial compare `diff_count=67936`，`max_abs=5.71276379`，因此该 payload 明确 rejected，不能 writeback 或 benchmark。
+- `decision`: sidecar exact 证明 payload 文件与 `compressed_offset` 路径正确；zero payload 证明 compare gate 能发现错误表示。下一步必须针对具体 compressed/approx format 设计 decode/compute kernel，并先通过 compare/top1，再谈性能。
