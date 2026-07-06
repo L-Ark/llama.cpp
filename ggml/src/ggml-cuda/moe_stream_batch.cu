@@ -3122,6 +3122,67 @@ extern "C" bool ggml_cuda_moe_expert_pack_v2_read_debug(
     return true;
 }
 
+static bool expert_pack_v2_packed_type_supported(int packed_type) {
+    return packed_type == GGML_TYPE_IQ1_S ||
+        packed_type == GGML_TYPE_IQ3_XXS || packed_type == GGML_TYPE_IQ3_S ||
+        packed_type == GGML_TYPE_IQ2_XXS || packed_type == GGML_TYPE_IQ2_XS ||
+        packed_type == GGML_TYPE_IQ2_S || packed_type == GGML_TYPE_Q2_K ||
+        packed_type == GGML_TYPE_Q3_K || packed_type == GGML_TYPE_IQ4_XS;
+}
+
+static void expert_pack_v2_shadow_profile_record(
+        const char *phase,
+        const char *tensor_name,
+        int expert_idx,
+        int logical_type,
+        size_t logical_nbytes,
+        const char *cache_state) {
+    const char *path = std::getenv("GGML_MOE_EXPERT_PACK_V2_SHADOW_PROFILE_OUT");
+    if (!path || !path[0] || !tensor_name || !tensor_name[0] || expert_idx < 0) return;
+
+    const expert_pack_v2_entry *entry = expert_pack_v2_lookup(tensor_name, expert_idx);
+    const int v2_hit = entry ? 1 : 0;
+    const int packed_type = entry ? entry->packed_type : -1;
+    const size_t packed_nbytes = entry ? (size_t)entry->nbytes : 0;
+    const int64_t ne00 = entry ? entry->ne00 : 0;
+    const int64_t ne01 = entry ? entry->ne01 : 0;
+    const size_t nb01 = entry ? (size_t)entry->nb01 : 0;
+    const int supported = entry && expert_pack_v2_packed_type_supported(entry->packed_type) ? 1 : 0;
+    const uint64_t byte_ratio_milli = (entry && logical_nbytes > 0) ?
+        (uint64_t)((packed_nbytes * 1000ULL) / logical_nbytes) : 0;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,phase,tensor,expert_idx,logical_type,logical_nbytes,cache_state,"
+                "v2_hit,packed_type,packed_nbytes,ne00,ne01,nb01,supported,byte_ratio_milli\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%s,%s,%d,%d,%zu,%s,%d,%d,%zu,%ld,%ld,%zu,%d,%lu\n",
+            (unsigned long)++seq,
+            phase ? phase : "",
+            tensor_name,
+            expert_idx,
+            logical_type,
+            logical_nbytes,
+            cache_state ? cache_state : "",
+            v2_hit,
+            packed_type,
+            packed_nbytes,
+            (long)ne00,
+            (long)ne01,
+            nb01,
+            supported,
+            (unsigned long)byte_ratio_milli);
+    std::fclose(f);
+}
+
 static void expert_pack_init_once() {
     std::lock_guard<std::mutex> lk(g_expert_pack.mu);
     if (g_expert_pack.inited) return;
@@ -7699,6 +7760,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     auto stage_tensor_slots_only = [&](
             const char *key_name, const void *host_base,
+            ggml_type logical_type,
             cudaStream_t run_stream, int32_t *d_x_ids,
             int32_t *h_x_ids, int *slots_out,
             const int *avoid_slots, int n_avoid_slots) -> bool {
@@ -7706,6 +7768,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             const char *expert_host = (const char *)host_base + (size_t)active_experts[j] * nb02;
             const uintptr_t cache_key = batch_key_hash(key_name, active_experts[j]);
             int cache_slot = batch_cache_lookup_slot(cache, cache_key);
+            const bool cache_hit = cache_slot >= 0;
             if (cache_slot < 0) {
                 cache_slot = batch_cache_insert_slot(
                     cache, cache_key, expert_host, src0_bytes, run_stream, true, false,
@@ -7713,6 +7776,9 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             } else {
                 batch_ttft_trace_record("cache_hit", key_name, active_experts[j], src0_bytes, true, false, false, 0.0);
             }
+            expert_pack_v2_shadow_profile_record(
+                    "upgate_stage", key_name, active_experts[j], (int)logical_type,
+                    src0_bytes, cache_hit ? "cache_hit" : "cache_miss");
             if (cache_slot < 0) return false;
             h_x_ids[j] = cache_slot;
             if (slots_out) slots_out[j] = cache_slot;
@@ -7723,6 +7789,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     auto stage_tensor_slots_only_sized = [&](
             const char *key_name, const void *host_base,
+            ggml_type logical_type,
             size_t expert_stride, size_t expert_bytes,
             cudaStream_t run_stream, int32_t *d_x_ids,
             int32_t *h_x_ids, int *slots_out,
@@ -7731,6 +7798,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             const char *expert_host = (const char *)host_base + (size_t)active_experts[j] * expert_stride;
             const uintptr_t cache_key = batch_key_hash(key_name, active_experts[j]);
             int cache_slot = batch_cache_lookup_slot(cache, cache_key);
+            const bool cache_hit = cache_slot >= 0;
             if (cache_slot < 0) {
                 cache_slot = batch_cache_insert_slot(
                     cache, cache_key, expert_host, expert_bytes, run_stream, true, false,
@@ -7738,6 +7806,9 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             } else {
                 batch_ttft_trace_record("cache_hit", key_name, active_experts[j], expert_bytes, true, false, false, 0.0);
             }
+            expert_pack_v2_shadow_profile_record(
+                    "upgate_stage", key_name, active_experts[j], (int)logical_type,
+                    expert_bytes, cache_hit ? "cache_hit" : "cache_miss");
             if (cache_slot < 0) return false;
             h_x_ids[j] = cache_slot;
             if (slots_out) slots_out[j] = cache_slot;
@@ -7764,6 +7835,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     auto plan_tensor = [&](
             const char *key_name, const void *host_base,
+            ggml_type logical_type,
             int32_t *h_x_ids, int *slots_out,
             const int *avoid_slots, int n_avoid_slots,
             std::vector<stage_copy_job> &jobs) -> bool {
@@ -7772,6 +7844,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             const char *expert_host = (const char *)host_base + (size_t)active_experts[j] * nb02;
             const uintptr_t cache_key = batch_key_hash(key_name, active_experts[j]);
             int cache_slot = batch_cache_lookup_slot(cache, cache_key);
+            const bool cache_hit = cache_slot >= 0;
             if (cache_slot < 0) {
                 cache_slot = batch_cache_insert_slot(
                     cache, cache_key, expert_host, src0_bytes, st, true, false,
@@ -7791,6 +7864,9 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             } else {
                 batch_ttft_trace_record("cache_hit", key_name, active_experts[j], src0_bytes, true, false, false, 0.0);
             }
+            expert_pack_v2_shadow_profile_record(
+                    "upgate_plan", key_name, active_experts[j], (int)logical_type,
+                    src0_bytes, cache_hit ? "cache_hit" : "cache_miss");
             h_x_ids[j] = cache_slot;
             if (slots_out) slots_out[j] = cache_slot;
             batch_route_profile_hit(key_name, active_experts[j], src0_bytes);
@@ -7800,6 +7876,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     auto plan_tensor_sized = [&](
             const char *key_name, const void *host_base,
+            ggml_type logical_type,
             size_t expert_stride, size_t expert_bytes,
             int32_t *h_x_ids, int *slots_out,
             const int *avoid_slots, int n_avoid_slots,
@@ -7809,6 +7886,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             const char *expert_host = (const char *)host_base + (size_t)active_experts[j] * expert_stride;
             const uintptr_t cache_key = batch_key_hash(key_name, active_experts[j]);
             int cache_slot = batch_cache_lookup_slot(cache, cache_key);
+            const bool cache_hit = cache_slot >= 0;
             if (cache_slot < 0) {
                 cache_slot = batch_cache_insert_slot(
                     cache, cache_key, expert_host, expert_bytes, st, true, false,
@@ -7828,6 +7906,9 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             } else {
                 batch_ttft_trace_record("cache_hit", key_name, active_experts[j], expert_bytes, true, false, false, 0.0);
             }
+            expert_pack_v2_shadow_profile_record(
+                    "upgate_plan", key_name, active_experts[j], (int)logical_type,
+                    expert_bytes, cache_hit ? "cache_hit" : "cache_miss");
             h_x_ids[j] = cache_slot;
             if (slots_out) slots_out[j] = cache_slot;
             batch_route_profile_hit(key_name, active_experts[j], expert_bytes);
@@ -7945,10 +8026,16 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             if (expert < 0 || expert >= rt.n_as) continue;
             const uintptr_t key = batch_key_hash(rt.name, expert);
             if (batch_cache_find_slot(down_cache, key) >= 0) {
+                expert_pack_v2_shadow_profile_record(
+                        "current_down_overlap", rt.name, expert, rt.type,
+                        rt.expert_bytes, "cache_hit");
                 ++g_current_down_overlap.cache_hits;
                 ++local_cache_hits;
                 continue;
             }
+            expert_pack_v2_shadow_profile_record(
+                    "current_down_overlap", rt.name, expert, rt.type,
+                    rt.expert_bytes, "cache_miss");
             const char *expert_host = (const char *)rt.data + (size_t)expert * rt.nb02;
             const int slot = batch_cache_insert_slot(
                 down_cache, key, expert_host, rt.expert_bytes, bc.prefetch_stream,
@@ -8160,13 +8247,13 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             std::vector<stage_copy_job> up_jobs;
             std::vector<stage_copy_job> gate_jobs;
             if (!plan_tensor_sized(
-                    up_key_name, src0_up_data, up_nb02, up_expert_bytes,
+                    up_key_name, src0_up_data, src0_type, up_nb02, up_expert_bytes,
                     bc.h_x_ids_up, up_slots, nullptr, 0, up_jobs)) {
                 clear_stage_jobs(up_jobs);
                 return mixed_overlap_fail("mixed_plan_up");
             }
             if (!plan_tensor_sized(
-                    gate_key_name, src0_gate_data, gate_nb02, gate_expert_bytes,
+                    gate_key_name, src0_gate_data, gate_type, gate_nb02, gate_expert_bytes,
                     bc.h_x_ids_gate, nullptr, up_slots, n_active, gate_jobs)) {
                 clear_stage_jobs(up_jobs);
                 clear_stage_jobs(gate_jobs);
@@ -8235,12 +8322,12 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             }
         } else {
             if (!stage_tensor_slots_only_sized(
-                    up_key_name, src0_up_data, up_nb02, up_expert_bytes, st,
+                    up_key_name, src0_up_data, src0_type, up_nb02, up_expert_bytes, st,
                     bc.d_x_ids_up, bc.h_x_ids_up, up_slots, nullptr, 0)) {
                 return decline("mixed_stage_up");
             }
             if (!stage_tensor_slots_only_sized(
-                    gate_key_name, src0_gate_data, gate_nb02, gate_expert_bytes, st,
+                    gate_key_name, src0_gate_data, gate_type, gate_nb02, gate_expert_bytes, st,
                     bc.d_x_ids_gate, bc.h_x_ids_gate, nullptr, up_slots, n_active)) {
                 return decline("mixed_stage_gate");
             }
@@ -8441,12 +8528,12 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (fused_mmq_up_gate) {
         int up_slots[MOE_STREAM_MAX_ACTIVE] = {};
         if (!stage_tensor_slots_only(
-                up_key_name, src0_up_data, st,
+                up_key_name, src0_up_data, src0_type, st,
                 bc.d_x_ids_up, bc.h_x_ids_up, up_slots, nullptr, 0)) {
             return false;
         }
         if (!stage_tensor_slots_only(
-                gate_key_name, src0_gate_data, st,
+                gate_key_name, src0_gate_data, gate_type, st,
                 bc.d_x_ids_gate, bc.h_x_ids_gate, nullptr, up_slots, n_active)) {
             return false;
         }
@@ -8534,11 +8621,11 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (parallel_stage) {
             std::vector<stage_copy_job> up_jobs;
             std::vector<stage_copy_job> gate_jobs;
-            if (!plan_tensor(up_key_name, src0_up_data, bc.h_x_ids_up, up_slots, nullptr, 0, up_jobs)) {
+            if (!plan_tensor(up_key_name, src0_up_data, src0_type, bc.h_x_ids_up, up_slots, nullptr, 0, up_jobs)) {
                 clear_stage_jobs(up_jobs);
                 return parallel_fail();
             }
-            if (!plan_tensor(gate_key_name, src0_gate_data, bc.h_x_ids_gate, nullptr, up_slots, n_active, gate_jobs)) {
+            if (!plan_tensor(gate_key_name, src0_gate_data, gate_type, bc.h_x_ids_gate, nullptr, up_slots, n_active, gate_jobs)) {
                 clear_stage_jobs(up_jobs);
                 clear_stage_jobs(gate_jobs);
                 return parallel_fail();
@@ -8716,7 +8803,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (serial_stage_batch) {
             std::vector<stage_copy_job> up_jobs;
             std::vector<stage_copy_job> gate_jobs;
-            if (!plan_tensor(up_key_name, src0_up_data, bc.h_x_ids, nullptr, nullptr, 0, up_jobs)) {
+            if (!plan_tensor(up_key_name, src0_up_data, src0_type, bc.h_x_ids, nullptr, nullptr, 0, up_jobs)) {
                 clear_stage_jobs(up_jobs);
                 return false;
             }
@@ -8730,7 +8817,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             }
             if (profile) cudaEventRecord(bc.ev_up, st);
 
-            if (!plan_tensor(gate_key_name, src0_gate_data, bc.h_x_ids, nullptr, nullptr, 0, gate_jobs)) {
+            if (!plan_tensor(gate_key_name, src0_gate_data, gate_type, bc.h_x_ids, nullptr, nullptr, 0, gate_jobs)) {
                 clear_stage_jobs(gate_jobs);
                 return false;
             }
@@ -9338,6 +9425,10 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         const uintptr_t cache_key = batch_key_hash(src0_name, active_experts[j]);
         batch_route_profile_hit(src0_name, active_experts[j], src0_bytes);
         int cache_slot = batch_cache_lookup_slot(cache, cache_key);
+        const bool cache_hit = cache_slot >= 0;
+        expert_pack_v2_shadow_profile_record(
+                "down", src0_name, active_experts[j], src0_type_int,
+                src0_bytes, cache_hit ? "cache_hit" : "cache_miss");
         if (cache_slot < 0) {
             ++down_profile_cache_misses;
             cache_slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, st, true, false,

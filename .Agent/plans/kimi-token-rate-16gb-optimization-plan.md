@@ -93814,3 +93814,105 @@ GP43 execution result:
   - no held-out prompts were used;
   - no runtime decode path was changed;
   - no token-rate or quality claim is made.
+
+## GP44: default-off GGMLMOEPACKv2 shadow coverage profile
+
+Timestamp: `2026-07-07T06:44:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- The path to higher token rate is still reducing SSD/host-to-VRAM expert bytes
+  while keeping output quality and TTFT within the existing gates.
+- GP42/GP43 made v2 metadata and payload reads possible, but runtime decode
+  still has no evidence about how often a future selected v2 low-byte pack would
+  cover the actual active experts on general prompts.
+- Directly enabling mixed-type v2 compute would be risky without first measuring
+  coverage, byte ratio, and supported-type ratio on dev prompts.
+
+Theory and upper bound:
+
+- This phase is instrumentation only and has no expected token-rate gain.
+- It measures the future upper bound:
+  - `logical_bytes_total`: bytes that current IQ3_S path would need for active
+    misses/experts;
+  - `packed_bytes_total`: bytes a v2 low-byte pack would move for matching
+    selected experts;
+  - `coverage = v2_hits / active_expert_observations`;
+  - `byte_ratio = packed_bytes_total / logical_bytes_total` over hits.
+- A future v2 runtime path cannot beat the measured byte-ratio upper bound, and
+  still remains capped by iouring queue bubbles, H2D staging, kernel support,
+  and correctness gates.
+- If coverage is low or supported packed types are low, the correct next action
+  is pack/hotset redesign, not runtime integration.
+
+Scope:
+
+- Add a default-off CSV shadow profiler controlled by:
+  `GGML_MOE_EXPERT_PACK_V2_SHADOW_PROFILE_OUT=<csv>`.
+- In real up/gate/down active expert loops, record whether a v2 metadata entry
+  exists for `(tensor, expert)` and its packed type/bytes/dims.
+- Record cache state separately so future analysis can distinguish:
+  - already-resident VRAM hits;
+  - runtime misses that would benefit from lower payload bytes;
+  - current-down overlap prefetch candidates.
+- Do not change:
+  - cache placement;
+  - H2D source;
+  - v1 expert-pack lookup;
+  - iouring batching;
+  - compute type;
+  - output.
+
+Validation:
+
+1. Local compile/syntax checks and synthetic v2 test.
+2. Remote CUDA compile of `moe_stream_batch.cu` with
+   `-DGGML_CUDA_MOE_STREAM_BATCH`.
+3. No held-out prompt usage.
+4. No token-rate or SOTA claim.
+
+Acceptance:
+
+- With the shadow env unset, existing runtime behavior remains unchanged.
+- With the shadow env set, runtime only appends CSV rows and never changes
+  decode decisions.
+- The CSV contains enough fields to reproduce coverage and byte-ratio analysis:
+  phase, tensor, expert, logical type/bytes, v2 hit, packed type/bytes, dims,
+  cache state, and support flag.
+
+GP44 execution result:
+
+- Timestamp: `2026-07-07T06:43:32+08:00`.
+- Record:
+  `.Agent/runs/20260707-gp44-v2-shadow-profile/report.md`.
+- Implemented default-off v2 shadow coverage profiler:
+  - env gate: `GGML_MOE_EXPERT_PACK_V2_SHADOW_PROFILE_OUT`;
+  - CSV helper records phase, tensor, expert, logical type/bytes, cache state,
+    v2 hit/miss, packed type/bytes, packed dims/stride, support flag, and byte
+    ratio;
+  - inserted into active expert loops for `upgate_stage`, `upgate_plan`,
+    `current_down_overlap`, and `down`.
+- Runtime behavior:
+  - env unset: immediate return, no v2 initialization;
+  - env set: append-only CSV instrumentation;
+  - no changes to cache placement, H2D source, v1 lookup, iouring, RAM tier,
+    compute type, or output.
+- Local validation:
+  - synthetic v2 payload/checksum round-trip passed with `entries=2`,
+    `entry_size=184`;
+  - `python3 -m py_compile` passed;
+  - `git diff --check` passed.
+- Remote validation:
+  - synthetic v2 payload/checksum round-trip passed in
+    `/root/lfz/tmp/vendor-kimi-speculative-gp33`;
+  - targeted CUDA compile with `-DGGML_CUDA_MOE_STREAM_BATCH` succeeded and
+    produced `/tmp/moe_stream_batch_gp44_batch.cu.o` (`6.9M`);
+  - warnings matched existing unused/missing-declaration patterns.
+- Decision:
+  - accepted as non-SOTA instrumentation progress;
+  - no held-out prompts were used;
+  - no token-rate or output-quality claim is made;
+  - next valid step is dev-only v2 shadow coverage measurement with a selected
+    low-byte pack before any runtime integration.
