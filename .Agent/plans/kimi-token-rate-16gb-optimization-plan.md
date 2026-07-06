@@ -93140,3 +93140,50 @@ GP35 execution result:
   - GP35 passes reproducibility/safety preparation.
   - Full IQ1_S n32 smoke remains gated by either additional disk space or
     explicit deletion approval.
+
+## GP36: IQ1_S part metadata validation gate
+
+Timestamp: `2026-07-07T11:05:00+0800`.
+
+Status: planned before execution.
+
+Purpose:
+
+- GP35 made the cleanup/download/smoke path reproducible and guarded.
+- Before any future deletion or download, verify that the Hugging Face IQ1_S
+  multipart asset still matches the exact expected five-part layout.
+- This prevents continuing with stale hardcoded byte counts if the upstream
+  asset changes.
+
+Implementation:
+
+- Extend `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+- Add env:
+  `VALIDATE_PARTS=1`.
+- Default:
+  `VALIDATE_PARTS=1`.
+- Validation uses Hugging Face model metadata API:
+  `https://huggingface.co/api/models/mradermacher/Kimi-K2.7-Code-i1-GGUF?blobs=true`.
+- Expected files:
+  - `Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5`: `41875931136`;
+  - `Kimi-K2.7-Code.i1-IQ1_S.gguf.part2of5`: `41875931136`;
+  - `Kimi-K2.7-Code.i1-IQ1_S.gguf.part3of5`: `41875931136`;
+  - `Kimi-K2.7-Code.i1-IQ1_S.gguf.part4of5`: `41875931136`;
+  - `Kimi-K2.7-Code.i1-IQ1_S.gguf.part5of5`: `36927147936`.
+- Expected total:
+  `204429739520`.
+
+Safety behavior:
+
+- Validation runs before deletion, space check, download, and smoke.
+- If any part is missing or has a different size, the script exits non-zero.
+- This phase remains non-destructive; no SOTA claim is possible.
+
+Validation:
+
+1. Local syntax:
+   `bash -n .Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+2. Remote default dry-run:
+   `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+3. Confirm output contains five `part_size_ok` lines and one `part_total_ok`
+   line before the current disk gate.

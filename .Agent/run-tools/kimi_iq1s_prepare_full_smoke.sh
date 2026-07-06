@@ -18,6 +18,7 @@ set -euo pipefail
 : "${CONFIRM_DELETE:=}"
 : "${DOWNLOAD:=1}"
 : "${RUN_SMOKE:=1}"
+: "${VALIDATE_PARTS:=1}"
 : "${MIN_FREE_AFTER_DOWNLOAD_GIB:=20}"
 
 IQ1S_BYTES=204429739520
@@ -77,7 +78,7 @@ path_size_bytes() {
 
 print_inventory() {
   log "date=$(date -Is)"
-  log "execute=$EXECUTE delete_old_packs=$DELETE_OLD_PACKS download=$DOWNLOAD run_smoke=$RUN_SMOKE"
+  log "execute=$EXECUTE delete_old_packs=$DELETE_OLD_PACKS download=$DOWNLOAD run_smoke=$RUN_SMOKE validate_parts=$VALIDATE_PARTS"
   log "repo=$REPO"
   if [ -d "$REPO/.git" ]; then
     log "repo_branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
@@ -94,6 +95,68 @@ print_inventory() {
   for path in "${DELETE_CANDIDATES[@]}"; do
     log "  candidate $(path_size_bytes "$path") $path"
   done
+}
+
+validate_part_metadata() {
+  if [ "$VALIDATE_PARTS" != "1" ]; then
+    log "part metadata validation skipped"
+    return
+  fi
+
+  python3 - <<'PY'
+import json
+import sys
+import urllib.request
+
+repo = "mradermacher/Kimi-K2.7-Code-i1-GGUF"
+expected = {
+    "Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5": 41875931136,
+    "Kimi-K2.7-Code.i1-IQ1_S.gguf.part2of5": 41875931136,
+    "Kimi-K2.7-Code.i1-IQ1_S.gguf.part3of5": 41875931136,
+    "Kimi-K2.7-Code.i1-IQ1_S.gguf.part4of5": 41875931136,
+    "Kimi-K2.7-Code.i1-IQ1_S.gguf.part5of5": 36927147936,
+}
+url = f"https://huggingface.co/api/models/{repo}?blobs=true"
+req = urllib.request.Request(url, headers={"User-Agent": "kimi-iq1s-prepare/1.0"})
+try:
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+except Exception as exc:
+    print(f"[kimi_iq1s_prepare] ERROR part metadata validation failed: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+sizes = {}
+for item in data.get("siblings", []):
+    name = item.get("rfilename")
+    if not name:
+        continue
+    size = item.get("size")
+    if size is None and isinstance(item.get("lfs"), dict):
+        size = item["lfs"].get("size")
+    if size is None and isinstance(item.get("blob"), dict):
+        size = item["blob"].get("size")
+    if size is not None:
+        sizes[name] = int(size)
+
+ok = True
+total = 0
+for name, want in expected.items():
+    got = sizes.get(name)
+    if got != want:
+        print(f"[kimi_iq1s_prepare] ERROR part_size name={name} got={got} expected={want}", file=sys.stderr)
+        ok = False
+    else:
+        print(f"[kimi_iq1s_prepare] part_size_ok name={name} bytes={got}")
+        total += got
+
+if total != sum(expected.values()):
+    print(f"[kimi_iq1s_prepare] ERROR total_size got={total} expected={sum(expected.values())}", file=sys.stderr)
+    ok = False
+else:
+    print(f"[kimi_iq1s_prepare] part_total_ok bytes={total}")
+
+sys.exit(0 if ok else 1)
+PY
 }
 
 validate_preserve_paths() {
@@ -243,6 +306,7 @@ run_smoke() {
 }
 
 print_inventory
+validate_part_metadata
 maybe_delete_old_packs
 check_space
 download_model
