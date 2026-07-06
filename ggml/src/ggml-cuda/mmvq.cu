@@ -1375,7 +1375,7 @@ extern "C" bool ggml_cuda_moe_stream_mmvq_batch_dev(
         void *d_src1_q8_row = (char *) d_src1_q8 + (size_t) k * src1_q8_row_bytes;
         float *d_dst_row = d_dst + k * ne01;
         const size_t nb01 = (size_t) ne00 * ggml_type_size((ggml_type) src0_type_int) / ggml_blck_size((ggml_type) src0_type_int);
-        if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, d_src0, ne01, ne00, nb01, d_src1_row, d_src1_q8_row, d_dst_row, stream)) {
+        if (!ggml_cuda_moe_stream_mmvq_dev(src0_type_int, d_src0_row, ne01, ne00, nb01, d_src1_row, d_src1_q8_row, d_dst_row, stream)) {
             return false;
         }
     }

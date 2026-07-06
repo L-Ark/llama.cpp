@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <cfloat>
 #include <cstdint>
 #include <cstdlib>
@@ -35,6 +36,22 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+static bool llama_string_contains_case_insensitive(const std::string & haystack, const char * needle) {
+    if (needle == nullptr || needle[0] == '\0') {
+        return true;
+    }
+
+    const char * needle_end = needle + std::strlen(needle);
+    const auto it = std::search(
+            haystack.begin(), haystack.end(),
+            needle, needle_end,
+            [](char a, char b) {
+                return std::tolower((unsigned char) a) == std::tolower((unsigned char) b);
+            });
+
+    return it != haystack.end();
+}
 
 struct ggml_backend_meta_split_state llama_meta_device_get_split_state(const struct ggml_tensor * tensor, void * userdata) {
     const llama_meta_device_get_split_state_userdata * ud = (const llama_meta_device_get_split_state_userdata *) userdata;
@@ -1999,9 +2016,12 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     }
                 }
 
-                if (ml.get_key(LLM_KV_ROPE_SCALING_YARN_LOG_MUL, hparams.rope_yarn_log_mul, 0.0f)) {
+                if (ml.get_key(LLM_KV_ROPE_SCALING_YARN_LOG_MUL, hparams.rope_yarn_log_mul, 0.0f) &&
+                        !llama_string_contains_case_insensitive(name, "kimi")) {
                     // [TAG_DEEPSEEK2_YARN_LOG_MUL_FIX]
-                    // cancel the factor from the convert script
+                    // Cancel the factor from the convert script for DeepSeek2.
+                    // Kimi K2 GGUFs also report deepseek2, but their accepted
+                    // path uses the stored multiplier directly.
                     hparams.rope_yarn_log_mul /= 0.1f;
                 }
 
@@ -3120,7 +3140,10 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
         LLAMA_LOG_WARN("%s: deferred expert loading disabled because tensor validation would fault expert pages eagerly\n", __func__);
         defer_expert_mmap = false;
     }
-    if (defer_expert_mmap && arch == LLM_ARCH_KIMI_LINEAR && !devices.empty() && n_gpu_layers > 0) {
+    const bool defer_kimi_experts_on_gpu =
+            arch == LLM_ARCH_KIMI_LINEAR ||
+            (arch == LLM_ARCH_DEEPSEEK2 && llama_string_contains_case_insensitive(name, "kimi"));
+    if (defer_expert_mmap && defer_kimi_experts_on_gpu && !devices.empty() && n_gpu_layers > 0) {
         deferred_expert_buft_override_patterns.reserve(n_layer);
         deferred_expert_buft_overrides.reserve(n_layer + 1);
 
@@ -3140,8 +3163,8 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
         deferred_expert_buft_overrides.push_back({ nullptr, nullptr });
         ml.tensor_buft_overrides = deferred_expert_buft_overrides.data();
 
-        LLAMA_LOG_INFO("%s: keeping deferred expert tensors on CPU with %d overrides while applying %d GPU layers\n",
-                __func__, n_layer, n_gpu_layers);
+        LLAMA_LOG_INFO("%s: keeping deferred expert tensors on CPU with %d overrides while applying %d GPU layers (arch=%s name='%s')\n",
+                __func__, n_layer, n_gpu_layers, llm_arch_name(arch), name.c_str());
     }
 
     const auto TENSOR_DUPLICATED      = llama_model_loader::TENSOR_DUPLICATED;

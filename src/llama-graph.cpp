@@ -1473,9 +1473,16 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         cb(selection_probs, "ffn_moe_probs_masked", il);
     }
 
+    // Kimi K2 GGUFs currently report the deepseek2 architecture, but use the
+    // Kimi top-k selection semantics from the accepted Kimi path.
+    const bool is_kimi_k2_deepseek2_layout =
+        arch == LLM_ARCH_DEEPSEEK2 &&
+        hparams.n_expert == 384 &&
+        hparams.n_expert_groups == 1;
+
     // select experts
     ggml_tensor * selected_experts =
-        (arch == LLM_ARCH_MISTRAL4 || arch == LLM_ARCH_KIMI_LINEAR)
+        (arch == LLM_ARCH_MISTRAL4 || arch == LLM_ARCH_KIMI_LINEAR || is_kimi_k2_deepseek2_layout)
         ? ggml_top_k(ctx0, selection_probs, n_expert_used)
         : ggml_argsort_top_k(ctx0, selection_probs, n_expert_used); // [n_expert_used, n_tokens]
     cb(selected_experts->src[0], "ffn_moe_argsort", il);
