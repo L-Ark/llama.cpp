@@ -4026,3 +4026,18 @@
 - `post_download_steps`: 先运行 `.Agent/run-tools/validate_4expert_ready.py --sha256`，通过后才调用 `.Agent/run-tools/run_4expert_validation_after_download.sh`。该 wrapper 内部还会再次执行 readiness gate，形成双重门禁。
 - `log_location`: 默认 `/root/lfz/runs/vendor-ds4-16gb/<stamp>-4expert-download-watch/watch.log`，同时记录 `ready-validation.json`、`ready_exit_status.txt`、`validation_exit_status.txt`。
 - `claim_rule`: watcher 的 first smoke 只用于确认完整 4Expert GGUF 是否能在严格 16GB 下加载并输出正确 France 回答；不是 generalized SOTA。若通过，后续仍需 calibration/dev，再 freeze 后跑 held-out test set。
+
+
+## 2026-07-06 执行记录：4Expert 下载完成自动验证 watcher 已启动
+
+- `attempt_id`: `20260706-4expert-download-watch-launch`
+- `status`: `watcher_running_download_incomplete_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-download-watch-launch-20260706.json`
+- `unit`: `ds4-4expert-watch-20260706T131914Z.service`
+- `log_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch`
+- `watch_log`: `/root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch/watch.log`
+- `prompt_scope`: 启动 watcher 本身未运行任何 prompt，未使用 held-out test set；只有下载完成且 readiness gate 通过后才会自动运行 France strict smoke。
+- `source_commit`: `fabb6036d1271b464c6056ab1c51d436928ec6a3`
+- `current_download_status`: 下载 service 仍为 `active`，`.aria2` sidecar 仍存在，watcher 仅轮询等待。
+- `automatic_next_steps`: `.aria2` 消失后执行 `validate_4expert_ready.py --sha256`；通过后执行 `run_4expert_validation_after_download.sh`，产生 strict 16GB France correctness smoke 记录。
+- `claim_rule`: 当前没有任何 correctness/perf/SOTA 结论。只有 watcher 产出完整 `ready-validation.json` 和 strict runner `summary.json`，并确认 RAM/page cache/TTFT/correctness 后，才允许进入后续 decision 和提交记录。
