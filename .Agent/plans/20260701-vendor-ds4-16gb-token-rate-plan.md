@@ -4357,3 +4357,16 @@
 - `first_smoke_env`: `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`、`LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`、`LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1`、`GGML_MOE_STREAM=0`。
 - `next_action`: 运行 France strict 16GB load/correctness smoke；如果 load 或 correctness 失败，立即 reject，不进入 token-rate benchmark。
 - `claim_rule`: 当前只有下载和 metadata ready 结论，没有 correctness/token-rate/SOTA 结论。
+
+## 2026-07-07 执行记录：antirez IQ2XXS France correctness rejected
+
+- `attempt_id`: `20260707-antirez-iq2xxs-alt-gguf-france-correctness`
+- `status`: `rejected_correctness_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-france-correctness-reject-20260707.json`
+- `prompt_scope`: 只运行 France smoke；未使用 `calibration_dev_set_v1` 调参，未使用 `held_out_test_set_v1_locked`。
+- `model_sha256`: `31598c67c8b8744d3bcebcd19aa62253c6dc43cef3b8adf9f593656c9e86fd8c`。
+- `default_smoke`: `/root/lfz/runs/vendor-ds4-16gb/20260706T181656Z-20260707-antirez-iq2xxs-alt-gguf-france-strict-smoke/france-antirez-iq2xxs-alt-cpu40-vram0gb-cpu40-vram0gb`；`eval_tok_s=2.7`，`prompt_tok_s=1.2`，`TTFT=25684.853561ms`，`memory_peak_bytes=16000000000`，`ram_ok=true`，但输出混合中文 thinking、重复 token 和不完整英文，`correctness_ok=false`。
+- `template_smoke`: `/root/lfz/runs/vendor-ds4-16gb/20260706T181941Z-20260707-antirez-iq2xxs-alt-gguf-france-deepseek3-reasonoff-smoke/france-antirez-iq2xxs-deepseek3-reasonoff-cpu40-vram0gb-cpu40-vram0gb`；`--chat-template deepseek3 --reasoning off --single-turn` 后 `eval_tok_s=3.4`，`prompt_tok_s=0.9`，`TTFT=25495.83811ms`，`memory_peak_bytes=16000000000`，`ram_ok=true`，但输出模型名/数字噪声，缺少 France/Europe/context，`correctness_ok=false`。
+- `decision`: reject，不进入 calibration/dev 或 held-out。虽然 token-rate 数字看起来接近/超过当前 dev baseline，但 France 正确率失败，不能作为 SOTA 或下一阶段泛化候选。
+- `cleanup`: 已删除本地 antirez 86.7GB GGUF 释放磁盘；sha256、ready validation、run dir、完整输出和 reject 记录已保留。
+- `next_direction`: alternate low-bit route 已连续暴露 load/correctness blocker（0xSero 缺 global hc、sleepy K128 gate shape、antirez correctness 失败）。下一步不应继续盲下大模型；若继续 alternate，需要先做 header+小样本 correctness proof 或回到 native source/dataflow 设计。
