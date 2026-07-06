@@ -2,6 +2,44 @@
 
 ## Summary
 
+### 2026-07-06 Latest Active Plan: One-Stream Up/Down Cache Audit Before Next Patch
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，没有新的 accepted performance result。本阶段目标不是先写 runtime patch，而是先把 one-stream cache 扩展到 up/down 的硬上界、VRAM 竞争和 page-cache 代价算清楚，再决定是否值得实践。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `elapsed_seconds=62.9`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `memory_max_events=16879`, `pgmajfault=272731`, `workingset_refault_file=1638880`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Accepted binary path/version: `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli`, `b14849-d9e56fcdf`
+- Accepted config: vendor DeepSeek native GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, O_DIRECT France gate pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`
+- Push target remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+Latest source audit finding:
+
+- Current accepted one-stream path is gate-only because accepted env uses `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, accepted cache-admit profile is gate-focused, and accepted O_DIRECT pack is the France gate pack. It is not because the one-stream implementation is intrinsically gate-only.
+- Source evidence to record in the next artifact: `moe_stream.cu` one-stream name filter around `moe_stream_one_name_filter_allows`; VRAM slot/budget initialization around `vram_cache_init`; cache-admit profile logic around `moe_stream_cache_admit_allows`; runtime implementation around `ggml_cuda_moe_stream_one`.
+- Gate/up/down expert tensors appear slot-size compatible in current profiles (`4456448` bytes per expert tensor), so a shared one-stream cache can theoretically admit up/down entries. The blocker is capacity and replacement economics, not type compatibility.
+- Accepted 13.25GiB one-stream cache provides only about `3192` slots at this tensor size. Adding up/down entries competes directly with the accepted gate working set unless cache budget is increased, and recent runs show little safe VRAM headroom.
+- Without an up/down pack, one-stream would fetch up/down tensor pages from the native GGUF mmap path and then drop/evict them; under strict 16GB including page cache, this can increase major faults/refaults and TTFT. Therefore it must not be enabled blindly.
+
+Hard-bound constraints already known:
+
+- Current profile basis: `138` decode tokens, current decode window about `31.1806s`, target `10 tok/s` decode window `13.8s`, required saving about `17.38s`.
+- Existing fallback math says all decode up/down fallback is about `19.03s`. Removing all of it has only about `1.65s` total overhead slack for `10 tok/s`.
+- Existing top-N zero-overhead bounds remain the reference until recomputed for one-stream slot competition: top512 about `5.987 tok/s`, top768 about `6.48 tok/s`, top1024 about `6.962 tok/s`, top1536 about `7.884 tok/s`, top2048 about `8.696 tok/s`, top3072 about `9.946 tok/s`, top4096 about `10.797 tok/s` before overhead and before gate-cache coexistence.
+- Top3072/top4096 style payload is not currently viable as a simple extension because it competes with the accepted gate cache and workspace; top4096 alone is about `17GiB` payload before gate cache/workspace.
+
+Updated next executable plan:
+
+1. Produce a new artifact, planned path `.Agent/runs/20260705-vendor-ds4-coldstart/one-stream-updown-extension-bound-20260706.json`, that uses existing accepted SOTA/profile data to quantify: available VRAM cache slots, accepted gate slot pressure, up/down top-N slot cost, expected fallback-time saving, expected TTFT/page-cache risk, and whether any top-N setting can exceed `4.4 tok/s` or approach `10 tok/s` with margin.
+2. Do not modify the runtime path until that artifact exists. The artifact must include source-line evidence for name filter, cache budget, cache admit profile, pack lookup/mmap fallback, and DONTNEED behavior.
+3. If the bound shows only small upside or negative margin, close one-stream up/down extension as a 10 tok/s route and keep it only as a possible small empirical >4.4 candidate after a separate strict experiment plan.
+4. If the bound shows a plausible small SOTA improvement under VRAM/RAM/TTFT constraints, run the smallest strict cold experiment first: limited up/down admit profile, no large new pack unless disk is explicitly approved, 16GB cgroup including page cache, `MemorySwapMax=0`, France correctness, exact output capture, and TTFT gate `<=33617.688744 ms`.
+5. If the bound shows no route to `10 tok/s`, shift the main plan to mechanisms that change the fallback bound instead of moving the same bytes differently: sidecar loader integration with correctness proof, a new real true-parallel expert source design beyond env toggles, verified speculation/MTP, or a representation with expert-equivalent payload near/below `11.879710 GiB`.
+6. Do not repeat rejected probes without new math: `GGML_MOE_STREAM_DOWN_BATCH` env-only, old batch-on attempts, per-call Q8_0 replacement, top768 hot-batch, source-only prefetch/io_uring, CUDA graph-only changes, and full-pack mmap remain rejected/closed unless a new artifact changes their bound.
+7. Promotion rule remains strict and immediate: if a compliant new SOTA appears, record full reproduction metadata in `.Agent/runs`, update this plan, commit all source/artifacts, and push immediately to `ssd/vendor/deepseek-token-rate-16gb` with `L-Ark <fliangae@connect.ust.hk>`. The record must include command, env, binary path/version, model path, pack/profile paths, cgroup settings, cold-start method, metrics, exact correctness output, git commit, and a clean pushed-source reproduction result.
+8. If token rate improves but TTFT exceeds the 20% gate, commit/push it only as `not accepted` diagnostic and make the next plan step TTFT recovery. If RAM/page cache exceeds the 16GB cgroup, if correctness fails, or if OOM/kill occurs, reject and do not promote.
+
 ### 2026-07-06 Latest Active Plan: Direct GGUF Metadata Bounds Closed for 10 tok/s
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，本节没有产生新的性能结果或 SOTA。
