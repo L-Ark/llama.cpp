@@ -4255,3 +4255,16 @@
 - `tensor_validation`: type counts 为 `F32=492`, `F16=359`, `Q8_0=345`, `IQ2_XXS=86`, `Q2_K=43`, `I32=3`；gate/up expert tensors 各 `43` 个，type `IQ2_XXS`，down expert tensors `43` 个，type `Q2_K`；`ffn_gate_tid2eid.weight` 为 `3` 个。
 - `next_action`: 运行 France strict 16GB correctness smoke。若 load 或 France correctness 失败，立即 reject，不做 calibration/dev token-rate benchmark；若通过，才进入 `calibration_dev_set_v1` strict cold no-prompt-specific baseline。
 - `claim_rule`: 当前只有下载和 metadata ready 结论，没有 correctness、token-rate 或 SOTA 结论。
+
+## 2026-07-07 执行记录：0xSero alternate GGUF France load smoke rejected
+
+- `attempt_id`: `20260707-0xsero-alt-gguf-france-load-smoke`
+- `status`: `rejected_load_incompatible_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-0xsero-france-load-smoke-reject-20260707.json`
+- `prompt_scope`: 只运行 France smoke；未使用 `calibration_dev_set_v1` 调参，未使用 `held_out_test_set_v1_locked`。
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T172636Z-20260707-0xsero-alt-gguf-france-strict-smoke/france-0xsero-alt-cpu40-vram0gb-cpu40-vram0gb`。
+- `config`: strict 16GB cgroup、drop_caches、`cpu_moe=40`、`vram_cache=0`、`LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`、`GGML_MOE_STREAM=0`、无 prompt-specific pack/profile。
+- `result`: exit status `1`，`eval_tok_s=None`，`prompt_tok_s=None`，`TTFT=None`，`memory_peak_bytes=387440640`，`memory_file_bytes=196919296`，`ram_ok=true`；没有进入真实推理。
+- `loader_error`: stderr 明确报 `missing tensor 'hc_head_base'`。0xSero header 中有 per-layer `blk.N.hc_attn_*` / `blk.N.hc_ffn_*`，但没有 vendor 当前期望的 global `hc_head_base/hc_head_fn/hc_head_scale`，也没有现有 alias 支持的 `output_hc_*`。
+- `decision`: reject，不进入 token-rate benchmark，不作为 SOTA。该问题是模型/loader/dataflow compatibility blocker，不是 RAM、TTFT 或 cache 参数问题。
+- `next_allowed_work`: 不使用 held-out。若继续 alternate GGUF 路线，必须先用 header-only probe 筛掉缺少 global `hc_head_*`/`output_hc_*` 或其他必需 tensor 的 candidate；或者单独写 loader/dataflow correctness 计划，证明 per-layer hc tensor 如何等价替代当前 global hc_head 后再改 source。
