@@ -4425,3 +4425,16 @@
   2. 若 up/down 进入 one-stream 后 correctness 正常但 token-rate 不升或下降，继续拆分 one-stream 内部时间：CPU_Mapped expert read、H2D、src1 staging、kernel、D2H/scatter，确认是不是每 expert 单独搬运导致吞吐差。
   3. 如果单 expert one-stream 对 up/down 太慢，再设计 compact exact gather/batched route：同一 layer 同一 token 的 topK up/down 统一处理，减少 per-expert launch/copy/scatter；理论上限按 fallback_source_probe 的 up/down decode ms 计算。
   4. 所有实验仍只用 calibration/dev；held-out locked test set 只在 candidate freeze 后测试。若产生合规 generalized SOTA，必须完整记录复现信息并立刻 push 到 `ssd/vendor/deepseek-token-rate-16gb`。
+
+## 2026-07-07 执行记录：up/down one-stream filter smoke rejected
+
+- `attempt_id`: `20260707-updown-one-stream-filter-france-smoke`
+- `status`: `rejected_slower_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-one-stream-filter-france-smoke-reject-20260707.json`
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T185243Z-20260707-updown-one-stream-filter-smoke-france/france-updown-one-stream-filter-cpu40-vram0gb`
+- `prompt_scope`: France calibration smoke only；未使用 held-out。该 run 只验证 route，不是 SOTA。
+- `config_delta`: `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps,ffn_down_exps`，strict cold 16GB cgroup，`cpu_moe=40`，`vram_cache=0`，`-n 96`。
+- `result`: exit `0`，`eval_tok_s=1.7`，`prompt_tok_s=0.7`，`TTFT=43048.10 ms`，`memory_peak_bytes=16000000000`，`memory_file_bytes=15062183936`，`ram_ok=true`，`correctness_ok=true`。
+- `fallback_result`: `fallback_source_probe_rows=0`，即 up/down CPU fallback 被 name_filter 扩展消除；但性能从 gate-only probe smoke 的 `2.5 tok/s` 降到 `1.7 tok/s`，wall runtime 也更长。
+- `decision`: reject，不扩大到 calibration/dev。该路线证明“up/down 可以进入 one-stream”，但 per-expert one-stream 搬运/同步/散写开销超过 CPU fallback 收益。不能把它当作 SOTA 或泛化候选。
+- `next_plan`: 用 `GGML_MOE_STREAM_Q80_SKIP_PROFILE=1` / `GGML_MOE_STREAM_Q80_SKIP_PROFILE_OUT=<file>` 或等价 one-stream timing profile 拆分 up/down one-stream 内部时间：host_src0、q80、cuda_alloc、H2D、kernel_sync、D2H、scatter、cuda_free。若主要时间在每 expert H2D/D2H/free/sync，则下一步应做 layer-level compact/batched exact route，而不是继续扩大 single-expert one-stream。

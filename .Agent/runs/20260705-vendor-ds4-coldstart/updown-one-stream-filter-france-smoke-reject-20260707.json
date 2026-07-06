@@ -1,0 +1,23 @@
+{
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. Renowned for its art, fashion, cuisine, and landmarks like the Eiffel Tower, the Louvre, and the Palace of Versailles, France is a major center for culture and politics. It is a unitary semi-presidential republic with a strong democratic tradition, and its capital, Paris, is often",
+  "artifact_id": "20260707-updown-one-stream-filter-france-smoke",
+  "config_delta": "GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps,ffn_down_exps; -n 96 France calibration smoke; strict 16GB; no held-out",
+  "correctness_ok": true,
+  "decision": "Reject as performance route: France n96 generation dropped from 2.5 tok/s in gate-only probe smoke to 1.5 tok/s, and wall runtime increased. Up/down one-stream may reduce CPU fallback accounting but adds high per-expert transfer/sync overhead; next step is to profile one-stream timing rather than enabling this broadly.",
+  "eval_tok_s": 1.7,
+  "exit_status": 0,
+  "fallback_source_by_reason_ms": {},
+  "fallback_source_by_role_phase_ms": {},
+  "fallback_source_examples": [],
+  "fallback_source_probe_csv": "/root/lfz/runs/vendor-ds4-16gb/20260706T185243Z-20260707-updown-one-stream-filter-smoke-france/france-updown-one-stream-filter-cpu40-vram0gb/fallback_source_probe.csv",
+  "fallback_source_probe_sha256": null,
+  "fallback_source_rows": 0,
+  "fallback_source_src0_buft_counts": {},
+  "memory_file_bytes": 15062183936,
+  "memory_peak_bytes": 16000000000,
+  "prompt_tok_s": 0.7,
+  "ram_ok": true,
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T185243Z-20260707-updown-one-stream-filter-smoke-france/france-updown-one-stream-filter-cpu40-vram0gb",
+  "status": "rejected_slower_probe_not_sota",
+  "ttft_estimate_ms": 43048.098579
+}
