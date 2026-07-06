@@ -87139,3 +87139,105 @@ cat "$RUN/metrics.txt"
 cat "$RUN/stdout.txt"
 tail -n 80 "$RUN/stderr.txt"
 ```
+
+## Phase 7OR - residual data-movement hard-bound audit
+
+Start time: `2026-07-06T09:18:02+0800` / `20260706-011802Z`.
+
+Purpose:
+
+- Continue from 7OQ without repeating closed env/cache-policy paths.
+- Quantify whether any remaining narrow source-level data-movement reduction can
+  materially improve strict `n96` token rate under the 16GB host-RAM gate.
+- Use existing 7OP profiling and 7OQ production artifacts; do not run a model in
+  this phase.
+
+Inputs:
+
+- 7OP profiling run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-005556Z-phase7op-current-head-n32-profile`.
+- 7OQ strict production run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-010831Z-phase7oq-current-head-n96-minprofile`.
+- 7OM lower-bit selected hot-key size audit:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-001309Z-phase7om-iq2xxs-hotkey-size`.
+- 7ON mixed-quant v2 audit:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-003119Z-phase7on-mixed-quant-pack-v2-audit`.
+
+Method:
+
+1. Create:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/<timestamp>-phase7or-residual-bound-audit
+```
+
+2. Record:
+
+- `repo_state.txt`;
+- `commands.log`;
+- `phase7or_residual_bound_audit.py`;
+- `baseline.tsv`;
+- `component_bounds.tsv`;
+- `storage_bounds.tsv`;
+- `decision.md`;
+- `summary.json`;
+- `audit_stdout.txt`;
+- `audit_stderr.txt`;
+- `exit.txt`;
+- `artifacts.txt`.
+
+3. Use 7OQ as the production baseline:
+
+- decode `55800.11 ms / 77 runs`;
+- `1.38 tok/s`;
+- TTFT `81892.21 ms`;
+- `memory.peak=15899996160`.
+
+4. Calculate the hard target:
+
+- `5 tok/s` at `77` decode runs requires decode time `<=15400 ms`.
+- Required saving from 7OQ is therefore about `40400 ms`.
+
+5. Bound candidate classes using measured quantities:
+
+- Remove all n96 expert-pack `iouring_wait_us`.
+- Speed n96 expert-pack IO to the prior raw8/raw12 replay bandwidths.
+- Scale 7OP profiled `up_gate_total.wall_ms` from `31` decode runs to `77`.
+- Scale 7OP profiled `down_total.stage_ms` and `down_total.wall_ms`.
+- Scale 7OP `decode,type=2` fallback time.
+- Combine the above optimistic removable buckets.
+- Apply the 7OM selected `IQ2_XXS` byte ratio `0.687389` to n96 iouring wait.
+- Apply the same lower-bit ratio together with raw8/raw12 bandwidth bounds.
+
+6. Treat these as upper bounds only:
+
+- A bound that reaches `5 tok/s` does not prove feasibility unless the runtime
+  has a valid implementation path and quality gate.
+- A bound that cannot reach a material improvement or repeats a rejected family
+  should not trigger source work.
+
+Decision rule:
+
+- If a narrow source-level candidate has:
+  - projected strict n96 token rate at least `1.55 tok/s`;
+  - no prior rejection in this plan;
+  - no new host-RAM pressure;
+  - no TTFT risk;
+  - and a concrete implementation path,
+  then write the next source implementation plan before editing code.
+- If all candidates are either too small, already rejected, or asset/storage
+  blocked, do not edit source. Record the blocker and keep the production path
+  unchanged.
+
+Acceptance:
+
+- Plan committed and pushed before running.
+- Audit exits `0`.
+- No source/model/pack changes.
+- No model inference.
+- Exact reproduction commands and raw artifacts are stored in the run directory.
+- Result appended here and pushed before any follow-up source work.
+
+Result:
+
+- Pending.
