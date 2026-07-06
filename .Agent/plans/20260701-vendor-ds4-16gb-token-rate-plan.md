@@ -3988,3 +3988,18 @@
 - `tid2eid_alias`: 当前分支在 `src/llama-model.cpp` 中已有 default-off `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`；当原始 `blk.%d.ffn_gate_tid2eid` metadata 不存在而 `.weight` alias 存在时，会选择 `.weight` tensor 创建 `layer.ffn_gate_tid2eid`。
 - `q4k_stream_one`: 当前分支在 `ggml/src/ggml-cpu/ggml-cpu.c` 和 `ggml/src/ggml-cuda/moe_stream.cu` 中已有 default-off `GGML_MOE_STREAM_ONE_Q4K=1` admission；未设置时不改变原 MXFP4/F8_E4M3_B128 SOTA 路径。
 - `decision`: 前置源码条件已满足，但这不是正确性或性能结果。完整真实 GGUF 下载完成后，必须先记录 size/sha256，再用 `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` 和 `GGML_MOE_STREAM_ONE_Q4K=1` 做 P3 load validation；通过后才允许进入严格 16GB correctness/perf benchmark。
+
+## 2026-07-06 执行记录：4Expert ready validator 工具与未完成门禁
+
+- `attempt_id`: `20260706-4expert-ready-validator-tool`
+- `status`: `completed_tooling_download_incomplete_not_sota`
+- `tool`: `.Agent/run-tools/validate_4expert_ready.py`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-ready-validation-incomplete-20260706.json`
+- `prompt_scope`: 未运行任何 prompt，未使用 held-out test set。
+- `purpose`: 为 P3 load validation 前增加硬门禁，避免把 aria2 预分配但未完成的 GGUF 当成完整模型跑 benchmark。
+- `completion_gate_enforced`: 默认要求 `.aria2` sidecar 不存在、`stat size == 164465760544`；下载完成后可加 `--sha256` 计算完整文件 hash。若 `.aria2` 存在，工具会输出 `complete_and_ready_for_load_validation=false` 并返回非通过状态，除非显式 `--allow-incomplete` 只做诊断记录。
+- `current_incomplete_result`: 当前文件 header 可解析，但 `.aria2` 仍存在，所以 `complete_and_ready_for_load_validation=false`，`failures=[aria2_sidecar_present]`。
+- `header_observation`: `general.architecture=deepseek4`，`deepseek4.block_count=43`，`deepseek4.expert_count=256`，`deepseek4.expert_used_count=4`；type counts 为 `Q4_K=129`、`Q8_0=366`、`F16=338`、`F32=492`、`I32=3`。
+- `alias_observation`: `tid2eid_plain=0`，`tid2eid_weight=3`，这正是后续必须启用 `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` 的原因。
+- `expert_tensor_observation`: Q4_K expert tensors 共 `129`，其中 gate/up/down 各 `43`，符合 43 层每层 gate/up/down 的预期。
+- `decision`: 这只是下载未完成状态下的门禁和 metadata 预检，不是 correctness/perf 结果。下载完成后先运行该工具的非 `--allow-incomplete` + `--sha256` 模式，并把通过结果作为 P3 load validation 的前置证据。
