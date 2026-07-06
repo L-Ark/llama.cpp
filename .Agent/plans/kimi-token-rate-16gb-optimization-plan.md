@@ -93325,3 +93325,40 @@ Validation:
    `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
 3. Confirm no deletion/download/smoke executes and dry-run still reports the
    resumable temp path.
+
+GP38 execution result:
+
+- Timestamp: `2026-07-07T05:58:56+0800`.
+- Commit tested on remote:
+  `24c9d0f1e61ce12cc6a6984a93cab45aa7e01afc`.
+- Record:
+  `.Agent/runs/20260707-gp38-iq1s-curl-rollback-gate/report.md`.
+- Remote command:
+  `ssh -p 51056 root@92.180.27.82 'cd /root/lfz/tmp/vendor-kimi-speculative-gp33 && git fetch origin vendor/kimi-speculative-general-token-rate-16gb && git checkout vendor/kimi-speculative-general-token-rate-16gb && git reset --hard origin/vendor/kimi-speculative-general-token-rate-16gb && .Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh'`.
+- Result:
+  - exit code `0`;
+  - no deletion executed;
+  - no download executed;
+  - no smoke executed;
+  - `execute=0`;
+  - `validate_parts=1`;
+  - `resume_download=1`;
+  - five `part_size_ok` lines emitted;
+  - `part_total_ok bytes=204430872480`;
+  - `required_iq1s_bytes=204430872480`;
+  - `free_before=89644806144`;
+  - `space_ready=0`;
+  - `free=89644802048`;
+  - `required=225905708960`;
+  - `missing=136260906912`;
+  - `smoke_ready=0`;
+  - dry-run download line prints the resumable temp path:
+    `Kimi-K2.7-Code.i1-IQ1_S.gguf.tmp`.
+- Decision:
+  - curl failure rollback implementation keeps the default dry-run
+    reproducible and non-destructive;
+  - the rollback branch itself is implemented but not triggered by this
+    default dry-run;
+  - full IQ1_S n32 smoke remains gated by disk capacity or explicit deletion
+    approval;
+  - no SOTA or token-rate claim is possible from this phase.
