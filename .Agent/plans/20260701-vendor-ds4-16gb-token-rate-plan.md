@@ -4003,3 +4003,14 @@
 - `alias_observation`: `tid2eid_plain=0`，`tid2eid_weight=3`，这正是后续必须启用 `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` 的原因。
 - `expert_tensor_observation`: Q4_K expert tensors 共 `129`，其中 gate/up/down 各 `43`，符合 43 层每层 gate/up/down 的预期。
 - `decision`: 这只是下载未完成状态下的门禁和 metadata 预检，不是 correctness/perf 结果。下载完成后先运行该工具的非 `--allow-incomplete` + `--sha256` 模式，并把通过结果作为 P3 load validation 的前置证据。
+
+## 2026-07-06 执行记录：4Expert 下载完成后的固定验证入口
+
+- `attempt_id`: `20260706-4expert-after-download-wrapper`
+- `status`: `tooling_ready_not_run_download_incomplete`
+- `tool`: `.Agent/run-tools/run_4expert_validation_after_download.sh`
+- `prompt_scope`: 工具尚未执行；未运行任何 prompt，未使用 held-out test set。
+- `reason`: 当前可用 binary 是 `build-ds4-moe-stream-batch/bin/llama-cli`，而 `strict_ds4_runner.py` 的默认 binary 路径不存在；为了避免下载完成后参数错配，新增固定 wrapper 显式传入 binary/model/env。
+- `pre_gate`: wrapper 首先运行 `.Agent/run-tools/validate_4expert_ready.py --sha256`；只有 `.aria2` 不存在、size 等于 `164465760544`、metadata 符合 4Expert 预期并且 sha256 记录完成，才允许进入后续 load/correctness smoke。
+- `first_smoke_config`: `cpu_moe=40`，`vram_cache_gb=0`，`ONE_CACHE_MIB=13568`，strict `drop_caches`，`MemoryMax=16000000000`，`MemorySwapMax=0`，France prompt，`LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`，`GGML_MOE_STREAM_ONE_Q4K=1`，`GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`，`GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`。
+- `claim_rule`: 该 first smoke 只证明完整 4Expert GGUF 能否在严格 16GB 下加载并输出正确 France 回答；不能作为 generalized SOTA。若 smoke 通过，再按 calibration/dev set 评估候选；candidate freeze 后才允许使用 held-out test set。
