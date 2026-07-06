@@ -91385,7 +91385,7 @@ Decision:
 
 Timestamp: `2026-07-07T03:55:00+0800`.
 
-Status: planned before code edit.
+Status: implemented and build-verified; no token-rate improvement claimed.
 
 Rationale:
 
@@ -91431,3 +91431,54 @@ Validation gate:
 - Remote clean-worktree CUDA build must pass.
 - No token-rate or quality claim is allowed until the lower-byte model/pack is
   available and tested under 16 GB cgroup cold start.
+
+Implementation:
+
+- Commit: `0252009a6`.
+- Changed `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Added `GGML_TYPE_IQ1_S` and `GGML_TYPE_Q2_K` to
+  `moe_stream_type_supported()`.
+- Added `GGML_TYPE_IQ1_S` and `GGML_TYPE_Q2_K` to the compact MMVQ batch
+  accepted-type switch.
+- Allowed observed mixed `IQ1_S`/`IQ2_XXS` up-gate pairs in either order.
+
+Build verification:
+
+- Record:
+  `.Agent/runs/20260707-gp22-lowbyte-type-compat/report.md`
+- Remote clean worktree:
+  `/root/lfz/tmp/gp22-lowbyte-type-compat-wt`
+- Remote build dir:
+  `/root/lfz/tmp/gp22-lowbyte-type-compat-build`
+- Command:
+
+```bash
+cmake -S /root/lfz/tmp/gp22-lowbyte-type-compat-wt \
+  -B /root/lfz/tmp/gp22-lowbyte-type-compat-build \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_SHARED_LIBS=ON \
+  -DGGML_CUDA=ON \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=120a-real
+cmake --build /root/lfz/tmp/gp22-lowbyte-type-compat-build --target ggml-cuda -j "$(nproc)"
+```
+
+- Result: pass.
+- Relevant compiled objects included:
+  - `moe_stream_batch.cu.o`;
+  - `mmvq.cu.o`;
+  - `mmq-instance-iq1_s.cu.o`;
+  - `mmq-instance-iq2_xxs.cu.o`;
+  - `mmq-instance-iq2_xs.cu.o`;
+  - `mmq-instance-iq2_s.cu.o`;
+  - `mmq-instance-q2_k.cu.o`.
+- Final link succeeded for `bin/libggml-cuda.so.0.10.0`.
+- Temporary build/worktree directories were removed.
+
+Decision:
+
+- GP22 is a compatibility prerequisite for lower-byte Kimi experiments.
+- It is not an accepted SOTA speedup.
+- Future lower-byte `n32`/`n96` runs can now verify actual stream activation
+  instead of failing at the type gate.
