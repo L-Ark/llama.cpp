@@ -1,0 +1,2614 @@
+{
+  "schema": "vendor-ds4-external-metadata-refresh-v1",
+  "created_at_utc": "2026-07-06T00:16:32.044321Z",
+  "source": {
+    "api_search_url": "https://huggingface.co/api/models?search=DeepSeek-V4-Flash&sort=lastModified&direction=-1&limit=60&full=true",
+    "queried_models_count": 35,
+    "note": "Metadata-only refresh: Hugging Face API model/sibling metadata was queried; no large model files were downloaded."
+  },
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "ttft_ms": 32087.738292,
+    "memory_peak_bytes": 16000000000,
+    "correctness_ok": true,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb"
+  },
+  "models": [
+    {
+      "modelId": "ilintar/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-05T18:13:51.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": [
+          "deepseek-ai/DeepSeek-V4-Flash"
+        ],
+        "license": "mit",
+        "library_name": null,
+        "pipeline_tag": null
+      },
+      "gguf_files": [],
+      "safetensors_count": 0,
+      "siblings_count": 2,
+      "url": "https://huggingface.co/ilintar/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "lastModified": "2026-07-05T01:45:53.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "transformers",
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "GGUF",
+        "quantized",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "moe",
+        "mixture-of-experts",
+        "2-bit",
+        "4-bit",
+        "iq2_xxs",
+        "q2_k",
+        "q4_k",
+        "ds4",
+        "apple-silicon",
+        "metal",
+        "llama.cpp",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": [
+          "deepseek-ai/DeepSeek-V4-Flash"
+        ],
+        "license": "mit",
+        "library_name": "transformers",
+        "pipeline_tag": null
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400,
+          "size_gib": 3.546,
+          "blobId": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+          "size": 86720111200,
+          "size_gib": 80.764,
+          "blobId": "d71f8c8320a874e97d26d5d53eeb596c96917ab9",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+          "size": 99705676384,
+          "size_gib": 92.858,
+          "blobId": "354edeb930d6069f5d680e1617f065fb73dc1c6c",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+          "size": 164633502304,
+          "size_gib": 153.327,
+          "blobId": "f4a47c11ae7ade594a01169336399bf563baf3c8",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 6,
+      "url": "https://huggingface.co/eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF"
+    },
+    {
+      "modelId": "suxiaoyiA186/DeepSeek-V4-Flash-DSpark",
+      "lastModified": "2026-07-04T23:54:25.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "transformers",
+        "safetensors",
+        "deepseek_v4",
+        "text-generation",
+        "arxiv:2606.19348",
+        "license:mit",
+        "endpoints_compatible",
+        "8-bit",
+        "fp8",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": null,
+        "license": "mit",
+        "library_name": "transformers",
+        "pipeline_tag": null
+      },
+      "gguf_files": [],
+      "safetensors_count": 48,
+      "siblings_count": 74,
+      "url": "https://huggingface.co/suxiaoyiA186/DeepSeek-V4-Flash-DSpark"
+    },
+    {
+      "modelId": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-04T07:28:18.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "transformers",
+        "gguf",
+        "text-generation-inference",
+        "unsloth",
+        "qwen3_5",
+        "reasoning",
+        "distillation",
+        "deepseek",
+        "deepseek-v4",
+        "sft",
+        "long-cot",
+        "chain-of-thought",
+        "efficient-inference",
+        "agent",
+        "multilingual",
+        "image-text-to-text",
+        "en",
+        "zh",
+        "ko",
+        "ja",
+        "es",
+        "ru",
+        "dataset:Jackrong/DeepSeek-V4-Distill-8000x",
+        "arxiv:2604.06628",
+        "base_model:unsloth/Qwen3.5-9B",
+        "base_model:quantized:unsloth/Qwen3.5-9B",
+        "license:apache-2.0",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": "unsloth/Qwen3.5-9B",
+        "license": "apache-2.0",
+        "library_name": null,
+        "pipeline_tag": "image-text-to-text"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "size": 4623521024,
+          "size_gib": 4.306,
+          "blobId": "733ad2f736a30d0e8a67f4bf3257e1cdacdfe673",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": 5629105408,
+          "size_gib": 5.243,
+          "blobId": "f712486e78fb21dbc3b87aa553f420e846d8cbcf",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_M.gguf",
+          "size": 6467966208,
+          "size_gib": 6.024,
+          "blobId": "1366342b3afad0c9ceef0ddfd286874d56668043",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-Q6_K.gguf",
+          "size": 7359255808,
+          "size_gib": 6.854,
+          "blobId": "c9e07698fcb6afdaf09e77d2ec2e895fe4cf794f",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-Q8_0.gguf",
+          "size": 9527497984,
+          "size_gib": 8.873,
+          "blobId": "f53051d9a8fe60afc30577c2899b67998b862060",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "mmproj.gguf",
+          "size": 921705376,
+          "size_gib": 0.858,
+          "blobId": "b0cf949b869b54858e259ff5392b3579c46a0330",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 8,
+      "url": "https://huggingface.co/Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "deepseek-ai/DeepSeek-V4-Flash-DSpark",
+      "lastModified": "2026-07-04T03:15:12.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "transformers",
+        "safetensors",
+        "deepseek_v4",
+        "text-generation",
+        "arxiv:2606.19348",
+        "license:mit",
+        "endpoints_compatible",
+        "8-bit",
+        "fp8",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": null,
+        "license": "mit",
+        "library_name": "transformers",
+        "pipeline_tag": null
+      },
+      "gguf_files": [],
+      "safetensors_count": 48,
+      "siblings_count": 74,
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-DSpark"
+    },
+    {
+      "modelId": "sokann/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-03T23:03:24.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "deepseek_v4",
+        "conversational",
+        "ik_llama.cpp",
+        "llama.cpp",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": "deepseek-ai/DeepSeek-V4-Flash",
+        "license": "mit",
+        "library_name": null,
+        "pipeline_tag": null
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash.gguf",
+          "size": 156378344544,
+          "size_gib": 145.639,
+          "blobId": "ac96ff5589c0bed92f231f1dc941a381065326f6",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 6,
+      "url": "https://huggingface.co/sokann/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "lovesenko/DeepSeek-V4-Flash-DSpark-Abliterated",
+      "lastModified": "2026-07-03T21:35:01.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "vllm",
+        "safetensors",
+        "deepseek_v4",
+        "abliterated",
+        "uncensored",
+        "weight-editing",
+        "deepseek-v4",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash-DSpark",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash-DSpark",
+        "license:mit",
+        "8-bit",
+        "fp8",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": "deepseek-ai/DeepSeek-V4-Flash-DSpark",
+        "license": "mit",
+        "library_name": "vllm",
+        "pipeline_tag": null
+      },
+      "gguf_files": [],
+      "safetensors_count": 48,
+      "siblings_count": 74,
+      "url": "https://huggingface.co/lovesenko/DeepSeek-V4-Flash-DSpark-Abliterated"
+    },
+    {
+      "modelId": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF",
+      "lastModified": "2026-07-03T12:52:45.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "transformers",
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "GGUF",
+        "huihui",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": [
+          "deepseek-ai/DeepSeek-V4-Flash"
+        ],
+        "license": "mit",
+        "library_name": "transformers",
+        "pipeline_tag": null
+      },
+      "gguf_files": [
+        {
+          "rfilename": "ggml-model-Q3_K_S.gguf",
+          "size": 122467948864,
+          "size_gib": 114.057,
+          "blobId": "71b2507baa48e49c5bb07822531a4708a60be3c6",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 3,
+      "url": "https://huggingface.co/huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF"
+    },
+    {
+      "modelId": "audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "lastModified": "2026-07-03T08:04:56.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "deepseek",
+        "llama.cpp",
+        "moe",
+        "research",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix"
+      ],
+      "cardData": {
+        "base_model": "deepseek-ai/DeepSeek-V4-Flash",
+        "license": "mit",
+        "library_name": null,
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-aligned.gguf",
+          "size": 86721392640,
+          "size_gib": 80.766,
+          "blobId": "d0004dc5583f7855733cc8f20187f15439c4b257",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+          "size": 86720106528,
+          "size_gib": 80.764,
+          "blobId": "9adf2ff6ac15e37107b128f475a1b5796b9452ee",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "cyberneurova-DeepSeek-V4-Flash-abliterated-Layers37-42Q4KExperts-mixed.gguf",
+          "size": 97591742496,
+          "size_gib": 90.889,
+          "blobId": "4d0785c59c68ec50fb007c58cb96dd6281c6b5f9",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+          "size": 98810926400,
+          "size_gib": 92.025,
+          "blobId": "b69c328ee8532f5e8a8becae85559ee06b19720d",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf",
+          "size": 164633497632,
+          "size_gib": 153.327,
+          "blobId": "799f85f59f3120092acdf4c7173a584be2257343",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf",
+          "size": 302251447616,
+          "size_gib": 281.494,
+          "blobId": "c571f7b836bd5b311125de077033742daac68ead",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 10,
+      "url": "https://huggingface.co/audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF"
+    },
+    {
+      "modelId": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-02T18:41:52.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": [
+          "deepseek-ai/DeepSeek-V4-Flash"
+        ],
+        "license": null,
+        "library_name": null,
+        "pipeline_tag": null
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash.IQ2_S.gguf",
+          "size": 88019539296,
+          "size_gib": 81.975,
+          "blobId": "83b7096cec12367bd29141ca3d6a6f0de5eb5288",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash.IQ3_XXS-AS.gguf",
+          "size": 102431550816,
+          "size_gib": 95.397,
+          "blobId": "8edbbd8c582b4cf14f18feeb19033a1179beb5c2",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash.IQ3_XXS-L21.gguf",
+          "size": 134056602976,
+          "size_gib": 124.85,
+          "blobId": "e5361e37e22a1cd16dcdb0e46f408f8fd607c3dc",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash.IQ3_XXS-L39.gguf",
+          "size": 151270026592,
+          "size_gib": 140.881,
+          "blobId": "38ae7fc1d82252c0713925d1ffae5cd762055afa",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash.IQ3_XXS.gguf",
+          "size": 113974275424,
+          "size_gib": 106.147,
+          "blobId": "fc4972a592d08844e6ed5bc194c79714d1d667d7",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash.IQ4_XS.gguf",
+          "size": 155095231840,
+          "size_gib": 144.444,
+          "blobId": "0c28c598e574f1b4814a7e1ed49704f511f52d24",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash.Q8_0.gguf",
+          "size": 156378344544,
+          "size_gib": 145.639,
+          "blobId": "ac96ff5589c0bed92f231f1dc941a381065326f6",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 15,
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "lastModified": "2026-07-02T12:34:53.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "custom_code",
+        "arxiv:2602.06036",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": [
+          "deepseek-ai/DeepSeek-V4-Flash"
+        ],
+        "license": null,
+        "library_name": "speculators",
+        "pipeline_tag": null
+      },
+      "gguf_files": [],
+      "safetensors_count": 1,
+      "siblings_count": 6,
+      "url": "https://huggingface.co/RedHatAI/DeepSeek-V4-Flash-speculator.dflash"
+    },
+    {
+      "modelId": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k",
+      "lastModified": "2026-07-02T06:05:47.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "cardData": {},
+      "gguf_files": [],
+      "safetensors_count": 1,
+      "siblings_count": 7,
+      "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k"
+    },
+    {
+      "modelId": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-02T05:07:00.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "imatrix",
+        "conversational",
+        "deepseek",
+        "llama.cpp",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": "deepseek-ai/DeepSeek-V4-Flash",
+        "license": "mit",
+        "library_name": null,
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00001-of-00004.gguf",
+          "size": 5248448,
+          "size_gib": 0.005,
+          "blobId": "dba4e47695258ca212f99de6979ca13bb091f27b",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00002-of-00004.gguf",
+          "size": 49179918240,
+          "size_gib": 45.802,
+          "blobId": "a1f20aef7ccc4e4af0490e389460128f9d915997",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00003-of-00004.gguf",
+          "size": 49994259008,
+          "size_gib": 46.561,
+          "blobId": "0dad3a7f61b3fc923fbcb6f98027b64f11d44d60",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00004-of-00004.gguf",
+          "size": 12932559648,
+          "size_gib": 12.044,
+          "blobId": "bd3c93703ccc106d5b72edb45af6090ebc7ef34f",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00005.gguf",
+          "size": 5248156,
+          "size_gib": 0.005,
+          "blobId": "ae9a61c4e1013e26b97d215a5fa00a1f60296a32",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00005.gguf",
+          "size": 49065891232,
+          "size_gib": 45.696,
+          "blobId": "5d19c598947478e7e8e2b6ce8b0bb8668cfd92db",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00005.gguf",
+          "size": 49056582912,
+          "size_gib": 45.688,
+          "blobId": "e049b0768fdae42f21ae944a20f26fc92837eda8",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00005.gguf",
+          "size": 49056582912,
+          "size_gib": 45.688,
+          "blobId": "378a023032c4a9a4c4ed154fa1ea737ad822c599",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "MXFP4/DeepSeek-V4-Flash-MXFP4-00005-of-00005.gguf",
+          "size": 9194039648,
+          "size_gib": 8.563,
+          "blobId": "2df4716f7ed0023867c3c70a16959f91f2a7a3b7",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K-00001-of-00003.gguf",
+          "size": 5248448,
+          "size_gib": 0.005,
+          "blobId": "ee1acb8504c13d159271dcf0044724af81784d31",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K-00002-of-00003.gguf",
+          "size": 49310047712,
+          "size_gib": 45.924,
+          "blobId": "196857b825e49e3207754956c3dd8f2b8f562c8f",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K-00003-of-00003.gguf",
+          "size": 47646863008,
+          "size_gib": 44.375,
+          "blobId": "b0dcb1a965ff20f15ca2de98afd36704c2deaabc",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Q3_K/DeepSeek-V4-Flash-Q3_K-00001-of-00004.gguf",
+          "size": 5248448,
+          "size_gib": 0.005,
+          "blobId": "dba4e47695258ca212f99de6979ca13bb091f27b",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Q3_K/DeepSeek-V4-Flash-Q3_K-00002-of-00004.gguf",
+          "size": 49983378752,
+          "size_gib": 46.551,
+          "blobId": "57f6800285e32cf76747360d91b6291684f6f863",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Q3_K/DeepSeek-V4-Flash-Q3_K-00003-of-00004.gguf",
+          "size": 49196411616,
+          "size_gib": 45.818,
+          "blobId": "4d9fea3acf4fa64b435a386ba410cf8f7ddd0e14",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Q3_K/DeepSeek-V4-Flash-Q3_K-00004-of-00004.gguf",
+          "size": 25912511712,
+          "size_gib": 24.133,
+          "blobId": "19cb7f9e30fe318847fa2d2315ba8399d6137c57",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "imatrix.gguf",
+          "size": 470338784,
+          "size_gib": 0.438,
+          "blobId": "19492df187fe7581e8c0202b38b3c21c9c759bd6",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 32,
+      "url": "https://huggingface.co/tarruda/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "drowzeys/DeepSeek-V4-Flash-DSpark-NVFP4-KV-1.5M-CTX-2xDGX-Spark",
+      "lastModified": "2026-07-01T22:19:24.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "vllm",
+        "dspark",
+        "speculative-decoding",
+        "nvfp4",
+        "kv-cache",
+        "dgx-spark",
+        "gb10",
+        "long-context",
+        "deepseek-v4",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash-DSpark",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash-DSpark",
+        "license:apache-2.0",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": [
+          "deepseek-ai/DeepSeek-V4-Flash-DSpark"
+        ],
+        "license": "apache-2.0",
+        "library_name": "vllm",
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [],
+      "safetensors_count": 0,
+      "siblings_count": 6,
+      "url": "https://huggingface.co/drowzeys/DeepSeek-V4-Flash-DSpark-NVFP4-KV-1.5M-CTX-2xDGX-Spark"
+    },
+    {
+      "modelId": "fraserprice/DeepSeek-V4-Flash-Abliterated-DSpark",
+      "lastModified": "2026-07-01T16:10:28.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "safetensors",
+        "deepseek_v4",
+        "deepseek",
+        "abliterated",
+        "uncensored",
+        "fp8",
+        "vllm",
+        "blackwell",
+        "rtx-pro-6000",
+        "speculative-decoding",
+        "dspark",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "8-bit",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": [
+          "deepseek-ai/DeepSeek-V4-Flash",
+          "fraserprice/DeepSeek-V4-Flash-FP8-Abliterated",
+          "deepseek-ai/DeepSeek-V4-Flash-DSpark"
+        ],
+        "license": "mit",
+        "library_name": null,
+        "pipeline_tag": null
+      },
+      "gguf_files": [],
+      "safetensors_count": 49,
+      "siblings_count": 58,
+      "url": "https://huggingface.co/fraserprice/DeepSeek-V4-Flash-Abliterated-DSpark"
+    },
+    {
+      "modelId": "fraserprice/DeepSeek-V4-Flash-DSpark",
+      "lastModified": "2026-07-01T16:10:17.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "safetensors",
+        "deepseek_v4",
+        "deepseek",
+        "fp8",
+        "vllm",
+        "blackwell",
+        "rtx-pro-6000",
+        "speculative-decoding",
+        "dspark",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "8-bit",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": [
+          "deepseek-ai/DeepSeek-V4-Flash",
+          "deepseek-ai/DeepSeek-V4-Flash-DSpark"
+        ],
+        "license": "mit",
+        "library_name": null,
+        "pipeline_tag": null
+      },
+      "gguf_files": [],
+      "safetensors_count": 49,
+      "siblings_count": 58,
+      "url": "https://huggingface.co/fraserprice/DeepSeek-V4-Flash-DSpark"
+    },
+    {
+      "modelId": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "lastModified": "2026-07-01T09:30:47.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "quantized",
+        "moe",
+        "4bit",
+        "q4_k",
+        "text-generation",
+        "en",
+        "zh",
+        "dataset:cloudyu/DeepSeek-V4-Flash-4Expert",
+        "license:apache-2.0",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": null,
+        "license": "apache-2.0",
+        "library_name": null,
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "ds4flash-4expert.gguf",
+          "size": 164465760544,
+          "size_gib": 153.171,
+          "blobId": "c5d6c67d6bce924456e1819ec60561a356f9a7b0",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 3,
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF"
+    },
+    {
+      "modelId": "bartowski/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-06-30T03:17:40.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "text-generation",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": "deepseek-ai/DeepSeek-V4-Flash",
+        "license": "mit",
+        "library_name": null,
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00004.gguf",
+          "size": 39546993120,
+          "size_gib": 36.831,
+          "blobId": "8f8d17af80097a0e63dcce21301365fc6ace7f54",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00004.gguf",
+          "size": 39630611872,
+          "size_gib": 36.909,
+          "blobId": "fb4d9c13a95fc14f9b149715c2e7e45cd9781937",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00004.gguf",
+          "size": 39628788224,
+          "size_gib": 36.907,
+          "blobId": "1c879c98897454066893cf836ff0660f67486731",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00004.gguf",
+          "size": 37198265248,
+          "size_gib": 34.644,
+          "blobId": "54c60d7a3990a410499a7e774d03490945e99a28",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 6,
+      "url": "https://huggingface.co/bartowski/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "teto3/DeepSeek-V4-Flash-Base-Q4KExperts",
+      "lastModified": "2026-06-28T00:13:40.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "endpoints_compatible",
+        "region:us"
+      ],
+      "cardData": {},
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-Base-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out.gguf",
+          "size": 164633497248,
+          "size_gib": 153.327,
+          "blobId": "55d74cfdf2937ffc39a38516ef530370e4732b09",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 2,
+      "url": "https://huggingface.co/teto3/DeepSeek-V4-Flash-Base-Q4KExperts"
+    },
+    {
+      "modelId": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k",
+      "lastModified": "2026-06-27T18:25:36.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "safetensors",
+        "custom_code",
+        "region:us"
+      ],
+      "cardData": {},
+      "gguf_files": [],
+      "safetensors_count": 1,
+      "siblings_count": 5,
+      "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k"
+    },
+    {
+      "modelId": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "lastModified": "2026-06-27T18:15:48.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "speculators",
+        "safetensors",
+        "speculative-decoding",
+        "dflash",
+        "deepseek-v4-flash",
+        "draft-model",
+        "custom_code",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:finetune:deepseek-ai/DeepSeek-V4-Flash",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": "deepseek-ai/DeepSeek-V4-Flash",
+        "license": null,
+        "library_name": "speculators",
+        "pipeline_tag": null
+      },
+      "gguf_files": [],
+      "safetensors_count": 1,
+      "siblings_count": 6,
+      "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k"
+    },
+    {
+      "modelId": "autotrust/DeepSeek-V4-Flash-DSpark-4E",
+      "lastModified": "2026-06-27T13:13:02.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "transformers",
+        "safetensors",
+        "deepseek_v4",
+        "text-generation",
+        "deepseek",
+        "moe",
+        "dspark",
+        "topk4",
+        "license:mit",
+        "endpoints_compatible",
+        "8-bit",
+        "fp8",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": null,
+        "license": "mit",
+        "library_name": "transformers",
+        "pipeline_tag": null
+      },
+      "gguf_files": [],
+      "safetensors_count": 48,
+      "siblings_count": 78,
+      "url": "https://huggingface.co/autotrust/DeepSeek-V4-Flash-DSpark-4E"
+    },
+    {
+      "modelId": "autotrust/DeepSeek-V4-Flash-4E",
+      "lastModified": "2026-06-27T06:38:04.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "transformers",
+        "safetensors",
+        "deepseek_v4",
+        "text-generation",
+        "deepseek",
+        "moe",
+        "mixture-of-experts",
+        "topk-4",
+        "efficient-inference",
+        "license:mit",
+        "endpoints_compatible",
+        "8-bit",
+        "fp8",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": null,
+        "license": "mit",
+        "library_name": "transformers",
+        "pipeline_tag": null
+      },
+      "gguf_files": [],
+      "safetensors_count": 46,
+      "siblings_count": 82,
+      "url": "https://huggingface.co/autotrust/DeepSeek-V4-Flash-4E"
+    },
+    {
+      "modelId": "cloudyu/DeepSeek-V4-Flash-4Expert",
+      "lastModified": "2026-06-27T06:16:15.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "transformers",
+        "safetensors",
+        "deepseek_v4",
+        "text-generation",
+        "deepseek",
+        "moe",
+        "mixture-of-experts",
+        "topk-4",
+        "efficient-inference",
+        "license:mit",
+        "endpoints_compatible",
+        "8-bit",
+        "fp8",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": null,
+        "license": "mit",
+        "library_name": "transformers",
+        "pipeline_tag": null
+      },
+      "gguf_files": [],
+      "safetensors_count": 46,
+      "siblings_count": 82,
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert"
+    },
+    {
+      "modelId": "inferencerlabs/DeepSeek-V4-Flash-MTP-MLX",
+      "lastModified": "2026-06-27T05:30:25.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "mlx",
+        "safetensors",
+        "deepseek_v4_mtp",
+        "quantized",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "8-bit",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": [
+          "deepseek-ai/DeepSeek-V4-Flash"
+        ],
+        "license": null,
+        "library_name": "mlx",
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [],
+      "safetensors_count": 1,
+      "siblings_count": 5,
+      "url": "https://huggingface.co/inferencerlabs/DeepSeek-V4-Flash-MTP-MLX"
+    },
+    {
+      "modelId": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4",
+      "lastModified": "2026-06-23T07:41:50.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "ds4",
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "nvfp4",
+        "hybrid-quant",
+        "dgx-spark",
+        "gb10",
+        "blackwell",
+        "experimental",
+        "text-generation",
+        "en",
+        "arxiv:2510.13999",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": "deepseek-ai/DeepSeek-V4-Flash",
+        "license": "mit",
+        "library_name": "ds4",
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-REAP-K150-hybrid.gguf",
+          "size": 91271893568,
+          "size_gib": 85.004,
+          "blobId": "6890885edd6d77405815465979db5e286aa1a8f2",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 3,
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4"
+    },
+    {
+      "modelId": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4",
+      "lastModified": "2026-06-23T07:41:47.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "ds4",
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "nvfp4",
+        "hybrid-quant",
+        "dgx-spark",
+        "gb10",
+        "blackwell",
+        "1m-context",
+        "experimental",
+        "text-generation",
+        "en",
+        "arxiv:2510.13999",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": "deepseek-ai/DeepSeek-V4-Flash",
+        "license": "mit",
+        "library_name": "ds4",
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-REAP-K180-hybrid.gguf",
+          "size": 105909374528,
+          "size_gib": 98.636,
+          "blobId": "b1baae9d0e4320302fdf4a097801143d95167e47",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 3,
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4"
+    },
+    {
+      "modelId": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4",
+      "lastModified": "2026-06-23T07:41:44.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "ds4",
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "nvfp4",
+        "hybrid-quant",
+        "dgx-spark",
+        "gb10",
+        "blackwell",
+        "experimental",
+        "text-generation",
+        "en",
+        "arxiv:2510.13999",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": "deepseek-ai/DeepSeek-V4-Flash",
+        "license": "mit",
+        "library_name": "ds4",
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-REAP-K128-hybrid.gguf",
+          "size": 80537740608,
+          "size_gib": 75.007,
+          "blobId": "7f12f9c000895abc2986f6d292ed577126a6aedb",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 3,
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4"
+    },
+    {
+      "modelId": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "lastModified": "2026-06-19T16:06:20.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "ds4",
+        "experimental",
+        "dgx-spark",
+        "text-generation",
+        "arxiv:2510.13999",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "imatrix",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": null,
+        "license": "mit",
+        "library_name": null,
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-REAP-K128.gguf",
+          "size": 55875180192,
+          "size_gib": 52.038,
+          "blobId": "cd524e77a0d915cbde6975e3362d8c4961539716",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 4,
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF"
+    },
+    {
+      "modelId": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "lastModified": "2026-06-19T15:56:40.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "mixture-of-experts",
+        "reap",
+        "expert-pruning",
+        "ds4",
+        "experimental",
+        "dgx-spark",
+        "text-generation",
+        "arxiv:2510.13999",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": null,
+        "license": "mit",
+        "library_name": null,
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+          "size": 50439361920,
+          "size_gib": 46.975,
+          "blobId": "fbc6873277a8e7f5d2f0d09ba24f8b31934db5ab",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 4,
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF"
+    },
+    {
+      "modelId": "rbinrs/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "lastModified": "2026-06-14T21:29:41.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "transformers",
+        "gguf",
+        "abliterated",
+        "uncensored",
+        "GGUF",
+        "quantized",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "moe",
+        "mixture-of-experts",
+        "2-bit",
+        "4-bit",
+        "iq2_xxs",
+        "q2_k",
+        "q4_k",
+        "ds4",
+        "apple-silicon",
+        "metal",
+        "llama.cpp",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": [
+          "deepseek-ai/DeepSeek-V4-Flash"
+        ],
+        "license": "mit",
+        "library_name": "transformers",
+        "pipeline_tag": null
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400,
+          "size_gib": 3.546,
+          "blobId": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-IQ2_XXS.gguf",
+          "size": 80227328608,
+          "size_gib": 74.718,
+          "blobId": "115acaba478e9a291d05bfbdbfb9b0cfe9a9130f",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+          "size": 86720111200,
+          "size_gib": 80.764,
+          "blobId": "d71f8c8320a874e97d26d5d53eeb596c96917ab9",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+          "size": 99705676384,
+          "size_gib": 92.858,
+          "blobId": "354edeb930d6069f5d680e1617f065fb73dc1c6c",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+          "size": 164633502304,
+          "size_gib": 153.327,
+          "blobId": "f4a47c11ae7ade594a01169336399bf563baf3c8",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 7,
+      "url": "https://huggingface.co/rbinrs/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF"
+    },
+    {
+      "modelId": "jedisct1/DeepSeek-V4-Flash-imatrix-aligned",
+      "lastModified": "2026-05-13T11:59:02.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "quantized",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "moe",
+        "mixture-of-experts",
+        "2-bit",
+        "4-bit",
+        "iq2_xxs",
+        "q2_k",
+        "q4_k",
+        "imatrix",
+        "ds4",
+        "apple-silicon",
+        "metal",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "region:us"
+      ],
+      "cardData": {
+        "base_model": "deepseek-ai/DeepSeek-V4-Flash",
+        "license": "mit",
+        "library_name": "gguf",
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-aligned.gguf",
+          "size": 86720111488,
+          "size_gib": 80.764,
+          "blobId": "cbbb021577fb6b7b74ff27facddd7d772e228cc7",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400,
+          "size_gib": 3.546,
+          "blobId": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 5,
+      "url": "https://huggingface.co/jedisct1/DeepSeek-V4-Flash-imatrix-aligned"
+    },
+    {
+      "modelId": "Preyazz/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-04-28T11:31:46.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "deepseek",
+        "deepseek-v4",
+        "moe",
+        "quantized",
+        "base_model:Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF",
+        "base_model:quantized:Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": "Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF",
+        "license": "mit",
+        "library_name": "gguf",
+        "pipeline_tag": null
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-Q2_K.gguf",
+          "size": 103283751520,
+          "size_gib": 96.19,
+          "blobId": "1aa9d3b3b667186e51e1c88fafc5cf42f9f6f008",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "size": 135535174240,
+          "size_gib": 126.227,
+          "blobId": "9239aee9c105577e9c9eff12a73e9844e24d68a3",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": 172037991008,
+          "size_gib": 160.223,
+          "blobId": "a87df8cebbbb4755adde5530af9044bdcfdf393b",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 5,
+      "url": "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "lastModified": "2026-05-22T10:25:05.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "base_model:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "base_model:quantized:Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+        "license:other",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": [
+          "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+          "unsloth/Qwen3.5-9B"
+        ],
+        "license": "other",
+        "library_name": null,
+        "pipeline_tag": null
+      },
+      "gguf_files": [
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-BF16.gguf",
+          "size": 18407318272,
+          "size_gib": 17.143,
+          "blobId": "eef5ce6eca552b68ca3635ff4ef984fcbd6f6be7",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf",
+          "size": 5357871872,
+          "size_gib": 4.99,
+          "blobId": "bc4e9f10c8e6964c18a61657f6c9ec3bd7f556bd",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf",
+          "size": 3914965760,
+          "size_gib": 3.646,
+          "blobId": "4ec41cbc0e5ca444a082cfbd4f01a8aba995cda9",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf",
+          "size": 5048509184,
+          "size_gib": 4.702,
+          "blobId": "298df264cb9b854ffaf260394d2fefa25d7cdeea",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf",
+          "size": 4737606400,
+          "size_gib": 4.412,
+          "blobId": "4bafe1226f2c24b8b6e85291bcbd910b95385758",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf",
+          "size": 4364018432,
+          "size_gib": 4.064,
+          "blobId": "8e1cee4b56cdeed6c373a2f06d8aaa3b6878fd15",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_M.gguf",
+          "size": 5780087552,
+          "size_gib": 5.383,
+          "blobId": "137e8357ce7a96ecf4c2d44978e57f2c1ce5eeab",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_S.gguf",
+          "size": 5488550656,
+          "size_gib": 5.112,
+          "blobId": "60d5d02b112fa8aa9bb68b2f363876abd41fd007",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_M.gguf",
+          "size": 6642541312,
+          "size_gib": 6.186,
+          "blobId": "57fb957c97a5e09db207c2d8e7992c570e60aace",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_S.gguf",
+          "size": 6472639232,
+          "size_gib": 6.028,
+          "blobId": "49f5839f743037f34be4e3e85e2e12670a0ea4e4",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q6_K.gguf",
+          "size": 7558898432,
+          "size_gib": 7.04,
+          "blobId": "9683e130d24256d8eeff7317ca4ab1c655d00367",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q8_0.gguf",
+          "size": 9786057472,
+          "size_gib": 9.114,
+          "blobId": "664235757835f56506d43ebd96401f8007f29218",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 14,
+      "url": "https://huggingface.co/Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF"
+    },
+    {
+      "modelId": "antirez/deepseek-v4-gguf",
+      "lastModified": "2026-05-31T11:28:43.000Z",
+      "private": false,
+      "gated": false,
+      "disabled": false,
+      "tags": [
+        "gguf",
+        "quantized",
+        "deepseek",
+        "deepseek-v4",
+        "deepseek-v4-flash",
+        "moe",
+        "mixture-of-experts",
+        "2-bit",
+        "4-bit",
+        "iq2_xxs",
+        "q2_k",
+        "q4_k",
+        "ds4",
+        "apple-silicon",
+        "metal",
+        "text-generation",
+        "en",
+        "base_model:deepseek-ai/DeepSeek-V4-Flash",
+        "base_model:quantized:deepseek-ai/DeepSeek-V4-Flash",
+        "license:mit",
+        "endpoints_compatible",
+        "region:us",
+        "conversational"
+      ],
+      "cardData": {
+        "base_model": "deepseek-ai/DeepSeek-V4-Flash",
+        "license": "mit",
+        "library_name": "gguf",
+        "pipeline_tag": "text-generation"
+      },
+      "gguf_files": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+          "size": 86720111488,
+          "size_gib": 80.764,
+          "blobId": "a3e5e6eaff923a303ce84849200a93abec551c15",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+          "size": 86720111200,
+          "size_gib": 80.764,
+          "blobId": "d586a5b01752b2e9b5d6f293d8f4e9fc5a5d730d",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed.gguf",
+          "size": 97591747456,
+          "size_gib": 90.889,
+          "blobId": "c8de129f0f53056398d97954544cd34a3441110e",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400,
+          "size_gib": 3.546,
+          "blobId": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf",
+          "size": 164633502592,
+          "size_gib": 153.327,
+          "blobId": "1e21f0425fef5db61e35911fc30de4d1ded766ee",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf",
+          "size": 164633502304,
+          "size_gib": 153.327,
+          "blobId": "40aa8b273182197b8d90ac10a7039beb6d58bcd9",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Pro-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-Instruct-imatrix.gguf",
+          "size": 464627334560,
+          "size_gib": 432.718,
+          "blobId": "90e4e50e1690a8587389c4c57f8ca31c71192cbe",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Pro-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-Instruct.gguf",
+          "size": 464627334240,
+          "size_gib": 432.718,
+          "blobId": "fe66704e42b9f3565cf73e72686a9240e2b4a157",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Pro-Q4K-Layers-31-output.gguf",
+          "size": 441962533120,
+          "size_gib": 411.61,
+          "blobId": "9a64ce741bc4fc06e1325b2732954bc6099e952a",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Pro-Q4K-Layers00-30.gguf",
+          "size": 457521327328,
+          "size_gib": 426.1,
+          "blobId": "f4b8c97c5a83e277fe089930d4d3b65b27ae142d",
+          "lfs_oid": null
+        }
+      ],
+      "safetensors_count": 0,
+      "siblings_count": 13,
+      "url": "https://huggingface.co/antirez/deepseek-v4-gguf"
+    }
+  ],
+  "candidate_screen": [
+    {
+      "modelId": "ilintar/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-05T18:13:51.000Z",
+      "action": "metadata_only_no_candidate",
+      "notes": [],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/ilintar/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "lastModified": "2026-07-05T01:45:53.000Z",
+      "action": "low_priority_correctness_risk_abliterated",
+      "notes": [
+        "has_gguf",
+        "abliterated_correctness_risk"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400,
+          "size_gib": 3.546,
+          "blobId": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+          "size": 86720111200,
+          "size_gib": 80.764,
+          "blobId": "d71f8c8320a874e97d26d5d53eeb596c96917ab9",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+          "size": 99705676384,
+          "size_gib": 92.858,
+          "blobId": "354edeb930d6069f5d680e1617f065fb73dc1c6c",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+          "size": 164633502304,
+          "size_gib": 153.327,
+          "blobId": "f4a47c11ae7ade594a01169336399bf563baf3c8",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/eadx/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF"
+    },
+    {
+      "modelId": "suxiaoyiA186/DeepSeek-V4-Flash-DSpark",
+      "lastModified": "2026-07-04T23:54:25.000Z",
+      "action": "reject_not_vendor_loadable_safetensors_only",
+      "notes": [
+        "dspark_safetensors_no_gguf"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/suxiaoyiA186/DeepSeek-V4-Flash-DSpark"
+    },
+    {
+      "modelId": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-04T07:28:18.000Z",
+      "action": "reject_incompatible_architecture_expected_qwen",
+      "notes": [
+        "has_gguf",
+        "qwen_distillation_not_vendor_deepseek4"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "mmproj.gguf",
+          "size": 921705376,
+          "size_gib": 0.858,
+          "blobId": "b0cf949b869b54858e259ff5392b3579c46a0330",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "size": 4623521024,
+          "size_gib": 4.306,
+          "blobId": "733ad2f736a30d0e8a67f4bf3257e1cdacdfe673",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": 5629105408,
+          "size_gib": 5.243,
+          "blobId": "f712486e78fb21dbc3b87aa553f420e846d8cbcf",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_M.gguf",
+          "size": 6467966208,
+          "size_gib": 6.024,
+          "blobId": "1366342b3afad0c9ceef0ddfd286874d56668043",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-Q6_K.gguf",
+          "size": 7359255808,
+          "size_gib": 6.854,
+          "blobId": "c9e07698fcb6afdaf09e77d2ec2e895fe4cf794f",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "deepseek-ai/DeepSeek-V4-Flash-DSpark",
+      "lastModified": "2026-07-04T03:15:12.000Z",
+      "action": "reject_not_vendor_loadable_safetensors_only",
+      "notes": [
+        "dspark_safetensors_no_gguf"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-DSpark"
+    },
+    {
+      "modelId": "sokann/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-03T23:03:24.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash.gguf",
+          "size": 156378344544,
+          "size_gib": 145.639,
+          "blobId": "ac96ff5589c0bed92f231f1dc941a381065326f6",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/sokann/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "lovesenko/DeepSeek-V4-Flash-DSpark-Abliterated",
+      "lastModified": "2026-07-03T21:35:01.000Z",
+      "action": "reject_not_vendor_loadable_safetensors_only",
+      "notes": [
+        "abliterated_correctness_risk",
+        "dspark_safetensors_no_gguf"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/lovesenko/DeepSeek-V4-Flash-DSpark-Abliterated"
+    },
+    {
+      "modelId": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF",
+      "lastModified": "2026-07-03T12:52:45.000Z",
+      "action": "low_priority_correctness_risk_abliterated",
+      "notes": [
+        "has_gguf",
+        "abliterated_correctness_risk"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "ggml-model-Q3_K_S.gguf",
+          "size": 122467948864,
+          "size_gib": 114.057,
+          "blobId": "71b2507baa48e49c5bb07822531a4708a60be3c6",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF"
+    },
+    {
+      "modelId": "audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "lastModified": "2026-07-03T08:04:56.000Z",
+      "action": "low_priority_correctness_risk_abliterated",
+      "notes": [
+        "has_gguf",
+        "abliterated_correctness_risk"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+          "size": 86720106528,
+          "size_gib": 80.764,
+          "blobId": "9adf2ff6ac15e37107b128f475a1b5796b9452ee",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-aligned.gguf",
+          "size": 86721392640,
+          "size_gib": 80.766,
+          "blobId": "d0004dc5583f7855733cc8f20187f15439c4b257",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "cyberneurova-DeepSeek-V4-Flash-abliterated-Layers37-42Q4KExperts-mixed.gguf",
+          "size": 97591742496,
+          "size_gib": 90.889,
+          "blobId": "4d0785c59c68ec50fb007c58cb96dd6281c6b5f9",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+          "size": 98810926400,
+          "size_gib": 92.025,
+          "blobId": "b69c328ee8532f5e8a8becae85559ee06b19720d",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf",
+          "size": 164633497632,
+          "size_gib": 153.327,
+          "blobId": "799f85f59f3120092acdf4c7173a584be2257343",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF"
+    },
+    {
+      "modelId": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-02T18:41:52.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash.IQ2_S.gguf",
+          "size": 88019539296,
+          "size_gib": 81.975,
+          "blobId": "83b7096cec12367bd29141ca3d6a6f0de5eb5288",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash.IQ3_XXS-AS.gguf",
+          "size": 102431550816,
+          "size_gib": 95.397,
+          "blobId": "8edbbd8c582b4cf14f18feeb19033a1179beb5c2",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash.IQ3_XXS.gguf",
+          "size": 113974275424,
+          "size_gib": 106.147,
+          "blobId": "fc4972a592d08844e6ed5bc194c79714d1d667d7",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash.IQ3_XXS-L21.gguf",
+          "size": 134056602976,
+          "size_gib": 124.85,
+          "blobId": "e5361e37e22a1cd16dcdb0e46f408f8fd607c3dc",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash.IQ3_XXS-L39.gguf",
+          "size": 151270026592,
+          "size_gib": 140.881,
+          "blobId": "38ae7fc1d82252c0713925d1ffae5cd762055afa",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "lastModified": "2026-07-02T12:34:53.000Z",
+      "action": "metadata_only_no_candidate",
+      "notes": [
+        "speculative_sidecar_or_mtp_needs_loader_support"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/RedHatAI/DeepSeek-V4-Flash-speculator.dflash"
+    },
+    {
+      "modelId": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k",
+      "lastModified": "2026-07-02T06:05:47.000Z",
+      "action": "metadata_only_no_candidate",
+      "notes": [
+        "speculative_sidecar_or_mtp_needs_loader_support"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-online-500k"
+    },
+    {
+      "modelId": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-07-02T05:07:00.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00005.gguf",
+          "size": 5248156,
+          "size_gib": 0.005,
+          "blobId": "ae9a61c4e1013e26b97d215a5fa00a1f60296a32",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00001-of-00004.gguf",
+          "size": 5248448,
+          "size_gib": 0.005,
+          "blobId": "dba4e47695258ca212f99de6979ca13bb091f27b",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K-00001-of-00003.gguf",
+          "size": 5248448,
+          "size_gib": 0.005,
+          "blobId": "ee1acb8504c13d159271dcf0044724af81784d31",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Q3_K/DeepSeek-V4-Flash-Q3_K-00001-of-00004.gguf",
+          "size": 5248448,
+          "size_gib": 0.005,
+          "blobId": "dba4e47695258ca212f99de6979ca13bb091f27b",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "imatrix.gguf",
+          "size": 470338784,
+          "size_gib": 0.438,
+          "blobId": "19492df187fe7581e8c0202b38b3c21c9c759bd6",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/tarruda/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "drowzeys/DeepSeek-V4-Flash-DSpark-NVFP4-KV-1.5M-CTX-2xDGX-Spark",
+      "lastModified": "2026-07-01T22:19:24.000Z",
+      "action": "reject_not_vendor_loadable_safetensors_only",
+      "notes": [
+        "dspark_safetensors_no_gguf"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/drowzeys/DeepSeek-V4-Flash-DSpark-NVFP4-KV-1.5M-CTX-2xDGX-Spark"
+    },
+    {
+      "modelId": "fraserprice/DeepSeek-V4-Flash-Abliterated-DSpark",
+      "lastModified": "2026-07-01T16:10:28.000Z",
+      "action": "reject_not_vendor_loadable_safetensors_only",
+      "notes": [
+        "abliterated_correctness_risk",
+        "dspark_safetensors_no_gguf"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/fraserprice/DeepSeek-V4-Flash-Abliterated-DSpark"
+    },
+    {
+      "modelId": "fraserprice/DeepSeek-V4-Flash-DSpark",
+      "lastModified": "2026-07-01T16:10:17.000Z",
+      "action": "reject_not_vendor_loadable_safetensors_only",
+      "notes": [
+        "dspark_safetensors_no_gguf"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/fraserprice/DeepSeek-V4-Flash-DSpark"
+    },
+    {
+      "modelId": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "lastModified": "2026-07-01T09:30:47.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf",
+        "compact_expert_candidate_correctness_required"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "ds4flash-4expert.gguf",
+          "size": 164465760544,
+          "size_gib": 153.171,
+          "blobId": "c5d6c67d6bce924456e1819ec60561a356f9a7b0",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF"
+    },
+    {
+      "modelId": "bartowski/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-06-30T03:17:40.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00004.gguf",
+          "size": 37198265248,
+          "size_gib": 34.644,
+          "blobId": "54c60d7a3990a410499a7e774d03490945e99a28",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00004.gguf",
+          "size": 39546993120,
+          "size_gib": 36.831,
+          "blobId": "8f8d17af80097a0e63dcce21301365fc6ace7f54",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00004.gguf",
+          "size": 39628788224,
+          "size_gib": 36.907,
+          "blobId": "1c879c98897454066893cf836ff0660f67486731",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00004.gguf",
+          "size": 39630611872,
+          "size_gib": 36.909,
+          "blobId": "fb4d9c13a95fc14f9b149715c2e7e45cd9781937",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/bartowski/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "teto3/DeepSeek-V4-Flash-Base-Q4KExperts",
+      "lastModified": "2026-06-28T00:13:40.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf",
+        "compact_expert_candidate_correctness_required"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-Base-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out.gguf",
+          "size": 164633497248,
+          "size_gib": 153.327,
+          "blobId": "55d74cfdf2937ffc39a38516ef530370e4732b09",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/teto3/DeepSeek-V4-Flash-Base-Q4KExperts"
+    },
+    {
+      "modelId": "inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k",
+      "lastModified": "2026-06-27T18:25:36.000Z",
+      "action": "metadata_only_no_candidate",
+      "notes": [
+        "speculative_sidecar_or_mtp_needs_loader_support"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-swa-muon-speculators-50k"
+    },
+    {
+      "modelId": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "lastModified": "2026-06-27T18:15:48.000Z",
+      "action": "metadata_only_no_candidate",
+      "notes": [
+        "speculative_sidecar_or_mtp_needs_loader_support"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k"
+    },
+    {
+      "modelId": "autotrust/DeepSeek-V4-Flash-DSpark-4E",
+      "lastModified": "2026-06-27T13:13:02.000Z",
+      "action": "reject_not_vendor_loadable_safetensors_only",
+      "notes": [
+        "dspark_safetensors_no_gguf",
+        "compact_expert_candidate_correctness_required"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/autotrust/DeepSeek-V4-Flash-DSpark-4E"
+    },
+    {
+      "modelId": "autotrust/DeepSeek-V4-Flash-4E",
+      "lastModified": "2026-06-27T06:38:04.000Z",
+      "action": "metadata_only_no_candidate",
+      "notes": [
+        "compact_expert_candidate_correctness_required"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/autotrust/DeepSeek-V4-Flash-4E"
+    },
+    {
+      "modelId": "cloudyu/DeepSeek-V4-Flash-4Expert",
+      "lastModified": "2026-06-27T06:16:15.000Z",
+      "action": "metadata_only_no_candidate",
+      "notes": [
+        "compact_expert_candidate_correctness_required"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert"
+    },
+    {
+      "modelId": "inferencerlabs/DeepSeek-V4-Flash-MTP-MLX",
+      "lastModified": "2026-06-27T05:30:25.000Z",
+      "action": "metadata_only_no_candidate",
+      "notes": [
+        "speculative_sidecar_or_mtp_needs_loader_support"
+      ],
+      "smallest_ggufs": [],
+      "url": "https://huggingface.co/inferencerlabs/DeepSeek-V4-Flash-MTP-MLX"
+    },
+    {
+      "modelId": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4",
+      "lastModified": "2026-06-23T07:41:50.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-REAP-K150-hybrid.gguf",
+          "size": 91271893568,
+          "size_gib": 85.004,
+          "blobId": "6890885edd6d77405815465979db5e286aa1a8f2",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K150-NVFP4"
+    },
+    {
+      "modelId": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4",
+      "lastModified": "2026-06-23T07:41:47.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-REAP-K180-hybrid.gguf",
+          "size": 105909374528,
+          "size_gib": 98.636,
+          "blobId": "b1baae9d0e4320302fdf4a097801143d95167e47",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K180-NVFP4"
+    },
+    {
+      "modelId": "sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4",
+      "lastModified": "2026-06-23T07:41:44.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-REAP-K128-hybrid.gguf",
+          "size": 80537740608,
+          "size_gib": 75.007,
+          "blobId": "7f12f9c000895abc2986f6d292ed577126a6aedb",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/sleepyeldrazi/DeepSeek-v4-Flash-REAP-K128-NVFP4"
+    },
+    {
+      "modelId": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "lastModified": "2026-06-19T16:06:20.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-REAP-K128.gguf",
+          "size": 55875180192,
+          "size_gib": 52.038,
+          "blobId": "cd524e77a0d915cbde6975e3362d8c4961539716",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF"
+    },
+    {
+      "modelId": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "lastModified": "2026-06-19T15:56:40.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+          "size": 50439361920,
+          "size_gib": 46.975,
+          "blobId": "fbc6873277a8e7f5d2f0d09ba24f8b31934db5ab",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF"
+    },
+    {
+      "modelId": "rbinrs/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "lastModified": "2026-06-14T21:29:41.000Z",
+      "action": "low_priority_correctness_risk_abliterated",
+      "notes": [
+        "has_gguf",
+        "abliterated_correctness_risk"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400,
+          "size_gib": 3.546,
+          "blobId": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-IQ2_XXS.gguf",
+          "size": 80227328608,
+          "size_gib": 74.718,
+          "blobId": "115acaba478e9a291d05bfbdbfb9b0cfe9a9130f",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+          "size": 86720111200,
+          "size_gib": 80.764,
+          "blobId": "d71f8c8320a874e97d26d5d53eeb596c96917ab9",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+          "size": 99705676384,
+          "size_gib": 92.858,
+          "blobId": "354edeb930d6069f5d680e1617f065fb73dc1c6c",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+          "size": 164633502304,
+          "size_gib": 153.327,
+          "blobId": "f4a47c11ae7ade594a01169336399bf563baf3c8",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/rbinrs/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF"
+    },
+    {
+      "modelId": "jedisct1/DeepSeek-V4-Flash-imatrix-aligned",
+      "lastModified": "2026-05-13T11:59:02.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400,
+          "size_gib": 3.546,
+          "blobId": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-aligned.gguf",
+          "size": 86720111488,
+          "size_gib": 80.764,
+          "blobId": "cbbb021577fb6b7b74ff27facddd7d772e228cc7",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/jedisct1/DeepSeek-V4-Flash-imatrix-aligned"
+    },
+    {
+      "modelId": "Preyazz/DeepSeek-V4-Flash-GGUF",
+      "lastModified": "2026-04-28T11:31:46.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-Q2_K.gguf",
+          "size": 103283751520,
+          "size_gib": 96.19,
+          "blobId": "1aa9d3b3b667186e51e1c88fafc5cf42f9f6f008",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "size": 135535174240,
+          "size_gib": 126.227,
+          "blobId": "9239aee9c105577e9c9eff12a73e9844e24d68a3",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": 172037991008,
+          "size_gib": 160.223,
+          "blobId": "a87df8cebbbb4755adde5530af9044bdcfdf393b",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF"
+    },
+    {
+      "modelId": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "lastModified": "2026-05-22T10:25:05.000Z",
+      "action": "reject_incompatible_architecture_expected_qwen",
+      "notes": [
+        "has_gguf",
+        "qwen_distillation_not_vendor_deepseek4",
+        "speculative_sidecar_or_mtp_needs_loader_support"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf",
+          "size": 3914965760,
+          "size_gib": 3.646,
+          "blobId": "4ec41cbc0e5ca444a082cfbd4f01a8aba995cda9",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf",
+          "size": 4364018432,
+          "size_gib": 4.064,
+          "blobId": "8e1cee4b56cdeed6c373a2f06d8aaa3b6878fd15",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf",
+          "size": 4737606400,
+          "size_gib": 4.412,
+          "blobId": "4bafe1226f2c24b8b6e85291bcbd910b95385758",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf",
+          "size": 5048509184,
+          "size_gib": 4.702,
+          "blobId": "298df264cb9b854ffaf260394d2fefa25d7cdeea",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf",
+          "size": 5357871872,
+          "size_gib": 4.99,
+          "blobId": "bc4e9f10c8e6964c18a61657f6c9ec3bd7f556bd",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF"
+    },
+    {
+      "modelId": "antirez/deepseek-v4-gguf",
+      "lastModified": "2026-05-31T11:28:43.000Z",
+      "action": "candidate_requires_full_download_and_correctness_test",
+      "notes": [
+        "has_gguf"
+      ],
+      "smallest_ggufs": [
+        {
+          "rfilename": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": 3807602400,
+          "size_gib": 3.546,
+          "blobId": "7a80fe1f3698d0d3d74646443051c09597fe4b81",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+          "size": 86720111200,
+          "size_gib": 80.764,
+          "blobId": "d586a5b01752b2e9b5d6f293d8f4e9fc5a5d730d",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+          "size": 86720111488,
+          "size_gib": 80.764,
+          "blobId": "a3e5e6eaff923a303ce84849200a93abec551c15",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed.gguf",
+          "size": 97591747456,
+          "size_gib": 90.889,
+          "blobId": "c8de129f0f53056398d97954544cd34a3441110e",
+          "lfs_oid": null
+        },
+        {
+          "rfilename": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf",
+          "size": 164633502304,
+          "size_gib": 153.327,
+          "blobId": "40aa8b273182197b8d90ac10a7039beb6d58bcd9",
+          "lfs_oid": null
+        }
+      ],
+      "url": "https://huggingface.co/antirez/deepseek-v4-gguf"
+    }
+  ],
+  "decision": {
+    "new_immediate_runtime_patch": false,
+    "new_accepted_sota": false,
+    "promising_metadata_candidates": [
+      "ilintar/DeepSeek-V4-Flash-GGUF",
+      "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "teto3/DeepSeek-V4-Flash-Base-Q4KExperts",
+      "sokann/DeepSeek-V4-Flash-GGUF",
+      "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "tarruda/DeepSeek-V4-Flash-GGUF",
+      "bartowski/DeepSeek-V4-Flash-GGUF"
+    ],
+    "blocked_by_disk_for_empirical_test": true,
+    "disk_note": "/root remains nearly full; do not download full GGUF files or delete/move existing models without explicit user approval.",
+    "next_action": "Update plan with metadata-refresh result. If disk cleanup is approved, full-download and correctness-test the most compact/vendor-loadable GGUF candidate first; otherwise continue only with metadata/header range checks that do not consume disk.",
+    "post_header_crosscheck": "No new metadata-only 10 tok/s route was found. The lowest-disk full-download candidate is sleepyeldrazi K128 Q2 uniform, but its existing optimistic header-bound projection is 9.44 tok/s, so it is an empirical SOTA/correctness candidate only, not a proven 10 tok/s path."
+  },
+  "existing_header_bound_crosscheck": {
+    "source_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alternate-gguf-header-bound-20260706-after-layer-close.json",
+    "sleepyeldrazi_k128_q2_uniform": {
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "size_bytes": 50439361920,
+      "size_gib": 46.975,
+      "range_header_arch": "deepseek4",
+      "expert_used_count": 6,
+      "best_metadata_projection_tok_s": 9.435899652555262,
+      "decision": "below_10_metadata_hard_bound_but_lowest_disk_empirical_candidate"
+    },
+    "cloudyu_4expert": {
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "file": "ds4flash-4expert.gguf",
+      "size_bytes": 164465760544,
+      "range_header_arch": "deepseek4",
+      "expert_used_count": 4,
+      "best_metadata_projection_tok_s": 5.5532873115893935,
+      "decision": "below_10_metadata_hard_bound_and_large_disk_requirement"
+    }
+  }
+}

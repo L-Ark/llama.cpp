@@ -2,6 +2,44 @@
 
 ## Summary
 
+### 2026-07-06 Latest Active Plan: External Metadata Refresh After CPU Bound
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。在 CPU fallback hard-bound 之后，完成了一轮无大文件下载的 Hugging Face metadata refresh；没有发现可直接支撑 `10 tok/s` 的新 vendor DeepSeek cold-start 路线。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `elapsed_seconds=62.9`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Actual accepted binary path/version: `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli`, `b14849-d9e56fcdf`.
+- Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+Metadata refresh artifact:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-metadata-refresh-20260706-after-cpu-bound.json`
+- Method: Hugging Face API search/model sibling metadata only; no full model files downloaded; no local model files deleted or moved.
+- Search source: `https://huggingface.co/api/models?search=DeepSeek-V4-Flash&sort=lastModified&direction=-1&limit=60&full=true`
+- Newly surfaced or refreshed GGUF candidates include `ilintar/DeepSeek-V4-Flash-GGUF`, `sokann/DeepSeek-V4-Flash-GGUF`, `bullerwins/DeepSeek-V4-Flash-GGUF`, `tarruda/DeepSeek-V4-Flash-GGUF`, `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF`, `teto3/DeepSeek-V4-Flash-Base-Q4KExperts`, `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF`, and `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF`.
+- `ilintar/DeepSeek-V4-Flash-GGUF` appeared in search as recently modified but exposed no GGUF sibling in the API response, so it is not an executable candidate from metadata.
+- `Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-*` remains incompatible with the vendor DeepSeek4 route because it is Qwen architecture despite the name.
+- DSpark/safetensors-only repos remain not vendor-loadable without a separate loader/conversion path.
+
+Best metadata candidates after cross-check:
+
+- Lowest disk empirical candidate: `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf`, size `50439361920` bytes (`46.98 GiB`). Existing range-header artifact confirms `general.architecture=deepseek4` and `expert_used_count=6`, but its optimistic metadata projection is only `9.4359 tok/s`; therefore it is below the `10 tok/s` hard target and can only be treated as an empirical correctness/SOTA candidate after disk approval.
+- Mixed REAP K128 candidate: `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF/DeepSeek-V4-Flash-REAP-K128.gguf`, size `55875180192` bytes (`52.04 GiB`), also `deepseek4`, but existing projection is lower at about `8.95 tok/s`.
+- `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf` remains large (`164465760544` bytes) and its existing optimistic metadata projection is about `5.55 tok/s`; it is a correctness/model-variant candidate only, not a `10 tok/s` path.
+- Compact MTP/speculator files around `3.55 GiB` are sidecar/draft artifacts, not a vendor-loadable replacement model; they need separate loader/verifier support and remain closed by previous MTP/DFlash bounds.
+
+Updated next executable plan:
+
+1. Commit and push this metadata artifact plus plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+2. Do not implement a runtime/source patch from this refresh; no new artifact has a metadata hard-bound above `10 tok/s` under the accepted RAM/VRAM/TTFT/correctness constraints.
+3. If disk cleanup/relocation is approved, first empirical download target should be `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf`, because it has the lowest disk requirement among current DeepSeek4 GGUF candidates. Required free space target: at least `60 GiB` for file plus SHA256/run artifacts.
+4. Treat the K128 Q2 test as empirical only: it must pass loader metadata, France correctness, five-prompt semantic checks, strict cold 16GB cgroup, and TTFT gates before any SOTA claim. It is not pre-authorized as a `10 tok/s` path because its existing optimistic bound is below 10.
+5. Without disk approval, continue only metadata/header-range work or a genuinely new compact-representation hard-bound. Do not download large files and do not delete or move models.
+6. Promotion remains strict: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, and correct/coherent France output.
+7. If a compliant new SOTA appears, immediately record full reproduction metadata, commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted.
+
 ### 2026-07-06 Latest Active Plan: CPU Fallback Hard-Bound Completed, No Blind Runtime Patch
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。本轮完成了基于 accepted SOTA binary/profile 的 CPU fallback hard-bound 分解；结论是当前已验证的源码/runtime 路线没有足够硬上界直接推进到 `10 tok/s`，不能盲目继续 patch。
