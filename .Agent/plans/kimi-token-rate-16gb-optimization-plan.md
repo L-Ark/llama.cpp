@@ -87633,4 +87633,87 @@ Acceptance:
 
 Result:
 
-- Pending.
+- Plan commit: `c907f4bcc`.
+- Tool commit: `022369d6a`.
+- New script:
+  `scripts/kimi-make-remote-pack-manifest.py`.
+- Server run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-014131Z-phase7ot-remote-pack-manifest`.
+- Exit code: `0`.
+- Source changes: tooling only.
+- Model inference: not run.
+- Pack output: none.
+- Model shard payload download: none.
+- Files deleted/moved/truncated: none.
+- Artifacts:
+  - `repo_state.txt`;
+  - `commands.log`;
+  - `stdout.txt`;
+  - `stderr.txt`;
+  - `manifest.tsv`;
+  - `manifest-summary.json`;
+  - `decision.md`;
+  - `exit.txt`;
+  - `artifacts.txt`.
+
+Dry-run output:
+
+- Entries: `31599`.
+- Selected tensors: `180`.
+- Remote shards: `6`.
+- Payload: `115.215 GiB`.
+- Estimated pack: `115.220 GiB`.
+- Invalid remote ranges: `0`.
+- Runtime nbytes mismatches: `31599`.
+- Current `IQ3_S` runtime compatible: `false`.
+- Output filesystem free: `87.716 GiB`.
+- Fits output filesystem: `false`.
+- Missing for output filesystem: `27.503 GiB`.
+
+Manifest sample:
+
+```text
+tensor=blk.1.ffn_down_exps.weight
+expert_idx=0
+remote_type=IQ2_XS
+current_nbytes=6307840
+remote_nbytes=4243456
+remote_range_header=bytes=3131775424-3136018879
+pack_offset=4804608
+```
+
+Decision:
+
+- Accept 7OT manifest/preflight tooling.
+- The manifest is internally valid:
+  - all remote ranges are within shard bounds;
+  - future `GGMLMOEPACKv1` offsets are computed;
+  - selected entries match 7OM (`31599`).
+- Do not build the lower-bit pack on the current filesystem because it still
+  lacks about `27.5 GiB`.
+- Do not attach/use this manifest or a pack generated from it with the current
+  `IQ3_S` runtime:
+  - all `31599` selected entries have `remote_nbytes != current_nbytes`;
+  - 7ON already showed current pack lookup/runtime dispatch is keyed by
+    model-derived `nbytes` and model tensor type.
+- Once external storage or explicit cleanup approval exists, the next safe step
+  is a controlled direct-builder implementation/dry-run that consumes this
+  manifest and still writes no production runtime env until a matching lower-bit
+  model/runtime path passes quality.
+
+Reproduce result:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard 022369d6a
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260706-014131Z-phase7ot-remote-pack-manifest
+PLAN=/root/lfz/runs/vendor-kimi-token-rate/20260706-001309Z-phase7om-iq2xxs-hotkey-size
+python3 scripts/kimi-make-remote-pack-manifest.py \
+  --plan-json "$PLAN/hotkey-pack-plan.json" \
+  --plan-tsv "$PLAN/hotkey-pack-plan.tsv" \
+  --output-pack "$RUN/selected-iq2xxs.expert-pack" \
+  --manifest-tsv "$RUN/manifest.tsv" \
+  --summary-json "$RUN/manifest-summary.json"
+cat "$RUN/manifest-summary.json"
+head -5 "$RUN/manifest.tsv"
+```
