@@ -92115,3 +92115,119 @@ Decision:
 - No token-rate SOTA is claimed.
 - Next step is a small dev cold-start route-detail trace and per-layer
   same-token/next-token route stability analysis.
+
+## GP29: route-detail same-layer stability analysis
+
+Timestamp: `2026-07-07T06:45:00+0800`.
+
+Status: completed; dev-only feasibility result; no runtime optimization
+accepted.
+
+Branch: `vendor/kimi-speculative-general-token-rate-16gb`.
+
+Commit under test:
+`b95ef6df95b3fa317de7993c45656c9e6e7d5db2`.
+
+Purpose:
+
+- Use the GP28 exact `GGML_MOE_ROUTE_DETAIL_OUT` trace to test whether a much
+  tighter per-layer route predictor can expose future expert demand early
+  enough to increase IO queue depth.
+- Evaluate only dev data. Held-out test prompts were not used.
+- Do not implement runtime prefetch unless the predictor passes the byte
+  coverage / false-byte gate.
+
+Valid run:
+
+- Remote worktree: `/root/lfz/tmp/gp29-route-detail-run`.
+- Remote run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp29-route-detail-dev-france-n32-batch`.
+- Local evidence:
+  `.Agent/runs/20260707-gp29-route-detail-analysis/`.
+- Report:
+  `.Agent/runs/20260707-gp29-route-detail-analysis/report.md`.
+- Analyzer:
+  `.Agent/run-tools/kimi_route_detail_stability.py`.
+
+Build note:
+
+- The first diagnostic run was invalid because the clean worktree build did not
+  enable `GGML_CUDA_MOE_STREAM_BATCH`; it used the stub path, had very low
+  token rate, and produced no route-detail trace.
+- The valid run was rebuilt with `-DGGML_CUDA_MOE_STREAM_BATCH=ON`.
+
+Runtime metrics:
+
+- Prompt: `Please introduce France in a short paragraph.`
+- `N=32`.
+- Quality: `pass`.
+- Output: `France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- `ttft_ms=73885.36`.
+- `decode_ms=23975.93`.
+- `decode_runs=31`.
+- `token_rate=1.29`.
+- `memory.max=15899996160`.
+- `memory.swap.max=0`.
+- `memory.peak=15899996160`.
+- `memory.current.final=15071965184`.
+- Route detail rows: `42928`.
+- Expert pack: `iouring_bytes=126391910400`,
+  `iouring_wait_us=20452709`.
+- iouring inflight: average `3.33`, max `8`.
+- iouring batch histogram:
+  `1:176`, `2-4:2679`, `5-8:2323`, `9-16:0`,
+  `17-32:0`, `gt32:0`.
+- VRAM cache total hit rate: `53.9%`.
+- down hit rate: `73.4%`.
+- up/gate hit rate: `45.2%`.
+
+Analyzer command:
+
+```bash
+python3 .Agent/run-tools/kimi_route_detail_stability.py \
+  --detail-csv .Agent/runs/20260707-gp29-route-detail-analysis/route-detail.csv \
+  --out-json .Agent/runs/20260707-gp29-route-detail-analysis/route-stability.json \
+  --out-csv .Agent/runs/20260707-gp29-route-detail-analysis/route-stability-by-layer.csv
+```
+
+Gate:
+
+- byte coverage >= `0.60`;
+- false-prefetch ratio <= `0.25`;
+- net byte multiplier <= `1.25`.
+
+Results:
+
+- Passing settings: none.
+- `depth1_all`: byte coverage `0.356`, false-prefetch ratio `0.644`,
+  net byte multiplier `1.644`.
+- `depth1_down`: byte coverage `0.359`, false-prefetch ratio `0.641`,
+  net byte multiplier `1.641`.
+- `depth2_all`: byte coverage `0.469`, false-prefetch ratio `1.158`,
+  net byte multiplier `2.158`.
+- `depth4_all`: byte coverage `0.548`, false-prefetch ratio `2.003`,
+  net byte multiplier `3.003`.
+- Best by byte coverage: `depth4_down`, byte coverage `0.5495`,
+  false-prefetch ratio `1.9977`, net byte multiplier `2.9977`.
+
+Decision:
+
+- Reject same-layer previous-call route prediction as a runtime prefetch path.
+- Do not implement this predictor in runtime.
+- The simple route-reuse assumption is too weak: one-call history covers only
+  about `36%` of bytes and still adds about `64%` false bytes; four-call
+  history covers only about `55%` while tripling total bytes.
+- Exact-repeat rate is `0.0`, so the active expert set does not repeat at a
+  granularity that can cheaply hide IO.
+
+Next direction:
+
+- Stop repeating naive recency-based expert prediction.
+- Continue toward `>5 tok/s` using one of these evidence-gated paths:
+  - byte reduction independent of prompt: lower-byte expert representation,
+    compressed pack, or residual/clustered approximation with quality gates;
+  - compatible draft/predictor model feasibility, including RAM/VRAM/TTFT
+    overhead and acceptance-rate gates before implementation;
+  - a tighter learned or statistical route classifier that predicts a bounded
+    candidate set and must pass the same byte coverage / false-byte gate before
+    runtime changes.
