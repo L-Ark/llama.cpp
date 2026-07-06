@@ -4208,3 +4208,22 @@
 - `decision`: 不允许从当前证据写 exact graph/dataflow runtime patch。因为 generalized 5 需要 joint gate/source + up/down reduction，而当前图缺少 retained-gate/source-reuse 接口；这不是调参问题，而是数据流 blocker。
 - `reopen_condition`: 需要先有 source/dataflow probe 证明 accepted graph 中存在 retained CUDA gate/topk/weights path，或者新增接口后有 hard-bound 证明所有 calibration prompt 在计入 overhead、16GB page cache、gate cache、workspace 后仍 `>5 tok/s`，并且 fixed-text top1/correctness 先过。
 - `next_allowed_work`: 剩余可行类别转为 external verifier/speculative decoding 高接受率路线，或 representation/model 路线的 correctness/top1 proof。若这些也没有证据，则应记录 generalized `>5 tok/s` 需要新的 dataflow interface，而不是继续 stream/cache 局部调优。
+
+## 2026-07-07 route triage：转向 alternate low-bit DeepSeek GGUF 候选
+
+- `attempt_id`: `20260707-generalized-route-triage-alt-gguf-plan`
+- `status`: `plan_recorded_before_download_no_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-route-triage-alt-gguf-plan-20260707.json`
+- `prompt_scope`: 未运行新 prompt；未使用 `held_out_test_set_v1_locked`。
+- `why_now`: 当前 native 路线的局部优化已被 generalized hard-bound 限制住：up/down grouped staging、up/down-only fallback removal、当前 exact graph/dataflow、DFlash/MTP verifier、native exact compact representation、4Expert 都没有足够证据能在 `16GB RAM + 32GB 5090` 下让随机/泛化 prompt 稳定 `>5 tok/s`。
+- `closed_route_summary`:
+  - up/down grouped staging：gate-preserving `3.2GiB` zero-overhead 上限只有 `mean≈2.64-2.68 tok/s`, `min≈1.94-1.96 tok/s`；更大 payload 会挤压 gate cache 且仍不到 generalized `5 tok/s`。
+  - up/down-only removal：理想 zero-overhead 40-layer 上限 `mean≈4.916`, `min≈3.592 tok/s`；43-layer sensitivity 仍有 Fibonacci 低于 `5 tok/s`。
+  - exact graph/dataflow：当前 source 没有 retained gate output/source-reuse 接口，不能从现有证据直接写 runtime patch。
+  - DFlash/MTP/speculative：oracle target verifier 的 W=2/4/8 speedup 只有 `1.010x/1.013x/1.002x`，低于 reopen gate；vendor 也没有 source-ready DFlash/MTP runtime。
+  - native exact compact representation：MXFP4 hotset 实测/entropy reduction 只有约 `1.04x-1.085x`，远低于 `4x-5.33x` 需求。
+  - 4Expert：空输出 token_type 问题已定位并 default-off 修复，但 France correctness 仍失败，约 `2.0 tok/s`，不是短期 token-rate 候选。
+- `reopened_candidate`: alternate low-bit DeepSeek GGUF，优先 `0xSero/DeepSeek-V4-Flash-162B-GGUF` 的 `DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`。该路线必须标注为 alternate model/quantization candidate，不能混同 native GGUF SOTA；只有 correctness 和泛化 prompt-set 都过关后才可作为任务候选。
+- `disk_and_head_audit`: 当前 `/root` 可用约 `111G`，不删除 native SOTA evidence 也足够下载一个 `52,593,532,000 bytes` 的 0xSero candidate；HEAD 当前返回 `x-linked-size=52593532000`，`x-linked-etag=e917278028d7a9e25dfc9d04bf5848375dad7573c5aeab1720d6a83714352406`，final `ETag=7f4deb0dc07cdbc01ff88ae11e616fd8d2d1d8263efec15b034c5d731fe83070`。
+- `next_action`: 先记录并 push 本计划；之后只下载这一条 candidate，记录 size/sha256 和 metadata/header validation。France strict 16GB correctness 通过前禁止 token-rate SOTA claim；calibration/dev 通过并 freeze 前禁止使用 held-out test。
+- `promotion_rule`: 如果 alternate candidate 在 `calibration_dev_set_v1` 上形成候选，必须冻结 model sha256、source commit、env/CLI 和参数后，再运行 `held_out_test_set_v1_locked`。accepted generalized SOTA 必须报告 held-out per-prompt `eval_tok_s`、TTFT、RAM/page-cache、correctness 和完整输出，并立即 commit/push 到 `ssd/vendor/deepseek-token-rate-16gb` 后从 pushed commit 复现。
