@@ -139,6 +139,22 @@
         "ordinary DeepSeek2 graph YaRN keeps the upstream convert-factor correction"
       ]
     },
+    "pushed_commit_ctest_subset": {
+      "host": "92.180.27.82",
+      "repo": "/root/lfz/llama.cpp-vendor-kimi",
+      "commit": "5726b77ef5a505d389d5b1f728d04c6361fbb22e",
+      "command": "ctest --test-dir build-cuda-batch -R \"test-(kimi-deepseek2-guards|deepseek4-native-packers|tokenizer-0-deepseek-(coder|llm))\" --output-on-failure",
+      "status": "pass",
+      "total": 4,
+      "passed": [
+        "test-tokenizer-0-deepseek-coder",
+        "test-tokenizer-0-deepseek-llm",
+        "test-kimi-deepseek2-guards",
+        "test-deepseek4-native-packers"
+      ],
+      "elapsed_real_seconds": 7.88,
+      "scope": "This verifies available non-model DeepSeek/Kimi regressions on the pushed branch. It does not replace a full DeepSeek SOTA cold-start run because the validation host still lacks the required DeepSeek GGUF and accepted gate expert pack."
+    },
     "prior_merge_probe": ".Agent/runs/20260705-vendor-ds4-coldstart/kimi-preserving-merge-probe-20260706.json",
     "prior_merge_probe_status": "DeepSeek strict cold run passed correctness/RAM/TTFT constraints at the merge checkpoint, but was below the accepted 4.4 tok/s SOTA.",
     "current_host_asset_audit": {
