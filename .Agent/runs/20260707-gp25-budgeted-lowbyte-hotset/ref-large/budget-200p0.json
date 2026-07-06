@@ -1,0 +1,125 @@
+{
+  "aggregate": {
+    "current_bytes": 3765149237248,
+    "events": 675560,
+    "hybrid_byte_ratio": 0.6864358807092257,
+    "hybrid_bytes": 2584533532672
+  },
+  "budget_bytes": 214748364800,
+  "budget_gib": 200.0,
+  "by_kind": {
+    "down": {
+      "current_bytes": 112198696960,
+      "entries": 16876,
+      "remote_bytes": 88587763712
+    },
+    "gate": {
+      "current_bytes": 104762212352,
+      "entries": 19742,
+      "remote_bytes": 66719744000
+    },
+    "up": {
+      "current_bytes": 96898285568,
+      "entries": 19742,
+      "remote_bytes": 59431092224
+    }
+  },
+  "by_prompt": [
+    {
+      "current_bytes": 594076499968,
+      "events": 106592,
+      "hybrid_byte_ratio": 0.6863374373737436,
+      "hybrid_bytes": 407736942592,
+      "prompt": "dev_france_regression",
+      "selected_byte_coverage": 1.0,
+      "selected_current_bytes": 594076499968,
+      "selected_remote_bytes": 407736942592
+    },
+    {
+      "current_bytes": 655784148992,
+      "events": 117664,
+      "hybrid_byte_ratio": 0.6863370026918578,
+      "hybrid_bytes": 450088927232,
+      "prompt": "dev_japan_factual",
+      "selected_byte_coverage": 1.0,
+      "selected_current_bytes": 655784148992,
+      "selected_remote_bytes": 450088927232
+    },
+    {
+      "current_bytes": 262397886464,
+      "events": 47080,
+      "hybrid_byte_ratio": 0.6863432765366743,
+      "hybrid_bytes": 180095025152,
+      "prompt": "dev_linear_equation",
+      "selected_byte_coverage": 1.0,
+      "selected_current_bytes": 262397886464,
+      "selected_remote_bytes": 180095025152
+    },
+    {
+      "current_bytes": 416667009024,
+      "events": 74760,
+      "hybrid_byte_ratio": 0.6864929943122139,
+      "hybrid_bytes": 286038982656,
+      "prompt": "dev_mixed_summary",
+      "selected_byte_coverage": 0.9985920912688189,
+      "selected_current_bytes": 416080379904,
+      "selected_remote_bytes": 285452353536
+    },
+    {
+      "current_bytes": 725205254144,
+      "events": 130120,
+      "hybrid_byte_ratio": 0.6864533135292905,
+      "hybrid_bytes": 497819549696,
+      "prompt": "dev_photosynthesis_factual",
+      "selected_byte_coverage": 0.9989301452029388,
+      "selected_current_bytes": 724429389824,
+      "selected_remote_bytes": 497043685376
+    },
+    {
+      "current_bytes": 732918710272,
+      "events": 131504,
+      "hybrid_byte_ratio": 0.6865778562826577,
+      "hybrid_bytes": 503205756928,
+      "prompt": "dev_python_reverse",
+      "selected_byte_coverage": 0.9977881382242263,
+      "selected_current_bytes": 731297595392,
+      "selected_remote_bytes": 501584642048
+    },
+    {
+      "current_bytes": 378099728384,
+      "events": 67840,
+      "hybrid_byte_ratio": 0.6864547338484237,
+      "hybrid_bytes": 259548348416,
+      "prompt": "dev_zh_france",
+      "selected_byte_coverage": 0.9989489706282031,
+      "selected_current_bytes": 377702334464,
+      "selected_remote_bytes": 259150954496
+    }
+  ],
+  "candidate_keys": 56896,
+  "kinds": [
+    "down",
+    "gate",
+    "up"
+  ],
+  "pack": {
+    "data_start": 8568832,
+    "entries": 56360,
+    "estimated_pack_bytes": 214747168768,
+    "index_bytes": 8566720,
+    "padding_bytes": 2072,
+    "payload_bytes": 214738599936
+  },
+  "profiles": [
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_france_regression/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_japan_factual/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_linear_equation/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_mixed_summary/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_photosynthesis_factual/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_python_reverse/route-profile.csv",
+    ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_zh_france/route-profile.csv"
+  ],
+  "remote_plan_tsv": ".Agent/runs/20260707-gp21-remote-range-pack/plan.tsv",
+  "selected_entries": 56360,
+  "selected_keys": 56360
+}

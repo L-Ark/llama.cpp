@@ -91615,3 +91615,101 @@ Decision:
   lower-byte full model, or another byte-reduction mechanism.
 - The next useful branch should target a prompt-agnostic lower-byte asset or a
   substantially smaller full selected pack, not another France-derived hotset.
+
+## GP25: prompt-agnostic budgeted lower-byte hotset bound
+
+Timestamp: `2026-07-07T04:45:00+0800`.
+
+Status: completed dev-only bound; no runtime change.
+
+Rationale:
+
+- GP21 and GP24 used the existing selected current SOTA hotset, which is still
+  France-biased.
+- Before implementing lower-byte expert override or deleting old packs, estimate
+  the best dev-prompt byte bound for a new prompt-agnostic selected hotset under
+  realistic pack budgets.
+- This analysis must use dev route profiles only, not held-out test prompts.
+
+Design:
+
+- Build a candidate set from dev `route-profile.csv` keys:
+  `(tensor, expert_idx)`.
+- For each candidate:
+  - current cost is `count * current_expert_bytes`;
+  - lower-byte cost is `count * remote_expert_bytes`;
+  - benefit is the saved runtime bytes on dev profiles;
+  - pack storage cost is the lower-byte expert payload plus pack alignment
+    overhead.
+- Select candidates greedily by `benefit / pack_cost` under a configured pack
+  budget.
+- Report per-prompt and aggregate hybrid byte ratios.
+
+Budgets to test:
+
+- `62 GiB`: roughly the GP23 `up+gate` subpack size that fits today.
+- `85 GiB`: approximate current free-space ceiling.
+- `115 GiB`: the GP21 full selected-pack size, useful as an upper reference.
+
+Acceptance:
+
+- This is a bound only, not a runtime result.
+- Do not promote SOTA from this analysis.
+- If even `85 GiB` remains far above the GP10 byte ratio target, do not spend
+  implementation time on selected lower-byte override as the next primary path.
+
+Tooling:
+
+- `.Agent/run-tools/kimi_lowbyte_budgeted_hotset.py`
+
+Record:
+
+- `.Agent/runs/20260707-gp25-budgeted-lowbyte-hotset/report.md`
+- `.Agent/runs/20260707-gp25-budgeted-lowbyte-hotset/budget-62p0.json`
+- `.Agent/runs/20260707-gp25-budgeted-lowbyte-hotset/budget-85p0.json`
+- `.Agent/runs/20260707-gp25-budgeted-lowbyte-hotset/budget-115p0.json`
+- `.Agent/runs/20260707-gp25-budgeted-lowbyte-hotset/ref-large/report.md`
+- `.Agent/runs/20260707-gp25-budgeted-lowbyte-hotset/ref-large/budget-260p0.json`
+
+Results:
+
+- Dev profiles: `7`.
+- Candidate keys: `56896`.
+- `62 GiB` budget:
+  - selected entries: `19470`;
+  - pack estimate: `61.999 GiB`;
+  - hybrid byte ratio: `0.7626`.
+- `85 GiB` budget:
+  - selected entries: `26052`;
+  - pack estimate: `84.999 GiB`;
+  - hybrid byte ratio: `0.7348`;
+  - worst prompt: `dev_linear_equation`, `0.7574`.
+- `115 GiB` budget:
+  - selected entries: `34420`;
+  - pack estimate: `114.998 GiB`;
+  - hybrid byte ratio: `0.7110`;
+  - worst prompt: `dev_python_reverse`, `0.7237`.
+- Full dev candidate reference:
+  - selected entries: `56896`;
+  - pack estimate: `202.804 GiB`;
+  - hybrid byte ratio: `0.6863`.
+
+Manifest dry-run:
+
+- The `85 GiB` and `115 GiB` selected plans can be converted into valid remote
+  pack manifests:
+  - `invalid_remote_range_count=0`;
+  - `bad_pack_offset_count=0`.
+- No pack was written.
+
+Decision:
+
+- A prompt-agnostic selected hotset is more balanced than the France-derived
+  selected pack, but still not close to the GP10 byte-ratio target.
+- Even selecting every dev-profile candidate leaves `0.6863x` bytes, because
+  the AesSedai lower-byte representation itself is not small enough.
+- Do not make selected AesSedai lower-byte expert override the next primary
+  implementation path.
+- The next primary branch must reduce bytes more aggressively than AesSedai
+  `IQ2_XXS`, avoid reading most expert bytes, or use a verified speculative /
+  draft-token mechanism.

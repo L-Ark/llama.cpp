@@ -1,0 +1,72 @@
+{
+  "direct_range_temp_upper_bound_bytes": 123783221248,
+  "entries": 34420,
+  "fits_output_fs": false,
+  "hf_repo": "AesSedai/Kimi-K2.7-Code-GGUF",
+  "hf_revision": "main",
+  "missing_bytes": 52321665024,
+  "missing_gib": 48.72834777832031,
+  "one_shard_streaming_temp_bytes": 173686244800,
+  "output_fs_free_bytes": 71157014528,
+  "output_fs_free_gib": 66.27013397216797,
+  "output_fs_path": "/",
+  "output_pack": "/root/lfz/runs/ik_llama/kimi-iq2xs-assets/kimi-aessedai-budget-115p0.expert-pack",
+  "pack": {
+    "alignment": 4096,
+    "by_kind": {
+      "down": {
+        "bytes": 37330026496,
+        "entries": 7269
+      },
+      "gate": {
+        "bytes": 44555714560,
+        "entries": 13303
+      },
+      "up": {
+        "bytes": 41587703808,
+        "entries": 13848
+      }
+    },
+    "by_remote_type": {
+      "IQ1_S": {
+        "bytes": 51922124800,
+        "entries": 18109
+      },
+      "IQ2_S": {
+        "bytes": 15686565888,
+        "entries": 3336
+      },
+      "IQ2_XS": {
+        "bytes": 912343040,
+        "entries": 215
+      },
+      "IQ2_XXS": {
+        "bytes": 34221293568,
+        "entries": 9042
+      },
+      "IQ3_XXS": {
+        "bytes": 19753287680,
+        "entries": 3515
+      },
+      "Q2_K": {
+        "bytes": 977829888,
+        "entries": 203
+      }
+    },
+    "current_iq3_runtime_compatible": false,
+    "data_start": 5234688,
+    "entry_bytes": 152,
+    "estimated_pack_bytes": 123478679552,
+    "header_bytes": 40,
+    "invalid_remote_range_count": 0,
+    "padding_bytes": 2808,
+    "payload_bytes": 123473444864,
+    "runtime_nbytes_mismatch_count": 34420
+  },
+  "plan_json": ".Agent/runs/20260707-gp21-remote-range-pack/plan.json",
+  "plan_tsv": ".Agent/runs/20260707-gp25-budgeted-lowbyte-hotset/budget-115p0-selected-plan.tsv",
+  "remote_prefix": "IQ2_XXS/",
+  "remote_shards": 6,
+  "repo_head": "90bf14a002cf9f29b00028d608f41b4829b5a6c0",
+  "selected_tensors": 173
+}
