@@ -1,0 +1,70 @@
+{
+  "created_at_utc": "2026-07-06T01:01:52.641914Z",
+  "decision": {
+    "benchmark_tested": false,
+    "correctness_tested": false,
+    "metadata_bound_result": "lovedheart Q2_K reduces expert payload substantially but does not make all experts VRAM-resident; metadata-only bound does not prove 10 tok/s.",
+    "sota_changed": false
+  },
+  "lovedheart_q2k": {
+    "expert_payload_bytes": 93063217152,
+    "expert_payload_gib": 86.671875,
+    "file_size_bytes": 100451521792,
+    "file_size_gib": 93.55277,
+    "nonexpert_payload_bytes": 7382976576,
+    "nonexpert_payload_gib": 6.875933,
+    "source_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/lovedheart-q2k-full-shard-header-bound-20260706.json"
+  },
+  "native": {
+    "category_bytes": {
+      "attention": 5406904448,
+      "expert_down": 49056579584,
+      "expert_gate": 49056579584,
+      "expert_up": 49056579584,
+      "other_nonexpert": 2285268928,
+      "router": 180355072,
+      "shared_ffn_or_dense_ffn": 1100597248
+    },
+    "category_counts": {
+      "attention": 701,
+      "expert_down": 43,
+      "expert_gate": 43,
+      "expert_up": 43,
+      "other_nonexpert": 280,
+      "router": 43,
+      "shared_ffn_or_dense_ffn": 175
+    },
+    "data_start": 5325312,
+    "expert_payload_bytes": 147169738752,
+    "expert_payload_gib": 137.0625,
+    "file_size_bytes": 156148189760,
+    "file_size_gib": 145.424334,
+    "n_kv": 50,
+    "n_tensors": 1328,
+    "nonexpert_or_overhead_bytes": 8978451008,
+    "nonexpert_or_overhead_gib": 8.361834,
+    "parse_end": 5325308,
+    "type_counts": {
+      "39": 129,
+      "42": 365,
+      "BF16": 147,
+      "F32": 684,
+      "I32": 3
+    }
+  },
+  "native_model_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "optimistic_decode_bound_if_fallback_scales_only_with_expert_payload": {
+    "basis_decode_tokens": 138,
+    "basis_decode_window_s": 31.1806,
+    "basis_full_decode_fallback_s": 19.03,
+    "interpretation": "This is optimistic and not a benchmark. It assumes all decode fallback time scales linearly with expert payload and ignores loader/correctness/TTFT effects.",
+    "optimistic_eval_tok_s": 5.70618683456704,
+    "optimistic_new_decode_window_s": 24.18427647058823,
+    "scaled_fallback_s": 12.033676470588235
+  },
+  "ratios": {
+    "q2k_expert_vs_native_expert_payload": 0.6323529411764706,
+    "q2k_total_vs_native_file": 0.6433089102498988
+  },
+  "schema": "vendor-ds4-native-vs-lovedheart-q2k-header-bound-v1"
+}

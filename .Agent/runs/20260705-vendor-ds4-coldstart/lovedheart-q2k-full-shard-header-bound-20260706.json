@@ -1,0 +1,1910 @@
+{
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "ram_limit_bytes": 16000000000,
+    "ttft_gate_ms": 33617.688744
+  },
+  "created_at_utc": "2026-07-06T00:59:09.777095Z",
+  "decision": {
+    "benchmark_tested": false,
+    "correctness_tested": false,
+    "download_allowed_now": false,
+    "note": "This is a stronger metadata bound than first-shard projection, but still not a performance result. Full download, loader validation, correctness, and strict cold 16GB benchmark remain required.",
+    "sota_changed": false
+  },
+  "expert_payload_bytes": 93063217152,
+  "expert_payload_fits_vram_budget": {
+    "12GiB": false,
+    "16GiB": false,
+    "24GiB": false,
+    "32GiB": false,
+    "48GiB": false
+  },
+  "expert_payload_gib": 86.671875,
+  "global_category_bytes": {
+    "attention": 4019654784,
+    "expert_down": 31021072384,
+    "expert_gate": 31021072384,
+    "expert_up": 31021072384,
+    "other_nonexpert": 2285268928,
+    "router": 180355072,
+    "shared_ffn_or_dense_ffn": 897697792
+  },
+  "global_category_counts": {
+    "attention": 701,
+    "expert_down": 43,
+    "expert_gate": 43,
+    "expert_up": 43,
+    "other_nonexpert": 280,
+    "router": 43,
+    "shared_ffn_or_dense_ffn": 175
+  },
+  "global_type_counts": {
+    "BF16": 190,
+    "F32": 684,
+    "I32": 3,
+    "Q2_K": 123,
+    "Q3_K": 3,
+    "Q4_K": 3,
+    "Q5_K": 150,
+    "Q6_K": 172
+  },
+  "layer_summary": [
+    {
+      "bytes_by_category": {
+        "attention": 78436736,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1572992,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 23762944
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 0
+    },
+    {
+      "bytes_by_category": {
+        "attention": 78436736,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1572992,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 23762944
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 1
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6296192,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 23762944
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 2
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 3
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 4
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 5
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 6
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 7
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 8
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 9
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 10
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 11
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 12
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 13
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 14
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 15
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 16
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 17
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 18
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 19
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 20
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 21
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 22
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 23
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 24
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 25
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 26
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 27
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 28
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 29
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 30
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 31
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 32
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 33
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 34
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 35
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 36
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 37
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 38
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 39
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2113929216,
+      "expert_gib": 1.96875,
+      "layer": 40
+    },
+    {
+      "bytes_by_category": {
+        "attention": 87089536,
+        "expert_down": 922746880,
+        "expert_gate": 922746880,
+        "expert_up": 922746880,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 2768240640,
+      "expert_gib": 2.578125,
+      "layer": 41
+    },
+    {
+      "bytes_by_category": {
+        "attention": 100999552,
+        "expert_down": 1207959552,
+        "expert_gate": 1207959552,
+        "expert_up": 1207959552,
+        "other_nonexpert": 6297216,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 20660224
+      },
+      "expert_bytes": 3623878656,
+      "expert_gib": 3.375,
+      "layer": 42
+    }
+  ],
+  "method": "HTTP Range parse GGUF metadata and tensor directory for all 23 shards; infer per-tensor on-disk payload by offsets; no tensor bodies persisted.",
+  "nonexpert_payload_bytes": 7382976576,
+  "nonexpert_payload_gib": 6.875933,
+  "parse_errors": [],
+  "repo": "lovedheart/DeepSeek-V4-Flash-GGUF",
+  "schema": "vendor-ds4-lovedheart-q2k-full-shard-header-bound-v1",
+  "shard_count": 23,
+  "shards": [
+    {
+      "category_bytes": {
+        "attention": 155300480,
+        "expert_down": 704643072,
+        "expert_gate": 704643072,
+        "expert_up": 704643072,
+        "other_nonexpert": 2119975104,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 23762944
+      },
+      "category_counts": {
+        "attention": 21,
+        "expert_down": 1,
+        "expert_gate": 1,
+        "expert_up": 1,
+        "other_nonexpert": 9,
+        "router": 1,
+        "shared_ffn_or_dense_ffn": 5
+      },
+      "content_range": "bytes 0-8388607/4422407072",
+      "data_start": 5245024,
+      "file_size_bytes": 4422407072,
+      "file_size_gib": 4.118688,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 1,
+      "interesting_metadata": {
+        "deepseek4.block_count": {
+          "type": "UINT32",
+          "value": 43
+        },
+        "deepseek4.expert_count": {
+          "type": "UINT32",
+          "value": 256
+        },
+        "deepseek4.expert_used_count": {
+          "type": "UINT32",
+          "value": 6
+        },
+        "general.architecture": {
+          "type": "STRING",
+          "value": "deepseek4"
+        },
+        "general.file_type": {
+          "type": "UINT32",
+          "value": 19
+        },
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 0
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 54,
+      "n_tensors": 39,
+      "parse_end": 5245011,
+      "payload_bytes_inferred": 4417162048,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+      "type_counts": {
+        "BF16": 4,
+        "F32": 20,
+        "I32": 1,
+        "Q2_K": 3,
+        "Q5_K": 6,
+        "Q6_K": 5
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7870208,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 47525888
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 12,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 10
+      },
+      "content_range": "bytes 0-8388607/4479736224",
+      "data_start": 4000,
+      "file_size_bytes": 4479736224,
+      "file_size_gib": 4.172079,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 2,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 1
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 63,
+      "parse_end": 3999,
+      "payload_bytes_inferred": 4479732224,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00002-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 31,
+        "I32": 2,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531744",
+      "data_start": 3936,
+      "file_size_bytes": 4473531744,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 3,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 2
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3924,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00003-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531744",
+      "data_start": 3936,
+      "file_size_bytes": 4473531744,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 4,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 3
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3924,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00004-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531744",
+      "data_start": 3936,
+      "file_size_bytes": 4473531744,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 5,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 4
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3924,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00005-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 6,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 5
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3972,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00006-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 7,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 6
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00007-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 8,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 7
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00008-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 9,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 8
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00009-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 10,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 9
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00010-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 11,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 10
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00011-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 12,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 11
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00012-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 13,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 12
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00013-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 14,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 13
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00014-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 15,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 14
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00015-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 16,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 15
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00016-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 17,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 16
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00017-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 18,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 17
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00018-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 19,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 18
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00019-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 20,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 19
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00020-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 188089088,
+        "expert_down": 1409286144,
+        "expert_gate": 1409286144,
+        "expert_up": 1409286144,
+        "other_nonexpert": 7871232,
+        "router": 8388608,
+        "shared_ffn_or_dense_ffn": 41320448
+      },
+      "category_counts": {
+        "attention": 33,
+        "expert_down": 2,
+        "expert_gate": 2,
+        "expert_up": 2,
+        "other_nonexpert": 13,
+        "router": 2,
+        "shared_ffn_or_dense_ffn": 8
+      },
+      "content_range": "bytes 0-8388607/4473531808",
+      "data_start": 4000,
+      "file_size_bytes": 4473531808,
+      "file_size_gib": 4.166301,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 21,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 20
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 62,
+      "parse_end": 3986,
+      "payload_bytes_inferred": 4473527808,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00021-of-00023.gguf",
+      "type_counts": {
+        "BF16": 9,
+        "F32": 32,
+        "Q2_K": 6,
+        "Q5_K": 7,
+        "Q6_K": 8
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 95232384,
+        "expert_down": 2130706432,
+        "expert_gate": 922746880,
+        "expert_up": 922746880,
+        "other_nonexpert": 1574016,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 27541504
+      },
+      "category_counts": {
+        "attention": 16,
+        "expert_down": 2,
+        "expert_gate": 1,
+        "expert_up": 1,
+        "other_nonexpert": 4,
+        "router": 1,
+        "shared_ffn_or_dense_ffn": 5
+      },
+      "content_range": "bytes 0-8388607/4104744384",
+      "data_start": 1984,
+      "file_size_bytes": 4104744384,
+      "file_size_gib": 3.822841,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 22,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 21
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 30,
+      "parse_end": 1980,
+      "payload_bytes_inferred": 4104742400,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00022-of-00023.gguf",
+      "type_counts": {
+        "BF16": 3,
+        "F32": 15,
+        "Q3_K": 3,
+        "Q4_K": 1,
+        "Q5_K": 3,
+        "Q6_K": 5
+      }
+    },
+    {
+      "category_bytes": {
+        "attention": 7340160,
+        "expert_gate": 1207959552,
+        "expert_up": 1207959552,
+        "other_nonexpert": 6296192,
+        "router": 4194304,
+        "shared_ffn_or_dense_ffn": 13778944
+      },
+      "category_counts": {
+        "attention": 4,
+        "expert_gate": 1,
+        "expert_up": 1,
+        "other_nonexpert": 8,
+        "router": 1,
+        "shared_ffn_or_dense_ffn": 3
+      },
+      "content_range": "bytes 0-8388607/2447529952",
+      "data_start": 1248,
+      "file_size_bytes": 2447529952,
+      "file_size_gib": 2.27944,
+      "header_bytes_read": 8388608,
+      "http_status": 206,
+      "index": 23,
+      "interesting_metadata": {
+        "split.count": {
+          "type": "UINT16",
+          "value": 23
+        },
+        "split.no": {
+          "type": "UINT16",
+          "value": 22
+        },
+        "split.tensors.count": {
+          "type": "INT32",
+          "value": 1328
+        }
+      },
+      "n_kv": 3,
+      "n_tensors": 18,
+      "parse_end": 1243,
+      "payload_bytes_inferred": 2447528704,
+      "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00023-of-00023.gguf",
+      "type_counts": {
+        "BF16": 3,
+        "F32": 10,
+        "Q4_K": 2,
+        "Q5_K": 1,
+        "Q6_K": 2
+      }
+    }
+  ],
+  "source_manifest": ".Agent/runs/20260705-vendor-ds4-coldstart/lovedheart-q2k-manifest-validation-20260706.json",
+  "total_file_size_bytes": 100451521792,
+  "total_file_size_gib": 93.55277,
+  "total_inferred_payload_bytes": 100446193728,
+  "total_inferred_payload_gib": 93.547808
+}

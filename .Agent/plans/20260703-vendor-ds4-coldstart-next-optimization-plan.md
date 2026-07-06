@@ -33,20 +33,30 @@ Additional complete-candidate group screen:
 
 - Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/complete-gguf-group-screen-20260706.json`
 - Method: regroup broad HF GGUF candidates by complete split group or single file, merge the current `lovedheart` 23-shard manifest, and reject dense/sidecar candidates with zero expert tensors. No full model downloads.
-- Result: `7` complete non-sidecar DeepSeek4 groups. Only `2` have metadata screen `>=10 tok/s`: `lovedheart` Q2_K (`93.552770 GiB`, screen `23.0 tok/s`) and `setar007` Q8xQ5 (`184.743598 GiB`, screen `23.0 tok/s`). Both are disk-gated and still require correctness plus strict cold benchmark.
+- Result: `7` complete non-sidecar DeepSeek4 groups. Only `2` had first-file metadata screen `>=10 tok/s`: `lovedheart` Q2_K (`93.552770 GiB`, first-shard screen `23.0 tok/s`) and `setar007` Q8xQ5 (`184.743598 GiB`, first-shard screen `23.0 tok/s`). These screens are not accepted bounds.
 - Smallest complete non-sidecar DeepSeek4 group is the `antirez` hybrid at `90.889398 GiB`, but its metadata screen is only `7.423 tok/s`, so it is empirical-only and not the next `10 tok/s` route.
 - `shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs/dense/model-dense.gguf` is explicitly rejected as a direct benchmark candidate: it is `8.165128 GiB` but has `expert_tensor_count=0`, so it is dense/sidecar-only rather than a complete vendor-loadable DeepSeek4 model.
 - There is no currently identified complete non-sidecar DeepSeek4 GGUF candidate smaller than about `90 GiB` that can be used as a direct vendor model benchmark.
 
+Full-shard hard-bound for `lovedheart` Q2_K:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/lovedheart-q2k-full-shard-header-bound-20260706.json`
+- Method: HTTP Range parse GGUF metadata and tensor directory for all `23` shards; infer tensor payload by offsets; no tensor bodies persisted.
+- Result: total file size `93.552770 GiB`; expert payload `86.671875 GiB`; non-expert payload `6.875933 GiB`; expert payload does not fit `12/16/24/32/48 GiB` VRAM budgets. Category split: gate/up/down experts are each about `28.891 GiB`.
+- Native comparison artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/native-vs-lovedheart-q2k-header-bound-20260706.json`
+- Current native model header: file size `145.424334 GiB`; expert payload `137.062500 GiB`; gate/up/down experts are each about `45.688 GiB`. `lovedheart` Q2_K expert payload ratio is `0.632353` versus native.
+- Optimistic decode-only bound: using the current accepted profile basis (`138` decode tokens, `31.1806s` decode window, prior all decode up/down fallback bound `19.03s`), if fallback time scaled perfectly with expert payload, the projected decode rate is only about `5.706 tok/s`. This is not a benchmark, but it is enough to reject `lovedheart` Q2_K as a hard `10 tok/s` route.
+- Revised decision: `lovedheart` Q2_K may still be a disk-gated empirical candidate for improving above `4.4 tok/s`, but it is no longer the preferred route to the `10 tok/s` goal unless new math shows a mechanism beyond linear payload reduction.
+
 Updated next executable plan:
 
 1. Commit and push this manifest validation artifact plus this plan update to `ssd/vendor/deepseek-token-rate-16gb` immediately.
-2. Do not download `lovedheart` Q2_K until there is an explicit disk plan with at least `100 GiB` free/relocated capacity. Do not delete or move accepted native GGUF, accepted gate pack, SOTA run, current source branch, profile files, demo script, or pushed-source reproduction artifacts without explicit approval.
+2. Do not download `lovedheart` Q2_K as a 10 tok/s route; only consider it as an empirical >4.4 candidate after explicit disk approval with at least `100 GiB` free/relocated capacity. Do not delete or move accepted native GGUF, accepted gate pack, SOTA run, current source branch, profile files, demo script, or pushed-source reproduction artifacts without explicit approval.
 3. If disk is approved, download all 23 shards, record URL/path/size/SHA256/ETag for every shard, then run loader metadata validation before any benchmark.
 4. Correctness gates come before performance claims: France prompt must be semantically correct and coherent, then run the five-prompt set (`France`, `quantum computing`, `Python Fibonacci`, `Japan`, `climate change`) and record exact outputs.
 5. Only after correctness passes, run strict cold France benchmark under the same hard gates: `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, `TTFT <= 33617.688744 ms`, `eval_tok_s > 4.4`, and full metric/counter capture.
 6. If a compliant new SOTA appears, immediately record full reproduction metadata, commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted.
-7. If disk remains unavailable, continue metadata-only discovery for smaller complete DeepSeek4 GGUF/representation candidates or a new hard-bound compact route; do not repeat rejected runtime patches without new math.
+7. For the 10 tok/s target, prioritize a new compact-representation hard-bound or a complete model whose full-shard expert payload is far below `86.671875 GiB`. If disk remains unavailable, continue metadata-only discovery; do not repeat rejected runtime patches without new math.
 
 ### 2026-07-06 Latest Active Plan: Broader Header Refresh Completed, Validate Sharded Compact GGUF
 
