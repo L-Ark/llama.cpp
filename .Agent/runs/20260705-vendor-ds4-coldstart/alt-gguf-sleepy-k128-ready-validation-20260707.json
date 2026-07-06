@@ -1,0 +1,296 @@
+{
+  "aria2_sidecar_present": false,
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-ready-validation-20260707.json",
+  "attempt_id": "20260707-sleepy-k128-alt-gguf-ready-validation",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "claim_rule": "Ready validation only; no correctness/token-rate/SOTA claim until strict France smoke passes.",
+  "created_utc": "2026-07-06T17:49:03Z",
+  "download_log": "/root/lfz/runs/vendor-ds4-16gb/20260706T173353Z-sleepy-k128-alt-gguf-download/download.log",
+  "download_unit": "ds4-sleepy-k128-alt-gguf-download-20260706T173353Z.service",
+  "env_required_for_first_smoke": [
+    "LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1",
+    "LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1",
+    "GGML_MOE_STREAM=0"
+  ],
+  "expected_size_bytes": 50439361920,
+  "failures": [],
+  "first_relevant_tensors": [
+    {
+      "dims": [
+        4096,
+        2048,
+        256
+      ],
+      "name": "blk.0.ffn_gate_exps.weight",
+      "offset": 9308160,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        256
+      ],
+      "name": "blk.0.ffn_down_exps.weight",
+      "offset": 562956288,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        256
+      ],
+      "name": "blk.0.ffn_up_exps.weight",
+      "offset": 1267599360,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        256
+      ],
+      "name": "blk.1.ffn_gate_exps.weight",
+      "offset": 1821247488,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        256
+      ],
+      "name": "blk.1.ffn_down_exps.weight",
+      "offset": 2374895616,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        256
+      ],
+      "name": "blk.1.ffn_up_exps.weight",
+      "offset": 3079538688,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        256
+      ],
+      "name": "blk.2.ffn_gate_exps.weight",
+      "offset": 3633186816,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        256
+      ],
+      "name": "blk.2.ffn_down_exps.weight",
+      "offset": 4186834944,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        256
+      ],
+      "name": "blk.2.ffn_up_exps.weight",
+      "offset": 4891478016,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        128
+      ],
+      "name": "blk.3.ffn_gate_exps.weight",
+      "offset": 5445126144,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        128
+      ],
+      "name": "blk.3.ffn_down_exps.weight",
+      "offset": 5721950208,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        128
+      ],
+      "name": "blk.3.ffn_up_exps.weight",
+      "offset": 6074271744,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        128
+      ],
+      "name": "blk.4.ffn_gate_exps.weight",
+      "offset": 6351095808,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        128
+      ],
+      "name": "blk.4.ffn_down_exps.weight",
+      "offset": 6627919872,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        128
+      ],
+      "name": "blk.4.ffn_up_exps.weight",
+      "offset": 6980241408,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        128
+      ],
+      "name": "blk.5.ffn_gate_exps.weight",
+      "offset": 7257065472,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        128
+      ],
+      "name": "blk.5.ffn_down_exps.weight",
+      "offset": 7533889536,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        128
+      ],
+      "name": "blk.5.ffn_up_exps.weight",
+      "offset": 7886211072,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        128
+      ],
+      "name": "blk.6.ffn_gate_exps.weight",
+      "offset": 8163035136,
+      "type_id": 16,
+      "type_name": "IQ2_XXS"
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        128
+      ],
+      "name": "blk.6.ffn_down_exps.weight",
+      "offset": 8439859200,
+      "type_id": 10,
+      "type_name": "Q2_K"
+    }
+  ],
+  "gguf_header": {
+    "deepseek4.block_count": 43,
+    "deepseek4.embedding_length": 4096,
+    "deepseek4.expert_count": 256,
+    "deepseek4.expert_feed_forward_length": 2048,
+    "deepseek4.expert_used_count": 6,
+    "deepseek4.nextn_predict_layers": 1,
+    "general.architecture": "deepseek4",
+    "general.file_type": 19,
+    "general.name": "DeepSeek V4 Flash",
+    "general.size_label": "256x8.4B",
+    "magic": "GGUF",
+    "n_kv": 64,
+    "n_tensors": 1328,
+    "tokenizer.ggml.model": "gpt2",
+    "version": 3
+  },
+  "model_path": "/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+  "name_flags": {
+    "attn_kv": 43,
+    "attn_kv_latent": 0,
+    "compress": 0,
+    "compressor": 248,
+    "down": 43,
+    "gate": 43,
+    "hc_attn": 129,
+    "hc_ffn": 129,
+    "hc_head": 0,
+    "output_hc": 3,
+    "tid2eid_plain": 0,
+    "tid2eid_weight": 3,
+    "up": 43
+  },
+  "prompt_scope": "no prompt run; held_out_test_set_v1_locked not used",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "raw_type_id_counts": {
+    "0": 492,
+    "1": 359,
+    "10": 43,
+    "16": 86,
+    "26": 3,
+    "8": 345
+  },
+  "sha256": "54927e791ae4e0fbc848e5f2574681b0d8c32721fddd1da82918ece04c0d928b",
+  "sha256_log": "/root/lfz/runs/vendor-ds4-16gb/20260706T173353Z-sleepy-k128-alt-gguf-download/sha256.txt",
+  "source_head_before_artifact": "4b2e5e82f8668ff1d405c6e17a7324f380de89a4",
+  "stat_size_bytes": 50439361920,
+  "status": "ready_for_france_strict_smoke",
+  "tensor_info_end": 5334316,
+  "type_counts_by_current_enum_names": {
+    "F16": 359,
+    "F32": 492,
+    "I32": 3,
+    "IQ2_XXS": 86,
+    "Q2_K": 43,
+    "Q8_0": 345
+  }
+}

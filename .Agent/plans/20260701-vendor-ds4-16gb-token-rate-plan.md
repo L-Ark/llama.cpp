@@ -4300,3 +4300,17 @@
 - `working_directory`: `/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF`，本次不使用 `systemd-run --same-dir`，避免写入 repo root。
 - `completion_gate`: `.aria2` sidecar 消失、`stat size == 50439361920`、sha256/header validation 通过后，才允许 France strict 16GB smoke。
 - `claim_rule`: 当前只有下载启动记录，没有 correctness/token-rate/SOTA 结论。
+
+## 2026-07-07 执行记录：sleepy K128 alternate GGUF ready validation 通过
+
+- `attempt_id`: `20260707-sleepy-k128-alt-gguf-ready-validation`
+- `status`: `ready_for_france_strict_smoke`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-ready-validation-20260707.json`
+- `prompt_scope`: 未运行 prompt；未使用 `held_out_test_set_v1_locked`。
+- `model_path`: `/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf`。
+- `size_and_sha256`: size `50439361920` bytes；sha256 `54927e791ae4e0fbc848e5f2574681b0d8c32721fddd1da82918ece04c0d928b`。
+- `header_validation`: GGUF version `3`，`n_kv=64`，`n_tensors=1328`，`general.architecture=deepseek4`，`general.file_type=19`，`expert_count=256`，`expert_used_count=6`，`nextn_predict_layers=1`。
+- `tensor_validation`: type counts 为 `F32=492`, `F16=359`, `Q8_0=345`, `IQ2_XXS=86`, `Q2_K=43`, `I32=3`；`output_hc=3`、`tid2eid_weight=3`、gate/up/down expert tensors 各 `43` 个。
+- `first_smoke_env`: `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`、`LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`、`GGML_MOE_STREAM=0`。
+- `next_action`: 运行 France strict 16GB load/correctness smoke；如果 load 或 correctness 失败，立即 reject，不进入 token-rate benchmark。
+- `claim_rule`: 当前只有下载和 metadata ready 结论，没有 correctness/token-rate/SOTA 结论。
