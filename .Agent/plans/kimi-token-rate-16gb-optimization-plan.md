@@ -93290,3 +93290,38 @@ GP37 execution result:
   - resumable-download guard is ready;
   - full IQ1_S n32 smoke remains gated by disk capacity or explicit deletion
     approval.
+
+## GP38: IQ1_S resumable download failure rollback
+
+Timestamp: `2026-07-07T11:35:00+0800`.
+
+Status: planned before execution.
+
+Purpose:
+
+- GP37 added resumable streaming into `MODEL_PATH.tmp`.
+- With `set -e`, a `curl` failure during append can exit the script before the
+  post-request byte-count check runs.
+- If `curl` writes partial bytes and exits non-zero, the temp file must be
+  truncated back to the pre-request size; otherwise the next resume attempt may
+  start from a corrupt offset.
+
+Implementation:
+
+- Wrap each `curl` append in explicit return-code handling:
+  - record `before` size;
+  - run `curl` with `set +e`;
+  - restore `set -e`;
+  - on non-zero return, truncate temp back to `before` and fail;
+  - on byte-count mismatch, truncate temp back to `before` and fail.
+- Keep all deletion gates unchanged.
+- Keep default dry-run behavior unchanged.
+
+Validation:
+
+1. Local syntax:
+   `bash -n .Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+2. Remote default dry-run:
+   `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+3. Confirm no deletion/download/smoke executes and dry-run still reports the
+   resumable temp path.

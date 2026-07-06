@@ -278,10 +278,20 @@ download_model() {
     expected=$((expected - part_offset))
     before="$(stat -c '%s' "$tmp_path")"
     log "download part $((i + 1)) offset=$part_offset append_expected=$expected url=${PART_URLS[$i]}"
+    local curl_rc
+    set +e
     if [ "$part_offset" -gt 0 ]; then
       curl -L --fail --retry 5 --retry-delay 5 -r "${part_offset}-" "${PART_URLS[$i]}" >> "$tmp_path"
+      curl_rc=$?
     else
       curl -L --fail --retry 5 --retry-delay 5 "${PART_URLS[$i]}" >> "$tmp_path"
+      curl_rc=$?
+    fi
+    set -e
+    if [ "$curl_rc" -ne 0 ]; then
+      log "ERROR part $((i + 1)) curl failed rc=$curl_rc; truncating temp back to $before"
+      truncate -s "$before" "$tmp_path"
+      return 1
     fi
     after="$(stat -c '%s' "$tmp_path")"
     got=$((after - before))
