@@ -1,0 +1,41 @@
+run=/root/lfz/runs/vendor-kimi-token-rate/20260706-135000Z-gp2-alias-dev-n96-profile/dev_linear_equation
+prompt_id=dev_linear_equation
+prompt=Solve: if x + 3 = 10, what is x?
+exit=0
+quality=pass
+quality_reason=ok
+output=To solve for x, subtract 3 from both sides: x + 3 = 10 x = 10 − 3 **x = 7**
+ttft_ms=96794.17
+prompt_tokens=24
+decode_ms=71705.42
+decode_runs=34
+token_rate=0.47
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=14919262208
+anon=446464
+file=14633234432
+kernel=282894336
+inactive_file=3672125440
+active_file=10960351232
+pgmajfault=1298120
+pgfault=6167033
+workingset_refault_file=230739
+expert_pack_0=36766 misses=0 read_failures=0 direct_reads=32419 direct_fallbacks=0 iouring_reads=2443 iouring_bytes=13807403008 iouring_fallbacks=0 iouring_submit_us=13357 iouring_wait_us=2313647 iouring_h2d_enqueues=2443 entries=69120
+expert_pack_iouring_0=batches=469 submit_calls=469 wait_calls=1894 cqes=2443 inflight_avg=3.81 inflight_max=8 batch_hist=1:14,2-4:170,5-8:285,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 6.02 MiB
+pinned_staging_1=: enabled, 12 slots of 4.48 MiB
+pinned_staging_2=: enabled, 12 slots of 7.44 MiB
+pinned_staging_3=: enabled, 12 slots of 5.36 MiB
+pinned_staging_4=: copies=24850 waits=24814 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=109.260 ms host_stage=56606.125 ms enqueue=609.509 ms h2d=5452.407 ms h2d_timed=24850
+pinned_staging_5= iouring: batches=342 jobs=1789 submit_calls=342 wait_calls=1385 cqes=1789 inflight_avg=3.78 inflight_max=8 batch_hist=1:11,2-4:119,5-8:212,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=10012 waits=9988 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=45.524 ms host_stage=20660.150 ms enqueue=226.437 ms h2d=2083.666 ms h2d_timed=10012
+pinned_staging_7= gate iouring: batches=127 jobs=654 submit_calls=127 wait_calls=509 cqes=654 inflight_avg=3.89 inflight_max=8 batch_hist=1:3,2-4:51,5-8:73,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=1088 planned_jobs=5755 completed_jobs=5755 cache_hits=2133 missing_tensor=102 missing_pack=0 submitted_batches=986 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=15001716 batch_hist=1:3,2-4:220,5-8:763,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=9476 misses=4916 preloads=5755 pinned=0 hit_rate=65.8%
+vram_down_1=slots=766 slot=7.44 MiB hits=9476 misses=4916 preloads=5755 pinned=0 hit_rate=65.8%
+vram_down_2=slots=766 slot=7.44 MiB hits=9476 misses=4916 preloads=5755 pinned=0 hit_rate=65.8%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=8497 misses=24159 preloads=0 pinned=0 hit_rate=26.0%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=8497 misses=24159 preloads=0 pinned=0 hit_rate=26.0%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=8497 misses=24159 preloads=0 pinned=0 hit_rate=26.0%

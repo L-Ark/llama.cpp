@@ -89161,3 +89161,122 @@ Decision:
 - Next step:
   run strict n96 dev evaluation with alias enabled and profiling sufficient to
   verify quality, TTFT, memory, remaining copy wall, and remaining fallback.
+
+N96 dev gate result:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260706-135000Z-gp2-alias-dev-n96-profile
+```
+
+Run shape:
+
+- clean worktree:
+  `/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c`;
+- commit:
+  `7af40b1b5`;
+- `N=96`;
+- `PROFILE=1`;
+- no `COPY_PROFILE_H2D`;
+- strict 16 GB cgroup;
+- cold start per prompt;
+- alias:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv`.
+
+Local result copies:
+
+- `.Agent/runs/20260706-gp2-alias-dev-n96-profile/summary.md`;
+- `.Agent/runs/20260706-gp2-alias-dev-n96-profile/profile-breakdown-summary.md`;
+- `.Agent/runs/20260706-gp2-alias-dev-n96-profile/*/metrics.json`;
+- `.Agent/runs/20260706-gp2-alias-dev-n96-profile/*/metrics.txt`;
+- `.Agent/runs/20260706-gp2-alias-dev-n96-profile/*/answer.txt`;
+- `.Agent/runs/20260706-gp2-alias-dev-n96-profile/*/git.txt`.
+
+Per-prompt result:
+
+| prompt | quality | tok/s | TTFT ms | decode ms/runs | memory peak |
+|---|---|---:|---:|---:|---:|
+| `dev_france_regression` | pass | `1.37` | `75110.64` | `56157.24/77` | `15899996160` |
+| `dev_japan_factual` | pass | `1.01` | `77437.13` | `84104.48/85` | `15899996160` |
+| `dev_photosynthesis_factual` | pass | `0.76` | `67038.89` | `123762.68/94` | `15899996160` |
+| `dev_linear_equation` | pass | `0.47` | `96794.17` | `71705.42/34` | `15899996160` |
+| `dev_python_reverse` | pass | `0.67` | `77289.46` | `142312.18/95` | `15899996160` |
+| `dev_zh_france` | pass | `0.93` | `70178.85` | `52427.07/49` | `15899996160` |
+| `dev_mixed_summary` | pass | `0.62` | `106137.39` | `86560.20/54` | `15899996160` |
+
+Aggregate:
+
+- min:
+  `0.47 tok/s`;
+- median:
+  `0.76 tok/s`;
+- mean:
+  `0.833 tok/s`;
+- quality:
+  `7/7 pass`;
+- memory:
+  all runs stayed inside the strict 16 GB cgroup.
+
+Comparison with formal no-alias n96 dev baseline:
+
+| prompt | base tok/s | alias tok/s | speedup | base TTFT | alias TTFT | TTFT change |
+|---|---:|---:|---:|---:|---:|---:|
+| `dev_france_regression` | `1.26` | `1.37` | `1.09x` | `78634` | `75111` | `-4.5%` |
+| `dev_japan_factual` | `0.42` | `1.01` | `2.40x` | `74493` | `77437` | `+4.0%` |
+| `dev_linear_equation` | `0.16` | `0.47` | `2.94x` | `85340` | `96794` | `+13.4%` |
+| `dev_mixed_summary` | `0.20` | `0.62` | `3.10x` | `91143` | `106137` | `+16.5%` |
+| `dev_photosynthesis_factual` | `0.24` | `0.76` | `3.17x` | `66720` | `67039` | `+0.5%` |
+| `dev_python_reverse` | `0.17` | `0.67` | `3.94x` | `84157` | `77289` | `-8.2%` |
+| `dev_zh_france` | `0.38` | `0.93` | `2.45x` | `72540` | `70179` | `-3.3%` |
+
+Baseline aggregate:
+
+- min:
+  `0.16 tok/s`;
+- median:
+  `0.24 tok/s`;
+- mean:
+  `0.404 tok/s`.
+
+GP2 n96 decision:
+
+- Accept GP2 as a real dev-set improvement:
+  - all quality gates pass;
+  - TTFT remains within the `+20%` cap for every prompt;
+  - host RAM stays within the 16 GB cgroup;
+  - pack miss is eliminated (`misses=0`) for every prompt.
+- Do not promote final SOTA yet:
+  - held-out test has not been run;
+  - the target remains stable `>5 tok/s`, and current dev min is only
+    `0.47 tok/s`.
+
+Post-GP2 bottleneck:
+
+- Profile report:
+  `.Agent/runs/20260706-gp2-alias-dev-n96-profile/profile-breakdown-summary.md`.
+- Remaining large buckets:
+  - prompt fallback dominates aggregate fallback time:
+    `prompt,type=11/down 161684 ms`,
+    `prompt,type=22/up 113286 ms`,
+    `prompt,type=18/gate 104721 ms`;
+  - up/gate batch wall:
+    `up22_gate22 84038 ms`,
+    `up18_gate18 83754 ms`;
+  - down batch wall:
+    `type=23 64126 ms`,
+    `type=11 58070 ms`;
+  - decode Q4_0 down CPU fallback remains:
+    `decode,type=2/down 31017 ms`.
+- Current alias implementation still cannot batch unaligned GGUF alias entries
+  through io_uring; single-entry direct bounce read works and is enough for a
+  `2.1x` mean dev improvement, but likely leaves throughput on the table.
+
+Next design branch:
+
+- First quantify whether unaligned GGUF alias reads are now limited by:
+  - bounce read CPU memcpy;
+  - lack of batched io_uring for unaligned alias entries;
+  - prompt fallback;
+  - up/gate kernel/wait;
+  - Q4_0 down CPU fallback.
+- The next source optimization must name the largest remaining bucket and
+  compute an upper bound before implementation.
