@@ -328,6 +328,25 @@ Decision:
     prediction only if its acceptance/coverage is measured on dev and later
     validated on held-out test.
 
+Hard-bound follow-up:
+
+- Report:
+  `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/hard-bound-summary.md`.
+- Key result:
+  - France is the only dev prompt where eliminating visible iouring wait alone
+    would theoretically pass `5 tok/s`;
+  - for general prompts, visible iouring wait is only `1.1-13.2%` of decode
+    time, and removing it still leaves the slow prompts at only
+    `0.16-0.48 tok/s`.
+- Implication:
+  - Do not spend the next implementation cycle on queue-depth-only or
+    fixed-hotset-only work.
+  - The next candidate must target host staging, CPU fallback/materialization,
+    or bytes moved per routed expert.
+  - Any proposed mechanism must show a hard bound against the formal dev
+    baseline, especially `dev_linear_equation`, `dev_python_reverse`, and
+    `dev_mixed_summary`, before code edits.
+
 ## Current correctness base
 
 The correctness base is the vendor Kimi path after the DeepSeek2 YaRN kq-scale
