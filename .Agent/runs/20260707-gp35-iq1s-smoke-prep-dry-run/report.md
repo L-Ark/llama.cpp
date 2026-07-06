@@ -82,3 +82,11 @@ Result:
 The guarded executor is ready for a future approved IQ1_S full-model smoke.
 Current state remains gated by disk capacity or explicit approval to remove old
 non-SOTA packs.
+
+## Correction From GP36
+
+GP36 added a Hugging Face metadata validation gate and found the authoritative
+five-part total is `204430872480` bytes, not the earlier hardcoded
+`204429739520` bytes used in this dry-run. The GP35 dry-run remains useful as a
+deletion-guard validation record, but the final model-size constant was
+corrected in the executor before any real download.

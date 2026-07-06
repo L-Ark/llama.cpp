@@ -21,7 +21,7 @@ set -euo pipefail
 : "${VALIDATE_PARTS:=1}"
 : "${MIN_FREE_AFTER_DOWNLOAD_GIB:=20}"
 
-IQ1S_BYTES=204429739520
+IQ1S_BYTES=204430872480
 GIB=1073741824
 MIN_FREE_AFTER_DOWNLOAD_BYTES=$((MIN_FREE_AFTER_DOWNLOAD_GIB * GIB))
 
@@ -109,6 +109,7 @@ import sys
 import urllib.request
 
 repo = "mradermacher/Kimi-K2.7-Code-i1-GGUF"
+expected_total = 204430872480
 expected = {
     "Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5": 41875931136,
     "Kimi-K2.7-Code.i1-IQ1_S.gguf.part2of5": 41875931136,
@@ -149,8 +150,8 @@ for name, want in expected.items():
         print(f"[kimi_iq1s_prepare] part_size_ok name={name} bytes={got}")
         total += got
 
-if total != sum(expected.values()):
-    print(f"[kimi_iq1s_prepare] ERROR total_size got={total} expected={sum(expected.values())}", file=sys.stderr)
+if total != expected_total:
+    print(f"[kimi_iq1s_prepare] ERROR total_size got={total} expected={expected_total}", file=sys.stderr)
     ok = False
 else:
     print(f"[kimi_iq1s_prepare] part_total_ok bytes={total}")

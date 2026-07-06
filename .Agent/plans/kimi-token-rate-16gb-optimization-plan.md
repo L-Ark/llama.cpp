@@ -92931,7 +92931,9 @@ GP33 non-destructive space audit and asset recheck:
   - `part3of5`: `41875931136` bytes;
   - `part4of5`: `41875931136` bytes;
   - `part5of5`: `36927147936` bytes;
-  - total: `204429739520` bytes, about `190.39 GiB`.
+  - total: `204430872480` bytes, about `190.39 GiB`.
+  - Note: GP36 corrected an earlier arithmetic/constant error that used
+    `204429739520`; the authoritative size is the five-part metadata sum above.
 - Decision:
   - There is no non-destructive local cleanup path that frees the required
     space.
@@ -93089,7 +93091,7 @@ Implementation:
   - `MODEL_PATH=/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF/Kimi-K2.7-Code.i1-IQ1_S.gguf`;
   - `REPO=/root/lfz/tmp/vendor-kimi-speculative-gp33`.
 - Expected final IQ1_S bytes:
-  `204429739520`.
+  `204430872480`.
 - Keep at least `20 GiB` free after download by default.
 
 Validation before any real execution:
@@ -93171,7 +93173,7 @@ Implementation:
   - `Kimi-K2.7-Code.i1-IQ1_S.gguf.part4of5`: `41875931136`;
   - `Kimi-K2.7-Code.i1-IQ1_S.gguf.part5of5`: `36927147936`.
 - Expected total:
-  `204429739520`.
+  `204430872480`.
 
 Safety behavior:
 
