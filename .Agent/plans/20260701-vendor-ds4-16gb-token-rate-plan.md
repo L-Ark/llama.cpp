@@ -5140,3 +5140,14 @@
 - perf_probe: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-perf/france-n96，strict cold 16GB/no-swap，France n96，`GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=2`，exit=124 after 520s timeout；未完成 eval token timing。profile: down total=9.985 ms/call，cuda_batch=4.647 ms/call，fallback_t0=5.295 ms/call，batch_accept=3920，batch_decline=0。
 - memory: corrected checks and perf all recorded `memory.peak=16000000000`，`oom=0`，`oom_kill=0`；page cache included in cgroup。
 - decision: v2 rowtile 数学/正确率可行，但性能仍不可接受，不能 promotion，源码仍不保留。下一步 bottleneck 是 rowtile kernel/runtime performance，而不是 Q8_0 math parity。后续若继续该方向，必须先用 microbench/profile 降低 `cuda_batch` 和 timeout 风险，再重新进入 n96/generalized gate。
+
+## 2026-07-07 执行记录：Q8_0 rowtile v2 performance root-cause
+
+- attempt_id: 20260707-q80-rowtile-v2-performance-root-cause
+- status: diagnostic_complete_rowtile_slower_than_cpu_fallback
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/q80-rowtile-v2-performance-root-cause-20260707.json
+- stdout_noise_check: raw n96 probe 的 stdout 可达 0.9-1.2GB，主要是 loading spinner/重复输出，会污染 wall time；但这不是 timeout 的主因。当前稳定源码在同类 vram2/down-batch 配置下把 stdout 丢到 `/dev/null` 后仍 300s timeout。
+- stable_stdout_devnull_run: /root/lfz/runs/vendor-ds4-16gb/20260707T-runner-stdout-noise-baseline/france-n96-stable-stdout-devnull，strict 16GB/no-swap，exit=124，memory_peak=16000000000，oom=0，profile: down total=7.553 ms/call，cuda_batch=0，fallback_t0=7.542，batch_accept=0，batch_decline=3920。
+- rowtile_v2_perf_comparison: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-perf/france-n96，strict 16GB/no-swap，exit=124 after 520s，profile: down total=9.985 ms/call，cuda_batch=4.647，fallback_t0=5.295，batch_accept=3920，batch_decline=0。
+- conclusion: full-output Q8_0 rowtile 虽然 correctness 通过，但把 CPU fallback 转成 GPU rowtile 后 down total 反而从约 7.55 ms/call 增至约 9.99 ms/call；当前 rowtile 映射不是 5 tok/s 方向。后续不要继续以该 full-output rowtile 做 n96 试错。
+- next_direction: 若继续替换 down CPU fallback，必须设计全新 kernel/storage：例如 coalesced/transposed expert layout、tensor-core-friendly dequant/accumulate、或能显著减少 4096 输出列读写的结构化方法；否则应转向更高收益 bottleneck。所有后续 perf run 必须避免多 GB stdout artifact（stdout devnull 或 strict runner 控制）。

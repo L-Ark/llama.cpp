@@ -1,0 +1,52 @@
+{
+  "attempt_id": "20260707-q80-rowtile-v2-performance-root-cause",
+  "status": "diagnostic_complete_rowtile_slower_than_cpu_fallback",
+  "date": "2026-07-07",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "held_out_used": false,
+  "runs": {
+    "stable_stdout_devnull": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-runner-stdout-noise-baseline/france-n96-stable-stdout-devnull",
+      "exit_status": "124\n",
+      "memory_peak_bytes": "16000000000\n",
+      "memory_current_bytes": "15979458560\n",
+      "memory_events": "low 0\nhigh 0\nmax 62350\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "profile_line": "[kimi_cpu_moe_profile] down calls=11760 total=7.553 ms/call convert_t0=0.002 route=0.001 route_barrier=0.002 cuda_batch=0.000 cuda_single=0.000 post_cuda_barrier=0.001 fallback_t0=7.542 batch_accept=0 batch_decline=3920 single_accept=0 single_decline=49788",
+      "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\n[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=0)\ncommon_memory_breakdown_print: | memory breakdown [MiB] | total    free      self    model   context   compute    unaccounted |\ncommon_memory_breakdown_print: |   - CUDA0 (RTX 5090)   | 32109 = 13850 + ( 17362 =  17339 +      18 +       4) +         896 |\ncommon_memory_breakdown_print: |   - Host               |                  137609 = 137608 +       0 +       1                |\n~llama_context:      CUDA0 compute buffer size of   4.0703 MiB, does not match expectation of   1.3138 MiB\n~llama_context:  CUDA_Host compute buffer size of   1.3830 MiB, does not match expectation of   0.5012 MiB\n[moe_fallback_reason_profile] written: /root/lfz/runs/vendor-ds4-16gb/20260707T-runner-stdout-noise-baseline/france-n96-stable-stdout-devnull/fallback_reason_profile.csv entries=14901 dropped=0\n[kimi_cpu_moe_profile] down calls=11760 total=7.553 ms/call convert_t0=0.002 route=0.001 route_barrier=0.002 cuda_batch=0.000 cuda_single=0.000 post_cuda_barrier=0.001 fallback_t0=7.542 batch_accept=0 batch_decline=3920 single_accept=0 single_decline=49788\n",
+      "stdout_size_bytes": null
+    },
+    "rowtile_v2_perf": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-perf/france-n96",
+      "exit_status": "124\n",
+      "memory_peak_bytes": "16000000000\n",
+      "memory_current_bytes": "15976505344\n",
+      "memory_events": "low 0\nhigh 0\nmax 61592\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "profile_line": "[kimi_cpu_moe_profile] down calls=11760 total=9.985 ms/call convert_t0=0.002 route=0.001 route_barrier=0.004 cuda_batch=4.647 cuda_single=0.000 post_cuda_barrier=0.018 fallback_t0=5.295 batch_accept=3920 batch_decline=0 single_accept=0 single_decline=49788",
+      "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\n[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=0)\n[moe_stream] batched decode path active: experts=12 ne01=4096 ne00=2048\n[moe_stream_batch] MXFP4 down Q8_0 compat rowtile path active\n[moe_stream_batch] VRAM cache budget: requested=2048 MiB actual=2048 MiB free=13864 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0\n[moe_stream_batch] VRAM cache: 2.0 GiB, 481 slots (4.25 MiB each)\ncommon_memory_breakdown_print: | memory breakdown [MiB] | total    free      self    model   context   compute    unaccounted |\ncommon_memory_breakdown_print: |   - CUDA0 (RTX 5090)   | 32109 = 11804 + ( 17362 =  17339 +      18 +       4) +        2942 |\ncommon_memory_breakdown_print: |   - Host               |                  137609 = 137608 +       0 +       1                |\n~llama_context:      CUDA0 compute buffer size of   4.0703 MiB, does not match expectation of   1.3138 MiB\n~llama_context:  CUDA_Host compute buffer size of   1.3830 MiB, does not match expectation of   0.5012 MiB\n[moe_stream_batch] VRAM cache: hits=13979 misses=12181 preloads=0 hit_rate=53.4%\n[moe_stream_batch] VRAM cache down: slots=481 slot=4.25 MiB hits=13979 misses=12181 preloads=0 pinned=0 hit_rate=53.4%\n[moe_fallback_reason_profile] written: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-perf/france-n96/fallback_reason_profile.csv entries=9934 dropped=0\n[kimi_cpu_moe_profile] down calls=11760 total=9.985 ms/call convert_t0=0.002 route=0.001 route_barrier=0.004 cuda_batch=4.647 cuda_single=0.000 post_cuda_barrier=0.018 fallback_t0=5.295 batch_accept=3920 batch_decline=0 single_accept=0 single_decline=49788\n",
+      "stdout_size_bytes": 1231925438
+    },
+    "rowtile_v2_full_top1": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-check-with-baseline/top1-full-down-copy-baseline",
+      "exit_status": "0\n",
+      "memory_peak_bytes": "16000000000\n",
+      "memory_current_bytes": "15062192128\n",
+      "memory_events": "low 0\nhigh 0\nmax 85699\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "profile_line": "[kimi_cpu_moe_profile] down calls=17400 total=9.126 ms/call convert_t0=0.002 route=0.001 route_barrier=0.004 cuda_batch=4.339 cuda_single=0.000 post_cuda_barrier=0.018 fallback_t0=4.743 batch_accept=5800 batch_decline=0 single_accept=0 single_decline=69600",
+      "stderr_tail": " the full capacity of the model will not be utilized\nllama_context:  CUDA_Host  output buffer size =     0.49 MiB\nsched_reserve: reserving ...\nsched_reserve: Flash Attention was auto, set to enabled\nsched_reserve: resolving fused Gated Delta Net support:\nsched_reserve:      CUDA0 compute buffer size =     1.31 MiB\nsched_reserve:  CUDA_Host compute buffer size =     0.50 MiB\nsched_reserve: graph nodes  = 8102 (with bs=16), 8098 (with bs=1)\nsched_reserve: graph splits = 82\nsched_reserve: reserve took 314.56 ms, sched copies = 1\n[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=0)\n[moe_stream] batched decode path active: experts=6 ne01=4096 ne00=2048\n[moe_stream_batch] MXFP4 down Q8_0 compat rowtile path active\n[moe_stream_batch] VRAM cache budget: requested=2048 MiB actual=2048 MiB free=13866 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0\n[moe_stream_batch] VRAM cache: 2.0 GiB, 481 slots (4.25 MiB each)\nmain: loading results from result.gguf...\nmain: NMSE=0.000e+00\nmain: top1 same=145/145 first_mismatch=-1 max_abs=0 mean_abs=0 report=top1-check.json\n~llama_context:      CUDA0 compute buffer size of   1.4994 MiB, does not match expectation of   1.3138 MiB\n[moe_stream_batch] VRAM cache: hits=18255 misses=16545 preloads=0 hit_rate=52.5%\n[moe_stream_batch] VRAM cache down: slots=481 slot=4.25 MiB hits=18255 misses=16545 preloads=0 pinned=0 hit_rate=52.5%\n[moe_fallback_reason_profile] written: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-check-with-baseline/top1-full-down-copy-baseline/fallback_reason_profile.csv entries=9162 dropped=0\n[kimi_cpu_moe_profile] down calls=17400 total=9.126 ms/call convert_t0=0.002 route=0.001 route_barrier=0.004 cuda_batch=4.339 cuda_single=0.000 post_cuda_barrier=0.018 fallback_t0=4.743 batch_accept=5800 batch_decline=0 single_accept=0 single_decline=69600\n\tCommand being timed: \"/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch-on/bin/llama-results -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -f fixed-france-text.txt --sequential-logits -c 256 -b 16 -ub 16 -t 20 -tb 20 -ngl all --fit on -fa auto --n-cpu-moe 40 --defer-experts --output result.gguf --check --top1-report top1-check.json --top1-fail-on-mismatch\"\n\tUser time (seconds): 1105.23\n\tSystem time (seconds): 1317.92\n\tPercent of CPU this job got: 1226%\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 3:17.53\n\tAverage shared text size (kbytes): 0\n\tAverage unshared data size (kbytes): 0\n\tAverage stack size (kbytes): 0\n\tAverage total size (kbytes): 0\n\tMaximum resident set size (kbytes): 15600800\n\tAverage resident set size (kbytes): 0\n\tMajor (requiring I/O) page faults: 529447\n\tMinor (reclaiming a frame) page faults: 3504699\n\tVoluntary context switches: 1005949\n\tInvoluntary context switches: 88679\n\tSwaps: 0\n\tFile system inputs: 371609320\n\tFile system outputs: 2536\n\tSocket messages sent: 0\n\tSocket messages received: 0\n\tSignals delivered: 0\n\tPage size (bytes): 4096\n\tExit status: 0\n",
+      "stdout_size_bytes": null
+    }
+  },
+  "findings": [
+    "The huge stdout files in raw n96 probes are real runner noise, but not the main reason for timeout: stable source with stdout redirected to /dev/null still timed out at 300s under the same vram2/down-batch style config.",
+    "Stable stdout-devnull n96 profile: down total=7.553 ms/call, cuda_batch=0, fallback_t0=7.542, batch_accept=0, batch_decline=3920.",
+    "Rowtile v2 n96 profile: down total=9.985 ms/call, cuda_batch=4.647, fallback_t0=5.295, batch_accept=3920, batch_decline=0.",
+    "Therefore full-output Q8_0 rowtile moves work from CPU fallback to GPU but increases total down time in this configuration. It is not a path to 5 tok/s unless kernel/runtime is substantially redesigned."
+  ],
+  "decision": "Do not retry full-output Q8_0 rowtile in n96. Next plan should either microbenchmark a fundamentally different down kernel (coalesced expert layout/tensor-core/dequant strategy) or refocus on higher-yield non-down bottlenecks. Full-output rowtile is closed as a performance direction for now.",
+  "next_recommended_plan": [
+    "Use existing hot-batch microprobe numbers as lower-bound evidence: prior raw/transpose warp projected full kernel was about 1.8s for large retained sets, far above the per-token budget.",
+    "If continuing down GPU replacement, design a new kernel around coalesced/transposed expert storage or tensor-core-friendly dequant, not the current one-row x full-4096 rowtile mapping.",
+    "Before another full n96 run, use stdout-devnull or strict runner controls to avoid multi-GB stdout artifacts."
+  ]
+}
