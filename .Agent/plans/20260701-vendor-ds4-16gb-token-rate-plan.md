@@ -4160,3 +4160,16 @@
 - `large_payload_sensitivity`: `8GiB` 上限约 `mean=3.07`、`min=2.22`；`16GiB` 上限约 `mean=3.69`、`min=2.60`；`25.5GiB` 上限约 `mean=4.24`、`min=3.03`。这些 payload 已经会挤压 gate cache/VRAM，且仍不到 generalized `5 tok/s`。
 - `decision`: reject grouped up/down staging as a direct route before source change. 它只改变 staging/scheduling，不减少 expert payload，也不能在 gate-cache-safe VRAM budget 内覆盖足够 generalized fallback；任何真实实现开销都会低于 zero-overhead 上限。
 - `next_allowed_work`: 不写 grouped staging runtime patch。后续必须转向能减少 payload/改变数据流的路线：例如有 top1 proof 的表示压缩/非 native representation、能完全消除 up/down bytes 的 graph/dataflow 证明，或者先解决 4Expert correctness 后再重新评估 smaller representation。继续保持 held-out set 未使用，直到 candidate freeze。
+
+## 2026-07-07 执行记录：4Expert correctness follow-up rejected
+
+- `attempt_id`: `20260707-4expert-correctness-followup-reject`
+- `status`: `rejected_not_sota_correctness_still_fails`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-correctness-followup-reject-20260707.json`
+- `prompt_scope`: 只使用 France smoke；未使用 calibration prompt 调参，未使用 `held_out_test_set_v1_locked`。
+- `purpose`: 在 `LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1` 修复空输出后，做低成本 follow-up，判断 4Expert 是否只是模板/漏 tensor 问题。
+- `uncreated_check`: `/root/lfz/runs/vendor-ds4-16gb/20260706T164826Z-20260707-4expert-token-type-uncreated-dump-n1/france-4expert-ttype-uncreated-n1-cpu40-vram0gb`，启用 `LLAMA_DUMP_UNCREATED_TENSORS=1` 后没有出现 uncreated/unused tensor dump；`memory_peak_bytes=16000000000`、`ram_ok=true`。
+- `template_check_deepseek`: `/root/lfz/runs/vendor-ds4-16gb/20260706T165001Z-20260707-4expert-ttype0normal-deepseek-template-france-n128/france-4expert-deepseek-template-n128-cpu40-vram0gb`，`eval_tok_s=1.7`、`TTFT=32685.844057 ms`、`ram_ok=true`、`correctness_ok=false`，输出 malformed `deep2` version-map 风格文本，缺少 France/Europe/context。
+- `template_check_deepseek3`: 之前的 `/root/lfz/runs/vendor-ds4-16gb/20260706T163647Z-20260707-4expert-ttype0normal-deepseek3-template-france-n128/france-4expert-deepseek3-template-n128-cpu40-vram0gb`，同样 `correctness_ok=false`，输出 timestamp/Chat 噪声。
+- `decision`: 4Expert 不是短期 token-rate 候选。tokenizer attr 层已修复空输出，但 default/deepseek/deepseek3 模板都无法通过 France correctness，且没有明显未消费 tensor；剩余问题更可能是 tensor alias / numerical / route compatibility，需要单独的 layer-output parity 计划。除非 France correctness 先过，否则不要对 4Expert 做性能 benchmark 或 generalized SOTA claim。
+- `next_allowed_work`: 回到 native generalized path；若未来重开 4Expert，先写 dedicated numerical parity plan，而不是继续试模板或 token-rate 参数。

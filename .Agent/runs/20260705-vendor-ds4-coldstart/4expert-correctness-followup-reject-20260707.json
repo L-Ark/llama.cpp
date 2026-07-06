@@ -1,0 +1,78 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/4expert-correctness-followup-reject-20260707.json",
+  "date": "2026-07-07",
+  "decision": {
+    "continue_4expert_now": false,
+    "next_allowed_work": "Return to native generalized path or only reopen 4Expert with a dedicated numerical parity plan comparing layer outputs/routes against a known-good implementation; do not performance-benchmark it as a candidate until France correctness passes.",
+    "reason": "After token_type fix, 4Expert can emit visible tokens but still fails correctness across default/deepseek/deepseek3 template probes, with no obvious uncreated tensor. Remaining issue likely requires deeper tensor alias/numerical/route compatibility work and is not a short path to generalized >5 tok/s.",
+    "sota_changed": false
+  },
+  "prompt_scope": "France smoke only; no calibration tuning; held_out_test_set_v1_locked not used",
+  "purpose": "Close low-cost 4Expert follow-up after token_type empty-output fix: check for remaining uncreated tensors and template mismatch before considering it a payload-reducing representation route.",
+  "runs": {
+    "deepseek3_template_n128": {
+      "answer": "2bChat\n[2025-03-18T14:30:00.000Z] 2025-03-18 14:30:00.000Z\n[2025-03-18T14:30:00.000Z] 2025-03-18T14:30:00.000Z\n[2025-03-18T14:30:00.000Z] 2025-10-10T14:00:00:00:00:30:00:00:00:30:00.000Z\n[2025-00:",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T163647Z-20260707-4expert-ttype0normal-deepseek3-template-france-n128/france-4expert-deepseek3-template-n128-cpu40-vram0gb",
+      "correctness_ok": false,
+      "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+      "eval_tok_s": 1.6,
+      "memory_file_bytes": 15009763328,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.8,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 35921.23686
+    },
+    "deepseek_template_n128": {
+      "answer": "2-latest\": \"deep2:2.1-latest\",\n    \"deep2:2.1-ultralight\": \"deep2:2.1-ultralight\",\n    \"deep2:2.1-ultralight\": \"deep2:2.1-ultralight\",\n    \"deep2:2.1.0\": \"deep2:2.1.0\",\n    \"deep2:2.1.0\": \"deep2:2.2-live\":     \"deep2.1\":        \"   \": \"   \",\n    \"deep2\":     \"",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T165001Z-20260707-4expert-ttype0normal-deepseek-template-france-n128/france-4expert-deepseek-template-n128-cpu40-vram0gb",
+      "correctness_ok": false,
+      "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+      "eval_tok_s": 1.7,
+      "memory_file_bytes": 15030673408,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.9,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 32685.844057
+    },
+    "default_cli_n192": {
+      "answer": "assistant\n```\n\n### Output:\n```\nFrance, officially known as the French Republic, is a country located in Western Europe. It is known for its rich history, diverse culture, and iconic landmarks such as the Eiff Tower, the Louvre Museum, and the Palace of Versailles. The country is also famous for its cuisine, including the\",\n```\n\n## Assistant\n# \n# \n# \n# France, the\n<!--\n```\n\n## France\n```\n```\n\n## France\n```\n```\n\nFrance is a country in Europe, the\n```\n\n```\n<!-- \n    \n    \n    \n    \n```\n\n## \n##\n##\n### \n##\n## \n## \n## \n## \n```\n\n## \n##, Europe,##,## France Museum,###```<```#```<```<```<```<```<```<```<```<```<`````<```#<```#<```#<```#```<```<",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T163339Z-20260707-4expert-token-type-zero-normal-cli-france-n192/france-4expert-ttype0normal-cli-cpu40-vram0gb",
+      "correctness_ok": false,
+      "correctness_reason": "degenerate_text,truncated_or_corrupt_landmark",
+      "eval_tok_s": 2.0,
+      "memory_file_bytes": 14923116544,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 1.4,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 42943.682616
+    },
+    "uncreated_n1": {
+      "answer": "",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T164826Z-20260707-4expert-token-type-uncreated-dump-n1/france-4expert-ttype-uncreated-n1-cpu40-vram0gb",
+      "correctness_ok": false,
+      "correctness_reason": "too_short,missing_france,missing_europe,missing_expected_context",
+      "eval_tok_s": 1000000.0,
+      "memory_file_bytes": 15101677568,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 1.5,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": null
+    }
+  },
+  "source_commit": "796970b03 plus working tree default-off 4Expert token_type fix already pushed in 5db3a6aa1",
+  "status": "rejected_not_sota_correctness_still_fails",
+  "template_observation": {
+    "deepseek3_template": "fails with timestamp/Chat noise, missing France semantics",
+    "deepseek_template": "fails with malformed deep2/version-map style output, missing France semantics",
+    "default_cli": "starts with some France content but degenerates into markdown/code-fence noise and truncated Eiff Tower string"
+  },
+  "uncreated_tensor_observation": {
+    "interpretation": "No uncreated/unused tensor dump appeared under LLAMA_DUMP_UNCREATED_TENSORS=1, so remaining correctness failure is not explained by an obvious unconsumed tensor after current aliases.",
+    "matching_log_lines": [],
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260706T164826Z-20260707-4expert-token-type-uncreated-dump-n1/france-4expert-ttype-uncreated-n1-cpu40-vram0gb"
+  }
+}
