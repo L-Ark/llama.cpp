@@ -29,6 +29,15 @@ Decision:
 - This does not change SOTA. No correctness output or token-rate benchmark has been run for this candidate because the full model is not on disk.
 - The earlier first-shard metadata projection above `10 tok/s` remains only a screening signal. It is likely optimistic because shard 1 contains only partial tensor coverage; full-shard load, correctness, TTFT, and strict 16GB cold benchmark are mandatory.
 
+Additional complete-candidate group screen:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/complete-gguf-group-screen-20260706.json`
+- Method: regroup broad HF GGUF candidates by complete split group or single file, merge the current `lovedheart` 23-shard manifest, and reject dense/sidecar candidates with zero expert tensors. No full model downloads.
+- Result: `7` complete non-sidecar DeepSeek4 groups. Only `2` have metadata screen `>=10 tok/s`: `lovedheart` Q2_K (`93.552770 GiB`, screen `23.0 tok/s`) and `setar007` Q8xQ5 (`184.743598 GiB`, screen `23.0 tok/s`). Both are disk-gated and still require correctness plus strict cold benchmark.
+- Smallest complete non-sidecar DeepSeek4 group is the `antirez` hybrid at `90.889398 GiB`, but its metadata screen is only `7.423 tok/s`, so it is empirical-only and not the next `10 tok/s` route.
+- `shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs/dense/model-dense.gguf` is explicitly rejected as a direct benchmark candidate: it is `8.165128 GiB` but has `expert_tensor_count=0`, so it is dense/sidecar-only rather than a complete vendor-loadable DeepSeek4 model.
+- There is no currently identified complete non-sidecar DeepSeek4 GGUF candidate smaller than about `90 GiB` that can be used as a direct vendor model benchmark.
+
 Updated next executable plan:
 
 1. Commit and push this manifest validation artifact plus this plan update to `ssd/vendor/deepseek-token-rate-16gb` immediately.

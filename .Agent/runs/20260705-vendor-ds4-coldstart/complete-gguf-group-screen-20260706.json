@@ -1,0 +1,1009 @@
+{
+  "accepted_sota_reference": {
+    "eval_tok_s": 4.4,
+    "ram_limit_bytes": 16000000000,
+    "ttft_gate_ms": 33617.688744
+  },
+  "counts": {
+    "all_groups": 177,
+    "complete_deepseek4_non_sidecar_groups": 7,
+    "complete_deepseek4_projected_ge_10_screen_only": 2
+  },
+  "created_at_utc": "2026-07-06T00:50:45.419998Z",
+  "decision": {
+    "best_next_candidate": "lovedheart/DeepSeek-V4-Flash-GGUF Q2_K split group",
+    "disk_gate": "/root available about 1.7 GiB; /dev/shm is RAM-backed and cannot be used for strict host-RAM target.",
+    "download_allowed_now": false,
+    "reason": "No available non-RAM filesystem has enough free space; complete projected candidates require >=100 GiB or much more and still need correctness plus strict cold benchmark.",
+    "sota_changed": false
+  },
+  "explicit_rejections": [
+    {
+      "complete": true,
+      "decision": "not_full_model_dense_or_sidecar_no_expert_tensors",
+      "expected_count": 1,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "dense/model-dense.gguf",
+          "size": 8767239936,
+          "size_gib": 8.165128
+        }
+      ],
+      "first_file": "dense/model-dense.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 0,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 58,
+      "first_header_n_tensors": 1199,
+      "first_header_projection_approx": null,
+      "first_header_projection_is_screen_only": false,
+      "kind": "single",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "dense/model-dense",
+      "present_count": 1,
+      "repo": "shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs",
+      "total_size_bytes": 8767239936,
+      "total_size_gib": 8.165128
+    }
+  ],
+  "method": "Group GGUF siblings by split prefix/count or single file, require complete split group, merge current lovedheart Q2_K manifest, and reject dense/sidecar candidates with zero expert tensors. No full model downloads.",
+  "schema": "vendor-ds4-complete-gguf-group-screen-v2",
+  "smallest_complete_deepseek4_non_sidecar_groups": [
+    {
+      "complete": true,
+      "decision": "complete_candidate_below_10_or_needs_empirical_only",
+      "expected_count": 1,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed.gguf",
+          "size": 97591747456,
+          "size_gib": 90.889398
+        }
+      ],
+      "first_file": "DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 129,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 62,
+      "first_header_n_tensors": 1328,
+      "first_header_projection_approx": 7.423223622714167,
+      "first_header_projection_is_screen_only": false,
+      "kind": "single",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed",
+      "present_count": 1,
+      "repo": "antirez/deepseek-v4-gguf",
+      "total_size_bytes": 97591747456,
+      "total_size_gib": 90.889398
+    },
+    {
+      "complete": true,
+      "decision": "complete_candidate_pending_disk_correctness_benchmark_projection_screen_only",
+      "expected_count": 23,
+      "files": [
+        {
+          "blob_id": "8d60ab615519d81763dbf01319693711c70f4fe0",
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+          "size": 4422407072,
+          "size_gib": 4.118688
+        },
+        {
+          "blob_id": "f079e097fe853fc741bfc797e42254ca1b8a0cf2",
+          "index": 2,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00002-of-00023.gguf",
+          "size": 4479736224,
+          "size_gib": 4.172079
+        },
+        {
+          "blob_id": "51b7ed9da3dbdbf1f00edcc2c3c725e800cec1e8",
+          "index": 3,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00003-of-00023.gguf",
+          "size": 4473531744,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "3fa43da437b1f0e338f9ad54ae0d51ec3541dcdf",
+          "index": 4,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00004-of-00023.gguf",
+          "size": 4473531744,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "5dbb1906b1d73fb7f3494c8daf1adb4cd1c55fa0",
+          "index": 5,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00005-of-00023.gguf",
+          "size": 4473531744,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "c5b26202d51fe39bb942740b3669013b66a32c84",
+          "index": 6,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00006-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "69a524cc4987615516723c10c39676a8604b8d3e",
+          "index": 7,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00007-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "dc3e17888fe9fe4b042efc1fd190c97aadd3b4e6",
+          "index": 8,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00008-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "b82877a648430bb85fa8b00abbd1e8748044ce8f",
+          "index": 9,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00009-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "b1c3c287f49f71e373d9c89456a9a70a49237cce",
+          "index": 10,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00010-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "c91563dff072b43308a3ca8d215dc8989f991700",
+          "index": 11,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00011-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "14d0b3a9d7dfb5ad4f09b041b87cd8508d5af658",
+          "index": 12,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00012-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "4d22f162a47f4be76e578368a6d663e3416a76cb",
+          "index": 13,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00013-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "157eda403009e423ec5f79ace90bbacf93a3ebb4",
+          "index": 14,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00014-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "211b5a281fefd3b1c6b1edae32ef5a689fe94870",
+          "index": 15,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00015-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "b892c9a5f2cf571a9c7ddd89a8558a2af9996d9c",
+          "index": 16,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00016-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "5995029bb965268d98c310cb57d0206e4cc4b69f",
+          "index": 17,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00017-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "99a116aeec8296b28a377c64ed1a92844db16756",
+          "index": 18,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00018-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "e88ec336b73439e09d3d6d0e93bca1a6359529f4",
+          "index": 19,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00019-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "119a3a70ed1dbb445d22e4b5cb0fa26a3b5895e1",
+          "index": 20,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00020-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "b98dab49a85885ea40b0e9f0fe4321b61828ecaf",
+          "index": 21,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00021-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "796d4623efd4ec95d664507fc2ac14f9b71782c2",
+          "index": 22,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00022-of-00023.gguf",
+          "size": 4104744384,
+          "size_gib": 3.822841
+        },
+        {
+          "blob_id": "03754f02a13da56991833a8187a11107c4af9ba1",
+          "index": 23,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00023-of-00023.gguf",
+          "size": 2447529952,
+          "size_gib": 2.27944
+        }
+      ],
+      "first_file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 3,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 54,
+      "first_header_n_tensors": 39,
+      "first_header_projection_approx": 23.0,
+      "first_header_projection_is_screen_only": true,
+      "kind": "split",
+      "missing_indices": [],
+      "override_source": ".Agent/runs/20260705-vendor-ds4-coldstart/lovedheart-q2k-manifest-validation-20260706.json",
+      "prefix": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf",
+      "present_count": 23,
+      "repo": "lovedheart/DeepSeek-V4-Flash-GGUF",
+      "total_size_bytes": 100451521792,
+      "total_size_gib": 93.55277
+    },
+    {
+      "complete": true,
+      "decision": "complete_but_disk_heavy",
+      "expected_count": 1,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "ds4flash-4expert.gguf",
+          "size": 164465760544,
+          "size_gib": 153.170676
+        }
+      ],
+      "first_file": "ds4flash-4expert.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 129,
+      "first_header_expert_used_count": 4,
+      "first_header_n_kv": 48,
+      "first_header_n_tensors": 1328,
+      "first_header_projection_approx": 4.814644704513025,
+      "first_header_projection_is_screen_only": false,
+      "kind": "single",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "ds4flash-4expert",
+      "present_count": 1,
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "total_size_bytes": 164465760544,
+      "total_size_gib": 153.170676
+    },
+    {
+      "complete": true,
+      "decision": "complete_but_disk_heavy",
+      "expected_count": 1,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Base-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out.gguf",
+          "size": 164633497248,
+          "size_gib": 153.326893
+        }
+      ],
+      "first_file": "DeepSeek-V4-Flash-Base-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 129,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 57,
+      "first_header_n_tensors": 1328,
+      "first_header_projection_approx": 4.814644704513025,
+      "first_header_projection_is_screen_only": false,
+      "kind": "single",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "DeepSeek-V4-Flash-Base-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out",
+      "present_count": 1,
+      "repo": "teto3/DeepSeek-V4-Flash-Base-Q4KExperts",
+      "total_size_bytes": 164633497248,
+      "total_size_gib": 153.326893
+    },
+    {
+      "complete": true,
+      "decision": "complete_but_disk_heavy",
+      "expected_count": 1,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf",
+          "size": 164633502304,
+          "size_gib": 153.326897
+        }
+      ],
+      "first_file": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 129,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 58,
+      "first_header_n_tensors": 1328,
+      "first_header_projection_approx": 4.814644704513025,
+      "first_header_projection_is_screen_only": false,
+      "kind": "single",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2",
+      "present_count": 1,
+      "repo": "antirez/deepseek-v4-gguf",
+      "total_size_bytes": 164633502304,
+      "total_size_gib": 153.326897
+    },
+    {
+      "complete": true,
+      "decision": "complete_but_disk_heavy",
+      "expected_count": 1,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf",
+          "size": 164633502592,
+          "size_gib": 153.326898
+        }
+      ],
+      "first_file": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 129,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 62,
+      "first_header_n_tensors": 1328,
+      "first_header_projection_approx": 4.814644704513025,
+      "first_header_projection_is_screen_only": false,
+      "kind": "single",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix",
+      "present_count": 1,
+      "repo": "antirez/deepseek-v4-gguf",
+      "total_size_bytes": 164633502592,
+      "total_size_gib": 153.326898
+    },
+    {
+      "complete": true,
+      "decision": "complete_but_disk_heavy",
+      "expected_count": 11,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00001-of-00011.gguf",
+          "size": 17977152768,
+          "size_gib": 16.742528
+        },
+        {
+          "blob_id": null,
+          "index": 2,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00002-of-00011.gguf",
+          "size": 18348279264,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 3,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00003-of-00011.gguf",
+          "size": 18348279328,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 4,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00004-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 5,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00005-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 6,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00006-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 7,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00007-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 8,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00008-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 9,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00009-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 10,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00010-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 11,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00011-of-00011.gguf",
+          "size": 15255260256,
+          "size_gib": 14.207568
+        }
+      ],
+      "first_file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00001-of-00011.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 11,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 60,
+      "first_header_n_tensors": 108,
+      "first_header_projection_approx": 23.0,
+      "first_header_projection_is_screen_only": true,
+      "kind": "split",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf",
+      "present_count": 11,
+      "repo": "setar007/DeepSeek-V4-Flash-Q8xQ5-GGUF",
+      "total_size_bytes": 198366927360,
+      "total_size_gib": 184.743598
+    }
+  ],
+  "source_artifacts": [
+    ".Agent/runs/20260705-vendor-ds4-coldstart/broader-external-header-refresh-20260706.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/lovedheart-q2k-manifest-validation-20260706.json"
+  ],
+  "top_projected_complete_deepseek4_non_sidecar_groups": [
+    {
+      "complete": true,
+      "decision": "complete_but_disk_heavy",
+      "expected_count": 11,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00001-of-00011.gguf",
+          "size": 17977152768,
+          "size_gib": 16.742528
+        },
+        {
+          "blob_id": null,
+          "index": 2,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00002-of-00011.gguf",
+          "size": 18348279264,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 3,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00003-of-00011.gguf",
+          "size": 18348279328,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 4,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00004-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 5,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00005-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 6,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00006-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 7,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00007-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 8,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00008-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 9,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00009-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 10,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00010-of-00011.gguf",
+          "size": 18348279392,
+          "size_gib": 17.088167
+        },
+        {
+          "blob_id": null,
+          "index": 11,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00011-of-00011.gguf",
+          "size": 15255260256,
+          "size_gib": 14.207568
+        }
+      ],
+      "first_file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00001-of-00011.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 11,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 60,
+      "first_header_n_tensors": 108,
+      "first_header_projection_approx": 23.0,
+      "first_header_projection_is_screen_only": true,
+      "kind": "split",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf",
+      "present_count": 11,
+      "repo": "setar007/DeepSeek-V4-Flash-Q8xQ5-GGUF",
+      "total_size_bytes": 198366927360,
+      "total_size_gib": 184.743598
+    },
+    {
+      "complete": true,
+      "decision": "complete_candidate_pending_disk_correctness_benchmark_projection_screen_only",
+      "expected_count": 23,
+      "files": [
+        {
+          "blob_id": "8d60ab615519d81763dbf01319693711c70f4fe0",
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+          "size": 4422407072,
+          "size_gib": 4.118688
+        },
+        {
+          "blob_id": "f079e097fe853fc741bfc797e42254ca1b8a0cf2",
+          "index": 2,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00002-of-00023.gguf",
+          "size": 4479736224,
+          "size_gib": 4.172079
+        },
+        {
+          "blob_id": "51b7ed9da3dbdbf1f00edcc2c3c725e800cec1e8",
+          "index": 3,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00003-of-00023.gguf",
+          "size": 4473531744,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "3fa43da437b1f0e338f9ad54ae0d51ec3541dcdf",
+          "index": 4,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00004-of-00023.gguf",
+          "size": 4473531744,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "5dbb1906b1d73fb7f3494c8daf1adb4cd1c55fa0",
+          "index": 5,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00005-of-00023.gguf",
+          "size": 4473531744,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "c5b26202d51fe39bb942740b3669013b66a32c84",
+          "index": 6,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00006-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "69a524cc4987615516723c10c39676a8604b8d3e",
+          "index": 7,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00007-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "dc3e17888fe9fe4b042efc1fd190c97aadd3b4e6",
+          "index": 8,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00008-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "b82877a648430bb85fa8b00abbd1e8748044ce8f",
+          "index": 9,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00009-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "b1c3c287f49f71e373d9c89456a9a70a49237cce",
+          "index": 10,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00010-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "c91563dff072b43308a3ca8d215dc8989f991700",
+          "index": 11,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00011-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "14d0b3a9d7dfb5ad4f09b041b87cd8508d5af658",
+          "index": 12,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00012-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "4d22f162a47f4be76e578368a6d663e3416a76cb",
+          "index": 13,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00013-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "157eda403009e423ec5f79ace90bbacf93a3ebb4",
+          "index": 14,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00014-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "211b5a281fefd3b1c6b1edae32ef5a689fe94870",
+          "index": 15,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00015-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "b892c9a5f2cf571a9c7ddd89a8558a2af9996d9c",
+          "index": 16,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00016-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "5995029bb965268d98c310cb57d0206e4cc4b69f",
+          "index": 17,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00017-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "99a116aeec8296b28a377c64ed1a92844db16756",
+          "index": 18,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00018-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "e88ec336b73439e09d3d6d0e93bca1a6359529f4",
+          "index": 19,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00019-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "119a3a70ed1dbb445d22e4b5cb0fa26a3b5895e1",
+          "index": 20,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00020-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "b98dab49a85885ea40b0e9f0fe4321b61828ecaf",
+          "index": 21,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00021-of-00023.gguf",
+          "size": 4473531808,
+          "size_gib": 4.166301
+        },
+        {
+          "blob_id": "796d4623efd4ec95d664507fc2ac14f9b71782c2",
+          "index": 22,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00022-of-00023.gguf",
+          "size": 4104744384,
+          "size_gib": 3.822841
+        },
+        {
+          "blob_id": "03754f02a13da56991833a8187a11107c4af9ba1",
+          "index": 23,
+          "lfs_oid": null,
+          "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00023-of-00023.gguf",
+          "size": 2447529952,
+          "size_gib": 2.27944
+        }
+      ],
+      "first_file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 3,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 54,
+      "first_header_n_tensors": 39,
+      "first_header_projection_approx": 23.0,
+      "first_header_projection_is_screen_only": true,
+      "kind": "split",
+      "missing_indices": [],
+      "override_source": ".Agent/runs/20260705-vendor-ds4-coldstart/lovedheart-q2k-manifest-validation-20260706.json",
+      "prefix": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf",
+      "present_count": 23,
+      "repo": "lovedheart/DeepSeek-V4-Flash-GGUF",
+      "total_size_bytes": 100451521792,
+      "total_size_gib": 93.55277
+    },
+    {
+      "complete": true,
+      "decision": "complete_candidate_below_10_or_needs_empirical_only",
+      "expected_count": 1,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed.gguf",
+          "size": 97591747456,
+          "size_gib": 90.889398
+        }
+      ],
+      "first_file": "DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 129,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 62,
+      "first_header_n_tensors": 1328,
+      "first_header_projection_approx": 7.423223622714167,
+      "first_header_projection_is_screen_only": false,
+      "kind": "single",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed",
+      "present_count": 1,
+      "repo": "antirez/deepseek-v4-gguf",
+      "total_size_bytes": 97591747456,
+      "total_size_gib": 90.889398
+    },
+    {
+      "complete": true,
+      "decision": "complete_but_disk_heavy",
+      "expected_count": 1,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "ds4flash-4expert.gguf",
+          "size": 164465760544,
+          "size_gib": 153.170676
+        }
+      ],
+      "first_file": "ds4flash-4expert.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 129,
+      "first_header_expert_used_count": 4,
+      "first_header_n_kv": 48,
+      "first_header_n_tensors": 1328,
+      "first_header_projection_approx": 4.814644704513025,
+      "first_header_projection_is_screen_only": false,
+      "kind": "single",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "ds4flash-4expert",
+      "present_count": 1,
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "total_size_bytes": 164465760544,
+      "total_size_gib": 153.170676
+    },
+    {
+      "complete": true,
+      "decision": "complete_but_disk_heavy",
+      "expected_count": 1,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Base-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out.gguf",
+          "size": 164633497248,
+          "size_gib": 153.326893
+        }
+      ],
+      "first_file": "DeepSeek-V4-Flash-Base-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 129,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 57,
+      "first_header_n_tensors": 1328,
+      "first_header_projection_approx": 4.814644704513025,
+      "first_header_projection_is_screen_only": false,
+      "kind": "single",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "DeepSeek-V4-Flash-Base-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out",
+      "present_count": 1,
+      "repo": "teto3/DeepSeek-V4-Flash-Base-Q4KExperts",
+      "total_size_bytes": 164633497248,
+      "total_size_gib": 153.326893
+    },
+    {
+      "complete": true,
+      "decision": "complete_but_disk_heavy",
+      "expected_count": 1,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf",
+          "size": 164633502592,
+          "size_gib": 153.326898
+        }
+      ],
+      "first_file": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 129,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 62,
+      "first_header_n_tensors": 1328,
+      "first_header_projection_approx": 4.814644704513025,
+      "first_header_projection_is_screen_only": false,
+      "kind": "single",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix",
+      "present_count": 1,
+      "repo": "antirez/deepseek-v4-gguf",
+      "total_size_bytes": 164633502592,
+      "total_size_gib": 153.326898
+    },
+    {
+      "complete": true,
+      "decision": "complete_but_disk_heavy",
+      "expected_count": 1,
+      "files": [
+        {
+          "blob_id": null,
+          "index": 1,
+          "lfs_oid": null,
+          "rfilename": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf",
+          "size": 164633502304,
+          "size_gib": 153.326897
+        }
+      ],
+      "first_file": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf",
+      "first_header_architecture": "deepseek4",
+      "first_header_expert_tensor_count": 129,
+      "first_header_expert_used_count": 6,
+      "first_header_n_kv": 58,
+      "first_header_n_tensors": 1328,
+      "first_header_projection_approx": 4.814644704513025,
+      "first_header_projection_is_screen_only": false,
+      "kind": "single",
+      "missing_indices": [],
+      "override_source": null,
+      "prefix": "DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2",
+      "present_count": 1,
+      "repo": "antirez/deepseek-v4-gguf",
+      "total_size_bytes": 164633502304,
+      "total_size_gib": 153.326897
+    }
+  ]
+}
