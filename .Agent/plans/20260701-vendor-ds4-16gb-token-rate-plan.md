@@ -4843,3 +4843,13 @@
 - `exact_sidecar`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.partial_exact_payload.bin` + sidecar manifest；payload bytes `2506752`。strict 16GB/no-swap cgroup 内 top1 `same_top1=145/145`，partial compare `compare_ran=3786`，`diff_count=0`，`max_abs=0`，`memory_peak_bytes=1001168896`。
 - `zero_sidecar_reject`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.zero_payload.bin` + sidecar manifest；top1 仍 `145/145` 因为 compare-only 不写回，但 partial compare `diff_count=67936`，`max_abs=5.71276379`，因此该 payload 明确 rejected，不能 writeback 或 benchmark。
 - `decision`: sidecar exact 证明 payload 文件与 `compressed_offset` 路径正确；zero payload 证明 compare gate 能发现错误表示。下一步必须针对具体 compressed/approx format 设计 decode/compute kernel，并先通过 compare/top1，再谈性能。
+
+## 2026-07-07 下一步 source-edit plan：q2 ternary partial compressed candidate
+
+- `attempt_id`: `20260707-q2ternary-partial-compressed-candidate`
+- `status`: `planned_before_source_edit`
+- `why_now`: sidecar payload gate 已证明 exact sidecar 能 `diff_count=0`，zero sidecar 会被 compare gate 拒绝。下一步需要测试一个真实压缩 payload，而不是 same-size corrupted payload。由于 `block_mxfp4` 是 `1 byte e + 16 packed nibbles`，每 32 weights 共 `17 bytes`，任何进一步压缩都必须有新的 decode/compute kernel。
+- `candidate_format`: `mxfp4_q2tern_partial`，每个原 MXFP4 block 保留 `e`，把 32 个 4-bit value 压成 32 个 2-bit ternary codes（`0 -> 0`，positive -> `+4`，negative -> `-4`，第 4 个 code reserved），payload 从 `17 bytes/block` 降到 `9 bytes/block`，约 `1.89x` 压缩。该压缩比还不足 4x/8x，只作为 first correctness probe，不是最终性能路线。
+- `source_scope`: default-off，只支持 partial row-range sidecar manifest；不写回 logits，不清空 CPU fallback counts。复用 `GGML_MOE_STREAM_ONE_DIRECT_REPR_PAYLOAD` 和 `GGML_MOE_STREAM_Q80_PARTIAL_REPR_PROBE_OUT`，新增/识别 `repr_type=mxfp4_q2tern_partial`。
+- `math/correctness_expectation`: q2 ternary 会丢失 magnitude 信息，预期局部 `diff_count>0`，很可能 rejected。若 rejected，则证明 naive 2-bit ternary 不可作为 up/down replacement；下一步应转向更高精度或结构性方案，而不是硬跑 token-rate。
+- `validation_gate`: strict 16GB/no-swap fixed France verifier；top1 应保持 `145/145` 因为 compare-only 不写回；partial compressed compare 必须记录 `compare_ran`、`diff_count`、`max_abs`。如果 `diff_count>0`，标记 rejected，不允许 writeback/benchmark。
