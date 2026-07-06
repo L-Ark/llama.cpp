@@ -1,0 +1,56 @@
+{
+  "generated_at": "2026-07-07T02:30:28+0800",
+  "kind": "kimi_hot_upgate_quant_reencode_sample",
+  "samples": [
+    {
+      "count": 263,
+      "expert_bytes": 5619712,
+      "expert_idx": 27,
+      "tensor": "blk.41.ffn_gate_exps.weight"
+    },
+    {
+      "count": 263,
+      "expert_bytes": 4702208,
+      "expert_idx": 27,
+      "tensor": "blk.41.ffn_up_exps.weight"
+    },
+    {
+      "count": 228,
+      "expert_bytes": 4702208,
+      "expert_idx": 270,
+      "tensor": "blk.13.ffn_gate_exps.weight"
+    },
+    {
+      "count": 228,
+      "expert_bytes": 4702208,
+      "expert_idx": 270,
+      "tensor": "blk.13.ffn_up_exps.weight"
+    },
+    {
+      "count": 220,
+      "expert_bytes": 4702208,
+      "expert_idx": 280,
+      "tensor": "blk.27.ffn_gate_exps.weight"
+    },
+    {
+      "count": 220,
+      "expert_bytes": 4702208,
+      "expert_idx": 280,
+      "tensor": "blk.27.ffn_up_exps.weight"
+    },
+    {
+      "count": 218,
+      "expert_bytes": 5619712,
+      "expert_idx": 179,
+      "tensor": "blk.41.ffn_gate_exps.weight"
+    },
+    {
+      "count": 218,
+      "expert_bytes": 4702208,
+      "expert_idx": 179,
+      "tensor": "blk.41.ffn_up_exps.weight"
+    }
+  ],
+  "selection": "top dev route-profile up/gate experts, max 2 per tensor, no held-out prompts",
+  "source_runs_root": "/Users/spark/llama.cpp-vendor-kimi/.Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct"
+}

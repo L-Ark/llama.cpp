@@ -90544,3 +90544,117 @@ Updated next direction:
   3. compute expected moved-byte ratio including any GPU-side decode overhead;
   4. only if the offline error and byte ratio pass, build a default-off runtime
      path and validate on dev n32/n96 before held-out test.
+
+## GP11: hot up/gate lower-byte re-encoding error screen
+
+Timestamp: `2026-07-07T02:31:00+0800`.
+
+Status: planned offline experiment before runtime changes.
+
+Rationale:
+
+- GP10 shows the target requires about `0.39-0.55x` moved bytes even at an
+  optimistic `10.4 GiB/s`.
+- Up+gate account for about `78.5%` of estimated dev miss bytes, so the first
+  byte-reduction screen must target up/gate, not down-only.
+- Current up/gate tensors are already low-bit (`IQ2_S`/`IQ3_XXS` in many hot
+  layers). Any further reduction is high risk and must be screened for error
+  before runtime work.
+
+Offline experiment:
+
+- Create a dev-only hot expert sample from current GP4 dev route profiles:
+  - only `ffn_up_exps` and `ffn_gate_exps`;
+  - rank by route count across dev prompts;
+  - keep a small sample across hot tensors/layers to bound runtime cost.
+- Add a default-off tool:
+  `.Agent/run-tools/kimi_quant_reencode_bound.py`.
+- For each selected `(tensor, expert_idx)`:
+  - read exact current GGUF expert bytes;
+  - dequantize through this checkout's `libggml-base.so`;
+  - test simple symmetric blockwise re-encoding at `1/2/3/4` bits;
+  - report theoretical bytes, ratio versus current expert bytes, relative L2
+    error, relative max error, and finite checks.
+
+Hard gate for runtime implementation:
+
+- Do not implement a runtime re-encoded expert pack unless a candidate reaches:
+  - byte ratio at or below `0.55x` for the hot up/gate sample;
+  - mean relative L2 error low enough to be plausibly quality-preserving
+    (`<=0.03` as an initial screen);
+  - no NaN/Inf output;
+  - a GPU decode path whose estimated overhead is below the saved movement
+    time.
+- If the only candidates near `0.5x` have high error, reject naive lower-bit
+  re-encoding and move to more structured methods or accept that reaching
+  `5 tok/s` likely needs a model/pack prepared specifically for this runtime.
+
+Reproducibility:
+
+- Record sample JSON, exact command, server repo commit, model path, result
+  report, and decision.
+
+GP11 result, `2026-07-07T02:33:00+0800`:
+
+- Server repo:
+  - `/root/lfz/llama.cpp-vendor-kimi-gp2-6b5c`;
+  - commit `0a6021c27`;
+  - branch `vendor/kimi-general-prompt-token-rate-16gb`.
+- Sample:
+  - `.Agent/runs/20260707-gp11-quant-reencode-bound/hot-upgate-sample.json`;
+  - generated from GP4 dev route profiles only;
+  - 8 hot up/gate `(tensor, expert_idx)` pairs;
+  - no held-out prompt was used.
+- Command:
+
+```bash
+.Agent/run-tools/kimi_quant_reencode_bound.py \
+  --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv \
+  --sample-json .Agent/runs/20260707-gp11-quant-reencode-bound/hot-upgate-sample.json \
+  --libggml-base build-cuda-batch/bin/libggml-base.so \
+  --out-json .Agent/runs/20260707-gp11-quant-reencode-bound/report.json \
+  --out-md .Agent/runs/20260707-gp11-quant-reencode-bound/report.md \
+  --bits 1,2,3,4 \
+  --blocks 64,128,256 \
+  --torch-threads 8
+```
+
+- Output:
+  - `.Agent/runs/20260707-gp11-quant-reencode-bound/report.md`;
+  - `.Agent/runs/20260707-gp11-quant-reencode-bound/report.json`.
+- Result:
+  - Best candidates at `<=0.55x` byte ratio are all 1-bit blockwise
+    re-encodings.
+  - Their relative L2 error is extremely high:
+    - mean best `1.7986`;
+    - min `1.7774`;
+    - max `1.8616`.
+  - At `<=0.50x`, the same 1-bit candidates remain the only options.
+  - At `<=0.40x`, only two IQ3_XXS gate samples qualify, with even worse
+    relative L2 error around `2.073`.
+  - 2-bit candidates have lower but still unacceptable error
+    (`~0.69-0.79` relative L2) and byte ratios around `0.67-0.88`, so they do
+    not meet the GP10 byte target for most hot up/gate tensors.
+  - 3-bit and 4-bit candidates are larger than the current packed experts for
+    most IQ2_S/IQ3_XXS up/gate tensors and therefore cannot improve movement.
+- Decision:
+  - reject naive lower-bit blockwise re-encoding for hot up/gate experts;
+  - it fails the `<=0.03` relative L2 screen by nearly two orders of magnitude;
+  - it cannot be promoted to runtime implementation.
+
+Updated next direction:
+
+- The remaining plausible paths are no longer simple runtime/cache/predictor
+  changes or naive lower-bit repacking.
+- To approach `5 tok/s`, one of the following stronger changes is required:
+  1. a model-side or pack-side representation prepared with quantization-aware
+     calibration/training, especially for up/gate;
+  2. a mathematically structured approximation that demonstrates low error on
+     hot up/gate samples before runtime work;
+  3. a hardware/data path change that raises sustained decode movement close to
+     the pure IO bench while still reducing bytes materially;
+  4. a larger VRAM configuration or a smaller/lower-byte Kimi variant.
+- Next local step should be a short decision document comparing these remaining
+  options against the 16GB RAM + 32GB VRAM constraint, because the exhausted
+  implementation probes are now consistently below the required byte/time
+  delta.
