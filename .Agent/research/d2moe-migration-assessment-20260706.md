@@ -236,6 +236,34 @@ Initial result:
 - This is only a payload/input-selection bound. It does not yet dequantize
   tensors or prove residual quality.
 
+Dequantization smoke result:
+
+- Tool: `.Agent/run-tools/kimi_d2moe_dequant_sample.py`
+- Artifact: `.Agent/runs/20260706-kimi-d2moe-phase0/dequant-sample-summary.json`
+- Human summary: `.Agent/runs/20260706-kimi-d2moe-phase0/dequant-sample-summary.md`
+- Server command:
+
+```bash
+python3 .Agent/run-tools/kimi_d2moe_dequant_sample.py --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --phase0-plan .Agent/runs/20260706-kimi-d2moe-phase0/phase0-bound-input-plan.json --libggml-base build-cuda-batch/bin/libggml-base.so --out-json .Agent/runs/20260706-kimi-d2moe-phase0/dequant-sample-summary.json --out-md .Agent/runs/20260706-kimi-d2moe-phase0/dequant-sample-summary.md --max-per-type 1
+```
+
+Observed sample coverage:
+
+- `Q3_K`: `blk.1.ffn_down_exps.weight`, expert `116`, finite ratio `1.0`.
+- `IQ2_S`: `blk.1.ffn_gate_exps.weight`, expert `116`, finite ratio `1.0`.
+- `Q4_0`: `blk.15.ffn_down_exps.weight`, expert `336`, finite ratio `1.0`.
+- `IQ4_XS`: `blk.26.ffn_down_exps.weight`, expert `293`, finite ratio `1.0`.
+- `IQ3_XXS`: `blk.29.ffn_gate_exps.weight`, expert `227`, finite ratio `1.0`.
+
+Conclusion:
+
+- The selected GGUF expert byte ranges can be addressed directly from the
+  inventory offsets and decoded through this checkout's `libggml-base.so`.
+- This removes the immediate quant-format blocker for real Phase 0 residual
+  SVD work.
+- It is still not a quality or token-rate claim; the next required step is
+  building a weighted base and residual-rank curve on decoded experts.
+
 1. Select a small but representative Kimi layer set:
    - at least one early sparse layer;
    - at least one middle high-traffic layer;
