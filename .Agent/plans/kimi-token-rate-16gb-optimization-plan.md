@@ -91906,3 +91906,82 @@ Decision:
   - route/expert prediction for IO queue-depth improvement without requiring
     high text acceptance;
   - more aggressive prompt-agnostic byte reduction than GP25 lower-byte hotsets.
+
+## GP27: route/expert demand predictability for IO queue-depth
+
+Timestamp: `2026-07-07T05:55:00+0800`.
+
+Status: planned; dev-only analysis before runtime changes.
+
+Branch: `vendor/kimi-speculative-general-token-rate-16gb`.
+
+Rationale:
+
+- GP26 rejected no-extra-model text lookup as a primary route because accepted
+  text-token runs are far too short.
+- The remaining prediction idea is not to skip Kimi compute, but to expose
+  future expert demand early enough to keep expert-pack IO/H2D queues deeper.
+- Current runtime IO is below standalone peak because exact expert demand is
+  dependency-limited by decode order. If near-future expert demand is
+  predictable, false-tolerant prefetch may increase sustained queue depth.
+
+Important measurement caveat:
+
+- Existing `route-trace.csv` files do not contain explicit token ids or a clean
+  token/layer matrix.
+- They record ordered expert demand / movement events. Some entries are absent
+  when already cached.
+- Therefore GP27 must not claim exact token-level router accuracy from these
+  traces. It can only estimate ordered-window demand predictability and byte
+  coverage.
+
+Design:
+
+- Use dev traces only:
+  `.Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/*/route-trace.csv`.
+- Split each trace into fixed-size event windows.
+- For each window `W_t`, predict `W_t` using the unique expert keys seen in one
+  or more previous windows.
+- Evaluate:
+  - byte coverage of actual next-window demand;
+  - event coverage;
+  - false-prefetch byte ratio;
+  - net byte multiplier if all predicted-missing keys were prefetched;
+  - prompt-by-prompt variability.
+- Sweep window sizes that approximate sub-token to multi-token demand chunks:
+  `256`, `512`, `1024`, `1536`, and `2048` events.
+- Sweep history depths: `1`, `2`, and `4` windows.
+
+Theoretical gate:
+
+- A route prefetch scheme can help only if:
+  - coverage is high enough to move a large fraction of current critical-path IO
+    off the wait path; and
+  - false-prefetch bytes are low enough that total expert bytes do not grow
+    enough to erase the queue-depth gain.
+- A candidate runtime prototype requires at least one dev setting with:
+  - byte coverage >= `0.60`;
+  - false-prefetch byte ratio <= `0.25`;
+  - net predicted/present byte multiplier <= `1.25`;
+  - no prompt with catastrophic coverage below `0.35`.
+- If no setting passes this gate, do not implement predictor prefetch runtime.
+
+Execution records:
+
+- Directory:
+  `.Agent/runs/20260707-gp27-route-predictability/`.
+- Required files:
+  - analyzer script;
+  - `window-predictability.json`;
+  - `window-predictability.csv`;
+  - `report.md`;
+  - main-plan result update.
+
+Acceptance:
+
+- This is not SOTA and does not require held-out test.
+- Commit and push reproducible analysis regardless of whether the route is
+  accepted or rejected.
+- Do not modify runtime prefetch behavior until this analysis shows a plausible
+  prompt-agnostic route to higher IO queue depth under the 16 GB RAM and TTFT
+  constraints.
