@@ -93441,3 +93441,19 @@ GP39 execution result:
   - full IQ1_S n32 smoke remains gated by disk capacity or explicit deletion
     approval;
   - no SOTA or token-rate claim is possible from this phase.
+- Default dry-run regression at `2026-07-07T06:03:16+0800`:
+  - commit tested on remote:
+    `2cae23c176d221c4c4f81d6681c16e7c6bd6fffc`;
+  - command:
+    `ssh -p 51056 root@92.180.27.82 'cd /root/lfz/tmp/vendor-kimi-speculative-gp33 && git fetch origin vendor/kimi-speculative-general-token-rate-16gb && git checkout vendor/kimi-speculative-general-token-rate-16gb && git reset --hard origin/vendor/kimi-speculative-general-token-rate-16gb && .Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh'`;
+  - exit code `0`;
+  - no deletion/download/smoke executed;
+  - five `part_size_ok` lines emitted;
+  - `part_total_ok bytes=204430872480`;
+  - `free_before=89641250816`;
+  - `space_ready=0`;
+  - `required=225905708960`;
+  - `missing=136264458144`;
+  - `smoke_ready=0`;
+  - default real IQ1_S preparation behavior is unchanged by the synthetic test
+    hook.
