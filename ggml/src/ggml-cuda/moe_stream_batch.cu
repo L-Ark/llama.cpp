@@ -1081,6 +1081,25 @@ struct batch_route_trace_entry {
     char tensor[128] = {};
 };
 
+struct batch_route_detail_entry {
+    uint64_t seq = 0;
+    uint64_t call = 0;
+    int layer = -1;
+    int active_index = -1;
+    int expert_idx = -1;
+    int dst_id = -1;
+    int flat_dst_id = -1;
+    int token_id = -1;
+    int n_active = 0;
+    int src0_type = -1;
+    int64_t ne01 = 0;
+    int64_t ne00 = 0;
+    size_t expert_bytes = 0;
+    char mode[12] = {};
+    char kind[12] = {};
+    char tensor[128] = {};
+};
+
 struct trace_prefetch_state {
     bool inited = false;
     bool enabled = false;
@@ -1171,13 +1190,18 @@ struct batch_ttft_trace_entry {
 
 static std::vector<batch_route_profile_entry> g_route_profile;
 static std::vector<batch_route_trace_entry> g_route_trace;
+static std::vector<batch_route_detail_entry> g_route_detail;
 static trace_prefetch_state g_trace_prefetch;
 static host_prefetch_state g_host_prefetch;
 static std::mutex g_route_profile_mu;
+static std::mutex g_route_detail_mu;
 static const char * g_route_profile_out = nullptr;
 static const char * g_route_trace_out = nullptr;
+static const char * g_route_detail_out = nullptr;
 static bool g_route_profile_inited = false;
+static std::atomic<bool> g_route_detail_inited{false};
 static uint64_t g_route_trace_seq = 0;
+static uint64_t g_route_detail_seq = 0;
 static std::vector<batch_ttft_trace_entry> g_ttft_trace;
 static std::mutex g_ttft_trace_mu;
 static const char * g_ttft_trace_out = nullptr;
@@ -1256,6 +1280,111 @@ static void batch_route_profile_init_once() {
         std::atexit(batch_route_profile_report_atexit);
     }
     g_route_profile_inited = true;
+}
+
+static void batch_route_detail_parse_name(const char *tensor_name, int &layer, char *kind, size_t kind_sz) {
+    layer = -1;
+    if (kind && kind_sz > 0) kind[0] = '\0';
+    if (!tensor_name) return;
+
+    const char *blk = std::strstr(tensor_name, "blk.");
+    if (blk) {
+        layer = std::atoi(blk + 4);
+    }
+    const char *parsed = "";
+    if (std::strstr(tensor_name, ".ffn_up_exps.")) {
+        parsed = "up";
+    } else if (std::strstr(tensor_name, ".ffn_gate_exps.")) {
+        parsed = "gate";
+    } else if (std::strstr(tensor_name, ".ffn_down_exps.")) {
+        parsed = "down";
+    }
+    if (kind && kind_sz > 0) {
+        std::snprintf(kind, kind_sz, "%s", parsed);
+    }
+}
+
+static void batch_route_detail_report_atexit() {
+    std::vector<batch_route_detail_entry> rows;
+    {
+        std::lock_guard<std::mutex> lk(g_route_detail_mu);
+        rows = g_route_detail;
+    }
+    if (!g_route_detail_out || !g_route_detail_out[0] || rows.empty()) return;
+
+    FILE *f = std::fopen(g_route_detail_out, "w");
+    if (!f) {
+        std::fprintf(stderr, "[moe_stream_batch] route detail: open failed: %s\n", g_route_detail_out);
+        return;
+    }
+    std::fprintf(f, "seq,call,mode,kind,tensor,layer,active_index,expert_idx,dst_id,flat_dst_id,token_id,n_active,expert_bytes,src0_type,ne01,ne00\n");
+    for (const batch_route_detail_entry &e : rows) {
+        std::fprintf(f, "%lu,%lu,%s,%s,%s,%d,%d,%d,%d,%d,%d,%d,%zu,%d,%ld,%ld\n",
+                     e.seq, e.call, e.mode, e.kind, e.tensor, e.layer,
+                     e.active_index, e.expert_idx, e.dst_id, e.flat_dst_id, e.token_id,
+                     e.n_active, e.expert_bytes, e.src0_type, (long)e.ne01, (long)e.ne00);
+    }
+    std::fclose(f);
+    std::fprintf(stderr, "[moe_stream_batch] route detail written: %s (%zu events)\n",
+                 g_route_detail_out, rows.size());
+}
+
+static bool batch_route_detail_enabled() {
+    if (g_route_detail_inited.load(std::memory_order_acquire)) {
+        return g_route_detail_out && g_route_detail_out[0];
+    }
+    std::lock_guard<std::mutex> lk(g_route_detail_mu);
+    if (g_route_detail_inited.load(std::memory_order_acquire)) {
+        return g_route_detail_out && g_route_detail_out[0];
+    }
+    g_route_detail_out = std::getenv("GGML_MOE_ROUTE_DETAIL_OUT");
+    if (g_route_detail_out && g_route_detail_out[0]) {
+        std::atexit(batch_route_detail_report_atexit);
+    }
+    g_route_detail_inited.store(true, std::memory_order_release);
+    return g_route_detail_out && g_route_detail_out[0];
+}
+
+static void batch_route_detail_record(
+        const char *mode,
+        uint64_t call,
+        const char *tensor_name,
+        int src0_type,
+        const int *active_experts,
+        const int32_t *dst_ids,
+        const int32_t *flat_dst_ids,
+        const int32_t *token_ids,
+        int n_active,
+        size_t expert_bytes,
+        int64_t ne01,
+        int64_t ne00) {
+    if (!batch_route_detail_enabled() || !tensor_name || !active_experts || !dst_ids || n_active <= 0) return;
+
+    int layer = -1;
+    char kind[12] = {};
+    batch_route_detail_parse_name(tensor_name, layer, kind, sizeof(kind));
+
+    std::lock_guard<std::mutex> lk(g_route_detail_mu);
+    for (int j = 0; j < n_active; ++j) {
+        batch_route_detail_entry e;
+        e.seq = ++g_route_detail_seq;
+        e.call = call;
+        e.layer = layer;
+        e.active_index = j;
+        e.expert_idx = active_experts[j];
+        e.dst_id = dst_ids[j];
+        e.flat_dst_id = flat_dst_ids ? flat_dst_ids[j] : dst_ids[j];
+        e.token_id = token_ids ? token_ids[j] : -1;
+        e.n_active = n_active;
+        e.src0_type = src0_type;
+        e.ne01 = ne01;
+        e.ne00 = ne00;
+        e.expert_bytes = expert_bytes;
+        std::snprintf(e.mode, sizeof(e.mode), "%s", mode ? mode : "");
+        std::snprintf(e.kind, sizeof(e.kind), "%s", kind);
+        std::snprintf(e.tensor, sizeof(e.tensor), "%s", tensor_name);
+        g_route_detail.push_back(e);
+    }
 }
 
 static int trace_prefetch_env_int(const char *name, int fallback, int lo, int hi) {
@@ -7110,6 +7239,35 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     ggml_cuda_moe_stream_register_tensor(src0_up_type_int, src0_up_name, src0_up_data, n_as, up_nb02, up_expert_bytes);
     ggml_cuda_moe_stream_register_tensor(src0_gate_type_int, src0_gate_name, src0_gate_data, n_as, gate_nb02, gate_expert_bytes);
 
+    static std::atomic<uint64_t> route_detail_up_gate_call{0};
+    const uint64_t route_detail_call = route_detail_up_gate_call.fetch_add(1, std::memory_order_relaxed);
+    batch_route_detail_record(
+        prompt_mode ? "prompt" : "decode",
+        route_detail_call,
+        src0_up_name,
+        src0_up_type_int,
+        active_experts,
+        dst_ids,
+        flat_dst_ids,
+        token_ids,
+        n_active,
+        up_expert_bytes,
+        ne01,
+        ne00);
+    batch_route_detail_record(
+        prompt_mode ? "prompt" : "decode",
+        route_detail_call,
+        src0_gate_name,
+        src0_gate_type_int,
+        active_experts,
+        dst_ids,
+        flat_dst_ids,
+        token_ids,
+        n_active,
+        gate_expert_bytes,
+        ne01,
+        ne00);
+
     static std::atomic<int> first_up_gate{0};
     if (first_up_gate.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream] batched up/gate %s path active: rows=%d ne01=%ld ne00=%ld\n",
@@ -8809,6 +8967,19 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         std::fprintf(stderr, "[moe_stream_batch] trace call=%d tensor=%s experts=%d ne01=%ld ne00=%ld\n",
                      batch_call, src0_name ? src0_name : "(null)", n_active, (long)ne01, (long)ne00);
     }
+    batch_route_detail_record(
+        "decode",
+        (uint64_t)batch_call,
+        src0_name,
+        src0_type_int,
+        active_experts,
+        dst_ids,
+        nullptr,
+        nullptr,
+        n_active,
+        (size_t)ne01 * nb01,
+        ne01,
+        ne00);
 
     std::lock_guard<std::mutex> lk(g_batch_mu);
     batch_ctx &bc = g_batch;

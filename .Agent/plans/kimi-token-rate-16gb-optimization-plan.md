@@ -92089,3 +92089,29 @@ Follow-up analysis gate:
   - false candidate byte ratio.
 - Only if that analysis passes a stricter gate should a runtime prefetcher be
   implemented.
+
+GP28 execution result:
+
+- Timestamp: `2026-07-07T06:15:00+0800`.
+- Report:
+  `.Agent/runs/20260707-gp28-route-detail-instrumentation/report.md`.
+- Code:
+  `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Added default-off env:
+  `GGML_MOE_ROUTE_DETAIL_OUT`.
+- Existing `GGML_MOE_ROUTE_TRACE_OUT` format remains unchanged.
+- New CSV fields:
+  `seq,call,mode,kind,tensor,layer,active_index,expert_idx,dst_id,flat_dst_id,token_id,n_active,expert_bytes,src0_type,ne01,ne00`.
+- up/gate path records token-aware route detail.
+- down path records call/layer/kind/expert detail with `token_id=-1`.
+- Remote clean-worktree build:
+  - worktree: `/root/lfz/tmp/gp28-route-detail-build-1783366765`;
+  - command: `cmake --build build-cuda-batch -t ggml-cuda -j2`;
+  - result: passed; `libggml-cuda.so` linked.
+
+Decision:
+
+- Instrumentation is accepted and can be pushed.
+- No token-rate SOTA is claimed.
+- Next step is a small dev cold-start route-detail trace and per-layer
+  same-token/next-token route stability analysis.
