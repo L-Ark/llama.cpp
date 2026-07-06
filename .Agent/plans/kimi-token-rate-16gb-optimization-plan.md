@@ -93263,3 +93263,30 @@ Validation:
    `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
 3. Confirm dry-run prints the resumable download command shape and still stops
    at the current disk gate.
+
+GP37 execution result:
+
+- Timestamp: `2026-07-07T11:25:00+0800`.
+- Commit tested on remote:
+  `2072a294c151fff1a5ae2da7014688b6b2d19ca0`.
+- Record:
+  `.Agent/runs/20260707-gp37-iq1s-resumable-download/report.md`.
+- Remote command:
+  `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`.
+- Result:
+  - exit code `0`;
+  - no deletion executed;
+  - no download executed;
+  - no smoke executed;
+  - `resume_download=1`;
+  - `part_total_ok bytes=204430872480`;
+  - `space_ready=0`;
+  - `free_before=89647194112`;
+  - `required=225905708960`;
+  - `missing=136258514848`;
+  - dry-run download line prints resumable temp path:
+    `Kimi-K2.7-Code.i1-IQ1_S.gguf.tmp`.
+- Decision:
+  - resumable-download guard is ready;
+  - full IQ1_S n32 smoke remains gated by disk capacity or explicit deletion
+    approval.
