@@ -334,6 +334,61 @@ Decision:
   implementation. Continue token-rate work on scheduling/transfer paths where
   the optimization is exact and does not alter expert weights.
 
+Clustered-base follow-up:
+
+- Question: can multiple base experts per layer/tensor, such as `4/8/16`
+  clusters, make residuals small enough to revive a D2MoE runtime path?
+- Tool: `.Agent/run-tools/kimi_d2moe_cluster_base_bound.py`
+- Method:
+  - use top route-profile experts from the accepted Kimi fulltrace;
+  - dequantize real GGUF expert tensors through `libggml-base.so`;
+  - build deterministic weight sketches;
+  - run weighted k-means over the expert sketches;
+  - build one route-count weighted BF16 base per cluster;
+  - measure raw residual norm and rank64/rank128 low-rank residual error.
+- Artifacts:
+  - `.Agent/runs/20260706-kimi-d2moe-phase0/cluster-base-blk56-down-top32.json`
+  - `.Agent/runs/20260706-kimi-d2moe-phase0/cluster-base-blk56-down-top32.md`
+  - `.Agent/runs/20260706-kimi-d2moe-phase0/cluster-base-blk56-gate-top32.json`
+  - `.Agent/runs/20260706-kimi-d2moe-phase0/cluster-base-blk56-gate-top32.md`
+
+Top32 clustered-base summary:
+
+| tensor | clusters | raw residual/weight | rank128 total error/weight | rank128 residual ratio | base BF16 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `blk.56 down` | `1` | `0.9998` | `0.9040` | `0.9464` | `28 MiB` |
+| `blk.56 down` | `4` | `0.9756` | `0.7902` | `0.9466` | `112 MiB` |
+| `blk.56 down` | `8` | `0.9105` | `0.5723` | `0.9467` | `224 MiB` |
+| `blk.56 down` | `16` | `0.6407` | `0.5002` | `0.9467` | `448 MiB` |
+| `blk.56 gate` | `1` | `1.0001` | `0.9026` | `0.9444` | `28 MiB` |
+| `blk.56 gate` | `4` | `0.9726` | `0.7832` | `0.9449` | `112 MiB` |
+| `blk.56 gate` | `8` | `0.9017` | `0.6029` | `0.9449` | `224 MiB` |
+| `blk.56 gate` | `16` | `0.6650` | `0.3064` | `0.9448` | `448 MiB` |
+
+Interpretation:
+
+- Multiple bases do reduce the raw residual size, especially at `16` clusters.
+- The residual itself is still not low-rank: rank128 leaves about `94.5%-94.7%`
+  of residual norm for both tested tensors.
+- The best tested gate case still has rank128 total weight error around `0.306`
+  while requiring `448 MiB` of BF16 bases for one tensor only.
+- For a full layer/tensor with all `384` experts, `16` bases plus rank128 BF16
+  deltas would still carry large payload and nontrivial compute while preserving
+  a high semantic-quality risk. For the top32 sample itself, the base footprint
+  alone exceeds the original full quantized payload.
+- This makes clustered-base D2MoE more plausible than a single base, but still
+  not strong enough to justify runtime implementation under the current Kimi
+  correctness constraints.
+
+Decision:
+
+- Do not implement clustered-base D2MoE runtime now.
+- Keep the tool for future experiments.
+- Revisit only if a broader clustering method produces rank128 total
+  error/weight well below `0.1` at a payload clearly below current full quant
+  experts, or if an explicit quality experiment proves that the larger errors
+  are harmless for Kimi outputs.
+
 1. Select a small but representative Kimi layer set:
    - at least one early sparse layer;
    - at least one middle high-traffic layer;
