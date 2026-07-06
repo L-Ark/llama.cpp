@@ -90939,3 +90939,58 @@ Decision:
   3. run dev n32 cold-start quality/token-rate baseline;
   4. only if quality passes, build any needed expert pack and continue dev n96;
   5. held-out test remains reserved until candidate freeze.
+
+## GP16: disk-space plan for external IQ2_XXS candidate
+
+Timestamp: `2026-07-07T02:48:42+0800`.
+
+Status: completed non-destructive inventory; cleanup requires approval.
+
+Rationale:
+
+- GP15 found AesSedai `IQ2_XXS` GGUF as the smallest direct GGUF candidate,
+  about `262.79 GiB`.
+- GP14 measured only `86G` free on the server.
+- Before downloading anything, identify whether enough space can be freed while
+  preserving current SOTA reproducibility.
+
+Record:
+
+- `.Agent/runs/20260707-gp16-disk-space-plan/report.md`
+
+Current usage:
+
+- `/root/lfz/models`: `378G`.
+- `/root/lfz/runs`: `438G`.
+- `/root/lfz/runs/ik_llama/kimi-iq3s-assets`: `414G`.
+- `/root/lfz/runs/vendor-kimi-token-rate`: `9.3G`.
+
+Preserve for current SOTA reproduction:
+
+- `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S`: `378G`.
+- `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`: `164G`.
+- `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`: `4.6G`.
+
+Old expert-pack cleanup candidates:
+
+- `kimi-iq3s-france.expert-pack`: `160G`.
+- `kimi-iq3s-tracefirst-n64-20260630.expert-pack`: `75G`.
+- `kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack`: `7.2G`.
+- `kimi-iq3s-phase7gz-combined-overlay.expert-pack`: `4.7G`.
+- `tmp-hot-upgate-pair-smoke.expert-pack`: `328M`.
+- `kimi-iq3s-phase7gz-missing-down-overlay.expert-pack`: `190M`.
+
+Estimated releasable space:
+
+- about `247G` from old expert packs.
+- current `86G` + `247G` = about `333G` free.
+
+Decision:
+
+- Do not delete anything automatically.
+- With approval, deleting only the old expert-pack candidates should make
+  AesSedai `IQ2_XXS` download feasible while preserving current IQ3_S model and
+  SOTA expert packs.
+- It may still be insufficient for building a complete derived IQ2 expert pack
+  alongside the downloaded GGUF; extra disk or staged build strategy may be
+  needed after initial dev n32 smoke.
