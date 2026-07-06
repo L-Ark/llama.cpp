@@ -87980,4 +87980,100 @@ Rollback/rejection:
 
 Result:
 
-- Pending.
+- Plan commit: `04741819f`.
+- Partition script commit: `6afbe97a7`.
+- Remote branch: `wici/vendor/kimi-moe-stream-on-vendor`.
+- Server run:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260706-021314Z-phase7ov-partitioned-manifests
+```
+
+- Server validation:
+  - repo head: `6afbe97a7b359c0f62f28ea19e085e0e25d49c3a`;
+  - git status: clean;
+  - start: `2026-07-06T02:13:14Z`;
+  - end: `2026-07-06T02:13:20Z`;
+  - `python3 -m py_compile` exit: `0`;
+  - partitioner exit: `0`;
+  - builder exits: `up=0`, `gate=0`, `down=0`;
+  - overall exit: `0`;
+  - `.expert-pack` outputs: absent for all three partitions.
+
+Partition summary:
+
+- Partition count: `3`.
+- Source entries: `31599`.
+- Partition entries: `31599`.
+- Source payload: `115.215134 GiB`.
+- Partition payload: `115.215134 GiB`.
+- Source single-pack estimate: `115.219608 GiB`.
+- Sum of partition pack estimates: `115.219612 GiB`.
+- Output filesystem free: `87.692593 GiB`.
+- All partitions fit simultaneously: `false`.
+- Missing for all partitions simultaneously: `27.527020 GiB`.
+
+Partitions:
+
+| partition | entries | payload GiB | estimated pack GiB | fits individually | current IQ3 runtime compatible | nbytes mismatches | invalid ranges | bad offsets |
+| --- | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: |
+| `up` | `10389` | `29.186569` | `29.188042` | yes | no | `10389` | `0` | `0` |
+| `gate` | `10388` | `32.610413` | `32.611885` | yes | no | `10388` | `0` | `0` |
+| `down` | `10822` | `53.418152` | `53.419685` | yes | no | `10822` | `0` | `0` |
+
+Builder dry-run smoke:
+
+| partition | builder entries | smoke bytes | first tensor | first expert | sha256 prefix | seconds | pack written |
+| --- | ---: | ---: | --- | ---: | --- | ---: | --- |
+| `up` | `10389` | `2867200` | `blk.1.ffn_up_exps.weight` | `0` | `ebe48b5840c019d1` | `1.284` | no |
+| `gate` | `10388` | `2867200` | `blk.1.ffn_gate_exps.weight` | `0` | `c69e173f2ec1e752` | `1.165` | no |
+| `down` | `10822` | `4243456` | `blk.1.ffn_down_exps.weight` | `0` | `7874463173231983` | `1.184` | no |
+
+Reproduce result:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git fetch wici vendor/kimi-moe-stream-on-vendor
+git checkout vendor/kimi-moe-stream-on-vendor
+git merge --ff-only 6afbe97a7b359c0f62f28ea19e085e0e25d49c3a
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<new-ts>-phase7ov-partitioned-manifests
+MAN=/root/lfz/runs/vendor-kimi-token-rate/20260706-014334Z-phase7ot-remote-pack-manifest/manifest.tsv
+mkdir -p "$RUN"
+python3 -m py_compile \
+  scripts/kimi-partition-remote-pack-manifest.py \
+  scripts/kimi-build-remote-pack-from-manifest.py
+python3 scripts/kimi-partition-remote-pack-manifest.py \
+  --by-kind \
+  --manifest-tsv "$MAN" \
+  --out-dir "$RUN/partitions" \
+  --summary-json "$RUN/partition-summary.json"
+for kind in up gate down; do
+  python3 scripts/kimi-build-remote-pack-from-manifest.py \
+    --dry-run \
+    --manifest-tsv "$RUN/partitions/$kind.manifest.tsv" \
+    --output-pack "$RUN/$kind.expert-pack" \
+    --summary-json "$RUN/$kind.builder-summary.json" \
+    --smoke-entries 1
+  test ! -e "$RUN/$kind.expert-pack"
+done
+cat "$RUN/partition-summary.json"
+```
+
+Decision:
+
+- Accept 7OV as a reproducible tooling/preflight step.
+- This is not a token-rate SOTA change and did not run inference.
+- The single selected lower-bit manifest can now be deterministically split
+  into `up`, `gate`, and `down` manifests whose pack layouts are independently
+  valid and directly consumable by the 7OU builder.
+- This removes the single-output-layout blocker but not the two hard blockers:
+  - all three partitions still require `115.220 GiB` together, which exceeds
+    current free space by `27.527 GiB`;
+  - all entries remain `remote_nbytes != current_nbytes`, so current `IQ3_S`
+    runtime cannot consume them safely.
+- Next valid lower-bit progress still requires either:
+  - enough disk/external storage to hold the partition packs plus a matching
+    lower-bit model/runtime path; or
+  - explicit approval to reclaim enough disk from old artifacts; or
+  - a separate, default-off mixed-quant runtime design that makes pack entry
+    type/bytes authoritative and then passes strict n96 quality.
