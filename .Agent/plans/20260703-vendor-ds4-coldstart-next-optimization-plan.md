@@ -2,6 +2,47 @@
 
 ## Summary
 
+### 2026-07-06 Latest Active Plan: CPU Fallback Hard-Bound Completed, No Blind Runtime Patch
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。本轮完成了基于 accepted SOTA binary/profile 的 CPU fallback hard-bound 分解；结论是当前已验证的源码/runtime 路线没有足够硬上界直接推进到 `10 tok/s`，不能盲目继续 patch。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `elapsed_seconds=62.9`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `memory_max_events=16879`, `pgmajfault=272731`, `workingset_refault_file=1638880`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Actual accepted binary path/version: `/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli`, `b14849-d9e56fcdf`. The batch-probe binary is separate and must not be mixed into accepted SOTA claims.
+- Config: vendor DeepSeek native GGUF, `cpu_moe=40`, `vram_cache=0`, strict cold `drop_caches`, 16GB cgroup including page cache, `MemorySwapMax=0`, O_DIRECT France gate pack, no trace, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`, `GGML_MOE_STREAM_ONE_PREFILL_LIMIT=3000`, `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+- Push target for all future source/artifact updates remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+New hard-bound artifact:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-cpu-fallback-hard-bound-20260706.json`
+- Profile basis: `/root/lfz/runs/vendor-ds4-16gb/20260705T231251Z-20260706_current_sota_profile_bottleneck_63ca303/france-cpu40-vram0gb`, same accepted binary family `b14849-d9e56fcdf`, `eval_tok_s=4.4`, `TTFT=33029.387637 ms`, `elapsed_seconds=64.21`, strict 16GB/no-swap/correctness passed.
+- Generation window from profile: about `31.1806s` for `138` decode tokens, or `4.43 tok/s`; reaching `10 tok/s` requires generation window `13.8s`, so required saving is about `17.38s`.
+- Measured CPU MoE profile: `16920` calls, `total=1.974 ms/call` (`~33.41s` prompt+decode), `fallback_t0=1.488 ms/call` (`~25.18s` prompt+decode), `cuda_single=0.474 ms/call` (`~8.02s` prompt+decode), `batch_accept=0`.
+- Decode-only top40 up/down fallback accounts for `11.178s`: layers `0-2` `3.382s`, layers `3-9` `3.568s`, layers `10-19` `1.280s`, layers `20-29` `1.628s`, layers `30-39` `1.319s`; up `5.222s`, down `5.956s`.
+- Top40 zero-overhead removal reaches only about `6.9 tok/s`; it cannot be a `10 tok/s` route.
+- Prior full decode fallback bound remains relevant: all decode up/down fallback is about `19.03s`. Removing all of it with zero overhead would reach about `11.36 tok/s`, but leaves only about `1.65s` total overhead slack to still hit `10 tok/s`.
+
+Updated route decisions:
+
+- Small exact hotsets remain closed for `10 tok/s`: top768 exact Q8_0 has only about `6.48 tok/s` zero-overhead ceiling. It can at most be an intermediate candidate, not the target route.
+- Large resident exact Q8_0 remains infeasible under current VRAM shape: top3072 almost reaches `10 tok/s` with zero overhead but needs `12.75 GiB` payload and still has negative slack; top4096 first exceeds `10 tok/s` but needs about `17.0 GiB` payload before gate cache/workspace.
+- The all-up/down Q8_0 correctness substrate is valuable but the current performance implementation is closed: measured per-call Q8_0 replacement spent `58.687s` for up-skip, far above the `~1.65s` all-fallback-removal overhead budget.
+- Source-only, io_uring/source-prefetch, raw/transposed/rowtile hot-batch, standalone MMVQ skip/write, CUDA graph, full-pack mmap, and old `88de4bb09` variants remain rejected unless a new hard-bound changes the limiting math.
+- Early historical `8.x tok/s` hard-16GB runs are not accepted cold-start SOTA because they predate the explicit cold `drop_caches` baseline; they remain evidence that cold page/refault state is the gap, not a current reproducible cold result.
+
+Updated next executable plan:
+
+1. Commit and push this hard-bound artifact plus plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+2. Do not implement another runtime/source patch unless a new hard-bound proves a concrete path above `10 tok/s` with margin after RAM/VRAM/TTFT/correctness costs. In particular, do not repeat per-call Q8_0, top768 hot-batch, source-only prefetch/io_uring, CUDA graph, or full-pack mmap variants without new math.
+3. Without disk cleanup approval, the only useful next work is metadata-only external artifact refresh or a new compact-representation proof. The target is an artifact/model/representation that reduces exact active payload far below the raw top4096 requirement while preserving correctness.
+4. With explicit disk cleanup/relocation approval, run full alternate GGUF empirical testing before new source patches. Required order: free/relocate space without deleting accepted assets, download candidate, record URL/path/size/SHA256, verify loader metadata, run correctness gates, run five-prompt semantic check, then run strict cold France benchmark only if correctness passes.
+5. Candidate order after disk approval remains `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf` if enough space is available for full file plus artifacts; otherwise test the best compact/native-topology low-bit GGUF that fits the approved space. Treat every alternate artifact as new-model/quantization evidence requiring correctness proof.
+6. Do not delete or move model files without explicit user approval. Preserve accepted native GGUF, accepted France gate pack, accepted SOTA run, current source branch, profile files, demo script, and pushed-source reproduction artifacts.
+7. Promotion remains strict: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, 16GB cgroup including file page cache, `MemorySwapMax=0`, no swap/OOM/ram kill, and correct/coherent France output.
+8. If a compliant new SOTA appears, immediately record full reproduction metadata, commit and push source plus artifacts to `ssd/vendor/deepseek-token-rate-16gb`, then perform a clean pushed-source reproduction before treating it as accepted. Future rollback must be able to reproduce the exact metric from the remote branch.
+
 ### 2026-07-06 Latest Active Plan: Old 88de Reproduction Rejected, Preserve 4.4 SOTA
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`。旧 `88de4bb09` 二进制来源已经完成有界复现，结果只有 `3.9 tok/s`，因此旧 `5.1 tok/s` 只能作为不可复现诊断信号关闭，不能作为当前 SOTA 或候选继续推进。

@@ -1,0 +1,154 @@
+{
+  "schema": "vendor-ds4-coldstart-hard-bound-v1",
+  "created_at_utc": "2026-07-06T00:13:16.736629Z",
+  "status": "completed_no_runtime_patch_authorized_by_bound",
+  "purpose": "Fresh hard-bound decomposition from the accepted 4.4 tok/s strict-cold SOTA path before choosing any new source optimization.",
+  "accepted_sota": {
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 1.8,
+    "ttft_ms": 32087.738292,
+    "elapsed_seconds": 62.9,
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb",
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15099523072,
+    "memory_max_events": 16879,
+    "pgmajfault": 272731,
+    "workingset_refault_file": 1638880,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "binary_version": "b14849-d9e56fcdf",
+    "binary_path": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli"
+  },
+  "profile_basis": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/current-sota-profile-bottleneck-20260706.json",
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260705T231251Z-20260706_current_sota_profile_bottleneck_63ca303/france-cpu40-vram0gb",
+    "binary_version": "b14849-d9e56fcdf",
+    "eval_tok_s": 4.4,
+    "ttft_ms": 33029.387637,
+    "elapsed_seconds": 64.21,
+    "decode_tokens_inferred_from_name_profile": 138,
+    "generation_window_seconds": 31.180612363,
+    "generation_tok_s_from_window": 4.425827126,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15097061376,
+    "memory_max_events": 17169,
+    "ram_ok": true,
+    "correctness_ok": true
+  },
+  "target_math": {
+    "target_tok_s": 10.0,
+    "target_generation_seconds_for_138_tokens": 13.8,
+    "required_generation_saving_seconds": 17.380612363,
+    "current_generation_ms_per_token": 225.9464664,
+    "target_ms_per_token": 100.0
+  },
+  "measured_bottleneck": {
+    "kimi_cpu_moe_profile_calls": 16920,
+    "kimi_cpu_moe_total_ms_per_call": 1.974,
+    "kimi_cpu_moe_total_ms_est_prompt_plus_decode": 33412.08,
+    "fallback_t0_ms_per_call": 1.488,
+    "fallback_t0_ms_est_prompt_plus_decode": 25176.96,
+    "cuda_single_ms_per_call": 0.474,
+    "cuda_single_ms_est_prompt_plus_decode": 8020.08,
+    "batch_accept": 0,
+    "single_accept": 35151,
+    "single_decline": 38222,
+    "top40_updown_decode_fallback_ms": 11178.0,
+    "top40_updown_prompt_fallback_ms": 4269.57,
+    "top40_updown_total_fallback_ms": 15447.537,
+    "top40_decode_fallback_by_band_ms": {
+      "0-2": 3381.828,
+      "3-9": 3568.128,
+      "10-19": 1280.364,
+      "20-29": 1628.262,
+      "30-39": 1319.418
+    },
+    "top40_decode_fallback_by_kind_ms": {
+      "up": 5221.92,
+      "down": 5956.08
+    },
+    "all_decode_updown_fallback_ms_from_prior_profile_bound": 19029.457,
+    "all_decode_updown_fallback_source": ".Agent/runs/20260705-vendor-ds4-coldstart/q80-source-resident-batched-hard-bound-v2.json"
+  },
+  "zero_overhead_bounds": {
+    "remove_top40_updown_decode_fallback": {
+      "saving_ms": 11178.0,
+      "new_generation_seconds": 20.002612363,
+      "tok_s": 6.899098
+    },
+    "remove_all_decode_updown_fallback": {
+      "saving_ms": 19029.457,
+      "new_generation_seconds": 12.151155363,
+      "tok_s": 11.356121,
+      "integration_slack_to_10tok_s_ms": 1648.844637
+    },
+    "topn_resident_q80_prior_bounds": [
+      {
+        "top_n": 512,
+        "zero_overhead_tok_s": 5.987,
+        "payload_gib": 2.125,
+        "slack_to_10tok_s_ms": -9156.724
+      },
+      {
+        "top_n": 768,
+        "zero_overhead_tok_s": 6.48,
+        "payload_gib": 3.188,
+        "slack_to_10tok_s_ms": -7419.679
+      },
+      {
+        "top_n": 1024,
+        "zero_overhead_tok_s": 6.962,
+        "payload_gib": 4.25,
+        "slack_to_10tok_s_ms": -5960.032
+      },
+      {
+        "top_n": 1536,
+        "zero_overhead_tok_s": 7.884,
+        "payload_gib": 6.375,
+        "slack_to_10tok_s_ms": -3665.81
+      },
+      {
+        "top_n": 2048,
+        "zero_overhead_tok_s": 8.696,
+        "payload_gib": 8.5,
+        "slack_to_10tok_s_ms": -2049.4
+      },
+      {
+        "top_n": 3072,
+        "zero_overhead_tok_s": 9.946,
+        "payload_gib": 12.75,
+        "slack_to_10tok_s_ms": -73.955
+      },
+      {
+        "top_n": 4096,
+        "zero_overhead_tok_s": 10.797,
+        "payload_gib": 17.0,
+        "slack_to_10tok_s_ms": 1008.842
+      },
+      {
+        "top_n": 5254,
+        "zero_overhead_tok_s": 11.367,
+        "payload_gib": 21.806,
+        "slack_to_10tok_s_ms": 1642.887
+      }
+    ]
+  },
+  "closed_runtime_routes_reconfirmed": {
+    "top40_or_small_hotset": "Top40 decode fallback removal reaches only about 6.9 tok/s at zero overhead; top768 reaches only about 6.48 tok/s at zero overhead. These cannot meet 10 tok/s.",
+    "all_exact_q80_runtime_current_shape": "All decode up/down fallback removal can exceed 10 only with about 1.65s total overhead slack. Existing CPU-compatible Q8_0 per-call path measured 58.687s for up-skip replacement, far outside the slack.",
+    "source_residency_only": "Removing source/H2D alone was previously bounded to leave about 24.5s Q8_0 path time, still not viable.",
+    "raw_transposed_rowtile_mmvq_hot_batch": "Existing raw/transposed/rowtile/MMVQ probes either miss source-bandwidth/transfer budgets or are standalone-runtime rejected in committed artifacts.",
+    "full_pack_mmap_old88de": "Current-source full-pack mmap variants and rebuilt old 88de reproduction are rejected; old 5.1 diagnostic is closed as non-reproducible."
+  },
+  "decision": {
+    "implement_source_patch_now": false,
+    "reason": "No currently validated exact runtime route has a hard-bound margin to 10 tok/s under 16GB RAM, TTFT, and correctness constraints. Small hotsets cannot reach 10; all-fallback removal has enough zero-overhead ceiling but not enough integration slack for the measured implementations.",
+    "allowed_next_without_disk": "Metadata-only external artifact refresh or a new hard-bound proving a compact/exact representation with payload far below the raw top4096 requirement.",
+    "allowed_next_with_disk_approval": "Full alternate GGUF empirical testing with correctness gates before benchmark; candidate order starts with cloudyu 4Expert if enough space is explicitly approved.",
+    "not_allowed": [
+      "Do not rerun per-call Q8_0 strict cold performance.",
+      "Do not repeat top768/raw/transposed/hot-batch/CUDA-graph/source-only/io_uring variants without a new hard-bound.",
+      "Do not delete or move model files without explicit user approval."
+    ]
+  }
+}
