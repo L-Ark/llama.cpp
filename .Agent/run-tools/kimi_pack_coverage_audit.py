@@ -78,6 +78,40 @@ def load_pack_keys(pack_paths: list[pathlib.Path], replace_duplicates: bool) -> 
     return set(keys), summaries
 
 
+def load_alias_keys(alias_paths: list[pathlib.Path], keys: set[tuple[str, int, int]]) -> tuple[set[tuple[str, int, int]], list[dict[str, object]]]:
+    summaries = []
+    out = set(keys)
+    for path in alias_paths:
+        rows = 0
+        added = 0
+        duplicates = 0
+        payload_bytes = 0
+        with path.open(newline="", encoding="utf-8", errors="replace") as f:
+            for row in csv.DictReader(f, delimiter="\t"):
+                rows += 1
+                tensor = row.get("tensor", "")
+                expert_idx = read_int(row, "expert_idx")
+                nbytes = read_int(row, "nbytes")
+                if not tensor or nbytes <= 0:
+                    continue
+                key = (tensor, expert_idx, nbytes)
+                if key in out:
+                    duplicates += 1
+                    continue
+                out.add(key)
+                added += 1
+                payload_bytes += nbytes
+        summaries.append({
+            "path": str(path),
+            "entries": rows,
+            "new_unique_keys": added,
+            "duplicates": duplicates,
+            "payload_gib_new_unique": payload_bytes / 1024**3,
+            "data_start": "alias",
+        })
+    return out, summaries
+
+
 def iter_route_trace(path: pathlib.Path):
     with path.open(newline="", encoding="utf-8", errors="replace") as f:
         for row in csv.DictReader(f):
@@ -253,7 +287,8 @@ def write_report(prompt_rows: list[dict[str, object]], pack_summaries: list[dict
 
 def main():
     parser = argparse.ArgumentParser(description="Audit route-trace expert-pack key coverage.")
-    parser.add_argument("--pack", action="append", type=pathlib.Path, required=True, help="Expert-pack file; may be repeated in runtime load order.")
+    parser.add_argument("--pack", action="append", type=pathlib.Path, default=[], help="Expert-pack file; may be repeated in runtime load order.")
+    parser.add_argument("--alias-tsv", action="append", type=pathlib.Path, default=[], help="GGUF expert alias TSV; may be repeated.")
     parser.add_argument("--trace", action="append", type=pathlib.Path, help="route-trace.csv; may be repeated.")
     parser.add_argument("--runs-root", type=pathlib.Path, help="Directory containing prompt subdirs with route-trace.csv.")
     parser.add_argument("--replace-duplicates", action="store_true", help="Mirror GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1.")
@@ -266,7 +301,12 @@ def main():
     if not trace_paths:
         raise SystemExit("no route traces supplied")
 
-    pack_keys, pack_summaries = load_pack_keys(args.pack, args.replace_duplicates)
+    if not args.pack and not args.alias_tsv:
+        raise SystemExit("at least one --pack or --alias-tsv is required")
+
+    pack_keys, pack_summaries = load_pack_keys(args.pack, args.replace_duplicates) if args.pack else (set(), [])
+    pack_keys, alias_summaries = load_alias_keys(args.alias_tsv, pack_keys)
+    pack_summaries.extend(alias_summaries)
     rows = [analyze_prompt(path, pack_keys) for path in sorted(trace_paths)]
     write_report(rows, pack_summaries, args.out)
     print(args.out)

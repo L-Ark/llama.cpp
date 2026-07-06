@@ -1,0 +1,72 @@
+{
+  "by_kind": {
+    "down": {
+      "bytes": 157443686400,
+      "entries": 23040,
+      "tensors": 60
+    },
+    "gate": {
+      "bytes": 122079412224,
+      "entries": 23040,
+      "tensors": 60
+    },
+    "up": {
+      "bytes": 112919052288,
+      "entries": 23040,
+      "tensors": 60
+    }
+  },
+  "by_type": {
+    "IQ2_S": {
+      "bytes": 122784055296,
+      "entries": 26112,
+      "tensors": 68
+    },
+    "IQ3_XXS": {
+      "bytes": 112214409216,
+      "entries": 19968,
+      "tensors": 52
+    },
+    "IQ4_XS": {
+      "bytes": 35936796672,
+      "entries": 4608,
+      "tensors": 12
+    },
+    "Q3_K": {
+      "bytes": 99310632960,
+      "entries": 15744,
+      "tensors": 41
+    },
+    "Q4_0": {
+      "bytes": 22196256768,
+      "entries": 2688,
+      "tensors": 7
+    }
+  },
+  "entries": 69120,
+  "expert_tensors": 180,
+  "include_kinds": [
+    "down",
+    "gate",
+    "up"
+  ],
+  "model_paths": [
+    "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf",
+    "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00002-of-00010.gguf",
+    "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00003-of-00010.gguf",
+    "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00004-of-00010.gguf",
+    "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00005-of-00010.gguf",
+    "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00006-of-00010.gguf",
+    "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00007-of-00010.gguf",
+    "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00008-of-00010.gguf",
+    "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00009-of-00010.gguf",
+    "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00010-of-00010.gguf"
+  ],
+  "model_shards": 10,
+  "n_experts": 384,
+  "output_tsv": "/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv",
+  "repo_head": "b2f8e07f392994f2d87234421ef198a5add1dc84",
+  "total_payload_bytes": 392442150912,
+  "total_payload_gib": 365.490234375,
+  "unaligned_rows": 69120
+}

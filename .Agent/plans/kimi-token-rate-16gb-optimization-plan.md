@@ -88963,3 +88963,119 @@ Rejection/rollback:
 - Revert if alias TSV parsing causes startup memory to exceed the 16 GB budget.
 - Revert if n32 quality regresses or TTFT exceeds the allowed bound.
 - Do not promote SOTA from GP2 until n96 dev and held-out test gates pass.
+
+Implementation result so far:
+
+- Plan commit:
+  `84db7dd5b` (`docs: plan kimi gguf alias expert source`).
+- Added generator:
+  `scripts/kimi-build-gguf-expert-alias-tsv.py`.
+- Added runtime env:
+  `GGML_MOE_EXPERT_GGUF_ALIAS_TSV`.
+- Runtime behavior:
+  - env unset: existing pack behavior unchanged;
+  - env set: alias entries are appended after existing pack sources;
+  - duplicate alias keys already covered by current packs are skipped, so the
+    existing optimized pack remains preferred;
+  - exact `nbytes` remains part of the key;
+  - no full GGUF mmap or startup payload read.
+- Important implementation adjustment:
+  all current IQ3_S alias rows are not 4KiB aligned, so the first GP2 runtime
+  implementation adds an aligned bounce read for single-entry direct reads.
+  Batched io_uring still rejects unaligned entries and falls back to the normal
+  per-entry staging path. Batched aligned-bounce io_uring is a later optimization
+  only if GP2 n32/n96 diagnostics show it is needed.
+
+Build validation:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260706-131400Z-gp2-gguf-alias-build2
+```
+
+- Command:
+  `cmake --build build-cuda-batch -j$(nproc)`.
+- Exit:
+  `0`.
+- Notes:
+  warnings were the existing `moe_stream_batch.cu` unused/missing-declaration
+  warnings and the existing CMake `LLAMA_CURL` deprecation warning.
+
+Alias generation:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate
+python3 scripts/kimi-build-gguf-expert-alias-tsv.py \
+  --model-glob "/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/*.gguf" \
+  --n-experts 384 \
+  --out "$RUN/kimi-iq3s-all-experts.gguf-alias.tsv" \
+  --summary-json "$RUN/alias-summary.json"
+```
+
+Result:
+
+- entries:
+  `69120`;
+- expert tensors:
+  `180`;
+- referenced payload:
+  `365.490 GiB`;
+- alias TSV size:
+  about `11 MiB`;
+- unaligned rows:
+  `69120`.
+
+Local summary copies:
+
+- `.Agent/runs/20260706-gp2-gguf-alias-generate/alias-summary.json`;
+- `.Agent/runs/20260706-gp2-gguf-alias-generate/generate.log`.
+
+Coverage validation:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260706-132000Z-gp2-pack-plus-alias-coverage
+.Agent/run-tools/kimi_pack_coverage_audit.py \
+  --replace-duplicates \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  --alias-tsv /root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv \
+  --runs-root /root/lfz/runs/vendor-kimi-token-rate/20260706-114204Z-general-dev-baseline-n96-profile \
+  --out "$RUN/pack-plus-alias-coverage-summary.md"
+```
+
+Result:
+
+- current pack entries:
+  `31599`;
+- alias entries:
+  `69120`;
+- alias duplicates skipped because current packs already cover them:
+  `31599`;
+- alias new unique keys:
+  `37521`;
+- dev route byte hit rate with current packs only:
+  `70.1%`;
+- dev route byte hit rate with current packs plus alias:
+  `100.0%`;
+- dev route miss bytes after alias:
+  `0.00 GiB`.
+
+Local report copy:
+
+- `.Agent/runs/20260706-gp2-pack-plus-alias-coverage/pack-plus-alias-coverage-summary.md`.
+
+Next gate:
+
+- Commit and push the default-off implementation.
+- Rerun n32 dev diagnostic with:
+  - current packs;
+  - `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` set to the generated TSV;
+  - strict 16 GB cgroup;
+  - cold start;
+  - `PROFILE=1` and copy/pack profile enabled.
+- Reject or revise if:
+  - alias startup exceeds TTFT budget;
+  - direct bounce read is slower than the old GGUF fallback;
+  - memory peak exceeds the 16 GB cgroup;
+  - output quality regresses.

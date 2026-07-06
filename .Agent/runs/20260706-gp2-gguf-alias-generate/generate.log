@@ -1,0 +1,5 @@
+entries=69120
+expert_tensors=180
+payload_gib=365.490
+unaligned_rows=69120
+out=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv
