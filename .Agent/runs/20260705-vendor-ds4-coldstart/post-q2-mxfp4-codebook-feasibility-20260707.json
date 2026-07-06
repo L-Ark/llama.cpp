@@ -1,0 +1,892 @@
+{
+  "attempt_id": "20260707-post-q2-mxfp4-codebook-feasibility",
+  "block_count": 147456,
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "codebook_results": [
+    {
+      "bytes_per_block": 9,
+      "codebook": [
+        -4,
+        0,
+        4
+      ],
+      "compression_ratio_vs_mxfp4": 1.8888888888888888,
+      "exact_weight_ratio": 0.28363270229763454,
+      "max_abs_error": 8,
+      "mean_abs_error": 1.5669364929199219,
+      "name": "q2_ternary_sign_fixed_pm4",
+      "per_value": {
+        "-12": {
+          "abs_error": 8,
+          "count": 88315,
+          "mapped": -4
+        },
+        "-8": {
+          "abs_error": 4,
+          "count": 211474,
+          "mapped": -4
+        },
+        "-6": {
+          "abs_error": 2,
+          "count": 280267,
+          "mapped": -4
+        },
+        "-4": {
+          "abs_error": 0,
+          "count": 395424,
+          "mapped": -4
+        },
+        "-3": {
+          "abs_error": 1,
+          "count": 263251,
+          "mapped": -4
+        },
+        "-2": {
+          "abs_error": 2,
+          "count": 475538,
+          "mapped": 0
+        },
+        "-1": {
+          "abs_error": 1,
+          "count": 372868,
+          "mapped": 0
+        },
+        "0": {
+          "abs_error": 0,
+          "count": 547213,
+          "mapped": 0
+        },
+        "1": {
+          "abs_error": 1,
+          "count": 371109,
+          "mapped": 0
+        },
+        "2": {
+          "abs_error": 2,
+          "count": 474803,
+          "mapped": 0
+        },
+        "3": {
+          "abs_error": 1,
+          "count": 263184,
+          "mapped": 4
+        },
+        "4": {
+          "abs_error": 0,
+          "count": 395710,
+          "mapped": 4
+        },
+        "6": {
+          "abs_error": 2,
+          "count": 280163,
+          "mapped": 4
+        },
+        "8": {
+          "abs_error": 4,
+          "count": 211205,
+          "mapped": 4
+        },
+        "12": {
+          "abs_error": 8,
+          "count": 88068,
+          "mapped": 4
+        }
+      },
+      "rmse": 2.318516142580663
+    },
+    {
+      "bytes_per_block": 9,
+      "codebook": [
+        -6,
+        0,
+        6
+      ],
+      "compression_ratio_vs_mxfp4": 1.8888888888888888,
+      "exact_weight_ratio": 0.23474015129937065,
+      "max_abs_error": 6,
+      "mean_abs_error": 1.6339382595486112,
+      "name": "q2_opt3_global_from_mxfp4_values",
+      "per_value": {
+        "-12": {
+          "abs_error": 6,
+          "count": 88315,
+          "mapped": -6
+        },
+        "-8": {
+          "abs_error": 2,
+          "count": 211474,
+          "mapped": -6
+        },
+        "-6": {
+          "abs_error": 0,
+          "count": 280267,
+          "mapped": -6
+        },
+        "-4": {
+          "abs_error": 2,
+          "count": 395424,
+          "mapped": -6
+        },
+        "-3": {
+          "abs_error": 3,
+          "count": 263251,
+          "mapped": 0
+        },
+        "-2": {
+          "abs_error": 2,
+          "count": 475538,
+          "mapped": 0
+        },
+        "-1": {
+          "abs_error": 1,
+          "count": 372868,
+          "mapped": 0
+        },
+        "0": {
+          "abs_error": 0,
+          "count": 547213,
+          "mapped": 0
+        },
+        "1": {
+          "abs_error": 1,
+          "count": 371109,
+          "mapped": 0
+        },
+        "2": {
+          "abs_error": 2,
+          "count": 474803,
+          "mapped": 0
+        },
+        "3": {
+          "abs_error": 3,
+          "count": 263184,
+          "mapped": 0
+        },
+        "4": {
+          "abs_error": 2,
+          "count": 395710,
+          "mapped": 6
+        },
+        "6": {
+          "abs_error": 0,
+          "count": 280163,
+          "mapped": 6
+        },
+        "8": {
+          "abs_error": 2,
+          "count": 211205,
+          "mapped": 6
+        },
+        "12": {
+          "abs_error": 6,
+          "count": 88068,
+          "mapped": 6
+        }
+      },
+      "rmse": 2.0837552469908696
+    },
+    {
+      "bytes_per_block": 13,
+      "codebook": [
+        -4,
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        4
+      ],
+      "compression_ratio_vs_mxfp4": 1.3076923076923077,
+      "exact_weight_ratio": 0.6427054935031467,
+      "max_abs_error": 8,
+      "mean_abs_error": 1.006460189819336,
+      "name": "q3_sym_small_0_pm1_pm2_pm4",
+      "per_value": {
+        "-12": {
+          "abs_error": 8,
+          "count": 88315,
+          "mapped": -4
+        },
+        "-8": {
+          "abs_error": 4,
+          "count": 211474,
+          "mapped": -4
+        },
+        "-6": {
+          "abs_error": 2,
+          "count": 280267,
+          "mapped": -4
+        },
+        "-4": {
+          "abs_error": 0,
+          "count": 395424,
+          "mapped": -4
+        },
+        "-3": {
+          "abs_error": 1,
+          "count": 263251,
+          "mapped": -2
+        },
+        "-2": {
+          "abs_error": 0,
+          "count": 475538,
+          "mapped": -2
+        },
+        "-1": {
+          "abs_error": 0,
+          "count": 372868,
+          "mapped": -1
+        },
+        "0": {
+          "abs_error": 0,
+          "count": 547213,
+          "mapped": 0
+        },
+        "1": {
+          "abs_error": 0,
+          "count": 371109,
+          "mapped": 1
+        },
+        "2": {
+          "abs_error": 0,
+          "count": 474803,
+          "mapped": 2
+        },
+        "3": {
+          "abs_error": 1,
+          "count": 263184,
+          "mapped": 2
+        },
+        "4": {
+          "abs_error": 0,
+          "count": 395710,
+          "mapped": 4
+        },
+        "6": {
+          "abs_error": 2,
+          "count": 280163,
+          "mapped": 4
+        },
+        "8": {
+          "abs_error": 4,
+          "count": 211205,
+          "mapped": 4
+        },
+        "12": {
+          "abs_error": 8,
+          "count": 88068,
+          "mapped": 4
+        }
+      },
+      "rmse": 2.100531784219507
+    },
+    {
+      "bytes_per_block": 13,
+      "codebook": [
+        -8,
+        -4,
+        -2,
+        0,
+        2,
+        4,
+        8
+      ],
+      "compression_ratio_vs_mxfp4": 1.3076923076923077,
+      "exact_weight_ratio": 0.5746135711669922,
+      "max_abs_error": 4,
+      "mean_abs_error": 0.6562983194986979,
+      "name": "q3_sym_large_0_pm2_pm4_pm8",
+      "per_value": {
+        "-12": {
+          "abs_error": 4,
+          "count": 88315,
+          "mapped": -8
+        },
+        "-8": {
+          "abs_error": 0,
+          "count": 211474,
+          "mapped": -8
+        },
+        "-6": {
+          "abs_error": 2,
+          "count": 280267,
+          "mapped": -4
+        },
+        "-4": {
+          "abs_error": 0,
+          "count": 395424,
+          "mapped": -4
+        },
+        "-3": {
+          "abs_error": 1,
+          "count": 263251,
+          "mapped": -2
+        },
+        "-2": {
+          "abs_error": 0,
+          "count": 475538,
+          "mapped": -2
+        },
+        "-1": {
+          "abs_error": 1,
+          "count": 372868,
+          "mapped": 0
+        },
+        "0": {
+          "abs_error": 0,
+          "count": 547213,
+          "mapped": 0
+        },
+        "1": {
+          "abs_error": 1,
+          "count": 371109,
+          "mapped": 0
+        },
+        "2": {
+          "abs_error": 0,
+          "count": 474803,
+          "mapped": 2
+        },
+        "3": {
+          "abs_error": 1,
+          "count": 263184,
+          "mapped": 2
+        },
+        "4": {
+          "abs_error": 0,
+          "count": 395710,
+          "mapped": 4
+        },
+        "6": {
+          "abs_error": 2,
+          "count": 280163,
+          "mapped": 4
+        },
+        "8": {
+          "abs_error": 0,
+          "count": 211205,
+          "mapped": 8
+        },
+        "12": {
+          "abs_error": 4,
+          "count": 88068,
+          "mapped": 8
+        }
+      },
+      "rmse": 1.158621889759981
+    },
+    {
+      "bytes_per_block": 13,
+      "codebook": [
+        -12,
+        -6,
+        -3,
+        0,
+        3,
+        6,
+        12
+      ],
+      "compression_ratio_vs_mxfp4": 1.3076923076923077,
+      "exact_weight_ratio": 0.38368670145670575,
+      "max_abs_error": 2,
+      "mean_abs_error": 0.7058906555175781,
+      "name": "q3_opt7_global_from_mxfp4_values",
+      "per_value": {
+        "-12": {
+          "abs_error": 0,
+          "count": 88315,
+          "mapped": -12
+        },
+        "-8": {
+          "abs_error": 2,
+          "count": 211474,
+          "mapped": -6
+        },
+        "-6": {
+          "abs_error": 0,
+          "count": 280267,
+          "mapped": -6
+        },
+        "-4": {
+          "abs_error": 1,
+          "count": 395424,
+          "mapped": -3
+        },
+        "-3": {
+          "abs_error": 0,
+          "count": 263251,
+          "mapped": -3
+        },
+        "-2": {
+          "abs_error": 1,
+          "count": 475538,
+          "mapped": -3
+        },
+        "-1": {
+          "abs_error": 1,
+          "count": 372868,
+          "mapped": 0
+        },
+        "0": {
+          "abs_error": 0,
+          "count": 547213,
+          "mapped": 0
+        },
+        "1": {
+          "abs_error": 1,
+          "count": 371109,
+          "mapped": 0
+        },
+        "2": {
+          "abs_error": 1,
+          "count": 474803,
+          "mapped": 3
+        },
+        "3": {
+          "abs_error": 0,
+          "count": 263184,
+          "mapped": 3
+        },
+        "4": {
+          "abs_error": 1,
+          "count": 395710,
+          "mapped": 3
+        },
+        "6": {
+          "abs_error": 0,
+          "count": 280163,
+          "mapped": 6
+        },
+        "8": {
+          "abs_error": 2,
+          "count": 211205,
+          "mapped": 6
+        },
+        "12": {
+          "abs_error": 0,
+          "count": 88068,
+          "mapped": 12
+        }
+      },
+      "rmse": 0.9407684994014978
+    },
+    {
+      "bytes_per_block": 17,
+      "codebook": [
+        -12,
+        -8,
+        -6,
+        -4,
+        -3,
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4,
+        6,
+        8,
+        12
+      ],
+      "compression_ratio_vs_mxfp4": 1.0,
+      "exact_weight_ratio": 1.0,
+      "max_abs_error": 0,
+      "mean_abs_error": 0.0,
+      "name": "q4_exact_mxfp4_no_compression",
+      "per_value": {
+        "-12": {
+          "abs_error": 0,
+          "count": 88315,
+          "mapped": -12
+        },
+        "-8": {
+          "abs_error": 0,
+          "count": 211474,
+          "mapped": -8
+        },
+        "-6": {
+          "abs_error": 0,
+          "count": 280267,
+          "mapped": -6
+        },
+        "-4": {
+          "abs_error": 0,
+          "count": 395424,
+          "mapped": -4
+        },
+        "-3": {
+          "abs_error": 0,
+          "count": 263251,
+          "mapped": -3
+        },
+        "-2": {
+          "abs_error": 0,
+          "count": 475538,
+          "mapped": -2
+        },
+        "-1": {
+          "abs_error": 0,
+          "count": 372868,
+          "mapped": -1
+        },
+        "0": {
+          "abs_error": 0,
+          "count": 547213,
+          "mapped": 0
+        },
+        "1": {
+          "abs_error": 0,
+          "count": 371109,
+          "mapped": 1
+        },
+        "2": {
+          "abs_error": 0,
+          "count": 474803,
+          "mapped": 2
+        },
+        "3": {
+          "abs_error": 0,
+          "count": 263184,
+          "mapped": 3
+        },
+        "4": {
+          "abs_error": 0,
+          "count": 395710,
+          "mapped": 4
+        },
+        "6": {
+          "abs_error": 0,
+          "count": 280163,
+          "mapped": 6
+        },
+        "8": {
+          "abs_error": 0,
+          "count": 211205,
+          "mapped": 8
+        },
+        "12": {
+          "abs_error": 0,
+          "count": 88068,
+          "mapped": 12
+        }
+      },
+      "rmse": 0.0
+    }
+  ],
+  "decision": "low-bit lossy codebooks are not ready for writeback; q3_opt7 improves q2 error but only 1.31x compression and still has nonzero magnitude error; prefer non-lossy/batching/fallback reduction unless a stronger quantization/correction scheme is designed",
+  "entries": 96,
+  "group_value_counts": {
+    "down": {
+      "-1": 123445,
+      "-12": 30021,
+      "-2": 159406,
+      "-3": 86155,
+      "-4": 131706,
+      "-6": 92750,
+      "-8": 71167,
+      "0": 183551,
+      "1": 122764,
+      "12": 30134,
+      "2": 159635,
+      "3": 86607,
+      "4": 131509,
+      "6": 92613,
+      "8": 71401
+    },
+    "up": {
+      "-1": 249423,
+      "-12": 58294,
+      "-2": 316132,
+      "-3": 177096,
+      "-4": 263718,
+      "-6": 187517,
+      "-8": 140307,
+      "0": 363662,
+      "1": 248345,
+      "12": 57934,
+      "2": 315168,
+      "3": 176577,
+      "4": 264201,
+      "6": 187550,
+      "8": 139804
+    }
+  },
+  "input_manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.sidecar_exact_manifest.csv",
+  "input_manifest_sha256": "70082c6231e2653a3dafb99a07ef7399f79b97419507ae839335a90c3e91585a",
+  "input_payload": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.partial_exact_payload.bin",
+  "input_payload_sha256": "98b013f976d1f3eed541f19847aa589d5755801022c39833d9215e4d3b645086",
+  "nibble_counts": {
+    "0x0": 273106,
+    "0x1": 371109,
+    "0x2": 474803,
+    "0x3": 263184,
+    "0x4": 395710,
+    "0x5": 280163,
+    "0x6": 211205,
+    "0x7": 88068,
+    "0x8": 274107,
+    "0x9": 372868,
+    "0xa": 475538,
+    "0xb": 263251,
+    "0xc": 395424,
+    "0xd": 280267,
+    "0xe": 211474,
+    "0xf": 88315
+  },
+  "nonzero_ratio": 0.8840304480658637,
+  "per_entry_zero_ratio_preview": [
+    {
+      "expert": 66,
+      "group": "up",
+      "nonzero": 57980,
+      "tensor": "blk.22.ffn_up_exps.weight",
+      "weights": 65536,
+      "zero_ratio": 0.11529541015625
+    },
+    {
+      "expert": 66,
+      "group": "down",
+      "nonzero": 28910,
+      "tensor": "blk.22.ffn_down_exps.weight",
+      "weights": 32768,
+      "zero_ratio": 0.11773681640625
+    },
+    {
+      "expert": 101,
+      "group": "up",
+      "nonzero": 58043,
+      "tensor": "blk.3.ffn_up_exps.weight",
+      "weights": 65536,
+      "zero_ratio": 0.1143341064453125
+    },
+    {
+      "expert": 101,
+      "group": "down",
+      "nonzero": 28901,
+      "tensor": "blk.3.ffn_down_exps.weight",
+      "weights": 32768,
+      "zero_ratio": 0.118011474609375
+    },
+    {
+      "expert": 166,
+      "group": "up",
+      "nonzero": 57848,
+      "tensor": "blk.18.ffn_up_exps.weight",
+      "weights": 65536,
+      "zero_ratio": 0.1173095703125
+    },
+    {
+      "expert": 166,
+      "group": "down",
+      "nonzero": 28814,
+      "tensor": "blk.18.ffn_down_exps.weight",
+      "weights": 32768,
+      "zero_ratio": 0.12066650390625
+    },
+    {
+      "expert": 3,
+      "group": "up",
+      "nonzero": 58002,
+      "tensor": "blk.17.ffn_up_exps.weight",
+      "weights": 65536,
+      "zero_ratio": 0.114959716796875
+    },
+    {
+      "expert": 3,
+      "group": "down",
+      "nonzero": 28943,
+      "tensor": "blk.17.ffn_down_exps.weight",
+      "weights": 32768,
+      "zero_ratio": 0.116729736328125
+    },
+    {
+      "expert": 233,
+      "group": "up",
+      "nonzero": 58042,
+      "tensor": "blk.4.ffn_up_exps.weight",
+      "weights": 65536,
+      "zero_ratio": 0.114349365234375
+    },
+    {
+      "expert": 233,
+      "group": "down",
+      "nonzero": 28867,
+      "tensor": "blk.4.ffn_down_exps.weight",
+      "weights": 32768,
+      "zero_ratio": 0.119049072265625
+    },
+    {
+      "expert": 152,
+      "group": "up",
+      "nonzero": 57989,
+      "tensor": "blk.27.ffn_up_exps.weight",
+      "weights": 65536,
+      "zero_ratio": 0.1151580810546875
+    },
+    {
+      "expert": 152,
+      "group": "down",
+      "nonzero": 28904,
+      "tensor": "blk.27.ffn_down_exps.weight",
+      "weights": 32768,
+      "zero_ratio": 0.117919921875
+    },
+    {
+      "expert": 79,
+      "group": "up",
+      "nonzero": 57873,
+      "tensor": "blk.18.ffn_up_exps.weight",
+      "weights": 65536,
+      "zero_ratio": 0.1169281005859375
+    },
+    {
+      "expert": 79,
+      "group": "down",
+      "nonzero": 28910,
+      "tensor": "blk.18.ffn_down_exps.weight",
+      "weights": 32768,
+      "zero_ratio": 0.11773681640625
+    },
+    {
+      "expert": 200,
+      "group": "up",
+      "nonzero": 57939,
+      "tensor": "blk.8.ffn_up_exps.weight",
+      "weights": 65536,
+      "zero_ratio": 0.1159210205078125
+    },
+    {
+      "expert": 200,
+      "group": "down",
+      "nonzero": 28965,
+      "tensor": "blk.8.ffn_down_exps.weight",
+      "weights": 32768,
+      "zero_ratio": 0.116058349609375
+    }
+  ],
+  "prompt_scope": "calibration/dev derived sidecar only; held-out not used; not SOTA",
+  "source_head": "33b772a1f5ff34de3d165eee9bd674c06814a8cc",
+  "sparse_zeroing_proxies": [
+    {
+      "avg_kept_per_block": 28.28897433810764,
+      "estimated_bytes_per_block": 19.144487169053818,
+      "estimated_compression_ratio": 0.8879840890948344,
+      "kept_ratio": 0.8840304480658637,
+      "mean_abs_error": 0.0,
+      "rmse": 0.0,
+      "threshold_abs_ge": 1,
+      "zeroed_ratio": 0.11596955193413629
+    },
+    {
+      "avg_kept_per_block": 23.24355740017361,
+      "estimated_bytes_per_block": 16.621778700086807,
+      "estimated_compression_ratio": 1.0227545623568683,
+      "kept_ratio": 0.7263611687554253,
+      "mean_abs_error": 0.15766927931043836,
+      "rmse": 0.39707591126941755,
+      "threshold_abs_ge": 2,
+      "zeroed_ratio": 0.27363883124457467
+    },
+    {
+      "avg_kept_per_block": 16.79864501953125,
+      "estimated_bytes_per_block": 13.399322509765625,
+      "estimated_compression_ratio": 1.2687208616413366,
+      "kept_ratio": 0.5249576568603516,
+      "mean_abs_error": 0.5604763031005859,
+      "rmse": 0.9814699826743217,
+      "threshold_abs_ge": 3,
+      "zeroed_ratio": 0.47504234313964844
+    },
+    {
+      "avg_kept_per_block": 13.228529188368055,
+      "estimated_bytes_per_block": 11.614264594184029,
+      "estimated_compression_ratio": 1.4637172988561789,
+      "kept_ratio": 0.41339153713650173,
+      "mean_abs_error": 0.8951746622721354,
+      "rmse": 1.4026326690924398,
+      "threshold_abs_ge": 4,
+      "zeroed_ratio": 0.5866084628634982
+    },
+    {
+      "avg_kept_per_block": 7.863308376736111,
+      "estimated_bytes_per_block": 8.931654188368055,
+      "estimated_compression_ratio": 1.9033428345378147,
+      "kept_ratio": 0.24572838677300346,
+      "mean_abs_error": 1.5658272637261286,
+      "rmse": 2.156383270715425,
+      "threshold_abs_ge": 5,
+      "zeroed_ratio": 0.7542716132269965
+    },
+    {
+      "avg_kept_per_block": 7.863308376736111,
+      "estimated_bytes_per_block": 8.931654188368055,
+      "estimated_compression_ratio": 1.9033428345378147,
+      "kept_ratio": 0.24572838677300346,
+      "mean_abs_error": 1.5658272637261286,
+      "rmse": 2.156383270715425,
+      "threshold_abs_ge": 6,
+      "zeroed_ratio": 0.7542716132269965
+    },
+    {
+      "avg_kept_per_block": 4.062649197048611,
+      "estimated_bytes_per_block": 7.031324598524305,
+      "estimated_compression_ratio": 2.4177521264724238,
+      "kept_ratio": 0.12695778740776908,
+      "mean_abs_error": 2.278450859917535,
+      "rmse": 2.9875960883910984,
+      "threshold_abs_ge": 7,
+      "zeroed_ratio": 0.8730422125922309
+    },
+    {
+      "avg_kept_per_block": 4.062649197048611,
+      "estimated_bytes_per_block": 7.031324598524305,
+      "estimated_compression_ratio": 2.4177521264724238,
+      "kept_ratio": 0.12695778740776908,
+      "mean_abs_error": 2.278450859917535,
+      "rmse": 2.9875960883910984,
+      "threshold_abs_ge": 8,
+      "zeroed_ratio": 0.8730422125922309
+    },
+    {
+      "avg_kept_per_block": 1.1961737738715277,
+      "estimated_bytes_per_block": 5.598086886935764,
+      "estimated_compression_ratio": 3.0367517231061276,
+      "kept_ratio": 0.03738043043348524,
+      "mean_abs_error": 2.9950697157118054,
+      "rmse": 3.8286657249914047,
+      "threshold_abs_ge": 9,
+      "zeroed_ratio": 0.9626195695665147
+    },
+    {
+      "avg_kept_per_block": 1.1961737738715277,
+      "estimated_bytes_per_block": 5.598086886935764,
+      "estimated_compression_ratio": 3.0367517231061276,
+      "kept_ratio": 0.03738043043348524,
+      "mean_abs_error": 2.9950697157118054,
+      "rmse": 3.8286657249914047,
+      "threshold_abs_ge": 12,
+      "zeroed_ratio": 0.9626195695665147
+    }
+  ],
+  "status": "analysis_complete",
+  "value_counts": {
+    "-1": 372868,
+    "-12": 88315,
+    "-2": 475538,
+    "-3": 263251,
+    "-4": 395424,
+    "-6": 280267,
+    "-8": 211474,
+    "0": 547213,
+    "1": 371109,
+    "12": 88068,
+    "2": 474803,
+    "3": 263184,
+    "4": 395710,
+    "6": 280163,
+    "8": 211205
+  },
+  "weight_count": 4718592,
+  "zero_ratio": 0.11596955193413629
+}

@@ -4878,3 +4878,15 @@
 - candidate_metrics: 统计 nibble/value 频率、zero/nonzero 比例、按 up/down tensor 分组；评估 q2 ternary、q3 small-codebook、q3 magnitude-codebook、sparse-zero/keep-top-magnitude 等候选的 per-weight absolute/squared error proxy 和 payload bytes/block。
 - decision_rule: 若低位候选的 value-level 误差仍明显大，不能再进入 writeback 或 token-rate benchmark；只有当理论误差显著小于 q2 且压缩比足以减少 CPU fallback/host movement，才允许写下一轮 default-off compare kernel。否则转向非 lossy 路线，例如更高覆盖的 exact resident layout、CPU fallback batching/fusion、或减少 fallback 次数的 routing/cache 策略。
 - push_rule: 该 analysis 结果也必须记录 artifact 和 plan，并 push 到 ssd/vendor/deepseek-token-rate-16gb。
+
+
+## 2026-07-07 执行记录：post-q2 MXFP4 codebook feasibility
+
+- attempt_id: 20260707-post-q2-mxfp4-codebook-feasibility
+- status: analysis_complete_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/post-q2-mxfp4-codebook-feasibility-20260707.json
+- input: calibration/dev derived exact row128 partial sidecar payload，4718592 weights，147456 MXFP4 blocks，held-out 未使用。
+- distribution: zero_ratio=0.11597，nonzero_ratio=0.88403。该 payload 不稀疏；简单 sparse-zero/mask 编码在低误差区间没有有效压缩，threshold_abs_ge=2 只有约 1.023x 压缩，threshold_abs_ge=4 虽有 1.464x 但 mean_abs_error=0.895、rmse=1.403。
+- q2_result: fixed ternary +-4 的 1.889x 压缩对应 mean_abs_error=1.567、rmse=2.319、max_abs_error=8，和实际 compare reject 一致。
+- q3_result: q3_sym_large 约 1.308x 压缩，mean_abs_error=0.656、rmse=1.159、max_abs_error=4；q3_opt7 约 1.308x 压缩，mean_abs_error=0.706、rmse=0.941、max_abs_error=2。虽然比 q2 好，但仍有系统性非零误差，且压缩比太低，不足以单独把 generalized token rate 推到目标。
+- decision: 暂不写 q3/q4 lossy writeback 或 token-rate benchmark。后续应优先转向非 lossy 或减少 fallback 次数/开销的路线，例如 CPU fallback batching/fusion、larger generalized exact resident coverage、prefetch/admission 改进，或带 correction 的表示；任何 lossy 表示必须先有 compare-only 数值证据，再进入性能路径。
