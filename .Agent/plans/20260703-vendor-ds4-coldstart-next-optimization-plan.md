@@ -2,6 +2,38 @@
 
 ## Summary
 
+### 2026-07-06 Latest Active Plan: Disk and Loader Blocker Audit After Route Triage
+
+本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，本节没有产生新的 accepted performance result，没有删除/移动文件，没有源码 patch，也没有 strict cold benchmark。
+
+Current accepted SOTA remains:
+
+- Run: `/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close/france-current-head-sota44-no-trace-cpu40-vram0gb`
+- Metrics: `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=32087.738292 ms`, `elapsed_seconds=62.9`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15099523072`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`
+- Push target remains `ssd`, `https://github.com/wici-ai/ssd-llama.git`, branch `vendor/deepseek-token-rate-16gb`, using `L-Ark <fliangae@connect.ust.hk>`.
+
+New blocker audit artifact:
+
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/disk-and-loader-blocker-audit-after-triage-20260706.json`
+- Disk result: `/root` currently has only about `1.57 GiB` available, far below the `>=60 GiB` REAP-class empirical test target and far below the `>=180 GiB` 4Expert-class target.
+- Protected assets that must not be deleted/moved without explicit approval include the accepted native GGUF, accepted France gate pack, accepted SOTA run, current source branch, and DeepSeek model-side expert pack/model assets.
+- Approval-required cleanup candidates were enumerated only for accounting. Examples include the incomplete HF download cache (`~2.76 GiB`), inactive-looking `/root/lfz/swapfile` (`16 GiB`, `swapon --show` empty), rejected promptset/updown packs (`~39.5 GiB` plus smaller packs), large rejected diagnostic stdout files (`~2.8 GiB`), the GLM model directory (`~245 GiB`), and unrelated large external directories. No deletion or move was performed.
+
+Loader/speculative source audit result:
+
+- `examples/speculative` and `examples/speculative-simple` still require `--model-draft`; no compatible local vendor-loadable DeepSeek draft model is available.
+- `common/speculative.cpp` has generic `draft`, `eagle3`, and ngram types, but EAGLE3 is effectively disabled by `has_draft_eagle3=false` with a TODO, and there is no DFlash/DSpark verifier integration.
+- Source defines `blk.%d.nextn.*` tensor names and can preserve some NextN/MTP tensors, but comments still mark NextN/MTP tensors as ignored/reserved for future MTP support or preserved but unused. This is not a runnable DeepSeek4 MTP verifier.
+- Ordinary split GGUF loading is supported, but it is not a multi-source sidecar/overlay loader. Current source has no ready DFlash/DSpark/MTP/EAGLE/sidecar runtime path.
+
+Updated next executable plan:
+
+1. Commit and push the blocker audit artifact plus this plan update to `ssd/vendor/deepseek-token-rate-16gb` immediately.
+2. Without explicit cleanup/relocation approval, continue only small metadata/header/source-audit work. Do not download models, build large packs, run strict cold benchmarks, or touch runtime source from the current evidence.
+3. If cleanup/relocation is approved, free only named approved paths, record exact bytes and hashes where appropriate, then test exactly one candidate at a time through loader metadata, France correctness, five-prompt correctness, strict 16GB cgroup including file page cache, TTFT gate, immediate commit/push, and pushed-source reproduction.
+4. Do not reopen DFlash/MTP/EAGLE/sidecar implementation unless a new artifact first proves vendor compatibility, acceptance/verifier cost, RAM/VRAM/page-cache, TTFT, and correctness. Current source evidence is insufficient for a runtime patch.
+5. Promotion remains strict: `eval_tok_s > 4.4`, `TTFT <= 33617.688744 ms`, strict cold `drop_caches`, `MemorySwapMax=0`, no swap/OOM/ram kill, and correct/coherent output.
+
 ### 2026-07-06 Latest Active Plan: Bound-Changing Route Triage After One-Stream Closure
 
 本节是当前最新生效计划，覆盖下面所有较早的 `Latest Active Plan` / `Historical Plan` 段落；旧段落只作为历史实验记录保留。当前 accepted strict cold SOTA 仍然是 `4.4 tok/s`，本节没有产生新的 accepted performance result。

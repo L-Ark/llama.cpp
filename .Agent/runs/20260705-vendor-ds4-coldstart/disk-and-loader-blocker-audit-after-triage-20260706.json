@@ -1,0 +1,187 @@
+{
+  "schema": "vendor-ds4-disk-loader-blocker-audit-v1",
+  "created_at_utc": "2026-07-06T02:04:14Z",
+  "status": "completed_no_deletion_no_source_patch",
+  "source_state": {
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+    "branch": "feat/ds4-moe-stream-on-vendor",
+    "head": "af48319765eb926e37e3a3b45a4cbf134f0966f4",
+    "status_short": ""
+  },
+  "filesystem": {
+    "root_total_bytes": 1065418129408,
+    "root_used_bytes": 1063714488320,
+    "root_available_bytes": 1686863872,
+    "root_available_gib": 1.571014,
+    "swapon_show": "",
+    "disk_gate": "Current free space is far below the >=60GiB empirical REAP-class download target and far below the >=180GiB 4Expert-class target."
+  },
+  "top_level_observed_sizes_gib": {
+    "/root/lfz": 658.77103,
+    "/root/lfz/models": 547.722237,
+    "/root/lfz/runs": 73.538611,
+    "/root/lfz/runs/vendor-ds4-16gb/expert-packs": 58.588924,
+    "/root/yibins": 128.754166,
+    "/root/wici-diffgemma": 17.833633
+  },
+  "protected_assets_no_delete_or_move_without_explicit_approval": [
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "bytes": 156148189760,
+      "gib": 145.424334,
+      "class": "protected",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "accepted target model; required for current SOTA reproduction"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "bytes": 20495904768,
+      "gib": 19.088299,
+      "class": "protected",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "accepted France gate pack used by current SOTA"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260705T070310Z-20260705_current_head_sota44_no_trace_after_sparse_close",
+      "bytes": 44007,
+      "gib": 4.1e-05,
+      "class": "protected",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "accepted 4.4 tok/s strict-cold SOTA run record"
+    },
+    {
+      "path": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+      "bytes": 3527184428,
+      "gib": 3.284946,
+      "class": "protected",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "current source branch and pushed artifacts"
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+      "bytes": 147174760448,
+      "gib": 137.067177,
+      "class": "protected_model_asset",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "DeepSeek model-side expert pack/model asset; not deleted without explicit approval"
+    }
+  ],
+  "approval_required_cleanup_candidates": [
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/.cache/huggingface/download/AgEKDDObETLESPB-bwGREqjQfJM=.82822c4c3330cdc17762cff6f044fd50abb04278779309a157d4401ef8a9c17b.42532000.incomplete",
+      "bytes": 2965889623,
+      "gib": 2.7622,
+      "class": "approval_cleanup_candidate",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "incomplete HF download cache; likely safe but still requires approval before deletion"
+    },
+    {
+      "path": "/root/lfz/swapfile",
+      "bytes": 17179869184,
+      "gib": 16.0,
+      "class": "approval_cleanup_candidate",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "16GiB swapfile; swapon --show is empty now, but still requires explicit approval before deletion"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack",
+      "bytes": 38420348928,
+      "gib": 35.781738,
+      "class": "approval_cleanup_candidate",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "large promptset gate-union pack from non-accepted promptset experiments; not needed for current France SOTA but may be useful historical artifact"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top512-down-20260703.pack",
+      "bytes": 2281783296,
+      "gib": 2.125076,
+      "class": "approval_cleanup_candidate",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "rejected/down diagnostic pack; not accepted SOTA path"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top256-updown-20260703.pack",
+      "bytes": 1140891648,
+      "gib": 1.062538,
+      "class": "approval_cleanup_candidate",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "rejected/updown diagnostic pack; not accepted SOTA path"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top128-updown-20260703.pack",
+      "bytes": 570445824,
+      "gib": 0.531269,
+      "class": "approval_cleanup_candidate",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "rejected/updown diagnostic pack; not accepted SOTA path"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T065419Z-20260704_q80_up_compare_probe/france-q80-up-compare/stdout.txt",
+      "bytes": 1251927884,
+      "gib": 1.165949,
+      "class": "approval_cleanup_candidate",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "large diagnostic stdout from rejected q80 compare probe"
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T071633Z-20260704_ngram_map_k4v_probe/france-cpu40-vram0gb/stdout.txt",
+      "bytes": 1755629825,
+      "gib": 1.635058,
+      "class": "approval_cleanup_candidate",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "large diagnostic stdout from rejected ngram probe"
+    },
+    {
+      "path": "/root/lfz/models/GLM-5.2-UD-IQ3_XXS",
+      "bytes": 281688457065,
+      "gib": 262.342819,
+      "class": "approval_cleanup_candidate",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "large GLM model directory; user previously allowed killing GLM experiment, but deletion still needs explicit approval"
+    },
+    {
+      "path": "/root/yibins",
+      "bytes": 138248733557,
+      "gib": 128.754166,
+      "class": "approval_cleanup_candidate_external",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "large non-vendor directory outside this repo; owner/importance unknown"
+    },
+    {
+      "path": "/root/wici-diffgemma",
+      "bytes": 19148717883,
+      "gib": 17.833633,
+      "class": "approval_cleanup_candidate_external",
+      "requires_explicit_user_approval_before_delete_or_move": true,
+      "reason": "large non-vendor directory outside this repo; owner/importance unknown"
+    }
+  ],
+  "cleanup_capacity_examples": {
+    "small_safeish_candidates_incomplete_plus_large_logs_gib": 5.563206,
+    "swapfile_plus_incomplete_plus_rejected_updown_packs_gib": 58.262822,
+    "promptset_pack_plus_rejected_updown_packs_gib": 39.500622,
+    "glm_directory_gib": 262.342819,
+    "note": "These are accounting examples only; no deletion or move was performed."
+  },
+  "loader_and_speculative_source_audit": {
+    "speculative_examples_require_model_draft": "examples/speculative/speculative.cpp:52-55 and examples/speculative-simple/speculative-simple.cpp:46-49 reject runs without --model-draft.",
+    "generic_speculative_types": "common/speculative.cpp:21-40 includes draft, eagle3, and ngram variants, but not DFlash/DSpark verifier integration.",
+    "eagle3_placeholder_disabled": "common/speculative.cpp:1000-1047 sets has_draft_eagle3=false with TODO, so EAGLE3 is not enabled by params.",
+    "nextn_tensor_names_exist": "src/llama-arch.cpp:448-453 defines blk.%d.nextn.* tensor names.",
+    "nextn_mtp_marked_unused": "src/llama-arch.cpp:802-806 says NextN/MTP tensors are currently ignored/reserved for future MTP support.",
+    "mtp_todo_in_hparams": "src/llama-model.cpp:2100-2105 and 2134-2139 load nextn_predict_layers for some arches with TODO comments for future MTP implementation.",
+    "nextn_preserved_but_unused": "src/llama-model.cpp:5926-5935 and 6378-6386 create NextN/MTP tensors as preserved but unused conditional tensors.",
+    "split_gguf_supported": "src/llama-model-loader.cpp:586-640 loads ordinary split GGUF files and validates split.no/count; src/llama.cpp:489-525 builds split filenames.",
+    "sidecar_overlay_missing": "No source hits for DFlash/DSpark sidecar overlay loader; existing split GGUF loader is not a multi-source sidecar/overlay loader."
+  },
+  "decision": {
+    "accepted_sota_changed": false,
+    "runtime_source_edit_allowed_now": false,
+    "strict_cold_benchmark_allowed_now": false,
+    "deletion_or_move_performed": false,
+    "download_allowed_now": false,
+    "reason": "Current source does not contain a ready vendor DFlash/DSpark/MTP/EAGLE/sidecar runtime path, and disk is still far below the space needed for alternate GGUF empirical tests. Cleanup is possible only after explicit user approval of named paths.",
+    "next_without_approval": "Continue metadata/header/source-audit work only; do not run model downloads, large pack builds, or source patches.",
+    "next_with_cleanup_approval": "Free/relocate approved paths, record exact bytes and hashes where appropriate, then test exactly one candidate through loader metadata, correctness gates, strict 16GB cold benchmark, commit/push, and clean pushed-source reproduction."
+  }
+}
