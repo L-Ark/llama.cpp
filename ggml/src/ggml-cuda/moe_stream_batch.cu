@@ -2497,6 +2497,25 @@ static bool expert_pack_load_source(const char *path, int32_t source_idx, std::v
     return true;
 }
 
+static void expert_pack_append_env_list(std::vector<std::string> &paths, const char *env_name) {
+    const char *env = std::getenv(env_name);
+    if (!env || !env[0]) return;
+
+    const std::string value(env);
+    size_t start = 0;
+    while (start <= value.size()) {
+        const size_t end = value.find(':', start);
+        const size_t stop = end == std::string::npos ? value.size() : end;
+        if (stop > start) {
+            paths.emplace_back(value.substr(start, stop - start));
+        }
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+}
+
 static void expert_pack_init_once() {
     std::lock_guard<std::mutex> lk(g_expert_pack.mu);
     if (g_expert_pack.inited) return;
@@ -2518,27 +2537,29 @@ static void expert_pack_init_once() {
         }
     }
 
+    std::vector<std::string> source_paths;
     const char *path = std::getenv("GGML_MOE_EXPERT_PACK");
-    if (!path || !path[0]) {
+    if (path && path[0]) {
+        source_paths.emplace_back(path);
+        const char *overlay_path = std::getenv("GGML_MOE_EXPERT_PACK_OVERLAY");
+        if (overlay_path && overlay_path[0]) {
+            source_paths.emplace_back(overlay_path);
+        }
+        const char *overlay_extra_path = std::getenv("GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA");
+        if (overlay_extra_path && overlay_extra_path[0]) {
+            source_paths.emplace_back(overlay_extra_path);
+        }
+    }
+    expert_pack_append_env_list(source_paths, "GGML_MOE_EXPERT_PACK_LIST");
+
+    if (source_paths.empty()) {
         g_expert_pack.inited = true;
         return;
     }
 
     std::vector<expert_pack_entry> entries;
-    if (!expert_pack_load_source(path, 0, entries)) {
-        g_expert_pack.inited = true;
-        return;
-    }
-    const char *overlay_path = std::getenv("GGML_MOE_EXPERT_PACK_OVERLAY");
-    if (overlay_path && overlay_path[0]) {
-        if (!expert_pack_load_source(overlay_path, (int32_t)g_expert_pack.sources.size(), entries)) {
-            g_expert_pack.inited = true;
-            return;
-        }
-    }
-    const char *overlay_extra_path = std::getenv("GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA");
-    if (overlay_extra_path && overlay_extra_path[0]) {
-        if (!expert_pack_load_source(overlay_extra_path, (int32_t)g_expert_pack.sources.size(), entries)) {
+    for (const std::string &source_path : source_paths) {
+        if (!expert_pack_load_source(source_path.c_str(), (int32_t)g_expert_pack.sources.size(), entries)) {
             g_expert_pack.inited = true;
             return;
         }
