@@ -1,0 +1,11 @@
+INFO:gguf-dump:* Loading: /root/lfz/tmp/gp32-iq1s-header-preflight/Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5.head16m
+Traceback (most recent call last):
+  File "/root/lfz/tmp/gp29-route-detail-run/gguf-py/gguf/scripts/gguf_dump.py", line 477, in <module>
+    main()
+  File "/root/lfz/tmp/gp29-route-detail-run/gguf-py/gguf/scripts/gguf_dump.py", line 462, in main
+    reader = GGUFReader(args.model, 'r')
+  File "/root/lfz/tmp/gp29-route-detail-run/gguf-py/gguf/gguf_reader.py", line 185, in __init__
+    self._build_tensors(offs, tensors_fields)
+  File "/root/lfz/tmp/gp29-route-detail-run/gguf-py/gguf/gguf_reader.py", line 367, in _build_tensors
+    data = self._get(data_offs, item_type, item_count).reshape(np_dims),
+ValueError: cannot reshape array of size 9793120 into shape (163840,4928)

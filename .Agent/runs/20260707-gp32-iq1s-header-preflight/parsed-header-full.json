@@ -1,0 +1,408 @@
+{
+  "expert_examples": {
+    "10": [
+      {
+        "dims": [
+          2048,
+          7168,
+          384
+        ],
+        "index": 26,
+        "name": "blk.1.ffn_down_exps.weight",
+        "offset": 1337770496,
+        "type": 10
+      },
+      {
+        "dims": [
+          2048,
+          7168,
+          384
+        ],
+        "index": 44,
+        "name": "blk.2.ffn_down_exps.weight",
+        "offset": 5436057088,
+        "type": 10
+      },
+      {
+        "dims": [
+          2048,
+          7168,
+          384
+        ],
+        "index": 62,
+        "name": "blk.3.ffn_down_exps.weight",
+        "offset": 9534343680,
+        "type": 10
+      }
+    ],
+    "19": [
+      {
+        "dims": [
+          7168,
+          2048,
+          384
+        ],
+        "index": 28,
+        "name": "blk.1.ffn_gate_exps.weight",
+        "offset": 3192275456,
+        "type": 19
+      },
+      {
+        "dims": [
+          7168,
+          2048,
+          384
+        ],
+        "index": 32,
+        "name": "blk.1.ffn_up_exps.weight",
+        "offset": 4307186176,
+        "type": 19
+      },
+      {
+        "dims": [
+          7168,
+          2048,
+          384
+        ],
+        "index": 46,
+        "name": "blk.2.ffn_gate_exps.weight",
+        "offset": 7290562048,
+        "type": 19
+      },
+      {
+        "dims": [
+          7168,
+          2048,
+          384
+        ],
+        "index": 50,
+        "name": "blk.2.ffn_up_exps.weight",
+        "offset": 8405472768,
+        "type": 19
+      },
+      {
+        "dims": [
+          7168,
+          2048,
+          384
+        ],
+        "index": 64,
+        "name": "blk.3.ffn_gate_exps.weight",
+        "offset": 11388848640,
+        "type": 19
+      },
+      {
+        "dims": [
+          7168,
+          2048,
+          384
+        ],
+        "index": 68,
+        "name": "blk.3.ffn_up_exps.weight",
+        "offset": 12503759360,
+        "type": 19
+      },
+      {
+        "dims": [
+          2048,
+          7168,
+          384
+        ],
+        "index": 80,
+        "name": "blk.4.ffn_down_exps.weight",
+        "offset": 13632630272,
+        "type": 19
+      },
+      {
+        "dims": [
+          7168,
+          2048,
+          384
+        ],
+        "index": 82,
+        "name": "blk.4.ffn_gate_exps.weight",
+        "offset": 14736502272,
+        "type": 19
+      }
+    ]
+  },
+  "expert_type_counts": {
+    "10": 3,
+    "19": 177
+  },
+  "first_tensors": [
+    {
+      "dims": [
+        7168,
+        163840
+      ],
+      "index": 0,
+      "name": "output.weight",
+      "offset": 0,
+      "type": 13
+    },
+    {
+      "dims": [
+        7168
+      ],
+      "index": 1,
+      "name": "output_norm.weight",
+      "offset": 807403520,
+      "type": 0
+    },
+    {
+      "dims": [
+        7168,
+        163840
+      ],
+      "index": 2,
+      "name": "token_embd.weight",
+      "offset": 807432192,
+      "type": 10
+    },
+    {
+      "dims": [
+        128,
+        512,
+        64
+      ],
+      "index": 3,
+      "name": "blk.0.attn_k_b.weight",
+      "offset": 1192783872,
+      "type": 20
+    },
+    {
+      "dims": [
+        7168,
+        576
+      ],
+      "index": 4,
+      "name": "blk.0.attn_kv_a_mqa.weight",
+      "offset": 1195143168,
+      "type": 19
+    },
+    {
+      "dims": [
+        512
+      ],
+      "index": 5,
+      "name": "blk.0.attn_kv_a_norm.weight",
+      "offset": 1195949568,
+      "type": 0
+    },
+    {
+      "dims": [
+        7168
+      ],
+      "index": 6,
+      "name": "blk.0.attn_norm.weight",
+      "offset": 1195951616,
+      "type": 0
+    },
+    {
+      "dims": [
+        8192,
+        7168
+      ],
+      "index": 7,
+      "name": "blk.0.attn_output.weight",
+      "offset": 1195980288,
+      "type": 16
+    },
+    {
+      "dims": [
+        7168,
+        1536
+      ],
+      "index": 8,
+      "name": "blk.0.attn_q_a.weight",
+      "offset": 1211119104,
+      "type": 19
+    },
+    {
+      "dims": [
+        1536
+      ],
+      "index": 9,
+      "name": "blk.0.attn_q_a_norm.weight",
+      "offset": 1213269504,
+      "type": 0
+    },
+    {
+      "dims": [
+        1536,
+        12288
+      ],
+      "index": 10,
+      "name": "blk.0.attn_q_b.weight",
+      "offset": 1213275648,
+      "type": 19
+    },
+    {
+      "dims": [
+        512,
+        128,
+        64
+      ],
+      "index": 11,
+      "name": "blk.0.attn_v_b.weight",
+      "offset": 1216962048,
+      "type": 19
+    },
+    {
+      "dims": [
+        18432,
+        7168
+      ],
+      "index": 12,
+      "name": "blk.0.ffn_down.weight",
+      "offset": 1217781248,
+      "type": 10
+    },
+    {
+      "dims": [
+        7168,
+        18432
+      ],
+      "index": 13,
+      "name": "blk.0.ffn_gate.weight",
+      "offset": 1261133312,
+      "type": 19
+    },
+    {
+      "dims": [
+        7168
+      ],
+      "index": 14,
+      "name": "blk.0.ffn_norm.weight",
+      "offset": 1286938112,
+      "type": 0
+    },
+    {
+      "dims": [
+        7168,
+        18432
+      ],
+      "index": 15,
+      "name": "blk.0.ffn_up.weight",
+      "offset": 1286966784,
+      "type": 19
+    },
+    {
+      "dims": [
+        128,
+        512,
+        64
+      ],
+      "index": 16,
+      "name": "blk.1.attn_k_b.weight",
+      "offset": 1312771584,
+      "type": 20
+    },
+    {
+      "dims": [
+        7168,
+        576
+      ],
+      "index": 17,
+      "name": "blk.1.attn_kv_a_mqa.weight",
+      "offset": 1315130880,
+      "type": 19
+    },
+    {
+      "dims": [
+        512
+      ],
+      "index": 18,
+      "name": "blk.1.attn_kv_a_norm.weight",
+      "offset": 1315937280,
+      "type": 0
+    },
+    {
+      "dims": [
+        7168
+      ],
+      "index": 19,
+      "name": "blk.1.attn_norm.weight",
+      "offset": 1315939328,
+      "type": 0
+    }
+  ],
+  "kind_type_counts": {
+    "down/10": 3,
+    "down/19": 57,
+    "gate/19": 60,
+    "up/19": 60
+  },
+  "last_tensor": {
+    "dims": [
+      7168,
+      2048
+    ],
+    "index": 1095,
+    "name": "blk.60.ffn_up_shexp.weight",
+    "offset": 204421021184,
+    "type": 19
+  },
+  "magic": "GGUF",
+  "metadata_end_offset": 6984096,
+  "n_kv": 61,
+  "n_tensors": 1096,
+  "selected_kv": {
+    "deepseek2.attention.head_count": 64,
+    "deepseek2.attention.head_count_kv": 1,
+    "deepseek2.attention.key_length": 576,
+    "deepseek2.attention.key_length_mla": 192,
+    "deepseek2.attention.kv_lora_rank": 512,
+    "deepseek2.attention.layer_norm_rms_epsilon": 9.999999747378752e-06,
+    "deepseek2.attention.q_lora_rank": 1536,
+    "deepseek2.attention.value_length": 512,
+    "deepseek2.attention.value_length_mla": 128,
+    "deepseek2.block_count": 61,
+    "deepseek2.context_length": 262144,
+    "deepseek2.embedding_length": 7168,
+    "deepseek2.expert_count": 384,
+    "deepseek2.expert_feed_forward_length": 2048,
+    "deepseek2.expert_gating_func": 2,
+    "deepseek2.expert_group_count": 1,
+    "deepseek2.expert_group_used_count": 1,
+    "deepseek2.expert_shared_count": 1,
+    "deepseek2.expert_used_count": 8,
+    "deepseek2.expert_weights_norm": true,
+    "deepseek2.expert_weights_scale": 2.8269999027252197,
+    "deepseek2.feed_forward_length": 18432,
+    "deepseek2.leading_dense_block_count": 1,
+    "deepseek2.rope.dimension_count": 64,
+    "deepseek2.rope.freq_base": 50000.0,
+    "deepseek2.rope.scaling.factor": 64.0,
+    "deepseek2.rope.scaling.original_context_length": 4096,
+    "deepseek2.rope.scaling.type": "yarn",
+    "deepseek2.rope.scaling.yarn_beta_fast": 32.0,
+    "deepseek2.rope.scaling.yarn_beta_slow": 1.0,
+    "deepseek2.rope.scaling.yarn_log_multiplier": 0.10000000149011612,
+    "deepseek2.vocab_size": 163840,
+    "general.architecture": "deepseek2",
+    "general.file_type": 24,
+    "general.license": "other",
+    "general.license.name": "modified-mit",
+    "general.name": "Kimi K2.7 Code",
+    "general.quantization_version": 2,
+    "general.size_label": "384x14B",
+    "general.source.url": "https://huggingface.co/moonshotai/Kimi-K2.7-Code",
+    "general.tags": [
+      "compressed-tensors",
+      "image-text-to-text"
+    ],
+    "general.type": "model",
+    "general.url": "https://huggingface.co/mradermacher/Kimi-K2.7-Code-i1-GGUF"
+  },
+  "type_counts": {
+    "0": 365,
+    "10": 8,
+    "13": 1,
+    "16": 61,
+    "19": 600,
+    "20": 61
+  },
+  "version": 3
+}

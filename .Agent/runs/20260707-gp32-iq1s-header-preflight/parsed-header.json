@@ -1,0 +1,517 @@
+{
+  "all_kv_keys": [
+    "deepseek2.attention.head_count",
+    "deepseek2.attention.head_count_kv",
+    "deepseek2.attention.key_length",
+    "deepseek2.attention.key_length_mla",
+    "deepseek2.attention.kv_lora_rank",
+    "deepseek2.attention.layer_norm_rms_epsilon",
+    "deepseek2.attention.q_lora_rank",
+    "deepseek2.attention.value_length",
+    "deepseek2.attention.value_length_mla",
+    "deepseek2.block_count",
+    "deepseek2.context_length",
+    "deepseek2.embedding_length",
+    "deepseek2.expert_count",
+    "deepseek2.expert_feed_forward_length",
+    "deepseek2.expert_gating_func",
+    "deepseek2.expert_group_count",
+    "deepseek2.expert_group_used_count",
+    "deepseek2.expert_shared_count",
+    "deepseek2.expert_used_count",
+    "deepseek2.expert_weights_norm",
+    "deepseek2.expert_weights_scale",
+    "deepseek2.feed_forward_length",
+    "deepseek2.leading_dense_block_count",
+    "deepseek2.rope.dimension_count",
+    "deepseek2.rope.freq_base",
+    "deepseek2.rope.scaling.factor",
+    "deepseek2.rope.scaling.original_context_length",
+    "deepseek2.rope.scaling.type",
+    "deepseek2.rope.scaling.yarn_beta_fast",
+    "deepseek2.rope.scaling.yarn_beta_slow",
+    "deepseek2.rope.scaling.yarn_log_multiplier",
+    "deepseek2.vocab_size",
+    "general.architecture",
+    "general.file_type",
+    "general.license",
+    "general.license.name",
+    "general.name",
+    "general.quantization_version",
+    "general.size_label",
+    "general.source.url",
+    "general.tags",
+    "general.type",
+    "general.url",
+    "mradermacher.convert_type",
+    "mradermacher.quantize_version",
+    "mradermacher.quantized_at",
+    "mradermacher.quantized_by",
+    "mradermacher.quantized_on",
+    "quantize.imatrix.chunks_count",
+    "quantize.imatrix.dataset",
+    "quantize.imatrix.entries_count",
+    "quantize.imatrix.file",
+    "tokenizer.chat_template",
+    "tokenizer.ggml.bos_token_id",
+    "tokenizer.ggml.eos_token_id",
+    "tokenizer.ggml.merges",
+    "tokenizer.ggml.model",
+    "tokenizer.ggml.padding_token_id",
+    "tokenizer.ggml.pre",
+    "tokenizer.ggml.token_type",
+    "tokenizer.ggml.tokens"
+  ],
+  "first_tensors": [
+    {
+      "dims": [
+        7168,
+        163840
+      ],
+      "index": 0,
+      "name": "output.weight",
+      "offset": 0,
+      "type": 13
+    },
+    {
+      "dims": [
+        7168
+      ],
+      "index": 1,
+      "name": "output_norm.weight",
+      "offset": 807403520,
+      "type": 0
+    },
+    {
+      "dims": [
+        7168,
+        163840
+      ],
+      "index": 2,
+      "name": "token_embd.weight",
+      "offset": 807432192,
+      "type": 10
+    },
+    {
+      "dims": [
+        128,
+        512,
+        64
+      ],
+      "index": 3,
+      "name": "blk.0.attn_k_b.weight",
+      "offset": 1192783872,
+      "type": 20
+    },
+    {
+      "dims": [
+        7168,
+        576
+      ],
+      "index": 4,
+      "name": "blk.0.attn_kv_a_mqa.weight",
+      "offset": 1195143168,
+      "type": 19
+    },
+    {
+      "dims": [
+        512
+      ],
+      "index": 5,
+      "name": "blk.0.attn_kv_a_norm.weight",
+      "offset": 1195949568,
+      "type": 0
+    },
+    {
+      "dims": [
+        7168
+      ],
+      "index": 6,
+      "name": "blk.0.attn_norm.weight",
+      "offset": 1195951616,
+      "type": 0
+    },
+    {
+      "dims": [
+        8192,
+        7168
+      ],
+      "index": 7,
+      "name": "blk.0.attn_output.weight",
+      "offset": 1195980288,
+      "type": 16
+    },
+    {
+      "dims": [
+        7168,
+        1536
+      ],
+      "index": 8,
+      "name": "blk.0.attn_q_a.weight",
+      "offset": 1211119104,
+      "type": 19
+    },
+    {
+      "dims": [
+        1536
+      ],
+      "index": 9,
+      "name": "blk.0.attn_q_a_norm.weight",
+      "offset": 1213269504,
+      "type": 0
+    },
+    {
+      "dims": [
+        1536,
+        12288
+      ],
+      "index": 10,
+      "name": "blk.0.attn_q_b.weight",
+      "offset": 1213275648,
+      "type": 19
+    },
+    {
+      "dims": [
+        512,
+        128,
+        64
+      ],
+      "index": 11,
+      "name": "blk.0.attn_v_b.weight",
+      "offset": 1216962048,
+      "type": 19
+    },
+    {
+      "dims": [
+        18432,
+        7168
+      ],
+      "index": 12,
+      "name": "blk.0.ffn_down.weight",
+      "offset": 1217781248,
+      "type": 10
+    },
+    {
+      "dims": [
+        7168,
+        18432
+      ],
+      "index": 13,
+      "name": "blk.0.ffn_gate.weight",
+      "offset": 1261133312,
+      "type": 19
+    },
+    {
+      "dims": [
+        7168
+      ],
+      "index": 14,
+      "name": "blk.0.ffn_norm.weight",
+      "offset": 1286938112,
+      "type": 0
+    },
+    {
+      "dims": [
+        7168,
+        18432
+      ],
+      "index": 15,
+      "name": "blk.0.ffn_up.weight",
+      "offset": 1286966784,
+      "type": 19
+    },
+    {
+      "dims": [
+        128,
+        512,
+        64
+      ],
+      "index": 16,
+      "name": "blk.1.attn_k_b.weight",
+      "offset": 1312771584,
+      "type": 20
+    },
+    {
+      "dims": [
+        7168,
+        576
+      ],
+      "index": 17,
+      "name": "blk.1.attn_kv_a_mqa.weight",
+      "offset": 1315130880,
+      "type": 19
+    },
+    {
+      "dims": [
+        512
+      ],
+      "index": 18,
+      "name": "blk.1.attn_kv_a_norm.weight",
+      "offset": 1315937280,
+      "type": 0
+    },
+    {
+      "dims": [
+        7168
+      ],
+      "index": 19,
+      "name": "blk.1.attn_norm.weight",
+      "offset": 1315939328,
+      "type": 0
+    },
+    {
+      "dims": [
+        8192,
+        7168
+      ],
+      "index": 20,
+      "name": "blk.1.attn_output.weight",
+      "offset": 1315968000,
+      "type": 16
+    },
+    {
+      "dims": [
+        7168,
+        1536
+      ],
+      "index": 21,
+      "name": "blk.1.attn_q_a.weight",
+      "offset": 1331106816,
+      "type": 19
+    },
+    {
+      "dims": [
+        1536
+      ],
+      "index": 22,
+      "name": "blk.1.attn_q_a_norm.weight",
+      "offset": 1333257216,
+      "type": 0
+    },
+    {
+      "dims": [
+        1536,
+        12288
+      ],
+      "index": 23,
+      "name": "blk.1.attn_q_b.weight",
+      "offset": 1333263360,
+      "type": 19
+    },
+    {
+      "dims": [
+        512,
+        128,
+        64
+      ],
+      "index": 24,
+      "name": "blk.1.attn_v_b.weight",
+      "offset": 1336949760,
+      "type": 19
+    },
+    {
+      "dims": [
+        384
+      ],
+      "index": 25,
+      "name": "blk.1.exp_probs_b.bias",
+      "offset": 1337768960,
+      "type": 0
+    },
+    {
+      "dims": [
+        2048,
+        7168,
+        384
+      ],
+      "index": 26,
+      "name": "blk.1.ffn_down_exps.weight",
+      "offset": 1337770496,
+      "type": 10
+    },
+    {
+      "dims": [
+        2048,
+        7168
+      ],
+      "index": 27,
+      "name": "blk.1.ffn_down_shexp.weight",
+      "offset": 3187458560,
+      "type": 10
+    },
+    {
+      "dims": [
+        7168,
+        2048,
+        384
+      ],
+      "index": 28,
+      "name": "blk.1.ffn_gate_exps.weight",
+      "offset": 3192275456,
+      "type": 19
+    },
+    {
+      "dims": [
+        7168,
+        384
+      ],
+      "index": 29,
+      "name": "blk.1.ffn_gate_inp.weight",
+      "offset": 4293280256,
+      "type": 0
+    },
+    {
+      "dims": [
+        7168,
+        2048
+      ],
+      "index": 30,
+      "name": "blk.1.ffn_gate_shexp.weight",
+      "offset": 4304290304,
+      "type": 19
+    },
+    {
+      "dims": [
+        7168
+      ],
+      "index": 31,
+      "name": "blk.1.ffn_norm.weight",
+      "offset": 4307157504,
+      "type": 0
+    },
+    {
+      "dims": [
+        7168,
+        2048,
+        384
+      ],
+      "index": 32,
+      "name": "blk.1.ffn_up_exps.weight",
+      "offset": 4307186176,
+      "type": 19
+    },
+    {
+      "dims": [
+        7168,
+        2048
+      ],
+      "index": 33,
+      "name": "blk.1.ffn_up_shexp.weight",
+      "offset": 5408190976,
+      "type": 19
+    },
+    {
+      "dims": [
+        128,
+        512,
+        64
+      ],
+      "index": 34,
+      "name": "blk.2.attn_k_b.weight",
+      "offset": 5411058176,
+      "type": 20
+    },
+    {
+      "dims": [
+        7168,
+        576
+      ],
+      "index": 35,
+      "name": "blk.2.attn_kv_a_mqa.weight",
+      "offset": 5413417472,
+      "type": 19
+    },
+    {
+      "dims": [
+        512
+      ],
+      "index": 36,
+      "name": "blk.2.attn_kv_a_norm.weight",
+      "offset": 5414223872,
+      "type": 0
+    },
+    {
+      "dims": [
+        7168
+      ],
+      "index": 37,
+      "name": "blk.2.attn_norm.weight",
+      "offset": 5414225920,
+      "type": 0
+    },
+    {
+      "dims": [
+        8192,
+        7168
+      ],
+      "index": 38,
+      "name": "blk.2.attn_output.weight",
+      "offset": 5414254592,
+      "type": 16
+    },
+    {
+      "dims": [
+        7168,
+        1536
+      ],
+      "index": 39,
+      "name": "blk.2.attn_q_a.weight",
+      "offset": 5429393408,
+      "type": 19
+    }
+  ],
+  "kv_offset_end": 6913103,
+  "magic": "GGUF",
+  "n_kv": 61,
+  "n_tensors": 1096,
+  "parsed_tensor_count": 40,
+  "selected_kv": {
+    "deepseek2.attention.head_count": 64,
+    "deepseek2.attention.head_count_kv": 1,
+    "deepseek2.attention.key_length": 576,
+    "deepseek2.attention.key_length_mla": 192,
+    "deepseek2.attention.kv_lora_rank": 512,
+    "deepseek2.attention.layer_norm_rms_epsilon": 9.999999747378752e-06,
+    "deepseek2.attention.q_lora_rank": 1536,
+    "deepseek2.attention.value_length": 512,
+    "deepseek2.attention.value_length_mla": 128,
+    "deepseek2.block_count": 61,
+    "deepseek2.context_length": 262144,
+    "deepseek2.embedding_length": 7168,
+    "deepseek2.expert_count": 384,
+    "deepseek2.expert_feed_forward_length": 2048,
+    "deepseek2.expert_gating_func": 2,
+    "deepseek2.expert_group_count": 1,
+    "deepseek2.expert_group_used_count": 1,
+    "deepseek2.expert_shared_count": 1,
+    "deepseek2.expert_used_count": 8,
+    "deepseek2.expert_weights_norm": true,
+    "deepseek2.expert_weights_scale": 2.8269999027252197,
+    "deepseek2.feed_forward_length": 18432,
+    "deepseek2.leading_dense_block_count": 1,
+    "deepseek2.rope.dimension_count": 64,
+    "deepseek2.rope.freq_base": 50000.0,
+    "deepseek2.rope.scaling.factor": 64.0,
+    "deepseek2.rope.scaling.original_context_length": 4096,
+    "deepseek2.rope.scaling.type": "yarn",
+    "deepseek2.rope.scaling.yarn_beta_fast": 32.0,
+    "deepseek2.rope.scaling.yarn_beta_slow": 1.0,
+    "deepseek2.rope.scaling.yarn_log_multiplier": 0.10000000149011612,
+    "deepseek2.vocab_size": 163840,
+    "general.architecture": "deepseek2",
+    "general.file_type": 24,
+    "general.license": "other",
+    "general.license.name": "modified-mit",
+    "general.name": "Kimi K2.7 Code",
+    "general.quantization_version": 2,
+    "general.size_label": "384x14B",
+    "general.source.url": "https://huggingface.co/moonshotai/Kimi-K2.7-Code",
+    "general.tags": [
+      "compressed-tensors",
+      "image-text-to-text"
+    ],
+    "general.type": "model",
+    "general.url": "https://huggingface.co/mradermacher/Kimi-K2.7-Code-i1-GGUF"
+  },
+  "version": 3
+}

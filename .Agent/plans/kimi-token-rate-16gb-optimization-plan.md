@@ -92644,3 +92644,71 @@ Execution records:
 - Store under:
   `.Agent/runs/20260707-gp32-iq1s-header-preflight/`.
 - Commit and push the plan and result.
+
+GP32 execution result:
+
+- Timestamp: `2026-07-07T08:45:00+0800`.
+- Status: completed header/range preflight; no deletion; no full model
+  download.
+- Report:
+  `.Agent/runs/20260707-gp32-iq1s-header-preflight/report.md`.
+- Remote temp:
+  `/root/lfz/tmp/gp32-iq1s-header-preflight/`.
+- Checked file:
+  `Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5`.
+- Downloaded range: `0-16777215` only.
+- 16 MiB prefix SHA256:
+  `47eb7d745164141fd86ed11bf8479053b5f76db58771a0ab6abab2f09f6b48a4`.
+- The 16 MiB prefix binary is not committed.
+
+Metadata result:
+
+- `magic=GGUF`.
+- `version=3`.
+- `n_tensors=1096`.
+- `n_kv=61`.
+- `general.architecture=deepseek2`.
+- `general.name=Kimi K2.7 Code`.
+- `general.file_type=24`, which maps to
+  `LLAMA_FTYPE_MOSTLY_IQ1_S`.
+- `deepseek2.block_count=61`.
+- `deepseek2.expert_count=384`.
+- `deepseek2.expert_used_count=8`.
+- `deepseek2.expert_feed_forward_length=2048`.
+- `deepseek2.leading_dense_block_count=1`.
+
+Tensor type metadata:
+
+- All tensor metadata parsed from the 16 MiB prefix.
+- Type counts:
+  - `F32`: `365`;
+  - `Q2_K`: `8`;
+  - `Q5_K`: `1`;
+  - `IQ2_XXS`: `61`;
+  - `IQ1_S`: `600`;
+  - `IQ4_NL`: `61`.
+- Expert tensor type counts:
+  - `up/IQ1_S`: `60`;
+  - `gate/IQ1_S`: `60`;
+  - `down/IQ1_S`: `57`;
+  - `down/Q2_K`: `3`.
+
+Decision:
+
+- GP32 passes the metadata gate.
+- `i1-IQ1_S` remains the next plausible material branch:
+  - size ratio is close enough to GP10 target;
+  - header is Kimi/deepseek2-compatible;
+  - expert tensor types are plausible for the current vendor stream path
+    (`IQ1_S` and `Q2_K` are supported).
+- Remaining blockers:
+  - current free disk is only about `85G`, while final IQ1_S is about
+    `190.39 GiB`;
+  - deleting old packs requires explicit approval;
+  - semantic quality risk is high;
+  - runtime prompt/fallback behavior still needs n32 smoke validation.
+
+Next step:
+
+- Write a cleanup/download/smoke plan before any destructive action.
+- Request explicit approval before deleting old non-SOTA packs.

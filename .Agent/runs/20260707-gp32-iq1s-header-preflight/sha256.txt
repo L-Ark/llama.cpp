@@ -1,0 +1,1 @@
+47eb7d745164141fd86ed11bf8479053b5f76db58771a0ab6abab2f09f6b48a4  Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5.head16m

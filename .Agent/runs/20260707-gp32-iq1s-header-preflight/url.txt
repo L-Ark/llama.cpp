@@ -1,0 +1,1 @@
+https://huggingface.co/mradermacher/Kimi-K2.7-Code-i1-GGUF/resolve/main/Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5
