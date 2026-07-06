@@ -91294,3 +91294,140 @@ Decision:
   run has been performed.
 - The next material gate remains disk/artifact approval for the full lower-byte
   GGUF candidate.
+
+## GP21: remote range selected-pack feasibility for AesSedai lower-byte GGUF
+
+Timestamp: `2026-07-07T03:45:00+0800`.
+
+Status: completed non-destructive planning and range smoke; no pack written.
+
+Rationale:
+
+- Full AesSedai GGUF download is blocked by current disk space.
+- Existing scripts can read remote GGUF metadata prefixes and build selected
+  expert packs via HTTP Range requests, avoiding full model download.
+- Before deleting old assets, test whether the current SOTA selected hotset
+  could be rebuilt from the lower-byte remote GGUF within the current `86G`
+  free space.
+
+Record:
+
+- `.Agent/runs/20260707-gp21-remote-range-pack/plan.json`
+- `.Agent/runs/20260707-gp21-remote-range-pack/plan.tsv`
+- `.Agent/runs/20260707-gp21-remote-range-pack/manifest-summary.json`
+- `.Agent/runs/20260707-gp21-remote-range-pack/manifest.tsv`
+- `.Agent/runs/20260707-gp21-remote-range-pack/build-dry-run-summary.json`
+
+Method:
+
+- Remote host:
+  `ssh -p 51056 root@92.180.27.82`.
+- Did not modify the dirty remote checkout.
+- Extracted scripts from `FETCH_HEAD` into
+  `/root/lfz/tmp/gp21-remote-range-pack`.
+- Input packs:
+  - `kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `kimi-iq3s-l1l2down-overlay.expert-pack`.
+- Remote GGUF source:
+  - repo `AesSedai/Kimi-K2.7-Code-GGUF`;
+  - prefix `IQ2_XXS/`;
+  - `7` remote GGUF shards;
+  - metadata range read: `64 MiB` per shard.
+
+Planning result:
+
+- Remote expert tensors parsed: `180`.
+- Selected entries: `31599`.
+- Selected tensors: `180`.
+- Current selected payload: `167.613 GiB`.
+- Remote selected payload: `115.215 GiB`.
+- Remote selected pack estimate: `115.220 GiB`.
+- Remote/current payload ratio: `0.687389`.
+- Current disk free: `85.684 GiB`.
+- Missing disk for the selected remote pack: about `29.55 GiB`.
+- The selected lower-byte pack therefore still cannot be written under current
+  disk state.
+
+Actual remote tensor types in the `IQ2_XXS` directory are mixed:
+
+- `up/IQ1_S`: `8698` entries, `23.226 GiB`.
+- `up/IQ2_XXS`: `1691` entries, `5.960 GiB`.
+- `gate/IQ1_S`: `4687` entries, `12.516 GiB`.
+- `gate/IQ2_XXS`: `5701` entries, `20.095 GiB`.
+- `down/IQ3_XXS`: `7224` entries, `37.809 GiB`.
+- `down/IQ2_S`: `3056` entries, `13.383 GiB`.
+- `down/IQ2_XS`: `384` entries, `1.518 GiB`.
+- `down/Q2_K`: `158` entries, `0.709 GiB`.
+
+Range smoke:
+
+- Dry-run builder requested `4` manifest entries.
+- Smoke bytes read: `16973824` bytes.
+- No pack was written.
+- Remote ranges were valid:
+  - `invalid_remote_range_count=0`;
+  - `bad_pack_offset_count=0`.
+
+Decision:
+
+- Remote range construction is technically feasible and reproducible.
+- The current SOTA selected hotset still does not fit in the existing `86G`
+  free disk when rebuilt from AesSedai lower-byte GGUF.
+- The lower-byte candidate also requires more runtime type compatibility than
+  GP20 added:
+  - `IQ1_S` for many up/gate tensors;
+  - `Q2_K` for a small down subset;
+  - mixed `IQ1_S`/`IQ2_XXS` up-gate pairs in many layers.
+- This path alone is also insufficient for `5 tok/s`: `0.687x` payload is above
+  the GP10 required range of roughly `0.39-0.55x` bytes/token.
+
+## GP22: complete lower-byte vendor stream type compatibility
+
+Timestamp: `2026-07-07T03:55:00+0800`.
+
+Status: planned before code edit.
+
+Rationale:
+
+- GP21 showed the AesSedai lower-byte candidate includes actual expert tensor
+  types beyond IQ2:
+  - up/gate: `IQ1_S` and `IQ2_XXS`;
+  - down: `IQ2_XS`, `IQ2_S`, `IQ3_XXS`, and `Q2_K`.
+- GP20 added `IQ2_XXS`/`IQ2_XS`, but the runtime would still reject:
+  - same-type `IQ1_S` up/gate layers;
+  - mixed `IQ1_S`/`IQ2_XXS` up-gate layers;
+  - `Q2_K` down tensors.
+
+Layer pairing from GP21:
+
+- `IQ1_S`/`IQ1_S`: `25` layers.
+- `IQ2_XXS`/`IQ2_XXS`: `7` layers.
+- `IQ2_XXS`/`IQ1_S`: `2` layers.
+- `IQ1_S`/`IQ2_XXS`: `26` layers.
+
+Theory and expected bound:
+
+- This patch still does not reduce bytes/token by itself and is not a SOTA
+  speedup.
+- It is required so the lower-byte candidate can use the same vendor stream and
+  expert-pack machinery during the future `n32`/`n96` quality and token-rate
+  gates.
+- The expected bound remains governed by GP10 and GP21 byte ratios. Even if the
+  type gate is fixed, current selected hotset bytes are only reduced to
+  `0.687x`, so this exact pack is not expected to reach `5 tok/s`.
+
+Implementation scope:
+
+- Add `GGML_TYPE_IQ1_S` and `GGML_TYPE_Q2_K` to vendor MoE stream supported
+  types.
+- Add the same types to compact MMVQ batch accepted-type switch.
+- Allow mixed up/gate pairs where both sides are from the lower-byte supported
+  set and the pair observed in GP21 is `IQ1_S` with `IQ2_XXS`.
+- Do not change cache policy, IO depth, current-down overlap, or SOTA runtime
+  defaults.
+
+Validation gate:
+
+- Remote clean-worktree CUDA build must pass.
+- No token-rate or quality claim is allowed until the lower-byte model/pack is
+  available and tested under 16 GB cgroup cold start.

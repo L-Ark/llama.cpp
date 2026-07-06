@@ -1,0 +1,119 @@
+{
+  "dry_run": true,
+  "execute": false,
+  "fits_output_fs": false,
+  "manifest_tsv": "/root/lfz/tmp/gp21-remote-range-pack/out/manifest.tsv",
+  "missing_bytes": 31733178368,
+  "missing_gib": 29.55382537841797,
+  "output_fs_free_bytes": 91982934016,
+  "output_fs_free_gib": 85.6657829284668,
+  "output_fs_path": "/root/lfz/runs/ik_llama",
+  "output_pack": "/root/lfz/runs/ik_llama/kimi-iq2xs-assets/kimi-aessedai-iq2-selected-from-current-hotset.expert-pack",
+  "pack": {
+    "alignment": 4096,
+    "bad_pack_offset_count": 0,
+    "by_kind": {
+      "down": {
+        "bytes": 57357303808,
+        "entries": 10822
+      },
+      "gate": {
+        "bytes": 35015163904,
+        "entries": 10388
+      },
+      "up": {
+        "bytes": 31338840064,
+        "entries": 10389
+      }
+    },
+    "by_remote_type": {
+      "IQ1_S": {
+        "bytes": 38377472000,
+        "entries": 13385
+      },
+      "IQ2_S": {
+        "bytes": 14369947648,
+        "entries": 3056
+      },
+      "IQ2_XS": {
+        "bytes": 1629487104,
+        "entries": 384
+      },
+      "IQ2_XXS": {
+        "bytes": 27976531968,
+        "entries": 7392
+      },
+      "IQ3_XXS": {
+        "bytes": 40596799488,
+        "entries": 7224
+      },
+      "Q2_K": {
+        "bytes": 761069568,
+        "entries": 158
+      }
+    },
+    "current_iq3_runtime_compatible": false,
+    "data_start": 4804608,
+    "entries": 31599,
+    "entry_bytes": 152,
+    "estimated_pack_bytes": 123716112384,
+    "header_bytes": 40,
+    "invalid_remote_range_count": 0,
+    "payload_bytes": 123711307776,
+    "remote_shards": 6,
+    "runtime_nbytes_mismatch_count": 31599,
+    "selected_tensors": 180
+  },
+  "pack_written": false,
+  "repo_head": "unknown",
+  "smoke": [
+    {
+      "bytes_per_second": 2864102.199806768,
+      "entry_idx": 0,
+      "expert_idx": 0,
+      "remote_nbytes": 4243456,
+      "remote_range_header": "bytes=3131775424-3136018879",
+      "remote_shard_name": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00002-of-00007.gguf",
+      "seconds": 1.4816007614135742,
+      "sha256": "787446317323198397c3590a5a8ba3eae0527b95fb79f949fe556088ec392fb8",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "bytes_per_second": 3459345.791367663,
+      "entry_idx": 1,
+      "expert_idx": 1,
+      "remote_nbytes": 4243456,
+      "remote_range_header": "bytes=3136018880-3140262335",
+      "remote_shard_name": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00002-of-00007.gguf",
+      "seconds": 1.2266643047332764,
+      "sha256": "45b8cfc0c8ac38bb692688f09c2b011e0d367a6b9656b13842441bd393fe5e3a",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "bytes_per_second": 3483590.0745682884,
+      "entry_idx": 2,
+      "expert_idx": 2,
+      "remote_nbytes": 4243456,
+      "remote_range_header": "bytes=3140262336-3144505791",
+      "remote_shard_name": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00002-of-00007.gguf",
+      "seconds": 1.2181272506713867,
+      "sha256": "f5aeef610995cf754c688d13036118e084a761f60598d8cdadb0b8b937670686",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    },
+    {
+      "bytes_per_second": 3647644.237707525,
+      "entry_idx": 3,
+      "expert_idx": 3,
+      "remote_nbytes": 4243456,
+      "remote_range_header": "bytes=3144505792-3148749247",
+      "remote_shard_name": "IQ2_XXS/Kimi-K2.7-Code-IQ2_XXS-00002-of-00007.gguf",
+      "seconds": 1.1633415222167969,
+      "sha256": "9817fc862ac21245731b59f9417b2f0af55fa843179f5cc3cb50eb7433a3db6a",
+      "tensor": "blk.1.ffn_down_exps.weight"
+    }
+  ],
+  "smoke_bytes": 16973824,
+  "smoke_entries_completed": 4,
+  "smoke_entries_requested": 4,
+  "write_summary": null
+}

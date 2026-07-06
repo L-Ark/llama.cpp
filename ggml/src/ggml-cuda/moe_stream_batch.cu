@@ -6307,9 +6307,10 @@ static bool prompt_up_gate_stream_enabled() {
 }
 
 static bool moe_stream_type_supported(ggml_type type) {
-    return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ3_S ||
+    return type == GGML_TYPE_IQ1_S ||
+        type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ3_S ||
         type == GGML_TYPE_IQ2_XXS || type == GGML_TYPE_IQ2_XS || type == GGML_TYPE_IQ2_S ||
-        type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
+        type == GGML_TYPE_Q2_K || type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }
 
 static std::atomic<int> g_q4_down_parity_calls{0};
@@ -6791,7 +6792,9 @@ static bool launch_moe_mmvq_compact_batch(
         cudaStream_t st) {
     switch (src0_type) {
         case GGML_TYPE_Q4_0:
+        case GGML_TYPE_Q2_K:
         case GGML_TYPE_Q3_K:
+        case GGML_TYPE_IQ1_S:
         case GGML_TYPE_IQ2_XXS:
         case GGML_TYPE_IQ2_XS:
         case GGML_TYPE_IQ3_XXS:
@@ -7052,8 +7055,11 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const bool scoped_mixed_iq2_iq3 =
         (src0_type == GGML_TYPE_IQ2_S && gate_type == GGML_TYPE_IQ3_XXS) ||
         (src0_type == GGML_TYPE_IQ3_XXS && gate_type == GGML_TYPE_IQ2_S);
+    const bool scoped_mixed_iq1_iq2xxs =
+        (src0_type == GGML_TYPE_IQ1_S && gate_type == GGML_TYPE_IQ2_XXS) ||
+        (src0_type == GGML_TYPE_IQ2_XXS && gate_type == GGML_TYPE_IQ1_S);
     if (!moe_stream_type_supported(src0_type) || !moe_stream_type_supported(gate_type)) return decline("unsupported_type");
-    if (mixed_types && !scoped_mixed_iq2_iq3) return decline("unsupported_mixed_type_pair");
+    if (mixed_types && !scoped_mixed_iq2_iq3 && !scoped_mixed_iq1_iq2xxs) return decline("unsupported_mixed_type_pair");
     if (up_expert_bytes == 0 || gate_expert_bytes == 0) return decline("bad_expert_bytes");
     if (!src1_f32 || !src0_up_data || !src0_gate_data) return decline("missing_input");
     if (unary_op != GGML_UNARY_OP_SILU && unary_op != GGML_UNARY_OP_RELU && unary_op != GGML_UNARY_OP_GELU) return decline("unsupported_unary");
