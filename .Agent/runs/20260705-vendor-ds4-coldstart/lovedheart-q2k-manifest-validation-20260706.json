@@ -1,0 +1,482 @@
+{
+  "accepted_sota_reference": {
+    "branch": "ssd/vendor/deepseek-token-rate-16gb",
+    "eval_tok_s": 4.4,
+    "ram_limit_bytes": 16000000000,
+    "ttft_gate_ms": 33617.688744,
+    "ttft_ms": 32087.738292
+  },
+  "api_url": "https://huggingface.co/api/models/lovedheart/DeepSeek-V4-Flash-GGUF?blobs=true",
+  "created_at_utc": "2026-07-06T00:39:25.698576Z",
+  "decision": {
+    "accepted_sota_eval_tok_s": 4.4,
+    "download_allowed_now": false,
+    "next_action": "Get explicit disk cleanup/relocation approval or find a smaller complete DeepSeek4 GGUF candidate; do not download with only current free space.",
+    "reason": "Manifest is now complete and source supports local split loading, but /root has far less than the required >=100 GiB free space and no correctness/performance benchmark has been run.",
+    "sota_changed": false,
+    "status": "manifest_complete_loader_supported_pending_disk_download_correctness_and_strict_benchmark"
+  },
+  "gguf_count": 24,
+  "loader_support": {
+    "evidence": [
+      {
+        "file": "src/llama-model-loader.cpp",
+        "lines": "77-101",
+        "summary": "llama_get_list_splits derives all split filenames from the supplied split path and n_split."
+      },
+      {
+        "file": "src/llama-model-loader.cpp",
+        "lines": "586-607",
+        "summary": "loader reads split.count, requires loading from split.no == 0, generates split list when none is supplied, and rejects wrong split count."
+      },
+      {
+        "file": "src/llama-model-loader.cpp",
+        "lines": "613-638",
+        "summary": "loader opens every additional split, checks split.no for each, and adds each split file to the tensor-weight map."
+      },
+      {
+        "file": "src/llama.cpp",
+        "lines": "489-524",
+        "summary": "split path helpers use the -00001-of-00023.gguf naming pattern used by the candidate."
+      },
+      {
+        "file": "common/download.h",
+        "lines": "76-77",
+        "summary": "HF/download layer documents automatic detection/download of multipart GGUF files."
+      },
+      {
+        "file": "common/download.cpp",
+        "lines": "734-755",
+        "summary": "URL download task generation expands a split GGUF URL into all numbered parts."
+      }
+    ],
+    "remaining_validation": "Actual loader validation still requires all 23 shards on disk; current /root available space is insufficient.",
+    "status": "source_supports_local_split_loading_when_first_shard_is_present"
+  },
+  "method": "Hugging Face model API with blobs=true plus HEAD metadata probes only; no model file body downloads.",
+  "model_last_modified": "2026-04-26T21:44:33.000Z",
+  "model_sha": "cd42deba41ac0536e68b125dfc367197b0ec3038",
+  "q2k": {
+    "claimed_totals": [
+      23
+    ],
+    "complete_manifest": true,
+    "entries": [
+      {
+        "blob_id": "8d60ab615519d81763dbf01319693711c70f4fe0",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+        "index": 1,
+        "lfs_oid": null,
+        "lfs_size": 4422407072,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+        "size": 4422407072,
+        "size_gib": 4.118688
+      },
+      {
+        "blob_id": "f079e097fe853fc741bfc797e42254ca1b8a0cf2",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00002-of-00023.gguf",
+        "index": 2,
+        "lfs_oid": null,
+        "lfs_size": 4479736224,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00002-of-00023.gguf",
+        "size": 4479736224,
+        "size_gib": 4.172079
+      },
+      {
+        "blob_id": "51b7ed9da3dbdbf1f00edcc2c3c725e800cec1e8",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00003-of-00023.gguf",
+        "index": 3,
+        "lfs_oid": null,
+        "lfs_size": 4473531744,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00003-of-00023.gguf",
+        "size": 4473531744,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "3fa43da437b1f0e338f9ad54ae0d51ec3541dcdf",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00004-of-00023.gguf",
+        "index": 4,
+        "lfs_oid": null,
+        "lfs_size": 4473531744,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00004-of-00023.gguf",
+        "size": 4473531744,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "5dbb1906b1d73fb7f3494c8daf1adb4cd1c55fa0",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00005-of-00023.gguf",
+        "index": 5,
+        "lfs_oid": null,
+        "lfs_size": 4473531744,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00005-of-00023.gguf",
+        "size": 4473531744,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "c5b26202d51fe39bb942740b3669013b66a32c84",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00006-of-00023.gguf",
+        "index": 6,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00006-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "69a524cc4987615516723c10c39676a8604b8d3e",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00007-of-00023.gguf",
+        "index": 7,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00007-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "dc3e17888fe9fe4b042efc1fd190c97aadd3b4e6",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00008-of-00023.gguf",
+        "index": 8,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00008-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "b82877a648430bb85fa8b00abbd1e8748044ce8f",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00009-of-00023.gguf",
+        "index": 9,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00009-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "b1c3c287f49f71e373d9c89456a9a70a49237cce",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00010-of-00023.gguf",
+        "index": 10,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00010-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "c91563dff072b43308a3ca8d215dc8989f991700",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00011-of-00023.gguf",
+        "index": 11,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00011-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "14d0b3a9d7dfb5ad4f09b041b87cd8508d5af658",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00012-of-00023.gguf",
+        "index": 12,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00012-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "4d22f162a47f4be76e578368a6d663e3416a76cb",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00013-of-00023.gguf",
+        "index": 13,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00013-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "157eda403009e423ec5f79ace90bbacf93a3ebb4",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00014-of-00023.gguf",
+        "index": 14,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00014-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "211b5a281fefd3b1c6b1edae32ef5a689fe94870",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00015-of-00023.gguf",
+        "index": 15,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00015-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "b892c9a5f2cf571a9c7ddd89a8558a2af9996d9c",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00016-of-00023.gguf",
+        "index": 16,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00016-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "5995029bb965268d98c310cb57d0206e4cc4b69f",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00017-of-00023.gguf",
+        "index": 17,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00017-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "99a116aeec8296b28a377c64ed1a92844db16756",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00018-of-00023.gguf",
+        "index": 18,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00018-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "e88ec336b73439e09d3d6d0e93bca1a6359529f4",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00019-of-00023.gguf",
+        "index": 19,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00019-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "119a3a70ed1dbb445d22e4b5cb0fa26a3b5895e1",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00020-of-00023.gguf",
+        "index": 20,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00020-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "b98dab49a85885ea40b0e9f0fe4321b61828ecaf",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00021-of-00023.gguf",
+        "index": 21,
+        "lfs_oid": null,
+        "lfs_size": 4473531808,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00021-of-00023.gguf",
+        "size": 4473531808,
+        "size_gib": 4.166301
+      },
+      {
+        "blob_id": "796d4623efd4ec95d664507fc2ac14f9b71782c2",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00022-of-00023.gguf",
+        "index": 22,
+        "lfs_oid": null,
+        "lfs_size": 4104744384,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00022-of-00023.gguf",
+        "size": 4104744384,
+        "size_gib": 3.822841
+      },
+      {
+        "blob_id": "03754f02a13da56991833a8187a11107c4af9ba1",
+        "claimed_total": 23,
+        "download_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00023-of-00023.gguf",
+        "index": 23,
+        "lfs_oid": null,
+        "lfs_size": 2447529952,
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00023-of-00023.gguf",
+        "size": 2447529952,
+        "size_gib": 2.27944
+      }
+    ],
+    "expected_total": 23,
+    "extra_indices": [],
+    "first_shard_header_range_parse": {
+      "bytes_read": 8388608,
+      "gguf_version": 3,
+      "interesting_metadata": {
+        "deepseek4.block_count": {
+          "type": 4,
+          "value": 43
+        },
+        "deepseek4.expert_count": {
+          "type": 4,
+          "value": 256
+        },
+        "deepseek4.expert_used_count": {
+          "type": 4,
+          "value": 6
+        },
+        "general.architecture": {
+          "type": 8,
+          "value": "deepseek4"
+        },
+        "general.file_type": {
+          "type": 4,
+          "value": 19
+        },
+        "split.count": {
+          "type": 2,
+          "value": 23
+        },
+        "split.no": {
+          "type": 2,
+          "value": 0
+        },
+        "split.tensors.count": {
+          "type": 5,
+          "value": 1328
+        }
+      },
+      "n_kv": 54,
+      "n_tensors": 39,
+      "parse_offset_after_kv": 5242722,
+      "range_bytes_requested": "0-8388607",
+      "url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf"
+    },
+    "head_probes": [
+      {
+        "content_length": "4422407072",
+        "content_type": "application/octet-stream",
+        "etag": "\"2b8908565184966e7f39216467a21098c30b9569ad0ca5cba1d51d73bf6cf62f\"",
+        "final_url_prefix": "https://us.aws.cdn.hf.co/xet-bridge-us/69ee4e546fa6de06d22af731/2b8908565184966e7f39216467a21098c30b9569ad0ca5cba1d51d73bf6cf62f?response-content-disposition=inline%3B+filename*%3D",
+        "head_error": null,
+        "head_ok": true,
+        "head_status": 200,
+        "index": 1,
+        "resolve_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+        "x_linked_etag": null,
+        "x_linked_size": null
+      },
+      {
+        "content_length": "4479736224",
+        "content_type": "application/octet-stream",
+        "etag": "\"8ef7b243a79b6199e5d118bab6052deede63d9277bdf4f90df03a0b844c2bf05\"",
+        "final_url_prefix": "https://us.aws.cdn.hf.co/xet-bridge-us/69ee4e546fa6de06d22af731/8ef7b243a79b6199e5d118bab6052deede63d9277bdf4f90df03a0b844c2bf05?X-Xet-Cas-Uid=public&response-content-disposition=i",
+        "head_error": null,
+        "head_ok": true,
+        "head_status": 200,
+        "index": 2,
+        "resolve_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00002-of-00023.gguf",
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00002-of-00023.gguf",
+        "x_linked_etag": null,
+        "x_linked_size": null
+      },
+      {
+        "content_length": "4473531808",
+        "content_type": "application/octet-stream",
+        "etag": "\"89a101c96c3b8bc7a0248543ad9f6480b76afbb69a8deee17f6dc100ea718913\"",
+        "final_url_prefix": "https://us.aws.cdn.hf.co/xet-bridge-us/69ee4e546fa6de06d22af731/89a101c96c3b8bc7a0248543ad9f6480b76afbb69a8deee17f6dc100ea718913?X-Xet-Cas-Uid=public&response-content-disposition=i",
+        "head_error": null,
+        "head_ok": true,
+        "head_status": 200,
+        "index": 21,
+        "resolve_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00021-of-00023.gguf",
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00021-of-00023.gguf",
+        "x_linked_etag": null,
+        "x_linked_size": null
+      },
+      {
+        "content_length": "4104744384",
+        "content_type": "application/octet-stream",
+        "etag": "\"d6a25cea9458b9fbd6b0c8ddab549789d31328b030ecc2be6fef71a1921b400a\"",
+        "final_url_prefix": "https://us.aws.cdn.hf.co/xet-bridge-us/69ee4e546fa6de06d22af731/d6a25cea9458b9fbd6b0c8ddab549789d31328b030ecc2be6fef71a1921b400a?response-content-disposition=inline%3B+filename*%3D",
+        "head_error": null,
+        "head_ok": true,
+        "head_status": 200,
+        "index": 22,
+        "resolve_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00022-of-00023.gguf",
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00022-of-00023.gguf",
+        "x_linked_etag": null,
+        "x_linked_size": null
+      },
+      {
+        "content_length": "2447529952",
+        "content_type": "application/octet-stream",
+        "etag": "\"cc1123341598371440a7b80ce77384d16f2676bc7a32b25f9a0b36a5250cd1b4\"",
+        "final_url_prefix": "https://us.aws.cdn.hf.co/xet-bridge-us/69ee4e546fa6de06d22af731/cc1123341598371440a7b80ce77384d16f2676bc7a32b25f9a0b36a5250cd1b4?response-content-disposition=inline%3B+filename*%3D",
+        "head_error": null,
+        "head_ok": true,
+        "head_status": 200,
+        "index": 23,
+        "resolve_url": "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF/resolve/main/Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00023-of-00023.gguf",
+        "rfilename": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00023-of-00023.gguf",
+        "x_linked_etag": null,
+        "x_linked_size": null
+      }
+    ],
+    "missing_indices": [],
+    "present_indices": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ],
+    "present_shard_count": 23,
+    "required_free_space_if_complete_gib": 100,
+    "total_present_size_bytes": 100451521792,
+    "total_present_size_gib": 93.55277
+  },
+  "repo": "lovedheart/DeepSeek-V4-Flash-GGUF",
+  "schema": "vendor-ds4-lovedheart-q2k-manifest-validation-v1",
+  "sibling_count": 26,
+  "source_state": {
+    "disk_root": {
+      "available_bytes": 1768030208,
+      "filesystem": "/dev/root",
+      "mount": "/",
+      "size_bytes": 1065418129408,
+      "use_percent": "100%",
+      "used_bytes": 1063633321984
+    },
+    "git_head": "3191d6e04e885d240d8504c4f270c2964b93191e",
+    "llama_cli_version": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\nversion: 14849 (d9e56fcdf)\nbuilt with GNU 12.3.0 for Linux x86_64"
+  }
+}
