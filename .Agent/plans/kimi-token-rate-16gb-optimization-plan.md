@@ -94021,3 +94021,99 @@ GP45 execution result:
   - accepted as non-SOTA planning/instrumentation progress;
   - no runtime behavior changed;
   - no token-rate or output-quality claim is made.
+
+## GP46: dev-only v2 low-byte hotset size sweep
+
+Timestamp: `2026-07-07T07:04:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- GP45 showed that a `4096` entry selected v2 low-byte hotset only reaches a
+  static hybrid byte ratio of `0.835037` on dev N96 route profiles.
+- Before spending time on real v2 H2D/compute, we need the coverage curve:
+  how many selected entries would be required before byte reduction is even
+  theoretically large enough to matter.
+
+Theory and upper bound:
+
+- If decode time were purely proportional to moved expert bytes, then the
+  optimistic speed bound is:
+  `bounded_tok_s = current_tok_s / hybrid_byte_ratio`.
+- With current general SOTA around `1.38 tok/s`, reaching `5 tok/s` would require
+  an idealized total byte ratio of at most `~0.276`.
+- Real required byte ratio is lower than this because decode also has compute,
+  scheduling bubbles, CPU fallback, H2D staging, and TTFT constraints.
+- Therefore, if even very large dev hotsets cannot approach `0.276`, selected
+  low-byte payloads alone cannot solve the target.
+
+Scope:
+
+- Add `.Agent/run-tools/kimi_sweep_v2_shadow_hotset.py`.
+- Inputs:
+  - committed dev N96 `route-profile.csv` files only;
+  - selected-entry sizes;
+  - packed-byte ratios.
+- Outputs:
+  - CSV/JSON/Markdown sweep summaries;
+  - no runtime code changes;
+  - no real payload pack requirement.
+
+Validation:
+
+1. Run locally using committed dev route profiles.
+2. Run remotely in `/root/lfz/tmp/vendor-kimi-speculative-gp33`.
+3. Confirm local and remote headline rows match.
+4. Do not use held-out test prompt profiles.
+
+Acceptance:
+
+- Sweep is deterministic and reproducible from committed inputs.
+- It reports event coverage, byte coverage, hybrid byte ratio, and idealized
+  transfer-only token-rate bound for each size/ratio pair.
+- It clearly states whether selected low-byte v2 payloads are worth runtime
+  integration before writing v2 H2D/compute.
+
+GP46 execution result:
+
+- Timestamp: `2026-07-07T06:52:10+08:00`.
+- Record:
+  `.Agent/runs/20260707-gp46-v2-hotset-sweep/report.md`.
+- Added:
+  `.Agent/run-tools/kimi_sweep_v2_shadow_hotset.py`.
+- Inputs:
+  - seven committed dev-only N96 route-profile files from
+    `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile`;
+  - no held-out test prompt profiles were used.
+- Sweep:
+  - sizes: `512,1024,2048,4096,8192,16384,32768,56896`;
+  - packed ratios: `0.55,0.35,0.276`;
+  - baseline token rate: `1.385 tok/s`;
+  - target token rate: `5.0 tok/s`.
+- Headline static results:
+  - candidate entries: `56896`;
+  - at realistic `0.55x`, even all entries selected gives
+    `hybrid_byte_ratio=0.5500` and ideal transfer-only bound `2.518 tok/s`;
+  - at `0.35x`, all entries selected gives `3.957 tok/s`;
+  - only the extreme `0.276x` with all `56896` entries selected reaches an
+    ideal transfer-only `5.018 tok/s`.
+- Interpretation:
+  - selected low-byte v2 payloads alone cannot plausibly reach `>5 tok/s` under
+    the realistic IQ1_S byte-ratio range;
+  - continuing straight into real v2 H2D/compute is low priority unless it is
+    combined with another large gain;
+  - next high-leverage work should focus on scheduling/prediction, keeping
+    iouring queues full, reducing per-token expert demand, or a more aggressive
+    compression/approximation path with explicit quality gates.
+- Validation:
+  - local sweep run passed;
+  - local `python3 -m py_compile` passed;
+  - local `git diff --check` passed;
+  - remote sweep run in `/root/lfz/tmp/vendor-kimi-speculative-gp33` produced
+    matching headline metrics;
+  - remote `python3 -m py_compile` and `git diff --check` passed.
+- Decision:
+  - accepted as non-SOTA planning evidence;
+  - no runtime behavior changed;
+  - no token-rate or output-quality claim is made.
