@@ -93916,3 +93916,108 @@ GP44 execution result:
   - no token-rate or output-quality claim is made;
   - next valid step is dev-only v2 shadow coverage measurement with a selected
     low-byte pack before any runtime integration.
+
+## GP45: dev-only metadata v2 shadow-pack generator
+
+Timestamp: `2026-07-07T06:52:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- GP44 can measure v2 coverage in the real decode loops, but it needs a v2 pack
+  metadata file whose entries represent candidate selected low-byte experts.
+- Full IQ1_S model storage is still blocked by disk space. We cannot build a
+  real selected IQ1_S payload pack without either deletion approval, external
+  storage, or a different byte-reduction source.
+- A metadata-only v2 shadow pack is enough to answer the immediate planning
+  question: whether a dev-derived selected hotset would cover enough active
+  experts and bytes on general prompts to justify implementing real v2 H2D and
+  compute.
+
+Theory and upper bound:
+
+- This phase has no runtime speedup by itself.
+- Given dev route-profile rows `(tensor, expert, count, logical_nbytes)`, select
+  hot entries and assign a hypothetical packed byte size:
+  `packed_nbytes = ceil(logical_nbytes * packed_ratio)`.
+- Static upper bound:
+  - `coverage_events = covered_events / total_events`;
+  - `hybrid_byte_ratio = (covered_packed_bytes + uncovered_logical_bytes) /
+    total_logical_bytes`.
+- Runtime GP44 shadow CSV can later validate whether the same metadata entries
+  cover real active expert observations under cold-start dev runs.
+- If `hybrid_byte_ratio` is not dramatically below current, real v2 payload
+  integration cannot reach `>5 tok/s` by byte reduction alone.
+
+Scope:
+
+- Add `.Agent/run-tools/kimi_make_v2_shadow_pack_from_routes.py`.
+- Inputs:
+  - one or more dev `route-profile.csv` files;
+  - max selected entries;
+  - optional tensor-kind filter;
+  - packed type id;
+  - packed byte ratio.
+- Outputs:
+  - metadata-only `GGMLMOEPACKv2` file;
+  - JSON manifest with selected entries and aggregate static coverage;
+  - Markdown summary for reproducibility.
+- The pack is for `GGML_MOE_EXPERT_PACK_V2` shadow profiling only. It is not a
+  real payload pack and must not be used for `read_debug` or runtime H2D.
+
+Validation:
+
+1. Run the generator on existing committed/dev route-profile files only.
+2. Do not inspect or use held-out test prompt route profiles.
+3. Verify the generated metadata pack with the existing synthetic parser shape
+   where practical.
+4. Record command, selected count, static coverage, and output files.
+
+Acceptance:
+
+- The generator is deterministic and records all input profiles.
+- It does not require the full IQ1_S model or deletion of existing packs.
+- It does not change runtime code.
+- It does not claim a new token-rate SOTA.
+
+GP45 execution result:
+
+- Timestamp: `2026-07-07T06:46:00+08:00`.
+- Record:
+  `.Agent/runs/20260707-gp45-v2-shadow-pack-from-dev-routes/report.md`.
+- Added:
+  `.Agent/run-tools/kimi_make_v2_shadow_pack_from_routes.py`.
+- Inputs:
+  - seven dev-only N96 route-profile files from
+    `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile`;
+  - no held-out test profiles were used.
+- Command generated a metadata-only shadow pack with:
+  - `--max-entries 4096`;
+  - `--kind up,gate,down`;
+  - `--packed-type 24`;
+  - `--packed-ratio 0.55`.
+- Static result:
+  - candidate entries: `56896`;
+  - selected entries: `4096`;
+  - events: `675560`;
+  - event coverage: `0.359676`;
+  - byte coverage: `0.366584`;
+  - hybrid byte ratio: `0.835037`.
+- Interpretation:
+  - this selected low-byte hotset is not enough to approach `>5 tok/s`;
+  - even with optimistic `0.55x` packed bytes for covered entries, total bytes
+    only fall to `83.5%`;
+  - next step should sweep larger metadata hotsets and/or run GP44 runtime
+    shadow profiling on dev prompts before implementing real v2 H2D/compute.
+- Validation:
+  - local generator run passed;
+  - local `python3 -m py_compile` passed;
+  - local `git diff --check` passed;
+  - remote generator run in `/root/lfz/tmp/vendor-kimi-speculative-gp33`
+    produced identical headline metrics;
+  - remote `git diff --check` passed.
+- Decision:
+  - accepted as non-SOTA planning/instrumentation progress;
+  - no runtime behavior changed;
+  - no token-rate or output-quality claim is made.
