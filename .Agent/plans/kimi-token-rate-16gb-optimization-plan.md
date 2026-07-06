@@ -94118,6 +94118,102 @@ GP46 execution result:
   - no runtime behavior changed;
   - no token-rate or output-quality claim is made.
 
+## GP51: remaining fallback eligibility audit
+
+Timestamp: `2026-07-07T08:10:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- GP50 reduced mixed-batch direct reads on the France n32 smoke
+  (`671 -> 133`) but token rate stayed neutral at `1.25 tok/s`.
+- The same GP50 run still reports many decode paths with
+  `batch_eligible=0`, especially down tensors such as layers `6`, `7`, `8`,
+  `9`, `10`, `15`, and `18`.
+- Those paths are not fixed by partial iouring because they are not considered
+  CUDA batch eligible in the first place.
+
+Hypothesis:
+
+- The remaining high-value gap may be unsupported tensor type / tensor shape /
+  name mapping rather than pack transport.
+- If a subset of `batch_eligible=0` tensors contributes several seconds of
+  decode time and has pack data available, adding CUDA batch support or pack
+  lookup support for that subset may lift token rate more than further reducing
+  small direct-read leakage.
+
+Scope:
+
+- Use already generated cold-start profile artifacts first:
+  - baseline:
+    `/root/lfz/tmp/runs/20260707-gp50-partial-iouring/baseline_dev_france_n32`;
+  - GP50:
+    `/root/lfz/tmp/runs/20260707-gp50-partial-iouring/dev_france_n32_batch_on`.
+- Parse `fallback-profile.csv`, `up-gate-profile.csv`,
+  `down-batch-profile.csv`, `route-profile.csv`, and stderr name-profile lines
+  if available.
+- Produce a ranked table of remaining decode fallback by:
+  - tensor name;
+  - layer;
+  - expert matrix role: up/gate/down;
+  - tensor type if present in the profile;
+  - decode calls;
+  - decode fallback ms/call and total estimated decode ms;
+  - `batch_eligible`, `batch_accept`, `batch_decline`;
+  - whether expert-pack lookup appears available.
+
+Validation:
+
+- This is an analysis-only step; no runtime behavior changes.
+- Do not use held-out test prompts.
+- Record exact commands and input run dirs.
+- If the analysis identifies a candidate expected to save at least `0.1 s/token`
+  without increasing TTFT by more than 20%, write the next implementation plan
+  before changing code.
+
+Acceptance:
+
+- Commit and push only the analysis/report if it materially narrows the next
+  optimization target.
+- No SOTA or token-rate improvement claim is made for GP51 itself.
+
+GP51 execution result:
+
+- Timestamp: `2026-07-07T08:18:00+08:00`.
+- Input runs:
+  - baseline:
+    `/root/lfz/tmp/runs/20260707-gp50-partial-iouring/baseline_dev_france_n32`;
+  - GP50:
+    `/root/lfz/tmp/runs/20260707-gp50-partial-iouring/dev_france_n32_batch_on`.
+- Remaining decode paths with `batch_eligible=0` are exactly seven
+  `type=2` down tensors in the GP50 France n32 smoke:
+  - `blk.6.ffn_down_exps.weight`: `439.360 ms`;
+  - `blk.8.ffn_down_exps.weight`: `357.944 ms`;
+  - `blk.7.ffn_down_exps.weight`: `326.200 ms`;
+  - `blk.18.ffn_down_exps.weight`: `325.600 ms`;
+  - `blk.10.ffn_down_exps.weight`: `324.768 ms`;
+  - `blk.9.ffn_down_exps.weight`: `305.496 ms`;
+  - `blk.15.ffn_down_exps.weight`: `246.424 ms`.
+- Total remaining `batch_eligible=0` decode fallback is about
+  `2.326 s / 31 tokens`, or `75 ms/token`.
+- Perfectly eliminating those fallback paths would only move the GP50 n32
+  France rate from `1.25 tok/s` to roughly `1.38 tok/s` before replacement
+  GPU/H2D cost, so this is not the highest-leverage next implementation toward
+  `5 tok/s`.
+- Larger remaining decode wall components from CSV:
+  - up/gate `type=22/22`: `3508.889 ms`;
+  - up/gate `type=18/18`: `2877.195 ms`;
+  - down batch `type=11`: `2260.062 ms`;
+  - down batch `type=23`: `2206.576 ms`.
+- Decision:
+  - do not prioritize standalone Q4_0 down CUDA batch support next;
+  - next plan should target up/gate wall time, sustained iouring queue depth /
+    earlier known-job submission, or down stage time for `type=11` and
+    `type=23`.
+- Report:
+  `.Agent/runs/20260707-gp51-fallback-eligibility-audit/report.md`.
+
 ## GP50: partial batched iouring for mixed valid/fallback job batches
 
 Timestamp: `2026-07-07T07:42:00+08:00`.
