@@ -87415,4 +87415,91 @@ Acceptance:
 
 Result:
 
-- Pending.
+- Plan commit: `efde32ded`.
+- Server run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-013140Z-phase7os-storage-feasibility`.
+- Exit code: `0`.
+- Source/model/asset changes: none.
+- Model inference: not run.
+- Pack output: none.
+- Files deleted/moved/downloaded: none.
+- Artifacts:
+  - `repo_state.txt`;
+  - `commands.log`;
+  - `phase7os_storage_feasibility.py`;
+  - `mounts.tsv`;
+  - `findmnt.txt`;
+  - `large_files.tsv`;
+  - `required_assets.tsv`;
+  - `cleanup_candidates.tsv`;
+  - `decision.md`;
+  - `summary.json`;
+  - `audit_stdout.txt`;
+  - `audit_stderr.txt`;
+  - `exit.txt`;
+  - `artifacts.txt`.
+
+Mount result:
+
+- Writable mounts with at least `116 GiB` free: `0`.
+- `/` (`/root/lfz`) free: `87.719 GiB`.
+- Missing for selected `IQ2_XXS` direct-pack threshold (`116 GiB`):
+  `28.281 GiB`.
+- Missing for one-shard threshold (`162 GiB`):
+  `74.281 GiB`.
+
+Required current runtime assets:
+
+- Current production main pack:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`.
+- Current production overlay:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`.
+- Current `IQ3_S` GGUF model shards under:
+  `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S`.
+- Total required-assets size reported by the audit:
+  `545.166 GiB`.
+
+Report-only cleanup candidates:
+
+- Total report-only cleanup candidate bytes:
+  `252.576 GiB`.
+- No cleanup was performed.
+- Any cleanup below requires explicit user approval.
+
+Largest candidates:
+
+| size | path | class |
+|---:|---|---|
+| `159.901 GiB` | `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack` | historical expert-pack artifact |
+| `74.081 GiB` | `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-tracefirst-n64-20260630.expert-pack` | historical expert-pack artifact |
+| `7.161 GiB` | `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack` | historical expert-pack artifact |
+| `4.696 GiB` | `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack` | historical expert-pack artifact |
+| `4.512 GiB` | `/root/lfz/runs/vendor-kimi-token-rate/20260705-7ir-overlay-firstuse/kimi-iq3s-l1l2down-overlay-firstuse.expert-pack` | old run artifact |
+
+Decision:
+
+- Accept 7OS as a non-destructive storage feasibility audit.
+- There is no existing writable mount with enough free space for selected
+  `IQ2_XXS` direct-pack construction.
+- The direct selected-pack path is short by about `28.3 GiB`.
+- The one-shard path is short by about `74.3 GiB`.
+- The next storage-consuming step requires one of:
+  - attach/provide an external writable path with at least `116 GiB` free for
+    the direct selected-pack builder, preferably `162 GiB` for one-shard
+    streaming headroom;
+  - or explicit user approval to delete/move one or more listed cleanup
+    candidates.
+- Until that approval or storage appears, do not start lower-bit asset download
+  or expert-pack writing.
+
+Reproduce result:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+git reset --hard efde32ded
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260706-013140Z-phase7os-storage-feasibility
+python3 "$RUN/phase7os_storage_feasibility.py"
+cat "$RUN/mounts.tsv"
+cat "$RUN/cleanup_candidates.tsv"
+cat "$RUN/decision.md"
+```
