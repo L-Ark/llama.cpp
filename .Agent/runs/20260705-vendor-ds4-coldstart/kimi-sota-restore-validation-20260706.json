@@ -91,8 +91,22 @@
         "iouring_wait_us": 49964973
       }
     ],
+    "same_host_original_kimi_ab_baseline": {
+      "purpose": "Check whether the merged repair regressed Kimi token rate, or whether the current host simply no longer reproduces the fastest 1.38 tok/s run.",
+      "commit": "9820ecbbb3dbb503b179ea605c848b903082e121",
+      "run": "/root/lfz/runs/vendor-kimi-token-rate/20260706-042743Z-original-kimi-9820-n96-ab-baseline",
+      "exit": 0,
+      "quality": "pass",
+      "ttft_ms": 66671.48,
+      "decode_ms": 57597.97,
+      "decode_runs": 77,
+      "token_rate": 1.34,
+      "memory_peak": 15899996160,
+      "iouring_wait_us": 52248637,
+      "comparison": "On the same host and current IO state, original Kimi 9820ecbbb ran slower than the pushed merged repair repeat (1.34 tok/s vs 1.36 tok/s). This supports classifying the missing 1.38 reproduction as host/IO variance rather than a merged-branch Kimi regression."
+    },
     "latest_output": "France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its diverse landscapes, from the vineyards of Bordeaux to the beaches of the Riviera, and plays a major role in European and global affairs.<|im_end|> [end of text]",
-    "decision": "Kimi correctness, 16GB RAM, TTFT, deferred expert loading, YaRN semantics, and SOTA-shaped expert-pack counters are restored. The pushed-state repeat is in the prior accepted 1.36 tok/s band but did not reproduce the fastest 1.38 tok/s run on this host; the remaining delta is dominated by iouring_wait_us variance."
+    "decision": "Kimi correctness, 16GB RAM, TTFT, deferred expert loading, YaRN semantics, and SOTA-shaped expert-pack counters are restored. The pushed-state repeat is in the prior accepted 1.36 tok/s band but did not reproduce the fastest 1.38 tok/s run on this host; the same-host original Kimi A/B baseline also only reached 1.34 tok/s, so the remaining delta is dominated by current host/IO variance rather than the merged repair."
   },
   "deepseek_validation": {
     "build_status": "pass",
