@@ -19,6 +19,7 @@ cd "${REPO:-/root/lfz/llama.cpp-vendor-kimi}" || exit 1
 : "${PROFILE:=0}"
 : "${COPY_PROFILE:=0}"
 : "${EXTRA_RUNTIME_ENV:=}"
+: "${MODEL_PATH:=/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf}"
 
 PROMPT="<|im_user|>user<|im_middle|>${PROMPT_USER_TEXT}<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>"
 mkdir -p "$RUN"
@@ -110,7 +111,7 @@ if [ -n "$EXTRA_RUNTIME_ENV" ]; then
 fi
 
 LLAMA_ARGS=(build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl 99 --special
-  -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf
+  -m "$MODEL_PATH"
   -c 512 -n "$N" --temp 0 --top-p 1.0 --top-k 1 --seed 1
   --no-display-prompt -no-cnv -t "$THREADS" -tb "$THREADS" -p "$PROMPT")
 
@@ -128,6 +129,7 @@ LLAMA_ARGS=(build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl
   echo "MOE_IO_DEPTH=$MOE_IO_DEPTH"
   echo "MOE_IO_REFILL_BATCH=$MOE_IO_REFILL_BATCH"
   echo "MOE_PREFETCH_DOWN_DEPTH=$MOE_PREFETCH_DOWN_DEPTH"
+  echo "MODEL_PATH=$MODEL_PATH"
   echo "PROFILE=$PROFILE"
   echo "COPY_PROFILE=$COPY_PROFILE"
   printf '%q ' "${LLAMA_ARGS[@]}"

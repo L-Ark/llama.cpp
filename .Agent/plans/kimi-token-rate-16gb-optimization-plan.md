@@ -92836,3 +92836,26 @@ Held-out test rule:
 - Held-out test prompts are still sealed.
 - They can only be run after an IQ1_S candidate passes France n32 and dev n96,
   and after the candidate commit is frozen.
+
+GP33 non-destructive preparation result:
+
+- Timestamp: `2026-07-07T09:20:00+0800`.
+- Status: implemented script preparation only; no deletion and no full model
+  download.
+- Script changed:
+  `.Agent/run-tools/kimi-general-prompt-repro.sh`.
+- Added env:
+  `MODEL_PATH`.
+- Default value remains the current IQ3_S first shard:
+  `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf`.
+- The generated `llama-completion` command now uses:
+  `-m "$MODEL_PATH"`.
+- `MODEL_PATH` is recorded into each run's `command.txt`.
+- This keeps current IQ3_S SOTA reproduction unchanged while allowing the
+  future IQ1_S smoke run to pass:
+  `MODEL_PATH=/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF/Kimi-K2.7-Code.i1-IQ1_S.gguf`.
+
+Validation:
+
+- Run `bash -n .Agent/run-tools/kimi-general-prompt-repro.sh`.
+- Do not run IQ1_S smoke until deletion/download approval is explicit.
