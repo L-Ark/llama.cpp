@@ -625,12 +625,46 @@ static const char * ggml_kimi_cpu_moe_eligibility_reason_name(enum ggml_kimi_cpu
     }
 }
 
+static bool ggml_moe_name_filter_matches_any(const char * filter, const char * name) {
+    if (!filter || !filter[0] || !name) {
+        return false;
+    }
+
+    const char * p = filter;
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == ',' || *p == ':') {
+            ++p;
+        }
+        const char * start = p;
+        while (*p && *p != ',' && *p != ':') {
+            ++p;
+        }
+        const char * end = p;
+        while (end > start && (end[-1] == ' ' || end[-1] == '\t')) {
+            --end;
+        }
+        const size_t len = (size_t) (end - start);
+        if (len > 0) {
+            for (const char * hit = name; *hit; ++hit) {
+                if (strncmp(hit, start, len) == 0) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 static bool ggml_moe_stream_one_name_filter_would_allow(const char * name) {
     const char * filter = getenv("GGML_MOE_STREAM_ONE_NAME_FILTER");
     if (!filter || !filter[0]) {
         return true;
     }
-    return name && strstr(name, filter) != NULL;
+    return ggml_moe_name_filter_matches_any(filter, name);
+}
+
+static bool ggml_moe_stream_one_gpu_only_filter_matches(const char * name) {
+    return ggml_moe_name_filter_matches_any(getenv("GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER"), name);
 }
 
 static void ggml_moe_fallback_reason_profile_report(void) {
@@ -3926,6 +3960,21 @@ static void ggml_compute_forward_mul_mat_id(
         ggml_barrier(params->threadpool);
         if (kimi_cpu_moe_profile && ith == 0) {
             ggml_kimi_cpu_moe_profile.down.post_cuda_barrier_us += ggml_time_us() - kimi_cpu_moe_post_cuda_barrier_start;
+        }
+    }
+
+    if (ggml_moe_stream_one_gpu_only_filter_matches(src0->name)) {
+        int64_t gpu_only_rows = 0;
+        for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+            gpu_only_rows += matrix_row_counts[cur_a];
+        }
+        if (gpu_only_rows > 0) {
+            fprintf(stderr,
+                    "[moe_stream] GPU-only filter matched but CPU fallback remains: tensor=%s rows=%" PRId64 " batch_reason=%s single_attempts=%" PRId64 " single_accepts=%" PRId64 "\n",
+                    src0->name ? src0->name : "", gpu_only_rows,
+                    ggml_kimi_cpu_moe_eligibility_reason_name(kimi_cpu_moe_batch_reason),
+                    kimi_cpu_moe_single_attempts, kimi_cpu_moe_single_accepts);
+            abort();
         }
     }
 

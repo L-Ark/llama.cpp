@@ -3803,3 +3803,21 @@
 - `remaining_bottleneck`: up fallback still dominated (`up decode=19954.796ms`, `up prompt=4304.180ms`). Down batch also added staging/cache cost and required reducing gate cache headroom, so local down fallback removal did not translate into end-to-end gain.
 - `decision`: reject. This is slower than the no-prompt-specific calibration France baseline/profile (`~2.6-2.7 tok/s`) and cannot be promoted. Do not run held-out or claim generalized SOTA from this path.
 - `next_design`: prioritize prompt-general `ffn_up_exps` fallback reduction, or redesign down/offload only if it avoids sacrificing gate cache and has a hard-bound above the generalized baseline. Any future candidate must first improve the calibration/dev aggregate, then freeze before held-out testing.
+
+
+## 2026-07-06 执行记录：up one-stream comma filter probe rejected
+
+- `attempt_id`: `20260706-up-one-stream-comma-filter-n64`
+- `status`: `rejected_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-one-stream-comma-filter-n64-rejection-20260706.json`
+- `source_change`: added default-compatible comma/colon matching for `GGML_MOE_STREAM_ONE_NAME_FILTER` in CPU/CUDA one-stream checks, plus default-off `GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER` in CPU `mul_mat_id` to abort if a matched tensor silently falls back to CPU.
+- `default_safety`: when `GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER` is unset and the name filter is a single substring, behavior remains equivalent to the previous path. This is a diagnostic/config capability, not an accepted optimization.
+- `candidate_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T121537Z-20260706T-up-one-stream-comma-filter-n64-dev-smoke/france-up-one-stream-comma-cpu40-vram0gb`.
+- `candidate_config`: calibration France only, no held-out, no prompt-specific pack/profile, `n=64`, strict 16GB cgroup, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`.
+- `candidate_metrics`: `eval_tok_s=1.9`, `prompt_tok_s=0.8`, `TTFT=38614.208237ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15063433216`, `ram_ok=true`, `oom_seen=false`, heuristic France correctness `true` despite short output.
+- `candidate_fallback`: up fallback was removed from fallback profile; remaining fallback was down only (`down decode=8205.193ms`, `down prompt=4904.790ms`). VRAM cache reported `hits=19629`, `misses=6884`, `hit_rate=74.0%`.
+- `control_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T121752Z-20260706T-gate-only-n64-dev-control-after-filter-patch/france-gate-only-n64-control-cpu40-vram0gb` with gate-only filter under the same `n=64` constraints.
+- `control_metrics`: `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `TTFT=37992.446775ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`; correctness false only because `n=64` truncates the answer.
+- `control_fallback`: gate-only retained `up decode=7469.804ms`, `up prompt=3772.828ms`, `down decode=5037.867ms`, `down prompt=4480.035ms`; VRAM cache `hits=13435`, `misses=3716`, `hit_rate=78.3%`.
+- `decision`: reject naive `gate+up` one-stream shared-cache path. It proves `ffn_up_exps` can be routed through one-stream, but end-to-end speed regresses from `2.2` to `1.9 tok/s` on the matched `n=64` control. The local up fallback win is outweighed by cache/staging overhead and remaining down fallback.
+- `next_design`: a valid up/down fallback fix must avoid stealing enough gate cache residency to create more misses. Prioritize either a separate hard-bounded up/offload path with better residency policy, or a combined design that reduces total expert movement instead of simply adding up experts to the existing gate cache. Continue using only calibration/dev prompts until a candidate is frozen.

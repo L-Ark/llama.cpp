@@ -1799,12 +1799,42 @@ static bool moe_stream_one_ds4_nonids_enabled() {
     return enabled != 0;
 }
 
+static bool moe_stream_name_filter_matches_any(const char * filter, const char * name) {
+    if (!filter || !filter[0] || !name) {
+        return false;
+    }
+
+    const char * p = filter;
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == ',' || *p == ':') {
+            ++p;
+        }
+        const char * start = p;
+        while (*p && *p != ',' && *p != ':') {
+            ++p;
+        }
+        const char * end = p;
+        while (end > start && (end[-1] == ' ' || end[-1] == '\t')) {
+            --end;
+        }
+        const size_t len = (size_t) (end - start);
+        if (len > 0) {
+            for (const char * hit = name; *hit; ++hit) {
+                if (std::strncmp(hit, start, len) == 0) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 static bool moe_stream_one_name_filter_allows(const char * name) {
     static const char * filter = std::getenv("GGML_MOE_STREAM_ONE_NAME_FILTER");
     if (!filter || !filter[0]) {
         return true;
     }
-    return name && std::strstr(name, filter) != nullptr;
+    return moe_stream_name_filter_matches_any(filter, name);
 }
 
 static const int8_t moe_stream_mxfp4_values[16] = {
