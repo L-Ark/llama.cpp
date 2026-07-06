@@ -1,0 +1,8 @@
+prompt_id,quality,decode_runs,token_rate,decode_ms_per_token,ttft_ms,upgate_ms_per_token,down_ms_per_token,down_stage_ms_per_token,decode_fallback_ms_per_token,residual_ms_per_token,direct_read_ratio,iouring_gib_s,missing
+dev_france_regression,pass,77,1.260,792.397,78633.750,218.163,145.949,135.772,59.651,368.634,0.038,4.814,
+dev_japan_factual,pass,85,0.420,2383.232,74493.280,639.671,424.433,414.020,150.238,1168.890,0.498,0.675,
+dev_linear_equation,pass,34,0.160,6428.414,85340.380,1691.729,1234.646,1222.383,225.125,3276.914,0.874,0.059,
+dev_mixed_summary,pass,54,0.200,4942.434,91143.370,1342.055,963.825,951.965,215.759,2420.794,0.797,0.120,
+dev_photosynthesis_factual,pass,94,0.240,4189.084,66719.530,1090.455,787.591,777.001,168.161,2142.878,0.754,0.159,
+dev_python_reverse,pass,95,0.170,5963.713,84157.320,1531.595,1151.263,1139.113,207.188,3073.666,0.867,0.059,
+dev_zh_france,pass,49,0.380,2629.834,72540.090,738.082,496.810,486.342,137.805,1257.137,0.575,0.452,

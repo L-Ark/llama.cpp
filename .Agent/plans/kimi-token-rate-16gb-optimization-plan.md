@@ -94118,6 +94118,121 @@ GP46 execution result:
   - no runtime behavior changed;
   - no token-rate or output-quality claim is made.
 
+## GP52: prompt-agnostic decode bottleneck attribution from dev profiles
+
+Timestamp: `2026-07-07T08:30:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- GP51 was useful but used the France n32 smoke. The global task requires
+  prompt-agnostic progress for random user prompts, so the next decision must
+  use dev-prompt aggregation rather than a single France trace.
+- GP51 showed standalone Q4_0 down fallback can only save about `75 ms/token` on
+  France n32, while larger wall components are up/gate and down stage time.
+- GP49 showed broad dev prompts still have poor iouring utilization and large
+  direct fallback, but it did not attribute decode time by operation type.
+
+Goal:
+
+- Build a prompt-agnostic ranking of remaining decode cost from existing dev
+  profile artifacts.
+- Decide whether the next implementation should target:
+  - up/gate compute/wait for `type=22` and `type=18`;
+  - down stage time for `type=11` and `type=23`;
+  - iouring queue-depth starvation / earlier known-job submission;
+  - unsupported fallback tensors.
+
+Inputs:
+
+- Use only dev profile artifacts, not held-out test prompts.
+- Primary inputs:
+  `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/*`.
+- If a profile lacks some CSV files, record the missing coverage and do not
+  infer beyond available data.
+- GP50 France n32 can be used only as an implementation sanity reference, not
+  as the prompt-agnostic decision basis.
+
+Method:
+
+1. For every dev prompt run with available CSVs, parse:
+   - `metrics.txt` / `metrics.json` for token rate, TTFT, decode ms, RAM;
+   - `up-gate-profile.csv` for wall/stage/up/gate/cache/jobs by tensor type;
+   - `down-batch-profile.csv` for wall/stage/kernel/cache/jobs by tensor type;
+   - `fallback-profile.csv` for decode fallback by tensor/type/phase;
+   - `copy-profile.csv` if present for iouring/direct/H2D decomposition.
+2. Normalize every cost to `ms/token` using decode runs.
+3. Report weighted and per-prompt totals:
+   - up/gate wall by type pair and by layer;
+   - down wall/stage/kernel by type;
+   - fallback decode by type and tensor;
+   - iouring wait and H2D time if copy profile exists.
+4. Estimate upper-bound token rate for each candidate by subtracting the
+   measured `ms/token` component from current per-token decode time.
+
+Validation:
+
+- Analyzer must be deterministic and runnable locally and remotely.
+- The report must list exact input directories and commands.
+- Do not use held-out test profiles.
+- No runtime behavior changes in this step.
+
+Acceptance:
+
+- The report must identify the next implementation target with a numeric
+  upper-bound gain and explain why the target is higher priority than the
+  alternatives.
+- If no candidate can plausibly save at least `0.1 s/token`, the plan must shift
+  toward a larger architectural change such as stronger route prediction,
+  speculative route prefetch, or lower-byte expert payloads with explicit
+  quality gates.
+
+GP52 execution result:
+
+- Timestamp: `2026-07-07T08:42:00+08:00`.
+- Added analyzer:
+  `.Agent/run-tools/kimi_dev_decode_bottleneck_summary.py`.
+- Added reproducible report directory:
+  `.Agent/runs/20260707-gp52-dev-decode-bottleneck-summary`.
+- Added the required dev profile CSV inputs that were previously local-only:
+  `up-gate-profile.csv`, `down-batch-profile.csv`, and
+  `fallback-profile.csv` for the seven dev prompts under
+  `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile`.
+- Validation:
+  - local `python3 -m py_compile` passed;
+  - local analyzer run passed;
+  - remote analyzer run in
+    `/root/lfz/tmp/vendor-kimi-speculative-gp33` produced matching headline
+    metrics after synchronizing the CSV inputs;
+  - no held-out test prompts were used.
+- Prompt-agnostic dev baseline:
+  - runs: `7`;
+  - total decode runs: `488`;
+  - weighted decode ms/token: `3766.876`;
+  - weighted token rate: `0.265 tok/s`;
+  - direct read ratio: `0.572`;
+  - iouring read ratio: `0.428`;
+  - iouring throughput over decode wall: `0.343 GiB/s`.
+- Component attribution:
+  - residual unattributed: `1895.301 ms/token`, `50.3%` of decode;
+  - up/gate wall: `994.530 ms/token`, `26.4%`;
+  - down wall: `715.341 ms/token`, `19.0%`;
+  - down stage: `704.299 ms/token`, `18.7%`;
+  - reported iouring wait: `246.852 ms/token`, `6.6%`;
+  - decode fallback: `161.703 ms/token`, `4.3%`.
+- Important prompt-agnostic observation:
+  - slow dev prompts have high direct-read ratio and very low iouring
+    throughput;
+  - France is fast and mostly iouring-backed;
+  - therefore the next target should explain and reduce broad direct-read /
+    residual time on non-France dev prompts before standalone Q4_0 fallback.
+- Decision:
+  - do not prioritize Q4_0 down fallback as the next implementation;
+  - next plan should run current GP50 code on slow dev prompts with
+    `COPY_PROFILE=1`, rank direct-read copy paths by tensor/type, then move the
+    highest-byte safe path from direct reads to batched iouring.
+
 ## GP51: remaining fallback eligibility audit
 
 Timestamp: `2026-07-07T08:10:00+08:00`.

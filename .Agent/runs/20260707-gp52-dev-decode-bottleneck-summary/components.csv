@@ -1,0 +1,7 @@
+component,total_ms,ms_per_token,share_of_decode,ideal_token_rate_without_component
+residual_unattributed,924907.019,1895.301,0.503,0.534
+upgate_wall,485330.658,994.530,0.264,0.361
+down_wall,349086.609,715.341,0.190,0.328
+down_stage,343697.931,704.299,0.187,0.327
+iouring_wait_reported,120463.828,246.852,0.066,0.284
+decode_fallback,78911.024,161.703,0.043,0.277
