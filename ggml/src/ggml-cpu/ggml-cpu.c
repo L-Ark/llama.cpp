@@ -1509,6 +1509,11 @@ static const char * ggml_ds4_grouped_retained_route_profile_out(void) {
     return env && env[0] && env[0] != '0' ? env : NULL;
 }
 
+static const char * ggml_ds4_grouped_retained_route_detail_out(void) {
+    const char * env = getenv("GGML_DS4_GROUPED_RETAINED_ROUTE_DETAIL_OUT");
+    return env && env[0] && env[0] != '0' ? env : NULL;
+}
+
 static int ggml_ds4_grouped_retained_parse_layer(const char * name) {
     if (!name) {
         return -1;
@@ -1631,6 +1636,56 @@ static void ggml_ds4_grouped_retained_route_profile_write(
             eligible ? 1 : 0,
             reason ? reason : "ok");
     fclose(f);
+
+    const char * detail_path = ggml_ds4_grouped_retained_route_detail_out();
+    if (detail_path && role && strcmp(role, "up_gate") != 0) {
+        static bool detail_header_written = false;
+        FILE * df = fopen(detail_path, "a");
+        if (df) {
+            if (!detail_header_written) {
+                fprintf(df,
+                        "seq,role,layer,phase,tensor_name,src0_type,expert_id,rows,"
+                        "expert_bytes,logical_source_bytes,cache_contains,"
+                        "eligible_grouped_retained,reason_if_ineligible\n");
+                detail_header_written = true;
+            }
+            for (int64_t i = 0; i < n_as; ++i) {
+                const int64_t c = matrix_row_counts[i];
+                if (c <= 0) {
+                    continue;
+                }
+                int cache_state = -1;
+                if (can_query_cache) {
+                    bool contains = false;
+                    if (ggml_cuda_moe_stream_one_cache_contains && src0_data && expert_stride > 0) {
+                        const char * expert_data = (const char *) src0_data + (size_t)i * expert_stride;
+                        contains = ggml_cuda_moe_stream_one_cache_contains(tensor_name, expert_data, expert_bytes, i);
+                    }
+                    if (!contains && ggml_cuda_moe_stream_cache_contains) {
+                        contains = ggml_cuda_moe_stream_cache_contains(tensor_name, expert_bytes, (int)i);
+                    }
+                    cache_state = contains ? 1 : 0;
+                }
+                fprintf(df,
+                        "%" PRIu64 ",%s,%d,%s,%s,%d,%" PRId64 ",%" PRId64
+                        ",%zu,%zu,%d,%d,%s\n",
+                        cur_seq,
+                        role,
+                        ggml_ds4_grouped_retained_parse_layer(tensor_name),
+                        prompt_phase ? "prompt" : "decode",
+                        tensor_name,
+                        src0_type,
+                        i,
+                        c,
+                        expert_bytes,
+                        expert_bytes,
+                        cache_state,
+                        eligible ? 1 : 0,
+                        reason ? reason : "ok");
+            }
+            fclose(df);
+        }
+    }
     pthread_mutex_unlock(&mu);
 }
 

@@ -1,0 +1,616 @@
+{
+  "artifact_id": "20260707-grouped-retained-calib-dev-detail-bound",
+  "status": "detail_profiler_validated_bound_rejects_naive_hot_cache_not_sota",
+  "timestamp_utc": "2026-07-07T10:52:00Z",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit_before_artifact_commit": "298ac7853",
+  "held_out_test_used": false,
+  "prompt_scope": "calibration_dev_set_v1 only; held_out_test_set_v1_locked was not used",
+  "expert_bytes": 4456448,
+  "source_sha256": {
+    "ggml/src/ggml-cpu/ggml-cpu.c": "6f6d2acdacdcd5260ed9a7b615c9b5591dc0deb0cc0cc8bfc646e782e0f3cc31",
+    "ggml/src/ggml-cuda/moe_stream.cu": "3d455fb62748dde669fc1892b6ef624b613d0a0f2a8932822f869b5d8fe1036b"
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream -j20 --target llama-cli llama-results",
+    "result": "passed",
+    "binary": "build-ds4-moe-stream/bin/llama-cli",
+    "binary_sha256": "c3aa016da81aee65db5b65fbb79a19604ef212e5897840c93dad3c9b8f1eab78"
+  },
+  "detail_profiler_source_change": "Added default-off GGML_DS4_GROUPED_RETAINED_ROUTE_DETAIL_OUT per-active-expert CSV, requiring the summary profiler env to be enabled. Default path remains unchanged.",
+  "detail_smoke": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T103645Z-20260707-grouped-retained-detail-smoke-france/france-detail-smoke-cpu40-vram0gb",
+    "result": "CSV generated; n=16 diagnostic only; memory_peak_bytes=16000000000; ram_ok=true"
+  },
+  "detail_cases": {
+    "france": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T103823Z-20260707-grouped-retained-calib-dev-detail-france/calib-france-grouped-retained-detail-cpu40-vram0gb",
+      "profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T103823Z-20260707-grouped-retained-calib-dev-detail-france/calib-france-grouped-retained-detail-cpu40-vram0gb/grouped_route_profile.csv",
+      "detail_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T103823Z-20260707-grouped-retained-calib-dev-detail-france/calib-france-grouped-retained-detail-cpu40-vram0gb/grouped_route_detail.csv",
+      "detail_rows": 51873,
+      "summary": {
+        "eval_tok_s": 2.5,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 38785.291728,
+        "elapsed_seconds": 75.28,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15034355712,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "oom_seen": false,
+        "correctness_ok": false,
+        "correctness_reason": "unfinished_sentence"
+      },
+      "roles": {
+        "gate": {
+          "records": 24831,
+          "rows": 26160,
+          "logical_gib": 103.05835,
+          "unique_pairs": 4039,
+          "unique_decode_pairs": 3502,
+          "unique_payload_gib": 16.763428,
+          "unique_decode_payload_gib": 14.534668,
+          "cache_contains": 20684,
+          "cache_missing": 4147,
+          "cache_hit_rate": 0.832991,
+          "layer_unique_min": 67,
+          "layer_unique_mean": 100.975,
+          "layer_unique_max": 196
+        },
+        "up": {
+          "records": 13521,
+          "rows": 14170,
+          "logical_gib": 56.117432,
+          "unique_pairs": 2586,
+          "unique_decode_pairs": 2200,
+          "unique_payload_gib": 10.73291,
+          "unique_decode_payload_gib": 9.130859,
+          "cache_contains": 0,
+          "cache_missing": 13521,
+          "cache_hit_rate": 0.0,
+          "layer_unique_min": 37,
+          "layer_unique_mean": 64.65,
+          "layer_unique_max": 165
+        },
+        "down": {
+          "records": 13521,
+          "rows": 14170,
+          "logical_gib": 56.117432,
+          "unique_pairs": 2586,
+          "unique_decode_pairs": 2200,
+          "unique_payload_gib": 10.73291,
+          "unique_decode_payload_gib": 9.130859,
+          "cache_contains": 0,
+          "cache_missing": 13521,
+          "cache_hit_rate": 0.0,
+          "layer_unique_min": 37,
+          "layer_unique_mean": 64.65,
+          "layer_unique_max": 165
+        }
+      }
+    },
+    "quantum": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T103944Z-20260707-grouped-retained-calib-dev-detail-quantum/calib-quantum-grouped-retained-detail-cpu40-vram0gb",
+      "profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T103944Z-20260707-grouped-retained-calib-dev-detail-quantum/calib-quantum-grouped-retained-detail-cpu40-vram0gb/grouped_route_profile.csv",
+      "detail_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T103944Z-20260707-grouped-retained-calib-dev-detail-quantum/calib-quantum-grouped-retained-detail-cpu40-vram0gb/grouped_route_detail.csv",
+      "detail_rows": 51315,
+      "summary": {
+        "eval_tok_s": 1.7,
+        "prompt_tok_s": 0.8,
+        "ttft_estimate_ms": 38843.857037,
+        "elapsed_seconds": 90.84,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15034900480,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "oom_seen": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required"
+      },
+      "roles": {
+        "gate": {
+          "records": 24605,
+          "rows": 25440,
+          "logical_gib": 102.120361,
+          "unique_pairs": 4560,
+          "unique_decode_pairs": 4132,
+          "unique_payload_gib": 18.925781,
+          "unique_decode_payload_gib": 17.149414,
+          "cache_contains": 19526,
+          "cache_missing": 5079,
+          "cache_hit_rate": 0.793579,
+          "layer_unique_min": 66,
+          "layer_unique_mean": 114,
+          "layer_unique_max": 218
+        },
+        "up": {
+          "records": 13355,
+          "rows": 13780,
+          "logical_gib": 55.428467,
+          "unique_pairs": 3080,
+          "unique_decode_pairs": 2762,
+          "unique_payload_gib": 12.783203,
+          "unique_decode_payload_gib": 11.463379,
+          "cache_contains": 0,
+          "cache_missing": 13355,
+          "cache_hit_rate": 0.0,
+          "layer_unique_min": 34,
+          "layer_unique_mean": 77,
+          "layer_unique_max": 182
+        },
+        "down": {
+          "records": 13355,
+          "rows": 13780,
+          "logical_gib": 55.428467,
+          "unique_pairs": 3080,
+          "unique_decode_pairs": 2762,
+          "unique_payload_gib": 12.783203,
+          "unique_decode_payload_gib": 11.463379,
+          "cache_contains": 0,
+          "cache_missing": 13355,
+          "cache_hit_rate": 0.0,
+          "layer_unique_min": 34,
+          "layer_unique_mean": 77,
+          "layer_unique_max": 182
+        }
+      }
+    },
+    "fibonacci": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T104121Z-20260707-grouped-retained-calib-dev-detail-fibonacci/calib-fibonacci-grouped-retained-detail-cpu40-vram0gb",
+      "profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T104121Z-20260707-grouped-retained-calib-dev-detail-fibonacci/calib-fibonacci-grouped-retained-detail-cpu40-vram0gb/grouped_route_profile.csv",
+      "detail_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T104121Z-20260707-grouped-retained-calib-dev-detail-fibonacci/calib-fibonacci-grouped-retained-detail-cpu40-vram0gb/grouped_route_detail.csv",
+      "detail_rows": 51968,
+      "summary": {
+        "eval_tok_s": 1.8,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 39735.273142,
+        "elapsed_seconds": 89.56,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15029653504,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "oom_seen": false,
+        "correctness_ok": false,
+        "correctness_reason": "unfinished_sentence"
+      },
+      "roles": {
+        "gate": {
+          "records": 24896,
+          "rows": 26160,
+          "logical_gib": 103.328125,
+          "unique_pairs": 4839,
+          "unique_decode_pairs": 4422,
+          "unique_payload_gib": 20.08374,
+          "unique_decode_payload_gib": 18.353027,
+          "cache_contains": 19458,
+          "cache_missing": 5438,
+          "cache_hit_rate": 0.781571,
+          "layer_unique_min": 83,
+          "layer_unique_mean": 120.975,
+          "layer_unique_max": 203
+        },
+        "up": {
+          "records": 13536,
+          "rows": 14170,
+          "logical_gib": 56.179688,
+          "unique_pairs": 3131,
+          "unique_decode_pairs": 2814,
+          "unique_payload_gib": 12.994873,
+          "unique_decode_payload_gib": 11.679199,
+          "cache_contains": 0,
+          "cache_missing": 13536,
+          "cache_hit_rate": 0.0,
+          "layer_unique_min": 40,
+          "layer_unique_mean": 78.275,
+          "layer_unique_max": 180
+        },
+        "down": {
+          "records": 13536,
+          "rows": 14170,
+          "logical_gib": 56.179688,
+          "unique_pairs": 3131,
+          "unique_decode_pairs": 2814,
+          "unique_payload_gib": 12.994873,
+          "unique_decode_payload_gib": 11.679199,
+          "cache_contains": 0,
+          "cache_missing": 13536,
+          "cache_hit_rate": 0.0,
+          "layer_unique_min": 40,
+          "layer_unique_mean": 78.275,
+          "layer_unique_max": 180
+        }
+      }
+    },
+    "japan": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T104258Z-20260707-grouped-retained-calib-dev-detail-japan/calib-japan-grouped-retained-detail-cpu40-vram0gb",
+      "profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T104258Z-20260707-grouped-retained-calib-dev-detail-japan/calib-japan-grouped-retained-detail-cpu40-vram0gb/grouped_route_profile.csv",
+      "detail_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T104258Z-20260707-grouped-retained-calib-dev-detail-japan/calib-japan-grouped-retained-detail-cpu40-vram0gb/grouped_route_detail.csv",
+      "detail_rows": 51901,
+      "summary": {
+        "eval_tok_s": 2.3,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 39081.738699,
+        "elapsed_seconds": 76.78999999999999,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15049314304,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "oom_seen": false,
+        "correctness_ok": false,
+        "correctness_reason": "unfinished_sentence"
+      },
+      "roles": {
+        "gate": {
+          "records": 24843,
+          "rows": 26160,
+          "logical_gib": 103.108154,
+          "unique_pairs": 4165,
+          "unique_decode_pairs": 3539,
+          "unique_payload_gib": 17.286377,
+          "unique_decode_payload_gib": 14.688232,
+          "cache_contains": 20524,
+          "cache_missing": 4319,
+          "cache_hit_rate": 0.826148,
+          "layer_unique_min": 69,
+          "layer_unique_mean": 104.125,
+          "layer_unique_max": 217
+        },
+        "up": {
+          "records": 13529,
+          "rows": 14170,
+          "logical_gib": 56.150635,
+          "unique_pairs": 2639,
+          "unique_decode_pairs": 2176,
+          "unique_payload_gib": 10.952881,
+          "unique_decode_payload_gib": 9.03125,
+          "cache_contains": 0,
+          "cache_missing": 13529,
+          "cache_hit_rate": 0.0,
+          "layer_unique_min": 35,
+          "layer_unique_mean": 65.975,
+          "layer_unique_max": 185
+        },
+        "down": {
+          "records": 13529,
+          "rows": 14170,
+          "logical_gib": 56.150635,
+          "unique_pairs": 2639,
+          "unique_decode_pairs": 2176,
+          "unique_payload_gib": 10.952881,
+          "unique_decode_payload_gib": 9.03125,
+          "cache_contains": 0,
+          "cache_missing": 13529,
+          "cache_hit_rate": 0.0,
+          "layer_unique_min": 35,
+          "layer_unique_mean": 65.975,
+          "layer_unique_max": 185
+        }
+      }
+    },
+    "climate": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T104422Z-20260707-grouped-retained-calib-dev-detail-climate/calib-climate-grouped-retained-detail-cpu40-vram0gb",
+      "profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T104422Z-20260707-grouped-retained-calib-dev-detail-climate/calib-climate-grouped-retained-detail-cpu40-vram0gb/grouped_route_profile.csv",
+      "detail_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T104422Z-20260707-grouped-retained-calib-dev-detail-climate/calib-climate-grouped-retained-detail-cpu40-vram0gb/grouped_route_detail.csv",
+      "detail_rows": 51903,
+      "summary": {
+        "eval_tok_s": 2.1,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 39084.609883,
+        "elapsed_seconds": 81.21000000000001,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15020539904,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "oom_seen": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required"
+      },
+      "roles": {
+        "gate": {
+          "records": 24845,
+          "rows": 26160,
+          "logical_gib": 103.116455,
+          "unique_pairs": 4407,
+          "unique_decode_pairs": 3798,
+          "unique_payload_gib": 18.290771,
+          "unique_decode_payload_gib": 15.763184,
+          "cache_contains": 20167,
+          "cache_missing": 4678,
+          "cache_hit_rate": 0.811713,
+          "layer_unique_min": 73,
+          "layer_unique_mean": 110.175,
+          "layer_unique_max": 220
+        },
+        "up": {
+          "records": 13529,
+          "rows": 14170,
+          "logical_gib": 56.150635,
+          "unique_pairs": 2839,
+          "unique_decode_pairs": 2370,
+          "unique_payload_gib": 11.782959,
+          "unique_decode_payload_gib": 9.836426,
+          "cache_contains": 0,
+          "cache_missing": 13529,
+          "cache_hit_rate": 0.0,
+          "layer_unique_min": 38,
+          "layer_unique_mean": 70.975,
+          "layer_unique_max": 189
+        },
+        "down": {
+          "records": 13529,
+          "rows": 14170,
+          "logical_gib": 56.150635,
+          "unique_pairs": 2839,
+          "unique_decode_pairs": 2370,
+          "unique_payload_gib": 11.782959,
+          "unique_decode_payload_gib": 9.836426,
+          "cache_contains": 0,
+          "cache_missing": 13529,
+          "cache_hit_rate": 0.0,
+          "layer_unique_min": 38,
+          "layer_unique_mean": 70.975,
+          "layer_unique_max": 189
+        }
+      }
+    }
+  },
+  "aggregate": {
+    "gate": {
+      "records": 124020,
+      "rows": 130080,
+      "logical_gib": 514.731445,
+      "unique_pairs": 7833,
+      "unique_decode_pairs": 7561,
+      "unique_payload_gib": 32.51001,
+      "unique_decode_payload_gib": 31.381104,
+      "cache_contains": 100359,
+      "cache_missing": 23661,
+      "unknown": 0,
+      "cache_hit_rate": 0.809216,
+      "layer_unique_min": 156,
+      "layer_unique_mean": 195.825,
+      "layer_unique_max": 256,
+      "layer_count": 40
+    },
+    "up": {
+      "records": 67470,
+      "rows": 70460,
+      "logical_gib": 280.026855,
+      "unique_pairs": 5824,
+      "unique_decode_pairs": 5535,
+      "unique_payload_gib": 24.171875,
+      "unique_decode_payload_gib": 22.972412,
+      "cache_contains": 0,
+      "cache_missing": 67470,
+      "unknown": 0,
+      "cache_hit_rate": 0.0,
+      "layer_unique_min": 92,
+      "layer_unique_mean": 145.6,
+      "layer_unique_max": 256,
+      "layer_count": 40
+    },
+    "down": {
+      "records": 67470,
+      "rows": 70460,
+      "logical_gib": 280.026855,
+      "unique_pairs": 5824,
+      "unique_decode_pairs": 5535,
+      "unique_payload_gib": 24.171875,
+      "unique_decode_payload_gib": 22.972412,
+      "cache_contains": 0,
+      "cache_missing": 67470,
+      "unknown": 0,
+      "cache_hit_rate": 0.0,
+      "layer_unique_min": 92,
+      "layer_unique_mean": 145.6,
+      "layer_unique_max": 256,
+      "layer_count": 40
+    }
+  },
+  "fallback_hotset": {
+    "source_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+    "total_updown_fallback_ms": 216535.305,
+    "by_role": {
+      "up": {
+        "fallback_ms": 123474.033,
+        "unique_pairs": 6683,
+        "payload_gib": 27.737061,
+        "calls": 111020,
+        "rows": 114010
+      },
+      "down": {
+        "fallback_ms": 93061.272,
+        "unique_pairs": 6683,
+        "payload_gib": 27.737061,
+        "calls": 111020,
+        "rows": 114010
+      }
+    },
+    "top_0.5gib": {
+      "entries": 120,
+      "payload_gib": 0.498047,
+      "covered_fallback_ms": 19144.019,
+      "coverage": 0.088411,
+      "calls": 24978,
+      "rows": 25674
+    },
+    "top_1gib": {
+      "entries": 240,
+      "payload_gib": 0.996094,
+      "covered_fallback_ms": 30326.212,
+      "coverage": 0.140052,
+      "calls": 37134,
+      "rows": 38430
+    },
+    "top_2gib": {
+      "entries": 481,
+      "payload_gib": 1.996338,
+      "covered_fallback_ms": 47615.929,
+      "coverage": 0.219899,
+      "calls": 55024,
+      "rows": 57399
+    },
+    "top_4gib": {
+      "entries": 963,
+      "payload_gib": 3.996826,
+      "covered_fallback_ms": 73505.469,
+      "coverage": 0.339462,
+      "calls": 78386,
+      "rows": 82057
+    },
+    "top_8gib": {
+      "entries": 1927,
+      "payload_gib": 7.997803,
+      "covered_fallback_ms": 110544.782,
+      "coverage": 0.510516,
+      "calls": 113511,
+      "rows": 118324
+    },
+    "top_12gib": {
+      "entries": 2891,
+      "payload_gib": 11.998779,
+      "covered_fallback_ms": 136820.98,
+      "coverage": 0.631865,
+      "calls": 138164,
+      "rows": 143495
+    },
+    "top_16gib": {
+      "entries": 3855,
+      "payload_gib": 15.999756,
+      "covered_fallback_ms": 156587.848,
+      "coverage": 0.723152,
+      "calls": 157842,
+      "rows": 163409
+    },
+    "top_24gib": {
+      "entries": 5782,
+      "payload_gib": 23.997559,
+      "covered_fallback_ms": 184245.233,
+      "coverage": 0.850878,
+      "calls": 184601,
+      "rows": 190402
+    },
+    "top_32gib": {
+      "entries": 7710,
+      "payload_gib": 31.999512,
+      "covered_fallback_ms": 200979.855,
+      "coverage": 0.928162,
+      "calls": 202193,
+      "rows": 208132
+    }
+  },
+  "bounds": {
+    "france": {
+      "baseline_eval_tok_s": 2.6,
+      "approx_decode_ms_from_192": 73846.154,
+      "updown_fallback_ms": 31233.213,
+      "tok_s_if_updown_reduce_50pct": 3.297295,
+      "tok_s_if_updown_reduce_75pct": 3.807919,
+      "tok_s_if_updown_reduce_80pct": 3.929628,
+      "tok_s_if_updown_reduce_90pct": 4.197982,
+      "tok_s_if_updown_reduce_95pct": 4.346389,
+      "tok_s_if_updown_reduce_100pct": 4.505674
+    },
+    "quantum": {
+      "baseline_eval_tok_s": 1.9,
+      "approx_decode_ms_from_192": 101052.632,
+      "updown_fallback_ms": 56352.754,
+      "tok_s_if_updown_reduce_50pct": 2.634603,
+      "tok_s_if_updown_reduce_75pct": 3.265969,
+      "tok_s_if_updown_reduce_80pct": 3.430383,
+      "tok_s_if_updown_reduce_90pct": 3.814432,
+      "tok_s_if_updown_reduce_95pct": 4.040615,
+      "tok_s_if_updown_reduce_100pct": 4.295314
+    },
+    "fibonacci": {
+      "baseline_eval_tok_s": 1.7,
+      "approx_decode_ms_from_192": 112941.176,
+      "updown_fallback_ms": 56350.986,
+      "tok_s_if_updown_reduce_50pct": 2.265068,
+      "tok_s_if_updown_reduce_75pct": 2.716548,
+      "tok_s_if_updown_reduce_80pct": 2.829338,
+      "tok_s_if_updown_reduce_90pct": 3.085562,
+      "tok_s_if_updown_reduce_95pct": 3.231902,
+      "tok_s_if_updown_reduce_100pct": 3.392814
+    },
+    "japan": {
+      "baseline_eval_tok_s": 2.4,
+      "approx_decode_ms_from_192": 80000.0,
+      "updown_fallback_ms": 32981.767,
+      "tok_s_if_updown_reduce_50pct": 3.023188,
+      "tok_s_if_updown_reduce_75pct": 3.474253,
+      "tok_s_if_updown_reduce_80pct": 3.581115,
+      "tok_s_if_updown_reduce_90pct": 3.815853,
+      "tok_s_if_updown_reduce_95pct": 3.945152,
+      "tok_s_if_updown_reduce_100pct": 4.083522
+    },
+    "climate": {
+      "baseline_eval_tok_s": 2.3,
+      "approx_decode_ms_from_192": 83478.261,
+      "updown_fallback_ms": 39616.585,
+      "tok_s_if_updown_reduce_50pct": 3.01555,
+      "tok_s_if_updown_reduce_75pct": 3.571042,
+      "tok_s_if_updown_reduce_80pct": 3.707638,
+      "tok_s_if_updown_reduce_90pct": 4.014777,
+      "tok_s_if_updown_reduce_95pct": 4.188253,
+      "tok_s_if_updown_reduce_100pct": 4.377398
+    }
+  },
+  "decision": {
+    "detail_profiler_accepted_as_default_off_measurement_scaffold": true,
+    "new_sota": false,
+    "naive_updown_hot_cache_rejected": true,
+    "reason": "Across calibration/dev, up and down each require about 24.17 GiB unique payload (48.34 GiB combined) for observed active experts; current gate cache is already useful and uses the VRAM budget. Top 12 GiB of up/down hot experts covers only 63.19% of fallback time, and even perfect up/down fallback removal is bounded below the >5 tok/s generalized target (min 3.39, mean 4.13). A future route must also reduce gate/source/non-updown decode cost and avoid simple VRAM hot-cache competition with gate.",
+    "next_action": "Do not implement a naive up/down cache or prompt-specific pack. Next source work should be a default-off grouped-retained GPU dataflow microbench that keeps gate cache intact, batches active up/down by layer, avoids per-expert source staging, and targets additional gate/source reductions before any held-out test."
+  },
+  "bound_summary": {
+    "updown_reduce_50pct": {
+      "min": 2.265068,
+      "mean": 2.847141,
+      "max": 3.297295
+    },
+    "updown_reduce_75pct": {
+      "min": 2.716548,
+      "mean": 3.367146,
+      "max": 3.807919
+    },
+    "updown_reduce_80pct": {
+      "min": 2.829338,
+      "mean": 3.49562,
+      "max": 3.929628
+    },
+    "updown_reduce_90pct": {
+      "min": 3.085562,
+      "mean": 3.785721,
+      "max": 4.197982
+    },
+    "updown_reduce_95pct": {
+      "min": 3.231902,
+      "mean": 3.950462,
+      "max": 4.346389
+    },
+    "updown_reduce_100pct": {
+      "min": 3.392814,
+      "mean": 4.130944,
+      "max": 4.505674
+    }
+  },
+  "default_off_guard": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T104801Z-20260707-defaultoff-detail-profiler-guard/defaultoff-france-after-detail-profiler-cpu40-vram0gb",
+    "metrics": {
+      "eval_tok_s": 2.6,
+      "prompt_tok_s": 0.9,
+      "ttft_estimate_ms": 38185.447499,
+      "elapsed_seconds": 90.26,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15027335168,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "oom_seen": false,
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required"
+    },
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage."
+  }
+}

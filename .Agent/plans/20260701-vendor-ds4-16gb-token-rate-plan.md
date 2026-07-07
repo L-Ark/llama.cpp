@@ -5973,3 +5973,61 @@
   - Commit and push this default-off profiler scaffold plus artifact to `ssd/vendor/deepseek-token-rate-16gb`.
   - Use the new CSV to calculate grouped-retained source-movement upper bounds on the calibration/dev set before writing the next GPU dataflow patch.
   - Do not run held-out prompts until a prompt-general candidate is frozen.
+
+## 2026-07-07 X10-G execution result：calibration/dev detail inventory rejects naive up/down hot cache
+
+- attempt_id: `20260707-grouped-retained-calib-dev-detail-bound`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/grouped-retained-calib-dev-detail-bound-20260707.json`
+- status: `detail_profiler_validated_bound_rejects_naive_hot_cache_not_sota`
+- prompt_scope:
+  - Used only `calibration_dev_set_v1`: France, quantum, Fibonacci, Japan, climate.
+  - `held_out_test_set_v1_locked` was not used.
+  - Runs were strict cold, no prompt-specific pack/profile/alias, `MemoryMax=16000000000`, `MemorySwapMax=0`, page cache inside cgroup.
+- source_update:
+  - Added default-off `GGML_DS4_GROUPED_RETAINED_ROUTE_DETAIL_OUT=<csv>` in `ggml-cpu.c`.
+  - It writes one row per active expert with `seq, role, layer, phase, tensor, expert_id, rows, expert_bytes, cache_contains, eligibility`.
+  - It requires `GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT` to be enabled and remains fully off by default.
+- build_validation:
+  - command: `cmake --build build-ds4-moe-stream -j20 --target llama-cli llama-results`
+  - result: passed.
+- detail_smoke:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T103645Z-20260707-grouped-retained-detail-smoke-france/france-detail-smoke-cpu40-vram0gb`
+  - result: detail CSV generated; `memory_peak_bytes=16000000000`, `ram_ok=true`; `n=16` diagnostic only.
+- calibration_dev_detail_runs:
+  - France: `/root/lfz/runs/vendor-ds4-16gb/20260707T103823Z-20260707-grouped-retained-calib-dev-detail-france/calib-france-grouped-retained-detail-cpu40-vram0gb`, `eval_tok_s=2.5`, `TTFT=38785.291728 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, diagnostic `n=96` truncated.
+  - Quantum: `/root/lfz/runs/vendor-ds4-16gb/20260707T103944Z-20260707-grouped-retained-calib-dev-detail-quantum/calib-quantum-grouped-retained-detail-cpu40-vram0gb`, `eval_tok_s=1.7`, `TTFT=38843.857037 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`.
+  - Fibonacci: `/root/lfz/runs/vendor-ds4-16gb/20260707T104121Z-20260707-grouped-retained-calib-dev-detail-fibonacci/calib-fibonacci-grouped-retained-detail-cpu40-vram0gb`, `eval_tok_s=1.8`, `TTFT=39735.273142 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, diagnostic `n=96` truncated.
+  - Japan: `/root/lfz/runs/vendor-ds4-16gb/20260707T104258Z-20260707-grouped-retained-calib-dev-detail-japan/calib-japan-grouped-retained-detail-cpu40-vram0gb`, `eval_tok_s=2.3`, `TTFT=39081.738699 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, diagnostic `n=96` truncated.
+  - Climate: `/root/lfz/runs/vendor-ds4-16gb/20260707T104422Z-20260707-grouped-retained-calib-dev-detail-climate/calib-climate-grouped-retained-detail-cpu40-vram0gb`, `eval_tok_s=2.1`, `TTFT=39084.609883 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`.
+- aggregate_route_inventory:
+  - gate: `unique_pairs=7833`, `unique_payload=32.510 GiB`, `cache_hit_rate=80.9216%`, `logical=514.731 GiB`.
+  - up: `unique_pairs=5824`, `unique_payload=24.171875 GiB`, `cache_hit_rate=0%`, `logical=280.027 GiB`.
+  - down: `unique_pairs=5824`, `unique_payload=24.171875 GiB`, `cache_hit_rate=0%`, `logical=280.027 GiB`.
+  - up+down combined observed unique payload is about `48.34 GiB`, before any duplication for staging/workspace. This cannot fit alongside the current model and useful gate cache on a `32GB` RTX 5090.
+- hotset_bound_from_existing_fallback_profile:
+  - Source timing artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json`.
+  - Total up/down fallback in that baseline: `216535.305 ms`.
+  - Top `1 GiB` up/down hotset covers only `14.01%` of fallback time.
+  - Top `4 GiB` covers `33.95%`.
+  - Top `8 GiB` covers `51.05%`.
+  - Top `12 GiB` covers `63.19%`.
+  - Top `16 GiB` covers `72.32%`.
+  - These budgets would compete directly with the existing gate cache, which the new profiler shows is already useful.
+- hard_bound:
+  - If up/down fallback were reduced by `80%`, calibration/dev projected min/mean/max token rate is `2.829/3.496/3.930 tok/s`.
+  - If reduced by `90%`, projected min/mean/max is `3.086/3.786/4.198 tok/s`.
+  - If reduced by `95%`, projected min/mean/max is `3.232/3.950/4.346 tok/s`.
+  - Even impossible `100%` up/down fallback removal only projects `min=3.393`, `mean=4.131`, `max=4.506 tok/s`, still below the product target of stable `>5 tok/s`.
+- default_off_guard_after_detail:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T104801Z-20260707-defaultoff-detail-profiler-guard/defaultoff-france-after-detail-profiler-cpu40-vram0gb`
+  - profiler env unset; default path.
+  - metrics: `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=38185.447499 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15027335168`, `ram_ok=true`, `correctness_ok=true`.
+  - France output was complete, semantic, coherent.
+- decision:
+  - Accept the detail profiler as a default-off measurement scaffold.
+  - Reject naive up/down hot cache, naive up/down expert pack, and any route that only spends VRAM on up/down hot experts while evicting gate cache.
+  - Do not claim new SOTA; all detail runs are diagnostic and `n=96` may truncate outputs.
+- next_action:
+  - Commit/push the detail profiler, artifact, and this plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+  - Next source work must be planned as a broader grouped-retained dataflow microbench, not a cache-only patch: preserve current gate cache, batch active up/down by layer, avoid per-expert source staging and D2H/writeback where possible, and include a mechanism to reduce gate/source or other non-updown decode cost.
+  - Before any held-out test, a candidate must first beat the calibration/dev no-prompt-specific baseline on min/mean token rate without correctness/RAM/TTFT regression.
