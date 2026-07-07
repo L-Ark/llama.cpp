@@ -94409,6 +94409,122 @@ GP55 execution result:
   - because RAM peak has no margin, do not increase overlay size before
     profiling memory/page-cache distribution.
 
+## GP56: multi-dev validation for budget16 general overlay
+
+Timestamp: `2026-07-07T10:41:00+08:00`.
+
+Status: planned before execution.
+
+Current state:
+
+- GP55 accepted `dev_linear_equation N=48` as a dev runtime improvement:
+  `0.16 -> 0.22 tok/s`, quality pass, TTFT not increased, 16GB cgroup pass.
+- It is not enough to claim a general prompt-agnostic SOTA because only one dev
+  prompt was runtime-tested.
+- GP54 showed several slow dev prompts still had weak current-pack coverage:
+  - `dev_python_reverse`: `54.0%` hit, `313.99 GiB` miss;
+  - `dev_mixed_summary`: `58.5%` hit, `161.17 GiB` miss;
+  - `dev_photosynthesis_factual`: `59.0%` hit, `276.74 GiB` miss.
+
+Goal:
+
+- Validate whether the `budget16gib` overlay generalizes across additional dev
+  prompts before touching the held-out test set.
+- Use `N=96` so results are comparable to the committed
+  `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile` baseline.
+
+Prompts:
+
+1. `dev_python_reverse`
+   - prompt: `Write a Python function to reverse a string.`
+   - quality keywords: `python|def|string,[::-1]|reverse`
+   - n96 baseline: token rate `0.17`, TTFT `84157.32 ms`, decode
+     `566552.71 ms / 95`.
+   - TTFT limit: `100988.78 ms`.
+2. `dev_mixed_summary`
+   - prompt:
+     `In two sentences, compare solar power and wind power for a small town.`
+   - quality keywords: `solar|sun,wind,power|energy`
+   - n96 baseline: token rate `0.20`, TTFT `91143.37 ms`, decode
+     `266891.43 ms / 54`.
+   - TTFT limit: `109372.04 ms`.
+
+Runtime command template:
+
+```bash
+repo=/root/lfz/tmp/vendor-kimi-speculative-gp33
+cd "$repo"
+ln -sfn build-gp50-runtime build-cuda-batch
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO="$repo" RUN="$run" N=96 PROFILE=1 COPY_PROFILE=0 \
+      PROMPT_ID="$prompt_id" \
+      PROMPT_USER_TEXT="$prompt" \
+      QUALITY_KEYWORDS="$quality_keywords" \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_LIST=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+Validation:
+
+- Cold start for each prompt.
+- `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Quality must pass and the answer must be semantically reasonable for the
+  prompt.
+- TTFT must stay within `+20%` of the n96 baseline for that prompt.
+- Token rate must improve over that prompt's n96 baseline before it is counted
+  as accepted.
+- Record exact commands, metrics, answer text, RAM, expert-pack counters, and
+  any failure reason.
+
+Acceptance:
+
+- If both prompts pass, accept the overlay as a generalized dev improvement and
+  proceed to a single held-out test-set gate in the next planned step.
+- If one prompt fails quality, TTFT, RAM, or token rate, do not proceed to
+  held-out testing; analyze the failure first.
+- Do not use held-out test prompts in GP56.
+
+GP56 execution result:
+
+- Timestamp: `2026-07-07T10:58:00+08:00`.
+- Report:
+  `.Agent/runs/20260707-gp56-budget16-multidev/report.md`.
+- Runtime used the same budget16 overlay from GP55:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack`.
+- `dev_python_reverse N=96`:
+  - quality: `pass`;
+  - answer includes a valid Python `reverse_string(s)` function using
+    `s[::-1]`;
+  - token rate: `0.24 tok/s` versus baseline `0.17 tok/s`;
+  - decode: `398190.38 ms / 95` versus `566552.71 ms / 95`;
+  - TTFT: `74730.11 ms`, below baseline `84157.32 ms` and below the
+    `100988.78 ms` gate;
+  - RAM peak: `15899996160`;
+  - expert-pack counters: hits `58937`, misses `31035`, direct reads `7544`,
+    iouring reads `48347`, iouring wait `60488511 us`.
+- `dev_mixed_summary N=96`:
+  - quality: `pass`;
+  - answer is a coherent two-sentence solar/wind comparison;
+  - token rate: `0.30 tok/s` versus baseline `0.20 tok/s`;
+  - decode: `178704.87 ms / 54` versus `266891.43 ms / 54`;
+  - TTFT: `91176.80 ms`, effectively flat versus baseline `91143.37 ms` and
+    below the `109372.04 ms` gate;
+  - RAM peak: `15899996160`;
+  - expert-pack counters: hits `36265`, misses `14209`, direct reads `3778`,
+    iouring reads `30676`, iouring wait `35376444 us`.
+- Acceptance:
+  - accepted as a generalized dev improvement across three dev prompts
+    including GP55;
+  - still not a final SOTA until the held-out test-set gate is run;
+  - RAM peak has no margin, so the next stage must keep the same overlay size
+    and inspect memory if any held-out prompt approaches OOM.
+- Next:
+  - write a held-out test-set validation plan;
+  - run the test set once without tuning on test outputs;
+  - accept final SOTA only if test-set quality, TTFT, RAM, and token-rate gates
+    pass.
+
 ## GP53: current-code slow dev direct-read copy attribution
 
 Timestamp: `2026-07-07T08:50:00+08:00`.

@@ -1,0 +1,41 @@
+run=/root/lfz/tmp/runs/20260707-gp56-budget16-multidev/dev_mixed_summary_n96
+prompt_id=dev_mixed_summary
+prompt=In two sentences, compare solar power and wind power for a small town.
+exit=0
+quality=pass
+quality_reason=ok
+output=Solar power offers predictable daytime generation and works well on rooftops, making it easy for small towns to scale gradually. Wind power can produce energy day and night but depends more on location and consistent breezes, so it suits towns with open landscapes more than densely built areas.
+ttft_ms=91176.80
+prompt_tokens=24
+decode_ms=178704.87
+decode_runs=54
+token_rate=0.30
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=14926430208
+anon=454656
+file=14596063232
+kernel=327954432
+inactive_file=7234269184
+active_file=7361200128
+pgmajfault=1375923
+pgfault=5065468
+workingset_refault_file=8072069
+expert_pack_0=36265 misses=14209 read_failures=0 direct_reads=3778 direct_fallbacks=0 iouring_reads=30676 iouring_bytes=169472049152 iouring_fallbacks=0 iouring_submit_us=184230 iouring_wait_us=35376444 iouring_h2d_enqueues=30676 entries=34577
+expert_pack_iouring_0=batches=8037 submit_calls=8037 wait_calls=23326 cqes=30676 inflight_avg=3.14 inflight_max=8 batch_hist=1:659,2-4:4711,5-8:2667,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 6.02 MiB
+pinned_staging_1=: enabled, 12 slots of 4.48 MiB
+pinned_staging_2=: enabled, 12 slots of 7.44 MiB
+pinned_staging_3=: enabled, 12 slots of 5.36 MiB
+pinned_staging_4=: copies=34090 waits=34054 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=129.208 ms host_stage=127770.595 ms enqueue=770.418 ms h2d=7486.842 ms h2d_timed=34090
+pinned_staging_5= iouring: batches=5395 jobs=21182 submit_calls=5395 wait_calls=16136 cqes=21182 inflight_avg=3.17 inflight_max=8 batch_hist=1:415,2-4:3035,5-8:1945,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=13360 waits=13336 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=52.654 ms host_stage=51047.480 ms enqueue=300.063 ms h2d=2788.177 ms h2d_timed=13360
+pinned_staging_7= gate iouring: batches=2642 jobs=9494 submit_calls=2642 wait_calls=7190 cqes=9494 inflight_avg=3.06 inflight_max=8 batch_hist=1:244,2-4:1676,5-8:722,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=1728 planned_jobs=7415 completed_jobs=7415 cache_hits=5113 missing_tensor=162 missing_pack=2023 submitted_batches=1564 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=39053765 batch_hist=1:28,2-4:696,5-8:840,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=15887 misses=6985 preloads=7415 pinned=0 hit_rate=69.5%
+vram_down_1=slots=766 slot=7.44 MiB hits=15887 misses=6985 preloads=7415 pinned=0 hit_rate=69.5%
+vram_down_2=slots=766 slot=7.44 MiB hits=15887 misses=6985 preloads=7415 pinned=0 hit_rate=69.5%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=18838 misses=33018 preloads=0 pinned=0 hit_rate=36.3%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=18838 misses=33018 preloads=0 pinned=0 hit_rate=36.3%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=18838 misses=33018 preloads=0 pinned=0 hit_rate=36.3%
