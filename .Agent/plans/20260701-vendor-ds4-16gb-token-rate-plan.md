@@ -5679,3 +5679,23 @@
   - The GP4 full-source alias path stays healthy through the sweep: all runs have `misses=0`, `direct_fallbacks=0`, and positive `iouring_reads`.
   - The current correctness boundary is not source IO; it is the MXFP4 down GPU math/writeback for `call=3`, tensor `blk.3.ffn_down_exps.weight`.
   - Do not run token-rate or calibration/dev with broader down perf yet. The next implementation must add targeted compare/debug for call 3, including active experts, dst/token rows, CPU row output, GPU row output, and final writeback placement.
+
+### X10-B4 result：standalone `blk.3.ffn_down_exps.weight` down perf reproduces the top1 failure
+
+- status: diagnostic_boundary_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gp4-alias-down-blk3-debug-20260707.json`
+- run_root: `/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-down-call3-debug`
+- target_tensor: `blk.3.ffn_down_exps.weight`
+- parity_result:
+  - targeted parity, full active/full columns: `active=6`, `compared=24576`;
+  - direct CPU-vs-GPU row compare: `max_abs=0.00697596481`, `mean_abs=0.0009336933`, `max_rel=0.0324131084`;
+  - worst location: `active=5`, `expert=201`, `col=3342`, `gpu=0.208244517`, `cpu=0.215220481`;
+  - final top1 remains exact because parity mode does not write back GPU output: `same_top1=145/145`.
+- perf_result:
+  - targeted perf for only `blk.3.ffn_down_exps.weight` fails top1: `same_top1=141/145`, `first_mismatch_pos=3`, `max_abs=7.26641`, `mean_abs=0.126753`;
+  - mismatch preview positions: `3`, `71`, `78`, `134`;
+  - source IO remains healthy: `hits=6`, `misses=0`, `iouring_reads=6`, `iouring_bytes=26738688`, `direct_fallbacks=0`.
+- conclusion:
+  - The standalone `blk.3` down GPU writeback is sufficient to flip token top1, so the blocker is not the prefix combination of calls `0..3`.
+  - The full-source alias/io_uring path is not the correctness problem; it consistently loads the right entries with misses zero.
+  - Next work must compare the exact `dst` rows after writeback/scatter, not only sampled raw row MMV output. The likely bug class is row placement, accumulation semantics, or tolerance amplification from replacing CPU down output with the current GPU down output.
