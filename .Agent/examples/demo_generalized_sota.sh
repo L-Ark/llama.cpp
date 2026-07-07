@@ -1,26 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prompt-general vendor DeepSeek SOTA demo under the project constraints.
+# Prompt-general demo for the current vendor DeepSeek SOTA baseline.
 #
-# This demo intentionally does not use France-specific traces, prompt-specific
-# expert packs, or prompt admission profiles. The user may pass any prompt; the
-# run is cold by default and is executed by strict_ds4_runner.py inside a 16 GB
-# cgroup that includes page cache.
+# This script accepts any user prompt and runs it through the current
+# no-prompt-specific vendor DeepSeek path under the project constraints:
+#   - 16 GB host RAM cgroup, including page cache
+#   - MemorySwapMax=0 through strict_ds4_runner.py/systemd-run
+#   - cold start by default via drop_caches
+#   - no France-specific trace, expert pack, prompt profile, or admission file
 #
 # Examples:
 #   .Agent/examples/demo_generalized_sota.sh --prompt "What does AI infrastructure do?"
 #   .Agent/examples/demo_generalized_sota.sh "今天吃什么？"
-#   printf 'Introduce Japan in one paragraph.\n' | .Agent/examples/demo_generalized_sota.sh --stdin-prompt
+#   printf 'Introduce Brazil briefly.\n' | .Agent/examples/demo_generalized_sota.sh --stdin-prompt
 #   .Agent/examples/demo_generalized_sota.sh --prompt-file prompt.txt
-#   .Agent/examples/demo_generalized_sota.sh
+#   .Agent/examples/demo_generalized_sota.sh --fast-smoke --prompt "Explain database indexes briefly."
 #
-# Useful options:
-#   --n-predict 192      Default comparable decode length.
-#   --fast-smoke         Use n_predict=32 only to prove the path runs.
-#   --warm               Keep page cache; not a cold-start SOTA metric.
-#   --print-command      Print the strict runner command and exit.
-#   --json               Print a final machine-readable JSON line.
+# Notes:
+#   Default --n-predict is 192 for comparable metrics.
+#   --fast-smoke uses 32 decode tokens only to prove that the path runs.
+#   The current prompt-general baseline is below the product target of stable
+#   >5 tok/s for random prompts; this demo reports the real measured result.
 
 ROOT="${ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 RUNNER="${RUNNER:-$ROOT/.Agent/run-tools/strict_ds4_runner.py}"
@@ -32,22 +33,39 @@ BASELINE_JSON="${BASELINE_JSON:-$ROOT/.Agent/runs/20260705-vendor-ds4-coldstart/
 PROMPT=""
 PROMPT_FILE=""
 STDIN_PROMPT=0
-RUN_NAME=""
+RUN_NAME="demo-generalized-sota"
 CASE_NAME=""
 N_PREDICT=192
+CTX_SIZE=256
+BATCH_SIZE=16
+UBATCH_SIZE=16
 COLD_START=1
+FAST_SMOKE=0
 PRINT_COMMAND=0
 PRINT_JSON=0
-FAST_SMOKE=0
 MIN_DEMO_TOK_S="${MIN_DEMO_TOK_S:-0}"
 
-usage() {
-  sed -n '1,31p' "$0"
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 2
 }
 
-die() {
-  echo "error: $*" >&2
-  exit 2
+usage() {
+  sed -n '1,32p' "$0"
+  cat <<'EOF'
+
+Options:
+  --prompt TEXT        Prompt text.
+  --prompt-file FILE   Read prompt from FILE.
+  --stdin-prompt       Read prompt from stdin.
+  --n-predict N        Decode token budget, default 192.
+  --fast-smoke         Use --n-predict 32 for quick path validation.
+  --warm               Do not drop page cache first; not a cold SOTA metric.
+  --case-name NAME     Case directory prefix.
+  --run-name NAME      Run directory suffix.
+  --print-command      Print strict runner command and exit.
+  --json               Emit a final [demo-json] line.
+EOF
 }
 
 slugify() {
@@ -59,11 +77,19 @@ import sys
 raw = sys.argv[1]
 text = raw.strip().lower()
 text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
-print(text[:48] if text else "prompt-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10])
+print(text[:56] if text else "prompt-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10])
 PY
 }
 
-print_baseline_banner() {
+json_quote() {
+  python3 - "$1" <<'PY'
+import json
+import sys
+print(json.dumps(sys.argv[1], ensure_ascii=False))
+PY
+}
+
+print_generalized_baseline() {
   python3 - "$BASELINE_JSON" <<'PY'
 import json
 import sys
@@ -74,23 +100,35 @@ if not path.exists():
     print("[demo] generalized_baseline_artifact=missing")
     raise SystemExit(0)
 
-data = json.loads(path.read_text())
+data = json.loads(path.read_text(encoding="utf-8"))
 agg = data.get("aggregate", {})
 print(f"[demo] generalized_baseline_artifact={path}")
-print(f"[demo] baseline_eval_tok_s_min={agg.get('min_eval_tok_s')}")
-print(f"[demo] baseline_eval_tok_s_mean={agg.get('mean_eval_tok_s')}")
-print(f"[demo] baseline_eval_tok_s_max={agg.get('max_eval_tok_s')}")
-print(f"[demo] baseline_ram_ok_all={agg.get('all_ram_ok')}")
-print(f"[demo] product_target_met_all_prompts_gt_5_tok_s={agg.get('target_met_all_prompts_gt_5_tok_s')}")
+print(f"[demo] generalized_baseline_eval_tok_s_min={agg.get('min_eval_tok_s')}")
+print(f"[demo] generalized_baseline_eval_tok_s_mean={agg.get('mean_eval_tok_s')}")
+print(f"[demo] generalized_baseline_eval_tok_s_max={agg.get('max_eval_tok_s')}")
+print(f"[demo] generalized_baseline_ram_ok_all={agg.get('all_ram_ok')}")
+print(f"[demo] generalized_baseline_target_gt_5_all_prompts={agg.get('target_met_all_prompts_gt_5_tok_s')}")
 PY
 }
 
-print_constraint_banner() {
-  printf '[demo] task=current prompt-general vendor DeepSeek SOTA demo\n'
-  printf '[demo] target=random user prompt, stable >5 tok/s, 16GB host RAM including page cache, 32GB RTX 5090\n'
-  printf '[demo] status=current generalized SOTA is still below the product target; this script demonstrates the best prompt-general path currently accepted\n'
-  printf '[demo] prompt_specific_optimization=disabled\n'
-  printf '[demo] config=vendor DeepSeek, cpu_moe=40, vram_cache=0, DS4 gate one-stream cache, strict 16GB cgroup\n'
+unset_prompt_specific_env() {
+  for var in \
+    GGML_MOE_STREAM_ONE_EXPERT_PACK \
+    GGML_MOE_STREAM_CACHE_ADMIT_PROFILE \
+    GGML_MOE_STREAM_ONE_PREFILL_PROFILE \
+    GGML_MOE_STREAM_ONE_PREFILL_LIMIT \
+    GGML_MOE_EXPERT_PACK \
+    GGML_MOE_EXPERT_PACK_OVERLAY \
+    GGML_MOE_EXPERT_GGUF_ALIAS_TSV \
+    GGML_MOE_IO_ALIGNED_ALIAS_BATCH \
+    GGML_MOE_STREAM_ONE_TRACE_IN \
+    GGML_MOE_STREAM_ONE_TRACE_OUT \
+    DS4_NATIVE_RETAINED_DOWN_PROBE_OUT \
+    DS4_FUSED_UP_GATE_REF \
+    DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT
+  do
+    unset "$var" || true
+  done
 }
 
 while [[ $# -gt 0 ]]; do
@@ -160,7 +198,7 @@ input_modes=0
 [[ -n "$PROMPT" ]] && input_modes=$((input_modes + 1))
 [[ -n "$PROMPT_FILE" ]] && input_modes=$((input_modes + 1))
 [[ "$STDIN_PROMPT" -eq 1 ]] && input_modes=$((input_modes + 1))
-[[ "$input_modes" -le 1 ]] || die "use only one of --prompt, --prompt-file, --stdin-prompt, or positional prompt"
+[[ "$input_modes" -le 1 ]] || die "use only one prompt input mode"
 
 if [[ -n "$PROMPT_FILE" ]]; then
   [[ -f "$PROMPT_FILE" ]] || die "prompt file not found: $PROMPT_FILE"
@@ -178,37 +216,17 @@ fi
 
 [[ -n "${PROMPT//[[:space:]]/}" ]] || die "prompt is empty"
 [[ "$N_PREDICT" =~ ^[0-9]+$ ]] || die "--n-predict must be a positive integer"
-[[ "$N_PREDICT" -ge 1 ]] || die "--n-predict must be a positive integer"
+[[ "$N_PREDICT" -gt 0 ]] || die "--n-predict must be a positive integer"
 
 cd "$ROOT"
-
 for path in "$RUNNER" "$BINARY" "$MODEL"; do
   [[ -e "$path" ]] || die "missing required artifact: $path"
 done
 
-# Keep this demo prompt-general even if the caller's shell has leftovers from
-# France/Kimi/GP experiments.
-for var in \
-  GGML_MOE_STREAM_ONE_EXPERT_PACK \
-  GGML_MOE_STREAM_CACHE_ADMIT_PROFILE \
-  GGML_MOE_STREAM_ONE_PREFILL_PROFILE \
-  GGML_MOE_EXPERT_PACK \
-  GGML_MOE_EXPERT_PACK_OVERLAY \
-  GGML_MOE_EXPERT_GGUF_ALIAS_TSV \
-  GGML_MOE_IO_ALIGNED_ALIAS_BATCH \
-  GGML_MOE_STREAM_ONE_TRACE_IN \
-  GGML_MOE_STREAM_ONE_TRACE_OUT \
-  DS4_NATIVE_RETAINED_DOWN_PROBE_OUT \
-  DS4_FUSED_UP_GATE_REF
-do
-  unset "$var" || true
-done
+unset_prompt_specific_env
 
 if [[ -z "$CASE_NAME" ]]; then
   CASE_NAME="$(slugify "$PROMPT")"
-fi
-if [[ -z "$RUN_NAME" ]]; then
-  RUN_NAME="$(date -u +%Y%m%dT%H%M%SZ)-demo-generalized-sota"
 fi
 
 cmd=(
@@ -236,11 +254,11 @@ cmd=(
   --extra-arg=-n
   --extra-arg="$N_PREDICT"
   --extra-arg=-c
-  --extra-arg=256
+  --extra-arg="$CTX_SIZE"
   --extra-arg=-b
-  --extra-arg=16
+  --extra-arg="$BATCH_SIZE"
   --extra-arg=-ub
-  --extra-arg=16
+  --extra-arg="$UBATCH_SIZE"
 )
 
 if [[ "$COLD_START" -eq 1 ]]; then
@@ -258,23 +276,23 @@ after=$(mktemp)
 trap 'rm -f "$before" "$after"' EXIT
 find "$OUT_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%p\n' 2>/dev/null | sort > "$before"
 
-printf '[demo] prompt-general vendor DeepSeek strict-16GB demo\n'
+printf '[demo] task=prompt-general vendor DeepSeek SOTA baseline demo\n'
 printf '[demo] repo=%s\n' "$ROOT"
 printf '[demo] branch=%s\n' "$(git rev-parse --abbrev-ref HEAD)"
 printf '[demo] commit=%s\n' "$(git rev-parse --short HEAD)"
-printf '[demo] prompt=%s\n' "$PROMPT"
+printf '[demo] prompt=%s\n' "$(json_quote "$PROMPT")"
 printf '[demo] n_predict=%s\n' "$N_PREDICT"
-print_constraint_banner
-print_baseline_banner
+printf '[demo] mode=%s\n' "$([[ "$FAST_SMOKE" -eq 1 ]] && printf fast_smoke || printf comparable_default)"
+printf '[demo] cold_start=%s\n' "$([[ "$COLD_START" -eq 1 ]] && printf true || printf false)"
+printf '[demo] memory_limit_bytes=16000000000\n'
+printf '[demo] page_cache_counted_in_cgroup=true\n'
+printf '[demo] swap=disabled\n'
+printf '[demo] prompt_specific_optimization=false\n'
+printf '[demo] config=cpu_moe=40,vram_cache=0,gate_one_stream_cache_mib=13568,no_prompt_pack,no_profile,no_trace\n'
+printf '[demo] product_target=random prompts stable >5 tok/s on 16GB host RAM + 32GB RTX 5090\n'
+print_generalized_baseline
 if [[ "$FAST_SMOKE" -eq 1 ]]; then
-  printf '[demo] metric_mode=fast_smoke; use default --n-predict 192 for comparable numbers\n'
-else
-  printf '[demo] metric_mode=comparable_default\n'
-fi
-if [[ "$COLD_START" -eq 1 ]]; then
-  printf '[demo] memory_mode=cold, drop_caches before case, MemoryMax=16000000000, MemorySwapMax=0\n'
-else
-  printf '[demo] memory_mode=warm, MemoryMax=16000000000, MemorySwapMax=0; not a cold-start SOTA metric\n'
+  printf '[demo] note=fast_smoke validates runnable path only; use default n_predict=192 for comparable token-rate numbers\n'
 fi
 
 "${cmd[@]}"
@@ -284,9 +302,9 @@ run_dir=$(comm -13 "$before" "$after" | tail -n 1)
 if [[ -z "$run_dir" ]]; then
   run_dir=$(find "$OUT_ROOT" -mindepth 1 -maxdepth 1 -type d -name "*-$RUN_NAME" -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -n 1 | cut -d' ' -f2-)
 fi
+
 case_dir="$run_dir/${CASE_NAME}-cpu40-vram0gb"
 summary="$case_dir/summary.json"
-
 [[ -f "$summary" ]] || die "summary not found: $summary"
 
 python3 - "$summary" "$PRINT_JSON" "$MIN_DEMO_TOK_S" <<'PY'
@@ -297,28 +315,28 @@ from pathlib import Path
 summary = Path(sys.argv[1])
 print_json = sys.argv[2] == "1"
 min_demo_tok_s = float(sys.argv[3])
-s = json.loads(summary.read_text())
+s = json.loads(summary.read_text(encoding="utf-8"))
 
-fields = [
-    ("eval_tok_s", s.get("eval_tok_s")),
-    ("prompt_tok_s", s.get("prompt_tok_s")),
-    ("ttft_estimate_ms", s.get("ttft_estimate_ms")),
-    ("elapsed_seconds", s.get("elapsed_seconds")),
-    ("memory_peak_bytes", s.get("memory_peak_bytes")),
-    ("memory_file_bytes", s.get("memory_file_bytes")),
-    ("memory_max_events", s.get("memory_max_events")),
-    ("pgmajfault", s.get("pgmajfault")),
-    ("workingset_refault_file", s.get("workingset_refault_file")),
-    ("ram_ok", s.get("ram_ok")),
-    ("ram_limit_killed", s.get("ram_limit_killed")),
-    ("oom_seen", s.get("oom_seen")),
-    ("correctness_ok", s.get("correctness_ok")),
-    ("correctness_reason", s.get("correctness_reason")),
+keys = [
+    "eval_tok_s",
+    "prompt_tok_s",
+    "ttft_estimate_ms",
+    "elapsed_seconds",
+    "memory_peak_bytes",
+    "memory_file_bytes",
+    "memory_max_events",
+    "pgmajfault",
+    "workingset_refault_file",
+    "ram_ok",
+    "ram_limit_killed",
+    "oom_seen",
+    "correctness_ok",
+    "correctness_reason",
 ]
 
 print("\n[demo] metrics")
-for key, value in fields:
-    print(f"{key}={value}")
+for key in keys:
+    print(f"{key}={s.get(key)}")
 
 answer = (s.get("answer") or "").strip()
 print("\n[demo] answer")
@@ -339,27 +357,26 @@ else:
 
 print(f"\n[demo] status={status}")
 if s.get("correctness_ok") is not True:
-    print("[demo] correctness_note=runner heuristic is conservative for arbitrary prompts; review the answer above.")
-if answer and answer[-1] not in ".!?。！？)]}\"'":
-    print("[demo] answer_note=possibly_truncated; increase --n-predict for a longer answer.")
-if min_demo_tok_s > 0:
-    print(f"[demo] min_demo_tok_s={min_demo_tok_s}")
+    print("[demo] correctness_note=automatic heuristic is conservative for arbitrary prompts; manually review the answer above")
+if answer and answer[-1] not in ".!?。！？)]}\"'`":
+    print("[demo] answer_note=possibly_truncated_by_n_predict; increase --n-predict for a longer demo answer")
 
+payload = {
+    "status": status,
+    "summary": str(summary),
+    "case_dir": s.get("case_dir"),
+    "eval_tok_s": s.get("eval_tok_s"),
+    "prompt_tok_s": s.get("prompt_tok_s"),
+    "ttft_estimate_ms": s.get("ttft_estimate_ms"),
+    "elapsed_seconds": s.get("elapsed_seconds"),
+    "memory_peak_bytes": s.get("memory_peak_bytes"),
+    "memory_file_bytes": s.get("memory_file_bytes"),
+    "ram_ok": s.get("ram_ok"),
+    "correctness_ok": s.get("correctness_ok"),
+    "correctness_reason": s.get("correctness_reason"),
+    "answer": answer,
+}
 if print_json:
-    payload = {
-        "status": status,
-        "summary": str(summary),
-        "eval_tok_s": s.get("eval_tok_s"),
-        "prompt_tok_s": s.get("prompt_tok_s"),
-        "ttft_estimate_ms": s.get("ttft_estimate_ms"),
-        "memory_peak_bytes": s.get("memory_peak_bytes"),
-        "memory_file_bytes": s.get("memory_file_bytes"),
-        "ram_ok": s.get("ram_ok"),
-        "correctness_ok": s.get("correctness_ok"),
-        "correctness_reason": s.get("correctness_reason"),
-        "answer": answer,
-        "min_demo_tok_s": min_demo_tok_s,
-    }
     print("[demo-json] " + json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
 if status != "RUN_COMPLETED_STRICT_16GB":
