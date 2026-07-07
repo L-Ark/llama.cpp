@@ -1674,6 +1674,59 @@ GP79 front-layer admission smoke result on 2026-07-08:
     admission or protection hook, and must justify the small simulated upper
     bound before implementation.
 
+GP80 planned IO depth/refill smoke:
+
+- Goal:
+  - test whether runtime queue depth is still limiting cold decode after the
+    GP79 cache-policy path failed.
+- Hypothesis:
+  - GP79 baseline N32 still shows iouring wait `11929606 us` and batch hist has
+    many `5-8` batches;
+  - increasing `MOE_IO_DEPTH` from `8` to `16` and `MOE_IO_REFILL_BATCH` from
+    `4` to `8` may reduce exposed wait if the current queue is artificially
+    shallow;
+  - if the true limit is route dependency or per-layer max 8 active experts, the
+    counters will remain unchanged and token rate will not improve.
+- Method:
+  - dev-only N32 France cold-start smoke;
+  - compare against GP79 baseline:
+    `.Agent/runs/20260708-gp79-frontlayer-admit-baseline-n32`;
+  - no source changes.
+- Acceptance:
+  - quality pass;
+  - host RAM peak `<16GB`;
+  - TTFT within +20%;
+  - token rate must beat the GP79 baseline `1.72 tok/s`;
+  - iouring wait should decrease or the result is not a real transport win.
+
+GP80 IO depth/refill smoke result on 2026-07-08:
+
+- Local report:
+  - `.Agent/runs/20260708-gp80-io-depth16-refill8-summary.md`
+  - `.Agent/runs/20260708-gp80-io-depth16-refill8-summary.json`
+- Candidate run:
+  - `.Agent/runs/20260708-gp80-io-depth16-refill8-n32`
+- Comparison against GP79 baseline:
+  - baseline `MOE_IO_DEPTH=8`, `MOE_IO_REFILL_BATCH=4`:
+    - token rate `1.72`;
+    - TTFT `77778.06 ms`;
+    - decode `18051.43 ms / 31`;
+    - iouring wait `11929606 us`;
+    - inflight avg/max `3.12 / 8`.
+  - candidate `MOE_IO_DEPTH=16`, `MOE_IO_REFILL_BATCH=8`:
+    - token rate `1.69`;
+    - TTFT `83751.31 ms`;
+    - decode `18315.23 ms / 31`;
+    - iouring wait `12066182 us`;
+    - inflight avg/max `3.10 / 8`.
+- Decision:
+  - reject;
+  - token rate regressed and wait increased;
+  - `inflight_max` stayed at `8`, and batch hist stayed identical;
+  - this supports the current bottleneck model: deeper configured io_uring
+    queues do not help because decode exposes at most the current layer's
+    active experts and route dependencies keep the queue from staying deep.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.

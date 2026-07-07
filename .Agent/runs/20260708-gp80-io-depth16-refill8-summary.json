@@ -1,0 +1,34 @@
+{
+  "kind": "kimi_gp80_io_depth16_refill8_smoke",
+  "sota_claim": false,
+  "held_out_prompts_used": 0,
+  "baseline": {
+    "run": ".Agent/runs/20260708-gp79-frontlayer-admit-baseline-n32",
+    "moe_io_depth": 8,
+    "moe_io_refill_batch": 4,
+    "quality": "pass",
+    "token_rate": 1.72,
+    "ttft_ms": 77778.06,
+    "decode_ms": 18051.43,
+    "decode_runs": 31,
+    "memory_peak": 15899996160,
+    "iouring_wait_us": 11929606,
+    "inflight_avg": 3.12,
+    "inflight_max": 8
+  },
+  "candidate": {
+    "run": ".Agent/runs/20260708-gp80-io-depth16-refill8-n32",
+    "moe_io_depth": 16,
+    "moe_io_refill_batch": 8,
+    "quality": "pass",
+    "token_rate": 1.69,
+    "ttft_ms": 83751.31,
+    "decode_ms": 18315.23,
+    "decode_runs": 31,
+    "memory_peak": 15899996160,
+    "iouring_wait_us": 12066182,
+    "inflight_avg": 3.10,
+    "inflight_max": 8
+  },
+  "decision": "Reject: token rate regressed, iouring wait increased, and inflight_max stayed 8, so deeper configured queue depth does not help this runtime path."
+}
