@@ -5259,3 +5259,16 @@
   - Stage 5: held-out locked test set only after candidate freeze; accepted generalized SOTA must be held-out-backed, strict 16GB/page-cache, TTFT compliant, correctness pass, and immediately pushed/reproduced from pushed commit.
 - reject_rule: If load fails, correctness fails, output degenerates, RAM/page-cache exceeds 16GB, or TTFT rises beyond gate before an accepted candidate exists, record artifact/plan and stop this model route. Do not tune prompt-specific profiles or packs for this candidate.
 - push_rule: Candidate selection plan and all download/load/correctness artifacts must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Any future source changes remain default-off and must preserve Kimi functionality.
+
+### X5 Stage 1 result：IQ2_S download complete
+
+- status: download_complete_not_model_validated
+- artifacts:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-download-stage1-started-20260707.json`
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-download-stage1-complete-20260707.json`
+- model_path: `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+- size: expected and actual `88019539296` bytes.
+- sha256: `817627eb3aa7b42e73264b653218fc1a1f27659fb999aa52840c17469415e809`.
+- download_log: aria2 completed at `2026-07-07T01:00:17Z`, avg speed about `79MiB/s`; `.aria2` control file disappeared.
+- note: HF/Xet HEAD etag `4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0` did not equal local file sha256, so use local `sha256 + size` for reproducibility.
+- next_step: Stage 2 strict `16GB/no-swap` load smoke with no prompt-specific env and stdout controlled. This is still not SOTA and must not use held-out.
