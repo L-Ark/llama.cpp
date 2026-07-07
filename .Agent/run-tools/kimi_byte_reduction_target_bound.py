@@ -5,11 +5,13 @@ import csv
 import json
 import pathlib
 import re
+import statistics
 
 
 EXPERT_PACK_RE = re.compile(r"iouring_bytes=(\d+)")
 LAYER_RE = re.compile(r"blk\.(\d+)\.ffn_(up|gate|down)_exps\.weight")
 HIT_RATE_RE = re.compile(r"hit_rate=([0-9.]+)%")
+CACHE_LINE_RE = re.compile(r"slot=([0-9.]+) MiB hits=(\d+) misses=(\d+)")
 
 
 def gib(nbytes):
@@ -77,6 +79,82 @@ def parse_hit_rate(metrics, group):
     key = "vram_down_0" if group == "down" else "vram_upgate_0"
     match = HIT_RATE_RE.search(str(metrics.get(key, "")))
     return float(match.group(1)) / 100.0 if match else 0.0
+
+
+def parse_cache_line(metrics, key):
+    match = CACHE_LINE_RE.search(str(metrics.get(key, "")))
+    if not match:
+        return {"slot_mib": 0.0, "hits": 0, "misses": 0}
+    return {
+        "slot_mib": float(match.group(1)),
+        "hits": int(match.group(2)),
+        "misses": int(match.group(3)),
+    }
+
+
+def mean_or_min(vals):
+    if not vals:
+        return 0.0
+    return statistics.mean(vals)
+
+
+def estimate_all_hit_moe_floor_ms_per_token(run_dir, decode_runs):
+    """Estimate the MoE wall floor if active expert bytes were already in VRAM.
+
+    This is still an optimistic bound. It uses all-hit rows where available and
+    the minimum observed row wall as a fallback when a prompt has no all-hit
+    sample for a path.
+    """
+    up_rows = 0
+    up_hit_wall = []
+    up_min_wall = []
+    up_source = "all_hit_rows"
+    up_path = run_dir / "up-gate-profile.csv"
+    if up_path.exists():
+        with up_path.open(newline="", encoding="utf-8", errors="replace") as f:
+            for row in csv.DictReader(f):
+                if row.get("mode") != "decode":
+                    continue
+                up_rows += 1
+                wall = float(row.get("wall_ms", 0.0) or 0.0)
+                up_min_wall.append(wall)
+                misses = int(float(row.get("up_cache_misses", 0) or 0)) + int(float(row.get("gate_cache_misses", 0) or 0))
+                if misses == 0:
+                    up_hit_wall.append(wall)
+    if not up_hit_wall and up_min_wall:
+        up_hit_wall = [min(up_min_wall)]
+        up_source = "min_row_fallback"
+
+    down_rows = 0
+    down_hit_wall = []
+    down_min_wall = []
+    down_source = "all_hit_rows"
+    down_path = run_dir / "down-batch-profile.csv"
+    if down_path.exists():
+        with down_path.open(newline="", encoding="utf-8", errors="replace") as f:
+            for row in csv.DictReader(f):
+                down_rows += 1
+                wall = float(row.get("wall_ms", 0.0) or 0.0)
+                down_min_wall.append(wall)
+                misses = int(float(row.get("cache_misses", 0) or 0))
+                if misses == 0:
+                    down_hit_wall.append(wall)
+    if not down_hit_wall and down_min_wall:
+        down_hit_wall = [min(down_min_wall)]
+        down_source = "min_row_fallback"
+
+    up_mean = mean_or_min(up_hit_wall)
+    down_mean = mean_or_min(down_hit_wall)
+    floor = ((up_rows * up_mean) + (down_rows * down_mean)) / decode_runs if decode_runs else 0.0
+    return {
+        "all_hit_moe_floor_ms_per_token": floor,
+        "up_rows": up_rows,
+        "down_rows": down_rows,
+        "up_hit_mean_ms": up_mean,
+        "down_hit_mean_ms": down_mean,
+        "up_source": up_source,
+        "down_source": down_source,
+    }
 
 
 def load_trace_estimated_misses(run_dir, prompt_id, metrics):
@@ -164,10 +242,24 @@ def summarize_prompt(run_dir, target_tps, peak_gib_s):
     decode_s = float(metrics.get("decode_ms", 0.0)) / 1000.0
     token_rate = float(metrics.get("token_rate", 0.0))
     iouring_bytes = parse_iouring_bytes(metrics)
+    moved_gib_per_token = gib(iouring_bytes) / decode_runs if decode_runs else 0.0
     current_gib_s = gib(iouring_bytes) / decode_s if decode_s > 0 else 0.0
     target_decode_s = decode_runs / target_tps if target_tps > 0 else 0.0
     ratio_at_peak = (target_decode_s * peak_gib_s) / gib(iouring_bytes) if iouring_bytes else 0.0
     ratio_at_current = (target_decode_s * current_gib_s) / gib(iouring_bytes) if iouring_bytes else 0.0
+    floor = estimate_all_hit_moe_floor_ms_per_token(run_dir, decode_runs)
+    target_ms_per_token = 1000.0 / target_tps if target_tps > 0 else 0.0
+    io_budget_ms_per_token_after_floor = max(0.0, target_ms_per_token - floor["all_hit_moe_floor_ms_per_token"])
+    budget_gib_per_token_at_peak_after_floor = io_budget_ms_per_token_after_floor / 1000.0 * peak_gib_s
+    budget_gib_per_token_at_current_after_floor = io_budget_ms_per_token_after_floor / 1000.0 * current_gib_s
+    ratio_at_peak_after_floor = budget_gib_per_token_at_peak_after_floor / moved_gib_per_token if moved_gib_per_token else 0.0
+    ratio_at_current_after_floor = budget_gib_per_token_at_current_after_floor / moved_gib_per_token if moved_gib_per_token else 0.0
+    up_cache = parse_cache_line(metrics, "vram_upgate_0")
+    down_cache = parse_cache_line(metrics, "vram_down_0")
+    active_gib_per_token = (
+        ((up_cache["hits"] + up_cache["misses"]) * up_cache["slot_mib"]) +
+        ((down_cache["hits"] + down_cache["misses"]) * down_cache["slot_mib"])
+    ) / 1024.0 / decode_runs if decode_runs else 0.0
     row = {
         "prompt_id": prompt_id,
         "decode_runs": decode_runs,
@@ -175,12 +267,22 @@ def summarize_prompt(run_dir, target_tps, peak_gib_s):
         "decode_s": decode_s,
         "target_decode_s": target_decode_s,
         "iouring_gib": gib(iouring_bytes),
-        "moved_gib_per_token": gib(iouring_bytes) / decode_runs if decode_runs else 0.0,
+        "moved_gib_per_token": moved_gib_per_token,
+        "active_gib_per_token": active_gib_per_token,
         "current_effective_gib_s": current_gib_s,
         "required_byte_ratio_at_peak": min(ratio_at_peak, 1.0),
         "required_byte_ratio_at_current": min(ratio_at_current, 1.0),
         "required_reduction_at_peak_pct": pct(max(0.0, 1.0 - min(ratio_at_peak, 1.0))),
         "required_reduction_at_current_pct": pct(max(0.0, 1.0 - min(ratio_at_current, 1.0))),
+        "all_hit_moe_floor_ms_per_token": floor["all_hit_moe_floor_ms_per_token"],
+        "io_budget_ms_per_token_after_floor": io_budget_ms_per_token_after_floor,
+        "budget_gib_per_token_at_peak_after_floor": budget_gib_per_token_at_peak_after_floor,
+        "budget_gib_per_token_at_current_after_floor": budget_gib_per_token_at_current_after_floor,
+        "required_byte_ratio_at_peak_after_floor": min(ratio_at_peak_after_floor, 1.0),
+        "required_byte_ratio_at_current_after_floor": min(ratio_at_current_after_floor, 1.0),
+        "required_reduction_at_peak_after_floor_pct": pct(max(0.0, 1.0 - min(ratio_at_peak_after_floor, 1.0))),
+        "required_reduction_at_current_after_floor_pct": pct(max(0.0, 1.0 - min(ratio_at_current_after_floor, 1.0))),
+        "floor_detail": floor,
         "quality": metrics.get("quality", ""),
         "memory_peak": int(metrics.get("memory.peak", metrics.get("memory_peak", 0)) or 0),
     }
@@ -203,11 +305,12 @@ def aggregate_misses(miss_rows, key_fields):
     return sorted(out, key=lambda r: r["bytes"], reverse=True)
 
 
-def write_report(out, prompt_rows, miss_rows, target_tps, peak_gib_s):
+def write_report(out, prompt_rows, miss_rows, target_tps, peak_gib_s, evidence_scope):
     out.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "target_tps": target_tps,
         "peak_gib_s": peak_gib_s,
+        "evidence_scope": evidence_scope,
         "prompts": prompt_rows,
         "miss_by_role": aggregate_misses(miss_rows, ["role"]),
         "miss_by_layer_role": aggregate_misses(miss_rows, ["layer", "role"]),
@@ -218,25 +321,46 @@ def write_report(out, prompt_rows, miss_rows, target_tps, peak_gib_s):
     lines = [
         "# Kimi byte-reduction target bound",
         "",
-        "This is a dev-only planning bound. It does not use held-out test prompts.",
+        f"Evidence scope: `{evidence_scope}`.",
+        "",
+        "This is a bound report only. It must not be used to select prompt-specific experts or tune held-out prompts.",
         "",
         f"- target token rate: `{target_tps:.2f} tok/s`",
         f"- optimistic sustained movement bandwidth: `{peak_gib_s:.2f} GiB/s`",
         "",
         "## Prompt Bound",
         "",
-        "| prompt | tok/s | decode tok | decode s | moved GiB | GiB/token | eff GiB/s | required byte ratio at peak | required reduction at peak | required reduction at current eff |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| prompt | tok/s | decode tok | decode s | moved GiB | moved GiB/token | active GiB/token | eff GiB/s | transfer-only ratio @ peak | floor ms/token | IO budget GiB/token @ peak | ratio @ peak after floor | reduction @ peak after floor | ratio @ current eff after floor |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in prompt_rows:
         lines.append(
             f"| `{row['prompt_id']}` | {row['token_rate']:.2f} | {row['decode_runs']} | "
             f"{row['decode_s']:.2f} | {row['iouring_gib']:.2f} | "
-            f"{row['moved_gib_per_token']:.2f} | {row['current_effective_gib_s']:.2f} | "
+            f"{row['moved_gib_per_token']:.2f} | {row['active_gib_per_token']:.2f} | "
+            f"{row['current_effective_gib_s']:.2f} | "
             f"{row['required_byte_ratio_at_peak']:.2f}x | "
-            f"{row['required_reduction_at_peak_pct']:.1f}% | "
-            f"{row['required_reduction_at_current_pct']:.1f}% |"
+            f"{row['all_hit_moe_floor_ms_per_token']:.1f} | "
+            f"{row['budget_gib_per_token_at_peak_after_floor']:.2f} | "
+            f"{row['required_byte_ratio_at_peak_after_floor']:.2f}x | "
+            f"{row['required_reduction_at_peak_after_floor_pct']:.1f}% | "
+            f"{row['required_byte_ratio_at_current_after_floor']:.2f}x |"
         )
+
+    if prompt_rows:
+        moved = [row["moved_gib_per_token"] for row in prompt_rows]
+        active = [row["active_gib_per_token"] for row in prompt_rows]
+        floor_vals = [row["all_hit_moe_floor_ms_per_token"] for row in prompt_rows]
+        ratios = [row["required_byte_ratio_at_peak_after_floor"] for row in prompt_rows]
+        lines.extend([
+            "",
+            "## Aggregate Bound",
+            "",
+            f"- median moved bytes: `{statistics.median(moved):.2f} GiB/token`; mean `{statistics.mean(moved):.2f} GiB/token`.",
+            f"- median active expert footprint before cache: `{statistics.median(active):.2f} GiB/token`; mean `{statistics.mean(active):.2f} GiB/token`.",
+            f"- median all-hit MoE floor estimate: `{statistics.median(floor_vals):.1f} ms/token`; mean `{statistics.mean(floor_vals):.1f} ms/token`.",
+            f"- median required byte ratio at `{peak_gib_s:.2f} GiB/s` after floor: `{statistics.median(ratios):.2f}x`; worst `{min(ratios):.2f}x`.",
+        ])
 
     lines.extend([
         "",
@@ -273,6 +397,8 @@ def write_report(out, prompt_rows, miss_rows, target_tps, peak_gib_s):
         "",
         "- The peak-bandwidth ratio is an optimistic lower bound: it assumes expert movement is the only remaining bottleneck",
         "  and that runtime can sustain the pure IO bench bandwidth during decode.",
+        "- The after-floor ratio is stricter: it reserves time for an optimistic all-hit MoE wall estimate before assigning",
+        "  the remaining token budget to expert movement.",
         "- If the required byte ratio is far below 1.0, queue tuning and prediction cannot be enough; expert bytes must shrink.",
         "- When down/upgate miss profiles are absent, role/layer miss bytes are estimated from route trace bytes",
         "  scaled by the prompt-level VRAM cache hit rates in metrics.json.",
@@ -288,6 +414,7 @@ def main():
     parser.add_argument("--out", type=pathlib.Path, required=True)
     parser.add_argument("--target-tps", type=float, default=5.0)
     parser.add_argument("--peak-gib-s", type=float, default=10.4)
+    parser.add_argument("--evidence-scope", default="dev")
     args = parser.parse_args()
 
     prompt_rows = []
@@ -300,7 +427,7 @@ def main():
         miss_rows.extend(misses)
     if not prompt_rows:
         raise SystemExit("no prompt metrics found")
-    write_report(args.out, prompt_rows, miss_rows, args.target_tps, args.peak_gib_s)
+    write_report(args.out, prompt_rows, miss_rows, args.target_tps, args.peak_gib_s, args.evidence_scope)
     print(args.out)
 
 

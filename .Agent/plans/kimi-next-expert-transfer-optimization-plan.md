@@ -361,7 +361,91 @@ Route-detail predictor bound on 2026-07-07:
   - any runtime predictor must use stronger information than recent route history, such as router-level signals or a much smaller high-confidence candidate set;
   - otherwise focus on reducing expert bytes or changing pack/layout rather than adding false IO.
 
-## Phase 5: Lower-Priority Compute Work
+## Phase 5: Structural Byte-Reduction Gate
+
+Purpose:
+
+Use the current prompt-general SOTA profile to quantify how much expert movement
+must shrink before any optimization can plausibly reach `5 tok/s`. This phase is
+a planning gate before investing in new runtime formats.
+
+Important rule:
+
+- Held-out SOTA profiles may be used only to measure the target gap after a
+  candidate has already been frozen. They must not be used to select hot experts,
+  tune prompt-specific packs, or train a predictor.
+- Dev profiles may be used for candidate design, but final SOTA claims still
+  require held-out validation.
+
+Tool update on 2026-07-07:
+
+- Tool:
+  - `.Agent/run-tools/kimi_byte_reduction_target_bound.py`
+- Added:
+  - evidence-scope labeling;
+  - active expert footprint estimate before cache;
+  - transfer-only byte ratio bound;
+  - optimistic all-hit MoE floor estimate from up/down profile CSV;
+  - stricter byte ratio after reserving time for the all-hit MoE floor.
+
+Accepted held-out SOTA bound:
+
+- Report:
+  - `.Agent/runs/20260707-kimi-5tps-byte-reduction-bound-heldout-sota/report.md`
+- Evidence scope:
+  - accepted held-out SOTA profile only;
+  - no hotset, predictor, or pack selection is derived from held-out routes.
+- Result:
+  - current moved bytes: median `4.23 GiB/token`, mean `4.39 GiB/token`;
+  - active expert footprint before cache: median/mean `8.10 GiB/token`;
+  - optimistic all-hit MoE floor: median `40.5 ms/token`, mean `40.1 ms/token`;
+  - at the measured pure IO upper bound of `10.4 GiB/s`, after reserving the
+    all-hit MoE floor, median required byte ratio is `0.39x`;
+  - worst prompt requires `0.30x`;
+  - role split of miss bytes is broad: down `37.6%`, up `31.2%`, gate `31.2%`.
+
+Current-SOTA dev bound:
+
+- Report:
+  - `.Agent/runs/20260707-kimi-5tps-byte-reduction-bound-dev-sota/report.md`
+- Evidence scope:
+  - current SOTA dev profile only.
+- Limitation:
+  - this dev profile has route profiles but not up/down profile CSV, so it can
+    estimate moved bytes but not the all-hit MoE floor. Do not interpret its
+    `floor=0` rows as a compute conclusion.
+- Result:
+  - moved bytes are still about `4.36 GiB/token` on average, matching the
+    held-out SOTA scale.
+
+Decision:
+
+- Queue-depth tuning, pack layout-only changes, and simple route-history
+  predictors are bounded below the `5 tok/s` target.
+- A viable `5 tok/s` path needs a representation or execution change that
+  reduces moved expert bytes to about `0.30x-0.40x` of current IQ3 movement
+  while preserving quality.
+- Selected IQ1_S/v2 hotsets are not sufficient by themselves:
+  - earlier GP46 showed that realistic selected-IQ1_S scale near `0.52x-0.61x`
+    does not reach `5 tok/s`;
+  - even hypothetical `0.276x` only reaches a transfer-only `5.0 tok/s` bound
+    and leaves no room for runtime overhead.
+
+Next actions:
+
+1. Use dev-only samples to evaluate lower-byte expert representations under
+   quality-preserving error metrics:
+   - residual/base expert clusters;
+   - mixed lower-bit up/gate/down candidates;
+   - direct compressed compute candidates that avoid reconstructing full expert
+     tensors.
+2. Reject any candidate whose theoretical byte ratio cannot reach `0.30x-0.40x`
+   after accounting for runtime overhead.
+3. Only after a candidate passes dev-only error and byte gates, implement a
+   default-off runtime path and run cold-start n32 dev quality/perf.
+4. Run held-out n96 only once the candidate is frozen.
+
+## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
 
@@ -391,14 +475,24 @@ For every experiment:
 
 ## Immediate Next Task
 
-Start with Phase 0 and Phase 1:
+Continue from Phase 5:
 
-1. Add missing gate-to-read and queue-depth observability if not already present.
-2. Re-run n96 cold-start baseline with the correct GP4 env.
-3. Implement `GGML_MOE_STAGE_2M_ALIGN=1` as the first low-risk code experiment.
-4. Compare pure IO and real decode before starting the global scheduler.
+1. Build a dev-only lower-byte representation screen that samples real active
+   up/gate/down experts and reports byte ratio plus reconstruction/activation
+   error.
+2. Prioritize candidates that can plausibly reach `0.30x-0.40x` total moved
+   bytes; reject candidates above that bound unless they also remove exposed IO
+   through direct compressed compute.
+3. Do not build more prompt-specific hot expert overlays. GP57 showed dev
+   overlay gains can regress held-out performance severely.
+4. Keep scheduler/predictor work default-off unless a shadow predictor can show
+   high useful byte recall under a strict extra-read cap.
 
 Rationale:
 
-- 2 MiB staging is the cheapest experiment that may improve throughput without prediction risk.
-- The global scheduler is likely the highest-upside structural fix, but it needs better counters first so we can distinguish scheduler overhead from real IO overlap gains.
+- The current accepted SOTA already moves only about half of the active expert
+  footprint, yet it remains at `~1.37 tok/s`.
+- At `10.4 GiB/s`, the `5 tok/s` budget after an optimistic MoE floor allows
+  only about `1.6-1.7 GiB/token` of expert movement on typical prompts.
+- This requires structural byte reduction, not another small IO scheduling
+  adjustment.
