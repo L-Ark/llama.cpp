@@ -3416,6 +3416,105 @@ Decision:
   compute/storage-form change that targets `0.30x-0.40x` moved bytes before
   writing runtime kernels.
 
+## Phase 5V: GP99 Activation-Weighted Cluster Base Residual Oracle
+
+Goal:
+
+- Test the strongest remaining version of the cluster-base idea before spending
+  runtime engineering effort:
+  - keep a small number of per-layer/per-tensor base matrices resident;
+  - move only a low-bit residual for the selected expert;
+  - evaluate actual down-output error on prompt-general dev activation traces.
+- This is a prompt-general offline screen, not a prompt-specific hotset.
+- Held-out test prompts remain sealed.
+
+Why this is next:
+
+- GP98 defers the complete `i1-IQ1_S` path because current disk margin is too
+  small, and even `0.505x` is only borderline for `5 tok/s`.
+- GP95-GP97 rejected intermediate slicing, scalar correction, and tiny output
+  subspaces, but those did not test the activation-weighted cluster-base
+  residual form directly.
+- Earlier D2MoE cluster-base work measured raw weight residual norms. GP99
+  tightens the gate by measuring the actual `W_down @ h` output error on
+  multi-prompt call-stride activation data.
+
+Method:
+
+1. Use only dev activation corpus:
+   `.Agent/runs/20260708-gp88-callstride-activation-corpus/{dev_*}`.
+2. For selected high-traffic down tensors, load the active experts observed in
+   the dev corpus from the current IQ3_S inventory.
+3. Cluster expert weights by deterministic sketches and build weighted base
+   matrices for `clusters in {1,4,8}`.
+4. For each activation row, compare:
+   - exact `W_e @ h`;
+   - base only `B_cluster @ h`;
+   - base plus blockwise 1-bit residual;
+   - base plus blockwise 2-bit residual.
+5. Record:
+   - row-level and grouped active-expert relative L2;
+   - residual moved-byte ratio versus current IQ3_S expert bytes;
+   - resident base BF16 MiB per tensor;
+   - exact reproduce command.
+
+Acceptance:
+
+- A candidate can proceed only if, on dev prompts:
+  - grouped down-output mean rel L2 is near the existing `0.10` quality gate;
+  - moved residual bytes are within the `0.30x-0.40x` target;
+  - resident base VRAM is plausible under 32GB with current dense/GPU cache.
+- If down-only output error is far above the gate, reject this path before
+  testing up/gate or writing kernels.
+
+Expected risk:
+
+- The base VRAM cost may be too high even if residual bytes are low.
+- A 1-bit residual may hit the byte target but fail output error.
+- A 2-bit residual may improve output error but miss the byte target.
+
+Execution result:
+
+- Timestamp: `2026-07-08T03:56:45+0800`.
+- Status: completed dev-only offline oracle; no runtime change and no SOTA
+  claim.
+- Script:
+  `.Agent/run-tools/kimi_cluster_base_activation_oracle.py`.
+- Reports:
+  - smoke:
+    `.Agent/runs/20260708-gp99-cluster-base-activation-smoke/report.md`;
+  - expanded:
+    `.Agent/runs/20260708-gp99-cluster-base-activation-expanded/report.md`.
+- Remote execution:
+  - worktree: `/root/lfz/tmp/kimi-stage2m-align`;
+  - command ran under `systemd-run --wait --collect --same-dir`;
+  - memory cap: `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Expanded input:
+  - dev prompts only:
+    `dev_python_reverse`, `dev_japan_factual`, `dev_mixed_summary`;
+  - source corpus:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus`;
+  - `max-records-per-prompt=192`;
+  - `max-tensors=2`;
+  - clusters: `1,4,8`;
+  - residual bits: `1,2`;
+  - block: `256`.
+- Expanded result:
+  - `blk.60.ffn_down_exps.weight`, best target-ratio candidate:
+    `clusters=8`, `residual_1bit`, moved ratio `0.3091`, group mean rel L2
+    `1.142634`;
+  - `blk.12.ffn_down_exps.weight`, target-ratio candidate:
+    `clusters=8`, `residual_1bit`, moved ratio `0.3091`, group mean rel L2
+    `1.606279`;
+  - 2-bit residual misses the byte target with moved ratio `0.6000`, and still
+    has group mean rel L2 `0.405364` and `0.572879` on the two tested tensors.
+- Decision:
+  - reject cluster-base plus 1-bit/2-bit residual as a primary `5 tok/s` path;
+  - target moved bytes can be reached with 1-bit residual, but output error is
+    more than an order of magnitude above the `0.10` gate;
+  - 2-bit residual does not rescue quality and misses the moved-byte target;
+  - do not write runtime kernels for this representation.
+
 ## Run Discipline
 
 For every experiment:
@@ -3509,6 +3608,12 @@ Continue from Phase 5E:
     kernel is written.
 30. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
     gains can regress held-out performance severely.
+31. GP99 rejects activation-weighted cluster-base residual as a primary path:
+    `0.309x` moved-byte candidates have group rel L2 `1.14-1.61`, and
+    `0.600x` 2-bit candidates still have group rel L2 `0.40-0.57`.
+32. The next primary direction must avoid per-expert residual reconstruction
+    unless it introduces a materially stronger learned/optimized residual
+    codec with an offline output-error gate close to `0.10`.
 
 Rationale:
 

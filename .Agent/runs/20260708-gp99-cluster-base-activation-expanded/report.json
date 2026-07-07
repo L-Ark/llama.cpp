@@ -1,0 +1,394 @@
+{
+  "bits": [
+    1,
+    2
+  ],
+  "block": 256,
+  "clusters": [
+    1,
+    4,
+    8
+  ],
+  "decision": "Reject as primary: best target-ratio candidate blk.60.ffn_down_exps.weight clusters=8 residual_1bit has group mean rel L2 1.142634, above the 0.10 gate.",
+  "generated_at": "2026-07-07T19:56:45+0000",
+  "inventory": ".Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv",
+  "kind": "kimi_cluster_base_activation_oracle",
+  "libggml_base": "build-cuda-batch/bin/libggml-base.so",
+  "max_records_per_prompt": 192,
+  "max_tensors": 2,
+  "prompt_roots": [
+    "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse",
+    "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual",
+    "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_mixed_summary"
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_cluster_base_activation_oracle.py --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_mixed_summary --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --libggml-base build-cuda-batch/bin/libggml-base.so --out-json /root/lfz/runs/vendor-kimi-token-rate/20260708-gp99-cluster-base-activation-expanded/report.json --out-md /root/lfz/runs/vendor-kimi-token-rate/20260708-gp99-cluster-base-activation-expanded/report.md --max-records-per-prompt 192 --max-tensors 2 --clusters 1,4,8 --bits 1,2 --block 256 --sketch-dim 4096 --torch-threads 8",
+  "sketch_dim": 4096,
+  "tensors": [
+    {
+      "cluster_results": [
+        {
+          "base_bf16_mib": 28.0,
+          "cluster_sizes": {
+            "0": 11
+          },
+          "clusters": 1,
+          "group_summary": {
+            "base_only": {
+              "max_rel_l2": 0.9442174110012252,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.9379651268158146,
+              "rows": 3
+            },
+            "residual_1bit": {
+              "max_rel_l2": 2.1490833900878754,
+              "mean_moved_ratio": 0.3090909090909091,
+              "mean_rel_l2": 2.1305288102594737,
+              "rows": 3
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.76671074136875,
+              "mean_moved_ratio": 0.6,
+              "mean_rel_l2": 0.7600233450348942,
+              "rows": 3
+            }
+          },
+          "row_summary": {
+            "base_only": {
+              "max_rel_l2": 1.0166367086991173,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.9463366978784212,
+              "rows": 24
+            },
+            "residual_1bit": {
+              "max_rel_l2": 2.3988839881656956,
+              "mean_moved_ratio": 0.30909090909090886,
+              "mean_rel_l2": 2.1500130439772853,
+              "rows": 24
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.841839371218604,
+              "mean_moved_ratio": 0.5999999999999998,
+              "mean_rel_l2": 0.7684453956377263,
+              "rows": 24
+            }
+          }
+        },
+        {
+          "base_bf16_mib": 112.0,
+          "cluster_sizes": {
+            "0": 3,
+            "1": 2,
+            "2": 4,
+            "3": 2
+          },
+          "clusters": 4,
+          "group_summary": {
+            "base_only": {
+              "max_rel_l2": 0.7656202384726416,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.7357544585302985,
+              "rows": 3
+            },
+            "residual_1bit": {
+              "max_rel_l2": 1.72116266662854,
+              "mean_moved_ratio": 0.3090909090909091,
+              "mean_rel_l2": 1.6594750537381646,
+              "rows": 3
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.609699266457282,
+              "mean_moved_ratio": 0.6,
+              "mean_rel_l2": 0.5919216096640142,
+              "rows": 3
+            }
+          },
+          "row_summary": {
+            "base_only": {
+              "max_rel_l2": 1.0590184250571508,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.7513376431296069,
+              "rows": 24
+            },
+            "residual_1bit": {
+              "max_rel_l2": 2.4525332712520442,
+              "mean_moved_ratio": 0.30909090909090886,
+              "mean_rel_l2": 1.7072132933637134,
+              "rows": 24
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.8580773621351188,
+              "mean_moved_ratio": 0.5999999999999998,
+              "mean_rel_l2": 0.6044267575289911,
+              "rows": 24
+            }
+          }
+        },
+        {
+          "base_bf16_mib": 224.0,
+          "cluster_sizes": {
+            "0": 1,
+            "1": 2,
+            "2": 2,
+            "3": 2,
+            "4": 1,
+            "5": 1,
+            "6": 1,
+            "7": 1
+          },
+          "clusters": 8,
+          "group_summary": {
+            "base_only": {
+              "max_rel_l2": 0.544927233411783,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.5081420717257416,
+              "rows": 3
+            },
+            "residual_1bit": {
+              "max_rel_l2": 1.227380226951274,
+              "mean_moved_ratio": 0.3090909090909091,
+              "mean_rel_l2": 1.1426340621474758,
+              "rows": 3
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.4380603806000452,
+              "mean_moved_ratio": 0.6,
+              "mean_rel_l2": 0.4053643145197612,
+              "rows": 3
+            }
+          },
+          "row_summary": {
+            "base_only": {
+              "max_rel_l2": 0.8594464352488062,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.4601909727637164,
+              "rows": 24
+            },
+            "residual_1bit": {
+              "max_rel_l2": 1.9812953456413671,
+              "mean_moved_ratio": 0.30909090909090886,
+              "mean_rel_l2": 1.0355913506938699,
+              "rows": 24
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.707651446827613,
+              "mean_moved_ratio": 0.5999999999999998,
+              "mean_rel_l2": 0.36991355996688297,
+              "rows": 24
+            }
+          }
+        }
+      ],
+      "expert_bytes": 6307840,
+      "experts": [
+        23,
+        30,
+        41,
+        49,
+        65,
+        135,
+        240,
+        298,
+        320,
+        333,
+        373
+      ],
+      "kind": "down",
+      "layer": 60,
+      "rows": 24,
+      "shape": [
+        2048,
+        7168,
+        384
+      ],
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    {
+      "cluster_results": [
+        {
+          "base_bf16_mib": 28.0,
+          "cluster_sizes": {
+            "0": 19
+          },
+          "clusters": 1,
+          "group_summary": {
+            "base_only": {
+              "max_rel_l2": 0.9699355848497573,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.9653829729676612,
+              "rows": 3
+            },
+            "residual_1bit": {
+              "max_rel_l2": 2.1787464794772027,
+              "mean_moved_ratio": 0.3090909090909091,
+              "mean_rel_l2": 2.1693075744771453,
+              "rows": 3
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.7850818474351043,
+              "mean_moved_ratio": 0.6,
+              "mean_rel_l2": 0.7839450310164602,
+              "rows": 3
+            }
+          },
+          "row_summary": {
+            "base_only": {
+              "max_rel_l2": 0.9943256009949705,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.964767796208312,
+              "rows": 24
+            },
+            "residual_1bit": {
+              "max_rel_l2": 2.267128853277859,
+              "mean_moved_ratio": 0.30909090909090886,
+              "mean_rel_l2": 2.154796496505559,
+              "rows": 24
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.8169735770684617,
+              "mean_moved_ratio": 0.5999999999999998,
+              "mean_rel_l2": 0.7777552108981066,
+              "rows": 24
+            }
+          }
+        },
+        {
+          "base_bf16_mib": 112.0,
+          "cluster_sizes": {
+            "0": 7,
+            "1": 4,
+            "2": 5,
+            "3": 3
+          },
+          "clusters": 4,
+          "group_summary": {
+            "base_only": {
+              "max_rel_l2": 0.9058006807625123,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.8742648860063486,
+              "rows": 3
+            },
+            "residual_1bit": {
+              "max_rel_l2": 2.0485344673441928,
+              "mean_moved_ratio": 0.3090909090909091,
+              "mean_rel_l2": 1.9897921743134501,
+              "rows": 3
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.7316535352481094,
+              "mean_moved_ratio": 0.6,
+              "mean_rel_l2": 0.706330346047683,
+              "rows": 3
+            }
+          },
+          "row_summary": {
+            "base_only": {
+              "max_rel_l2": 1.0071769640753445,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.8723763235517167,
+              "rows": 24
+            },
+            "residual_1bit": {
+              "max_rel_l2": 2.304495929181241,
+              "mean_moved_ratio": 0.30909090909090886,
+              "mean_rel_l2": 1.968934147675619,
+              "rows": 24
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.8211414369427913,
+              "mean_moved_ratio": 0.5999999999999998,
+              "mean_rel_l2": 0.7019657873255981,
+              "rows": 24
+            }
+          }
+        },
+        {
+          "base_bf16_mib": 224.0,
+          "cluster_sizes": {
+            "0": 3,
+            "1": 2,
+            "2": 2,
+            "3": 2,
+            "4": 5,
+            "5": 2,
+            "6": 2,
+            "7": 1
+          },
+          "clusters": 8,
+          "group_summary": {
+            "base_only": {
+              "max_rel_l2": 0.8365644572225633,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.7182428215969455,
+              "rows": 3
+            },
+            "residual_1bit": {
+              "max_rel_l2": 1.9004643732397386,
+              "mean_moved_ratio": 0.3090909090909091,
+              "mean_rel_l2": 1.6062789859084339,
+              "rows": 3
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.6687869194727691,
+              "mean_moved_ratio": 0.6,
+              "mean_rel_l2": 0.5728788006890063,
+              "rows": 3
+            }
+          },
+          "row_summary": {
+            "base_only": {
+              "max_rel_l2": 1.0144371804467724,
+              "mean_moved_ratio": 0.0,
+              "mean_rel_l2": 0.6463176531971345,
+              "rows": 24
+            },
+            "residual_1bit": {
+              "max_rel_l2": 2.2986924732544836,
+              "mean_moved_ratio": 0.30909090909090886,
+              "mean_rel_l2": 1.4508629600759948,
+              "rows": 24
+            },
+            "residual_2bit": {
+              "max_rel_l2": 0.8168934527514203,
+              "mean_moved_ratio": 0.5999999999999998,
+              "mean_rel_l2": 0.5201638859009314,
+              "rows": 24
+            }
+          }
+        }
+      ],
+      "expert_bytes": 6307840,
+      "experts": [
+        8,
+        31,
+        56,
+        92,
+        101,
+        116,
+        129,
+        133,
+        148,
+        167,
+        171,
+        178,
+        196,
+        225,
+        240,
+        321,
+        360,
+        375,
+        378
+      ],
+      "kind": "down",
+      "layer": 12,
+      "rows": 24,
+      "shape": [
+        2048,
+        7168,
+        384
+      ],
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    }
+  ]
+}
