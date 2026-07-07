@@ -1,0 +1,1057 @@
+{
+  "decision": "Reject tiny layer-output subspace as the next primary path: rank 4 leave-one-prompt-out mean rel L2 is 1.194453, above the 0.1 gate.",
+  "details": [
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 0,
+      "rel_l2": 1.3001213826906381,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 1,
+      "rel_l2": 1.276712687312849,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 2,
+      "rel_l2": 1.276712687312849,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 4,
+      "rel_l2": 1.276712687312849,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 0,
+      "rel_l2": 1.1918609529128077,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 1,
+      "rel_l2": 1.1768377043080203,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 2,
+      "rel_l2": 1.1768377043080203,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 4,
+      "rel_l2": 1.1768377043080203,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 0,
+      "rel_l2": 1.085499636638295,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 1,
+      "rel_l2": 1.08494176671087,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 2,
+      "rel_l2": 1.08494176671087,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.12|decode|7|0",
+      "layer": "blk.12",
+      "rank": 4,
+      "rel_l2": 1.08494176671087,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 0,
+      "rel_l2": 1.3595251394222134,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 1,
+      "rel_l2": 1.3547270244636207,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 2,
+      "rel_l2": 1.3547270244636207,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 4,
+      "rel_l2": 1.3547270244636207,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 0,
+      "rel_l2": 1.1512792029426542,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 1,
+      "rel_l2": 1.1454924748416564,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 2,
+      "rel_l2": 1.1454924748416564,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 4,
+      "rel_l2": 1.1454924748416564,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 0,
+      "rel_l2": 1.083814058715352,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 1,
+      "rel_l2": 1.083668491693565,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 2,
+      "rel_l2": 1.083668491693565,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.21|decode|14|0",
+      "layer": "blk.21",
+      "rank": 4,
+      "rel_l2": 1.083668491693565,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 0,
+      "rel_l2": 1.4550492512396536,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 1,
+      "rel_l2": 1.4535010728784221,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 2,
+      "rel_l2": 1.4535010728784221,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 4,
+      "rel_l2": 1.4535010728784221,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 0,
+      "rel_l2": 1.123563575998889,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 1,
+      "rel_l2": 1.115469778804756,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 2,
+      "rel_l2": 1.115469778804756,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 4,
+      "rel_l2": 1.115469778804756,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 0,
+      "rel_l2": 1.1560279252012373,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 1,
+      "rel_l2": 1.1402653587264853,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 2,
+      "rel_l2": 1.1402653587264853,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.28|decode|21|0",
+      "layer": "blk.28",
+      "rank": 4,
+      "rel_l2": 1.1402653587264853,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 0,
+      "rel_l2": 1.3004471964149302,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 1,
+      "rel_l2": 1.2159898412703949,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 2,
+      "rel_l2": 1.2159898412703949,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 4,
+      "rel_l2": 1.2159898412703949,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 0,
+      "rel_l2": 1.0945212445212784,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 1,
+      "rel_l2": 1.088067657969725,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 2,
+      "rel_l2": 1.088067657969725,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 4,
+      "rel_l2": 1.088067657969725,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 0,
+      "rel_l2": 1.4935709062934854,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 1,
+      "rel_l2": 1.4419188765279516,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 2,
+      "rel_l2": 1.4419188765279516,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.35|decode|28|0",
+      "layer": "blk.35",
+      "rank": 4,
+      "rel_l2": 1.4419188765279516,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 0,
+      "rel_l2": 1.1263653901483204,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 1,
+      "rel_l2": 1.1200682766414813,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 2,
+      "rel_l2": 1.1200682766414813,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 4,
+      "rel_l2": 1.1200682766414813,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 0,
+      "rel_l2": 1.2318495910825906,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 1,
+      "rel_l2": 1.2022634187709347,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 2,
+      "rel_l2": 1.2022634187709347,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 4,
+      "rel_l2": 1.2022634187709347,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 0,
+      "rel_l2": 1.4023177924806784,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 1,
+      "rel_l2": 1.3928133686191713,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 2,
+      "rel_l2": 1.3928133686191713,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.42|decode|35|0",
+      "layer": "blk.42",
+      "rank": 4,
+      "rel_l2": 1.3928133686191713,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 0,
+      "rel_l2": 1.0991525478331228,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 1,
+      "rel_l2": 1.0972088556470925,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 2,
+      "rel_l2": 1.0972088556470925,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 4,
+      "rel_l2": 1.0972088556470925,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 0,
+      "rel_l2": 1.301702413847161,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 1,
+      "rel_l2": 1.25031754218638,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 2,
+      "rel_l2": 1.25031754218638,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 4,
+      "rel_l2": 1.25031754218638,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 0,
+      "rel_l2": 1.387241655869362,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 1,
+      "rel_l2": 1.351920706567596,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 2,
+      "rel_l2": 1.351920706567596,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.49|decode|42|0",
+      "layer": "blk.49",
+      "rank": 4,
+      "rel_l2": 1.351920706567596,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 0,
+      "rel_l2": 1.103022400186426,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 1,
+      "rel_l2": 1.0806986707891721,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 2,
+      "rel_l2": 1.0806986707891721,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 4,
+      "rel_l2": 1.0806986707891721,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 0,
+      "rel_l2": 1.1224595439993446,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 1,
+      "rel_l2": 1.09000002825633,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 2,
+      "rel_l2": 1.09000002825633,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 4,
+      "rel_l2": 1.09000002825633,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 0,
+      "rel_l2": 1.7117254154054469,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 1,
+      "rel_l2": 1.7102499740708064,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 2,
+      "rel_l2": 1.7102499740708064,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.56|decode|49|0",
+      "layer": "blk.56",
+      "rank": 4,
+      "rel_l2": 1.7102499740708064,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 0,
+      "rel_l2": 0.8559512441594604,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 1,
+      "rel_l2": 0.8439955344234055,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 2,
+      "rel_l2": 0.8439955344234055,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 4,
+      "rel_l2": 0.8439955344234055,
+      "test_prompt": "dev_japan_factual",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 0,
+      "rel_l2": 0.8916664887658688,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 1,
+      "rel_l2": 0.8916523304433026,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 2,
+      "rel_l2": 0.8916523304433026,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 4,
+      "rel_l2": 0.8916523304433026,
+      "test_prompt": "dev_mixed_summary",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 0,
+      "rel_l2": 1.0721121475288027,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 0
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 1,
+      "rel_l2": 1.05809770676632,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 2,
+      "rel_l2": 1.05809770676632,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    },
+    {
+      "group_key": "blk.60|decode|0|0",
+      "layer": "blk.60",
+      "rank": 4,
+      "rel_l2": 1.05809770676632,
+      "test_prompt": "dev_python_reverse",
+      "usable_rank": 1
+    }
+  ],
+  "generated_at": "2026-07-07T19:42:33+0000",
+  "groups": 24,
+  "kind": "kimi_layer_output_subspace_oracle",
+  "layer_summary": {
+    "blk.12:rank0": {
+      "layer": "blk.12",
+      "max_rel_l2": 1.3001213826906381,
+      "mean_rel_l2": 1.192493990747247,
+      "rank": 0,
+      "rows": 3
+    },
+    "blk.12:rank1": {
+      "layer": "blk.12",
+      "max_rel_l2": 1.276712687312849,
+      "mean_rel_l2": 1.1794973861105797,
+      "rank": 1,
+      "rows": 3
+    },
+    "blk.12:rank2": {
+      "layer": "blk.12",
+      "max_rel_l2": 1.276712687312849,
+      "mean_rel_l2": 1.1794973861105797,
+      "rank": 2,
+      "rows": 3
+    },
+    "blk.12:rank4": {
+      "layer": "blk.12",
+      "max_rel_l2": 1.276712687312849,
+      "mean_rel_l2": 1.1794973861105797,
+      "rank": 4,
+      "rows": 3
+    },
+    "blk.21:rank0": {
+      "layer": "blk.21",
+      "max_rel_l2": 1.3595251394222134,
+      "mean_rel_l2": 1.1982061336934064,
+      "rank": 0,
+      "rows": 3
+    },
+    "blk.21:rank1": {
+      "layer": "blk.21",
+      "max_rel_l2": 1.3547270244636207,
+      "mean_rel_l2": 1.1946293303329474,
+      "rank": 1,
+      "rows": 3
+    },
+    "blk.21:rank2": {
+      "layer": "blk.21",
+      "max_rel_l2": 1.3547270244636207,
+      "mean_rel_l2": 1.1946293303329474,
+      "rank": 2,
+      "rows": 3
+    },
+    "blk.21:rank4": {
+      "layer": "blk.21",
+      "max_rel_l2": 1.3547270244636207,
+      "mean_rel_l2": 1.1946293303329474,
+      "rank": 4,
+      "rows": 3
+    },
+    "blk.28:rank0": {
+      "layer": "blk.28",
+      "max_rel_l2": 1.4550492512396536,
+      "mean_rel_l2": 1.24488025081326,
+      "rank": 0,
+      "rows": 3
+    },
+    "blk.28:rank1": {
+      "layer": "blk.28",
+      "max_rel_l2": 1.4535010728784221,
+      "mean_rel_l2": 1.2364120701365546,
+      "rank": 1,
+      "rows": 3
+    },
+    "blk.28:rank2": {
+      "layer": "blk.28",
+      "max_rel_l2": 1.4535010728784221,
+      "mean_rel_l2": 1.2364120701365546,
+      "rank": 2,
+      "rows": 3
+    },
+    "blk.28:rank4": {
+      "layer": "blk.28",
+      "max_rel_l2": 1.4535010728784221,
+      "mean_rel_l2": 1.2364120701365546,
+      "rank": 4,
+      "rows": 3
+    },
+    "blk.35:rank0": {
+      "layer": "blk.35",
+      "max_rel_l2": 1.4935709062934854,
+      "mean_rel_l2": 1.2961797824098982,
+      "rank": 0,
+      "rows": 3
+    },
+    "blk.35:rank1": {
+      "layer": "blk.35",
+      "max_rel_l2": 1.4419188765279516,
+      "mean_rel_l2": 1.2486587919226906,
+      "rank": 1,
+      "rows": 3
+    },
+    "blk.35:rank2": {
+      "layer": "blk.35",
+      "max_rel_l2": 1.4419188765279516,
+      "mean_rel_l2": 1.2486587919226906,
+      "rank": 2,
+      "rows": 3
+    },
+    "blk.35:rank4": {
+      "layer": "blk.35",
+      "max_rel_l2": 1.4419188765279516,
+      "mean_rel_l2": 1.2486587919226906,
+      "rank": 4,
+      "rows": 3
+    },
+    "blk.42:rank0": {
+      "layer": "blk.42",
+      "max_rel_l2": 1.4023177924806784,
+      "mean_rel_l2": 1.2535109245705298,
+      "rank": 0,
+      "rows": 3
+    },
+    "blk.42:rank1": {
+      "layer": "blk.42",
+      "max_rel_l2": 1.3928133686191713,
+      "mean_rel_l2": 1.238381688010529,
+      "rank": 1,
+      "rows": 3
+    },
+    "blk.42:rank2": {
+      "layer": "blk.42",
+      "max_rel_l2": 1.3928133686191713,
+      "mean_rel_l2": 1.238381688010529,
+      "rank": 2,
+      "rows": 3
+    },
+    "blk.42:rank4": {
+      "layer": "blk.42",
+      "max_rel_l2": 1.3928133686191713,
+      "mean_rel_l2": 1.238381688010529,
+      "rank": 4,
+      "rows": 3
+    },
+    "blk.49:rank0": {
+      "layer": "blk.49",
+      "max_rel_l2": 1.387241655869362,
+      "mean_rel_l2": 1.2626988725165484,
+      "rank": 0,
+      "rows": 3
+    },
+    "blk.49:rank1": {
+      "layer": "blk.49",
+      "max_rel_l2": 1.351920706567596,
+      "mean_rel_l2": 1.2331490348003562,
+      "rank": 1,
+      "rows": 3
+    },
+    "blk.49:rank2": {
+      "layer": "blk.49",
+      "max_rel_l2": 1.351920706567596,
+      "mean_rel_l2": 1.2331490348003562,
+      "rank": 2,
+      "rows": 3
+    },
+    "blk.49:rank4": {
+      "layer": "blk.49",
+      "max_rel_l2": 1.351920706567596,
+      "mean_rel_l2": 1.2331490348003562,
+      "rank": 4,
+      "rows": 3
+    },
+    "blk.56:rank0": {
+      "layer": "blk.56",
+      "max_rel_l2": 1.7117254154054469,
+      "mean_rel_l2": 1.3124024531970726,
+      "rank": 0,
+      "rows": 3
+    },
+    "blk.56:rank1": {
+      "layer": "blk.56",
+      "max_rel_l2": 1.7102499740708064,
+      "mean_rel_l2": 1.293649557705436,
+      "rank": 1,
+      "rows": 3
+    },
+    "blk.56:rank2": {
+      "layer": "blk.56",
+      "max_rel_l2": 1.7102499740708064,
+      "mean_rel_l2": 1.293649557705436,
+      "rank": 2,
+      "rows": 3
+    },
+    "blk.56:rank4": {
+      "layer": "blk.56",
+      "max_rel_l2": 1.7102499740708064,
+      "mean_rel_l2": 1.293649557705436,
+      "rank": 4,
+      "rows": 3
+    },
+    "blk.60:rank0": {
+      "layer": "blk.60",
+      "max_rel_l2": 1.0721121475288027,
+      "mean_rel_l2": 0.9399099601513773,
+      "rank": 0,
+      "rows": 3
+    },
+    "blk.60:rank1": {
+      "layer": "blk.60",
+      "max_rel_l2": 1.05809770676632,
+      "mean_rel_l2": 0.9312485238776761,
+      "rank": 1,
+      "rows": 3
+    },
+    "blk.60:rank2": {
+      "layer": "blk.60",
+      "max_rel_l2": 1.05809770676632,
+      "mean_rel_l2": 0.9312485238776761,
+      "rank": 2,
+      "rows": 3
+    },
+    "blk.60:rank4": {
+      "layer": "blk.60",
+      "max_rel_l2": 1.05809770676632,
+      "mean_rel_l2": 0.9312485238776761,
+      "rank": 4,
+      "rows": 3
+    }
+  },
+  "prompts": [
+    {
+      "groups": 8,
+      "layers": 8,
+      "prompt_id": "dev_japan_factual",
+      "root": "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual"
+    },
+    {
+      "groups": 8,
+      "layers": 8,
+      "prompt_id": "dev_mixed_summary",
+      "root": "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_mixed_summary"
+    },
+    {
+      "groups": 8,
+      "layers": 8,
+      "prompt_id": "dev_python_reverse",
+      "root": "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse"
+    }
+  ],
+  "ranks": [
+    0,
+    1,
+    2,
+    4
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_layer_output_subspace_oracle.py --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_mixed_summary --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --libggml-base build-cuda-batch/bin/libggml-base.so --out-json /root/lfz/runs/vendor-kimi-token-rate/20260708-gp97-layer-output-subspace-oracle-smoke64/report.json --out-md /root/lfz/runs/vendor-kimi-token-rate/20260708-gp97-layer-output-subspace-oracle-smoke64/report.md --ranks 0,1,2,4 --max-down-records-per-prompt 64 --torch-threads 8",
+  "summary": {
+    "rank0": {
+      "max_rel_l2": 1.7117254154054469,
+      "mean_rel_l2": 1.2125352960124174,
+      "rank": 0,
+      "rows": 24
+    },
+    "rank1": {
+      "max_rel_l2": 1.7102499740708064,
+      "mean_rel_l2": 1.1944532978620963,
+      "rank": 1,
+      "rows": 24
+    },
+    "rank2": {
+      "max_rel_l2": 1.7102499740708064,
+      "mean_rel_l2": 1.1944532978620963,
+      "rank": 2,
+      "rows": 24
+    },
+    "rank4": {
+      "max_rel_l2": 1.7102499740708064,
+      "mean_rel_l2": 1.1944532978620963,
+      "rank": 4,
+      "rows": 24
+    }
+  },
+  "target_mean_rel_l2": 0.1,
+  "target_rank": 4
+}

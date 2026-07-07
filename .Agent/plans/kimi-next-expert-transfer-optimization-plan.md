@@ -3252,6 +3252,79 @@ Decision:
   the `0.10` gate.
 - Do not pursue norm/energy scalar predictors for this candidate.
 
+## Phase 5T: GP97 Layer MoE Output Subspace Oracle
+
+Goal:
+
+- Test a stronger compute/storage-form change: approximate each layer's final
+  MoE output contribution from a small prompt-general output subspace, instead
+  of reconstructing individual experts or active intermediate dimensions.
+- If this works, the runtime representation could be tiny compared with expert
+  weights: per-layer bases in VRAM plus a small coefficient predictor.
+
+Why this is different from GP84/GP95:
+
+- GP84 tested a per-call low-rank subspace over the eight active expert
+  contribution rows and failed.
+- GP95/GP96 tested top intermediate dimensions within the exact down path and
+  failed.
+- GP97 ignores expert-local structure and asks whether the summed layer MoE
+  output `sum_e W_down_e h_e` itself lives in a small shared subspace across
+  prompts.
+
+Method:
+
+1. Use GP88 call-stride dev activation corpus only.
+2. Compute exact summed down output per `(prompt, layer, call, token)` group.
+3. For each layer, perform leave-one-prompt-out validation:
+   - fit a PCA/SVD basis on the other dev prompts' group outputs;
+   - project held-out dev-prompt group outputs onto rank `1,2,4` bases;
+   - report relative L2 reconstruction error.
+4. Start with `64` down records per prompt (`8` groups) as a smoke. Expand only
+   if rank `<=4` is close to the `0.10` error gate.
+
+Acceptance:
+
+- Rank `<=4` should approach mean rel L2 `<=0.10` on leave-one-prompt-out
+  validation before designing a coefficient predictor.
+- If even oracle projection onto a train-prompt basis is far above the gate,
+  reject this layer-output-subspace surrogate as the next primary path.
+
+Caveats:
+
+- This is an oracle over exact outputs; it does not solve coefficient
+  prediction from hidden state.
+- Passing would only justify a second oracle for coefficient prediction.
+- Failure is strong evidence that a tiny prompt-general layer-output basis is
+  not enough.
+
+Result on 2026-07-08:
+
+- Added `.Agent/run-tools/kimi_layer_output_subspace_oracle.py`.
+- Remote smoke:
+  - `.Agent/runs/20260708-gp97-layer-output-subspace-oracle-smoke64/report.md`;
+  - three dev prompts from GP88 call-stride corpus;
+  - `64` down records per prompt, producing `24` evaluated groups total;
+  - no held-out prompts used.
+- Leave-one-prompt-out summary:
+
+| rank | rows | mean rel L2 | max rel L2 |
+|---:|---:|---:|---:|
+| `0` | `24` | `1.212535` | `1.711725` |
+| `1` | `24` | `1.194453` | `1.710250` |
+| `2` | `24` | `1.194453` | `1.710250` |
+| `4` | `24` | `1.194453` | `1.710250` |
+
+Decision:
+
+- Reject tiny layer-output subspace surrogate as the next primary path.
+- Even the rank-4 oracle projection is about `1.19` mean rel L2, far above the
+  `0.10` gate.
+- The smoke has few train samples per layer, so it is not a final academic
+  statement about all possible learned surrogates, but it is enough to avoid
+  spending runtime implementation effort on a tiny per-layer output basis.
+- Do not proceed to coefficient prediction for this tiny-basis candidate.
+
 ## Run Discipline
 
 For every experiment:
@@ -3329,13 +3402,17 @@ Continue from Phase 5E:
     magnitude-limited or fundamentally missing directional information.
 24. GP96 rejects scalar correction: optimal alpha is effectively `1.0`, and
     `0.4x` group error remains `0.157266`.
-25. Next primary direction must be a different non-expert-local byte-reduced
+25. Run GP97 layer MoE output subspace oracle to test a stronger non-expert-
+    local surrogate before returning to runtime scheduling.
+26. GP97 rejects tiny per-layer MoE output subspace: rank-4 leave-one-prompt-
+    out mean rel L2 is `1.194453`, far above the `0.10` gate.
+27. Next primary direction must be a different non-expert-local byte-reduced
     representation or compute/storage-form change. Prediction/prefetch is
     secondary after bytes are reduced.
-26. The next screen must target global moved bytes around `0.30x-0.40x` and
+28. The next screen must target global moved bytes around `0.30x-0.40x` and
     fused up/gate mean rel L2 close to the quality gate before any runtime
     kernel is written.
-27. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+29. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
     gains can regress held-out performance severely.
 
 Rationale:
