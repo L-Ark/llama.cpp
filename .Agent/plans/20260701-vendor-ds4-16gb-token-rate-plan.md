@@ -7715,3 +7715,81 @@ Decision:
 - Next step:
   - for compact-target path, parity evidence must cover the actual candidate types and real tensor bytes (`IQ1_S/IQ1_M/Q2_K` if those are the selected candidates);
   - if no local real bytes exist for those exact types, disk cleanup/download approval is the practical path to continue.
+
+## 2026-07-08 X10-AR real GGUF IQ2_XS down row parity probe
+
+- changed files:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`
+  - `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-real-gguf-iq2xs-down-row-parity-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-real-rows-iq2xs-namefix`
+- status: `real_gguf_iq2xs_down_row_parity_pass_default_off_not_sota`
+
+Purpose:
+- Extend X10-AQ from a supported existing stream type (`IQ3_S`) to another real lowbit type present in the local GGUF (`IQ2_XS`).
+- This still avoids new downloads and does not delete any files.
+
+Input tensor:
+- source file:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+- tensor:
+  - `blk.5.ffn_down_exps.weight`
+- type:
+  - `IQ2_XS`
+- shape:
+  - `[2048, 4096, 256]`
+- byte layout observed by `gguf-py`:
+  - data shape `[256, 4096, 592]`
+  - extracted expert `0`, first `16` rows
+  - `ne00=2048`, `ne01=16`, `nb01=592`
+  - extracted bytes: `9472`
+
+Implementation:
+- Added `IQ2_XS` to `lowbit_down_probe_candidate(...)`, still gated by:
+  - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+  - tensor name containing `ffn_down_exps`
+  - optional target-name filter.
+- Added `IQ2_XS` to the compact mmvq down launch type gate.
+- Updated the direct probe to:
+  - include synthetic `IQ2_XS`;
+  - use type-suffixed synthetic tensor names, avoiding cache-key reuse across different quant types in a single process;
+  - use env-provided real GGUF row bytes for real-layout parity.
+
+Verification:
+- Build:
+  - `ninja -C build-ds4-moe-stream ggml-cuda -j2`: pass.
+  - direct probe compile: pass.
+- Default-off mode:
+  - env: `GGML_MOE_STREAM=1`
+  - `rc=0`
+  - `IQ2_XS`, `IQ1_S`, `IQ1_M`, `Q2_K` all return `decline-ok`
+  - stderr reason remains `unsupported_type`
+  - conclusion: production/default path is unchanged.
+- Probe mode:
+  - env:
+    - `GGML_MOE_STREAM=1`
+    - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+    - `GGML_MOE_STREAM_REAL_ROWS_TYPE=17`
+    - `GGML_MOE_STREAM_REAL_ROWS_NE00=2048`
+    - `GGML_MOE_STREAM_REAL_ROWS_NE01=16`
+    - `GGML_MOE_STREAM_REAL_ROWS_NB01=592`
+  - `rc=0`
+  - synthetic parity:
+    - `IQ2_XS`: `finite=1`, `max_abs=0.00187444687`
+    - `IQ1_S`: `finite=1`, `max_abs=0.00330495834`
+    - `IQ1_M`: `finite=1`, `max_abs=0.00184059143`
+    - `Q2_K`: `finite=1`, `max_abs=0.00194692612`
+  - real GGUF row parity:
+    - `IQ2_XS`: `finite=1`, `max_abs=0.00131262094`, `mean_abs=0.000492808991`
+
+Decision:
+- This strengthens down-stream lowbit correctness evidence:
+  - synthetic `IQ2_XS/IQ1_S/IQ1_M/Q2_K` parity passes;
+  - real GGUF `IQ2_XS` down row parity passes.
+- This is still not a SOTA and not production enablement:
+  - no full-model load/generation correctness was run;
+  - no prompt-general token-rate, TTFT, or strict 16GB model-run gate was executed;
+  - no local real `IQ1_S/IQ1_M/Q2_K` full candidate bytes are available without disk cleanup/download.
+- Next step:
+  - if disk cleanup/download is approved, fetch exactly one priority compact candidate and run strict load/correctness first;
+  - otherwise, the current local evidence route is close to exhausted and should not be mistaken for token-rate progress.

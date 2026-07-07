@@ -6236,7 +6236,7 @@ static bool mxfp4_down_q80_debug_enabled() {
 static bool lowbit_down_probe_candidate(const char *name, ggml_type type) {
     if (!expert_pack_env_bool("GGML_MOE_STREAM_DOWN_LOWBIT_PROBE", false)) return false;
     if (!name || !std::strstr(name, "ffn_down_exps")) return false;
-    if (type != GGML_TYPE_IQ1_S && type != GGML_TYPE_IQ1_M && type != GGML_TYPE_Q2_K) return false;
+    if (type != GGML_TYPE_IQ2_XS && type != GGML_TYPE_IQ1_S && type != GGML_TYPE_IQ1_M && type != GGML_TYPE_Q2_K) return false;
     const char *target = std::getenv("GGML_MOE_STREAM_DOWN_LOWBIT_PROBE_TENSOR");
     return !target || !target[0] || std::strstr(name, target) != nullptr;
 }
@@ -7176,6 +7176,7 @@ static bool launch_moe_mmvq_compact_batch(
         case GGML_TYPE_Q3_K:
         case GGML_TYPE_IQ3_XXS:
         case GGML_TYPE_IQ3_S:
+        case GGML_TYPE_IQ2_XS:
         case GGML_TYPE_IQ2_S:
         case GGML_TYPE_IQ1_S:
         case GGML_TYPE_IQ1_M:

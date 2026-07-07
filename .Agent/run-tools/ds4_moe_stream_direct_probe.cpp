@@ -90,7 +90,7 @@ static bool run_decline_case(ggml_type type, const char * type_name) {
 
     const bool done = ggml_cuda_moe_stream_batch(
         (int) type,
-        "blk.0.ffn_down_exps.weight",
+        (std::string("blk.0.ffn_down_exps.weight.") + type_name).c_str(),
         src0_q.data(),
         n_as,
         ne01,
@@ -177,7 +177,7 @@ static bool run_real_rows_case() {
 
     const bool done = ggml_cuda_moe_stream_batch(
         (int) type,
-        "blk.0.ffn_down_exps.weight",
+        (std::string("blk.0.ffn_down_exps.weight.") + type_name).c_str(),
         src0_q.data(),
         1,
         ne01,
@@ -223,6 +223,7 @@ int main() {
     ggml_cpu_init();
 
     bool ok = true;
+    ok = run_decline_case(GGML_TYPE_IQ2_XS, "iq2_xs") && ok;
     ok = run_decline_case(GGML_TYPE_IQ1_S, "iq1_s") && ok;
     ok = run_decline_case(GGML_TYPE_IQ1_M, "iq1_m") && ok;
     ok = run_decline_case(GGML_TYPE_Q2_K, "q2_K") && ok;
