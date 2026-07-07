@@ -735,6 +735,43 @@ GP67 dev result on 2026-07-07:
     residual correction, or a small calibrated low-byte model/pack, and must
     pass this activation-output gate before runtime implementation.
 
+GP68 activation-aware scale result on 2026-07-07:
+
+- Code:
+  - extended `.Agent/run-tools/kimi_activation_output_compression_screen.py`
+    with `--scale-modes maxabs,aw_mse`;
+  - `aw_mse` uses dumped real activation weights `x_i^2` to choose each block's
+    scale by weighted least-squares instead of max-abs.
+- Report:
+  - `.Agent/runs/20260707-gp68-activation-aware-scale-screen-n16-france/report.md`;
+  - `.Agent/runs/20260707-gp68-activation-aware-scale-screen-n16-france/screen.json`.
+- Input:
+  - reused the GP67 dev France `N=16` activation dump;
+  - no held-out prompts were used.
+- Result:
+  - automatic gate still failed:
+    - passing matvec candidates: `0`;
+    - passing fused candidates: `0`;
+    - advance blockwise low-bit path: `False`.
+  - `aw_mse` improved target-range 1-bit error substantially:
+    - down 1-bit mean rel L2 improved from `1.55-1.93` to about
+      `0.495-0.499`;
+    - up/gate 1-bit mean rel L2 improved from about `2.06-2.28` to about
+      `0.593-0.596`;
+    - fused up/gate 1-bit mean rel L2 improved from `7.63-8.98` to about
+      `0.767-0.769`.
+  - The improvement is not enough for quality-preserving runtime work:
+    - target byte-ratio candidates are still far above the mean rel L2 gate
+      `<=0.10`;
+    - 2-bit `aw_mse` is also too inaccurate and remains above the byte target,
+      with fused mean rel L2 about `0.574-0.583` at `0.717x-0.783x`.
+- Decision:
+  - reject activation-aware scalar block scaling as the next runtime path;
+  - keep the result as evidence that activation-aware methods help, but require
+    a richer representation than one scale per block;
+  - next byte-reduction screen should test residual correction or trained
+    codebooks against the same activation-output gate.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.

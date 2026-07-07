@@ -44,6 +44,10 @@ def parse_csv_ints(text: str) -> list[int]:
     return [int(part) for part in text.split(",") if part.strip()]
 
 
+def parse_csv_strings(text: str) -> list[str]:
+    return [part.strip() for part in text.split(",") if part.strip()]
+
+
 def load_activation_rows(path: Path, max_records: int) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with path.open(newline="") as f:
@@ -78,7 +82,7 @@ def load_vector(torch: Any, bin_path: Path, row: dict[str, Any]) -> Any:
     return torch.frombuffer(bytearray(raw), dtype=torch.float32).clone()
 
 
-def quantize_blockwise(torch: Any, values: Any, bits: int, block: int) -> tuple[Any, dict[str, Any]]:
+def quantize_blockwise(torch: Any, values: Any, bits: int, block: int, scale_mode: str, act_weight: Any | None) -> tuple[Any, dict[str, Any]]:
     flat = values.reshape(-1).to(torch.float32)
     n = flat.numel()
     pad = (block - (n % block)) % block
@@ -87,7 +91,34 @@ def quantize_blockwise(torch: Any, values: Any, bits: int, block: int) -> tuple[
     else:
         flat_padded = flat
     grouped = flat_padded.reshape(-1, block)
-    scales = grouped.abs().amax(dim=1).clamp_min(1e-12)
+    if scale_mode == "maxabs":
+        weights = None
+    elif scale_mode == "aw_mse":
+        if act_weight is None:
+            raise RuntimeError("aw_mse scale mode requires activation weights")
+        wflat = act_weight.reshape(-1).to(torch.float32).clamp_min(0.0)
+        if pad:
+            wflat = torch.nn.functional.pad(wflat, (0, pad))
+        weights = wflat.reshape(-1, block)
+    else:
+        raise RuntimeError(f"unsupported scale mode: {scale_mode}")
+
+    if scale_mode == "maxabs":
+        scales = grouped.abs().amax(dim=1).clamp_min(1e-12)
+    elif bits == 1:
+        denom = weights.sum(dim=1).clamp_min(1e-12)
+        scales = (weights * grouped.abs()).sum(dim=1) / denom
+        scales = scales.clamp_min(1e-12)
+    else:
+        qmax = (1 << (bits - 1)) - 1
+        scales = grouped.abs().amax(dim=1).clamp_min(1e-12)
+        for _ in range(4):
+            q_iter = torch.round(grouped / scales[:, None] * qmax).clamp(-qmax, qmax)
+            numer = (weights * q_iter * grouped).sum(dim=1)
+            denom = (weights * q_iter * q_iter).sum(dim=1).clamp_min(1e-12)
+            updated = (numer / denom * qmax).abs().clamp_min(1e-12)
+            scales = torch.where(denom > 1e-11, updated, scales)
+
     if bits == 1:
         q = torch.sign(grouped)
         recon = q * scales[:, None]
@@ -101,6 +132,7 @@ def quantize_blockwise(torch: Any, values: Any, bits: int, block: int) -> tuple[
     info = {
         "bits": bits,
         "block": block,
+        "scale_mode": scale_mode,
         "payload_bytes": int(payload_bytes),
         "scale_bytes": int(scale_bytes),
         "total_bytes": int(payload_bytes + scale_bytes),
@@ -158,6 +190,17 @@ def expert_matvec(torch: Any, matrix: Any, vec: Any, row: dict[str, Any]) -> Any
     )
 
 
+def expand_activation_weight(torch: Any, matrix: Any, act_weight: Any, row: dict[str, Any]) -> Any:
+    if matrix.shape[1] == row["ne00"] and matrix.shape[0] == row["ne01"]:
+        return act_weight.reshape(1, -1).expand_as(matrix).contiguous()
+    if matrix.shape[0] == row["ne00"] and matrix.shape[1] == row["ne01"]:
+        return act_weight.reshape(-1, 1).expand_as(matrix).contiguous()
+    raise RuntimeError(
+        f"shape mismatch for activation weights: matrix={tuple(matrix.shape)} "
+        f"activation ne00/ne01={row['ne00']}/{row['ne01']}"
+    )
+
+
 def silu(torch: Any, x: Any) -> Any:
     return x * torch.sigmoid(x)
 
@@ -172,6 +215,7 @@ def main() -> int:
     parser.add_argument("--out-md", type=Path, required=True)
     parser.add_argument("--bits", default="1,2")
     parser.add_argument("--blocks", default="64,128,256")
+    parser.add_argument("--scale-modes", default="maxabs,aw_mse")
     parser.add_argument("--max-records", type=int, default=64)
     parser.add_argument("--torch-threads", type=int, default=8)
     args = parser.parse_args()
@@ -184,6 +228,7 @@ def main() -> int:
     rows = load_activation_rows(args.activation_csv, args.max_records)
     bits_values = parse_csv_ints(args.bits)
     block_values = parse_csv_ints(args.blocks)
+    scale_modes = parse_csv_strings(args.scale_modes)
 
     by_key: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -192,8 +237,8 @@ def main() -> int:
     aggregate: dict[str, Acc] = defaultdict(Acc)
     per_role: dict[str, dict[str, Any]] = {}
     exact_outputs: dict[int, Any] = {}
-    cand_outputs: dict[tuple[int, int, int], Any] = {}
-    candidate_bytes: dict[tuple[str, int, int, int], int] = {}
+    cand_outputs: dict[tuple[int, str, int, int], Any] = {}
+    candidate_bytes: dict[tuple[str, int, str, int, int], int] = {}
 
     for (tensor, expert_idx), key_rows in sorted(by_key.items()):
         if tensor not in inventory:
@@ -211,24 +256,29 @@ def main() -> int:
             )
 
         vectors = {row["record_id"]: load_vector(torch, args.activation_bin, row) for row in key_rows}
+        act_weight = None
+        if vectors:
+            act_weight = torch.stack([vec * vec for vec in vectors.values()], dim=0).mean(dim=0)
+        act_weight_matrix = expand_activation_weight(torch, matrix, act_weight, key_rows[0]) if act_weight is not None else None
         exact_by_record = {
             row["record_id"]: expert_matvec(torch, matrix, vectors[row["record_id"]], row)
             for row in key_rows
         }
         exact_outputs.update(exact_by_record)
 
-        for bits in bits_values:
-            for block in block_values:
-                recon, qinfo = quantize_blockwise(torch, matrix, bits, block)
-                candidate_bytes[(tensor, expert_idx, bits, block)] = qinfo["total_bytes"]
-                ratio = qinfo["total_bytes"] / key_rows[0]["expert_bytes"]
-                for row in key_rows:
-                    rid = row["record_id"]
-                    cand = expert_matvec(torch, recon, vectors[rid], row)
-                    cand_outputs[(rid, bits, block)] = cand
-                    rel, abs_mean, abs_max, out_norm = error_metrics(torch, exact_by_record[rid], cand)
-                    key = f"{row['role']}:bits{bits}:block{block}"
-                    aggregate[key].add(rel, abs_mean, abs_max, out_norm, ratio)
+        for scale_mode in scale_modes:
+            for bits in bits_values:
+                for block in block_values:
+                    recon, qinfo = quantize_blockwise(torch, matrix, bits, block, scale_mode, act_weight_matrix)
+                    candidate_bytes[(tensor, expert_idx, scale_mode, bits, block)] = qinfo["total_bytes"]
+                    ratio = qinfo["total_bytes"] / key_rows[0]["expert_bytes"]
+                    for row in key_rows:
+                        rid = row["record_id"]
+                        cand = expert_matvec(torch, recon, vectors[rid], row)
+                        cand_outputs[(rid, scale_mode, bits, block)] = cand
+                        rel, abs_mean, abs_max, out_norm = error_metrics(torch, exact_by_record[rid], cand)
+                        key = f"{row['role']}:{scale_mode}:bits{bits}:block{block}"
+                        aggregate[key].add(rel, abs_mean, abs_max, out_norm, ratio)
         per_role_key = f"{tensor}:{expert_idx}"
         per_role[per_role_key] = {
             "tensor": tensor,
@@ -241,7 +291,6 @@ def main() -> int:
         }
         del matrix
 
-    rows_by_id = {row["record_id"]: row for row in rows}
     pair_acc: dict[str, Acc] = defaultdict(Acc)
     pair_index: dict[tuple[Any, ...], dict[str, dict[str, Any]]] = defaultdict(dict)
     for row in rows:
@@ -256,18 +305,19 @@ def main() -> int:
         up = pair["up"]
         gate = pair["gate"]
         exact = exact_outputs[up["record_id"]] * silu(torch, exact_outputs[gate["record_id"]])
-        for bits in bits_values:
-            for block in block_values:
-                up_c = cand_outputs.get((up["record_id"], bits, block))
-                gate_c = cand_outputs.get((gate["record_id"], bits, block))
-                if up_c is None or gate_c is None:
-                    continue
-                cand = up_c * silu(torch, gate_c)
-                rel, abs_mean, abs_max, out_norm = error_metrics(torch, exact, cand)
-                up_bytes = candidate_bytes[(up["tensor"], up["expert_idx"], bits, block)]
-                gate_bytes = candidate_bytes[(gate["tensor"], gate["expert_idx"], bits, block)]
-                ratio = (up_bytes + gate_bytes) / max(up["expert_bytes"] + gate["expert_bytes"], 1)
-                pair_acc[f"fused_up_gate:bits{bits}:block{block}"].add(rel, abs_mean, abs_max, out_norm, ratio)
+        for scale_mode in scale_modes:
+            for bits in bits_values:
+                for block in block_values:
+                    up_c = cand_outputs.get((up["record_id"], scale_mode, bits, block))
+                    gate_c = cand_outputs.get((gate["record_id"], scale_mode, bits, block))
+                    if up_c is None or gate_c is None:
+                        continue
+                    cand = up_c * silu(torch, gate_c)
+                    rel, abs_mean, abs_max, out_norm = error_metrics(torch, exact, cand)
+                    up_bytes = candidate_bytes[(up["tensor"], up["expert_idx"], scale_mode, bits, block)]
+                    gate_bytes = candidate_bytes[(gate["tensor"], gate["expert_idx"], scale_mode, bits, block)]
+                    ratio = (up_bytes + gate_bytes) / max(up["expert_bytes"] + gate["expert_bytes"], 1)
+                    pair_acc[f"fused_up_gate:{scale_mode}:bits{bits}:block{block}"].add(rel, abs_mean, abs_max, out_norm, ratio)
 
     aggregate_rows = {key: acc.row() for key, acc in sorted(aggregate.items())}
     fused_rows = {key: acc.row() for key, acc in sorted(pair_acc.items())}
@@ -294,6 +344,7 @@ def main() -> int:
         "unique_tensor_experts": len(by_key),
         "bits": bits_values,
         "blocks": block_values,
+        "scale_modes": scale_modes,
         "aggregate": aggregate_rows,
         "fused_up_gate": fused_rows,
         "tensor_experts": per_role,
