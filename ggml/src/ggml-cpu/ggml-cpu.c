@@ -1514,6 +1514,22 @@ static const char * ggml_ds4_grouped_retained_route_detail_out(void) {
     return env && env[0] && env[0] != '0' ? env : NULL;
 }
 
+static bool ggml_ds4_grouped_retained_handoff_profile_enabled(void) {
+    static int initialized = 0;
+    static bool enabled = false;
+    if (!initialized) {
+        const char * env = getenv("GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT");
+        enabled = env && env[0] && env[0] != '0';
+        initialized = 1;
+    }
+    return enabled;
+}
+
+static const char * ggml_ds4_grouped_retained_handoff_profile_out(void) {
+    const char * env = getenv("GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT");
+    return env && env[0] && env[0] != '0' ? env : NULL;
+}
+
 static int ggml_ds4_grouped_retained_parse_layer(const char * name) {
     if (!name) {
         return -1;
@@ -1761,6 +1777,140 @@ static void ggml_ds4_grouped_retained_route_profile_record_up_gate(
             up_expert_bytes > gate_expert_bytes ? up_expert_bytes : gate_expert_bytes,
             up_expert_bytes + gate_expert_bytes,
             eligible, reason);
+}
+
+struct ggml_ds4_grouped_retained_last_up_gate {
+    const void * dst_data;
+    int layer;
+    int64_t ne01;
+    int64_t dst_rows;
+    int64_t active_experts;
+    int64_t rows;
+    char up_name[128];
+    char gate_name[128];
+    uint64_t serial;
+};
+
+static pthread_mutex_t ggml_ds4_grouped_retained_handoff_mu = PTHREAD_MUTEX_INITIALIZER;
+static struct ggml_ds4_grouped_retained_last_up_gate ggml_ds4_grouped_retained_last_up_gate = {0};
+
+static void ggml_ds4_grouped_retained_handoff_mark_up_gate(
+        const char * up_name,
+        const char * gate_name,
+        const void * dst_data,
+        int64_t ne01,
+        const int64_t * matrix_row_counts,
+        int64_t n_as,
+        int64_t rows_stride) {
+    if (!ggml_ds4_grouped_retained_handoff_profile_enabled() || !dst_data || !matrix_row_counts) {
+        return;
+    }
+
+    int64_t active_experts = 0;
+    int64_t rows = 0;
+    for (int64_t e = 0; e < n_as; ++e) {
+        const int64_t c = matrix_row_counts[e];
+        if (c <= 0) {
+            continue;
+        }
+        ++active_experts;
+        rows += c;
+    }
+
+    pthread_mutex_lock(&ggml_ds4_grouped_retained_handoff_mu);
+    ggml_ds4_grouped_retained_last_up_gate.dst_data = dst_data;
+    ggml_ds4_grouped_retained_last_up_gate.layer = ggml_ds4_grouped_retained_parse_layer(up_name);
+    ggml_ds4_grouped_retained_last_up_gate.ne01 = ne01;
+    ggml_ds4_grouped_retained_last_up_gate.dst_rows = rows_stride;
+    ggml_ds4_grouped_retained_last_up_gate.active_experts = active_experts;
+    ggml_ds4_grouped_retained_last_up_gate.rows = rows;
+    snprintf(ggml_ds4_grouped_retained_last_up_gate.up_name,
+            sizeof(ggml_ds4_grouped_retained_last_up_gate.up_name), "%s", up_name ? up_name : "");
+    snprintf(ggml_ds4_grouped_retained_last_up_gate.gate_name,
+            sizeof(ggml_ds4_grouped_retained_last_up_gate.gate_name), "%s", gate_name ? gate_name : "");
+    ++ggml_ds4_grouped_retained_last_up_gate.serial;
+    pthread_mutex_unlock(&ggml_ds4_grouped_retained_handoff_mu);
+}
+
+static void ggml_ds4_grouped_retained_handoff_record_down(
+        const char * down_name,
+        const void * src1_data,
+        int64_t ne00,
+        int64_t ne01,
+        const int64_t * matrix_row_counts,
+        int64_t n_as) {
+    if (!ggml_ds4_grouped_retained_handoff_profile_enabled() || !down_name || !matrix_row_counts) {
+        return;
+    }
+    if (strcmp(ggml_moe_tensor_role(down_name), "down") != 0) {
+        return;
+    }
+
+    int64_t active_experts = 0;
+    int64_t rows = 0;
+    for (int64_t e = 0; e < n_as; ++e) {
+        const int64_t c = matrix_row_counts[e];
+        if (c <= 0) {
+            continue;
+        }
+        ++active_experts;
+        rows += c;
+    }
+    if (active_experts == 0) {
+        return;
+    }
+
+    static uint64_t seq = 0;
+    static bool header_written = false;
+    const char * path = ggml_ds4_grouped_retained_handoff_profile_out();
+    if (!path) {
+        return;
+    }
+
+    pthread_mutex_lock(&ggml_ds4_grouped_retained_handoff_mu);
+    const struct ggml_ds4_grouped_retained_last_up_gate last = ggml_ds4_grouped_retained_last_up_gate;
+    const uint64_t cur_seq = ++seq;
+    const int down_layer = ggml_ds4_grouped_retained_parse_layer(down_name);
+    const bool ptr_match = src1_data && last.dst_data == src1_data;
+    const bool layer_match = last.layer == down_layer;
+    const bool width_match = last.ne01 == ne00;
+    const bool shape_ok = ptr_match && layer_match && width_match;
+
+    FILE * f = fopen(path, "a");
+    if (f) {
+        if (!header_written) {
+            fprintf(f,
+                    "seq,down_layer,down_tensor,up_gate_serial,up_layer,up_tensor,gate_tensor,"
+                    "ptr_match,layer_match,width_match,shape_ok,down_active_experts,down_rows,"
+                    "up_active_experts,up_rows,down_ne00,down_ne01,up_ne01,up_dst_rows\n");
+            header_written = true;
+        }
+        fprintf(f,
+                "%" PRIu64 ",%d,%s,%" PRIu64 ",%d,%s,%s,%d,%d,%d,%d,%" PRId64
+                ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64
+                ",%" PRId64 ",%" PRId64 "\n",
+                cur_seq,
+                down_layer,
+                down_name,
+                last.serial,
+                last.layer,
+                last.up_name,
+                last.gate_name,
+                ptr_match ? 1 : 0,
+                layer_match ? 1 : 0,
+                width_match ? 1 : 0,
+                shape_ok ? 1 : 0,
+                active_experts,
+                rows,
+                last.active_experts,
+                last.rows,
+                ne00,
+                ne01,
+                last.ne01,
+                last.dst_rows);
+        fclose(f);
+    }
+    pthread_mutex_unlock(&ggml_ds4_grouped_retained_handoff_mu);
 }
 
 static double ggml_moe_cpu_trace_now_ms(void) {
@@ -4324,6 +4474,13 @@ static void ggml_compute_forward_mul_mat_id(
                 matrix_row_counts,
                 n_as,
                 (size_t)ne01 * nb01);
+        ggml_ds4_grouped_retained_handoff_record_down(
+                src0->name,
+                src1->data,
+                ne10,
+                ne01,
+                matrix_row_counts,
+                n_as);
     }
 
     // reset current_chunk
@@ -5313,6 +5470,14 @@ static void ggml_compute_forward_moe_up_gate(
                 n_as,
                 up_expert_bytes,
                 gate_expert_bytes);
+        ggml_ds4_grouped_retained_handoff_mark_up_gate(
+                src0_up->name,
+                src0_gate->name,
+                dst->data,
+                ne01,
+                matrix_row_counts,
+                n_as,
+                ids->ne[0]*ids->ne[1]);
     }
 
     for (int cur_a = ith; cur_a < n_as; cur_a += nth) {

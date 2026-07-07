@@ -6031,3 +6031,46 @@
   - Commit/push the detail profiler, artifact, and this plan update to `ssd/vendor/deepseek-token-rate-16gb`.
   - Next source work must be planned as a broader grouped-retained dataflow microbench, not a cache-only patch: preserve current gate cache, batch active up/down by layer, avoid per-expert source staging and D2H/writeback where possible, and include a mechanism to reduce gate/source or other non-updown decode cost.
   - Before any held-out test, a candidate must first beat the calibration/dev no-prompt-specific baseline on min/mean token rate without correctness/RAM/TTFT regression.
+
+## 2026-07-07 X10-H execution result：default graph has no existing up_gate handoff producer
+
+- attempt_id: `20260707-grouped-retained-handoff-eligibility-profile`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/grouped-retained-handoff-eligibility-profile-20260707.json`
+- status: `handoff_profiler_validated_default_graph_has_no_upgate_handoff_not_sota`
+- purpose:
+  - Test whether the current no-prompt-specific default graph already creates an `up_gate` output that `ffn_down_exps` could consume through existing `g_handoff`.
+  - This matters because if the producer does not exist, simply enabling `GGML_MOE_GPU_HANDOFF` cannot help.
+- source_update:
+  - Added default-off `GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT=<csv>` in `ggml-cpu.c`.
+  - It records the last `moe_up_gate` dst pointer and compares each down op's `src1->data`, layer, and width against that producer.
+  - It does not enable GPU handoff, allocate GPU buffers, change route counts, change cache admission, or change logits.
+- build_validation:
+  - command: `cmake --build build-ds4-moe-stream -j20 --target llama-cli llama-results`
+  - result: passed.
+- profile_run:
+  - prompt scope: calibration prompt only; held-out was not used.
+  - prompt: `Please introduce France in a short paragraph.`
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T105726Z-20260707-grouped-retained-handoff-profile-france/france-handoff-profile-cpu40-vram0gb`
+  - handoff CSV: `/root/lfz/runs/vendor-ds4-16gb/20260707T105726Z-20260707-grouped-retained-handoff-profile-france/france-handoff-profile-cpu40-vram0gb/handoff_profile.csv`
+  - metrics: `eval_tok_s=2.4`, `prompt_tok_s=0.9`, `TTFT=37437.770123 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15049195520`, `ram_ok=true`, diagnostic `n=96` truncated.
+- handoff_summary:
+  - records: `3920` down calls.
+  - `shape_ok=0`, `ptr_match=0`, `width_match=0`.
+  - `up_gate_serial_max=0`, `up_rows_observed_by_profiler=0`, `up_active_experts_observed_by_profiler=0`.
+  - Interpretation: the default generalized graph did not call the `moe_up_gate` producer path at all, so current `g_handoff` cannot be reused by toggling `GGML_MOE_GPU_HANDOFF`.
+- default_off_guard:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T105924Z-20260707-defaultoff-handoff-profiler-guard/defaultoff-france-after-handoff-profiler-cpu40-vram0gb`
+  - profiler env unset.
+  - metrics: `eval_tok_s=2.5`, `prompt_tok_s=0.9`, `TTFT=36971.998157 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15020609536`, `ram_ok=true`, `correctness_ok=true`.
+  - France output was complete, semantic, coherent.
+- decision:
+  - Accept the handoff profiler as a default-off measurement scaffold.
+  - Reject any next attempt that only toggles `GGML_MOE_GPU_HANDOFF` on the current graph; there is no matching producer.
+  - Do not rerun the old plain `GGML_MOE_STREAM_FUSED_UP_GATE` SOTA attempt. It is already rejected because it duplicates/competes with gate cache and was too slow.
+- next_action:
+  - Commit/push the handoff profiler, artifact, and this plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+  - Next implementation must start from a default-off DS4 fused up/gate retained microbench:
+    - keep current one-stream gate cache semantics or explicitly avoid duplicate gate storage;
+    - produce a GPU-resident fused activation buffer;
+    - feed down through a correctness-checked handoff path;
+    - first validate on calibration/dev only, then freeze before held-out.
