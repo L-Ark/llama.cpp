@@ -1387,6 +1387,143 @@ GP76b multi-prompt activation sample result on 2026-07-07:
   - next compression/representation screen must evaluate on this multi-prompt
     sample before any runtime kernel or pack conversion is built.
 
+GP77 planned multi-prompt representation screen:
+
+- Goal:
+  - re-run the activation-output compression gate on GP76b's prompt-general dev
+    sample instead of the old France-only sample.
+- Scope:
+  - dev-only offline screen;
+  - no model run, no runtime behavior change, no SOTA claim;
+  - held-out test prompts remain sealed and unused.
+- Candidate family:
+  - reuse the GP68-GP70 best available diagnostic family only as a baseline:
+    `aw_mse`, `bits=1`, `block=256`, `keep_input_fracs=0.02,0.05,0.10`;
+  - this candidate is already rejected on France-only GP70, so the expected
+    outcome is confirmation that it should not be implemented;
+  - if it unexpectedly improves on multi-prompt data, it still must pass the
+    same byte/error gate before any runtime work.
+- Method:
+  - run `.Agent/run-tools/kimi_activation_output_compression_screen.py` for
+    each GP76b prompt activation dump:
+    - `dev_japan_factual`;
+    - `dev_python_reverse`;
+    - `dev_mixed_summary`;
+  - aggregate per-prompt `aggregate` and `fused_up_gate` rows into a weighted
+    multi-prompt report;
+  - apply the same advancement gate:
+    - global moved byte target `0.30x-0.40x`;
+    - component mean rel L2 `<=0.10`;
+    - fused up/gate must pass, because up/gate is the blocking role.
+- Acceptance:
+  - if passing candidates are `0`, stop this candidate family permanently and
+    move to a new representation family;
+  - any future trained residual/codebook must be evaluated against this same
+    GP76b multi-prompt sample before runtime implementation.
+
+GP77 multi-prompt representation screen result on 2026-07-08:
+
+- Local report:
+  - `.Agent/runs/20260707-gp77-multiprompt-representation-screen/summary.md`
+  - `.Agent/runs/20260707-gp77-multiprompt-representation-screen/summary.json`
+- Remote report:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp77-multiprompt-representation-screen`
+- Inputs:
+  - GP76b dev-only activation dumps for:
+    - `dev_japan_factual`;
+    - `dev_python_reverse`;
+    - `dev_mixed_summary`.
+- Candidate family:
+  - `aw_mse`, `bits=1`, `block=256`;
+  - `keep_input_fracs=0.02,0.05,0.10`;
+  - fused up/gate evaluated explicitly because up/gate misses are the blocking
+    role in the real profile.
+- Result:
+  - aggregate matvec candidates: `12`;
+  - aggregate fused up/gate candidates: `4`;
+  - passing matvec candidates: `0`;
+  - passing fused candidates: `0`;
+  - passing mixed-role candidates: `0`.
+- Best mixed-role under `<=0.40x` global moved-byte budget:
+  - down candidate: `down:aw_mse:bits1:block256`;
+  - fused up/gate candidate:
+    `fused_up_gate:aw_mse_keep_input0p1:bits1:block256`;
+  - global byte ratio: `0.3861x`;
+  - down mean rel L2: `0.499277`;
+  - fused up/gate mean rel L2: `0.598174`;
+  - worst mean rel L2: `0.598174`;
+  - decision: reject.
+- Best fused up/gate by rel L2:
+  - candidate: `fused_up_gate:aw_mse_keep_input0p1:bits1:block256`;
+  - byte ratio: `0.4326x`;
+  - mean rel L2: `0.598174`;
+  - max rel L2: `0.659500`;
+  - decision: reject because it misses both the `<=0.40x` byte budget and the
+    `<=0.10` error gate.
+- Decision:
+  - stop this blockwise 1-bit residual family permanently as a primary runtime
+    path;
+  - the failure is not a scheduling issue: the compressed output error is too
+    high on prompt-general activation samples;
+  - move to a qualitatively different representation family before writing
+    runtime kernels.
+- Reproduce:
+
+```bash
+cd /root/lfz/tmp/kimi-stage2m-align
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260707-gp77-multiprompt-representation-screen
+rm -rf "$ROOT"
+mkdir -p "$ROOT"
+for id in dev_japan_factual dev_python_reverse dev_mixed_summary; do
+  mkdir -p "$ROOT/$id"
+  python3 .Agent/run-tools/kimi_activation_output_compression_screen.py \
+    --activation-csv /root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/$id/act/activations.csv \
+    --activation-bin /root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/$id/act/activations.f32 \
+    --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv \
+    --libggml-base build-cuda-batch/bin/libggml-base.so \
+    --out-json "$ROOT/$id/screen.json" \
+    --out-md "$ROOT/$id/report.md" \
+    --bits 1 \
+    --blocks 256 \
+    --scale-modes aw_mse \
+    --keep-input-fracs 0.02,0.05,0.10 \
+    --max-records 72 \
+    --torch-threads 8
+done
+python3 .Agent/run-tools/kimi_multi_prompt_screen_summary.py \
+  --screen-json "$ROOT/dev_japan_factual/screen.json" \
+  --screen-json "$ROOT/dev_python_reverse/screen.json" \
+  --screen-json "$ROOT/dev_mixed_summary/screen.json" \
+  --out-json "$ROOT/summary.json" \
+  --out-md "$ROOT/summary.md"
+```
+
+GP78 planned next representation family:
+
+- Goal:
+  - find a prompt-general expert representation that can plausibly meet the
+    `0.30x-0.40x` moved-byte target while keeping activation-output error near
+    the `<=0.10` gate.
+- Direction:
+  - train or derive a shared codebook/residual basis on the GP76b dev activation
+    sample instead of using independent per-block 1-bit signs;
+  - evaluate fused up/gate first, because GP77 shows it is the quality
+    bottleneck;
+  - no runtime implementation until the offline activation-output gate passes.
+- Candidate families to screen before runtime work:
+  - per-role/product-quantized residual codebook for output contribution
+    blocks;
+  - clustered base expert plus small residual for experts within the same
+    layer/role cluster;
+  - mixed precision expert pack where only the most activation-sensitive rows
+    keep higher precision.
+- Required evidence:
+  - dev-only screen on GP76b;
+  - held-out prompts remain sealed;
+  - report byte ratio, fused up/gate mean/max rel L2, down mean/max rel L2, and
+    estimated 5 tok/s ceiling;
+  - only if the offline gate passes, write a runtime pack/kernel plan.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
@@ -1421,11 +1558,12 @@ Continue from Phase 5E:
 
 1. Stop treating scheduling-only work as the primary path; GP75 caps it around
    `2.18 tok/s` mean on held-out.
-2. Run GP76 multi-prompt activation collection.
-3. Choose the next representation family:
-   - prompt-general trained residual/codebook with dev/test split; or
-   - a calibrated lower-bit expert pack whose activation-output error is
-     tested before runtime implementation.
+2. GP77 confirms blockwise 1-bit residual candidates fail the prompt-general
+   offline gate.
+3. Run GP78 to screen qualitatively different representation families:
+   - prompt-general trained residual/codebook with dev/test split;
+   - clustered base expert plus residual;
+   - mixed precision expert pack guided by activation sensitivity.
 4. The next screen must target global moved bytes around `0.30x-0.40x` and
    fused up/gate mean rel L2 close to the quality gate before any runtime
    kernel is written.
