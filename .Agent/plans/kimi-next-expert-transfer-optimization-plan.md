@@ -4259,6 +4259,18 @@ Continue from Phase 5E:
       `258.1 GB` requirement for `i1-IQ1_S` plus reserve;
     - the next lower-quant step requires either explicit deletion approval for
       the old overlay or a new external storage path.
+46. GP108 re-encode/v2 path audit closes two tempting non-download detours:
+    - report:
+      `.Agent/runs/20260708-gp108-reencode-v2-path-audit/report.md`;
+    - direct simple re-encoding from current IQ3/IQ2 experts was already
+      rejected by GP11: `0.347x-0.488x` 1-bit candidates have rel L2
+      `1.777-2.275`, and 2-bit candidates remain too large and too inaccurate;
+    - default-off `GGMLMOEPACKv2` parser/debug/shadow machinery exists, but
+      GP46 showed selected v2 hotsets alone need an unrealistic `0.276x`
+      nearly-complete payload ratio just to hit an ideal transfer-only
+      `5.018 tok/s` bound;
+    - do not spend runtime work on naive re-encode or v2 selected-hotset
+      execution as a standalone route.
 
 Rationale:
 
