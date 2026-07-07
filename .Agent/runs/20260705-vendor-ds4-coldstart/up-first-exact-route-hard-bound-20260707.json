@@ -1,0 +1,133 @@
+{
+  "artifact_id": "20260707-up-first-exact-route-hard-bound",
+  "created_at_utc": "2026-07-07T10:05:00Z",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit": "9c5fa3162f4594f84d8ab021eaf05bc7b941529c",
+  "status": "design_bound_no_source_edit",
+  "purpose": "Decide whether a prompt-general ffn_up_exps-only exact GPU route is worth implementing after down GPU correctness was fixed.",
+  "prompt_scope": "calibration/dev only; locked held-out prompts not used",
+  "inputs": {
+    "generalized_baseline": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+    "full_updown_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json",
+    "simultaneous_reduction_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-simultaneous-reduction-thresholds-20260707.json",
+    "role_profile": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-role-profile-database-indexing-20260707.json",
+    "fused_upgate_rejection": ".Agent/runs/20260705-vendor-ds4-coldstart/existing-fused-upgate-ds4-evidence-review-20260707.json",
+    "updown_one_stream_rejection": ".Agent/runs/20260705-vendor-ds4-coldstart/updown-one-stream-trace-france-20260707.json"
+  },
+  "method": "Use existing no-prompt-specific calibration/dev decode windows and measured up/down decode fallback times. Compute zero-overhead token-rate bounds for removing only up, only down, and both up+down. Then compare against simultaneous gate/source and up/down reduction thresholds.",
+  "per_prompt_bounds_layer43": [
+    {
+      "prompt_id": "france",
+      "current_tok_s": 2.6,
+      "required_save_ms_for_5": 19255.813953488374,
+      "up_decode_ms": 13454.805000000004,
+      "down_decode_ms": 9706.408999999976,
+      "up_only_tok_s_zero_overhead": 3.9120989825415586,
+      "down_only_tok_s_zero_overhead": 3.4298839601123268,
+      "updown_tok_s_zero_overhead": 6.15169125875999,
+      "remaining_gap_after_up_ms": 5801.00895348837,
+      "remaining_gap_after_updown_ms": 0
+    },
+    {
+      "prompt_id": "quantum",
+      "current_tok_s": 1.9,
+      "required_save_ms_for_5": 47107.099143206855,
+      "up_decode_ms": 28547.33999999999,
+      "down_decode_ms": 21084.470999999903,
+      "up_only_tok_s_zero_overhead": 3.043534218517215,
+      "down_only_tok_s_zero_overhead": 2.629769530635202,
+      "updown_tok_s_zero_overhead": 5.479120076648587,
+      "remaining_gap_after_up_ms": 18559.759143206866,
+      "remaining_gap_after_updown_ms": 0
+    },
+    {
+      "prompt_id": "fibonacci",
+      "current_tok_s": 1.7,
+      "required_save_ms_for_5": 56045.827633378925,
+      "up_decode_ms": 29358.357999999982,
+      "down_decode_ms": 18727.003999999975,
+      "up_only_tok_s_zero_overhead": 2.5983009623104003,
+      "down_only_tok_s_zero_overhead": 2.1809709308778524,
+      "updown_tok_s_zero_overhead": 3.919371077693916,
+      "remaining_gap_after_up_ms": 26687.469633378943,
+      "remaining_gap_after_updown_ms": 7960.465633378968
+    },
+    {
+      "prompt_id": "japan",
+      "current_tok_s": 2.4,
+      "required_save_ms_for_5": 22107.558139534885,
+      "up_decode_ms": 14711.023999999998,
+      "down_decode_ms": 9858.454000000007,
+      "up_only_tok_s_zero_overhead": 3.6698560893139605,
+      "down_only_tok_s_zero_overhead": 3.1245293666514247,
+      "updown_tok_s_zero_overhead": 5.6859604503952506,
+      "remaining_gap_after_up_ms": 7396.534139534888,
+      "remaining_gap_after_updown_ms": 0
+    },
+    {
+      "prompt_id": "climate",
+      "current_tok_s": 2.3,
+      "required_save_ms_for_5": 27505.055611729025,
+      "up_decode_ms": 18342.417999999954,
+      "down_decode_ms": 12832.000000000025,
+      "up_only_tok_s_zero_overhead": 3.5943800647235222,
+      "down_only_tok_s_zero_overhead": 3.0745683225139326,
+      "updown_tok_s_zero_overhead": 5.9284414999765565,
+      "remaining_gap_after_up_ms": 9162.637611729071,
+      "remaining_gap_after_updown_ms": 0
+    }
+  ],
+  "aggregate_bounds": {
+    "up_only_zero_overhead": {
+      "min_tok_s": 2.5983009623104003,
+      "mean_tok_s": 3.3636340634813315,
+      "decision": "not_viable_as_sota_route"
+    },
+    "down_only_zero_overhead": {
+      "min_tok_s": 2.1809709308778524,
+      "mean_tok_s": 2.8879444221581476,
+      "decision": "not_viable_as_sota_route"
+    },
+    "updown_zero_overhead": {
+      "min_tok_s": 3.919371077693916,
+      "mean_tok_s": 5.43291687269486,
+      "decision": "insufficient_for_generalized_min_gt5_because_fibonacci_remains_below_target"
+    }
+  },
+  "joint_reduction_threshold_examples": [
+    {
+      "gate_source_cut_fraction": 0.75,
+      "updown_cut_fraction": 0.90,
+      "dev_min_tok_s": 5.013237859282419,
+      "dev_mean_tok_s": 5.878630894472317
+    },
+    {
+      "gate_source_cut_fraction": 0.80,
+      "updown_cut_fraction": 0.85,
+      "dev_min_tok_s": 5.020214409723517,
+      "dev_mean_tok_s": 5.859916169581771
+    },
+    {
+      "gate_source_cut_fraction": 0.85,
+      "updown_cut_fraction": 0.80,
+      "dev_min_tok_s": 5.027210404717366,
+      "dev_mean_tok_s": 5.841955537556731
+    }
+  ],
+  "existing_source_audit": {
+    "baseline_path": "No-prompt-specific baseline uses one-stream gate cache for ffn_gate_exps and ordinary MoE fallback for ffn_up_exps/ffn_down_exps; it does not use the historical fused up/gate route.",
+    "old_fused_upgate": "Rejected: correct but 0.5-0.8 tok/s and TTFT regression; DS4 MXFP4/F8 did not get Kimi's true IQ2_S parallel fast path and duplicated/competed with gate cache.",
+    "one_stream_updown": "Rejected: France trace eval 1.7 tok/s; per-expert calls dominated by src0 movement, with src0_ms around 94% of traced time."
+  },
+  "decision": {
+    "source_edit_allowed_now": false,
+    "do_not_repeat": [
+      "up-only kernel as a SOTA attempt",
+      "old GGML_MOE_STREAM_FUSED_UP_GATE DS4 env rerun",
+      "one-stream up/down without grouped retained source movement fix"
+    ],
+    "next_allowed_source_edit": "Only a prompt-general joint route that credibly cuts both gate/source movement and up/down fallback at the required scale, or a default-off correctness/microbench scaffold explicitly marked not SOTA.",
+    "next_design_target": "grouped-retained up/down plus gate-cache-aware source path: preserve current gate cache behavior, batch active up/down experts by layer, avoid per-expert src0 staging, and avoid D2H/writeback unless required by the next CPU op."
+  }
+}

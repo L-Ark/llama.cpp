@@ -5873,3 +5873,25 @@
   - Design a prompt-general up/down GPU path or fused retained dataflow with a hard-bound showing enough reduction in up/down fallback to beat the generalized baseline with margin.
   - The first candidate should target `ffn_up_exps` because it has higher decode fallback than down on this generalized profile.
   - Any implementation must remain prompt-general, pass strict `16GB` RAM including page cache, preserve correctness, and not use held-out prompts before candidate freeze.
+
+## 2026-07-07 X10-E up-first hard-bound：up alone is not a valid SOTA route
+
+- attempt_id: `20260707-up-first-exact-route-hard-bound`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/up-first-exact-route-hard-bound-20260707.json`
+- status: `design_bound_no_source_edit`
+- purpose:
+  - Before implementing another `ffn_up_exps` path, calculate whether up-only or up+down-only exact compute can meet the product target on generalized prompts.
+  - Inputs are existing calibration/dev no-prompt-specific fallback profiles and simultaneous reduction bounds; held-out prompts are not used.
+- hard_bound_result:
+  - `up-only` zero-overhead removal: dev-set min `2.598 tok/s`, mean `3.364 tok/s`; not a viable SOTA route.
+  - `down-only` zero-overhead removal: dev-set min `2.181 tok/s`, mean `2.888 tok/s`; not viable and already had slower exact GPU kernel evidence.
+  - `up+down` zero-overhead removal: dev-set min `3.919 tok/s`, mean `5.433 tok/s`; still fails the generalized min target because Fibonacci remains below `5 tok/s`.
+  - Joint reduction grid: a viable `>5 tok/s` dev-set min requires roughly `gate/source >=75%` cut with `up/down >=90%` cut, or equivalent combinations such as `gate >=85%` with `up/down >=80%`.
+- existing_source_audit:
+  - Baseline no-prompt-specific path does not use the old DeepSeek fused up/gate path; gate is accelerated by the one-stream gate cache and up/down remain ordinary MoE matmul fallback.
+  - Existing fused up/gate DeepSeek path is already rejected by `.Agent/runs/20260705-vendor-ds4-coldstart/existing-fused-upgate-ds4-evidence-review-20260707.json`: it was correct but only `0.5-0.8 tok/s` with TTFT regressions, because it duplicated/competed with gate cache and did not give DS4 a true parallel fast path.
+  - Existing one-stream up/down trace is rejected by `.Agent/runs/20260705-vendor-ds4-coldstart/updown-one-stream-trace-france-20260707.json`: per-expert calls were dominated by source movement (`src0_ms` about `94%` of traced time), not compute.
+- decision:
+  - Do not implement an up-only kernel or rerun old fused up/gate envs as a SOTA attempt.
+  - A source edit is allowed only if it is a prompt-general joint dataflow route that credibly cuts both gate/source movement and up/down fallback at the required scale, or if it first lands as a default-off correctness/microbench scaffold explicitly marked not SOTA.
+  - Next practical design target is `grouped-retained up/down + gate-cache-aware source path`: reuse or preserve the current gate cache behavior, batch active up/down experts by layer, avoid per-expert `src0` staging, and avoid D2H/writeback unless the next CPU op actually needs it.
