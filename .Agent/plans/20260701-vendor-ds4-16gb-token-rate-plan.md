@@ -6306,3 +6306,33 @@ Decision:
 - Reject and keep reverted. This candidate is not a SOTA and must not be benchmark-promoted.
 - The candidate source was removed with reverse patch and a clean `llama-debug` rebuild passed after revert (`/tmp/ds4-clean-debug-rebuild-after-fused-probe.exit = 0`).
 - Down GPU correctness remains the fixed reference path; the next fused/retained attempt must first expose matching gate/up clamped debug records and pass act-level parity before fixed-text top1 or generalized calibration/dev benchmarks.
+
+## 2026-07-07 X10-N execution result：debug-visible fused up/gate still fails act parity
+
+- attempt_id: `20260707-ds4-fused-upgate-debug-zero-act-parity`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-upgate-debug-zero-act-parity-reject-20260707.json`
+- candidate source diff: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-debug-zero-rejected-source-diff-20260707.patch`
+- status: `rejected_reverted_not_sota`
+
+Purpose:
+- Follow X10-M by separating two issues in the fused up/gate scaffold: missing act-level debug records versus real numerical mismatch.
+- This used only the fixed France calibration prompt; `held_out_test_set_v1_locked` was not used.
+
+Implementation tested:
+- Added a default-off diagnostic env `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1` on top of `DS4_FUSED_UP_GATE_REF=1`.
+- First variant built explicit gate/up debug tensors but left them disconnected; this still produced only `43` candidate records and `86` missing candidate records, proving graph pruning skipped disconnected debug tensors.
+- Second variant added a zero-value dependency from explicit `gate_dbg/up_dbg` into fused `act`, preserving mathematical output while forcing debug tensors into the graph.
+
+Strict probe result:
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-debug-zero`
+- constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+- candidate env: `DS4_FUSED_UP_GATE_REF=1`, `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`.
+- records: explicit `129`, candidate `129`, missing candidate `0`.
+- result: act-level parity still failed with `12` diffs over atol and max sum diff `13.226561999996193`.
+- earliest swiglu mismatch remains `ffn_moe_swiglu-0` at about `8e-6`; later hidden-state divergence appears in `ffn_moe_gate_clamped-41`, `ffn_moe_up_clamped-41`, `ffn_moe_gate_clamped-42`, `ffn_moe_up_clamped-42`, and `ffn_moe_swiglu-42`.
+
+Decision:
+- Reject and keep reverted. This candidate is not a SOTA and must not be benchmark-promoted.
+- The zero-dependency trick is useful only as a diagnostic pattern for future probes; it does not fix fused math parity.
+- The candidate source was removed and clean `llama-debug` rebuild passed after revert (`/tmp/ds4-clean-debug-rebuild-after-zero-probe.exit = 0`).
+- Next fused/retained attempt should stop replacing explicit gate/up math with the current fused CPU op. It must either exactly reuse the explicit dot/dequant/accumulation order or retain the explicit act dataflow while reducing source movement; otherwise layer-0 act drift will keep propagating to final logits.
