@@ -1,0 +1,66 @@
+{
+  "attempt_id": "20260707-retained-gate-probe-insertion-audit",
+  "created_at_local": "2026-07-07",
+  "status": "source_location_audit_recorded_no_source_change_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Locate the smallest source insertion point for a retained-gate feasibility probe after the X10-U 80/80 hard-bound gate.",
+  "current_head_when_audited": "7ed8e37d8e41a301eaef97a5c79f3b5cd3fcaff5",
+  "findings": {
+    "deepseek4_specific_graph_file": "src/models/deepseek4.cpp",
+    "existing_probe_comment": {
+      "file": "src/models/deepseek4.cpp",
+      "lines": "418-420",
+      "meaning": "Existing sparse retained graph probe records that build_expert_mix receives selected IDs and weights, not a retained gate output; graph_gate_output_input_available is hardcoded false."
+    },
+    "expert_mix_entry": {
+      "file": "src/models/deepseek4.cpp",
+      "lines": "1175-1421",
+      "signature_summary": "build_expert_mix(cur_ffn, selected_experts, weights, layer, il)",
+      "current_inputs": ["cur_ffn", "selected_experts", "weights", "layer", "il"],
+      "missing_for_retained_gate": ["scores/selection/probs retained tensor", "retained topk/weights dataflow handle", "proof that gate is not recomputed in hot/expert path"]
+    },
+    "deepseek4_gate_route": {
+      "file": "src/models/deepseek4.cpp",
+      "lines": "1436-1470",
+      "summary": "build_moe_v4 computes scores, selected_experts, and weights, then immediately calls build_expert_mix(cur_ffn, selected_experts, weights, layer, il).",
+      "probe_candidate": "Add a default-off diagnostic probe around build_moe_v4 -> build_expert_mix handoff to report whether scores/selection/selected_experts/weights can be passed without recompute and what tensor buffer types/shapes are visible."
+    },
+    "default_single_path_expert_compute": {
+      "file": "src/models/deepseek4.cpp",
+      "lines": "1350-1418",
+      "summary": "Default path computes gate/up, swiglu, down, weights multiply, then sum. It already has native retained down probe around act/experts/down tensors."
+    },
+    "generic_moe_route_for_reference": {
+      "file": "src/llama-graph.cpp",
+      "lines": "1390-1527",
+      "summary": "Generic MoE has logits/probs/topk/weights in one builder and expands weights early. This is useful as a reference but DeepSeek4 uses its own build_moe_v4 path."
+    }
+  },
+  "next_probe_design": {
+    "env_name": "DS4_RETAINED_GATE_INTERFACE_PROBE_OUT",
+    "default_off": true,
+    "no_logit_change": true,
+    "intended_patch_scope": "diagnostic only; write CSV/JSON rows from graph construction, no runtime token-rate optimization.",
+    "minimum_fields": [
+      "layer",
+      "moe_tokens",
+      "n_expert_used",
+      "scores_ne/nb/type/buft",
+      "selection_ne/nb/type/buft",
+      "selected_experts_ne/nb/type/buft",
+      "weights_ne/nb/type/buft",
+      "cur_ffn_ne/nb/type/buft",
+      "whether build_expert_mix can receive an optional retained_gate_context without recomputing gate",
+      "whether selected_experts and weights are already the exact retained data needed by expert mix"
+    ],
+    "success_gate": "Probe must show a dataflow path where build_expert_mix can consume retained selected_experts/weights and avoid gate recompute/extra hot payload. Then a new hard-bound must show generalized min_eval_tok_s >= 5.5 before any performance source patch.",
+    "failure_gate": "If probe confirms no retained gate/topk/weights can be threaded without extra payload or recompute, close retained-gate path and switch to compact representation feasibility."
+  },
+  "decision": {
+    "sota_changed": false,
+    "runtime_source_patch_allowed_for_sota_candidate_now": false,
+    "diagnostic_source_probe_next_is_allowed": true,
+    "reason": "The next source change, if made, should be a default-off non-logit-changing probe to measure eligibility, not a token-rate runtime patch."
+  }
+}

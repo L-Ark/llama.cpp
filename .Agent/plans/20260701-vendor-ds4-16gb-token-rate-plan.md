@@ -6605,3 +6605,45 @@ Implementation rule:
 Next action:
 - Design/instrument the smallest retained-gate interface probe that can show whether gate/topk/weights can be made available to the expert mix path without recomputing gate and without large payload.
 - If the probe cannot plausibly hit the 80/80 cut under 32GB VRAM and strict 16GB host RAM including page cache, close this path and switch to compact representation feasibility.
+
+## 2026-07-07 X10-V source audit：retained-gate probe insertion point
+
+- attempt_id: `20260707-retained-gate-probe-insertion-audit`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/retained-gate-probe-insertion-audit-20260707.json`
+- status: `source_location_audit_recorded_no_source_change_not_sota`
+
+Purpose:
+- Locate the smallest safe source insertion point for the retained-gate feasibility probe required by X10-U.
+- This is not a performance patch and not a SOTA claim.
+
+Findings:
+- DeepSeek4 uses a model-specific graph builder in `src/models/deepseek4.cpp`, not only the generic `llama-graph.cpp` MoE path.
+- Existing probe code already records the core blocker:
+  - `src/models/deepseek4.cpp:418-420`
+  - `build_expert_mix` receives selected IDs and weights, not a retained gate output; `graph_gate_output_input_available` is currently hardcoded false.
+- Expert mix entry:
+  - `src/models/deepseek4.cpp:1175-1421`
+  - signature shape: `build_expert_mix(cur_ffn, selected_experts, weights, layer, il)`
+  - current inputs are only `cur_ffn`, `selected_experts`, `weights`, `layer`, and `il`.
+- DeepSeek4 gate route:
+  - `src/models/deepseek4.cpp:1436-1470`
+  - `build_moe_v4` computes `scores`, `selected_experts`, and `weights`, then immediately calls `build_expert_mix(cur_ffn, selected_experts, weights, layer, il)`.
+- Default single-path expert compute:
+  - `src/models/deepseek4.cpp:1350-1418`
+  - computes gate/up, swiglu, down, weight multiply, and sum; it already has native retained down probe coverage.
+- Generic MoE reference:
+  - `src/llama-graph.cpp:1390-1527`
+  - useful for comparison, but not the DeepSeek4 primary route.
+
+Next diagnostic probe design:
+- Add a default-off env, proposed name: `DS4_RETAINED_GATE_INTERFACE_PROBE_OUT`.
+- The probe must be non-logit-changing and should only emit graph-construction facts.
+- Minimum fields:
+  - layer, `moe_tokens`, `n_expert_used`
+  - tensor shape/stride/type/buffer for `scores`, `selection`, `selected_experts`, `weights`, and `cur_ffn`
+  - whether `build_expert_mix` can receive an optional retained-gate context without recomputing gate
+  - whether `selected_experts` and `weights` are already the exact retained data needed by expert mix
+
+Decision:
+- A default-off diagnostic source probe is allowed next because it does not claim token-rate improvement and does not alter logits.
+- A SOTA candidate runtime patch is still not allowed until the probe plus a new hard-bound show generalized calibration/dev `min_eval_tok_s >= 5.5`.
