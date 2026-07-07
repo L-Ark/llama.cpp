@@ -1,0 +1,43 @@
+{
+  "branch": "vendor/kimi-speculative-general-token-rate-16gb",
+  "commit": "300516836",
+  "decision": "reject",
+  "kind": "kimi_next_gate_shadow_dev_n96_top8",
+  "remote_root": "/root/lfz/runs/vendor-kimi-token-rate/20260707-gp66-next-gate-shadow-dev-n96-top8",
+  "result": {
+    "completed_prompts": [
+      {
+        "decode_ms": 40632.75,
+        "decode_runs": 77,
+        "memory_peak": 15899996160,
+        "prompt": "dev_france_regression",
+        "quality": "pass",
+        "token_rate": 1.9,
+        "ttft_ms": 88618.6
+      }
+    ],
+    "stopped_prompts": [
+      {
+        "decision": "TTFT/early-latency failure",
+        "observed_state": "no metrics; stdout only 5 bytes; killed after systemd runtime 7min 36.857s",
+        "prompt": "dev_japan_factual"
+      },
+      {
+        "decision": "ignored cleanup artifact",
+        "observed_state": "no metrics; transiently started during cleanup; killed",
+        "prompt": "dev_photosynthesis_factual"
+      },
+      {
+        "decision": "ignored cleanup artifact",
+        "observed_state": "no metrics; transiently started during cleanup; killed",
+        "prompt": "dev_linear_equation"
+      }
+    ]
+  },
+  "runtime": {
+    "MemoryMax": 15900000000,
+    "MemorySwapMax": 0,
+    "N": 96,
+    "shadow_topk": 8
+  }
+}

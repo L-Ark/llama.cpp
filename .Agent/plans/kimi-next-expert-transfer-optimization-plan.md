@@ -361,6 +361,53 @@ Route-detail predictor bound on 2026-07-07:
   - any runtime predictor must use stronger information than recent route history, such as router-level signals or a much smaller high-confidence candidate set;
   - otherwise focus on reducing expert bytes or changing pack/layout rather than adding false IO.
 
+Next-gate shadow confirmation:
+
+- Earlier GP64 dev-only `N=16` shadow profiling showed that
+  `GGML_MOE_NEXT_GATE_SHADOW_TOPK=8` has useful signal:
+  - expert/byte recall about `77.79%`;
+  - false/actual bytes about `0.2221`;
+  - but `N=16` was too short for final quality gating and TTFT was noisy.
+- GP65 `N=32` dev result on 2026-07-07:
+  - report:
+    `.Agent/runs/20260707-gp65-next-gate-shadow-dev-n32-top8/report.md`;
+  - summary:
+    `.Agent/runs/20260707-gp65-next-gate-shadow-dev-n32-top8/summary.json`;
+  - remote root:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp65-next-gate-shadow-dev-n32-top8`;
+  - prompts with shadow CSV: `7/7`;
+  - expert/byte recall: `77.35%`;
+  - precision: `77.35%`;
+  - false/actual bytes: `0.2265`;
+  - max record overhead: `2633 us`;
+  - average token rate: `1.659 tok/s`;
+  - host RAM peak: `15899996160`;
+  - quality: `6/7` pass.
+- GP65 decision:
+  - do not implement real prefetch yet;
+  - the single quality failure was `dev_linear_equation`, whose `N=32` output
+    was truncated before the expected final keyword, so the predictor signal is
+    not rejected but still needs longer-output confirmation;
+  - GP66 `N=96` TopK=8 dev shadow is the next required gate before planning
+    bounded runtime prefetch.
+- GP66 `N=96` dev result on 2026-07-07:
+  - report:
+    `.Agent/runs/20260707-gp66-next-gate-shadow-dev-n96-top8/report.md`;
+  - summary:
+    `.Agent/runs/20260707-gp66-next-gate-shadow-dev-n96-top8/summary.json`;
+  - remote root:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp66-next-gate-shadow-dev-n96-top8`;
+  - first prompt `dev_france_regression` passed with `1.90 tok/s`, TTFT
+    `88618.6 ms`, decode `40632.75 ms / 77`;
+  - second prompt `dev_japan_factual` produced no useful output after
+    `7min 36.857s` systemd runtime and was killed;
+  - cleanup transiently started later prompts, which were killed and ignored.
+- GP66 decision:
+  - reject TopK=8 next-gate shadow as a direct prefetch implementation gate;
+  - do not implement real prefetch from this signal yet;
+  - future predictor work must first reduce shadow/predictor overhead or prove
+    with a paired baseline that the long TTFT was unrelated to the predictor.
+
 ## Phase 5: Structural Byte-Reduction Gate
 
 Purpose:
