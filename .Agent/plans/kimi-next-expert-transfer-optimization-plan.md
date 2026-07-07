@@ -3843,6 +3843,88 @@ Execution result:
     external storage, or a newly discovered compatible candidate below
     `177.235 GiB`.
 
+Phase GP104 remote cleanup inventory for lower-quant smoke:
+
+- Purpose:
+  - unblock a complete lower-quant runtime smoke, especially `i1-IQ1_S`, by
+    identifying remote artifacts that can be safely deleted only after explicit
+    user approval;
+  - keep this phase strictly non-destructive.
+- Bottleneck:
+  - GP103 found `i1-IQ1_S` is `204430872480 bytes` (`190.391 GiB`);
+  - current remote free space was `243991797760 bytes` (`227.235 GiB`);
+  - preserving a `50 GiB` safety margin requires at least
+    `258117963680 bytes` (`240.391 GiB`) free before download;
+  - therefore the minimum extra space needed is about `14126165920 bytes`
+    (`13.156 GiB`).
+- Theory:
+  - a full-model lower-bit smoke is currently the most direct way to test
+    whether structural byte reduction can move the bound toward `5 tok/s`;
+  - unlike prompt-specific expert overlays, a complete lower-quant model is
+    prompt-general by construction, but must still pass cold-start quality,
+    RAM, TTFT, and held-out gates;
+  - disk cleanup has no token-rate value by itself, so it is only an enabling
+    step and must not be claimed as SOTA.
+- Preserve list:
+  - current IQ3_S model:
+    `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S`;
+  - current SOTA expert packs and configs used by GP4/GP103 reproduction;
+  - committed `.Agent` reports and run records;
+  - any artifact whose ownership or current-runtime use is unclear.
+- Inventory commands:
+  - inspect free space with `df -B1 /root /root/lfz`;
+  - inspect `/root/lfz/models`, `/root/lfz/runs/ik_llama/kimi-iq3s-assets`,
+    `/root/lfz/runs/vendor-kimi-token-rate`, and large `/root/lfz/tmp`
+    subtrees with `du`;
+  - list large single files with `find ... -printf "%s\t%p\n" | sort -nr`.
+- Acceptance:
+  - produce a report with exact path, byte size, reason, and keep/delete
+    recommendation;
+  - identify a minimal candidate cleanup set that would bring free space above
+    the `i1-IQ1_S + 50 GiB` gate;
+  - do not delete anything in GP104;
+  - if no safe candidate set exists, keep lower-quant smoke blocked on
+    explicit external storage or user-approved deletion.
+
+Execution result:
+
+- Timestamp: `2026-07-08T05:35:00+0800`.
+- Status: completed non-destructive inventory; no remote files were deleted.
+- Report:
+  `.Agent/runs/20260708-gp104-remote-cleanup-inventory/report.md`.
+- Current remote free space:
+  - `243991724032 bytes` (`227.235 GiB`).
+- Required free before `i1-IQ1_S` download with `50 GiB` reserve:
+  - `258117963680 bytes` (`240.391 GiB`).
+- Additional space needed:
+  - `14126239648 bytes` (`13.156 GiB`).
+- Preserve:
+  - current IQ3_S model:
+    `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S`;
+  - current Kimi SOTA main pack:
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - current Kimi SOTA overlay:
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`;
+  - current remote worktree and GP4 held-out run evidence.
+- Minimal cleanup candidate requiring explicit user approval:
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack`;
+  - size `17179111424 bytes` (`15.999 GiB`);
+  - not referenced by current remote Kimi repro scripts in the inventory grep;
+  - deleting only this candidate would leave `56739962976 bytes`
+    (`52.843 GiB`) after the `i1-IQ1_S` download, passing the `50 GiB`
+    reserve gate.
+- Larger cleanup candidate requiring explicit user approval:
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-tracefirst-n64-20260630.expert-pack`;
+  - size `79544299520 bytes` (`74.087 GiB`);
+  - historical trace-first pack, not referenced by current remote Kimi repro
+    scripts.
+- Decision:
+  - lower-quant smoke is now blocked on explicit cleanup/move approval, not on
+    identifying a candidate;
+  - do not delete files without approval;
+  - after cleanup, run the `i1-IQ1_S` full-model cold-start smoke under the
+    same 16 GB RAM, France-quality, TTFT, and prompt-general gates.
+
 ## Run Discipline
 
 For every experiment:
@@ -3955,7 +4037,16 @@ Continue from Phase 5E:
 37. GP103 refreshes complete lower-quant candidates and finds no candidate that
     passes the current disk gate while preserving IQ3_S SOTA assets and a
     `50 GiB` safety margin.
-38. The next primary direction should either:
+38. Run GP104 as a non-destructive remote cleanup inventory before any
+    lower-quant full-model download. The target is to find at least
+    `13.156 GiB` of user-approvable cleanup while preserving current SOTA
+    reproduction assets.
+39. GP104 found a minimal approval candidate:
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack`
+    (`15.999 GiB`). Deleting only this file would leave `52.843 GiB` after
+    downloading `i1-IQ1_S`, enough for the `50 GiB` reserve, but no deletion
+    was performed.
+40. The next primary direction should either:
     - obtain a smaller full-model quant/runtime smoke with explicit disk
       approval or external storage; or
     - test a materially different learned surrogate that uses richer
