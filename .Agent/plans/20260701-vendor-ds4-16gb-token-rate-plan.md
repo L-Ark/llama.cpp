@@ -7407,3 +7407,40 @@ Decision:
      - constructs named `ffn_down_exps`/`ffn_up_exps` tensors and forces the stream hook through the graph, or
      - calls `ggml_cuda_moe_stream_batch` directly with synthetic expert/source/destination buffers and compares against CPU/generic CUDA reference.
 - Any harness implementation must be default-off, not affect current SOTA, and must record exact parity thresholds before any fast-path source patch.
+
+## 2026-07-08 X10-AL expand backend smoke coverage for compact-target lowbit types
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/expanded-backend-ops-lowbit-smoke-filter-20260708.json`
+- changed file: `tests/CMakeLists.txt`
+- status: `source_test_coverage_added_pass_not_sota`
+
+Purpose:
+- Preserve the X10-AJ generic backend smoke evidence in normal test coverage so future changes do not silently break compact-target lowbit support.
+- This is a test coverage change only. It does not affect runtime behavior and is not a SOTA claim.
+
+Change:
+- Extended `LLAMA_BACKEND_OPS_SMOKE_FILTER` with:
+  - `MUL_MAT(type_a=iq1_s, ...)`
+  - `MUL_MAT(type_a=iq1_m, ...)`
+  - `MUL_MAT(type_a=q2_K, ...)`
+  - `MUL_MAT_ID(type_a=iq1_s, ...)`
+  - `MUL_MAT_ID(type_a=iq1_m, ...)`
+  - `MUL_MAT_ID(type_a=q2_K, ...)`
+
+Verification:
+- command:
+  - `./build-ds4-moe-stream-batch-probe/bin/test-backend-ops test -o <expanded LLAMA_BACKEND_OPS_SMOKE_FILTER> --output csv`
+- result:
+  - `rc=0`
+  - all expanded lowbit smoke cases passed.
+- summary:
+  - `MUL_MAT type_a=iq1_s`: pass
+  - `MUL_MAT type_a=iq1_m`: pass
+  - `MUL_MAT type_a=q2_K`: pass
+  - `MUL_MAT_ID type_a=iq1_s`: pass
+  - `MUL_MAT_ID type_a=iq1_m`: pass
+  - `MUL_MAT_ID type_a=q2_K`: pass
+
+Decision:
+- Keep this source change because it only broadens regression coverage for the compact-target route.
+- It still does not prove DeepSeek MoE stream fast-path correctness or performance; X10-AK remains the active gate before any stream writeback patch.

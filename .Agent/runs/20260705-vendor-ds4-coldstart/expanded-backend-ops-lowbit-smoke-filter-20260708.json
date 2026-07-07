@@ -1,0 +1,67 @@
+{
+  "attempt_id": "20260708-expanded-backend-ops-lowbit-smoke-filter",
+  "created_at_local": "2026-07-08",
+  "status": "source_test_coverage_added_pass_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head_before_commit": "93ebd83d0e7178c2ecba428e184d8af4bcb594ae",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Add compact-target lowbit generic backend smoke coverage to tests/CMakeLists.txt so IQ1_S/IQ1_M/Q2_K MUL_MAT and MUL_MAT_ID support does not silently regress.",
+  "changed_file": "tests/CMakeLists.txt",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-expanded-backend-smoke",
+  "verification_command": "./build-ds4-moe-stream-batch-probe/bin/test-backend-ops test -o <expanded LLAMA_BACKEND_OPS_SMOKE_FILTER> --output csv",
+  "verification_rc": 0,
+  "result_rows": 15,
+  "summary_by_op_type": {
+    "MUL_MAT type_a=q2_K": {
+      "count": 2,
+      "pass": 2
+    },
+    "MUL_MAT type_a=iq1_s": {
+      "count": 2,
+      "pass": 2
+    },
+    "MUL_MAT type_a=iq1_m": {
+      "count": 2,
+      "pass": 2
+    },
+    "MUL_MAT type_a=iq4_xs": {
+      "count": 2,
+      "pass": 2
+    },
+    "MUL_MAT type_a=f8_e4m3_b128": {
+      "count": 1,
+      "pass": 1
+    },
+    "MUL_MAT_ID type_a=q2_K": {
+      "count": 1,
+      "pass": 1
+    },
+    "MUL_MAT_ID type_a=q3_K": {
+      "count": 1,
+      "pass": 1
+    },
+    "MUL_MAT_ID type_a=iq1_s": {
+      "count": 1,
+      "pass": 1
+    },
+    "MUL_MAT_ID type_a=iq1_m": {
+      "count": 1,
+      "pass": 1
+    },
+    "MUL_MAT_ID type_a=iq4_xs": {
+      "count": 1,
+      "pass": 1
+    },
+    "HC_WEIGHTED_SUM n_embd=64": {
+      "count": 1,
+      "pass": 1
+    }
+  },
+  "decision": {
+    "accepted_sota_changed": false,
+    "runtime_behavior_changed": false,
+    "what_this_proves": "Expanded generic backend smoke filter passes for compact-target lowbit types on CUDA.",
+    "what_this_does_not_prove": "Still does not prove DeepSeek MoE stream fast-path correctness or performance for these types.",
+    "next_action": "Keep this coverage; next real optimization still requires cleanup+candidate load/correctness or a dedicated MoE stream parity harness."
+  }
+}
