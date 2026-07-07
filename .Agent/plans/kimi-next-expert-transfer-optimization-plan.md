@@ -3515,6 +3515,109 @@ Execution result:
   - 2-bit residual does not rescue quality and misses the moved-byte target;
   - do not write runtime kernels for this representation.
 
+## Phase 5W: GP100 Shared Down Projector Oracle
+
+Goal:
+
+- Test a non-expert-local compute/storage form for the down path:
+  replace per-expert down matrices with one learned/shared per-layer projector
+  from the summed fused intermediate vector to the summed down output.
+- If this works, runtime could:
+  - keep the shared projectors resident in VRAM;
+  - stop moving down expert tensors;
+  - reallocate down-cache VRAM to up/gate experts;
+  - keep exact up/gate computation unchanged.
+- This is an offline dev-only oracle. It does not change runtime behavior,
+  does not use held-out prompts, and does not claim SOTA.
+
+Why this is next:
+
+- GP99 rejects per-expert base/residual reconstruction; the next attempt should
+  avoid reconstructing individual expert matrices.
+- GP95 showed exact top intermediate slicing at `0.4x` has grouped down-output
+  rel L2 around `0.157`, above the gate but closer than most other rejected
+  paths. A learned shared projector may recover some of that missing directional
+  information without reading expert-specific down tensors.
+- This path only targets down movement. It cannot reach `5 tok/s` alone, but if
+  accurate it can remove a runtime component and free VRAM for the main up/gate
+  bottleneck.
+
+Method:
+
+1. Use only the GP88 dev call-stride activation corpus.
+2. For each complete down group:
+   - input feature candidates:
+     - `sum_h`: sum of active down input vectors;
+     - `sum_h_abs`: concatenate `sum(h)` and `sum(abs(h))`;
+     - `sum_h_abs_sq`: concatenate `sum(h)`, `sum(abs(h))`, and `sum(h*h)`;
+   - exact target: sum of exact `W_down_e @ h_e` across active experts.
+3. For each layer, run leave-one-prompt-out kernel ridge regression from
+   features to exact summed down output.
+4. Report:
+   - group mean/max rel L2 by feature mode and ridge lambda;
+   - estimated resident BF16 MiB for one projector per layer;
+   - whether the error is close enough to justify a runtime kernel.
+
+Acceptance:
+
+- Advance only if a feature mode has leave-one-prompt-out group mean rel L2
+  close to `<=0.10` with plausible resident VRAM.
+- If the best error is still far above `0.10`, reject shared down projectors as
+  a primary path and avoid runtime implementation.
+
+Expected risk:
+
+- The active experts have genuinely different down projections; a single
+  projector over summed intermediate vectors may lose too much expert-specific
+  direction.
+- Feature expansion improves accuracy but increases resident VRAM:
+  `sum_h` is about `28 MiB/layer`, `sum_h_abs` about `56 MiB/layer`, and
+  `sum_h_abs_sq` about `84 MiB/layer`.
+
+Execution result:
+
+- Timestamp: `2026-07-08T04:07:51+0800`.
+- Status: completed dev-only offline oracle; no runtime change and no SOTA
+  claim.
+- Script:
+  `.Agent/run-tools/kimi_shared_down_projector_oracle.py`.
+- Reports:
+  - smoke:
+    `.Agent/runs/20260708-gp100-shared-down-projector-smoke/report.md`;
+  - lambda check:
+    `.Agent/runs/20260708-gp100-shared-down-projector-lambda-check/report.md`.
+- Remote execution:
+  - worktree: `/root/lfz/tmp/kimi-stage2m-align`;
+  - command ran under `systemd-run --wait --collect --same-dir`;
+  - memory cap: `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Inputs:
+  - dev prompts only:
+    `dev_python_reverse`, `dev_japan_factual`, `dev_mixed_summary`;
+  - source corpus:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus`;
+  - `max-down-records-per-prompt=256`;
+  - smoke modes:
+    `sum_h`, `sum_h_abs`, `sum_h_abs_sq`;
+  - smoke lambdas:
+    `0.001,0.01,0.1,1.0`;
+  - follow-up lambdas for the best feature mode:
+    `1.0,10.0,100.0`.
+- Smoke result:
+  - groups: `96`;
+  - layers evaluated: `32`;
+  - best smoke candidate:
+    `sum_h_abs_sq`, `lambda=1`, resident `84 MiB/layer`
+    (`4.92 GiB/60 layers`), mean rel L2 `2.717026`.
+- Lambda check result:
+  - best candidate:
+    `sum_h_abs_sq`, `lambda=100`, resident `84 MiB/layer`,
+    mean rel L2 `1.260756`, max rel L2 `1.774349`.
+- Decision:
+  - reject shared down projector as a primary path;
+  - even the heavily regularized best candidate is more than an order of
+    magnitude above the `0.10` gate;
+  - do not write runtime kernels for down-cache removal via shared projectors.
+
 ## Run Discipline
 
 For every experiment:
@@ -3614,6 +3717,15 @@ Continue from Phase 5E:
 32. The next primary direction must avoid per-expert residual reconstruction
     unless it introduces a materially stronger learned/optimized residual
     codec with an offline output-error gate close to `0.10`.
+33. GP100 rejects shared down projectors: the best `sum_h_abs_sq` candidate
+    needs `4.92 GiB/60 layers` resident VRAM and still has mean rel L2
+    `1.260756`, far above the `0.10` gate.
+34. The next primary direction should either:
+    - obtain a smaller full-model quant/runtime smoke with explicit disk
+      approval or external storage; or
+    - test a materially different learned surrogate that uses richer
+      inputs than aggregated down intermediates and has a strict
+      leave-one-prompt-out gate before any runtime work.
 
 Rationale:
 
