@@ -4239,6 +4239,16 @@ Continue from Phase 5E:
       approval or external storage; or
     - test an exact/near-exact representation change that is not a small
       learned surrogate and can plausibly preserve arithmetic quality.
+44. Disk gate rechecked on 2026-07-08:
+    - remote available bytes: `243713159168`;
+    - bytes required for `i1-IQ1_S` plus the existing `50 GiB` safety reserve:
+      `258117963680`;
+    - current shortfall: about `14.4 GB`;
+    - the old non-current overlay
+      `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack`
+      still exists and is `17179111424` bytes, which would satisfy the gate if
+      the user explicitly approves deleting it;
+    - no deletion has been performed.
 
 Rationale:
 
