@@ -95792,3 +95792,60 @@ GP61 implementation and first measurement:
   - next required phase is a shadow error test for candidate thresholds,
     starting with `0.1` and `0.2`, comparing exact down output/logit or token
     changes before any real skip is allowed.
+
+## GP62: masked down activation shadow error validation
+
+Timestamp: `2026-07-07T12:13:00+08:00`.
+
+Status: planned before execution.
+
+Reason:
+
+- GP61 found prompt-stable block sparsity at candidate threshold `0.2`:
+  combined low-block ratio `0.345436`, with three prompt ratios in the
+  `33.1%-35.7%` range.
+- This satisfies the byte-reduction signal requirement, but not the quality
+  safety requirement.
+- Real partial reads are still forbidden until we know how much down output,
+  logits, and generated tokens change when those blocks are skipped.
+
+Design:
+
+1. Keep runtime output exact.
+2. Add a separate default-off shadow validation mode, not a production
+   optimization:
+   - candidate env: `GGML_MOE_DOWN_ACT_SHADOW_ERROR_OUT=<csv>`;
+   - threshold env: `GGML_MOE_DOWN_ACT_SHADOW_THRESHOLDS=0.1,0.2`;
+   - block env reuses `GGML_MOE_DOWN_ACT_SPARSITY_BLOCK`.
+3. For each down batch:
+   - run the normal exact path unchanged;
+   - create a masked copy of the down activation where blocks with
+     `max(abs(block)) <= threshold` are zeroed;
+   - run the same loaded expert/cache MMVQ path into a shadow output buffer;
+   - compare exact vs masked down output per active expert and record:
+     `l2_abs`, `l2_rel`, `max_abs_err`, `mean_abs_err`,
+     skipped block count, skipped value count, and threshold.
+4. Do not modify sampled logits or generated tokens in this phase.
+5. If down-output error is small at `0.1` but not at `0.2`, do not use `0.2`.
+6. If down-output error looks promising, add a second validation stage that
+   compares logits/top-k and final tokens on short deterministic prompts before
+   any real read skipping.
+
+Validation plan:
+
+- Run build validation.
+- Run at least the same three random/general prompts as GP61 under GP4
+  alias/full-source SOTA env, `N=32`, cold start, 16GB RAM.
+- Required runtime signature remains:
+  `entries=69120`, `misses=0`, `direct_reads=0`.
+- Acceptance for proceeding to real partial-read design:
+  - quality remains pass because exact output is still used;
+  - shadow down-output relative error is consistently small at the chosen
+    threshold;
+  - threshold provides meaningful block skip ratio, preferably at least
+    `20%-30%` after any quality-safe threshold adjustment.
+
+Rejection:
+
+- If `0.1` and `0.2` produce large down-output error, reject activation block
+  skipping as a near-term optimization and return to IO scheduling/coalescing.
