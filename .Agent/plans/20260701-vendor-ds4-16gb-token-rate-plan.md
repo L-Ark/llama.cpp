@@ -5151,3 +5151,35 @@
 - rowtile_v2_perf_comparison: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-perf/france-n96，strict 16GB/no-swap，exit=124 after 520s，profile: down total=9.985 ms/call，cuda_batch=4.647，fallback_t0=5.295，batch_accept=3920，batch_decline=0。
 - conclusion: full-output Q8_0 rowtile 虽然 correctness 通过，但把 CPU fallback 转成 GPU rowtile 后 down total 反而从约 7.55 ms/call 增至约 9.99 ms/call；当前 rowtile 映射不是 5 tok/s 方向。后续不要继续以该 full-output rowtile 做 n96 试错。
 - next_direction: 若继续替换 down CPU fallback，必须设计全新 kernel/storage：例如 coalesced/transposed expert layout、tensor-core-friendly dequant/accumulate、或能显著减少 4096 输出列读写的结构化方法；否则应转向更高收益 bottleneck。所有后续 perf run 必须避免多 GB stdout artifact（stdout devnull 或 strict runner 控制）。
+
+## 2026-07-07 低比特 sidecar / q2tern 可行性复盘与下一步计划
+
+- attempt_id: 20260707-lowbit-sidecar-generalization-feasibility-audit
+- status: diagnostic_complete_no_runtime_patch_allowed
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/lowbit-sidecar-generalization-feasibility-audit-20260707.json
+- task_context: 目标仍是 vendor DeepSeek 在 `16GB host RAM`（含 page cache）+ `32GB RTX 5090 VRAM` 上，对随机/泛化 prompt 稳定达到 `>5 tok/s`。后续 accepted SOTA 必须在冻结候选后跑 `held_out_test_set_v1_locked`，不能基于 France、dev prompt trace、prompt-specific pack 或 prompt-specific hotset promotion。
+- evidence_reviewed:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/sidecar-repr-payload-correctness-gate-20260707.json`: exact sidecar payload gate passed (`diff_count=0`, fixed-text `same_top1=145/145`), zero sidecar produced nonzero local diffs and was rejected. 结论是 sidecar loader/compare gate 可用，但不代表近似 payload 可写回。
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/q2ternary-partial-compressed-candidate-20260707.json`: q2 ternary partial 表示 `1.8889x` 压缩，但 compare 有 `diff_count=67936`, `max_abs=9.40296984`, `mean_abs_max=2.49075008`，因此 rejected；不能 enable writeback，也不能进入 token-rate benchmark。
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/post-q2-mxfp4-codebook-feasibility-20260707.json`: q3/codebook 方案误差下降但压缩比只有约 `1.31x` 且仍有非零 magnitude error；不足以支撑 runtime source patch。
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-lowbit-representation-coverage-bound-20260707.json`: 只有假设 `4x/8x/16x` 低比特压缩且零 runtime overhead 时，dev set bound 才能跨过 `>5 tok/s`；这只是 hard bound，不证明正确性或实现可行。
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/non-native-representation-next-hard-bound.json`: 已明确 non-native/approx representation 没有 source-ready 路径；任何新近似表示必须先做 offline/compare-only fixed-text top1 和误差门，再谈性能。
+- decision: 当前 q2tern / 简单 codebook / approximate sidecar 方向不允许继续做 runtime patch 或 strict cold token-rate benchmark。exact sidecar 只能作为验证框架，不带压缩收益；lossy sidecar 在 op-level compare 失败前不能写回模型输出。该方向不产生新 SOTA，accepted SOTA 不变。
+- bottleneck_update: 当前泛化 dev baseline 距 `>5 tok/s` 的主要差距仍来自两类 prompt-general source movement：gate src0 read/cache handling 与 up/down CPU fallback。已验证 full-output Q8_0 rowtile 会变慢；已验证 naive up one-stream/cache 会变慢；已验证 lossy lowbit sidecar 不满足正确性。因此下一步不能继续单点试错，要转为 exact prompt-general dataflow 设计。
+
+### 下一步 Phase X1：prompt-general exact retained dataflow / source-movement bound
+
+- attempt_id: 20260707-exact-retained-dataflow-source-movement-plan
+- status: planned_before_experiment
+- hypothesis: 如果不使用 prompt-specific pack，也不使用未通过正确性门的 lossy representation，要接近 `>5 tok/s`，需要减少 source movement 和 CPU fallback 的重复工作，而不是把同样的 full-output down 计算迁到更慢的 GPU kernel。候选方向是 exact retained dataflow：在 calibration/dev set 上识别 prompt-agnostic 的 shared hot expert rows/blocks、保留 gate/up/down 可复用中间数据或 expert layout，并用严格预算证明不会挤坏 gate cache、不会超 32GB VRAM、不会增加 TTFT 超过 20%。
+- first_experiment: 不改源码，先做 artifact-only hard-bound 与 profile 汇总：从 `general-prompt-baseline-no-prompt-specific-20260706.json`、`dev-fallback-profile-no-prompt-specific-20260706.json`、gate traces 和 fallback reason CSV 中计算每个 prompt 的 `gate_src0_ms/token`、`up_fallback_ms/token`、`down_fallback_ms/token`、expert-call bytes、unique expert coverage、跨 prompt overlap、按 `ms_saved_per_byte` 排序的 exact hotset 上界；输出每个 VRAM budget (`2/4/6/8/10/12/13.25 GiB`) 的 min/mean bound。
+- first_experiment_result_20260707: completed, artifact `.Agent/runs/20260705-vendor-ds4-coldstart/exact-retained-dataflow-source-movement-bound-20260707.json`。该结果复用 calibration/dev artifact，不使用 held-out prompts，不跑模型，不改源码。
+- exact_hotset_result: prompt-agnostic exact hotset residency 在可用 `13.25GiB` payload 预算下不达标；最优 split 为 gate `6GiB` + up/down `7.25GiB`，zero-overhead bound 只有 `min=2.7706693327 tok/s`, `mean=3.1860363950 tok/s`。因此 exact hotset residency alone 不允许进入源码实现，也不能作为 `>5 tok/s` 产品方向。
+- combined_bottleneck_result: 已有 source-movement combination bound 仍然成立：必须同时减少 gate/source movement 和 up/down fallback，单独 exact residency 或单独 full-output down GPU rowtile 都不够。下一步若写源码，必须是 fused/retained dataflow 或新的结构化 kernel/storage，并先给出 `min >= 5.5 tok/s` 的 hard-bound。
+- required_bound_for_source_edit: 只有当 exact/prompt-agnostic retained-dataflow bound 在 dev set 上给出 `min >= 5.5 tok/s` 或明确指出某个可实现子路径能净减少至少 `150 ms/token` 且不会伤害 TTFT/RAM，才允许进入 default-off source edit。否则只记录 close artifact，不改源码。
+- source_edit_candidates_after_bound:
+  - exact top hotset residency with prompt-agnostic calibration only，不使用 held-out，不使用单 prompt route trace promotion；
+  - fused/grouped up-gate 或 retained gate activation dataflow，目标是减少 per-expert H2D/sync/D2H，而不是扩大 naive one-stream；
+  - 新 down path 必须先有 microbench 证明 `cuda_batch_ms/call < CPU fallback_ms/call`，否则不再进入 n96 strict cold run。
+- validation_gates: 每次 source edit 必须 default-off；先 fixed-text top1/parity，再 France semantic correctness，再 calibration/dev prompt set；候选冻结后才跑 held-out。所有 run 必须 strict `MemoryMax=16000000000`, `MemorySwapMax=0`, page cache inside cgroup, stdout 控制，记录 TTFT/token rate/输出/正确性。
+- push_rule: 任何符合要求的新 SOTA 必须详细记录复现信息并立即 push 源码到 `ssd/vendor/deepseek-token-rate-16gb`；rejected/closed 诊断也必须记录 artifact 并 push，确保未来回顾不会重复无效路线。
