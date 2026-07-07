@@ -277,7 +277,9 @@ struct batch_ctx {
     int32_t * d_x_ids_gate = nullptr; size_t d_x_ids_gate_sz = 0;
     int32_t * d_bounds = nullptr;  size_t d_bounds_sz = 0;
     void * h_src1 = nullptr;     size_t h_src1_sz = 0;
+    void * h_src1_shadow = nullptr; size_t h_src1_shadow_sz = 0;
     void * h_dst = nullptr;      size_t h_dst_sz = 0;
+    void * h_dst_shadow = nullptr; size_t h_dst_shadow_sz = 0;
     pinned_stage_ring stage_ring;
     pinned_stage_ring stage_ring_gate;
     pinned_stage_ring stage_ring_up_aux;
@@ -2367,35 +2369,180 @@ static bool down_act_sparsity_profile_enabled() {
     return env && env[0];
 }
 
+static bool down_act_shadow_error_enabled() {
+    const char *env = std::getenv("GGML_MOE_DOWN_ACT_SHADOW_ERROR_OUT");
+    return env && env[0];
+}
+
 static size_t down_act_sparsity_block_size() {
     return expert_pack_env_size("GGML_MOE_DOWN_ACT_SPARSITY_BLOCK", 64, 1, 4096);
+}
+
+static std::vector<double> parse_threshold_list_env(const char *env_name, const char *default_spec) {
+    std::vector<double> thresholds;
+    const char *env = std::getenv(env_name);
+    const char *spec = (env && env[0]) ? env : default_spec;
+    const char *p = spec;
+    while (*p) {
+        char *end = nullptr;
+        const double v = std::strtod(p, &end);
+        if (end != p && std::isfinite(v) && v >= 0.0) {
+            thresholds.push_back(v);
+        }
+        p = end && end != p ? end : p + 1;
+        while (*p == ',' || *p == ';' || *p == ' ' || *p == '\t') {
+            ++p;
+        }
+    }
+    if (thresholds.empty()) {
+        thresholds.push_back(0.0);
+    }
+    std::sort(thresholds.begin(), thresholds.end());
+    thresholds.erase(std::unique(thresholds.begin(), thresholds.end()), thresholds.end());
+    return thresholds;
 }
 
 static const std::vector<double> & down_act_sparsity_thresholds() {
     static std::vector<double> thresholds;
     static std::once_flag once;
     std::call_once(once, []() {
-        const char *env = std::getenv("GGML_MOE_DOWN_ACT_SPARSITY_THRESHOLDS");
-        const char *spec = (env && env[0]) ? env : "0,1e-6,1e-5,1e-4,1e-3,1e-2,5e-2,1e-1,2e-1,5e-1";
-        const char *p = spec;
-        while (*p) {
-            char *end = nullptr;
-            const double v = std::strtod(p, &end);
-            if (end != p && std::isfinite(v) && v >= 0.0) {
-                thresholds.push_back(v);
-            }
-            p = end && end != p ? end : p + 1;
-            while (*p == ',' || *p == ';' || *p == ' ' || *p == '\t') {
-                ++p;
-            }
-        }
-        if (thresholds.empty()) {
-            thresholds = {0.0, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 5e-2, 1e-1, 2e-1, 5e-1};
-        }
-        std::sort(thresholds.begin(), thresholds.end());
-        thresholds.erase(std::unique(thresholds.begin(), thresholds.end()), thresholds.end());
+        thresholds = parse_threshold_list_env(
+                "GGML_MOE_DOWN_ACT_SPARSITY_THRESHOLDS",
+                "0,1e-6,1e-5,1e-4,1e-3,1e-2,5e-2,1e-1,2e-1,5e-1");
     });
     return thresholds;
+}
+
+static const std::vector<double> & down_act_shadow_thresholds() {
+    static std::vector<double> thresholds;
+    static std::once_flag once;
+    std::call_once(once, []() {
+        thresholds = parse_threshold_list_env("GGML_MOE_DOWN_ACT_SHADOW_THRESHOLDS", "0.1,0.2");
+    });
+    return thresholds;
+}
+
+static void down_act_shadow_error_record(
+        uint64_t call,
+        const char *tensor,
+        ggml_type src0_type,
+        int active_index,
+        int expert_idx,
+        int dst_id,
+        int token_id,
+        double threshold,
+        int64_t ne00,
+        int64_t ne01,
+        size_t block_size,
+        uint64_t skipped_blocks,
+        uint64_t total_blocks,
+        uint64_t skipped_values,
+        const float *exact,
+        const float *shadow) {
+    const char *path = std::getenv("GGML_MOE_DOWN_ACT_SHADOW_ERROR_OUT");
+    if (!path || !path[0] || !exact || !shadow || ne01 <= 0) return;
+
+    double exact_l2_sq = 0.0;
+    double err_l2_sq = 0.0;
+    double abs_err_sum = 0.0;
+    double max_abs_err = 0.0;
+    double exact_max_abs = 0.0;
+    double shadow_max_abs = 0.0;
+    for (int64_t i = 0; i < ne01; ++i) {
+        const double e = (double)exact[i];
+        const double s = (double)shadow[i];
+        const double d = s - e;
+        const double ad = std::fabs(d);
+        exact_l2_sq += e * e;
+        err_l2_sq += d * d;
+        abs_err_sum += ad;
+        if (max_abs_err < ad) {
+            max_abs_err = ad;
+        }
+        exact_max_abs = std::max(exact_max_abs, std::fabs(e));
+        shadow_max_abs = std::max(shadow_max_abs, std::fabs(s));
+    }
+    const double exact_l2 = std::sqrt(exact_l2_sq);
+    const double err_l2 = std::sqrt(err_l2_sq);
+    const double rel_l2 = exact_l2 > 0.0 ? err_l2 / exact_l2 :
+        (err_l2 > 0.0 ? std::numeric_limits<double>::infinity() : 0.0);
+    const double mean_abs_err = abs_err_sum / (double)ne01;
+
+    int layer = -1;
+    char kind[16] = {};
+    batch_route_detail_parse_name(tensor, layer, kind, sizeof(kind));
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,call,tensor,layer,kind,src0_type,active_index,expert_idx,dst_id,token_id,"
+                "threshold,ne00,ne01,block_size,skipped_blocks,total_blocks,skipped_values,"
+                "skip_block_ratio,skip_value_ratio,l2_abs,l2_rel,max_abs_err,mean_abs_err,"
+                "exact_l2,exact_max_abs,shadow_max_abs\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%lu,%s,%d,%s,%d,%d,%d,%d,%d,%.9g,%ld,%ld,%zu,%lu,%lu,%lu,"
+            "%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n",
+            (unsigned long)++seq,
+            (unsigned long)call,
+            tensor ? tensor : "",
+            layer,
+            kind,
+            (int)src0_type,
+            active_index,
+            expert_idx,
+            dst_id,
+            token_id,
+            threshold,
+            (long)ne00,
+            (long)ne01,
+            block_size,
+            (unsigned long)skipped_blocks,
+            (unsigned long)total_blocks,
+            (unsigned long)skipped_values,
+            total_blocks > 0 ? (double)skipped_blocks / (double)total_blocks : 0.0,
+            ne00 > 0 ? (double)skipped_values / (double)ne00 : 0.0,
+            err_l2,
+            rel_l2,
+            max_abs_err,
+            mean_abs_err,
+            exact_l2,
+            exact_max_abs,
+            shadow_max_abs);
+    std::fclose(f);
+}
+
+static void down_act_mask_row(
+        float *row,
+        int64_t ne00,
+        size_t block_size,
+        double threshold,
+        uint64_t &skipped_blocks,
+        uint64_t &skipped_values,
+        uint64_t &total_blocks) {
+    skipped_blocks = 0;
+    skipped_values = 0;
+    total_blocks = ne00 > 0 ? ((uint64_t)ne00 + block_size - 1) / block_size : 0;
+    for (uint64_t b = 0; b < total_blocks; ++b) {
+        const size_t begin = (size_t)b * block_size;
+        const size_t end = std::min((size_t)ne00, begin + block_size);
+        double block_max_abs = 0.0;
+        for (size_t i = begin; i < end; ++i) {
+            block_max_abs = std::max(block_max_abs, (double)std::fabs(row[i]));
+        }
+        if (block_max_abs <= threshold) {
+            std::memset(row + begin, 0, (end - begin) * sizeof(float));
+            ++skipped_blocks;
+            skipped_values += end - begin;
+        }
+    }
 }
 
 static void down_act_sparsity_profile_record(
@@ -9510,6 +9657,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         g_handoff.d_data &&
         g_handoff.ne01 == ne00 &&
         g_handoff.dst_cols >= dst_cols;
+    const bool shadow_error = down_act_shadow_error_enabled();
     const bool down_q8k_requested = down_q8k_candidate && !use_handoff;
     const size_t src1_q8k_bytes = down_q8k_requested ? (size_t)n_active * (ne00 / QK_K) * sizeof(block_q8_K) : 0;
     const size_t dst_bytes = (size_t)dst_cols * ne01 * sizeof(float);
@@ -9517,7 +9665,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const size_t bounds_bytes = (size_t)(n_active + 1) * sizeof(int32_t);
 
     bool ok = ensure_dev(bc.d_src0, bc.d_src0_sz, src0_all_bytes)
-        && (use_handoff || ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes))
+        && ((use_handoff && !shadow_error) || ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes))
         && ensure_dev(bc.d_src1_q8, bc.d_src1_q8_sz, src1_q8_bytes)
         && (!down_q8k_requested || ensure_dev(bc.d_src1_q8k, bc.d_src1_q8k_sz, src1_q8k_bytes))
         && ensure_dev(bc.d_dst, bc.d_dst_sz, dst_bytes)
@@ -9525,8 +9673,10 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         && ensure_dev((void *&)bc.d_ids_dst, bc.d_ids_dst_sz, ids_bytes)
         && ensure_dev((void *&)bc.d_x_ids, bc.d_x_ids_sz, ids_bytes)
         && ensure_dev((void *&)bc.d_bounds, bc.d_bounds_sz, bounds_bytes)
-        && (use_handoff || ensure_host_pinned(bc.h_src1, bc.h_src1_sz, src1_f32_bytes))
-        && ensure_host_pinned(bc.h_dst, bc.h_dst_sz, dst_bytes);
+        && ((use_handoff && !shadow_error) || ensure_host_pinned(bc.h_src1, bc.h_src1_sz, src1_f32_bytes))
+        && ensure_host_pinned(bc.h_dst, bc.h_dst_sz, dst_bytes)
+        && (!shadow_error || ensure_host_pinned(bc.h_src1_shadow, bc.h_src1_shadow_sz, src1_f32_bytes))
+        && (!shadow_error || ensure_host_pinned(bc.h_dst_shadow, bc.h_dst_shadow_sz, dst_bytes));
     if (!ok) return decline("ensure_buffers");
     static std::atomic<int> first_down_q8k{0};
     if (down_q8k_requested && first_down_q8k.fetch_add(1) == 0) {
@@ -9665,7 +9815,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                     (const float *)src_row,
                     ne00);
         }
-        if (!use_handoff) {
+        if (!use_handoff || shadow_error) {
             std::memcpy((char *)bc.h_src1 + (size_t)j * ne00 * sizeof(float), src_row, (size_t)ne00 * sizeof(float));
         }
         bc.h_ids_src1[j] = j;
@@ -9749,6 +9899,82 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                 src1_f32, src1_nb1, src1_nb2,
                 active_experts, dst_ids, token_ids, n_active, (const float *)bc.h_dst);
         return false;
+    }
+
+    if (shadow_error) {
+        const std::vector<double> &thresholds = down_act_shadow_thresholds();
+        const size_t block_size = down_act_sparsity_block_size();
+        std::vector<uint64_t> skipped_blocks((size_t)n_active);
+        std::vector<uint64_t> skipped_values((size_t)n_active);
+        std::vector<uint64_t> total_blocks((size_t)n_active);
+        const float *exact_rows = (const float *)bc.h_dst;
+
+        for (double threshold : thresholds) {
+            std::memcpy(bc.h_src1_shadow, bc.h_src1, src1_f32_bytes);
+            for (int j = 0; j < n_active; ++j) {
+                float *row = (float *)bc.h_src1_shadow + (size_t)j * ne00;
+                down_act_mask_row(
+                        row,
+                        ne00,
+                        block_size,
+                        threshold,
+                        skipped_blocks[(size_t)j],
+                        skipped_values[(size_t)j],
+                        total_blocks[(size_t)j]);
+            }
+
+            if (cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1_shadow, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+                return decline("shadow_copy_src1_h2d");
+            }
+            if (cudaMemsetAsync(bc.d_dst, 0, dst_bytes, st) != cudaSuccess) {
+                return decline("shadow_memset_dst");
+            }
+            if (down_q8k_requested) {
+                if (ne00 % QK_K != 0) return decline("shadow_down_q8k_bad_ne00");
+                const int nblocks = (int)(n_active * (ne00 / QK_K));
+                moe_quantize_row_q8_k_kernel<<<nblocks, 1, 0, st>>>((const float *)bc.d_src1_f32, (block_q8_K *)bc.d_src1_q8k, nblocks);
+                if (cudaGetLastError() != cudaSuccess) return decline("shadow_down_q8k_quantize");
+                if (!launch_moe_iq3_xxs_q8k_batch(
+                        src0_type, (const char *)cache->pool, (const block_q8_K *)bc.d_src1_q8k,
+                        bc.d_ids_dst, bc.d_x_ids, (float *)bc.d_dst,
+                        ne00, ne01, nb01, cache->slot_sz, n_active, dst_cols, false, st)) {
+                    return decline("shadow_launch_down_q8k_batch");
+                }
+            } else if (!launch_moe_mmvq_compact_batch(
+                        src0_type,
+                        (const char *)cache->pool, bc.h_x_ids, cache->slot_sz,
+                        ne00, ne01, nb01, (const float *)bc.d_src1_f32, ne00, nullptr,
+                        bc.d_src1_q8, (float *)bc.d_dst, n_active, st)) {
+                return decline("shadow_launch_moe_mmvq_compact_batch");
+            }
+            if (cudaMemcpyAsync(bc.h_dst_shadow, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) {
+                return decline("shadow_copy_dst_d2h");
+            }
+            if (cudaStreamSynchronize(st) != cudaSuccess) {
+                return decline("shadow_sync_stream");
+            }
+
+            const float *shadow_rows = (const float *)bc.h_dst_shadow;
+            for (int j = 0; j < n_active; ++j) {
+                down_act_shadow_error_record(
+                        (uint64_t)batch_call,
+                        src0_name,
+                        src0_type,
+                        j,
+                        active_experts[j],
+                        dst_ids[j],
+                        token_ids[j],
+                        threshold,
+                        ne00,
+                        ne01,
+                        block_size,
+                        skipped_blocks[(size_t)j],
+                        total_blocks[(size_t)j],
+                        skipped_values[(size_t)j],
+                        exact_rows + (size_t)j * ne01,
+                        shadow_rows + (size_t)j * ne01);
+            }
+        }
     }
 
     float stage_ms = 0.0f;

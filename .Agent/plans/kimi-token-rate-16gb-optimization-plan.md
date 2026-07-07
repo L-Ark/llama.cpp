@@ -95849,3 +95849,82 @@ Rejection:
 
 - If `0.1` and `0.2` produce large down-output error, reject activation block
   skipping as a near-term optimization and return to IO scheduling/coalescing.
+
+GP62 execution result:
+
+- Timestamp: `2026-07-07T12:23:00+08:00`.
+- Added default-off masked down activation shadow error validation:
+  - env: `GGML_MOE_DOWN_ACT_SHADOW_ERROR_OUT=<csv>`;
+  - threshold env: `GGML_MOE_DOWN_ACT_SHADOW_THRESHOLDS`, default `0.1,0.2`;
+  - block size reuses `GGML_MOE_DOWN_ACT_SPARSITY_BLOCK`.
+- Added offline summarizer:
+  `.Agent/run-tools/kimi_down_act_shadow_error_summary.py`.
+- Shadow path behavior:
+  - exact down output is computed and used for generation unchanged;
+  - shadow mode copies the existing host down activation, zeroes low-energy
+    blocks for each threshold, reruns the same loaded expert/cache MMVQ path
+    into a shadow output buffer, and records exact-vs-shadow down output error;
+  - no sampled logits, final tokens, routing, expert IO, or output scatter are
+    changed by the shadow path.
+- Validation:
+  - local `git diff --check` passed;
+  - local `python3 -m py_compile` passed;
+  - remote `python3 -m py_compile` passed;
+  - remote `git diff --check` passed;
+  - remote `cmake --build build-cuda-batch -j2 --target llama-completion`
+    passed.
+- Smoke run:
+  - run:
+    `/root/lfz/tmp/runs/20260707-gp62-shadow-error-smoke/ai_infra_n16`;
+  - quality `pass`;
+  - GP4 alias signature confirmed:
+    `entries=69120`, `misses=0`, `direct_reads=0`;
+  - shadow CSV rows: `12736` data rows;
+  - `threshold=0.1`: skip block ratio `0.206859`, mean `l2_rel=0.217722`;
+  - `threshold=0.2`: skip block ratio `0.355425`, mean `l2_rel=0.378592`.
+- Multi-prompt validation run:
+  - remote:
+    `/root/lfz/tmp/runs/20260707-gp62-shadow-error-multiprompt-n32`;
+  - local record:
+    `.Agent/runs/20260707-gp62-shadow-error-multiprompt-n32`;
+  - prompts:
+    - `AI infra 是做什么的`;
+    - `Explain how Kubernetes schedules pods in one short paragraph.`;
+    - `Why do seasons happen? Answer in one short paragraph.`;
+  - all used `N=32`, cold start, 16GB cgroup, GP4 alias/full-source env;
+  - all quality checks passed and all runs had `memory.peak=15899996160`.
+- Per-prompt shadow error:
+  - AI infra:
+    - `0.1`: skip `0.204577`, mean `l2_rel=0.216041`;
+    - `0.2`: skip `0.356569`, mean `l2_rel=0.378524`.
+  - Kubernetes:
+    - `0.1`: skip `0.199917`, mean `l2_rel=0.212604`;
+    - `0.2`: skip `0.348393`, mean `l2_rel=0.369079`.
+  - seasons:
+    - `0.1`: skip `0.189467`, mean `l2_rel=0.200310`;
+    - `0.2`: skip `0.331347`, mean `l2_rel=0.355024`.
+- Combined shadow error over `39456` rows per threshold:
+  - `0.1`: skip block ratio `0.197987`, mean `l2_rel=0.209652`,
+    max `l2_rel=1.000000`, mean absolute error `0.00202662`,
+    max absolute error `0.102449`;
+  - `0.2`: skip block ratio `0.345436`, mean `l2_rel=0.367542`,
+    max `l2_rel=1.000000`, mean absolute error `0.00755045`,
+    max absolute error `0.228624`.
+- Interpretation:
+  - `0.2` reaches the desired `30%-50%` skipped block range, but down output
+    error is far too large for a quality-safe approximation;
+  - even `0.1` only skips about `20%` globally and still changes down output by
+    about `21%` relative L2 on average;
+  - early and middle layers are especially unsafe, with layer-level mean
+    `l2_rel` often near `0.8-1.0` and max `l2_rel=1.0`;
+  - because the lower-level down-output error is already large and stable
+    across prompts, there is no value in running a final-token/logit candidate
+    for these thresholds before redesigning the approximation.
+- Decision:
+  - reject activation block skip at thresholds `0.1` and `0.2`;
+  - do not implement partial down reads from this method;
+  - keep GP61/GP62 instrumentation for future threshold or layer-restricted
+    studies;
+  - next optimization should return to IO scheduling/coalescing or investigate
+    a layer-restricted threshold below `0.1`, but only if it still offers
+    meaningful byte reduction.
