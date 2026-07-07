@@ -94118,6 +94118,142 @@ GP46 execution result:
   - no runtime behavior changed;
   - no token-rate or output-quality claim is made.
 
+## GP54: prompt-agnostic general hotset expert-pack feasibility
+
+Timestamp: `2026-07-07T09:30:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- GP53 showed the accepted slow dev prompt run is dominated by `pack=0` copy
+  paths:
+  - `runtime_load,pack=0,iouring=0`: `183050.117 ms`, `64.888 GiB`;
+  - `current_down_overlap,pack=0,iouring=0`: `41181.273 ms`, `15.809 GiB`.
+- The current production pack is France-oriented and does not cover slow
+  general prompts well enough.
+- GP52 showed prompt-agnostic dev weighted direct-read ratio is `0.572` and
+  iouring throughput over decode wall is only `0.343 GiB/s`.
+
+Goal:
+
+- Determine whether a prompt-agnostic dev-trained general hotset expert pack can
+  reduce `pack=0` coverage failures enough to justify building/running it.
+- The pack must be trained only from dev route profiles and must not use
+  held-out test prompts.
+- The result must be reproducible and must not claim final SOTA until held-out
+  test metrics are run.
+
+Method:
+
+1. Audit existing expert-pack generation tools and current pack format.
+2. From committed dev `route-profile.csv` files, generate candidate hotsets:
+   - global top-N by cumulative bytes;
+   - per-role or per-layer caps if needed to avoid France-only skew;
+   - sizes chosen to fit available SSD/RAM/VRAM workflow.
+3. Estimate candidate coverage against each dev prompt:
+   - added pack hit bytes;
+   - remaining `pack=0` bytes;
+   - expected direct-read wall savings using GP53 measured host-ms/GiB;
+   - approximate output pack size.
+4. If a candidate is promising, build a real expert pack from GGUF/model
+   tensors or an overlay compatible with existing pack lookup.
+5. Runtime validation, only after the plan is updated with the selected
+   candidate:
+   - cold start;
+   - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+   - at least one slow dev prompt such as `dev_linear_equation`;
+   - semantic correctness must pass;
+   - TTFT must not increase by more than 20%;
+   - token rate and `pack=0` copy wall must improve.
+
+Theory and upper bound:
+
+- GP53 measured `pack=0` direct host copy at roughly:
+  - runtime load: `183.050 s / 64.888 GiB = 2.82 s/GiB`;
+  - current-down overlap: `41.181 s / 15.809 GiB = 2.60 s/GiB`.
+- If a general pack turns `X GiB` of `pack=0` traffic into pack-hit iouring
+  traffic, the optimistic saved host time is approximately
+  `2.6-2.8 * X seconds`, minus replacement iouring wait/H2D.
+- The upper bound is limited by:
+  - expert-pack size and SSD space;
+  - iouring queue depth and batch sizes;
+  - duplicated entries already in current pack/overlay;
+  - TTFT and 16GB RAM cold-start constraints.
+
+Validation:
+
+- Do not use held-out test prompts for candidate selection.
+- Record exact commands, input route profiles, candidate size, estimated
+  coverage, and any generated pack path.
+- If only a simulation is performed, clearly label it as non-runtime evidence.
+- If a real pack is built and run, record answer text, quality, token rate,
+  TTFT, RAM peak, expert-pack hit/miss counters, and copy-profile attribution.
+
+Acceptance:
+
+- Commit and push the feasibility report if it identifies a concrete candidate
+  or rules out the approach.
+- If a real runtime candidate passes quality, TTFT, RAM, and token-rate gates,
+  commit and push immediately as an accepted improvement.
+- If runtime quality fails, TTFT rises over 20%, RAM exceeds limit, or token
+  rate regresses, revert/disable the runtime candidate and keep only analysis.
+
+GP54 execution result:
+
+- Timestamp: `2026-07-07T10:16:00+08:00`.
+- Added `.Agent/run-tools/kimi_general_hotset_pack_feasibility.py`.
+- Reproduction command on the 5090 server:
+
+```bash
+cd /root/lfz/tmp/vendor-kimi-speculative-gp33
+python3 .Agent/run-tools/kimi_general_hotset_pack_feasibility.py \
+  --route-root .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  --out-dir .Agent/runs/20260707-gp54-general-hotset-pack-feasibility
+```
+
+- Report path:
+  `.Agent/runs/20260707-gp54-general-hotset-pack-feasibility/report.md`.
+- This is a dev-only simulation:
+  - no held-out test prompt was used;
+  - no inference was run;
+  - no token-rate or SOTA claim is made.
+- Current pack coverage over the seven dev prompts:
+  - routed traffic: `3506.57 GiB`;
+  - existing pack-hit traffic: `2459.33 GiB`;
+  - existing pack-miss traffic: `1047.24 GiB`;
+  - existing pack-hit traffic ratio: `70.1%`;
+  - unique missing keys: `27797`.
+- Slow prompt coverage remains weak:
+  - `dev_linear_equation`: `54.1%` hit, `112.22 GiB` miss;
+  - `dev_mixed_summary`: `58.5%` hit, `161.17 GiB` miss;
+  - `dev_photosynthesis_factual`: `59.0%` hit, `276.74 GiB` miss;
+  - `dev_python_reverse`: `54.0%` hit, `313.99 GiB` miss.
+- Candidate estimates:
+  - `budget16gib`: `2978` entries, `16.00 GiB` pack, covers `448.14 GiB`
+    miss traffic (`42.8%`), optimistic direct-copy saving `1210.0 s`;
+  - `top4096`: `4096` entries, `22.14 GiB` pack, covers `526.03 GiB`
+    miss traffic (`50.2%`), optimistic direct-copy saving `1420.3 s`;
+  - `budget32gib`: `5954` entries, `32.00 GiB` pack, covers `629.81 GiB`
+    miss traffic (`60.1%`), optimistic direct-copy saving `1700.5 s`;
+  - `top8192`: `8192` entries, `43.62 GiB` pack, covers `728.40 GiB`
+    miss traffic (`69.6%`), optimistic direct-copy saving `1966.7 s`.
+- Interpretation:
+  - the current France-oriented pack is good for France regression
+    (`99.4%` hit) but not prompt-agnostic enough;
+  - GP53's `pack=0` direct-copy bottleneck is consistent with current dev
+    miss coverage;
+  - a real general overlay is justified, but runtime acceptance still requires
+    cold-start 16GB RAM, semantic correctness, TTFT within `+20%`, and token
+    rate improvement.
+- Next selected practical candidate:
+  - first build and test `budget16gib` because it respects a smaller disk and
+    TTFT risk envelope while covering `42.8%` of dev miss traffic;
+  - if accepted or clearly IO-limited rather than index/TTFT-limited, test
+    `top4096` / `budget32gib`.
+
 ## GP53: current-code slow dev direct-read copy attribution
 
 Timestamp: `2026-07-07T08:50:00+08:00`.
