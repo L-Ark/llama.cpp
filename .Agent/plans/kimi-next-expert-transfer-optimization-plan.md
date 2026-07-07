@@ -842,6 +842,82 @@ GP69 target-range result on 2026-07-07:
     mixed precision with a small preserved high-error subset, and must keep the
     same activation-output gate.
 
+GP70 planned activation-channel residual upper-bound screen:
+
+- Goal:
+  - test whether a small mixed-precision residual can rescue 1-bit base
+    accuracy while keeping total bytes near the `0.30x-0.40x` target.
+- Candidate:
+  - start from `aw_mse` 1-bit blockwise base;
+  - for each real activation vector, preserve the original expert weights for
+    the largest `|activation|` input channels;
+  - compute output as low-bit base plus exact correction on those preserved
+    channels.
+- Why this is an optimistic upper bound:
+  - preserved channels are selected with the same activation being evaluated;
+  - byte ratio assumes the preserved channels replace their low-bit base bytes
+    instead of being stored as an extra residual overlay;
+  - real runtime would need a prompt-general policy, packed column layout, and
+    direct mixed compute.
+- Experiment:
+  - dev-only, reuse GP67 activation dump;
+  - test keep fractions around the target budget, initially `0.02,0.05,0.10`;
+  - use `bits=1`, `block=256`, `scale_mode=aw_mse`, because GP68 showed this
+    is the best target-byte scalar base.
+- Acceptance to advance:
+  - up/gate fused and down mean rel L2 `<=0.10`;
+  - byte ratio `<=0.40x` for target candidates;
+  - if only `>0.40x` candidates pass, this is not a direct `5 tok/s` path and
+    must be rejected or redesigned.
+
+GP70 result on 2026-07-07:
+
+- Code:
+  - extended `.Agent/run-tools/kimi_activation_output_compression_screen.py`
+    with `--keep-input-fracs`;
+  - this adds optimistic input-channel correction candidates to the same
+    matvec/fused activation-output gate.
+- Report:
+  - `.Agent/runs/20260707-gp70-activation-input-residual-screen-n16-france/report.md`;
+  - `.Agent/runs/20260707-gp70-activation-input-residual-screen-n16-france/screen.json`.
+- Input:
+  - reused the GP67 dev France `N=16` activation dump;
+  - 72 real decode activation records;
+  - command target:
+    - `--bits 1`;
+    - `--blocks 256`;
+    - `--scale-modes aw_mse`;
+    - `--keep-input-fracs 0.02,0.05,0.10`.
+- Result:
+  - automatic gate failed:
+    - passing matvec candidates: `0`;
+    - passing fused candidates: `0`;
+    - advance blockwise low-bit path: `False`.
+  - Down improves but remains too inaccurate:
+    - base `0.309x`, rel L2 `0.499`;
+    - keep 10% `0.378x`, rel L2 `0.234`.
+  - Up/gate remains far above the error gate:
+    - keep 2% stays within target bytes at `0.382x`, but rel L2 is about
+      `0.545-0.546`;
+    - keep 5% is already about `0.401x`, with rel L2 about `0.499-0.500`;
+    - keep 10% is `0.433x`, with rel L2 about `0.438-0.439`.
+  - Fused up/gate remains the blocking point:
+    - base `0.369x`, rel L2 `0.769`;
+    - keep 2% `0.382x`, rel L2 `0.719`;
+    - keep 5% `0.401x`, rel L2 `0.669`;
+    - keep 10% `0.433x`, rel L2 `0.594`.
+- Decision:
+  - reject small input-channel residual correction as the next runtime path;
+  - do not build column-gather mixed compute for this candidate;
+  - the result suggests target-byte `1-bit + small residual` cannot preserve
+    up/gate semantics even under oracle channel selection;
+  - next work should shift away from lossy 1-bit representations and toward:
+    - better use of existing exact expert bytes, such as cross-layer / next-layer
+      demand scheduling;
+    - or a representation that keeps substantially more than 10% of up/gate
+      information while reducing bytes elsewhere enough to stay under the global
+      budget.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.

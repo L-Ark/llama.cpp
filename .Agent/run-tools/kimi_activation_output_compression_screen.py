@@ -48,6 +48,10 @@ def parse_csv_strings(text: str) -> list[str]:
     return [part.strip() for part in text.split(",") if part.strip()]
 
 
+def parse_csv_floats(text: str) -> list[float]:
+    return [float(part) for part in text.split(",") if part.strip()]
+
+
 def load_activation_rows(path: Path, max_records: int) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with path.open(newline="") as f:
@@ -254,6 +258,23 @@ def expert_matvec(torch: Any, matrix: Any, vec: Any, row: dict[str, Any]) -> Any
     )
 
 
+def input_keep_corrected_matvec(torch: Any, matrix: Any, recon: Any, vec: Any, row: dict[str, Any], keep_frac: float) -> Any:
+    n_input = row["ne00"]
+    keep = max(1, min(n_input, int(round(n_input * keep_frac))))
+    idx = torch.topk(vec.abs(), keep, largest=True, sorted=False).indices
+    base = expert_matvec(torch, recon, vec, row)
+    if matrix.shape[1] == n_input and matrix.shape[0] == row["ne01"]:
+        correction = torch.mv((matrix[:, idx] - recon[:, idx]).contiguous(), vec[idx])
+    elif matrix.shape[0] == n_input and matrix.shape[1] == row["ne01"]:
+        correction = torch.mv((matrix[idx, :] - recon[idx, :]).t().contiguous(), vec[idx])
+    else:
+        raise RuntimeError(
+            f"shape mismatch for keep correction: matrix={tuple(matrix.shape)} "
+            f"activation ne00/ne01={row['ne00']}/{row['ne01']}"
+        )
+    return base + correction
+
+
 def expand_activation_weight(torch: Any, matrix: Any, act_weight: Any, row: dict[str, Any]) -> Any:
     if matrix.shape[1] == row["ne00"] and matrix.shape[0] == row["ne01"]:
         return act_weight.reshape(1, -1).expand_as(matrix).contiguous()
@@ -280,6 +301,7 @@ def main() -> int:
     parser.add_argument("--bits", default="1,2")
     parser.add_argument("--blocks", default="64,128,256")
     parser.add_argument("--scale-modes", default="maxabs,aw_mse")
+    parser.add_argument("--keep-input-fracs", default="", help="Optional comma-separated activation-channel keep fractions for optimistic residual screens.")
     parser.add_argument("--max-records", type=int, default=64)
     parser.add_argument("--torch-threads", type=int, default=8)
     args = parser.parse_args()
@@ -293,6 +315,7 @@ def main() -> int:
     bits_values = parse_csv_ints(args.bits)
     block_values = parse_csv_ints(args.blocks)
     scale_modes = parse_csv_strings(args.scale_modes)
+    keep_input_fracs = parse_csv_floats(args.keep_input_fracs)
 
     by_key: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -303,6 +326,9 @@ def main() -> int:
     exact_outputs: dict[int, Any] = {}
     cand_outputs: dict[tuple[int, str, int, int], Any] = {}
     candidate_bytes: dict[tuple[str, int, str, int, int], int] = {}
+    cand_outputs_named: dict[tuple[int, str], Any] = {}
+    candidate_bytes_named: dict[tuple[str, int, str], int] = {}
+    candidate_names: set[str] = set()
 
     for (tensor, expert_idx), key_rows in sorted(by_key.items()):
         if tensor not in inventory:
@@ -335,14 +361,35 @@ def main() -> int:
                 for block in block_values:
                     recon, qinfo = quantize_blockwise(torch, matrix, bits, block, scale_mode, act_weight_matrix)
                     candidate_bytes[(tensor, expert_idx, scale_mode, bits, block)] = qinfo["total_bytes"]
+                    candidate_name = f"{scale_mode}:bits{bits}:block{block}"
+                    candidate_names.add(candidate_name)
+                    candidate_bytes_named[(tensor, expert_idx, candidate_name)] = qinfo["total_bytes"]
                     ratio = qinfo["total_bytes"] / key_rows[0]["expert_bytes"]
                     for row in key_rows:
                         rid = row["record_id"]
                         cand = expert_matvec(torch, recon, vectors[rid], row)
                         cand_outputs[(rid, scale_mode, bits, block)] = cand
+                        cand_outputs_named[(rid, candidate_name)] = cand
                         rel, abs_mean, abs_max, out_norm = error_metrics(torch, exact_by_record[rid], cand)
                         key = f"{row['role']}:{scale_mode}:bits{bits}:block{block}"
                         aggregate[key].add(rel, abs_mean, abs_max, out_norm, ratio)
+                    if keep_input_fracs and bits == 1:
+                        for keep_frac in keep_input_fracs:
+                            if keep_frac <= 0.0 or keep_frac >= 1.0:
+                                raise RuntimeError(f"keep input fraction must be in (0,1): {keep_frac}")
+                            keep_label = f"{keep_frac:.4f}".rstrip("0").rstrip(".").replace(".", "p")
+                            keep_name = f"{scale_mode}_keep_input{keep_label}:bits{bits}:block{block}"
+                            candidate_names.add(keep_name)
+                            optimistic_ratio = ratio * (1.0 - keep_frac) + keep_frac
+                            keep_bytes = int(math.ceil(optimistic_ratio * key_rows[0]["expert_bytes"]))
+                            candidate_bytes_named[(tensor, expert_idx, keep_name)] = keep_bytes
+                            for row in key_rows:
+                                rid = row["record_id"]
+                                cand = input_keep_corrected_matvec(torch, matrix, recon, vectors[rid], row, keep_frac)
+                                cand_outputs_named[(rid, keep_name)] = cand
+                                rel, abs_mean, abs_max, out_norm = error_metrics(torch, exact_by_record[rid], cand)
+                                key = f"{row['role']}:{keep_name}"
+                                aggregate[key].add(rel, abs_mean, abs_max, out_norm, optimistic_ratio)
         per_role_key = f"{tensor}:{expert_idx}"
         per_role[per_role_key] = {
             "tensor": tensor,
@@ -369,19 +416,17 @@ def main() -> int:
         up = pair["up"]
         gate = pair["gate"]
         exact = exact_outputs[up["record_id"]] * silu(torch, exact_outputs[gate["record_id"]])
-        for scale_mode in scale_modes:
-            for bits in bits_values:
-                for block in block_values:
-                    up_c = cand_outputs.get((up["record_id"], scale_mode, bits, block))
-                    gate_c = cand_outputs.get((gate["record_id"], scale_mode, bits, block))
-                    if up_c is None or gate_c is None:
-                        continue
-                    cand = up_c * silu(torch, gate_c)
-                    rel, abs_mean, abs_max, out_norm = error_metrics(torch, exact, cand)
-                    up_bytes = candidate_bytes[(up["tensor"], up["expert_idx"], scale_mode, bits, block)]
-                    gate_bytes = candidate_bytes[(gate["tensor"], gate["expert_idx"], scale_mode, bits, block)]
-                    ratio = (up_bytes + gate_bytes) / max(up["expert_bytes"] + gate["expert_bytes"], 1)
-                    pair_acc[f"fused_up_gate:{scale_mode}:bits{bits}:block{block}"].add(rel, abs_mean, abs_max, out_norm, ratio)
+        for candidate_name in sorted(candidate_names):
+            up_c = cand_outputs_named.get((up["record_id"], candidate_name))
+            gate_c = cand_outputs_named.get((gate["record_id"], candidate_name))
+            if up_c is None or gate_c is None:
+                continue
+            cand = up_c * silu(torch, gate_c)
+            rel, abs_mean, abs_max, out_norm = error_metrics(torch, exact, cand)
+            up_bytes = candidate_bytes_named[(up["tensor"], up["expert_idx"], candidate_name)]
+            gate_bytes = candidate_bytes_named[(gate["tensor"], gate["expert_idx"], candidate_name)]
+            ratio = (up_bytes + gate_bytes) / max(up["expert_bytes"] + gate["expert_bytes"], 1)
+            pair_acc[f"fused_up_gate:{candidate_name}"].add(rel, abs_mean, abs_max, out_norm, ratio)
 
     aggregate_rows = {key: acc.row() for key, acc in sorted(aggregate.items())}
     fused_rows = {key: acc.row() for key, acc in sorted(pair_acc.items())}
@@ -409,6 +454,7 @@ def main() -> int:
         "bits": bits_values,
         "blocks": block_values,
         "scale_modes": scale_modes,
+        "keep_input_fracs": keep_input_fracs,
         "aggregate": aggregate_rows,
         "fused_up_gate": fused_rows,
         "tensor_experts": per_role,
