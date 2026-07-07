@@ -1,0 +1,500 @@
+{
+  "attempt_id": "20260708-compact-target-loader-compute-support-audit",
+  "created_at_local": "2026-07-08",
+  "status": "source_support_audit_recorded_no_source_change_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "ecfe18aa85002550e521b5c093899b526024a28a",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "input_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/compact-target-priority-header-gate-20260708.json",
+  "purpose": "Audit whether direct metadata-pass compact targets can use current vendor loader and DeepSeek MoE stream fast paths before any full download.",
+  "method": "Read current source gates and compare sampled expert tensor GGUF types from header artifact.",
+  "source_findings": {
+    "generic_loader_acceptance": "src/llama-model-loader.cpp maps IQ1_S/IQ1_M/IQ2_S/IQ3_XXS; ggml type table includes Q2_K/IQ2_XXS/IQ1_S/IQ1_M.",
+    "generic_cuda_support": "ggml/src/ggml-cuda/mmvq.cu supports IQ2_XXS/IQ2_XS/IQ2_S/IQ1_S/IQ1_M; ggml/src/ggml-cuda/ggml-cuda.cu device buffer support includes IQ1_M/IQ1_S/IQ2_S/IQ2_XS/IQ2_XXS.",
+    "moe_stream_type_gate": "ggml/src/ggml-cuda/moe_stream_batch.cu moe_stream_type_supported currently returns true only for IQ3_XXS/IQ3_S/IQ2_S/Q3_K/IQ4_XS.",
+    "moe_stream_mmvq_gate": "launch_moe_stream_mmvq_slot_loop accepts Q4_0/Q3_K/IQ3_XXS/IQ3_S/IQ2_S/IQ4_XS/MXFP4, not IQ1_S/IQ1_M/IQ2_XXS/Q2_K.",
+    "moe_stream_mmq_gate": "launch_moe_mmq_slot_batch dispatches IQ3_XXS/IQ2_S/Q3_K/IQ4_XS, not IQ1_S/IQ1_M/IQ2_XXS/Q2_K."
+  },
+  "candidate_support": [
+    {
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "variant_gib": 52.038,
+      "expert_types_sample": [
+        {
+          "role": "gate",
+          "type_id_or_name": "16",
+          "type_name": "IQ2_XXS",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_gate_exps.weight"
+        },
+        {
+          "role": "down",
+          "type_id_or_name": "10",
+          "type_name": "Q2_K",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.0.ffn_down_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "16",
+          "type_name": "IQ2_XXS",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_up_exps.weight"
+        },
+        {
+          "role": "gate",
+          "type_id_or_name": "16",
+          "type_name": "IQ2_XXS",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_gate_exps.weight"
+        },
+        {
+          "role": "down",
+          "type_id_or_name": "10",
+          "type_name": "Q2_K",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.1.ffn_down_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "16",
+          "type_name": "IQ2_XXS",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_up_exps.weight"
+        },
+        {
+          "role": "gate",
+          "type_id_or_name": "16",
+          "type_name": "IQ2_XXS",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_gate_exps.weight"
+        },
+        {
+          "role": "down",
+          "type_id_or_name": "10",
+          "type_name": "Q2_K",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.2.ffn_down_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "16",
+          "type_name": "IQ2_XXS",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_up_exps.weight"
+        },
+        {
+          "role": "gate",
+          "type_id_or_name": "16",
+          "type_name": "IQ2_XXS",
+          "dims": [
+            4096,
+            2048,
+            128
+          ],
+          "name": "blk.3.ffn_gate_exps.weight"
+        },
+        {
+          "role": "down",
+          "type_id_or_name": "10",
+          "type_name": "Q2_K",
+          "dims": [
+            2048,
+            4096,
+            128
+          ],
+          "name": "blk.3.ffn_down_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "16",
+          "type_name": "IQ2_XXS",
+          "dims": [
+            4096,
+            2048,
+            128
+          ],
+          "name": "blk.3.ffn_up_exps.weight"
+        }
+      ],
+      "primary_role_types": [
+        [
+          "down",
+          "Q2_K"
+        ],
+        [
+          "gate",
+          "IQ2_XXS"
+        ],
+        [
+          "up",
+          "IQ2_XXS"
+        ]
+      ],
+      "support_decision": "load_may_work_but_current_moe_stream_fast_path_not_covered",
+      "support_reason": "expert sample includes IQ2_XXS,Q2_K which are not accepted by current moe_stream_type_supported/slot batch gates"
+    },
+    {
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+      "variant_gib": 57.314,
+      "expert_types_sample": [
+        {
+          "role": "down",
+          "type_id_or_name": "10",
+          "type_name": "Q2_K",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.0.ffn_down_exps.weight"
+        },
+        {
+          "role": "gate",
+          "type_id_or_name": "19",
+          "type_name": "IQ1_S",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_gate_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "19",
+          "type_name": "IQ1_S",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_up_exps.weight"
+        },
+        {
+          "role": "down",
+          "type_id_or_name": "10",
+          "type_name": "Q2_K",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.1.ffn_down_exps.weight"
+        },
+        {
+          "role": "gate",
+          "type_id_or_name": "19",
+          "type_name": "IQ1_S",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_gate_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "19",
+          "type_name": "IQ1_S",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_up_exps.weight"
+        },
+        {
+          "role": "down",
+          "type_id_or_name": "10",
+          "type_name": "Q2_K",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.2.ffn_down_exps.weight"
+        },
+        {
+          "role": "gate",
+          "type_id_or_name": "19",
+          "type_name": "IQ1_S",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_gate_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "19",
+          "type_name": "IQ1_S",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_up_exps.weight"
+        },
+        {
+          "role": "down",
+          "type_id_or_name": "19",
+          "type_name": "IQ1_S",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.3.ffn_down_exps.weight"
+        },
+        {
+          "role": "gate",
+          "type_id_or_name": "19",
+          "type_name": "IQ1_S",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.3.ffn_gate_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "19",
+          "type_name": "IQ1_S",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.3.ffn_up_exps.weight"
+        }
+      ],
+      "primary_role_types": [
+        [
+          "down",
+          "IQ1_S"
+        ],
+        [
+          "down",
+          "Q2_K"
+        ],
+        [
+          "gate",
+          "IQ1_S"
+        ],
+        [
+          "up",
+          "IQ1_S"
+        ]
+      ],
+      "support_decision": "load_may_work_but_current_moe_stream_fast_path_not_covered",
+      "support_reason": "expert sample includes IQ1_S,Q2_K which are not accepted by current moe_stream_type_supported/slot batch gates"
+    },
+    {
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "file": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+      "variant_gib": 60.078,
+      "expert_types_sample": [
+        {
+          "role": "down",
+          "type_id_or_name": "10",
+          "type_name": "Q2_K",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.0.ffn_down_exps.weight"
+        },
+        {
+          "role": "gate",
+          "type_id_or_name": "29",
+          "type_name": "IQ1_M",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_gate_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "29",
+          "type_name": "IQ1_M",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.0.ffn_up_exps.weight"
+        },
+        {
+          "role": "down",
+          "type_id_or_name": "10",
+          "type_name": "Q2_K",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.1.ffn_down_exps.weight"
+        },
+        {
+          "role": "gate",
+          "type_id_or_name": "29",
+          "type_name": "IQ1_M",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_gate_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "29",
+          "type_name": "IQ1_M",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.1.ffn_up_exps.weight"
+        },
+        {
+          "role": "down",
+          "type_id_or_name": "10",
+          "type_name": "Q2_K",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.2.ffn_down_exps.weight"
+        },
+        {
+          "role": "gate",
+          "type_id_or_name": "29",
+          "type_name": "IQ1_M",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_gate_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "29",
+          "type_name": "IQ1_M",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.2.ffn_up_exps.weight"
+        },
+        {
+          "role": "down",
+          "type_id_or_name": "29",
+          "type_name": "IQ1_M",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "name": "blk.3.ffn_down_exps.weight"
+        },
+        {
+          "role": "gate",
+          "type_id_or_name": "29",
+          "type_name": "IQ1_M",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.3.ffn_gate_exps.weight"
+        },
+        {
+          "role": "up",
+          "type_id_or_name": "29",
+          "type_name": "IQ1_M",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "name": "blk.3.ffn_up_exps.weight"
+        }
+      ],
+      "primary_role_types": [
+        [
+          "down",
+          "IQ1_M"
+        ],
+        [
+          "down",
+          "Q2_K"
+        ],
+        [
+          "gate",
+          "IQ1_M"
+        ],
+        [
+          "up",
+          "IQ1_M"
+        ]
+      ],
+      "support_decision": "load_may_work_but_current_moe_stream_fast_path_not_covered",
+      "support_reason": "expert sample includes IQ1_M,Q2_K which are not accepted by current moe_stream_type_supported/slot batch gates"
+    }
+  ],
+  "decision": {
+    "accepted_sota_changed": false,
+    "source_patch": false,
+    "full_download": false,
+    "summary": "Direct metadata-pass candidates are not proven performance candidates: their sampled expert types are outside current DeepSeek MoE stream fast-path gates, even though generic loader/CUDA support likely exists.",
+    "next_action": "After explicit cleanup, run load/correctness on one candidate first. If correct but slow, design a separate stream support patch for its actual expert types with hard-bound and correctness parity before implementation."
+  }
+}

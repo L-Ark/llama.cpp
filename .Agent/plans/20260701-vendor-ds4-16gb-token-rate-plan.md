@@ -7238,3 +7238,51 @@ Next execution plan:
    - France semantic correctness;
    - calibration/dev generalized prompt benchmark only after correctness passes.
 5. Promote only if the result beats the no-prompt-specific generalized baseline with RAM/page-cache and TTFT constraints satisfied, then immediately commit and push to `ssd/vendor/deepseek-token-rate-16gb`.
+
+## 2026-07-08 X10-AH compact target loader/compute support audit
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-loader-compute-support-audit-20260708.json`
+- status: `source_support_audit_recorded_no_source_change_not_sota`
+
+Purpose:
+- Before any full download, check whether the X10-AG direct metadata-pass candidates are likely to use the current vendor loader and DeepSeek MoE stream fast paths.
+- This is source/header-artifact audit only. No source change, no full download, no model run, no SOTA claim.
+
+Source audit:
+- Generic GGML/loader support exists for the relevant lowbit types:
+  - `GGML_TYPE_IQ2_XXS=16`, `GGML_TYPE_IQ1_S=19`, `GGML_TYPE_IQ1_M=29`, `GGML_TYPE_Q2_K=10`.
+  - `ggml/src/ggml-cuda/mmvq.cu` has generic CUDA vector matmul support for `IQ2_XXS`, `IQ1_S`, `IQ1_M`.
+  - `ggml/src/ggml-cuda/ggml-cuda.cu` device buffer support includes `IQ1_M`, `IQ1_S`, `IQ2_XS`, `IQ2_XXS`.
+- Current DeepSeek MoE stream fast path is narrower:
+  - `moe_stream_type_supported(...)` currently allows `IQ3_XXS`, `IQ3_S`, `IQ2_S`, `Q3_K`, `IQ4_XS`.
+  - `launch_moe_stream_mmvq_slot_loop(...)` currently allows `Q4_0`, `Q3_K`, `IQ3_XXS`, `IQ3_S`, `IQ2_S`, `IQ4_XS`, `MXFP4`.
+  - `launch_moe_mmq_slot_batch(...)` currently dispatches `IQ3_XXS`, `IQ2_S`, `Q3_K`, `IQ4_XS`.
+
+Candidate support result:
+- `sleepyeldrazi REAP-K128 Q2-Q4 Mixed`
+  - sampled expert types include `IQ2_XXS` for gate/up and `Q2_K` for down.
+  - decision: load may work, but current MoE stream fast path is not covered.
+- `teamblobfish IQ1_S-XL`
+  - sampled expert types include `IQ1_S` for gate/up and `Q2_K` for down.
+  - decision: load may work, but current MoE stream fast path is not covered.
+- `teamblobfish IQ1_M`
+  - sampled expert types include `IQ1_M` for gate/up and `Q2_K` for down.
+  - decision: load may work, but current MoE stream fast path is not covered.
+
+Decision:
+- Do not assume compact target download will immediately produce a generalized token-rate SOTA.
+- The compact target route remains valuable because it may reduce target size, IO pressure, and host page-cache pressure, but performance still needs actual strict load/correctness and likely a separate type-specific MoE stream support plan.
+- No source patch is allowed from this audit alone.
+
+Updated next execution order:
+1. If explicit cleanup is approved, still download only one direct metadata-pass candidate first.
+2. Prefer `teamblobfish IQ1_S-XL` only as a correctness/load candidate, not as a guaranteed performance candidate.
+3. If it loads and passes France/generalized correctness but is slow, do not tune blindly:
+   - profile per-token time again under strict 16GB;
+   - confirm whether misses are now compact-target IO, generic CPU fallback, or missing MoE stream type support;
+   - only then design a type-specific stream patch for `IQ1_S/Q2_K` or choose the next candidate.
+4. A type-specific stream patch must first have:
+   - exact type/operator correctness parity against current CPU/generic CUDA output;
+   - a hard-bound showing generalized calibration/dev `min_eval_tok_s >= 5.5`;
+   - strict RAM/page-cache and TTFT gates.
+5. Accepted improvements must record full reproduction details and immediately push to `ssd/vendor/deepseek-token-rate-16gb`.
