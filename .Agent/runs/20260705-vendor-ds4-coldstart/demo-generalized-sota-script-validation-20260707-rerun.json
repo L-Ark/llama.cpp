@@ -1,0 +1,36 @@
+{
+  "artifact": "demo-generalized-sota-script-validation-20260707-rerun.json",
+  "purpose": "Validate .Agent/examples/demo_generalized_sota.sh accepts arbitrary prompts and runs current prompt-general vendor DeepSeek SOTA path under strict 16GB host RAM including page cache.",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "8b077b56586c3083e8f9db784b2b47a09490799b",
+  "script": ".Agent/examples/demo_generalized_sota.sh",
+  "prompt": "Explain database indexes briefly.",
+  "mode": "fast_smoke",
+  "held_out_test_set_used": false,
+  "prompt_specific_optimization": false,
+  "strict_16gb_cgroup": true,
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T131034Z-20260707T131034Z-demo-generalized-sota/explain-database-indexes-briefly-cpu40-vram0gb",
+  "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T131034Z-20260707T131034Z-demo-generalized-sota/explain-database-indexes-briefly-cpu40-vram0gb/summary.json",
+  "metrics": {
+    "eval_tok_s": 1.5,
+    "prompt_tok_s": 0.9,
+    "ttft_estimate_ms": 35425.271365,
+    "elapsed_seconds": 54.7,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15107751936,
+    "memory_max_events": 12363,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required"
+  },
+  "answer": "to explain database indexes briefly:\n\nA database index is like a book's index—it helps the database find data quickly without scanning the entire table. It works by",
+  "result": "pass",
+  "notes": [
+    "Fast-smoke n_predict=32 proves arbitrary prompt demo path runs; use default n_predict=192 for comparable token-rate numbers.",
+    "The answer is truncated by the smoke token limit, but semantic start is coherent and runner marked correctness_ok=true.",
+    "Current generalized SOTA path remains below the >5 tok/s product target."
+  ]
+}

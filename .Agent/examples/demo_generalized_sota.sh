@@ -39,6 +39,7 @@ COLD_START=1
 PRINT_COMMAND=0
 PRINT_JSON=0
 FAST_SMOKE=0
+MIN_DEMO_TOK_S="${MIN_DEMO_TOK_S:-0}"
 
 usage() {
   sed -n '1,31p' "$0"
@@ -76,13 +77,20 @@ if not path.exists():
 data = json.loads(path.read_text())
 agg = data.get("aggregate", {})
 print(f"[demo] generalized_baseline_artifact={path}")
-print("[demo] prompt_specific_optimization=disabled")
 print(f"[demo] baseline_eval_tok_s_min={agg.get('min_eval_tok_s')}")
 print(f"[demo] baseline_eval_tok_s_mean={agg.get('mean_eval_tok_s')}")
 print(f"[demo] baseline_eval_tok_s_max={agg.get('max_eval_tok_s')}")
 print(f"[demo] baseline_ram_ok_all={agg.get('all_ram_ok')}")
 print(f"[demo] product_target_met_all_prompts_gt_5_tok_s={agg.get('target_met_all_prompts_gt_5_tok_s')}")
 PY
+}
+
+print_constraint_banner() {
+  printf '[demo] task=current prompt-general vendor DeepSeek SOTA demo\n'
+  printf '[demo] target=random user prompt, stable >5 tok/s, 16GB host RAM including page cache, 32GB RTX 5090\n'
+  printf '[demo] status=current generalized SOTA is still below the product target; this script demonstrates the best prompt-general path currently accepted\n'
+  printf '[demo] prompt_specific_optimization=disabled\n'
+  printf '[demo] config=vendor DeepSeek, cpu_moe=40, vram_cache=0, DS4 gate one-stream cache, strict 16GB cgroup\n'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -256,9 +264,7 @@ printf '[demo] branch=%s\n' "$(git rev-parse --abbrev-ref HEAD)"
 printf '[demo] commit=%s\n' "$(git rev-parse --short HEAD)"
 printf '[demo] prompt=%s\n' "$PROMPT"
 printf '[demo] n_predict=%s\n' "$N_PREDICT"
-printf '[demo] target=random prompt, stable >5 tok/s, 16GB host RAM including page cache, 32GB RTX 5090\n'
-printf '[demo] current_status=generalized baseline/SOTA path, below product target; no prompt-specific optimization\n'
-printf '[demo] config=vendor DeepSeek, cpu_moe=40, vram_cache=0, DS4 gate one-stream cache, cold strict cgroup\n'
+print_constraint_banner
 print_baseline_banner
 if [[ "$FAST_SMOKE" -eq 1 ]]; then
   printf '[demo] metric_mode=fast_smoke; use default --n-predict 192 for comparable numbers\n'
@@ -283,13 +289,14 @@ summary="$case_dir/summary.json"
 
 [[ -f "$summary" ]] || die "summary not found: $summary"
 
-python3 - "$summary" "$PRINT_JSON" <<'PY'
+python3 - "$summary" "$PRINT_JSON" "$MIN_DEMO_TOK_S" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 summary = Path(sys.argv[1])
 print_json = sys.argv[2] == "1"
+min_demo_tok_s = float(sys.argv[3])
 s = json.loads(summary.read_text())
 
 fields = [
@@ -319,10 +326,14 @@ print(answer if answer else "<empty>")
 
 ram_ok = s.get("ram_ok") is True and not s.get("ram_limit_killed") and not s.get("oom_seen")
 has_answer = bool(answer)
+eval_tok_s = s.get("eval_tok_s")
+speed_ok = min_demo_tok_s <= 0 or (isinstance(eval_tok_s, (int, float)) and eval_tok_s >= min_demo_tok_s)
 if not ram_ok:
     status = "FAILED_STRICT_16GB_RAM_GATE"
 elif not has_answer:
     status = "FAILED_EMPTY_ANSWER"
+elif not speed_ok:
+    status = "FAILED_MIN_DEMO_TOK_S"
 else:
     status = "RUN_COMPLETED_STRICT_16GB"
 
@@ -331,6 +342,8 @@ if s.get("correctness_ok") is not True:
     print("[demo] correctness_note=runner heuristic is conservative for arbitrary prompts; review the answer above.")
 if answer and answer[-1] not in ".!?。！？)]}\"'":
     print("[demo] answer_note=possibly_truncated; increase --n-predict for a longer answer.")
+if min_demo_tok_s > 0:
+    print(f"[demo] min_demo_tok_s={min_demo_tok_s}")
 
 if print_json:
     payload = {
@@ -345,6 +358,7 @@ if print_json:
         "correctness_ok": s.get("correctness_ok"),
         "correctness_reason": s.get("correctness_reason"),
         "answer": answer,
+        "min_demo_tok_s": min_demo_tok_s,
     }
     print("[demo-json] " + json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
