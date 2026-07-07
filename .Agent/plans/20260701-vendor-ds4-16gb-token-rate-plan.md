@@ -7006,3 +7006,65 @@ Next allowed actions:
 - Continue searching only for tokenizer-compatible DeepSeek4/joyai-llm draft/verifier artifacts, or return to compact target representations gated by disk/correctness.
 - Any future draft candidate must first prove tokenizer/vocab compatibility and exact target-verification semantics; only then may it run France correctness and calibration/dev token-rate benchmarks.
 - If no such artifact appears, the project needs either approved disk cleanup for compact target correctness gates or a new dataflow/interface hard-bound with generalized `min_eval_tok_s >= 5.5` before implementation.
+
+## 2026-07-08 X10-AD compatible MTP refresh and cleanup/repro manifest
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compatible-mtp-refresh-and-cleanup-repro-manifest-20260708.json`
+- status: `metadata_and_cleanup_manifest_recorded_no_deletion_not_sota`
+
+Purpose:
+- Re-check the one public DeepSeek4-family small MTP GGUF that is not Qwen-tokenizer-based, then prepare a cleanup/repro manifest that can unlock compact target correctness gates if deletion is explicitly approved.
+- No full model was downloaded, no file was deleted, no runtime source was changed, and no token-rate benchmark was run.
+
+Antirez MTP refresh:
+- Candidate:
+  - repo: `antirez/deepseek-v4-gguf`
+  - file: `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf`
+  - size: `3,807,602,400 bytes` (`3.546 GiB`)
+- Metadata probe:
+  - used only a `128 MiB` range slice; temporary slice removed after reading metadata.
+  - `magic=GGUF`, `version=3`, `tensor_count=32`, `kv_count=5`
+  - `general.architecture=deepseek4_mtp_support`
+  - `general.name=DeepSeek V4 Flash MTP support`
+  - `deepseek4.nextn_predict_layers=1`
+  - `deepseek4.mtp_layer_count=1`
+  - `deepseek4.expert_count=256`
+  - no tokenizer metadata is present in the sidecar; it is not a standalone draft model.
+- Source support:
+  - current vendor source still has no loader/runtime for `general.architecture=deepseek4_mtp_support`.
+  - current vendor source still has no `mtp.0.*` tensor runtime path.
+  - existing generic `nextn_predict_layers` handling only preserves/skips tensors in some model loaders; it is not a DS4 verifier implementation.
+- Decision:
+  - Do not download full MTP or implement a loader now.
+  - The sidecar remains a possible future research input only if a new materially sublinear verifier proof appears. Existing MTP hard-bound/design artifacts keep N=2 closed for the current objective.
+
+Cleanup/repro manifest:
+- Current free space during this audit: about `33.07 GiB`.
+- Must preserve:
+  - `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`
+  - `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, `20,495,904,768 bytes`, sha256 `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`
+- Recommended first deletion if explicitly approved:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - size: `88,019,539,296 bytes` (`81.975 GiB`)
+  - reason: previously rejected for France correctness, not used by current generalized route or current SOTA.
+  - restore URL: `https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - observed restore etag: `4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0`
+- Small likely-safe cleanup if approved, but insufficient alone:
+  - incomplete HF download under `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/.cache/huggingface/download/...incomplete`
+  - size: `2,965,889,623 bytes`
+- Avoid deleting without extra approval:
+  - `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack`, `38,420,348,928 bytes`
+  - reason: historical prompt-set diagnostic pack with no external restore URL recorded.
+
+Unlocked correctness gates if the rejected IQ2_S file is deleted:
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF`
+  - `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`, `50,439,361,920 bytes` (`46.975 GiB`)
+  - next gate: load compatibility -> fixed-text top1 / France semantic correctness -> only then calibration/dev token-rate.
+- `antirez/deepseek-v4-gguf`
+  - `DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf`, `86,720,111,200 bytes` (`80.764 GiB`)
+  - next gate: correctness-first only; higher disk pressure than sleepy.
+
+Decision:
+- No deletion performed in this step.
+- No runtime source patch is allowed from this evidence.
+- If cleanup is explicitly approved later, delete only the rejected IQ2_S file first, then download exactly one compact target candidate and run load/correctness gates before any token-rate benchmark.

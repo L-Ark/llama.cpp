@@ -1,0 +1,107 @@
+{
+  "attempt_id": "20260708-compatible-mtp-refresh-and-cleanup-repro-manifest",
+  "created_at_local": "2026-07-08",
+  "status": "metadata_and_cleanup_manifest_recorded_no_deletion_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "2e2ed9b1047b46b2871b89c95e1af28eee42af39",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "After draft/verifier admission rejected Qwen-family drafts, re-check antirez DeepSeek4 MTP sidecar and prepare a reproducible disk cleanup manifest for compact target correctness gates without deleting files.",
+  "disk_state": {
+    "filesystem": "/",
+    "available_bytes": 35508494336,
+    "available_gib": 33.069862365722656
+  },
+  "antirez_mtp_refresh": {
+    "repo": "antirez/deepseek-v4-gguf",
+    "file": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+    "url": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/main/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+    "size_bytes": 3807602400,
+    "size_gib": 3.546,
+    "etag_observed": "b5f0214286c2c07ad6a751eb3a7f99bc60ce0df5b5ad57a0562ae22cb7f30fd6",
+    "metadata_probe": {
+      "downloaded": "128MiB range slice only; removed after metadata read",
+      "magic": "GGUF",
+      "version": 3,
+      "tensor_count": 32,
+      "kv_count": 5,
+      "general.architecture": "deepseek4_mtp_support",
+      "general.name": "DeepSeek V4 Flash MTP support",
+      "deepseek4.nextn_predict_layers": 1,
+      "deepseek4.mtp_layer_count": 1,
+      "deepseek4.expert_count": 256,
+      "tokenizer_metadata_present": false
+    },
+    "source_support_audit": {
+      "deepseek4_mtp_support_architecture_supported": false,
+      "mtp_0_tensor_runtime_supported": false,
+      "observed_source_state": "Current source only has generic nextn_predict_layers loading/skipping comments and no deepseek4_mtp_support architecture or mtp.0.* runtime path.",
+      "existing_hard_bound_reference": ".Agent/runs/20260705-vendor-ds4-coldstart/deepseek4-mtp-tensor-mapping-and-verify-design.json plus deepseek4-mtp-n2-verifier-cost-bound referenced there"
+    },
+    "decision": "Do not download full MTP or implement loader now. The sidecar is potentially relevant but not source-ready, and N=2 verifier route is already hard-bound insufficient unless a new materially sublinear verifier proof appears."
+  },
+  "cleanup_manifest_no_deletion": {
+    "must_preserve": [
+      {
+        "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+        "reason": "primary target model for current vendor route"
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+        "size_bytes": 20495904768,
+        "known_sha256": "7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076",
+        "reason": "accepted historical France pack reproduction surface; do not delete without replacement plan"
+      }
+    ],
+    "recommended_first_delete_if_approved": {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+      "size_bytes": 88019539296,
+      "size_gib": 81.975,
+      "reason": "previously downloaded alternate IQ2_S target, rejected for France correctness; not used by current generalized route or current SOTA",
+      "restore_url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ2_S.gguf",
+      "restore_size_bytes": 88019539296,
+      "restore_etag_observed": "4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0",
+      "restore_command_example": "mkdir -p /root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins && curl -L -C - -o /root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ2_S.gguf",
+      "delete_command_if_approved": "rm -f /root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf"
+    },
+    "safe_small_cleanup_if_approved_but_insufficient_alone": {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/.cache/huggingface/download/AgEKDDObETLESPB-bwGREqjQfJM=.82822c4c3330cdc17762cff6f044fd50abb04278779309a157d4401ef8a9c17b.42532000.incomplete",
+      "size_bytes": 2965889623,
+      "reason": "incomplete HF download; likely safe to remove but does not alone unlock the smallest 46.975GiB candidate"
+    },
+    "avoid_delete_without_extra_approval": [
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack",
+        "size_bytes": 38420348928,
+        "reason": "not current accepted SOTA, but historical prompt-set diagnostic pack with no external restore URL recorded"
+      }
+    ],
+    "unlocked_candidates_after_recommended_delete": [
+      {
+        "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+        "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+        "size_bytes": 50439361920,
+        "size_gib": 46.975,
+        "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+        "etag_observed": "62c451e6ea9fc6a851fb8e47713b1997bba14dd7e0a16e6a9199e126e0aa9374",
+        "next_gate_if_downloaded": "load compatibility -> fixed-text top1/France semantic correctness -> only then calibration/dev token-rate under strict 16GB"
+      },
+      {
+        "repo": "antirez/deepseek-v4-gguf",
+        "file": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+        "size_bytes": 86720111200,
+        "size_gib": 80.764,
+        "url": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/main/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+        "etag_observed": "018546ea817be12e80ffc5e925cbd4efb2f5a2db54c04e0e58a2efb035832e95",
+        "next_gate_if_downloaded": "higher disk pressure than sleepy; correctness-first only, no benchmark before France/top1 pass"
+      }
+    ]
+  },
+  "decision": {
+    "deleted_anything": false,
+    "downloaded_full_model": false,
+    "runtime_source_patch_allowed": false,
+    "accepted_sota_changed": false,
+    "next_action_if_user_approves_cleanup": "delete rejected IQ2_S file, then download exactly one compact target candidate and run load/correctness gate first",
+    "next_action_without_cleanup": "continue metadata-only search; no benchmark/source patch from current evidence"
+  }
+}
