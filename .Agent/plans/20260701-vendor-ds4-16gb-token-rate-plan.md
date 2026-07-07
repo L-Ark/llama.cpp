@@ -6901,3 +6901,47 @@ Decision:
 - No deletion performed.
 - Full external lowbit download remains disallowed until disk is freed or a smaller candidate is found.
 - Any deletion must be explicitly approved or have a replacement archival/reproduction plan, because the project requires SOTA/rejected runs to remain reproducible.
+
+## 2026-07-08 X10-AB external lowbit new-candidate size admission
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-lowbit-new-candidate-size-admission-20260708.json`
+- status: `new_candidate_size_admission_not_sota_no_download`
+
+Purpose:
+- Continue the X10-AA allowed path without deleting anything: search for newly visible DeepSeek-V4-Flash compact/lowbit GGUF candidates that might fit current disk and enter a correctness-first gate.
+- This is metadata/HTTP-header only; no model body was downloaded, no source was changed, and no token-rate benchmark was run.
+
+Method:
+- Hugging Face search for DeepSeek-V4-Flash GGUF candidates, then per-file `HEAD`/`Range: bytes=0-0` admission using `x-linked-size` or redirected `Content-Length`.
+- Current `/` free space during the check: about `33.20 GiB`.
+
+New candidate size results:
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF`
+  - `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`: `46.975 GiB`
+- `0xSero/DeepSeek-V4-Flash-162B-GGUF`
+  - `DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`: `48.982 GiB`
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF`
+  - `DeepSeek-V4-Flash-REAP-K128.gguf`: `52.038 GiB`
+- `0xSero/DeepSeek-V4-Flash-180B-GGUF`
+  - `DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf`: `53.522 GiB`
+- `0xSero/DeepSeek-V4-Flash-Spark-Mini-GGUF`
+  - `DeepSeek-V4-Flash-Spark-Mini-Q3-Dynamic-REAP-ds4.gguf`: `69.864 GiB`
+- `0xSero/DeepSeek-V4-Flash-Spark-GGUF`
+  - `DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf`: `76.725 GiB`
+- `ssweens/DeepSeek-V4-Flash-GGUF-YMMV`
+  - `IQ1_M`: `62.870 GiB`
+  - `IQ2_XXS` combined shards: `72.558 GiB`
+  - `IQ3_XXS` combined shards: `104.154 GiB`
+- `persadian/DeepSeek-V4-Flash-GGUF`
+  - `IQ1_S-XL` appears potentially interesting but is gated/401 from this environment, so it cannot enter an unauthenticated correctness gate.
+
+Decision:
+- No newly checked accessible candidate fits current disk.
+- The smallest accessible candidate is still `46.975 GiB`, which exceeds current free disk before any safety margin.
+- Do not download or benchmark these candidates until disk is freed or a smaller accessible artifact is found.
+- No runtime source patch is allowed from this evidence.
+
+Next allowed actions:
+- If deletion is explicitly approved, free space from already rejected or prompt-specific artifacts first, while preserving reproduction records.
+- If deletion is not approved, continue external artifact search for a genuinely smaller correctness-capable representation or switch to a draft/verifier path that does not require downloading a full lowbit target model.
+- Any candidate that becomes downloadable must still pass fixed-text top1 / France semantic correctness before any calibration/dev token-rate benchmark; held-out prompts remain reserved until candidate freeze.
