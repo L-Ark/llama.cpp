@@ -95928,3 +95928,257 @@ GP62 execution result:
   - next optimization should return to IO scheduling/coalescing or investigate
     a layer-restricted threshold below `0.1`, but only if it still offers
     meaningful byte reduction.
+
+## GP63: prompt-agnostic layer-wise IO coalescing and VRAM-cache rebalance plan
+
+Timestamp: `2026-07-07T12:45:00+08:00`.
+
+Status: planned before execution.
+
+Current best direction:
+
+- Do not continue simple speculative decoding, ngram lookup, recent-window
+  route prediction, or previous-call same-layer prediction as the next primary
+  path.
+- The most promising near-term direction is prompt-agnostic decode IO
+  continuity:
+  - rebalance VRAM cache by layer and tensor kind using dev-only route data;
+  - identify layers where current hotset residency gives poor marginal value;
+  - test whether selected low-hit layers should use larger batched IO
+    overfetch while high-hit layers keep tighter cache residency;
+  - preserve GP4 alias/full-source SOTA correctness and cold-start behavior.
+
+Reason:
+
+- GP26 rejected no-model ngram speculation: effective tokens per target step
+  was only `1.0658`, far below the `~3.6` zero-overhead requirement for
+  `5 tok/s`.
+- GP27 and GP29 rejected simple expert-demand predictors: useful byte coverage
+  required `~2x-3x` total bytes, which would likely increase SSD/H2D pressure
+  and TTFT.
+- GP61/GP62 rejected activation-block partial down reads at thresholds `0.1`
+  and `0.2`: byte reduction exists, but down-output error is too large.
+- Existing IO profiling shows the runtime is not always exposing a sustained,
+  saturated IO queue. A layer-aware scheduler/cache plan may improve token
+  rate without changing model math or relying on prompt-specific packs.
+
+Hard constraints:
+
+- Host RAM, including page cache and all cgroup file/anon memory, must stay
+  below `16 GB` with swap disabled.
+- Runs must be cold start.
+- Use the GP4 alias/full-source SOTA config as the baseline unless a later
+  accepted SOTA supersedes it:
+  - `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv`;
+  - `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`;
+  - required signature: `entries=69120`, `misses=0`, `direct_reads=0`,
+    `host_stage=0`.
+- Optimization must be prompt-agnostic:
+  - training/design may use only committed dev prompts and route profiles;
+  - held-out test prompts must not be inspected for tuning;
+  - final SOTA claim must use held-out test-set metrics.
+- Correctness gates:
+  - France regression must remain semantically correct and coherent;
+  - all general prompt outputs used for gating must be semantically correct;
+  - for `Please introduce France in a short paragraph.`, output must remain
+    coherent and factually reasonable.
+- TTFT must not increase by more than `20%` versus the accepted baseline for
+  the same prompt set.
+- Any accepted token-rate improvement must be immediately recorded with exact
+  reproduction commands, committed, pushed, and clean-rerun from pushed source.
+
+Phase 1: build a layer-wise marginal-value model before runtime changes
+
+Inputs:
+
+- Dev route/profile data only:
+  `.Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/*`.
+- Do not use held-out test-set route profiles for this phase.
+
+Analysis:
+
+1. For each `(kind, layer, tensor)` compute:
+   - total bytes demanded;
+   - current VRAM hit bytes and miss bytes;
+   - current expert-pack / alias read bytes;
+   - miss frequency;
+   - active experts per call distribution;
+   - current batch-size histogram;
+   - estimated critical-path wait contribution.
+2. Estimate marginal value of one additional resident expert slot per
+   `(kind, layer)`:
+   - bytes avoided per slot;
+   - expected wait avoided per slot;
+   - cross-dev stability of selected experts.
+3. Estimate marginal cost of reducing cache allocation for high-hit down layers
+   versus increasing allocation for low-hit up/gate layers.
+4. Identify low-hit, high-byte layers where cache does not generalize and where
+   controlled overfetch may increase IO queue depth without excessive false
+   bytes.
+
+Deliverable:
+
+- Write an analysis report under
+  `.Agent/runs/20260707-gp63-layerwise-io-cache-model/report.md`.
+- The report must include a ranked next-action table:
+  - cache-increase candidates;
+  - cache-decrease candidates;
+  - overfetch candidates;
+  - do-not-touch layers.
+
+Gate to Phase 2:
+
+- Proceed only if the model predicts at least one candidate with:
+  - expected end-to-end token-rate improvement `>= 10%`;
+  - false/extra byte ratio `<= 0.25` for any overfetch candidate;
+  - no projected 16GB host-RAM violation;
+  - no projected TTFT increase over `20%`.
+
+Phase 2: no-source config/proxy experiments
+
+Purpose:
+
+- Validate the model with the lowest-risk experiments before touching runtime
+  source.
+
+Experiments:
+
+1. Cache-rebalance proxy:
+   - use existing env/config knobs where possible;
+   - compare current GP4 SOTA cache allocation against a layer-weighted
+     candidate derived from Phase 1;
+   - run on dev prompts only.
+2. Overfetch offline/proxy simulation:
+   - simulate selected extra expert reads from route traces;
+   - calculate additional bytes, expected batch depth, and expected queue
+     occupancy;
+   - do not implement runtime overfetch unless simulation passes the gate.
+3. If a no-source config can emulate the candidate safely, run cold-start `N=32`
+   or `N=48` dev probes first, then `N=96` only after the small probe passes.
+
+Acceptance for Phase 2:
+
+- Every run must record:
+  - exact command and env;
+  - source commit;
+  - binary sha256;
+  - memory peak and final memory.stat;
+  - TTFT;
+  - decode time;
+  - token rate;
+  - answer text;
+  - expert-pack counters;
+  - iouring wait/inflight/batch histogram when available.
+- Reject immediately if:
+  - output quality fails;
+  - RAM reaches or exceeds the 16GB limit in a way that violates the gate;
+  - TTFT increases by more than `20%`;
+  - token rate does not improve on dev prompts;
+  - improvement appears prompt-specific.
+
+Phase 3: runtime implementation only after Phase 1/2 gates pass
+
+Candidate implementation classes:
+
+1. Layer-wise cache budget table:
+   - default-off env flag;
+   - deterministic per `(kind, layer)` cache budgets;
+   - no model-output math change.
+2. Layer-wise bounded overfetch:
+   - default-off env flag;
+   - only enabled for Phase-1-approved layers;
+   - submit selected extra reads in the same iouring batch to improve queue
+     continuity;
+   - hard cap false/extra bytes and inflight depth.
+3. IO coalescing for already-known selected experts:
+   - prefer batching known selected experts more aggressively before speculative
+     extras;
+   - do not wait for more future routing if it increases critical-path latency.
+
+Runtime implementation gate:
+
+- Must first run one short deterministic correctness probe.
+- Then run dev prompt set cold-start under 16GB.
+- Then run held-out test set once.
+- A new SOTA is accepted only if held-out token rate improves while all hard
+  constraints pass.
+
+Relationship to speculative decoding:
+
+- Real model-based speculative decoding remains a design candidate, but not the
+  immediate implementation path.
+- Reopen model-based speculation only if a compatible Kimi draft/DFlash/EAGLE
+  asset is available and a separate plan proves:
+  - tokenizer/runtime compatibility;
+  - RAM/VRAM footprint under the 16GB/32GB target;
+  - measured acceptance high enough to approach `5 tok/s`;
+  - exact target verification semantics;
+  - TTFT within gate.
+- Do not reopen ngram lookup, recent-window route prediction, or previous-call
+  same-layer prediction without new evidence that materially changes their
+  rejected bounds.
+
+Expected outcome:
+
+- This path is unlikely to jump directly to `5 tok/s`, but it is currently the
+  most defensible next step because it targets measured decode IO wait without
+  approximating model math.
+- If GP63 shows the remaining IO/cache scheduling ceiling is too low, the next
+  credible path must be a stronger algorithmic mechanism: a real compatible
+  draft verifier, lower-byte full expert representation with verified quality,
+  or a safe model-side byte-reduction method.
+
+GP63 Phase 1 execution result:
+
+- Timestamp: `2026-07-07T12:39:00+08:00`.
+- Added dev-only analysis tool:
+  `.Agent/run-tools/kimi_layerwise_io_cache_model.py`.
+- Inputs:
+  `.Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/*`.
+- Output directory:
+  `.Agent/runs/20260707-gp63-layerwise-io-cache-model`.
+- Main report:
+  `.Agent/runs/20260707-gp63-layerwise-io-cache-model/report.md`.
+- Validation:
+  - `python3 -m py_compile .Agent/run-tools/kimi_layerwise_io_cache_model.py`
+    passed;
+  - `git diff --check -- .Agent/run-tools/kimi_layerwise_io_cache_model.py`
+    passed.
+- Baseline summary across 7 dev prompts:
+  - average token rate: `1.331 tok/s`;
+  - token-rate range: `1.100-1.430 tok/s`;
+  - max TTFT: `98983.24 ms`;
+  - max memory peak: `15899996160` bytes;
+  - expert-pack iouring bytes: `2098.71 GiB`;
+  - expert-pack iouring wait: `359.15 s`;
+  - observed bytes/wait throughput: `5.84 GiB/s`;
+  - aggregate down VRAM hit rate: `71.45%`;
+  - aggregate up/gate VRAM hit rate: `40.16%`.
+- Cache-increase demand-side signal:
+  - best next64 layer/kind candidate: layer `25`, `down`;
+  - next64 demand coverage: `11.309 GiB`;
+  - proxy hit traffic: `23.668%`;
+  - average prompt coverage for those next64 keys: `4.828` prompts.
+- Same-budget cache-swap bound:
+  - `256 MiB` swap: net traffic reduction `1.663 GiB`,
+    estimated decode improvement `0.078%`;
+  - `512 MiB` swap: net traffic reduction `2.746 GiB`,
+    estimated decode improvement `0.129%`;
+  - `1024 MiB` swap: net traffic reduction `3.365 GiB`,
+    estimated decode improvement `0.158%`;
+  - larger swaps turned negative in the proxy model.
+- Static-prior overfetch:
+  - no leave-one-prompt-out layer/kind/top-K overfetch setting passed the
+    GP63 false-byte gate;
+  - the generated CSV
+    `.Agent/runs/20260707-gp63-layerwise-io-cache-model/overfetch-static-prior-by-layer.csv`
+    shows top-K prior recall is too low and false/actual bytes are far above
+    the `<=0.25` gate.
+- Decision:
+  - GP63 Phase 1 does **not** pass the Phase 2 gate;
+  - do not implement runtime layer-wise overfetch from this evidence;
+  - do not spend a runtime iteration on simple same-budget VRAM cache rebalance,
+    because the estimated decode improvement is only `0.158%`, far below the
+    required `>=10%`;
+  - the next plan should target a stronger predictor or a lower-byte expert
+    representation rather than simple layer-wise cache/overfetch.
