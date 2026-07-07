@@ -5846,3 +5846,30 @@
   - Return to the required design/execute loop with a new bottleneck decomposition that separates `ffn_gate_exps`, `ffn_up_exps`, and `ffn_down_exps` by tensor role on generalized calibration/dev prompts.
   - Any next implementation must target prompt-general simultaneous reduction of gate/source movement and up/down fallback, or provide a hard-bound showing `min >= 5.5 tok/s` before coding.
   - Do not use held-out prompts until a candidate is frozen.
+
+## 2026-07-07 X10-D generalized role profile：gate is cached, up/down fallback dominates compute gap
+
+- attempt_id: `20260707-generalized-role-profile-database-indexing`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-role-profile-database-indexing-20260707.json`
+- status: `diagnostic_profile_not_sota`
+- purpose:
+  - Run a no-prompt-specific generalized profile after down correctness work to split the bottleneck by tensor role.
+  - Prompt was `Describe database indexing in one concise paragraph.`, already used for demo validation and not part of the locked held-out set.
+- run:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T093826Z-role-profile-generalized-20260707/database-indexing-role-profile-cpu40-vram0gb`
+  - config: vendor DeepSeek, `cpu_moe=40`, `vram_cache=0`, gate one-stream cache `13568 MiB`, no prompt-specific pack/profile/alias, `GGML_KIMI_CPU_MOE_PROFILE=1`, `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`, strict cold `MemoryMax=16000000000`, `MemorySwapMax=0`.
+  - metrics: `eval_tok_s=1.9`, `prompt_tok_s=0.9`, `TTFT=39074.880991 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15044132864`, `ram_ok=true`, `correctness_ok=true`.
+- profile_summary:
+  - `VRAM cache`: `hits=19825`, `misses=5042`, hit rate `79.7%`.
+  - aggregate line: `down calls=11760`, `total=4.930 ms/call`, `cuda_single=2.404 ms/call`, `fallback_t0=2.498 ms/call`, `single_accept=24867`, `single_decline=27068`.
+  - top120 role aggregation:
+    - gate: avg total `7.262 ms/call`, avg decode total `5.320 ms/call`, avg decode fallback `0.001 ms/call`; gate is expensive but is already almost entirely outside CPU fallback, matching the gate cache path.
+    - up: avg total `4.241 ms/call`, avg decode fallback `3.349 ms/call`, avg prompt fallback `32.033 ms/call`; up remains CPU fallback dominated.
+    - down: avg total `3.288 ms/call`, avg decode fallback `2.246 ms/call`, avg prompt fallback `35.601 ms/call`; down remains CPU fallback dominated in the generalized baseline path.
+- interpretation:
+  - The current generalized baseline is not blocked primarily by gate CPU fallback; gate source/cache movement still costs time, but fallback for gate is near zero.
+  - The largest exact-compute opportunity is now prompt-general `ffn_up_exps` first, then `ffn_down_exps`, while preserving correctness. This agrees with the failed full-output Q8_0 down GPU result: fixing only down is not enough.
+- next_design_target:
+  - Design a prompt-general up/down GPU path or fused retained dataflow with a hard-bound showing enough reduction in up/down fallback to beat the generalized baseline with margin.
+  - The first candidate should target `ffn_up_exps` because it has higher decode fallback than down on this generalized profile.
+  - Any implementation must remain prompt-general, pass strict `16GB` RAM including page cache, preserve correctness, and not use held-out prompts before candidate freeze.

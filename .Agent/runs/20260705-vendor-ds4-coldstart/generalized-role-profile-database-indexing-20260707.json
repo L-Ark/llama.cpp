@@ -1,0 +1,89 @@
+{
+  "artifact_id": "20260707-generalized-role-profile-database-indexing",
+  "created_at_utc": "2026-07-07T09:45:00Z",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit": "cf62e521b",
+  "status": "diagnostic_profile_not_sota",
+  "purpose": "Split the no-prompt-specific generalized bottleneck by tensor role after down GPU correctness work.",
+  "held_out_used": false,
+  "prompt": "Describe database indexing in one concise paragraph.",
+  "prompt_status": "Already used demo/general profile prompt; not part of locked held-out set.",
+  "run": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T093826Z-role-profile-generalized-20260707/database-indexing-role-profile-cpu40-vram0gb",
+    "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli",
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "config": "cpu_moe=40, vram_cache=0, gate one-stream cache 13568 MiB, no prompt-specific pack/profile/alias, n_predict=96, c=256, b=16, ub=16",
+    "strict_memory": {
+      "memory_max_bytes": 16000000000,
+      "memory_swap_max": 0,
+      "drop_caches_before_case": true
+    }
+  },
+  "metrics": {
+    "eval_tok_s": 1.9,
+    "prompt_tok_s": 0.9,
+    "ttft_estimate_ms": 39074.880991,
+    "elapsed_seconds": 86.7,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15044132864,
+    "memory_max_events": 24335,
+    "pgmajfault": 274163,
+    "workingset_refault_file": 3096009,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required"
+  },
+  "answer": "Database indexing is a technique that creates a structured data structure (like a B-tree or hash table) for one or more columns in a database table, enabling the database management system to quickly locate and access specific rows without scanning the entire table, thereby dramatically improving query performance for operations such as SELECT, JOIN, and WHERE clauses. However, while indexes accelerate read operations, they also add overhead to write operations (INSERT, UPDATE, DELETE) and consume additional storage space, requiring careful",
+  "cache_profile": {
+    "vram_cache_hits": 19825,
+    "vram_cache_misses": 5042,
+    "vram_cache_hit_rate_pct": 79.7
+  },
+  "kimi_cpu_moe_profile": {
+    "down_calls": 11760,
+    "down_total_ms_per_call": 4.930,
+    "down_cuda_single_ms_per_call": 2.404,
+    "down_fallback_t0_ms_per_call": 2.498,
+    "batch_accept": 0,
+    "batch_decline": 0,
+    "single_accept": 24867,
+    "single_decline": 27068
+  },
+  "top120_role_aggregation": {
+    "gate": {
+      "calls": 3920,
+      "avg_total_ms": 7.262,
+      "avg_fallback_ms": 0.001,
+      "avg_decode_total_ms": 5.320,
+      "avg_decode_fallback_ms": 0.001,
+      "avg_prompt_total_ms": 68.763,
+      "avg_prompt_fallback_ms": 0.001,
+      "interpretation": "Gate is expensive but no longer CPU-fallback dominated under the gate one-stream cache path."
+    },
+    "up": {
+      "calls": 3920,
+      "avg_total_ms": 4.241,
+      "avg_fallback_ms": 4.227,
+      "avg_decode_total_ms": 3.363,
+      "avg_decode_fallback_ms": 3.349,
+      "avg_prompt_total_ms": 32.059,
+      "avg_prompt_fallback_ms": 32.033,
+      "interpretation": "Up is CPU-fallback dominated and is the first exact-compute target."
+    },
+    "down": {
+      "calls": 3920,
+      "avg_total_ms": 3.288,
+      "avg_fallback_ms": 3.267,
+      "avg_decode_total_ms": 2.265,
+      "avg_decode_fallback_ms": 2.246,
+      "avg_prompt_total_ms": 35.666,
+      "avg_prompt_fallback_ms": 35.601,
+      "interpretation": "Down is CPU-fallback dominated, but previous full-output Q8_0 GPU path was slower than CPU fallback."
+    }
+  },
+  "conclusion": "The generalized baseline is mainly blocked by prompt-general up and down fallback, not by gate CPU fallback. Gate/source movement still matters, but next exact compute work should target ffn_up_exps first, then a better retained/fused down path rather than more tuning of the rejected full-output Q8_0 down kernel.",
+  "next_action": "Design a prompt-general up/down GPU or fused retained dataflow candidate with a hard-bound showing enough reduction to beat the generalized baseline with margin; do not use held-out prompts before candidate freeze."
+}
