@@ -6242,3 +6242,35 @@
 - next_action:
   - Continue with the plan after X10-K: add an act-level parity probe for separate `gate/up -> clamp -> swiglu` before retrying any fused up/gate or retained down handoff.
   - Do not use held-out prompts until a prompt-general candidate is frozen.
+
+## 2026-07-07 X10-L execution result：act-level parity probe scaffold validated
+
+- attempt_id: `20260707-ds4-act-parity-probe-scaffold`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-act-parity-probe-identity-20260707.json`
+- status: `act_level_parity_probe_scaffold_validated_identity_not_sota`
+- purpose:
+  - Implement the X10-K next action before retrying any fused up/gate path.
+  - Provide a strict 16GB tool that compares explicit and candidate per-layer `gate_clamped`, `up_clamped`, and `swiglu` tensor sums before down/logits.
+- source_update:
+  - Added `.Agent/run-tools/run_ds4_act_parity_probe.py`.
+  - The script creates explicit/candidate cases, runs `llama-debug` under `systemd-run --wait --collect` with `MemoryMax=16000000000`, `MemorySwapMax=0`, and `drop_caches` before each case.
+  - It captures tensors matching `.*ffn_moe_(gate_clamped|up_clamped|swiglu).*`, parses per-layer `sum = ...` values, compares common names, reports missing tensors, and fails if no tensor records are found.
+  - It accepts candidate-only env via repeated `--candidate-env KEY=VALUE`, so the next fused up/gate candidate can be checked without changing the probe.
+  - Updated `common/debug.cpp` so `common_debug_cb_eval` respects `--tensor-filter` during `ask=true`; with a filter, it only retrieves matching tensors instead of copying every graph tensor. This affects only debug/eval-callback tooling, not default `llama-cli` inference.
+- build_validation:
+  - command: `cmake --build build-ds4-moe-stream --target llama-debug -j20`
+  - result: passed.
+- identity_probe:
+  - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-identity-smoke-v2`
+  - prompt: `Please introduce France in a short paragraph.`
+  - prompt scope: calibration fixed prompt only; `held_out_test_set_v1_locked` was not used.
+  - candidate env: empty, so this validates probe mechanics by comparing explicit path against itself.
+  - result: `explicit_records=129`, `candidate_records=129`, `record_names=129`, `max_abs_sum_diff=0.0`, `num_diffs_over_atol=0`, `status=pass`.
+  - runtime: explicit `0:34.12`, candidate `0:33.18`; max RSS about `15.6GB`; both exited `0` under strict 16GB/no-swap cgroup.
+- decision:
+  - Accept this as a default-off diagnostic scaffold for act-level parity.
+  - This is not a fused up/gate candidate and not a token-rate SOTA.
+  - Any future fused/refactored `gate/up -> clamp -> swiglu` path must pass this act-level probe with nonzero records before fixed-text top1 or token-rate benchmarking.
+- next_action:
+  - Re-attempt the DS4 fused up/gate correctness scaffold only after wiring it through this probe.
+  - First compare `gate_clamped`, `up_clamped`, and `swiglu` sums per layer; if act-level differences appear, debug the earliest differing layer before running final-logit top1.
