@@ -2242,6 +2242,151 @@ python3 .Agent/run-tools/kimi_activation_sample_summary.py \
   --min-layers-per-prompt 60
 ```
 
+## Phase 5I: GP85-Corpus Output-Subspace Validation
+
+Goal:
+
+- Re-run the dynamic output-subspace oracle on the better GP85 activation corpus
+  before fully rejecting or redesigning that non-expert-local family.
+- GP84 used GP76b, which had only `216` total activation records and was biased
+  toward early decode calls; GP85 has `1536` records and full layer/role
+  coverage.
+
+Scope:
+
+- Dev-only offline oracle.
+- Use GP85 corpus only.
+- No held-out prompts.
+- No runtime behavior change and no SOTA claim.
+
+Method:
+
+- Run `.Agent/run-tools/kimi_output_subspace_oracle.py` on:
+  - `.Agent/runs/20260708-gp85-strided-activation-corpus/dev_japan_factual`;
+  - `.Agent/runs/20260708-gp85-strided-activation-corpus/dev_python_reverse`;
+  - `.Agent/runs/20260708-gp85-strided-activation-corpus/dev_mixed_summary`.
+- Use `max_records_per_prompt=512` and ranks `1,2,3,4`.
+- Apply the same advancement gate as GP84:
+  - rank `<=3`;
+  - summed-output mean rel L2 `<=0.10`;
+  - both down and fused up/gate must pass.
+
+Acceptance:
+
+- If rank `<=3` still fails on complete groups, close dynamic output-subspace
+  as a primary path.
+- If it unexpectedly passes on complete groups, do not use held-out yet; first
+  design a concrete dev-only compute/storage representation and estimate
+  runtime bytes.
+
+GP86 diagnostic result on 2026-07-08:
+
+- Report:
+  - `.Agent/runs/20260708-gp86-output-subspace-gp85-corpus/report.md`
+  - `.Agent/runs/20260708-gp86-output-subspace-gp85-corpus/report.json`
+- Finding:
+  - record-level stride produced incomplete active groups;
+  - fused up/gate pairs were not reconstructable from the sampled records;
+  - the report only contained down rows and showed mean rank ratio near `0.93`,
+    proving most groups had too few sampled active experts.
+- Decision:
+  - treat GP86 as invalid for output-subspace/fused-upgate validation;
+  - do not use this report to accept or reject the representation;
+  - add group/call-level activation sampling before rerunning any group-level
+    oracle.
+
+## Phase 5J: Call-Strided Activation Dump For Group-Level Oracles
+
+Goal:
+
+- Fix the GP86 sampling issue by collecting complete active sets instead of
+  individual strided records.
+
+Implementation:
+
+- Add default-off call-level dump stride:
+  - `GGML_MOE_ACTIVATION_DUMP_CALL_STRIDE=<n>`;
+  - default `1`, preserving existing behavior.
+- When `CALL_STRIDE > 1`, keep all eligible activation records whose `call`
+  satisfies `call % CALL_STRIDE == 0`.
+- In call-stride mode, do not additionally apply record-stride filtering,
+  because record-stride can break up/gate pairs and active sets.
+
+Smoke:
+
+- Run `Please introduce France in a short paragraph.`, `N=32`, cold-start,
+  16 GB cgroup.
+- Use:
+  - `GGML_MOE_ACTIVATION_DUMP_CALL_STRIDE=7`;
+  - `GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=512`;
+  - decode-only dump.
+
+Acceptance:
+
+- Default behavior unchanged when `CALL_STRIDE` is unset.
+- Quality passes, `direct_reads=0`, Host RAM remains below 16 GB.
+- Dump contains up/gate/down.
+- Group-level inspection shows sampled calls retain complete active sets for
+  at least most non-tail groups.
+
+GP87 result on 2026-07-08:
+
+- Code:
+  - `GGML_MOE_ACTIVATION_DUMP_CALL_STRIDE` in
+    `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Activation smoke report:
+  - `.Agent/runs/20260708-gp87-callstride-activation-smoke/summary.md`
+  - prompt: `Please introduce France in a short paragraph.`
+  - `N=32`, `max_records=512`, `call_stride=7`;
+  - quality pass;
+  - token rate `1.83 tok/s`;
+  - TTFT `82667.35 ms`;
+  - decode `16941.86 ms / 31`;
+  - Host RAM peak `15899996160`;
+  - `direct_reads=0`;
+  - activation records `512`;
+  - layers `26`, tensors `65`;
+  - role counts: down `152`, gate `180`, up `180`.
+- Group completeness:
+  - up/gate expert pairs: `180/180`;
+  - complete up/gate calls: `22/23`, with the only partial group caused by the
+    `max_records` tail cutoff;
+  - complete down calls: `19/19`.
+- Output-subspace smoke report:
+  - `.Agent/runs/20260708-gp87-callstride-output-subspace-smoke/report.md`
+  - fused up/gate rows are present, confirming call-stride data is valid for
+    group-level fused analyses.
+  - rank `<=3` still fails:
+    - down rank 3 mean sum rel L2 `0.659468`;
+    - fused up/gate rank 3 mean sum rel L2 `0.768264`.
+- Decision:
+  - accept call-stride activation dump as the correct sampling mechanism for
+    future group-level oracles;
+  - keep it default-off;
+  - do not claim SOTA from this diagnostic run;
+  - rerun any future group-level representation screen on call-stride data, not
+    record-stride data.
+- Reproduce smoke:
+
+```bash
+cd /root/lfz/tmp/kimi-stage2m-align
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260708-gp87-callstride-activation-smoke/dev_france_regression
+rm -rf "$RUN"
+mkdir -p "$RUN/act"
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO=/root/lfz/tmp/kimi-stage2m-align \
+    RUN="$RUN" N=32 PROFILE=0 COPY_PROFILE=0 \
+    PROMPT_ID=dev_france_regression \
+    PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+    QUALITY_KEYWORDS="france|french,paris|europe|culture" \
+    EXTRA_RUNTIME_ENV="GGML_MOE_ACTIVATION_DUMP_DIR=$RUN/act
+GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=512
+GGML_MOE_ACTIVATION_DUMP_CALL_STRIDE=7
+GGML_MOE_ACTIVATION_DUMP_DECODE_ONLY=1" \
+    .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
 ## Run Discipline
 
 For every experiment:
@@ -2272,13 +2417,19 @@ Continue from Phase 5E:
 6. GP85 adds strided activation dumping and collects a better dev-only corpus
    so the next representation search is not biased to the first few decode
    calls.
-7. Next primary direction must be a different non-expert-local byte-reduced
+7. Run GP86 to validate the GP84 dynamic output-subspace conclusion on GP85's
+   larger corpus.
+8. GP86 record-stride data is invalid for group-level fused/upgate validation;
+   implement call-stride sampling and rerun a group-complete smoke.
+9. GP87 adds default-off call-stride activation dump and validates that it
+   preserves fused up/gate groups for group-level oracles.
+10. Next primary direction must be a different non-expert-local byte-reduced
    representation or compute/storage-form change. Prediction/prefetch is
    secondary after bytes are reduced.
-8. The next screen must target global moved bytes around `0.30x-0.40x` and
+11. The next screen must target global moved bytes around `0.30x-0.40x` and
    fused up/gate mean rel L2 close to the quality gate before any runtime
    kernel is written.
-9. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+12. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
    gains can regress held-out performance severely.
 
 Rationale:

@@ -1,0 +1,103 @@
+{
+  "accepted_for_dev_representation_screening": true,
+  "all_direct_reads_zero": true,
+  "all_layer_coverage_passed": true,
+  "all_quality_passed": true,
+  "decision": "Accept this dev-only activation sample for prompt-general representation screening.",
+  "expected_min_records": 512,
+  "expected_records_per_prompt": 512,
+  "kind": "kimi_activation_sample_summary",
+  "max_memory_peak": 15899996160,
+  "min_layers_per_prompt": 20,
+  "prompts": [
+    {
+      "activation": {
+        "layer_count": 26,
+        "layers": [
+          3,
+          6,
+          7,
+          10,
+          11,
+          12,
+          13,
+          14,
+          16,
+          17,
+          20,
+          21,
+          24,
+          27,
+          28,
+          31,
+          34,
+          35,
+          38,
+          42,
+          45,
+          49,
+          52,
+          56,
+          59,
+          60
+        ],
+        "records": 512,
+        "role_counts": {
+          "down,decode": 152,
+          "gate,decode": 180,
+          "up,decode": 180
+        },
+        "tensor_count": 65,
+        "top_tensors": [
+          [
+            "blk.60.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.60.ffn_gate_exps.weight",
+            8
+          ],
+          [
+            "blk.60.ffn_down_exps.weight",
+            8
+          ],
+          [
+            "blk.7.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.7.ffn_gate_exps.weight",
+            8
+          ],
+          [
+            "blk.12.ffn_down_exps.weight",
+            8
+          ],
+          [
+            "blk.14.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.14.ffn_gate_exps.weight",
+            8
+          ]
+        ]
+      },
+      "decode_ms": 16941.86,
+      "decode_runs": 31,
+      "direct_reads": 0,
+      "memory_peak": 15899996160,
+      "output": "France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous",
+      "prompt": "Please introduce France in a short paragraph.",
+      "prompt_id": "dev_france_regression",
+      "quality": "pass",
+      "quality_reason": "ok",
+      "run_dir": ".Agent/runs/20260708-gp87-callstride-activation-smoke/dev_france_regression",
+      "token_rate": 1.83,
+      "ttft_ms": 82667.35
+    }
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_activation_sample_summary.py --root .Agent/runs/20260708-gp87-callstride-activation-smoke --out-json .Agent/runs/20260708-gp87-callstride-activation-smoke/summary.json --out-md .Agent/runs/20260708-gp87-callstride-activation-smoke/summary.md --expected-records-per-prompt 512 --min-layers-per-prompt 20",
+  "root": ".Agent/runs/20260708-gp87-callstride-activation-smoke",
+  "total_activation_records": 512
+}

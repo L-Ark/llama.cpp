@@ -2998,6 +2998,16 @@ static int moe_activation_dump_stride() {
     return stride;
 }
 
+static int moe_activation_dump_call_stride() {
+    static const int stride = []() {
+        const char *env = std::getenv("GGML_MOE_ACTIVATION_DUMP_CALL_STRIDE");
+        if (!env || !env[0]) return 1;
+        const long v = std::strtol(env, nullptr, 10);
+        return (int)std::max<long>(1, std::min<long>(v, 1000000));
+    }();
+    return stride;
+}
+
 static bool moe_activation_dump_decode_only() {
     static const bool decode_only = []() {
         const char *env = std::getenv("GGML_MOE_ACTIVATION_DUMP_DECODE_ONLY");
@@ -3030,10 +3040,17 @@ static void moe_activation_dump_record(
 
     static std::atomic<uint64_t> next_candidate{0};
     static std::atomic<uint64_t> next_record{0};
-    const uint64_t candidate_id = next_candidate.fetch_add(1, std::memory_order_relaxed);
-    const int stride = moe_activation_dump_stride();
-    if ((candidate_id % (uint64_t)stride) != 0) {
-        return;
+    const int call_stride = moe_activation_dump_call_stride();
+    if (call_stride > 1) {
+        if ((call % (uint64_t)call_stride) != 0) {
+            return;
+        }
+    } else {
+        const uint64_t candidate_id = next_candidate.fetch_add(1, std::memory_order_relaxed);
+        const int stride = moe_activation_dump_stride();
+        if ((candidate_id % (uint64_t)stride) != 0) {
+            return;
+        }
     }
     const uint64_t record_id = next_record.fetch_add(1, std::memory_order_relaxed);
     if (record_id >= (uint64_t)moe_activation_dump_max_records()) {
