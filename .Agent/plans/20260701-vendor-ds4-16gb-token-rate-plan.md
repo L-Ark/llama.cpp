@@ -6707,3 +6707,86 @@ Decision:
 - Accept and push as a diagnostic scaffold only.
 - SOTA unchanged.
 - Next step remains hard-bound-driven: use the probe facts to design a retained gate/source context only if a new generalized bound clears `min_eval_tok_s >= 5.5`; otherwise close this path and switch to compact representation feasibility.
+
+## 2026-07-08 X10-X route selection：retained-gate handoff closes, lowbit correctness gate next
+
+- attempt_id: `20260708-post-retained-gate-lowbit-route-selection`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/post-retained-gate-lowbit-route-selection-20260708.json`
+- status: `route_selection_recorded_no_source_change_not_sota`
+
+Retained-gate handoff conclusion:
+- Probe artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/retained-gate-interface-probe-accepted-20260707.json`
+- Probe CSV: `/root/lfz/runs/vendor-ds4-16gb/20260707T155914Z-retained-gate-interface-probe-smoke-v2/retained-gate-probe-smoke-cpu40-vram0gb/retained_gate_interface_probe.csv`
+- rows: `1806`
+- observations:
+  - `selected_weights_retained_available=1`
+  - `selected_src0_is_selection=1`
+  - `graph_gate_output_input_available=0`
+  - `build_expert_mix_receives_scores=0`
+  - total selected/weights handoff payload in the smoke run is tiny (`103200` bytes).
+- decision:
+  - Current DeepSeek4 already passes `selected_experts` and `weights` into `build_expert_mix`.
+  - Passing only top-k/weights is not a new source-movement reduction.
+  - The missing piece would be a retained gate/source context that avoids expert gate-source movement and reduces up/down fallback, but current evidence does not prove an `80%/80%` generalized cut.
+
+Current-head sparse fused MMVQ placement probe:
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T160551Z-sparse-fused-mmvq-placement-probe-current-head/sparse-fused-mmvq-placement-cpu40-vram0gb`
+- prompt: `Explain database indexes briefly.`
+- strict 16GB/no-swap/drop-caches result:
+  - `eval_tok_s=1.5`
+  - `prompt_tok_s=0.8`
+  - `TTFT=34350.127534 ms`
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15106654208`
+  - `ram_ok=true`
+  - `correctness_ok=true`
+- probe CSV rows: `1806`
+- profile loaded:
+  - `top_n=48`
+  - `profile_payload_bytes=427819008`
+  - `profile_active_layers=32`
+  - `profile_max_pairs_per_layer=3`
+  - placement candidate rows: `1344`
+  - rows requiring runtime membership probe: `1344`
+- decision:
+  - The default-off placement/proof skeleton still works on current head.
+  - This top48 profile is not a generalized SOTA path.
+  - Existing generalized sparse top64/top128/top256/top512 bounds remain closed, so do not implement sparse-pair writeback/hot branch from current evidence.
+
+Closed routes reconfirmed:
+- Generalized sparse retained topN:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-generalized-bound-audit-after-membership-20260707.json`
+  - decision: closed for generalized target.
+- Compact/batched updown transfer alone:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/compact-batched-updown-transfer-hard-bound-20260707.json`
+  - decision: not sufficient for generalized 5 tok/s.
+- q2ternary / simple lowbit sidecars:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/q2ternary-partial-compressed-candidate-20260707.json`
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/lowbit-sidecar-generalization-feasibility-audit-20260707.json`
+  - decision: failed op-level correctness; exact sidecar has no compression benefit.
+- external IQ2/IQ2_S GGUF:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-france-correctness-reject-20260707.json`
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage3b-reasonoff-correctness-reject-20260707.json`
+  - decision: vendor-loadable but France correctness failed; do not run calibration/dev or held-out.
+
+Remaining viable direction:
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-lowbit-representation-coverage-bound-20260707.json`
+- best zero-overhead family:
+  - gate compression: `8x`
+  - up/down compression: `8x`
+  - gate compressed payload: `4.4726 GiB`
+  - up/down compressed payload: `6.7288 GiB`
+  - generalized min bound: `6.5404 tok/s`
+  - generalized mean bound: `10.4135 tok/s`
+- interpretation:
+  - A real 8x-ish gate + up/down representation has enough zero-overhead generalized margin.
+  - No currently tested lowbit representation has passed fixed-text top1/op-level correctness.
+
+Next implementation rule:
+- Do not write a token-rate runtime source patch now.
+- Do not run strict cold SOTA benchmark for lowbit routes until correctness is proven.
+- Allowed next work:
+  - offline or compare-only correctness gate for a stronger lowbit representation;
+  - it must prove fixed-text top1 and France semantic correctness before any performance run.
+- Fallback:
+  - if no correctness-verified representation appears, switch to external high-acceptance draft/verifier artifact search instead of more local cache/source tuning.
