@@ -5699,3 +5699,60 @@
   - The standalone `blk.3` down GPU writeback is sufficient to flip token top1, so the blocker is not the prefix combination of calls `0..3`.
   - The full-source alias/io_uring path is not the correctness problem; it consistently loads the right entries with misses zero.
   - Next work must compare the exact `dst` rows after writeback/scatter, not only sampled raw row MMV output. The likely bug class is row placement, accumulation semantics, or tolerance amplification from replacing CPU down output with the current GPU down output.
+
+### X10-C next plan：make Down expert GPU compute token-stable before any new token-rate benchmark
+
+- status: planned_next
+- priority: highest
+- reason:
+  - Gate already has an accepted GPU/VRAM-cache path, and GP4-style full-source alias/io_uring now loads DeepSeek expert bytes correctly with `misses=0`.
+  - The next blocker is not VRAM fullness or source IO; it is `ffn_down_exps` GPU writeback correctness.
+  - `MAX_CALLS=1/2/3` down perf passes fixed-text top1, but `MAX_CALLS=4` fails, and standalone `blk.3.ffn_down_exps.weight` perf reproduces the same top1 failure.
+  - No calibration/dev token-rate benchmark may be run with broader down perf until this correctness boundary is fixed.
+
+#### X10-C1：capture exact `blk.3` CPU-vs-GPU writeback rows
+
+- goal: Determine whether the `blk.3` failure is from raw MXFP4 MMV math, row placement, dst/token mapping, scatter/writeback, accumulation semantics, or downstream amplification.
+- implementation:
+  - Add default-off debug output for `GGML_MOE_STREAM_DOWN_MXFP4_DEBUG_TENSOR=blk.3.ffn_down_exps.weight`.
+  - For the failing perf call, record active experts, `dst_ids`, `token_ids`, `rows_stride`, `dst_cols`, `ne00`, `ne01`, and whether GPU handoff/down q8k is active.
+  - Capture full CPU reference down rows and GPU down rows for every active route before writeback.
+  - Capture the final `dst` rows after scatter/writeback, not only raw row MMV output.
+  - Report per active row `max_abs`, `mean_abs`, `max_rel`, top-N worst columns, and row norm ratios.
+- required_validation:
+  - Run fixed-text `llama-results` with `blk.3` targeted parity and perf under strict 16GB/no-swap.
+  - Parity/debug path must not change logits: `same_top1=145/145`.
+  - Perf path may fail during diagnosis, but the artifact must identify the exact row/column/writeback mismatch class.
+- reject_if:
+  - Debug instrumentation changes default behavior when env is unset.
+  - Debug path exceeds 16GB cgroup or uses held-out prompts.
+
+#### X10-C2：fix the identified down writeback bug
+
+- possible_fix_areas:
+  - row mapping: verify `dst_ids`, `token_ids`, `flat dst row`, and `matrix_row_counts` for decode vs prompt;
+  - accumulation semantics: verify whether CPU path accumulates multiple experts into the same dst row while GPU path overwrites, scatters, or zeros incorrectly;
+  - scaling: verify expert weights, DS4 expert scale, gate weights, and any post-MMV scaling/clamp applied by CPU but missing in GPU path;
+  - output layout: verify `dst_nb1`, `dst_nb2`, `dst_cols`, and D2H layout match CPU `ggml_compute_forward_mul_mat_id`;
+  - numeric tolerance: if layout/semantics are correct, measure whether MXFP4 GPU approximation alone can flip top1 and whether a more exact kernel/accumulation type is required.
+- validation_sequence:
+  1. targeted `blk.3` parity full rows passes;
+  2. targeted `blk.3` perf top1 passes;
+  3. prefix sweep passes at least `MAX_CALLS=4`, then `8`, then a larger bounded value;
+  4. full fixed-text top1 passes with the intended down perf scope;
+  5. only then run a short semantic France smoke;
+  6. only after that run `calibration_dev_set_v1` token-rate benchmark.
+- promotion_gate:
+  - No accepted SOTA until generalized calibration/dev improves over no-prompt-specific baseline and all correctness/RAM/TTFT gates pass.
+  - Held-out test remains locked until a candidate is frozen.
+
+#### X10-C3：token-rate path after down correctness
+
+- first_perf_candidate:
+  - Use prompt-agnostic full-source alias TSV, aligned io_uring reads, and corrected down GPU path.
+  - Keep up fallback unchanged initially, so the measurement isolates down improvement.
+  - Run `calibration_dev_set_v1` under strict cold 16GB cgroup and record per prompt token rate, TTFT, memory_file, exact output, fallback counters, and source read counters.
+- expected_outcome:
+  - If down fallback time drops but token rate still misses target, proceed to up GPU path with the same correctness-first method.
+  - If source IO becomes dominant after down correctness, move from single-entry io_uring to true batched alias copy and tune `IO_DEPTH`, refill batch, pinned slots, and cache split.
+  - If token rate improves under all gates, immediately record full reproduction info, commit, push to `ssd/vendor/deepseek-token-rate-16gb`, and reproduce from the pushed commit.
