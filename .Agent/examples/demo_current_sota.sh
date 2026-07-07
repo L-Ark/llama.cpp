@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Demo the current prompt-general vendor DeepSeek strict-16GB SOTA/reference path.
+# Demonstrate the current prompt-general vendor DeepSeek strict-16GB path.
 #
-# This intentionally does NOT use France-specific expert packs, prompt-derived
-# profiles, or cache-admission profiles. It is the no-prompt-specific path used
-# for the generalized random-prompt target.
+# This script is intentionally prompt-general:
+# - no prompt-specific expert pack
+# - no prompt-derived cache admission profile
+# - no France-only prefill/profile path
 #
 # Usage:
 #   .Agent/examples/demo_current_sota.sh --prompt "AI infra is what?"
 #   .Agent/examples/demo_current_sota.sh --stdin-prompt
-#   printf 'Introduce Brazil briefly.\n' | .Agent/examples/demo_current_sota.sh --stdin-prompt
-#   .Agent/examples/demo_current_sota.sh --prompt "Explain quantum computing briefly." --n-predict 96
-#   .Agent/examples/demo_current_sota.sh --prompt "Today, what should I eat?" --print-command
+#   .Agent/examples/demo_current_sota.sh --prompt-file prompt.txt
+#   .Agent/examples/demo_current_sota.sh
+#
+# Useful options:
+#   --n-predict 96       Decode length. Default matches the generalized baseline.
+#   --warm               Do not drop page cache before this case.
+#   --print-command      Print the strict runner command without executing it.
 #
 # Optional path overrides:
-#   ROOT=/path/to/checkout BINARY=/path/to/llama-cli MODEL=/path/to/model.gguf .Agent/examples/demo_current_sota.sh
+#   ROOT=/path/to/repo BINARY=/path/to/llama-cli MODEL=/path/to/model.gguf \
+#     .Agent/examples/demo_current_sota.sh --prompt "..."
 
 ROOT="${ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 RUNNER="${RUNNER:-$ROOT/.Agent/run-tools/strict_ds4_runner.py}"
@@ -24,32 +30,49 @@ MODEL="${MODEL:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flas
 OUT_ROOT="${OUT_ROOT:-/root/lfz/runs/vendor-ds4-16gb}"
 
 PROMPT=""
-RUN_NAME="demo-general-sota"
-CASE_NAME="custom"
-N_PREDICT=128
-PRINT_COMMAND=0
+PROMPT_FILE=""
 STDIN_PROMPT=0
+RUN_NAME="demo-generalized-sota"
+CASE_NAME=""
+N_PREDICT=96
 COLD_START=1
+PRINT_COMMAND=0
 
 usage() {
-  sed -n '1,18p' "$0"
+  sed -n '1,29p' "$0"
+}
+
+die() {
+  echo "error: $*" >&2
+  exit 2
 }
 
 slugify() {
   python3 - "$1" <<'PY'
+import hashlib
 import re
 import sys
 
 text = sys.argv[1].strip().lower()
 text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
-print((text or "custom")[:40])
+if text:
+    print(text[:48])
+else:
+    digest = hashlib.sha1(sys.argv[1].encode("utf-8")).hexdigest()[:10]
+    print(f"prompt-{digest}")
 PY
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --prompt)
-      PROMPT="${2:?missing value for --prompt}"
+      [[ $# -ge 2 ]] || die "missing value for --prompt"
+      PROMPT="$2"
+      shift 2
+      ;;
+    --prompt-file)
+      [[ $# -ge 2 ]] || die "missing value for --prompt-file"
+      PROMPT_FILE="$2"
       shift 2
       ;;
     --stdin-prompt)
@@ -57,18 +80,21 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --run-name)
-      RUN_NAME="${2:?missing value for --run-name}"
+      [[ $# -ge 2 ]] || die "missing value for --run-name"
+      RUN_NAME="$2"
       shift 2
       ;;
     --case-name)
-      CASE_NAME="${2:?missing value for --case-name}"
+      [[ $# -ge 2 ]] || die "missing value for --case-name"
+      CASE_NAME="$2"
       shift 2
       ;;
     --n-predict)
-      N_PREDICT="${2:?missing value for --n-predict}"
+      [[ $# -ge 2 ]] || die "missing value for --n-predict"
+      N_PREDICT="$2"
       shift 2
       ;;
-    --warm)
+    --warm|--no-drop-caches)
       COLD_START=0
       shift
       ;;
@@ -81,31 +107,34 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo "unknown argument: $1" >&2
-      usage >&2
-      exit 2
+      die "unknown argument: $1"
       ;;
   esac
 done
 
-if [[ "$STDIN_PROMPT" -eq 1 ]]; then
-  PROMPT="$(cat)"
-fi
+input_modes=0
+[[ -n "$PROMPT" ]] && input_modes=$((input_modes + 1))
+[[ -n "$PROMPT_FILE" ]] && input_modes=$((input_modes + 1))
+[[ "$STDIN_PROMPT" -eq 1 ]] && input_modes=$((input_modes + 1))
+[[ "$input_modes" -le 1 ]] || die "use only one of --prompt, --prompt-file, or --stdin-prompt"
 
-if [[ -z "${PROMPT//[[:space:]]/}" ]]; then
+if [[ -n "$PROMPT_FILE" ]]; then
+  [[ -f "$PROMPT_FILE" ]] || die "prompt file not found: $PROMPT_FILE"
+  PROMPT="$(<"$PROMPT_FILE")"
+elif [[ "$STDIN_PROMPT" -eq 1 ]]; then
+  PROMPT="$(cat)"
+elif [[ -z "${PROMPT//[[:space:]]/}" ]]; then
   if [[ -t 0 ]]; then
     printf 'Prompt: ' >&2
     IFS= read -r PROMPT
   else
-    echo "missing prompt; pass --prompt TEXT or --stdin-prompt" >&2
-    exit 2
+    die "missing prompt; pass --prompt TEXT, --prompt-file FILE, or --stdin-prompt"
   fi
 fi
 
-if ! [[ "$N_PREDICT" =~ ^[0-9]+$ ]] || [[ "$N_PREDICT" -lt 1 ]]; then
-  echo "--n-predict must be a positive integer" >&2
-  exit 2
-fi
+[[ -n "${PROMPT//[[:space:]]/}" ]] || die "prompt is empty"
+[[ "$N_PREDICT" =~ ^[0-9]+$ ]] || die "--n-predict must be a positive integer"
+[[ "$N_PREDICT" -ge 1 ]] || die "--n-predict must be a positive integer"
 
 cd "$ROOT"
 
@@ -116,11 +145,9 @@ for path in "$RUNNER" "$BINARY" "$MODEL"; do
     missing=1
   fi
 done
-if [[ "$missing" -ne 0 ]]; then
-  exit 2
-fi
+[[ "$missing" -eq 0 ]] || exit 2
 
-if [[ "$CASE_NAME" == "custom" ]]; then
+if [[ -z "$CASE_NAME" ]]; then
   CASE_NAME="$(slugify "$PROMPT")"
 fi
 
@@ -171,17 +198,19 @@ after=$(mktemp)
 trap 'rm -f "$before" "$after"' EXIT
 find "$OUT_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%p\n' 2>/dev/null | sort > "$before"
 
-printf '[demo] prompt-general vendor DeepSeek SOTA/reference path\n'
-printf '[demo] repo: %s\n' "$ROOT"
-printf '[demo] commit: %s\n' "$(git rev-parse --short HEAD)"
-printf '[demo] prompt: %s\n' "$PROMPT"
-printf '[demo] n_predict: %s\n' "$N_PREDICT"
+printf '[demo] current prompt-general vendor DeepSeek strict-16GB path\n'
+printf '[demo] repo=%s\n' "$ROOT"
+printf '[demo] commit=%s\n' "$(git rev-parse --short HEAD)"
+printf '[demo] prompt=%s\n' "$PROMPT"
+printf '[demo] n_predict=%s\n' "$N_PREDICT"
+printf '[demo] target_context=random/generalized prompt, 16GB host RAM including page cache, 32GB RTX 5090\n'
+printf '[demo] current_generalized_baseline=min 1.8 tok/s, mean 2.18 tok/s, max 2.7 tok/s on calibration prompts\n'
+printf '[demo] config=no prompt-specific pack/profile; gate one-stream cache only; cpu_moe=40; vram_cache=0\n'
 if [[ "$COLD_START" -eq 1 ]]; then
-  printf '[demo] memory: strict cold run, drop_caches + 16GB cgroup including page cache\n'
+  printf '[demo] memory_mode=cold strict cgroup, drop_caches before case, MemoryMax=16000000000, MemorySwapMax=0\n'
 else
-  printf '[demo] memory: warm run, 16GB cgroup including page cache\n'
+  printf '[demo] memory_mode=warm strict cgroup, MemoryMax=16000000000, MemorySwapMax=0\n'
 fi
-printf '[demo] config: no prompt-specific expert pack/profile; gate one-stream cache only\n'
 
 "${cmd[@]}"
 
@@ -206,8 +235,7 @@ from pathlib import Path
 summary = Path(sys.argv[1])
 s = json.loads(summary.read_text())
 
-print("\n[demo] metrics")
-for key in [
+keys = [
     "eval_tok_s",
     "prompt_tok_s",
     "ttft_estimate_ms",
@@ -222,11 +250,25 @@ for key in [
     "oom_seen",
     "correctness_ok",
     "correctness_reason",
-]:
+]
+
+print("\n[demo] metrics")
+for key in keys:
     print(f"{key}={s.get(key)}")
 
 print("\n[demo] answer")
-print(s.get("answer", ""))
+answer = (s.get("answer") or "").strip()
+print(answer)
+
+ram_ok = s.get("ram_ok") is True and not s.get("ram_limit_killed") and not s.get("oom_seen")
+if not ram_ok:
+    print("\n[demo] status=FAILED_RAM_GATE")
+    raise SystemExit(1)
+
+print("\n[demo] status=RUN_COMPLETED_STRICT_16GB")
+print("[demo] note=For arbitrary prompts, review the printed answer for semantic correctness.")
+if answer and answer[-1] not in ".!?。！？)]}\"'":
+    print("[demo] answer_note=possibly_truncated; rerun with a larger --n-predict for longer answers.")
 PY
 
 printf '\n[demo] gate/cache counters\n'
