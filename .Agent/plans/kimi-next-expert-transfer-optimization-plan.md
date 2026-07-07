@@ -547,6 +547,152 @@ GP71 probe smoke result on 2026-07-07:
   - do not run held-out prompts until a dev N32/N96 prefetch run passes quality,
     TTFT, RAM, direct-read, and net token-rate gates.
 
+GP72 planned cap4 runtime host-prefetch hook:
+
+- Goal:
+  - convert GP71's execution-order lead into a real default-off prefetch
+    candidate without writing a new IO subsystem.
+- Implementation:
+  - env:
+    - `GGML_MOE_NEXT_GATE_PREFETCH=1`;
+    - `GGML_MOE_NEXT_GATE_PREFETCH_CAP=4`;
+    - keep `GGML_MOE_NEXT_GATE_SHADOW_OUT=<csv>` and
+      `GGML_MOE_NEXT_GATE_SHADOW_TOPK=4` so the predicted topK graph nodes are
+      materialized;
+    - optional diagnostic:
+      `GGML_MOE_NEXT_GATE_PREFETCH_PROBE_OUT=<csv>`.
+  - `src/llama-context.cpp`:
+    - reuse the graph eval callback path from GP71;
+    - when a predicted `ffn_moe_next_shadow_topk-<layer>` node completes, copy
+      its expert IDs and submit the first `cap` IDs to CUDA MoE.
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`:
+    - expose a small `ggml_cuda_moe_next_gate_prefetch_submit()` API;
+    - map target layer to `blk.<layer>.ffn_up_exps.weight` and
+      `blk.<layer>.ffn_gate_exps.weight`;
+    - resolve exact `expert_bytes` from expert-pack metadata;
+    - enqueue into the existing planned host-prefetch queue;
+    - reuse the existing `host_prefetch_copy_h2d()` consumer, so demand can
+      consume a ready prefetched buffer.
+- Scope:
+  - decode-only in practice, because prompt/prefill does not have useful
+    next-layer lead;
+  - up/gate only; down remains handled by current-down overlap;
+  - default-off and not a SOTA claim until dev N96 and held-out gates pass.
+- Theory:
+  - cap4 policy bound suggests about `47%` useful expert coverage with
+    `~2.9%` false/actual bytes before accounting for VRAM residency;
+  - GP71 measured a median `~8 ms` same-token lead, enough to hide part of
+    host read latency if the worker is not starved by demand IO.
+- Dev acceptance before held-out:
+  - quality pass;
+  - Host RAM `<16GB`;
+  - `direct_reads=0`;
+  - host-prefetch useful hits are nonzero and materially higher than the old
+    planned-host-prefetch path;
+  - no large evicted-unused explosion;
+  - n32/n96 token rate improves or at least shows reduced demand iouring wait
+    without TTFT > +20%.
+
+GP72 cap4 runtime host-prefetch smoke result on 2026-07-07:
+
+- Run:
+  - remote: `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp72-next-gate-prefetch-smoke-n8-france`;
+  - local artifact:
+    `.Agent/runs/20260707-gp72-next-gate-prefetch-smoke-n8-france`.
+- Repro env delta on top of GP4 SOTA:
+  - `GGML_MOE_NEXT_GATE_SHADOW_OUT=<run>/next-gate-shadow.csv`;
+  - `GGML_MOE_NEXT_GATE_SHADOW_TOPK=4`;
+  - `GGML_MOE_NEXT_GATE_PREFETCH=1`;
+  - `GGML_MOE_NEXT_GATE_PREFETCH_CAP=4`;
+  - `GGML_MOE_HOST_PREFETCH_SLOTS=32`;
+  - `GGML_MOE_HOST_PREFETCH_MAX_MIB=512`;
+  - `GGML_MOE_NEXT_GATE_PREFETCH_PROBE_OUT=<run>/next-gate-prefetch-probe.csv`.
+- Result:
+  - `N=8`, France quality passed;
+  - token rate `1.27 tok/s`, decode `5531.38 ms / 7`, TTFT `81474.99 ms`;
+  - Host RAM peak `15899996160`, `direct_reads=0`;
+  - host prefetch counters:
+    - `planned_enqueued=5400`, `planned_dequeued=4809`;
+    - `hits=8`, `misses=5581`;
+    - `evicted=3879`, `read_failures=890`;
+    - `used=159.25 MiB`, `slots=32`.
+- Decision:
+  - reject cap4 as a performance candidate;
+  - do not run held-out prompts from this configuration;
+  - keep the code default-off only as a diagnostic until a smaller/safer
+    policy proves useful hits.
+- Diagnosis:
+  - GP71 proved the shadow topK has execution-order lead, but the current
+    host-prefetch queue is too small and too early for cap4 all-layer
+    predictions: many tasks are read and then evicted before demand;
+  - the worker also records `read_failures`, so the next implementation must
+    avoid losing exact expert-pack identity between prediction submission and
+    worker execution, or record the failing key to prove the mismatch.
+
+GP73 planned low-pressure next-gate prefetch diagnostic:
+
+- Goal:
+  - determine whether next-gate prefetch can produce useful hits when queue
+    pressure is reduced.
+- Configuration:
+  - same N8 France cold-start smoke;
+  - `GGML_MOE_NEXT_GATE_PREFETCH=1`;
+  - `GGML_MOE_NEXT_GATE_PREFETCH_CAP=1`;
+  - `GGML_MOE_HOST_PREFETCH_SLOTS=64`;
+  - `GGML_MOE_HOST_PREFETCH_MAX_MIB=1024`;
+  - keep `GGML_MOE_NEXT_GATE_SHADOW_OUT` and
+    `GGML_MOE_NEXT_GATE_SHADOW_TOPK=1`;
+  - omit `GGML_MOE_NEXT_GATE_PREFETCH_PROBE_OUT` to measure runtime overhead
+    without CSV writes.
+- Acceptance for further work:
+  - quality pass, Host RAM `<16GB`, `direct_reads=0`;
+  - host prefetch hits materially exceed cap4's `8` while evictions and
+    read-failures fall;
+  - token rate is neutral or better than the GP71 smoke reference `1.38 tok/s`.
+
+GP73 low-pressure next-gate prefetch result on 2026-07-07:
+
+- Run:
+  - remote:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp73-next-gate-prefetch-cap1-smoke-n8-france`;
+  - local artifact:
+    `.Agent/runs/20260707-gp73-next-gate-prefetch-cap1-smoke-n8-france`.
+- Repro env delta on top of GP4 SOTA:
+  - `GGML_MOE_NEXT_GATE_SHADOW_OUT=<run>/next-gate-shadow.csv`;
+  - `GGML_MOE_NEXT_GATE_SHADOW_TOPK=1`;
+  - `GGML_MOE_NEXT_GATE_PREFETCH=1`;
+  - `GGML_MOE_NEXT_GATE_PREFETCH_CAP=1`;
+  - `GGML_MOE_HOST_PREFETCH_SLOTS=64`;
+  - `GGML_MOE_HOST_PREFETCH_MAX_MIB=1024`;
+  - no prefetch-probe CSV output.
+- Result:
+  - `N=8`, France quality passed;
+  - token rate `1.21 tok/s`, decode `5780.30 ms / 7`, TTFT `90019.35 ms`;
+  - Host RAM peak `15899996160`, `direct_reads=0`;
+  - host prefetch counters:
+    - `planned_enqueued=3813`, `planned_dequeued=3813`;
+    - `hits=22`, `misses=5567`;
+    - `evicted=2727`, `read_failures=1000`;
+    - `used=311.50 MiB`, `slots=64`.
+- Decision:
+  - reject this runtime hook as a performance path;
+  - source code was reverted to GP71/default SOTA behavior;
+  - do not run held-out prompts for GP72/GP73.
+- Root-cause conclusion:
+  - lower cap and larger slots did not make useful-hit rate meaningful;
+  - the extra callback/shadow work plus host-prefetch queue churn raises TTFT
+    and decode time;
+  - next-gate prediction should not be implemented by feeding every predicted
+    up/gate key into the existing host-prefetch slot cache.
+- Next direction:
+  - if next-layer prediction is revisited, it needs a demand-integrated design:
+    record the exact predicted `expert_pack_entry` identity, prioritize only
+    immediately upcoming layers, cancel stale tasks, and write into a small
+    per-layer pending table consumed before demand IO submission;
+  - otherwise return to the Phase 5 structural byte-reduction path, because
+    current measurements still show that byte movement must shrink to about
+    `0.30x-0.40x` to make `5 tok/s` plausible.
+
 ## Phase 5: Structural Byte-Reduction Gate
 
 Purpose:

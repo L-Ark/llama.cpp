@@ -1,0 +1,112 @@
+repo=/root/lfz/tmp/kimi-stage2m-align
+pwd=/root/lfz/tmp/kimi-stage2m-align
+branch=vendor/kimi-speculative-general-token-rate-16gb
+head=87d9daaae8cb8a25ac25bc69efc9f3596d839b8d
+short=87d9daaae
+status_short:
+ M .Agent/plans/kimi-next-expert-transfer-optimization-plan.md
+ M ggml/src/ggml-cuda/moe_stream_batch.cu
+ M src/llama-context.cpp
+?? .Agent/plans/kimi-layer-fullhit-vram-cache-plan.md
+?? .Agent/plans/kimi-upgate-split-mirror-optimization-plan.md
+?? .Agent/run-tools/kimi-general-prompt-sweep.sh
+?? .Agent/run-tools/kimi_current_sota_profile_summary.py
+?? .Agent/run-tools/kimi_expert_pack_iouring_bench.cpp
+?? .Agent/run-tools/kimi_leave_one_dev_hotset_validation.py
+?? .Agent/run-tools/kimi_make_down_mirror_profile.py
+?? .Agent/runs/20260706-iouring-expert-parallelism/
+?? .Agent/runs/20260706-kimi-copy-profile-python-reverse-n32/answer.txt
+?? .Agent/runs/20260706-kimi-copy-profile-python-reverse-n32/copy-profile.csv
+?? .Agent/runs/20260706-kimi-copy-profile-python-reverse-n32/down-batch-profile.csv
+?? .Agent/runs/20260706-kimi-copy-profile-python-reverse-n32/fallback-profile.csv
+?? .Agent/runs/20260706-kimi-copy-profile-python-reverse-n32/memory.stat.final.txt
+?? .Agent/runs/20260706-kimi-copy-profile-python-reverse-n32/metrics.json
+?? .Agent/runs/20260706-kimi-copy-profile-python-reverse-n32/metrics.txt
+?? .Agent/runs/20260706-kimi-copy-profile-python-reverse-n32/stderr.txt
+?? .Agent/runs/20260706-kimi-copy-profile-python-reverse-n32/up-gate-profile.csv
+?? .Agent/runs/20260706-kimi-current-sota-profile/
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_france_regression/memory.stat.final.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_france_regression/metrics.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_france_regression/stderr.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_france_regression/ttft-trace.csv
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_japan_factual/memory.stat.final.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_japan_factual/metrics.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_japan_factual/stderr.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_japan_factual/ttft-trace.csv
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_linear_equation/memory.stat.final.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_linear_equation/metrics.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_linear_equation/stderr.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_linear_equation/ttft-trace.csv
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_mixed_summary/memory.stat.final.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_mixed_summary/metrics.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_mixed_summary/stderr.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_mixed_summary/ttft-trace.csv
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_photosynthesis_factual/memory.stat.final.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_photosynthesis_factual/metrics.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_photosynthesis_factual/stderr.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_photosynthesis_factual/ttft-trace.csv
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_python_reverse/memory.stat.final.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_python_reverse/metrics.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_python_reverse/stderr.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_python_reverse/ttft-trace.csv
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_zh_france/memory.stat.final.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_zh_france/metrics.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_zh_france/stderr.txt
+?? .Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/dev_zh_france/ttft-trace.csv
+?? .Agent/runs/20260706-upgate-split-sweep/
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_france_regression/route-profile.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_france_regression/route-trace.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_japan_factual/route-profile.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_japan_factual/route-trace.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_linear_equation/route-profile.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_linear_equation/route-trace.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_mixed_summary/route-profile.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_mixed_summary/route-trace.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_photosynthesis_factual/route-profile.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_photosynthesis_factual/route-trace.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_python_reverse/route-profile.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_python_reverse/route-trace.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_zh_france/route-profile.csv
+?? .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct/dev_zh_france/route-trace.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_chinese_01/down-batch-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_chinese_01/fallback-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_chinese_01/route-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_chinese_01/ttft-trace.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_chinese_01/up-gate-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_coding_01/down-batch-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_coding_01/fallback-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_coding_01/route-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_coding_01/ttft-trace.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_coding_01/up-gate-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_english_factual_01/down-batch-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_english_factual_01/fallback-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_english_factual_01/route-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_english_factual_01/ttft-trace.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_english_factual_01/up-gate-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_english_factual_02/down-batch-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_english_factual_02/fallback-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_english_factual_02/route-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_english_factual_02/ttft-trace.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_english_factual_02/up-gate-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_mixed_instruction_01/down-batch-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_mixed_instruction_01/fallback-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_mixed_instruction_01/route-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_mixed_instruction_01/ttft-trace.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_mixed_instruction_01/up-gate-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_reasoning_math_01/down-batch-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_reasoning_math_01/fallback-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_reasoning_math_01/route-profile.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_reasoning_math_01/ttft-trace.csv
+?? .Agent/runs/20260707-gp4-postcommit-test-n96-profile/test_reasoning_math_01/up-gate-profile.csv
+?? .Agent/runs/20260707-gp42-moepack-v2-parser-skeleton/synthetic-v2.expert-pack
+?? .Agent/runs/20260707-gp43-moepack-v2-read-debug/synthetic-v2.expert-pack
+?? .Agent/runs/20260707-gp44-v2-shadow-profile/synthetic-v2.expert-pack
+?? .Agent/runs/20260707-gp45-v2-shadow-pack-from-dev-routes/dev-hotset-iq1s-r055.json
+?? .Agent/runs/20260707-gp45-v2-shadow-pack-from-dev-routes/dev-hotset-iq1s-r055.shadow-v2.expert-pack
+?? .Agent/runs/20260707-gp64-next-gate-shadow-local/
+?? .Agent/runs/20260707-kimi-5tps-byte-reduction-bound-dev-profile/
+diff_stat:
+ .../kimi-next-expert-transfer-optimization-plan.md | 46 ++++++++++
+ ggml/src/ggml-cuda/moe_stream_batch.cu             | 45 +++++++++-
+ src/llama-context.cpp                              | 99 ++++++++++++++++++----
+ 3 files changed, 173 insertions(+), 17 deletions(-)
