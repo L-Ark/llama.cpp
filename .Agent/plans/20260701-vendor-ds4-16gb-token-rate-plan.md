@@ -6477,3 +6477,29 @@ Decision:
 - Next performance work should either:
   - keep explicit math and optimize retained source/dataflow around the exact gate/up/clamp/swiglu outputs; or
   - fix the real fused op under the explicit opt-in env and only then benchmark.
+
+## 2026-07-07 X10-S execution result：`ALLOW_FUSED` opt-in still rejected on latest head
+
+- attempt_id: `20260707-ds4-limited-upgate-allow-fused-recheck`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-allow-fused-recheck-reject-20260707.json`
+- status: `diagnostic_reject_not_sota_no_source_change`
+
+Purpose:
+- After X10-R, recheck on the latest pushed head that deliberately setting `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` still reopens the known bad real fused op.
+- This prevents future work from treating the opt-in env as benchmark-safe.
+- This used only the fixed France calibration prompt; `held_out_test_set_v1_locked` was not used.
+
+Strict probe result:
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-limited-upgate-allow-fused-recheck`
+- candidate env: `DS4_FUSED_UP_GATE_REF=1`, `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`, `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1`
+- constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+- returncodes: explicit `0`, candidate `0`.
+- records: explicit `129`, candidate `129`, missing `0`.
+- result: fail, `num_diffs_over_atol=12`, `max_abs_sum_diff=13.226561999996193`.
+- earliest mismatch remains `ffn_moe_swiglu-0` at about `8e-6`; largest mismatch remains `ffn_moe_gate_clamped-42` at `13.226561999996193`.
+
+Decision:
+- Reject as not SOTA; no source change.
+- X10-R remains valid: limited DS4 up/gate must default to explicit math.
+- `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` is only a deliberate debugging switch. It must not be used for token-rate benchmarking or promotion until a future source patch makes layer-0 act parity exact.
+- Next performance work should avoid the real fused op for now and focus on exact explicit retained source/dataflow, or fix the real fused op behind this opt-in env before benchmarking.
