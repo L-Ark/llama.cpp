@@ -5509,3 +5509,92 @@
   - Proceed to a default-off source-port plan/implementation for `GGML_MOE_EXPERT_GGUF_ALIAS_TSV`.
   - The first implementation must be metadata/self-check first, then correctness. No token-rate promotion is allowed from static coverage alone.
   - Runtime success must show lower pack/source misses or staged/direct-read overhead and must beat the no-prompt-specific generalized baseline on calibration/dev before held-out.
+
+### X10-B plan：port Kimi GP4 full-source alias as a DeepSeek generalized source path
+
+- status: planned_next
+- core_idea:
+  - Kimi GP4 的可迁移点不是 Kimi prompt pack 本身，而是把完整 GGUF expert tensor table 暴露成统一 expert source table，让 gate/up/down expert 都能通过同一套 batch/io_uring/pinned/H2D 路径读取。
+  - 对 DeepSeek native GGUF，这应通过静态 alias TSV 实现：每一行映射 `source_path + tensor + expert_id + model_offset + nbytes`，不复制 137GiB payload，不依赖任何 prompt trace 或 hotset。
+  - 因为 DeepSeek expert `model_offset` 不是 512/4096 对齐，必须实现 aligned alias batch：从 `floor(offset, alignment)` 开始读到 padded pinned slot，再从 `payload_shift` 处把真实 expert payload 交给后续 H2D/compute。
+- why_this_is_general:
+  - alias TSV 来自模型 GGUF tensor table，是 prompt-agnostic 静态元数据；
+  - 不使用 France route、AI infra route、held-out prompt route、answer trace、miss order、expert hot set；
+  - 可接受性必须由 `calibration_dev_set_v1` 的多 prompt 指标证明，最终 SOTA 才能跑 locked held-out。
+- theoretical_limit:
+  - 每个 DeepSeek native expert alias payload 为 `4456448 bytes`，共 `33024` 个 gate/up/down entries，覆盖约 `137.0625 GiB` expert bytes。
+  - aligned-read 额外读取最多约 `4095 bytes`/entry，相比 `4.25MiB` expert payload 小于 `0.1%`，因此 alignment 本身不应成为主要吞吐瓶颈。
+  - 该策略的直接收益上限只来自 source miss、direct read syscall、host staging、pinned copy、H2D 调度和 batch/io_uring 重排；如果当前主要时间仍是 up/down CPU compute fallback，alias source 本身不能单独达到 `>5 tok/s`，必须与 up/down GPU/batch path 联动。
+  - 因此 runtime profile 必须同时记录 `source entries/misses/direct_reads/iouring_reads/host_stage/H2D` 和 `up/down CPU fallback`。如果 misses 归零但 fallback 时间不降，结论应是“source coverage 有效但不是主瓶颈”，不能 promoted。
+
+#### Stage X10-B1：default-off source port validation
+
+- implementation_scope:
+  - Add default-off `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` loader to append alias entries into the existing expert-pack/source table.
+  - Add default-off `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1` for unaligned alias offsets in the batch/io_uring copy path.
+  - Existing pack/list/overlay/Kimi behavior must remain unchanged when both envs are unset.
+  - Duplicate handling must be explicit. Initial DeepSeek run should be alias-only or use existing replace-duplicates flag deliberately; accidental duplicate tensor/expert entries are rejected.
+- validation_before_benchmark:
+  - Build both normal and batch-enabled binaries.
+  - Run a metadata/loader self-check that proves `33024` alias rows load, source file opens once, offsets/nbytes match the audit TSV, and no payload file is created.
+  - Run a short fixed-text/top1 or parity smoke before any token-rate claim. Correctness must pass or the source port is rejected.
+  - If `llama-cli` does not enter the batch path, run `llama-results` fixed-text diagnostic with fallback-reason profile to identify whether the blocker is `batch_env_missing`, type support, row mapping, cache_get, or a wrapper path issue.
+- required_logs:
+  - `expert alias source` / `expert alias tsv loaded` counts;
+  - total expert source entries, alias source entries, duplicate count;
+  - batch/iouring counters, read offsets, payload shifts, read sizes;
+  - fallback-reason CSV for up/down/gate;
+  - cgroup `memory.current`, `memory.peak`, `memory.stat file`, `memory.events`, and OOM/swap status.
+- reject_if:
+  - alias loader is not invoked in the intended runtime path;
+  - O_DIRECT/io_uring rejects unaligned reads without aligned wrapper;
+  - output correctness fails on the pre-benchmark smoke;
+  - RAM/page cache exceeds the strict 16GB cgroup;
+  - env unset changes old SOTA behavior.
+
+#### Stage X10-B2：calibration/dev runtime probe
+
+- candidate_config:
+  - no prompt-specific pack/profile/hotset;
+  - strict cold `drop_caches`;
+  - `MemoryMax=16000000000`, `MemorySwapMax=0`;
+  - native DeepSeek GGUF alias TSV generated from static tensor metadata;
+  - `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=<ds4-native-full-gguf-alias-source.tsv>`;
+  - `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`;
+  - batch/io_uring/pinned flags only if the batch path actually consumes the alias entries;
+  - held-out prompts remain unused.
+- measurement:
+  - Run all `calibration_dev_set_v1` prompts with exact outputs captured.
+  - Record per prompt: `prompt_tok_s`, `eval_tok_s`, TTFT, elapsed, output correctness, `memory_peak_bytes`, `memory_file_bytes`, OOM/swap, entries/misses, direct reads, io_uring reads, host stage time, H2D time, up/down CPU fallback time, and fallback reasons.
+  - Compare against generalized no-prompt-specific baseline: min `1.8 tok/s`, mean `2.18 tok/s`, France `2.7`, quantum `1.8`, Fibonacci `1.8`, Japan `2.4`, climate `2.2`.
+- promotion_gate:
+  - A candidate is accepted only if calibration/dev `min_eval_tok_s` improves without severe per-prompt regression, all outputs are semantically/code correct, RAM/page cache stay inside 16GB, and TTFT is within the accepted `+20%` gate.
+  - If accepted, immediately write a full artifact, update this plan, commit source + docs, push to `ssd/vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from the pushed commit to prove reproducibility.
+  - If it improves only some counters but not generalized token rate, record as diagnostic/rejected and push the record, but do not replace SOTA.
+
+#### Stage X10-B3：combine source coverage with up/down fallback removal
+
+- decision_rule:
+  - If alias full-source makes misses/staging close to zero but token rate remains below target because `ffn_up_exps`/`ffn_down_exps` still fall back to CPU, move back to W2/W3 and use alias source only as the backing source for grouped/batched up/down GPU paths.
+  - Prioritize the part with the largest measured seconds per token: if CPU fallback remains dominant, optimize kernels/row mapping; if host staging/read time becomes dominant, tune io_uring depth, refill batch, pinned slots, and VRAM split.
+- combined_target:
+  - The product target is stable random-prompt `>5 tok/s` on `16GB host RAM + 32GB 5090`.
+  - The first milestone is calibration/dev min above the current `1.8 tok/s` baseline with no correctness/TTFT/RAM regression.
+  - The second milestone is a frozen candidate tested once on `held_out_test_set_v1_locked`; final SOTA is based on held-out metrics, not on France or any prompt used during tuning.
+
+#### Stage X10-B4：recording and branch discipline
+
+- branch: all code, artifacts, and plan updates for this line must be pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- identity: commits should use `L-Ark <fliangae@connect.ust.hk>`.
+- artifact_required_for_every_run:
+  - source commit and dirty status;
+  - build command and binary/library sha256;
+  - exact env/CLI;
+  - model path and alias TSV sha256;
+  - run directory;
+  - full prompt outputs;
+  - token-rate/TTFT/elapsed metrics;
+  - cgroup memory/page-cache/OOM/swap metrics;
+  - source/batch/fallback counters.
+- reproducibility_rule:
+  - Any new accepted SOTA must be committed and pushed immediately, and then reproduced from the pushed commit. A result that cannot be reproduced from the remote branch is not accepted.
