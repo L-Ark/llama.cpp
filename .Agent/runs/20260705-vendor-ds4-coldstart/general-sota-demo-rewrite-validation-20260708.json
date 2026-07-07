@@ -1,0 +1,39 @@
+{
+  "artifact_id": "general-sota-demo-script-rewrite-validation-20260708",
+  "purpose": "Validate rewritten scripts/demo-vendor-ds4-general-sota.sh for arbitrary prompt demo under strict 16GB host RAM cgroup.",
+  "script_path": "scripts/demo-vendor-ds4-general-sota.sh",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head_at_validation": "c218410c38461fd31084f1227733dda573f0a1ea",
+  "validation_command": "scripts/demo-vendor-ds4-general-sota.sh --prompt 请用三句话解释 AI infra 是做什么的。 --max-tokens 24 --run-label validation-ai-infra-demo-rewrite-st",
+  "validation_run_dir": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T183106Z-validation-ai-infra-demo-rewrite-st",
+  "prompt_general": true,
+  "prompt_specific_env_allowed": false,
+  "not_france_specialized_path": true,
+  "strict_memory": {
+    "MemoryMax": 16000000000,
+    "MemorySwapMax": 0,
+    "page_cache_counted_in_cgroup": true
+  },
+  "known_prompt_general_baseline_tok_s": {
+    "min": 1.8,
+    "mean": 2.18,
+    "max": 2.7,
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json"
+  },
+  "validation_metrics": {
+    "eval_tok_s": 1.7,
+    "prompt_tok_s": 1.0,
+    "first_output_ms": 44806.480123,
+    "elapsed_seconds": 54.58,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15039455232,
+    "ram_ok": true,
+    "answer_present": true,
+    "target_gt_5_tok_s_met_by_this_run": false,
+    "exit_status": 0,
+    "systemd_status": 0,
+    "stdout_limit_exceeded_file": false
+  },
+  "validation_answer": "，AI基础设施（AI Infra）的核心作用可概括为：提供算力、存储和数据管理等基础资源支撑",
+  "decision": "pass_demo_smoke; this is a script validation for arbitrary prompt input, not a new SOTA promotion. Current prompt-general performance remains below the >5 tok/s target."
+}
