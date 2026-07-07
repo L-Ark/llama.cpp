@@ -1,0 +1,7 @@
+repo=/root/lfz/tmp/vendor-kimi-speculative-gp33
+pwd=/root/lfz/tmp/vendor-kimi-speculative-gp33
+branch=vendor/kimi-speculative-general-token-rate-16gb
+head=6ddee66a74520cf23cf3cd1aca4644059f751f57
+short=6ddee66a7
+status_short:
+diff_stat:

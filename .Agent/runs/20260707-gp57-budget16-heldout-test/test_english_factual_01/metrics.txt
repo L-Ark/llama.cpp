@@ -1,0 +1,41 @@
+run=/root/lfz/tmp/runs/20260707-gp57-budget16-heldout-test/test_english_factual_01
+prompt_id=test_english_factual_01
+prompt=Give a short overview of Brazil.
+exit=0
+quality=pass
+quality_reason=ok
+output=Brazil is the largest country in South America and the fifth-largest in the world by area. It has a population of about 215 million people and its capital is Brasília, while São Paulo is its largest city. Portuguese is the official language, reflecting its colonial history under Portugal. Brazil has the largest economy in Latin America, driven by agriculture, mining, manufacturing, and services. It is a major global producer of commodities like soy, coffee, sugar, and iron ore. The
+ttft_ms=66832.04
+prompt_tokens=16
+decode_ms=222785.00
+decode_runs=95
+token_rate=0.43
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=15104176128
+anon=454656
+file=14770589696
+kernel=329015296
+inactive_file=6089678848
+active_file=8680140800
+pgmajfault=993010
+pgfault=4317423
+workingset_refault_file=7471590
+expert_pack_0=61016 misses=16009 read_failures=0 direct_reads=4563 direct_fallbacks=0 iouring_reads=52323 iouring_bytes=289572634624 iouring_fallbacks=0 iouring_submit_us=306868 iouring_wait_us=58992527 iouring_h2d_enqueues=52323 entries=34577
+expert_pack_iouring_0=batches=14443 submit_calls=14443 wait_calls=40555 cqes=52323 inflight_avg=3.04 inflight_max=8 batch_hist=1:1466,2-4:8808,5-8:4169,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 6.02 MiB
+pinned_staging_1=: enabled, 12 slots of 4.48 MiB
+pinned_staging_2=: enabled, 12 slots of 7.44 MiB
+pinned_staging_3=: enabled, 12 slots of 5.36 MiB
+pinned_staging_4=: copies=51584 waits=51548 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=179.971 ms host_stage=143520.309 ms enqueue=1100.122 ms h2d=11276.093 ms h2d_timed=51584
+pinned_staging_5= iouring: batches=9823 jobs=36579 submit_calls=9823 wait_calls=28566 cqes=36579 inflight_avg=3.07 inflight_max=8 batch_hist=1:925,2-4:5829,5-8:3069,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=20121 waits=20097 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=70.428 ms host_stage=54420.319 ms enqueue=415.719 ms h2d=4243.032 ms h2d_timed=20121
+pinned_staging_7= gate iouring: batches=4620 jobs=15744 submit_calls=4620 wait_calls=11989 cqes=15744 inflight_avg=2.98 inflight_max=8 batch_hist=1:541,2-4:2979,5-8:1100,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=3040 planned_jobs=11059 completed_jobs=11059 cache_hits=10981 missing_tensor=285 missing_pack=2514 submitted_batches=2734 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=49871748 batch_hist=1:148,2-4:1581,5-8:1005,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=29556 misses=10700 preloads=11059 pinned=0 hit_rate=73.4%
+vram_down_1=slots=766 slot=7.44 MiB hits=29556 misses=10700 preloads=11059 pinned=0 hit_rate=73.4%
+vram_down_2=slots=766 slot=7.44 MiB hits=29556 misses=10700 preloads=11059 pinned=0 hit_rate=73.4%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=41302 misses=49914 preloads=0 pinned=0 hit_rate=45.3%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=41302 misses=49914 preloads=0 pinned=0 hit_rate=45.3%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=41302 misses=49914 preloads=0 pinned=0 hit_rate=45.3%

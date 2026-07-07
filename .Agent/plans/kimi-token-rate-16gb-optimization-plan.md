@@ -94525,6 +94525,130 @@ GP56 execution result:
   - accept final SOTA only if test-set quality, TTFT, RAM, and token-rate gates
     pass.
 
+## GP57: held-out test-set gate for budget16 general overlay
+
+Timestamp: `2026-07-07T11:03:00+08:00`.
+
+Status: planned before execution.
+
+Candidate freeze:
+
+- Runtime candidate is frozen to the GP55/GP56 budget16 overlay:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack`.
+- No held-out prompt has been used to select entries, tune cache size, tune IO
+  settings, or modify runtime code.
+- GP57 must run the test set once and record the result. Do not tune on test
+  outputs.
+
+Test set:
+
+- Prompt file: `.Agent/evals/kimi-general-test-prompts.jsonl`.
+- Prompt count: `6`.
+- Use `N=96`, cold start per prompt, strict 16GB cgroup.
+
+Baseline:
+
+- Baseline source:
+  `.Agent/runs/20260707-gp4-postcommit-test-n96-profile/summary.md`.
+- Baseline token rates:
+  - `test_english_factual_01`: `1.48`;
+  - `test_english_factual_02`: `1.49`;
+  - `test_reasoning_math_01`: `1.32`;
+  - `test_coding_01`: `1.14`;
+  - `test_chinese_01`: `1.44`;
+  - `test_mixed_instruction_01`: `1.33`.
+- Baseline TTFT:
+  - `test_english_factual_01`: `53196.0 ms`;
+  - `test_english_factual_02`: `69820.25 ms`;
+  - `test_reasoning_math_01`: `231632.04 ms`;
+  - `test_coding_01`: `84072.9 ms`;
+  - `test_chinese_01`: `70343.09 ms`;
+  - `test_mixed_instruction_01`: `79872.16 ms`.
+
+Runtime command:
+
+```bash
+repo=/root/lfz/tmp/vendor-kimi-speculative-gp33
+out=/root/lfz/tmp/runs/20260707-gp57-budget16-heldout-test
+cd "$repo"
+ln -sfn build-gp50-runtime build-cuda-batch
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --repo "$repo" \
+  --prompt-file .Agent/evals/kimi-general-test-prompts.jsonl \
+  --out-root "$out" \
+  --mode test \
+  --n 96 \
+  --profile \
+  --keep-going \
+  --memory-max 15900000000 \
+  --runtime-max-sec 900 \
+  --extra-runtime-env "GGML_MOE_EXPERT_PACK_LIST=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1"
+```
+
+Validation:
+
+- All prompts must have quality `pass`.
+- Every answer must be semantically reasonable for the prompt.
+- RAM peak must stay under `15900000000` for every prompt.
+- TTFT must stay within `+20%` of the corresponding baseline.
+- Token-rate gate:
+  - no per-prompt token rate may regress by more than `5%` versus baseline;
+  - aggregate arithmetic mean token rate must be at least the baseline mean.
+- Record prompt outputs, token rate, TTFT, decode wall, RAM peak, expert-pack
+  counters, and the exact command.
+
+Acceptance:
+
+- If all gates pass, accept budget16 overlay as the current test-set validated
+  SOTA for this branch and push the report immediately.
+- If any gate fails, do not tune on test outputs. Record the failed test gate
+  and return to dev-only investigation.
+
+GP57 execution result:
+
+- Timestamp: `2026-07-07T12:05:00+08:00`.
+- Report:
+  `.Agent/runs/20260707-gp57-budget16-heldout-test/report.md`.
+- Held-out sweep run dir:
+  `/root/lfz/tmp/runs/20260707-gp57-budget16-heldout-test`.
+- Command matched the planned GP57 command with:
+  - `N=96`;
+  - `--mode test`;
+  - `--profile`;
+  - `MemoryMax=15900000000`;
+  - `GGML_MOE_EXPERT_PACK_LIST=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack`;
+  - `GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1`.
+- Quality result:
+  - all six held-out prompts passed keyword quality checks;
+  - answer text was semantically reasonable on inspection.
+- TTFT result:
+  - failed because `test_english_factual_01` rose from baseline
+    `53196.00 ms` to `66832.04 ms`, exceeding the `+20%` limit
+    `63835.20 ms`;
+  - other prompts stayed within the TTFT gate.
+- Token-rate result:
+  - failed for every prompt versus the existing held-out baseline;
+  - baseline arithmetic mean: `1.3667 tok/s`;
+  - overlay arithmetic mean: `0.2667 tok/s`.
+- Per-prompt token rates:
+  - `test_english_factual_01`: `1.48 -> 0.43`;
+  - `test_english_factual_02`: `1.49 -> 0.26`;
+  - `test_reasoning_math_01`: `1.32 -> 0.22`;
+  - `test_coding_01`: `1.14 -> 0.17`;
+  - `test_chinese_01`: `1.44 -> 0.27`;
+  - `test_mixed_instruction_01`: `1.33 -> 0.25`.
+- RAM result:
+  - all prompts stayed under the configured cgroup limit, but every run again
+    reported `memory.peak=15899996160`, so there is no margin.
+- Decision:
+  - budget16 overlay is rejected as a final prompt-agnostic SOTA candidate;
+  - do not enable this overlay for random user prompts;
+  - rollback/disable path is to omit
+    `GGML_MOE_EXPERT_PACK_LIST=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack`;
+  - no default runtime behavior was changed, so there is no code-path revert
+    needed;
+  - do not tune on the held-out test outputs; return to dev-only investigation.
+
 ## GP53: current-code slow dev direct-read copy attribution
 
 Timestamp: `2026-07-07T08:50:00+08:00`.
