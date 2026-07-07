@@ -1,0 +1,34 @@
+{
+  "kind": "kimi_gp79_frontlayer_admit_smoke",
+  "sota_claim": false,
+  "held_out_prompts_used": 0,
+  "prompt": "Please introduce France in a short paragraph.",
+  "n_predict": 32,
+  "admission_profile": ".Agent/runs/20260708-gp79-layer-admit-profile/front-layers-0-2.tsv",
+  "profile_entries": 1974,
+  "baseline": {
+    "run": ".Agent/runs/20260708-gp79-frontlayer-admit-baseline-n32",
+    "quality": "pass",
+    "token_rate": 1.72,
+    "ttft_ms": 77778.06,
+    "decode_ms": 18051.43,
+    "decode_runs": 31,
+    "memory_peak": 15899996160,
+    "upgate_hit_rate_pct": 45.2,
+    "down_hit_rate_pct": 73.4,
+    "iouring_wait_us": 11929606
+  },
+  "candidate": {
+    "run": ".Agent/runs/20260708-gp79-frontlayer-admit-profile-n32",
+    "quality": "pass",
+    "token_rate": 1.69,
+    "ttft_ms": 82742.77,
+    "decode_ms": 18354.19,
+    "decode_runs": 31,
+    "memory_peak": 15899996160,
+    "upgate_hit_rate_pct": 45.2,
+    "down_hit_rate_pct": 73.4,
+    "iouring_wait_us": 12001517
+  },
+  "decision": "Reject: token rate regressed, TTFT increased, and identical VRAM hit counters show GGML_MOE_STREAM_CACHE_ADMIT_PROFILE did not affect the active Kimi split-cache path."
+}

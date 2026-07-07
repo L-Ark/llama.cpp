@@ -1,0 +1,7 @@
+Running as unit: run-u1637.service
+Finished with result: success
+Main processes terminated with: code=exited/status=0
+Service runtime: 2min 10.862s
+CPU time consumed: 42min 16.533s
+IO bytes read: 12.0K
+IO bytes written: 0B

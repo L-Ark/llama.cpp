@@ -1,0 +1,9 @@
+{
+  "entries": 1974,
+  "kind": "kimi_layer_admit_profile",
+  "max_layer": 2,
+  "min_layer": 0,
+  "out": ".Agent/runs/20260708-gp79-layer-admit-profile/front-layers-0-2.tsv",
+  "route_root": ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct",
+  "total_route_hits_in_source": 23424
+}
