@@ -1,0 +1,44 @@
+{
+  "kind": "kimi_gp78a_aw_codebook_block256_smoke",
+  "remote_root": "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp78a-aw-codebook-block256-smoke",
+  "held_out_prompts_used": 0,
+  "prompts_evaluated": [
+    "dev_japan_factual"
+  ],
+  "candidate": "aw_codebook:bits1:block256",
+  "records_loaded": 72,
+  "unique_tensor_experts": 72,
+  "target_byte_ratio": 0.4,
+  "target_mean_rel_l2": 0.1,
+  "rows": [
+    {
+      "candidate": "down:aw_codebook:bits1:block256",
+      "mean_byte_ratio": 0.3273,
+      "mean_rel_l2": 0.571013,
+      "max_rel_l2": 0.578527,
+      "decision": "reject"
+    },
+    {
+      "candidate": "gate:aw_codebook:bits1:block256",
+      "mean_byte_ratio": 0.3912,
+      "mean_rel_l2": 0.592142,
+      "max_rel_l2": 0.613728,
+      "decision": "reject"
+    },
+    {
+      "candidate": "up:aw_codebook:bits1:block256",
+      "mean_byte_ratio": 0.3912,
+      "mean_rel_l2": 0.59545,
+      "max_rel_l2": 0.617253,
+      "decision": "reject"
+    },
+    {
+      "candidate": "fused_up_gate:aw_codebook:bits1:block256",
+      "mean_byte_ratio": 0.3912,
+      "mean_rel_l2": 0.773949,
+      "max_rel_l2": 0.814748,
+      "decision": "reject"
+    }
+  ],
+  "decision": "Stop aw_codebook:bits1:block256 early: it meets the byte budget but fused up/gate error is much worse than the <=0.10 gate and worse than GP77's best fused up/gate candidate."
+}

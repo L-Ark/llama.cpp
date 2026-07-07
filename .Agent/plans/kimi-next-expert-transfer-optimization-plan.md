@@ -1524,6 +1524,59 @@ GP78 planned next representation family:
     estimated 5 tok/s ceiling;
   - only if the offline gate passes, write a runtime pack/kernel plan.
 
+GP78a planned shared-codebook screen:
+
+- Goal:
+  - test whether a per-block activation-weighted codebook can reduce fused
+    up/gate error enough to justify a runtime representation path.
+- Why this is different from GP77:
+  - GP77 used sign-times-scale (`aw_mse`) plus optional exact input-channel
+    keep correction;
+  - GP78a uses `aw_codebook`, which learns two activation-weighted centers per
+    block and can represent asymmetric weight distributions that 1-bit scale
+    signs cannot;
+  - this is still an offline screen only and does not claim SOTA.
+- Candidate family:
+  - `scale_modes=aw_codebook`;
+  - `bits=1`;
+  - `blocks=128,256,512`;
+  - no input-channel keep correction in the first pass, so the byte ratio is
+    directly attributable to the codebook representation.
+- Acceptance:
+  - same GP77 gate:
+    - global moved byte ratio around `0.30x-0.40x`;
+    - fused up/gate mean rel L2 `<=0.10`;
+    - down mean rel L2 `<=0.10`;
+  - if no candidate is close, do not write runtime kernels for this family;
+  - if a candidate is close but slightly above byte budget, run a second pass
+    with larger blocks or shared centers before any runtime work.
+
+GP78a shared-codebook smoke result on 2026-07-08:
+
+- Local report:
+  - `.Agent/runs/20260708-gp78a-aw-codebook-block256-smoke/summary.md`
+  - `.Agent/runs/20260708-gp78a-aw-codebook-block256-smoke/dev_japan_factual/report.md`
+- Remote report:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp78a-aw-codebook-block256-smoke`
+- Execution note:
+  - the initial full `blocks=128,256,512` run was stopped because
+    `aw_codebook` center iteration was too slow for rapid screening;
+  - a smaller `block=256` smoke was run on `dev_japan_factual`;
+  - held-out prompts remained unused.
+- Result for `aw_codebook:bits1:block256`:
+  - down byte ratio `0.3273x`, mean rel L2 `0.571013`;
+  - gate byte ratio `0.3912x`, mean rel L2 `0.592142`;
+  - up byte ratio `0.3912x`, mean rel L2 `0.595450`;
+  - fused up/gate byte ratio `0.3912x`, mean rel L2 `0.773949`,
+    max rel L2 `0.814748`.
+- Decision:
+  - reject early;
+  - the byte ratio is within the target, but fused up/gate error is worse than
+    GP77's best fused candidate (`0.773949` vs `0.598174`);
+  - do not implement runtime kernels for this codebook family;
+  - next representation work must exploit activation/output subspace structure
+    rather than only changing per-block scalar/codebook reconstruction.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
