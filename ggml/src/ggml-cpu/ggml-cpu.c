@@ -223,6 +223,15 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_up_gate_batch(
     const int64_t * matrix_row_counts,
     const ggml_moe_stream_row_mapping * rows,
     int64_t rows_stride);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_cache_contains(
+    const char * src0_name,
+    size_t expert_bytes,
+    int expert_idx);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_one_cache_contains(
+    const char * src0_name,
+    const void * src0_data,
+    size_t expert_bytes,
+    int64_t expert_idx);
 #else
 static bool (*ggml_cuda_moe_stream_available)(void) = NULL;
 static void (*ggml_cuda_moe_stream_sync)(void) = NULL;
@@ -239,6 +248,8 @@ static bool (*ggml_cuda_moe_stream_up_gate_batch)(
     int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *,
     size_t, size_t, int, float, const int64_t *, const ggml_moe_stream_row_mapping *,
     int64_t) = NULL;
+static bool (*ggml_cuda_moe_stream_cache_contains)(const char *, size_t, int) = NULL;
+static bool (*ggml_cuda_moe_stream_one_cache_contains)(const char *, const void *, size_t, int64_t) = NULL;
 #endif
 
 static bool ggml_cuda_moe_stream_supports_type(enum ggml_type type) {
@@ -1480,6 +1491,221 @@ static const char * ggml_moe_tensor_role(const char * name) {
         }
     }
     return "other";
+}
+
+static bool ggml_ds4_grouped_retained_route_profile_enabled(void) {
+    static int initialized = 0;
+    static bool enabled = false;
+    if (!initialized) {
+        const char * env = getenv("GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT");
+        enabled = env && env[0] && env[0] != '0';
+        initialized = 1;
+    }
+    return enabled;
+}
+
+static const char * ggml_ds4_grouped_retained_route_profile_out(void) {
+    const char * env = getenv("GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT");
+    return env && env[0] && env[0] != '0' ? env : NULL;
+}
+
+static int ggml_ds4_grouped_retained_parse_layer(const char * name) {
+    if (!name) {
+        return -1;
+    }
+    const char * p = strstr(name, "blk.");
+    if (!p) {
+        return -1;
+    }
+    return atoi(p + 4);
+}
+
+static bool ggml_ds4_grouped_retained_role_supported(const char * role) {
+    return role &&
+        (strcmp(role, "gate") == 0 ||
+         strcmp(role, "up") == 0 ||
+         strcmp(role, "down") == 0 ||
+         strcmp(role, "up_gate") == 0);
+}
+
+static void ggml_ds4_grouped_retained_route_profile_write(
+        const char * role,
+        const char * tensor_name,
+        int src0_type,
+        const void * src0_data,
+        size_t expert_stride,
+        bool prompt_phase,
+        const int64_t * matrix_row_counts,
+        int64_t n_as,
+        size_t expert_bytes,
+        size_t logical_bytes_per_expert,
+        bool eligible,
+        const char * reason) {
+    if (!ggml_ds4_grouped_retained_route_profile_enabled() ||
+            !matrix_row_counts || n_as <= 0 || !tensor_name || !tensor_name[0]) {
+        return;
+    }
+
+    int64_t unique_experts = 0;
+    int64_t rows = 0;
+    int64_t cache_contains = 0;
+    int64_t cache_missing = 0;
+    const bool can_query_cache =
+        expert_bytes > 0 &&
+        ((ggml_cuda_moe_stream_one_cache_contains && src0_data && expert_stride > 0) ||
+         ggml_cuda_moe_stream_cache_contains);
+
+    for (int64_t i = 0; i < n_as; ++i) {
+        const int64_t c = matrix_row_counts[i];
+        if (c <= 0) {
+            continue;
+        }
+        ++unique_experts;
+        rows += c;
+        if (can_query_cache) {
+            bool contains = false;
+            if (ggml_cuda_moe_stream_one_cache_contains && src0_data && expert_stride > 0) {
+                const char * expert_data = (const char *) src0_data + (size_t)i * expert_stride;
+                contains = ggml_cuda_moe_stream_one_cache_contains(tensor_name, expert_data, expert_bytes, i);
+            }
+            if (!contains && ggml_cuda_moe_stream_cache_contains) {
+                contains = ggml_cuda_moe_stream_cache_contains(tensor_name, expert_bytes, (int)i);
+            }
+            if (contains) {
+                ++cache_contains;
+            } else {
+                ++cache_missing;
+            }
+        }
+    }
+
+    if (unique_experts == 0) {
+        return;
+    }
+    if (!can_query_cache) {
+        cache_contains = -1;
+        cache_missing = -1;
+    }
+
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+    static uint64_t seq = 0;
+    static bool header_written = false;
+
+    const char * path = ggml_ds4_grouped_retained_route_profile_out();
+    if (!path) {
+        return;
+    }
+
+    pthread_mutex_lock(&mu);
+    FILE * f = fopen(path, "a");
+    if (!f) {
+        pthread_mutex_unlock(&mu);
+        return;
+    }
+    if (!header_written) {
+        fprintf(f,
+                "seq,role,layer,phase,tensor_name,src0_type,active_experts,unique_experts,rows,"
+                "expert_bytes,logical_source_bytes,cache_contains_count,cache_missing_count,"
+                "eligible_grouped_retained,reason_if_ineligible\n");
+        header_written = true;
+    }
+
+    const uint64_t cur_seq = ++seq;
+    const size_t logical_source_bytes = (size_t)unique_experts * logical_bytes_per_expert;
+    fprintf(f,
+            "%" PRIu64 ",%s,%d,%s,%s,%d,%" PRId64 ",%" PRId64 ",%" PRId64
+            ",%zu,%zu,%" PRId64 ",%" PRId64 ",%d,%s\n",
+            cur_seq,
+            role ? role : "other",
+            ggml_ds4_grouped_retained_parse_layer(tensor_name),
+            prompt_phase ? "prompt" : "decode",
+            tensor_name,
+            src0_type,
+            unique_experts,
+            unique_experts,
+            rows,
+            expert_bytes,
+            logical_source_bytes,
+            cache_contains,
+            cache_missing,
+            eligible ? 1 : 0,
+            reason ? reason : "ok");
+    fclose(f);
+    pthread_mutex_unlock(&mu);
+}
+
+static void ggml_ds4_grouped_retained_route_profile_record(
+        const char * tensor_name,
+        int src0_type,
+        const void * src0_data,
+        size_t expert_stride,
+        bool prompt_phase,
+        const int64_t * matrix_row_counts,
+        int64_t n_as,
+        size_t expert_bytes) {
+    if (!ggml_ds4_grouped_retained_route_profile_enabled()) {
+        return;
+    }
+    const char * role = ggml_moe_tensor_role(tensor_name);
+    const bool supported_role = ggml_ds4_grouped_retained_role_supported(role);
+    const bool supported_type = ggml_cuda_moe_stream_supports_type((enum ggml_type)src0_type);
+    const bool eligible = supported_role && supported_type && expert_bytes > 0;
+    const char * reason = "ok";
+    if (!supported_role) {
+        reason = "unsupported_role";
+    } else if (!supported_type) {
+        reason = "unsupported_type";
+    } else if (expert_bytes == 0) {
+        reason = "bad_expert_bytes";
+    }
+    ggml_ds4_grouped_retained_route_profile_write(
+            role, tensor_name, src0_type, src0_data, expert_stride, prompt_phase,
+            matrix_row_counts, n_as, expert_bytes, expert_bytes,
+            eligible, reason);
+}
+
+static void ggml_ds4_grouped_retained_route_profile_record_up_gate(
+        const char * up_tensor_name,
+        const char * gate_tensor_name,
+        int up_type,
+        int gate_type,
+        const void * up_data,
+        size_t up_expert_stride,
+        const void * gate_data,
+        size_t gate_expert_stride,
+        bool prompt_phase,
+        const int64_t * matrix_row_counts,
+        int64_t n_as,
+        size_t up_expert_bytes,
+        size_t gate_expert_bytes) {
+    if (!ggml_ds4_grouped_retained_route_profile_enabled()) {
+        return;
+    }
+    char combined_name[192];
+    snprintf(combined_name, sizeof(combined_name), "%s+%s",
+            up_tensor_name ? up_tensor_name : "up",
+            gate_tensor_name ? gate_tensor_name : "gate");
+
+    const bool supported_type =
+        ggml_cuda_moe_stream_supports_type((enum ggml_type)up_type) &&
+        ggml_cuda_moe_stream_supports_type((enum ggml_type)gate_type);
+    const bool eligible = supported_type && up_expert_bytes > 0 && gate_expert_bytes > 0;
+    const char * reason = "ok";
+    if (!supported_type) {
+        reason = "unsupported_type";
+    } else if (up_expert_bytes == 0 || gate_expert_bytes == 0) {
+        reason = "bad_expert_bytes";
+    }
+    (void) up_data;
+    (void) up_expert_stride;
+    (void) gate_data;
+    (void) gate_expert_stride;
+    ggml_ds4_grouped_retained_route_profile_write(
+            "up_gate", combined_name, up_type, NULL, 0, prompt_phase,
+            matrix_row_counts, n_as,
+            up_expert_bytes > gate_expert_bytes ? up_expert_bytes : gate_expert_bytes,
+            up_expert_bytes + gate_expert_bytes,
+            eligible, reason);
 }
 
 static double ggml_moe_cpu_trace_now_ms(void) {
@@ -4034,6 +4260,15 @@ static void ggml_compute_forward_mul_mat_id(
         if (kimi_cpu_moe_profile) {
             ggml_kimi_cpu_moe_profile.down.route_us += ggml_time_us() - kimi_cpu_moe_route_start;
         }
+        ggml_ds4_grouped_retained_route_profile_record(
+                src0->name,
+                src0->type,
+                src0->data,
+                nb02,
+                ids->ne[1] > 1,
+                matrix_row_counts,
+                n_as,
+                (size_t)ne01 * nb01);
     }
 
     // reset current_chunk
@@ -4989,6 +5224,40 @@ static void ggml_compute_forward_moe_up_gate(
         if (kimi_cpu_moe_profile) {
             ggml_kimi_cpu_moe_profile.up_gate.route_us += ggml_time_us() - kimi_cpu_moe_route_start;
         }
+        const size_t up_expert_bytes = (size_t)ne01 * nb01;
+        const size_t gate_expert_bytes = (size_t)src0_gate->ne[1] * src0_gate->nb[1];
+        ggml_ds4_grouped_retained_route_profile_record(
+                src0_up->name,
+                src0_up->type,
+                src0_up->data,
+                src0_up->nb[2],
+                ids->ne[1] > 1,
+                matrix_row_counts,
+                n_as,
+                up_expert_bytes);
+        ggml_ds4_grouped_retained_route_profile_record(
+                src0_gate->name,
+                src0_gate->type,
+                src0_gate->data,
+                src0_gate->nb[2],
+                ids->ne[1] > 1,
+                matrix_row_counts,
+                n_as,
+                gate_expert_bytes);
+        ggml_ds4_grouped_retained_route_profile_record_up_gate(
+                src0_up->name,
+                src0_gate->name,
+                src0_up->type,
+                src0_gate->type,
+                src0_up->data,
+                src0_up->nb[2],
+                src0_gate->data,
+                src0_gate->nb[2],
+                ids->ne[1] > 1,
+                matrix_row_counts,
+                n_as,
+                up_expert_bytes,
+                gate_expert_bytes);
     }
 
     for (int cur_a = ith; cur_a < n_as; cur_a += nth) {

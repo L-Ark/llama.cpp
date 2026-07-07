@@ -13,6 +13,7 @@ void ggml_cuda_moe_stream_q80_probe(int, const char *, int64_t, const void *, in
 void ggml_cuda_moe_stream_q80_write(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const void *, size_t, int64_t, int64_t, float *, size_t, size_t, const ggml_moe_row_mapping *) {}
 bool ggml_cuda_moe_stream_q80_skip(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const void *, size_t, int64_t, int64_t, float *, size_t, size_t, const ggml_moe_row_mapping *) { return false; }
 void ggml_cuda_moe_stream_q80_hot_batch_probe(int, const char *, int64_t, int64_t, int64_t, size_t, const void *, size_t, int64_t, const float *, size_t, size_t, const int64_t *, const ggml_moe_row_mapping *, int64_t, const float *, size_t, size_t) {}
+bool ggml_cuda_moe_stream_one_cache_contains(const char *, const void *, size_t, int64_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_rows_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, const int32_t *, int64_t, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_batch_dev(int, const void *, int64_t, int64_t, const float *, void *, float *, const int32_t *, int64_t, int64_t, cudaStream_t) { return false; }
@@ -435,6 +436,16 @@ static void *vram_cache_lookup(uintptr_t key) {
         }
     }
     return nullptr;
+}
+
+static bool vram_cache_contains_key(uintptr_t key) {
+    if (!g_vcache.pool || g_vcache.n_slots == 0) return false;
+    for (int slot = 0; slot < g_vcache.n_slots; ++slot) {
+        if (g_vcache.slot_key[slot] == key) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Insert expert into cache. LRU eviction of slot's previous owner.
@@ -2208,6 +2219,20 @@ static bool one_prefill_key_mode_enabled() {
 
 static uintptr_t one_cache_key_for(const char * tensor, int64_t expert, const void * src0_data) {
     return one_prefill_key_mode_enabled() ? one_named_cache_key(tensor, expert) : (uintptr_t) src0_data;
+}
+
+extern "C" bool ggml_cuda_moe_stream_one_cache_contains(
+    const char *src0_name,
+    const void *src0_data,
+    size_t src0_bytes,
+    int64_t expert_index)
+{
+    (void) src0_bytes;
+    if (!src0_name || !src0_data || expert_index < 0) {
+        return false;
+    }
+    const uintptr_t key = one_cache_key_for(src0_name, expert_index, src0_data);
+    return vram_cache_contains_key(key);
 }
 
 static void one_prefill_maybe(slot_ctx & ctx, cudaStream_t st, size_t src0_bytes) {

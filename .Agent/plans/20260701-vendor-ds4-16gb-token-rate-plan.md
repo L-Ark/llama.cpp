@@ -5930,3 +5930,46 @@
 - branch_policy:
   - All scaffold source and artifacts must be committed and pushed to `ssd/vendor/deepseek-token-rate-16gb` with full reproduction details.
   - Any later performance SOTA must still be prompt-general, strict `16GB` including page cache, correctness passing, TTFT compliant, then held-out tested only after candidate freeze.
+
+## 2026-07-07 X10-F execution result：grouped-retained profiler validated, one-stream cache visibility fixed
+
+- attempt_id: `20260707-grouped-retained-onecache-profiler-validation`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/grouped-retained-onecache-profiler-validation-20260707.json`
+- status: `profiler_validated_not_sota`
+- source_scope:
+  - Added default-off `GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT=<csv>` route profiler in `ggml/src/ggml-cpu/ggml-cpu.c`.
+  - Added read-only `ggml_cuda_moe_stream_one_cache_contains()` in `ggml/src/ggml-cuda/moe_stream.cu` so the profiler can query the existing one-stream cache without changing LRU, hit counters, miss counters, logits, cache admission, or default behavior.
+  - CPU route builders now pass `src0->data` plus expert stride so cache queries use the same key as execution (`one_cache_key_for(src0_name, expert, expert_host_ptr)`).
+- build_validation:
+  - command: `cmake --build build-ds4-moe-stream -j20 --target llama-cli llama-results`
+  - result: passed.
+  - binary sha256: `c3aa016da81aee65db5b65fbb79a19604ef212e5897840c93dad3c9b8f1eab78`.
+- profiler_validation_run:
+  - prompt scope: calibration/dev only; `held_out_test_set_v1_locked` was not used.
+  - prompt: `Describe database indexing in one concise paragraph.`
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T101116Z-20260707-grouped-retained-onecache-profile-rerun/database-indexing-grouped-onecache-profile-cpu40-vram0gb`
+  - profile CSV: `/root/lfz/runs/vendor-ds4-16gb/20260707T101116Z-20260707-grouped-retained-onecache-profile-rerun/database-indexing-grouped-onecache-profile-cpu40-vram0gb/grouped_route_profile.csv`
+  - config: no prompt-specific pack/profile/alias; `cpu_moe=40`; `vram_cache=0`; gate one-stream cache `13568 MiB`; strict cold `drop_caches`; `MemoryMax=16000000000`; `MemorySwapMax=0`; `n=96`.
+  - metrics: `eval_tok_s=1.9`, `prompt_tok_s=0.9`, `TTFT=38884.836529 ms`, `elapsed=87.06 s`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15034089472`, `ram_ok=true`, `oom_seen=false`.
+  - quality note: this profiler run is diagnostic only. Its `n=96` answer is semantically coherent but truncated, so it is not used as a correctness/SOTA promotion run.
+- profile_summary:
+  - CSV records: `11760` rows plus header.
+  - gate: `records=3920`, `unique_experts=24867`, `rows=26160`, `logical_bytes=110818492416`, `cache_contains=19825`, `cache_missing=5042`.
+  - up: `records=3920`, `unique_experts=13534`, `rows=14170`, `logical_bytes=60313567232`, `cache_contains=0`, `cache_missing=13534`.
+  - down: `records=3920`, `unique_experts=13534`, `rows=14170`, `logical_bytes=60313567232`, `cache_contains=0`, `cache_missing=13534`.
+  - decode-only gate: `cache_contains=19305`, `cache_missing=3495`, proving the one-stream gate cache is visible to the profiler.
+  - decode-only up/down: `cache_contains=0`, `cache_missing=12350` for each role, confirming up/down still have no retained/cache source path in the generalized baseline.
+- default_off_guard:
+  - prompt: `Please introduce France in a short paragraph.`
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T101343Z-20260707-defaultoff-profiler-guard/defaultoff-france-after-profiler-cpu40-vram0gb`
+  - profiler env: unset.
+  - metrics: `eval_tok_s=2.5`, `prompt_tok_s=0.9`, `TTFT=39044.30398 ms`, `elapsed=91.31 s`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15033208832`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
+  - output: complete, coherent France paragraph; no logit/correctness regression observed with profiler default-off.
+- interpretation:
+  - The prior profiler-v1 all-zero cache counts were a measurement bug caused by only querying the batch cache. This is now fixed for one-stream gate cache.
+  - The current prompt-general path already has effective gate cache retention; the missing path is up/down retained/grouped GPU source and compute.
+  - A future implementation should not spend effort on gate-only cache work. It must target joint source/fallback reduction: preserve current gate cache behavior, reduce up/down per-expert source movement, and avoid D2H/writeback unless needed.
+- next_action:
+  - Commit and push this default-off profiler scaffold plus artifact to `ssd/vendor/deepseek-token-rate-16gb`.
+  - Use the new CSV to calculate grouped-retained source-movement upper bounds on the calibration/dev set before writing the next GPU dataflow patch.
+  - Do not run held-out prompts until a prompt-general candidate is frozen.
