@@ -6233,6 +6233,14 @@ static bool mxfp4_down_q80_debug_enabled() {
     return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_DEBUG", false);
 }
 
+static bool lowbit_down_probe_candidate(const char *name, ggml_type type) {
+    if (!expert_pack_env_bool("GGML_MOE_STREAM_DOWN_LOWBIT_PROBE", false)) return false;
+    if (!name || !std::strstr(name, "ffn_down_exps")) return false;
+    if (type != GGML_TYPE_IQ1_S && type != GGML_TYPE_IQ1_M && type != GGML_TYPE_Q2_K) return false;
+    const char *target = std::getenv("GGML_MOE_STREAM_DOWN_LOWBIT_PROBE_TENSOR");
+    return !target || !target[0] || std::strstr(name, target) != nullptr;
+}
+
 static bool mxfp4_down_q80_cpu_order_enabled() {
     return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER", false);
 }
@@ -7169,6 +7177,9 @@ static bool launch_moe_mmvq_compact_batch(
         case GGML_TYPE_IQ3_XXS:
         case GGML_TYPE_IQ3_S:
         case GGML_TYPE_IQ2_S:
+        case GGML_TYPE_IQ1_S:
+        case GGML_TYPE_IQ1_M:
+        case GGML_TYPE_Q2_K:
         case GGML_TYPE_IQ4_XS:
         case GGML_TYPE_MXFP4:
             break;
@@ -9121,6 +9132,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const bool q4_route_profile_candidate = q4_down_route_profile_candidate(src0_name, src0_type);
     const bool mxfp4_probe_candidate = mxfp4_down_probe_candidate(src0_name, src0_type);
     const bool mxfp4_q80_compat_candidate = mxfp4_down_q80_compat_candidate(src0_name, src0_type);
+    const bool lowbit_probe_candidate = lowbit_down_probe_candidate(src0_name, src0_type);
     if (src0_type == GGML_TYPE_MXFP4 && mxfp4_down_q80_debug_enabled()) {
         static std::atomic<int> q80_candidate_debug_count{0};
         const int dbg = q80_candidate_debug_count.fetch_add(1);
@@ -9133,7 +9145,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                     env ? env : "", target ? target : "", mxfp4_q80_compat_candidate ? 1 : 0);
         }
     }
-    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate && !mxfp4_probe_candidate && !mxfp4_q80_compat_candidate) return decline("unsupported_type");
+    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate && !mxfp4_probe_candidate && !mxfp4_q80_compat_candidate && !lowbit_probe_candidate) return decline("unsupported_type");
     if (mxfp4_down_q80_compat_forces_mxfp4(src0_name, src0_type) && !mxfp4_q80_compat_candidate) return decline("q80_not_target");
     if (!src1_f32) return decline("missing_src1");
     if (mxfp4_q80_compat_candidate && (!src1_q8_0 || src1_q8_0_row_size == 0 || src1_q8_0_ne1 <= 0)) return decline("missing_src1_q8_0");

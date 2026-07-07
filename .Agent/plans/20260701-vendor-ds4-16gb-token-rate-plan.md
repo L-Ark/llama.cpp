@@ -7491,3 +7491,62 @@ Decision:
   - report numerical error thresholds;
   - return false unless parity mode explicitly passes;
   - remain disabled by default.
+
+## 2026-07-08 X10-AN default-off lowbit down-stream parity probe
+
+- source changes:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`
+  - `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-lowbit-defaultoff-parity-probe-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-lowbit-probe`
+- status: `default_off_safe_probe_mode_rejected_correctness_not_sota`
+
+Purpose:
+- Execute the X10-AM next source step without changing production behavior:
+  - keep `IQ1_S/IQ1_M/Q2_K` down-stream support disabled by default;
+  - add an explicit diagnostic env gate, `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`;
+  - compare probe-mode GPU output against a CPU dequantized reference;
+  - reject non-finite or numerically divergent results.
+
+Implementation:
+- Added `lowbit_down_probe_candidate(...)` in `moe_stream_batch.cu`.
+- The candidate is true only when all conditions hold:
+  - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`;
+  - tensor name contains `ffn_down_exps`;
+  - type is one of `IQ1_S`, `IQ1_M`, `Q2_K`;
+  - optional `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE_TENSOR` matches the tensor name.
+- Added the three lowbit types to the compact batch launch switch only through the diagnostic candidate path.
+- Updated the direct probe tool to:
+  - expect default mode decline;
+  - expect probe mode accept;
+  - compute CPU reference via `ggml_get_type_traits(type)->to_float`;
+  - fail if either reference or GPU output contains `NaN`/`Inf`.
+
+Verification:
+- Build:
+  - `ninja -C build-ds4-moe-stream ggml-cuda -j2`: pass.
+  - direct probe compile against `build-ds4-moe-stream/bin`: pass.
+- Default-off run:
+  - env: `GGML_MOE_STREAM=1`
+  - `rc=0`
+  - `IQ1_S`, `IQ1_M`, `Q2_K` all return `decline-ok`
+  - stderr reason remains `unsupported_type`
+  - conclusion: production/default path is unchanged.
+- Probe-mode run:
+  - env: `GGML_MOE_STREAM=1 GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+  - `rc=1`
+  - stream accepts the synthetic lowbit down tensors, but parity fails:
+    - `IQ1_S`: `finite=0`, `first_gpu=nan`, `first_ref=inf`
+    - `IQ1_M`: `finite=0`, `first_gpu=inf`, `first_ref=inf`
+    - `Q2_K`: `finite=0`, `first_gpu=nan`, `first_ref=-nan`
+
+Decision:
+- This is not a SOTA improvement and must not be used for model runs.
+- Do not enable lowbit down-stream production support from this evidence.
+- The result narrows the next blocker:
+  - the name gate and type gate can be reached;
+  - the current synthetic lowbit layout/parity path is not correctness-valid.
+- Next step:
+  - either use a real compact target/expert pack layout for parity;
+  - or revise the synthetic harness to mirror real GGUF lowbit row layout before attempting any production lowbit down kernel enablement.
+  - Until then, generalized SOTA remains unchanged and the random-prompt `>5 tok/s` target is still unmet.
