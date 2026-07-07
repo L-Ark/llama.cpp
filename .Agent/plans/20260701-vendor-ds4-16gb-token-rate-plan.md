@@ -6435,3 +6435,45 @@ Decision:
 - Accept and push the scaffold because it is default-off, strict parity passes when force-explicit is enabled, and default prompt-general execution still runs under the 16GB cgroup.
 - Do not claim any token-rate improvement from this commit.
 - The next implementation step remains the real fused-op fix: make `GGML_OP_MOE_FUSED_UP_GATE` itself match layer-0 act parity, or keep explicit math and optimize retained source/dataflow around it.
+
+## 2026-07-07 X10-R execution result：limited up/gate defaults to exact explicit math
+
+- attempt_id: `20260707-ds4-limited-upgate-explicit-default`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-explicit-default-accepted-20260707.json`
+- source diff: `.Agent/runs/20260705-vendor-ds4-coldstart/limited-upgate-explicit-default-source-diff-20260707.patch`
+- status: `accepted_default_off_correctness_guard_not_sota`
+
+Purpose:
+- X10-P proved the real limited `GGML_OP_MOE_FUSED_UP_GATE` path is not act-exact.
+- X10-Q added a force-explicit reference, but still required a force env to avoid the bad fused op.
+- This step makes the safe behavior the default for limited DS4 up/gate: if `limit > 1e-6`, `ggml_moe_up_gate_limit(...)` returns the explicit `mul_mat_id + clamp + swiglu_split` graph unless `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` is explicitly set.
+
+Implementation:
+- Changed only `ggml/src/ggml.c`.
+- Added opt-in env `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1`.
+- Default accepted SOTA path remains unchanged because it does not set `DS4_FUSED_UP_GATE_REF` and normal `ggml_moe_up_gate(...)` still passes `limit=0`.
+- Future real fused-op debugging can still deliberately reopen the old path with `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1`, but that path remains disallowed for benchmark promotion until act parity is exact.
+
+Validation:
+- Build passed: `cmake --build build-ds4-moe-stream --target llama-debug -j20`.
+- Build passed: `cmake --build build-ds4-moe-stream --target llama-cli -j20`.
+- Strict act parity run without `GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT`:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-limited-upgate-explicit-default`
+  - candidate env: `DS4_FUSED_UP_GATE_REF=1`, `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`
+  - constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+  - result: pass, explicit records `129`, candidate records `129`, missing `0`, `num_diffs_over_atol=0`, `max_abs_sum_diff=0.0`.
+- Default-off France guard:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T152842Z-demo-generalized-sota/please-introduce-france-in-a-short-paragraph-cpu40-vram0gb`
+  - result: `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=38126.413486 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15026626560`, `ram_ok=true`, `correctness_ok=true`.
+  - output: semantically correct, coherent, complete short paragraph about France.
+  - This is a correctness/default-path guard, not a new SOTA claim.
+- Truncation observation:
+  - `/root/lfz/runs/vendor-ds4-16gb/20260707T152709Z-demo-generalized-sota/please-introduce-france-in-a-short-paragraph-cpu40-vram0gb` was semantically correct but cut by the `n_predict=96` cap, so it was replaced by the `n_predict=192` France guard above.
+  - `/root/lfz/runs/vendor-ds4-16gb/20260707T152222Z-demo-generalized-sota/explain-message-queues-in-one-short-paragraph-cpu40-vram0gb` also completed under strict 16GB, but the 32-token cap cut the sentence, so the heuristic marked `correctness_ok=false`. This is not a SOTA or quality metric.
+
+Decision:
+- Accept and push as a correctness guard, not as a token-rate optimization.
+- Do not benchmark-promote real limited fused up/gate unless `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` first passes layer-0 act parity with `max_abs_sum_diff=0.0`.
+- Next performance work should either:
+  - keep explicit math and optimize retained source/dataflow around the exact gate/up/clamp/swiglu outputs; or
+  - fix the real fused op under the explicit opt-in env and only then benchmark.

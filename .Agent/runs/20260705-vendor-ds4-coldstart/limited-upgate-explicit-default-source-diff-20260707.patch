@@ -1,0 +1,16 @@
+diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
+index bda93dd26..548e6e961 100644
+--- a/ggml/src/ggml.c
++++ b/ggml/src/ggml.c
+@@ -3452,7 +3452,10 @@ struct ggml_tensor * ggml_moe_up_gate_limit(
+         (as_up->type == as_gate->type || (mixed_enabled && mixed_iq2_iq3));
+     const char * force_explicit_env = getenv("GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT");
+     const bool force_explicit = force_explicit_env && force_explicit_env[0] && force_explicit_env[0] != '0';
+-    if (force_explicit || as_gate == NULL || !same_or_scoped_mixed || !ggml_are_same_shape(as_up, as_gate)) {
++    const char * allow_limited_fused_env = getenv("GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED");
++    const bool allow_limited_fused = allow_limited_fused_env && allow_limited_fused_env[0] && allow_limited_fused_env[0] != '0';
++    const bool limited_requires_explicit = limit > 1.0e-6f && !allow_limited_fused;
++    if (force_explicit || limited_requires_explicit || as_gate == NULL || !same_or_scoped_mixed || !ggml_are_same_shape(as_up, as_gate)) {
+         struct ggml_tensor * up   = ggml_mul_mat_id(ctx, as_up, b, ids);
+         struct ggml_tensor * gate = as_gate ? ggml_mul_mat_id(ctx, as_gate, b, ids) : up;
+ 
