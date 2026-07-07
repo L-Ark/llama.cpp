@@ -5662,3 +5662,20 @@
   - Do not run token-rate benchmark or calibration/dev with `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=perf`.
   - Keep GP4 alias source infrastructure because it is default-off and validated by top1 in parity mode.
   - Next work must debug down GPU output against CPU for the exact rows that flip top1, then fix math/row mapping/writeback before expanding perf coverage.
+
+### X10-B3 result：MXFP4 perf limit fixed; first failing down call isolated
+
+- status: diagnostic_progress_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gp4-alias-down-perf-limitfix-sweep-20260707.json`
+- source_change: `GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_CALLS` now applies to both `parity` and `perf` modes. Before this fix, `perf` ignored the limit and replaced all down calls, which made incremental correctness debugging impossible.
+- run_root: `/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-down-perf-top1`
+- fixed_text_top1_sweep:
+  - `MAX_CALLS=1`: pass, `same_top1=145/145`, `iouring_reads=6`, last GPU call `0:blk.0.ffn_down_exps.weight`.
+  - `MAX_CALLS=2`: pass, `same_top1=145/145`, `iouring_reads=12`, last GPU call `1:blk.1.ffn_down_exps.weight`.
+  - `MAX_CALLS=3`: pass, `same_top1=145/145`, `iouring_reads=18`, last GPU call `2:blk.2.ffn_down_exps.weight`.
+  - `MAX_CALLS=4`: fail, `same_top1=141/145`, `first_mismatch_pos=3`, `max_abs=7.26641`, last GPU call `3:blk.3.ffn_down_exps.weight`.
+  - `MAX_CALLS=8`: fail, `same_top1=142/145`, `first_mismatch_pos=3`, last GPU call `7:blk.7.ffn_down_exps.weight`.
+- conclusion:
+  - The GP4 full-source alias path stays healthy through the sweep: all runs have `misses=0`, `direct_fallbacks=0`, and positive `iouring_reads`.
+  - The current correctness boundary is not source IO; it is the MXFP4 down GPU math/writeback for `call=3`, tensor `blk.3.ffn_down_exps.weight`.
+  - Do not run token-rate or calibration/dev with broader down perf yet. The next implementation must add targeted compare/debug for call 3, including active experts, dst/token rows, CPU row output, GPU row output, and final writeback placement.

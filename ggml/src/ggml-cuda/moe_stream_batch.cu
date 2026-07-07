@@ -8883,14 +8883,14 @@ extern "C" bool ggml_cuda_moe_stream_batch(
             std::fprintf(stderr, "[moe_stream_batch] MXFP4 down batch probe active mode=%s\n",
                     mxfp4_down_probe_mode() ? mxfp4_down_probe_mode() : "");
         }
+        mxfp4_probe_call = g_mxfp4_down_probe_calls.fetch_add(1, std::memory_order_relaxed);
+        if (mxfp4_probe_call >= mxfp4_down_probe_max_calls()) return decline("mxfp4_probe_limit");
         if (mxfp4_down_probe_parity_mode()) {
-            mxfp4_probe_call = g_mxfp4_down_probe_calls.fetch_add(1, std::memory_order_relaxed);
-            if (mxfp4_probe_call >= mxfp4_down_probe_max_calls()) return decline("mxfp4_probe_limit");
             mxfp4_probe_run = true;
-            std::fprintf(stderr,
-                    "[moe_stream_batch] mxfp4_down_probe active tensor=%s call=%d active=%d ne01=%ld ne00=%ld\n",
-                    src0_name ? src0_name : "", mxfp4_probe_call, n_active, (long)ne01, (long)ne00);
         }
+        std::fprintf(stderr,
+                "[moe_stream_batch] mxfp4_down_probe active tensor=%s call=%d active=%d ne01=%ld ne00=%ld\n",
+                src0_name ? src0_name : "", mxfp4_probe_call, n_active, (long)ne01, (long)ne00);
     }
 
     static std::atomic<int> first_batch{0};
