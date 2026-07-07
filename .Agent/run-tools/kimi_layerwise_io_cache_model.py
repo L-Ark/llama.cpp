@@ -323,6 +323,50 @@ def build_traffic_models(profile_rows: list[dict], group_slots: dict[str, int]) 
     }
 
 
+def call_stats_by_layer(calls_by_prompt: dict[str, list[Call]]) -> dict[tuple[int, str], dict]:
+    stats: dict[tuple[int, str], dict] = collections.defaultdict(lambda: {
+        "calls": 0,
+        "active_sum": 0,
+        "active_min": None,
+        "active_max": 0,
+        "active_hist": collections.Counter(),
+    })
+    for calls in calls_by_prompt.values():
+        for call in calls:
+            active = len(call.experts)
+            bucket = stats[(call.layer, call.kind)]
+            bucket["calls"] += 1
+            bucket["active_sum"] += active
+            bucket["active_min"] = active if bucket["active_min"] is None else min(bucket["active_min"], active)
+            bucket["active_max"] = max(bucket["active_max"], active)
+            bucket["active_hist"][str(active)] += 1
+
+    out = {}
+    for key, bucket in stats.items():
+        calls = bucket["calls"]
+        out[key] = {
+            "calls": calls,
+            "active_experts_avg": bucket["active_sum"] / calls if calls else 0.0,
+            "active_experts_min": bucket["active_min"] or 0,
+            "active_experts_max": bucket["active_max"],
+            "active_experts_hist": dict(sorted(bucket["active_hist"].items(), key=lambda item: int(item[0]))),
+        }
+    return out
+
+
+def attach_call_and_wait_stats(layer_rows: list[dict], calls_by_prompt: dict[str, list[Call]], throughput_gibs: float) -> None:
+    call_stats = call_stats_by_layer(calls_by_prompt)
+    for row in layer_rows:
+        stats = call_stats.get((row["layer"], row["kind"]), {})
+        row["calls"] = stats.get("calls", 0)
+        row["active_experts_avg"] = stats.get("active_experts_avg", 0.0)
+        row["active_experts_min"] = stats.get("active_experts_min", 0)
+        row["active_experts_max"] = stats.get("active_experts_max", 0)
+        row["active_experts_hist"] = stats.get("active_experts_hist", {})
+        row["estimated_total_wait_s"] = row["traffic_gib"] / max(throughput_gibs, 1e-9)
+        row["estimated_proxy_miss_wait_s"] = gib(row["proxy_miss_traffic_bytes"]) / max(throughput_gibs, 1e-9)
+
+
 def build_swap_plans(
     counts_by_group: dict[str, collections.Counter[Key]],
     hotsets: dict[str, set[Key]],
@@ -516,6 +560,7 @@ def write_markdown(path: Path, report: dict) -> None:
         f"- Observed bytes/wait throughput: `{metrics['iouring_observed_gibs']:.2f} GiB/s`",
         f"- Aggregate down VRAM hit rate: `{metrics['vram_down_hit_rate']:.2f}%`",
         f"- Aggregate up/gate VRAM hit rate: `{metrics['vram_upgate_hit_rate']:.2f}%`",
+        f"- Expert-pack batch histogram: `{metrics['expert_pack_batch_hist']}`",
         "",
         "## Interpretation",
         "",
@@ -531,7 +576,10 @@ def write_markdown(path: Path, report: dict) -> None:
         ("layer", "layer"),
         ("kind", "kind"),
         ("traffic GiB", "traffic_gib"),
+        ("calls", "calls"),
+        ("active avg", "active_experts_avg"),
         ("proxy hit %", "proxy_hit_traffic_pct"),
+        ("miss wait s", "estimated_proxy_miss_wait_s"),
         ("next64 GiB", "next64_gain_gib"),
         ("MiB/slot", "next64_gain_per_slot_mib"),
         ("avg prompts", "next64_avg_prompt_coverage"),
@@ -541,7 +589,10 @@ def write_markdown(path: Path, report: dict) -> None:
         ("layer", "layer"),
         ("kind", "kind"),
         ("traffic GiB", "traffic_gib"),
+        ("calls", "calls"),
+        ("active avg", "active_experts_avg"),
         ("proxy hit %", "proxy_hit_traffic_pct"),
+        ("miss wait s", "estimated_proxy_miss_wait_s"),
         ("remove64 GiB", "remove64_cost_gib"),
         ("MiB/slot", "remove64_cost_per_slot_mib"),
         ("avg prompts", "remove64_avg_prompt_coverage"),
@@ -573,6 +624,8 @@ def write_markdown(path: Path, report: dict) -> None:
         ("layer", "layer"),
         ("kind", "kind"),
         ("traffic GiB", "traffic_gib"),
+        ("calls", "calls"),
+        ("active avg", "active_experts_avg"),
         ("proxy hit %", "proxy_hit_traffic_pct"),
         ("next64 GiB", "next64_gain_gib"),
         ("remove64 GiB", "remove64_cost_gib"),
@@ -617,6 +670,11 @@ def main() -> int:
         "upgate": parse_int_field(first_metrics.get("vram_upgate_0", ""), "slots", 1735),
     }
     traffic = build_traffic_models(profile_rows, group_slots)
+    attach_call_and_wait_stats(
+        traffic["layer_rows"],
+        calls_by_prompt,
+        metrics_summary["iouring_observed_gibs"],
+    )
     swap_plans = build_swap_plans(
         traffic["counts_by_group"],
         traffic["hotsets"],
@@ -689,8 +747,15 @@ def main() -> int:
         "traffic_gib",
         "unique_keys",
         "prompt_count",
+        "calls",
+        "active_experts_avg",
+        "active_experts_min",
+        "active_experts_max",
+        "active_experts_hist",
         "proxy_hot_keys",
         "proxy_hit_traffic_pct",
+        "estimated_total_wait_s",
+        "estimated_proxy_miss_wait_s",
         "next64_gain_gib",
         "next64_gain_per_slot_mib",
         "next64_avg_prompt_coverage",

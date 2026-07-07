@@ -3,6 +3,15 @@
   "best_swap_decode_improvement_pct": 0.1582163387199155,
   "cache_decrease_candidates": [
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 495
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 495,
+      "estimated_proxy_miss_wait_s": 3.3044621969622594,
+      "estimated_total_wait_s": 3.981037511399619,
       "events": 3960,
       "kind": "down",
       "layer": 60,
@@ -27,6 +36,15 @@
       "unique_keys": 352
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.2159946967089343,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 53,
@@ -51,6 +69,15 @@
       "unique_keys": 356
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.168745009073636,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 51,
@@ -75,6 +102,15 @@
       "unique_keys": 337
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.145622821507426,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 1,
@@ -99,6 +135,15 @@
       "unique_keys": 329
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.1436121965016683,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 29,
@@ -123,6 +168,15 @@
       "unique_keys": 338
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.131548446467124,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 55,
@@ -147,6 +201,15 @@
       "unique_keys": 349
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.126521883952731,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 59,
@@ -171,6 +234,15 @@
       "unique_keys": 356
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.1245112589469732,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 56,
@@ -195,6 +267,15 @@
       "unique_keys": 344
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.110436883906672,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 3,
@@ -219,6 +300,15 @@
       "unique_keys": 342
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.083293446328947,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 28,
@@ -243,6 +333,15 @@
       "unique_keys": 317
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.0812828213231898,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 12,
@@ -267,6 +366,15 @@
       "unique_keys": 326
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.076256258808796,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 47,
@@ -291,6 +399,15 @@
       "unique_keys": 335
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.038054383699406,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 52,
@@ -315,6 +432,15 @@
       "unique_keys": 341
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.0229746961562256,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 40,
@@ -339,6 +465,15 @@
       "unique_keys": 323
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.998847196087137,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 49,
@@ -363,6 +498,15 @@
       "unique_keys": 345
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.9536081334575957,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 34,
@@ -387,6 +531,15 @@
       "unique_keys": 327
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.8622030593773635,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 10,
@@ -412,6 +565,15 @@
       "unique_keys": 690
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.860704229827617,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 25,
@@ -437,6 +599,15 @@
       "unique_keys": 616
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.9224434458683564,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 48,
@@ -461,6 +632,15 @@
       "unique_keys": 338
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.9093743833309333,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 11,
@@ -487,6 +667,15 @@
   ],
   "cache_increase_candidates": [
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.7039368287879646,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 25,
@@ -511,6 +700,15 @@
       "unique_keys": 308
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.372074032383137,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 16,
@@ -535,6 +733,15 @@
       "unique_keys": 321
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.34960335336409,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 22,
@@ -560,6 +767,15 @@
       "unique_keys": 626
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.0737703951653144,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 23,
@@ -584,6 +800,15 @@
       "unique_keys": 305
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.1669902817958837,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 19,
@@ -608,6 +833,15 @@
       "unique_keys": 323
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.2030353046263706,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 20,
@@ -632,6 +866,15 @@
       "unique_keys": 314
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.727552533401042,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 4,
@@ -656,6 +899,15 @@
       "unique_keys": 337
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.170719077261107,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 26,
@@ -680,6 +932,15 @@
       "unique_keys": 323
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 5.262792674160807,
+      "estimated_total_wait_s": 6.993173110933897,
       "events": 7808,
       "kind": "upgate",
       "layer": 56,
@@ -705,6 +966,15 @@
       "unique_keys": 688
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.8622030593773635,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 10,
@@ -730,6 +1000,15 @@
       "unique_keys": 690
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.0638269405913867,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 24,
@@ -754,6 +1033,15 @@
       "unique_keys": 316
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.6741064650661825,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 58,
@@ -778,6 +1066,15 @@
       "unique_keys": 345
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.0229746961562256,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 40,
@@ -802,6 +1099,15 @@
       "unique_keys": 323
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.267667759356899,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 57,
@@ -826,6 +1132,15 @@
       "unique_keys": 340
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.1245112589469732,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 56,
@@ -850,6 +1165,15 @@
       "unique_keys": 344
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.083293446328947,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 28,
@@ -874,6 +1198,15 @@
       "unique_keys": 317
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.901331883307904,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 17,
@@ -898,6 +1231,15 @@
       "unique_keys": 314
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 990
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 990,
+      "estimated_proxy_miss_wait_s": 5.807343039356479,
+      "estimated_total_wait_s": 7.093485020312047,
       "events": 7920,
       "kind": "upgate",
       "layer": 60,
@@ -923,6 +1265,15 @@
       "unique_keys": 704
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.764413570460982,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 40,
@@ -948,6 +1299,15 @@
       "unique_keys": 646
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.1436121965016683,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 29,
@@ -980,6 +1340,15 @@
   },
   "layer_rows": [
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.145622821507426,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 1,
@@ -1004,6 +1373,15 @@
       "unique_keys": 329
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.689837661156526,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 1,
@@ -1029,6 +1407,15 @@
       "unique_keys": 658
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.84302375814094,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 2,
@@ -1053,6 +1440,15 @@
       "unique_keys": 329
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.91349227543332,
+      "estimated_total_wait_s": 6.993173110933897,
       "events": 7808,
       "kind": "upgate",
       "layer": 2,
@@ -1078,6 +1474,15 @@
       "unique_keys": 658
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.110436883906672,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 3,
@@ -1102,6 +1507,15 @@
       "unique_keys": 342
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 5.325487617522151,
+      "estimated_total_wait_s": 6.993173110933897,
       "events": 7808,
       "kind": "upgate",
       "layer": 3,
@@ -1127,6 +1541,15 @@
       "unique_keys": 684
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.727552533401042,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 4,
@@ -1151,6 +1574,15 @@
       "unique_keys": 337
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 5.440129799668608,
+      "estimated_total_wait_s": 6.993173110933897,
       "events": 7808,
       "kind": "upgate",
       "layer": 4,
@@ -1176,6 +1608,15 @@
       "unique_keys": 674
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.8802203207474513,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 5,
@@ -1200,6 +1641,15 @@
       "unique_keys": 336
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.906327139049166,
+      "estimated_total_wait_s": 6.993173110933897,
       "events": 7808,
       "kind": "upgate",
       "layer": 5,
@@ -1225,6 +1675,15 @@
       "unique_keys": 672
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.845423479783861,
+      "estimated_total_wait_s": 6.993173110933897,
       "events": 7808,
       "kind": "upgate",
       "layer": 6,
@@ -1250,6 +1709,15 @@
       "unique_keys": 656
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.450171160470246,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 7,
@@ -1275,6 +1743,15 @@
       "unique_keys": 682
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.666276791770878,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 8,
@@ -1300,6 +1777,15 @@
       "unique_keys": 682
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.436041950202514,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 9,
@@ -1325,6 +1811,15 @@
       "unique_keys": 684
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.8622030593773635,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 10,
@@ -1350,6 +1845,15 @@
       "unique_keys": 690
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.9093743833309333,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 11,
@@ -1374,6 +1878,15 @@
       "unique_keys": 326
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.3376127169661185,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 11,
@@ -1399,6 +1912,15 @@
       "unique_keys": 652
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.0812828213231898,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 12,
@@ -1423,6 +1945,15 @@
       "unique_keys": 326
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.593912569972756,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 12,
@@ -1448,6 +1979,15 @@
       "unique_keys": 652
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.467036882064309,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 13,
@@ -1472,6 +2012,15 @@
       "unique_keys": 306
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 3.6781277150776974,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 13,
@@ -1497,6 +2046,15 @@
       "unique_keys": 612
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.620849695004749,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 14,
@@ -1521,6 +2079,15 @@
       "unique_keys": 323
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.24788400648191,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 14,
@@ -1546,6 +2113,15 @@
       "unique_keys": 646
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.286652512274741,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 15,
@@ -1571,6 +2147,15 @@
       "unique_keys": 628
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.372074032383137,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 16,
@@ -1595,6 +2180,15 @@
       "unique_keys": 321
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.268666557677784,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 16,
@@ -1620,6 +2214,15 @@
       "unique_keys": 642
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.901331883307904,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 17,
@@ -1644,6 +2247,15 @@
       "unique_keys": 314
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.325622080568148,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 17,
@@ -1669,6 +2281,15 @@
       "unique_keys": 628
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.223701671185392,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 18,
@@ -1694,6 +2315,15 @@
       "unique_keys": 638
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.1669902817958837,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 19,
@@ -1718,6 +2348,15 @@
       "unique_keys": 323
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.166746148295028,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 19,
@@ -1743,6 +2382,15 @@
       "unique_keys": 646
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.2030353046263706,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 20,
@@ -1767,6 +2415,15 @@
       "unique_keys": 314
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.1712426369442674,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 20,
@@ -1792,6 +2449,15 @@
       "unique_keys": 628
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.8811159627954703,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 21,
@@ -1816,6 +2482,15 @@
       "unique_keys": 310
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 3.7920387608584245,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 21,
@@ -1841,6 +2516,15 @@
       "unique_keys": 620
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.627557871160321,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 22,
@@ -1865,6 +2549,15 @@
       "unique_keys": 313
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.34960335336409,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 22,
@@ -1890,6 +2583,15 @@
       "unique_keys": 626
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.0737703951653144,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 23,
@@ -1914,6 +2616,15 @@
       "unique_keys": 305
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.009369045571654,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 23,
@@ -1939,6 +2650,15 @@
       "unique_keys": 610
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.0638269405913867,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 24,
@@ -1963,6 +2683,15 @@
       "unique_keys": 316
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.23269464848387,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 24,
@@ -1988,6 +2717,15 @@
       "unique_keys": 632
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.7039368287879646,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 25,
@@ -2012,6 +2750,15 @@
       "unique_keys": 308
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.860704229827617,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 25,
@@ -2037,6 +2784,15 @@
       "unique_keys": 616
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.170719077261107,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 26,
@@ -2061,6 +2817,15 @@
       "unique_keys": 323
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.1352707277503535,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 26,
@@ -2086,6 +2851,15 @@
       "unique_keys": 646
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.7977846955113987,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 27,
@@ -2110,6 +2884,15 @@
       "unique_keys": 302
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.1712426369442674,
+      "estimated_total_wait_s": 5.851430562209996,
       "events": 7808,
       "kind": "upgate",
       "layer": 27,
@@ -2135,6 +2918,15 @@
       "unique_keys": 604
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.083293446328947,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 28,
@@ -2159,6 +2951,15 @@
       "unique_keys": 317
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.750723042012688,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 28,
@@ -2184,6 +2985,15 @@
       "unique_keys": 634
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.1436121965016683,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 29,
@@ -2208,6 +3018,15 @@
       "unique_keys": 338
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.956007855100517,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 29,
@@ -2233,6 +3052,15 @@
       "unique_keys": 676
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.891278758279117,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 30,
@@ -2257,6 +3085,15 @@
       "unique_keys": 337
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.532789569797731,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 30,
@@ -2282,6 +3119,15 @@
       "unique_keys": 674
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.614817819987477,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 31,
@@ -2306,6 +3152,15 @@
       "unique_keys": 327
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.1014556708353425,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 31,
@@ -2331,6 +3186,15 @@
       "unique_keys": 654
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.8239228205862448,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 32,
@@ -2355,6 +3219,15 @@
       "unique_keys": 326
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.509009359502365,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 32,
@@ -2380,6 +3253,15 @@
       "unique_keys": 652
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.827944070597759,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 33,
@@ -2404,6 +3286,15 @@
       "unique_keys": 323
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.476163058271946,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 33,
@@ -2429,6 +3320,15 @@
       "unique_keys": 646
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.9536081334575957,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 34,
@@ -2453,6 +3353,15 @@
       "unique_keys": 327
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.723012973751523,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 34,
@@ -2478,6 +3387,15 @@
       "unique_keys": 654
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.555504382317634,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 35,
@@ -2502,6 +3420,15 @@
       "unique_keys": 312
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.105586591301717,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 35,
@@ -2527,6 +3454,15 @@
       "unique_keys": 624
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.6821737576803493,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 36,
@@ -2551,6 +3487,15 @@
       "unique_keys": 315
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.354081563604186,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 36,
@@ -2576,6 +3521,15 @@
       "unique_keys": 630
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.614817819987477,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 37,
@@ -2600,6 +3554,15 @@
       "unique_keys": 326
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.093833574222608,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 37,
@@ -2625,6 +3588,15 @@
       "unique_keys": 652
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.7625987579106446,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 38,
@@ -2649,6 +3621,15 @@
       "unique_keys": 324
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.3361138874163725,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 38,
@@ -2674,6 +3655,15 @@
       "unique_keys": 648
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.6218550075076275,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 39,
@@ -2698,6 +3688,15 @@
       "unique_keys": 316
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.14521418232428,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 39,
@@ -2723,6 +3722,15 @@
       "unique_keys": 632
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.0229746961562256,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 40,
@@ -2747,6 +3755,15 @@
       "unique_keys": 323
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.764413570460982,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 40,
@@ -2772,6 +3789,15 @@
       "unique_keys": 646
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.734450007830041,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 41,
@@ -2796,6 +3822,15 @@
       "unique_keys": 324
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.3576641317962626,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 41,
@@ -2821,6 +3856,15 @@
       "unique_keys": 648
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.845034383146697,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 42,
@@ -2845,6 +3889,15 @@
       "unique_keys": 323
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.539516024362447,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 42,
@@ -2870,6 +3923,15 @@
       "unique_keys": 646
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.9053531333194185,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 43,
@@ -2894,6 +3956,15 @@
       "unique_keys": 331
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.6037463540918235,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 43,
@@ -2919,6 +3990,15 @@
       "unique_keys": 662
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.8862521957647234,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 44,
@@ -2943,6 +4023,15 @@
       "unique_keys": 336
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.685341172507287,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 44,
@@ -2968,6 +4057,15 @@
       "unique_keys": 672
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.900326570805025,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 45,
@@ -2992,6 +4090,15 @@
       "unique_keys": 332
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.665819831542297,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 45,
@@ -3017,6 +4124,15 @@
       "unique_keys": 664
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.7716465704365527,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 46,
@@ -3041,6 +4157,15 @@
       "unique_keys": 331
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.496452092420952,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 46,
@@ -3066,6 +4191,15 @@
       "unique_keys": 662
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.076256258808796,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 47,
@@ -3090,6 +4224,15 @@
       "unique_keys": 335
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.8448934059187065,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 47,
@@ -3115,6 +4258,15 @@
       "unique_keys": 670
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.9224434458683564,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 48,
@@ -3139,6 +4291,15 @@
       "unique_keys": 338
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.671120570193839,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 48,
@@ -3164,6 +4325,15 @@
       "unique_keys": 676
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.998847196087137,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 49,
@@ -3188,6 +4358,15 @@
       "unique_keys": 345
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.800623098973758,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 49,
@@ -3213,6 +4392,15 @@
       "unique_keys": 690
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.842018445638061,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 50,
@@ -3237,6 +4425,15 @@
       "unique_keys": 338
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.542641632325942,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 50,
@@ -3262,6 +4459,15 @@
       "unique_keys": 676
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.168745009073636,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 51,
@@ -3286,6 +4492,15 @@
       "unique_keys": 337
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 5.074598173621916,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 51,
@@ -3311,6 +4526,15 @@
       "unique_keys": 674
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.038054383699406,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 52,
@@ -3335,6 +4559,15 @@
       "unique_keys": 341
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.785068172792853,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 52,
@@ -3360,6 +4593,15 @@
       "unique_keys": 682
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.2159946967089343,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 53,
@@ -3384,6 +4626,15 @@
       "unique_keys": 356
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 5.043104474668098,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 53,
@@ -3409,6 +4660,15 @@
       "unique_keys": 712
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 2.816885633066094,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 54,
@@ -3433,6 +4693,15 @@
       "unique_keys": 345
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.534215285710904,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 54,
@@ -3458,6 +4727,15 @@
       "unique_keys": 690
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.131548446467124,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 55,
@@ -3482,6 +4760,15 @@
       "unique_keys": 349
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.932684605033732,
+      "estimated_total_wait_s": 6.422301836571947,
       "events": 7808,
       "kind": "upgate",
       "layer": 55,
@@ -3507,6 +4794,15 @@
       "unique_keys": 698
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.1245112589469732,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 56,
@@ -3531,6 +4827,15 @@
       "unique_keys": 344
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 5.262792674160807,
+      "estimated_total_wait_s": 6.993173110933897,
       "events": 7808,
       "kind": "upgate",
       "layer": 56,
@@ -3556,6 +4861,15 @@
       "unique_keys": 688
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.267667759356899,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 57,
@@ -3580,6 +4894,15 @@
       "unique_keys": 340
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 4.7773546841344015,
+      "estimated_total_wait_s": 6.993173110933897,
       "events": 7808,
       "kind": "upgate",
       "layer": 57,
@@ -3605,6 +4928,15 @@
       "unique_keys": 680
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.6741064650661825,
+      "estimated_total_wait_s": 4.852405832076582,
       "events": 3904,
       "kind": "down",
       "layer": 58,
@@ -3629,6 +4961,15 @@
       "unique_keys": 345
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 5.467894703157204,
+      "estimated_total_wait_s": 6.993173110933897,
       "events": 7808,
       "kind": "upgate",
       "layer": 58,
@@ -3654,6 +4995,15 @@
       "unique_keys": 690
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 488
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 488,
+      "estimated_proxy_miss_wait_s": 3.126521883952731,
+      "estimated_total_wait_s": 3.924740011238412,
       "events": 3904,
       "kind": "down",
       "layer": 59,
@@ -3678,6 +5028,15 @@
       "unique_keys": 356
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 976
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 976,
+      "estimated_proxy_miss_wait_s": 5.189350026223233,
+      "estimated_total_wait_s": 6.993173110933897,
       "events": 7808,
       "kind": "upgate",
       "layer": 59,
@@ -3703,6 +5062,15 @@
       "unique_keys": 712
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 495
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 495,
+      "estimated_proxy_miss_wait_s": 3.3044621969622594,
+      "estimated_total_wait_s": 3.981037511399619,
       "events": 3960,
       "kind": "down",
       "layer": 60,
@@ -3727,6 +5095,15 @@
       "unique_keys": 352
     },
     {
+      "active_experts_avg": 8.0,
+      "active_experts_hist": {
+        "8": 990
+      },
+      "active_experts_max": 8,
+      "active_experts_min": 8,
+      "calls": 990,
+      "estimated_proxy_miss_wait_s": 5.807343039356479,
+      "estimated_total_wait_s": 7.093485020312047,
       "events": 7920,
       "kind": "upgate",
       "layer": 60,

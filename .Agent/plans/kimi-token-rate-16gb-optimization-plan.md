@@ -96159,6 +96159,15 @@ GP63 Phase 1 execution result:
   - next64 demand coverage: `11.309 GiB`;
   - proxy hit traffic: `23.668%`;
   - average prompt coverage for those next64 keys: `4.828` prompts.
+- Per-layer call/wait coverage:
+  - `layerwise-cache-candidates.csv` now records `calls`,
+    `active_experts_avg`, `active_experts_min`, `active_experts_max`,
+    `active_experts_hist`, `estimated_total_wait_s`, and
+    `estimated_proxy_miss_wait_s` for each `(layer, kind)`;
+  - top candidate layer `25/down` has `488` calls, active expert histogram
+    `{'8': 488}`, and proxy miss wait estimate `3.704 s`;
+  - aggregate expert-pack batch histogram in the report is
+    `{'1': 1816, '17-32': 0, '2-4': 36099, '5-8': 46339, '9-16': 0, 'gt32': 0}`.
 - Same-budget cache-swap bound:
   - `256 MiB` swap: net traffic reduction `1.663 GiB`,
     estimated decode improvement `0.078%`;
