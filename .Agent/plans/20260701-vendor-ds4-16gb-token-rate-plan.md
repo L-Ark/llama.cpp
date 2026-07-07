@@ -5286,3 +5286,13 @@
   - `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`
   - `LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1`
 - Stage 2b constraints: still strict `16GB/no-swap`, still no prompt-specific pack/profile, still no held-out, stdout controlled, calibration France only. If alias load fails, output degenerates, or correctness fails, reject the IQ2_S route and do not proceed to calibration/dev benchmark.
+
+### X5 Stage 2b result：alias load reached prompt, wrapper invalid
+
+- status: alias_load_reached_prompt_but_timeout_due_interactive_wrapper_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage2b-alias-load-smoke-timeout-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-load-smoke/france-n1-alias-load`
+- result: Existing DeepSeek4 alias envs made the IQ2_S GGUF load far enough to enter the prompt loop, but the run omitted `--single-turn`; `llama-cli` generated one token and then waited for another interactive turn until `RuntimeMaxSec=420` killed it. This run is invalid for correctness and performance.
+- memory: wrapper was killed before saving cgroup files, but live polling repeatedly showed `memory.current≈15.997GB` and `memory.peak=16000000000`; page cache/process memory were inside the 16GB cgroup during the run.
+- cleanup: original stdout grew to about `1.3GB` due spinner/interactive prompt output; `stdout_head_excerpt.txt` and `stdout_tail_excerpt.txt` were preserved, and `stdout.txt` was removed to avoid artifact bloat.
+- Stage 3 plan: rerun France calibration semantic smoke with the same alias env plus `--single-turn`, strict `MemoryMax=16000000000`, `MemorySwapMax=0`, no prompt-specific pack/profile, stdout bounded, and a real token budget. If output degenerates or RAM/TTFT fails, reject IQ2_S. Only if France correctness passes may calibration/dev run.
