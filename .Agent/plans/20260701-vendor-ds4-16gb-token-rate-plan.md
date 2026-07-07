@@ -8232,3 +8232,32 @@ Decision:
 - Keep `0xsero-spark-mini-q2-reap-ds4` as the guarded runner default because it is smaller and header-pass `deepseek4`.
 - Do not claim correctness, token-rate, or SOTA.
 - After explicit cleanup approval, first run strict `16GB` load plus France semantic correctness. Only if that passes should calibration/dev token-rate be measured.
+
+## 2026-07-08 X10-BB retained GLU upload handoff probe and MXFP4 generic down rejection
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/retained-glu-upload-handoff-safe-decline-20260708.json`
+- status: `diagnostic_probe_safe_default_off_not_sota`
+
+Purpose:
+- Continue the down GPU correctness work by testing whether explicit CPU `ffn_moe_swiglu-*` activations can be uploaded into the existing CUDA `g_handoff` buffer and consumed by the down batch path.
+- This used only calibration/dev prompts; held-out prompts remain unused.
+
+Findings:
+- The initial upload probe did not trigger because `ggml_ds4_grouped_retained_handoff_mark_glu_act()` was gated by `GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT`.
+- The marker is now default-off but can be triggered by `GGML_MOE_GPU_HANDOFF_UPLOAD_GLU=1` without requiring profile-file output.
+- With `GGML_MOE_VRAM_CACHE_GB=0`, down batch declined at `cache_get`; the SOTA gate-only one-stream cache is not the same as down batch `batch_vram_cache`.
+- With a 2GB down `batch_vram_cache`, a temporary unsafe MXFP4 generic handoff consume produced `GPU handoff consumed` but generated incorrect text (`reply, answer, comeback...`) for the France prompt.
+- Root cause: MXFP4 down is not in `moe_stream_type_supported()` for the generic compact MMVQ path. Forcing MXFP4+uploaded f32 activations into that path is not correct.
+
+Decision:
+- Reject the unsafe MXFP4 generic f32 handoff consume path.
+- Remove the MXFP4 handoff override so MXFP4 down safely declines with `unsupported_type` unless an explicitly correct MXFP4 route is enabled.
+- Keep only the default-off GLU upload marker/probe because it does not change default behavior and gives a reproducible producer for the next correctness implementation.
+- No SOTA changed.
+
+Next:
+- Do not attempt another performance run from this handoff route until correctness is proven.
+- For down GPU correctness, either:
+  - route MXFP4 down through the already-correct Q8_0-compatible path; or
+  - implement a dedicated MXFP4 + f32-activation down kernel and prove top1/logit parity before any token-rate benchmark.
+- Any future accepted path must pass semantic output, strict 16GB RAM including page cache, and TTFT gates before being recorded as SOTA.

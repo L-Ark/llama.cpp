@@ -9,6 +9,7 @@ void ggml_cuda_moe_stream_batch_link_anchor(void) {}
 void ggml_cuda_moe_ttft_trace_mark(const char *) {}
 bool ggml_cuda_moe_iq2_prompt_replay(int, const void *, const void *, int64_t, int64_t, size_t, const float *, int64_t, int, float, ggml_moe_iq2_replay_result *) { return false; }
 bool ggml_cuda_moe_stream_batch(int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, const float *, size_t, size_t, const void *, size_t, int64_t, float *, size_t, size_t, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
+bool ggml_cuda_moe_stream_handoff_upload(const float *, int64_t, int64_t) { return false; }
 bool ggml_cuda_moe_stream_preload_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_preload_tensor_prompt(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
@@ -108,6 +109,8 @@ void ggml_cuda_moe_stream_batch_link_anchor(void) {
 }
 
 void ggml_cuda_moe_ttft_trace_mark(const char *label);
+
+bool ggml_cuda_moe_stream_handoff_upload(const float *host_ptr, int64_t ne01, int64_t dst_cols);
 
 bool ggml_cuda_moe_stream_batch(
     int  src0_type_int,
@@ -341,6 +344,7 @@ struct moe_gpu_handoff {
 };
 
 static moe_gpu_handoff g_handoff;
+static bool init_batch_once();
 
 struct batch_profile {
     bool enabled = false;
@@ -5425,6 +5429,50 @@ static bool ensure_host_pinned(void *&p, size_t &cur, size_t need) {
 static bool gpu_handoff_enabled() {
     const char *env = std::getenv("GGML_MOE_GPU_HANDOFF");
     return env && env[0] && env[0] != '0';
+}
+
+
+extern "C" bool ggml_cuda_moe_stream_handoff_upload(
+        const float *host_ptr,
+        int64_t ne01,
+        int64_t dst_cols) {
+    const char *env = std::getenv("GGML_MOE_GPU_HANDOFF_UPLOAD_GLU");
+    if (!env || !env[0] || env[0] == 0x30 || !gpu_handoff_enabled()) {
+        return false;
+    }
+    if (!host_ptr || ne01 <= 0 || dst_cols <= 0) {
+        return false;
+    }
+    if (!init_batch_once()) {
+        return false;
+    }
+    const size_t bytes = (size_t)ne01 * (size_t)dst_cols * sizeof(float);
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    batch_ctx &bc = g_batch;
+    if (!ensure_dev(bc.d_handoff, bc.d_handoff_sz, bytes)) {
+        return false;
+    }
+    if (cudaMemcpyAsync(bc.d_handoff, host_ptr, bytes, cudaMemcpyHostToDevice, bc.stream) != cudaSuccess) {
+        return false;
+    }
+    const char *sync_env = std::getenv("GGML_MOE_GPU_HANDOFF_UPLOAD_GLU_SYNC");
+    if (sync_env && sync_env[0] && sync_env[0] != 0x30) {
+        if (cudaStreamSynchronize(bc.stream) != cudaSuccess) {
+            return false;
+        }
+    }
+    g_handoff.host_ptr = host_ptr;
+    g_handoff.d_data = (const float *) bc.d_handoff;
+    g_handoff.bytes = bytes;
+    g_handoff.ne01 = ne01;
+    g_handoff.dst_cols = dst_cols;
+    ++g_handoff.serial;
+    static std::atomic<int> first_upload{0};
+    if (first_upload.fetch_add(1) == 0) {
+        std::fprintf(stderr, "[moe_stream_batch] GLU GPU handoff upload active: ne01=%ld dst_cols=%ld bytes=%zu\n",
+                (long)ne01, (long)dst_cols, bytes);
+    }
+    return true;
 }
 
 static __device__ __forceinline__ int moe_q8k_nearest_int(float fval) {

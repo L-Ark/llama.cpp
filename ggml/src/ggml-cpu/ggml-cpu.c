@@ -164,6 +164,10 @@ __attribute__((weak)) extern void ggml_cuda_moe_stream_q80_hot_batch_probe(
     const float * dst,
     size_t dst_nb1,
     size_t dst_nb2);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_handoff_upload(
+    const float * host_ptr,
+    int64_t ne01,
+    int64_t dst_cols);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     int src0_type_int,
     const char * src0_name,
@@ -243,6 +247,7 @@ static bool (*ggml_cuda_moe_stream_batch)(
     int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t,
     const float *, size_t, size_t, const void *, size_t, int64_t, float *, size_t, size_t,
     const int64_t *, const ggml_moe_stream_row_mapping *, int64_t) = NULL;
+static bool (*ggml_cuda_moe_stream_handoff_upload)(const float *, int64_t, int64_t) = NULL;
 static bool (*ggml_cuda_moe_stream_up_gate_batch)(
     int, int, const char *, const void *, const char *, const void *, int64_t,
     int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *,
@@ -1837,7 +1842,7 @@ static void ggml_ds4_grouped_retained_handoff_mark_up_gate(
 }
 
 static void ggml_ds4_grouped_retained_handoff_mark_glu_act(const struct ggml_tensor * dst) {
-    if (!ggml_ds4_grouped_retained_handoff_profile_enabled() || !dst || !dst->data || !dst->name[0]) {
+    if (!dst || !dst->data || !dst->name[0]) {
         return;
     }
     if (!strstr(dst->name, "ffn_moe_swiglu")) {
@@ -1845,6 +1850,11 @@ static void ggml_ds4_grouped_retained_handoff_mark_glu_act(const struct ggml_ten
     }
     const enum ggml_glu_op op = ggml_get_glu_op(dst);
     if (op != GGML_GLU_OP_SWIGLU && op != GGML_GLU_OP_SWIGLU_OAI) {
+        return;
+    }
+    const char * upload_env = getenv("GGML_MOE_GPU_HANDOFF_UPLOAD_GLU");
+    const bool upload_enabled = upload_env && upload_env[0] && upload_env[0] != 0x30;
+    if (!ggml_ds4_grouped_retained_handoff_profile_enabled() && !upload_enabled) {
         return;
     }
 
@@ -1865,6 +1875,11 @@ static void ggml_ds4_grouped_retained_handoff_mark_glu_act(const struct ggml_ten
             gate && gate->name[0] ? gate->name : "");
     ++ggml_ds4_grouped_retained_last_up_gate.serial;
     pthread_mutex_unlock(&ggml_ds4_grouped_retained_handoff_mu);
+
+    if (upload_enabled && ggml_cuda_moe_stream_handoff_upload) {
+        const int64_t dst_cols = dst->ne[1] * dst->ne[2];
+        (void) ggml_cuda_moe_stream_handoff_upload((const float *) dst->data, dst->ne[0], dst_cols);
+    }
 }
 
 static void ggml_ds4_grouped_retained_handoff_record_down(
