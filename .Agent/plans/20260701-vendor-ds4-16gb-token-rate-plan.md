@@ -5296,3 +5296,14 @@
 - memory: wrapper was killed before saving cgroup files, but live polling repeatedly showed `memory.current≈15.997GB` and `memory.peak=16000000000`; page cache/process memory were inside the 16GB cgroup during the run.
 - cleanup: original stdout grew to about `1.3GB` due spinner/interactive prompt output; `stdout_head_excerpt.txt` and `stdout_tail_excerpt.txt` were preserved, and `stdout.txt` was removed to avoid artifact bloat.
 - Stage 3 plan: rerun France calibration semantic smoke with the same alias env plus `--single-turn`, strict `MemoryMax=16000000000`, `MemorySwapMax=0`, no prompt-specific pack/profile, stdout bounded, and a real token budget. If output degenerates or RAM/TTFT fails, reject IQ2_S. Only if France correctness passes may calibration/dev run.
+
+### X5 Stage 3 result：IQ2_S single-turn correctness failed
+
+- status: load_passed_correctness_failed_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage3-france-singleturn-correctness-failed-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-france-correctness/france-n192-singleturn`
+- result: exit `0`, alias env made model load and generate under strict `16GB/no-swap`; `memory_peak_bytes=16000000000`, `oom=0`, `oom_kill=0`.
+- metrics: observed stdout summary `Prompt: 1.2 t/s | Generation: 2.7 t/s`, wall time `1:37.87`; this is below the generalized `>5 tok/s` target and not a SOTA.
+- correctness: failed. Output stayed in `[Start thinking]` and degenerated into repeated `geography` text instead of a coherent short paragraph introducing France.
+- interpretation: IQ2_S is vendor-loadable with existing alias envs, but default template/reasoning behavior is not acceptable. Because this may be an interface/template mismatch rather than only quantization quality, one controlled Stage 3b compatibility check is allowed.
+- Stage 3b allowed: rerun France calibration with the same alias env plus `--chat-template deepseek3 --reasoning off --single-turn`; still no prompt-specific pack/profile, strict 16GB/no-swap, stdout bounded, no held-out. If Stage 3b also fails correctness, degenerates, or remains far below target, close IQ2_S and do not run calibration/dev.
