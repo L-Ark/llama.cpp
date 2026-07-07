@@ -96804,3 +96804,80 @@ GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1
   - verify every run has `direct_reads=0` before using its metrics;
   - if `direct_reads>0`, reject the run immediately and do not compare it as
     current SOTA.
+
+GP65 corrected GP4-env shadow gate:
+
+- Timestamp: `2026-07-07T17:14:46+0800`.
+- Branch/head:
+  `vendor/kimi-speculative-general-token-rate-16gb` /
+  `74bcf7eacc6fc9bde889d58763dc86dedd89c6f0`.
+- Correct SOTA env used for all accepted GP65 confirmation runs:
+
+```text
+GGML_MOE_EXPERT_GGUF_ALIAS_TSV=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv
+GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1
+```
+
+- Shadow env for TopK=8 runs:
+
+```text
+GGML_MOE_NEXT_GATE_SHADOW_OUT=$RUN/next-gate-shadow.csv
+GGML_MOE_NEXT_GATE_SHADOW_TOPK=8
+```
+
+- N32 corrected GP4-env roots:
+  - baseline:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp65-correct-gp4env-n32-baseline`;
+  - TopK=8 shadow:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp65-correct-gp4env-n32-shadow-top8`;
+  - analysis:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp65-correct-gp4env-n32-analysis`;
+  - local report:
+    `.Agent/runs/20260707-gp65-correct-gp4env-n32-analysis/report.md`.
+- N32 result:
+  - shadow CSV: `7/7` prompts;
+  - expert/byte recall: `77.35%`;
+  - false/actual bytes: `0.2265`;
+  - max TTFT ratio: `1.062`;
+  - max decode ratio: `1.038`;
+  - mean token-rate ratio shadow/baseline: `0.995`;
+  - all shadow runs `direct_reads=0`, `entries=69120`,
+    `memory.peak=15899996160`;
+  - `dev_linear_equation` still failed quality at N32 due output truncation
+    before keyword `7`, so N32 is only a predictor/overhead screen.
+- N96 corrected GP4-env roots:
+  - baseline:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp65-correct-gp4env-n96-baseline`;
+  - TopK=8 shadow:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp65-correct-gp4env-n96-shadow-top8`;
+  - analysis:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp65-correct-gp4env-n96-analysis`;
+  - local report:
+    `.Agent/runs/20260707-gp65-correct-gp4env-n96-analysis/report.md`.
+- N96 result:
+  - shadow CSV: `7/7` prompts;
+  - dev quality pass in both baseline and shadow: `7/7`;
+  - expert/byte recall: `77.25%`;
+  - false/actual bytes: `0.2275`;
+  - max TTFT ratio: `1.085`;
+  - max decode ratio: `1.027`;
+  - mean token-rate ratio shadow/baseline: `0.993`;
+  - max shadow record overhead: `2718 us`;
+  - all shadow runs `direct_reads=0`, `memory.peak=15899996160`;
+  - `dev_photosynthesis_factual` first baseline attempt hung in a CPU-side
+    path and was preserved under `dev_photosynthesis_factual.hung-*`; the clean
+    rerun at the canonical prompt directory passed and is used for comparison.
+- Decision:
+  - GP65 N96 shadow gate **passes** for predictor signal, quality, TTFT,
+    memory, and direct-read integrity.
+  - Shadow mode still does not prefetch and therefore does not prove token-rate
+    improvement. It only proves that bounded runtime prefetch is justified.
+  - Proceed to a default-off runtime implementation with:
+    `GGML_MOE_NEXT_GATE_PREFETCH=1`,
+    `GGML_MOE_NEXT_GATE_PREFETCH_TOPK=8`,
+    `GGML_MOE_NEXT_GATE_PREFETCH_CAP_PER_LAYER=1`,
+    expert pack + io_uring only,
+    hard backpressure,
+    and extra-byte accounting.
+  - Do not run held-out test until the runtime prefetch candidate passes dev
+    N96 with quality, TTFT, memory, `direct_reads=0`, and net token-rate gates.
