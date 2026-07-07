@@ -6336,3 +6336,30 @@ Decision:
 - The zero-dependency trick is useful only as a diagnostic pattern for future probes; it does not fix fused math parity.
 - The candidate source was removed and clean `llama-debug` rebuild passed after revert (`/tmp/ds4-clean-debug-rebuild-after-zero-probe.exit = 0`).
 - Next fused/retained attempt should stop replacing explicit gate/up math with the current fused CPU op. It must either exactly reuse the explicit dot/dequant/accumulation order or retain the explicit act dataflow while reducing source movement; otherwise layer-0 act drift will keep propagating to final logits.
+
+## 2026-07-07 X10-O execution result：force-explicit up/gate parity isolates fused-op bug
+
+- attempt_id: `20260707-ds4-fused-upgate-force-explicit-parity`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-upgate-force-explicit-parity-pass-20260707.json`
+- candidate source diff: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-force-explicit-parity-pass-source-diff-20260707.patch`
+- status: `diagnostic_pass_reverted_not_sota`
+
+Purpose:
+- Narrow the X10-N layer-0 `swiglu` mismatch by testing the same DS4 fused branch while forcing `ggml_moe_up_gate_limit` to return the explicit `mul_mat_id + clamp + swiglu_split` subgraph instead of `GGML_OP_MOE_FUSED_UP_GATE`.
+- This used only the fixed France calibration prompt; `held_out_test_set_v1_locked` was not used.
+
+Implementation tested:
+- Added default-off diagnostic env `GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT=1` on top of `DS4_FUSED_UP_GATE_REF=1` and `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`.
+- The source was not kept; it was saved as a rejected/pass diagnostic patch and reverted after the run.
+
+Strict probe result:
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-force-explicit`
+- constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+- records: explicit `129`, candidate `129`, missing candidate `0`.
+- result: pass; `num_diffs_over_atol=0`, `max_abs_sum_diff=0.0`.
+
+Decision:
+- This proves the DS4 branch wiring, clamp semantics, debug visibility, and explicit fallback graph are correct.
+- The act mismatch from X10-N is isolated to the real `GGML_OP_MOE_FUSED_UP_GATE` execution path, likely row mapping, wdata preparation, quantization/dequantization, or accumulation/order inside `ggml_compute_forward_moe_up_gate` and its CUDA helper.
+- Do not benchmark or promote fused up/gate until layer-0 act parity is exact.
+- Clean `llama-debug` rebuild after revert passed (`/tmp/ds4-clean-debug-rebuild-after-force-explicit.exit = 0`).

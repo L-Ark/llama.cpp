@@ -1,0 +1,59 @@
+{
+  "artifact_id": "ds4-fused-upgate-force-explicit-parity-pass-20260707",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "candidate_env": {
+    "DS4_FUSED_UP_GATE_REF": "1",
+    "DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT": "1",
+    "GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT": "1"
+  },
+  "candidate_source_diff": ".Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-force-explicit-parity-pass-source-diff-20260707.patch",
+  "candidate_source_diff_sha256": "05849309a669db8074fbb77748c4dadc9be5138d9b548bd23a214c11c37cb205",
+  "clean_rebuild_after_revert": {
+    "exit": "0",
+    "log": "/tmp/ds4-clean-debug-rebuild-after-force-explicit.log",
+    "target": "llama-debug"
+  },
+  "comparison": {
+    "candidate_records": 129,
+    "explicit_records": 129,
+    "max_abs_sum_diff": 0.0,
+    "num_diffs_over_atol": 0,
+    "num_missing_candidate": 0,
+    "pass": true,
+    "record_names": 129
+  },
+  "constraints": {
+    "drop_caches_before_each_case": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0
+  },
+  "created_utc": "2026-07-07T14:39:36.090513+00:00",
+  "decision": "diagnostic_pass_reverted_not_sota",
+  "git_status_after_revert": "?? .Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-force-explicit-parity-pass-source-diff-20260707.patch\n?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json\n?? prof.nsys-rep",
+  "head_commit_after_revert": "079a7caecc92a8583cd46c2e48029b093c73d27b",
+  "head_oneline_after_revert": "079a7caec vendor-ds4: record fused upgate debug parity rejection",
+  "next_action": "If fused up/gate is pursued, debug ggml_compute_forward_moe_up_gate row mapping, wdata preparation, quantization/dequantization, and accumulation order against explicit ggml_mul_mat_id. Do not benchmark fused op until layer-0 swiglu parity is exact.",
+  "prompt_scope": "fixed France calibration prompt only; held-out prompts unused",
+  "reason": "Forcing ggml_moe_up_gate_limit through its explicit graph fallback produced exact act-level parity. Therefore DS4 branch wiring and clamp semantics are correct; the mismatch in X10-N is isolated to the real GGML_OP_MOE_FUSED_UP_GATE execution path.",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "returncodes": {
+    "candidate": 0,
+    "explicit": 0
+  },
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-force-explicit",
+  "runtime": {
+    "candidate": {
+      "elapsed": "0:34.21",
+      "exit_status": 0,
+      "major_page_faults": 192429,
+      "max_rss_kb": 15601292
+    },
+    "explicit": {
+      "elapsed": "0:34.56",
+      "exit_status": 0,
+      "major_page_faults": 194259,
+      "max_rss_kb": 15601168
+    }
+  },
+  "summary_json": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-force-explicit/summary.json"
+}
