@@ -7369,3 +7369,41 @@ Decision:
 - No source patch from this smoke alone.
 - If cleanup is approved, the next real step remains downloading exactly one candidate and running strict load/correctness first.
 - If cleanup is not approved, the next source-side step must be a default-off MoE stream parity harness for `IQ1_S/Q2_K` or `IQ1_M/Q2_K`, not a production stream writeback patch.
+
+## 2026-07-08 X10-AK MoE stream synthetic harness feasibility check
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-synthetic-harness-feasibility-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-harness-feasibility`
+- status: `existing_backend_test_not_sufficient_for_moe_stream_parity_not_sota`
+
+Purpose:
+- Check whether X10-AJ's existing `test-backend-ops` path can be reused as the default-off MoE stream parity harness required before any `IQ1_S/IQ1_M/Q2_K` stream patch.
+- This is still not a model run, not a source change, and not a SOTA claim.
+
+Probe:
+- command:
+  - `GGML_CUDA_FORCE_MMQ=1`
+  - `GGML_MOE_STREAM_BATCH=1`
+  - `GGML_MOE_STREAM_BATCH_ONLY=1`
+  - `GGML_MOE_STREAM_BATCH_DECLINE_DEBUG=1`
+  - `./build-ds4-moe-stream-batch-probe/bin/test-backend-ops test -o MUL_MAT_ID -p 'type_a=iq1_s,type_b=f32,n_mats=4,n_used=2,b=0,m=512,n=1,k=256' --output csv`
+- result:
+  - generic CUDA/CPU correctness passed;
+  - stderr contained CUDA init only;
+  - no `moe_stream_batch` decline/debug line was printed.
+
+Interpretation:
+- Existing backend tests cover generic `MUL_MAT` / `MUL_MAT_ID`, but they do not prove the vendor DeepSeek MoE stream fast path is entered.
+- Current stream batch source has gates that the generic test does not satisfy/prove:
+  - down batch requires `src0_name` containing `ffn_down_exps`;
+  - current stream type gate excludes `IQ1_S`, `IQ1_M`, and `Q2_K`.
+- Therefore X10-AJ cannot be promoted to MoE stream parity evidence.
+
+Decision:
+- Do not implement production stream writeback for compact target types from existing backend tests.
+- Valid next routes remain:
+  1. If explicit cleanup is approved, download one compact candidate and run real strict 16GB load/correctness first.
+  2. If cleanup is not approved, add a dedicated default-off synthetic MoE stream parity harness that either:
+     - constructs named `ffn_down_exps`/`ffn_up_exps` tensors and forces the stream hook through the graph, or
+     - calls `ggml_cuda_moe_stream_batch` directly with synthetic expert/source/destination buffers and compares against CPU/generic CUDA reference.
+- Any harness implementation must be default-off, not affect current SOTA, and must record exact parity thresholds before any fast-path source patch.
