@@ -6274,3 +6274,35 @@
 - next_action:
   - Re-attempt the DS4 fused up/gate correctness scaffold only after wiring it through this probe.
   - First compare `gate_clamped`, `up_clamped`, and `swiglu` sums per layer; if act-level differences appear, debug the earliest differing layer before running final-logit top1.
+
+## 2026-07-07 X10-M execution result：fused up/gate vecswiglu rejected by act-level parity
+
+- attempt_id: `20260707-ds4-fused-upgate-vecswiglu-act-parity`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-act-parity-fused-vecswiglu-reject-20260707.json`
+- candidate source patch: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-vecswiglu-rejected-source-diff-20260707.patch`
+- status: `rejected_reverted_not_sota`
+
+Purpose:
+- Continue from X10-L by testing the previously rejected `DS4_FUSED_UP_GATE_REF=1` vecswiglu fused up/gate candidate with the new act-level parity probe before doing any more token-rate benchmarking.
+- This used only the fixed France calibration prompt; `held_out_test_set_v1_locked` was not used.
+
+Run:
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-vecswiglu`
+- env delta: `DS4_FUSED_UP_GATE_REF=1`
+- tensor filter: `.*ffn_moe_(gate_clamped|up_clamped|swiglu).*`
+- constraints: strict `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+- returncodes: explicit `0`, candidate `0`.
+- runtime: explicit `0:34.93`, candidate `0:39.72`.
+
+Result:
+- explicit records: `129`
+- candidate records: `43`
+- missing candidate records: `86`; the candidate does not emit the separate `ffn_moe_gate_clamped-*` and `ffn_moe_up_clamped-*` records, so it is not yet observable as a drop-in replacement for the explicit graph.
+- diffs over atol: `8`
+- max swiglu sum diff: `1.9545899999998255`
+- largest late-layer diffs include `ffn_moe_swiglu-41` around `0.393555` and `ffn_moe_swiglu-42` around `1.95459`.
+
+Decision:
+- Reject and keep reverted. This candidate is not a SOTA and must not be benchmark-promoted.
+- The candidate source was removed with reverse patch and a clean `llama-debug` rebuild passed after revert (`/tmp/ds4-clean-debug-rebuild-after-fused-probe.exit = 0`).
+- Down GPU correctness remains the fixed reference path; the next fused/retained attempt must first expose matching gate/up clamped debug records and pass act-level parity before fixed-text top1 or generalized calibration/dev benchmarks.

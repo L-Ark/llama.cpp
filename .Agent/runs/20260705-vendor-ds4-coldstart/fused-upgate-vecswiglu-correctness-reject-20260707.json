@@ -1,0 +1,62 @@
+{
+  "artifact_id": "20260707-fused-upgate-vecswiglu-correctness-reject",
+  "attempt_kind": "default_off_correctness_retry_rejected",
+  "base_commit": "8b077b56586c3083e8f9db784b2b47a09490799b",
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j20",
+    "exit": 0,
+    "log": "/tmp/ds4-build-upgate-vecswiglu.log"
+  },
+  "change_vs_previous_reject": "For DS4 limit>0 fused CPU fallback, clamp gate/up then call ggml_vec_swiglu_f32 to match explicit swiglu_split SIMD activation instead of scalar ggml_silu_f32.",
+  "cpu_top1_compare": {
+    "explicit_cpu_top1_matches_next_token": 122,
+    "first_mismatch_pos": 134,
+    "fused_ref_cpu_top1_matches_next_token": 122,
+    "max_abs_top2_logit_diff": 1.3488000000000042,
+    "mean_abs_top2_logit_diff": 0.09598344827586212,
+    "mismatches": [
+      {
+        "base_top1": {
+          "id": 3631,
+          "logit": 31.0991,
+          "piece": " major"
+        },
+        "case_top1": {
+          "id": 2656,
+          "logit": 31.1145,
+          "piece": " top"
+        },
+        "position": 134
+      },
+      {
+        "base_top1": {
+          "id": 8469,
+          "logit": 30.8499,
+          "piece": " player"
+        },
+        "case_top1": {
+          "id": 7267,
+          "logit": 30.6135,
+          "piece": " cultural"
+        },
+        "position": 135
+      }
+    ],
+    "n_base": 145,
+    "n_case": 145,
+    "n_compare": 145,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T132000Z-fused-upgate-vecswiglu-cpu-top1",
+    "same_top1": 143,
+    "top1_pass": false
+  },
+  "decision": "reject_and_revert_source",
+  "held_out_used": false,
+  "memory_constraints": {
+    "drop_caches_before_each_case": true,
+    "memory_swap_max": 0,
+    "systemd_memory_max_bytes": 16000000000
+  },
+  "next_action": "Use eval-callback tensor dump / act-level parity probe before another fused correctness retry.",
+  "reason": "CPU explicit vs fused-ref fixed-text top1 still failed: same_top1=143/145, first_mismatch_pos=134. This improves over 142/145 but still fails the required exact top1 parity gate.",
+  "source_diff": ".Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-vecswiglu-rejected-source-diff-20260707.patch"
+}
