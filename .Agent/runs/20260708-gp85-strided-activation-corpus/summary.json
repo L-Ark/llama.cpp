@@ -1,0 +1,377 @@
+{
+  "accepted_for_dev_representation_screening": true,
+  "all_direct_reads_zero": true,
+  "all_layer_coverage_passed": true,
+  "all_quality_passed": true,
+  "decision": "Accept this dev-only activation sample for prompt-general representation screening.",
+  "expected_min_records": 1536,
+  "expected_records_per_prompt": 512,
+  "kind": "kimi_activation_sample_summary",
+  "max_memory_peak": 15899996160,
+  "min_layers_per_prompt": 60,
+  "prompts": [
+    {
+      "activation": {
+        "layer_count": 60,
+        "layers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60
+        ],
+        "records": 512,
+        "role_counts": {
+          "down,decode": 154,
+          "gate,decode": 181,
+          "up,decode": 177
+        },
+        "tensor_count": 173,
+        "top_tensors": [
+          [
+            "blk.60.ffn_up_exps.weight",
+            4
+          ],
+          [
+            "blk.60.ffn_down_exps.weight",
+            4
+          ],
+          [
+            "blk.1.ffn_gate_exps.weight",
+            4
+          ],
+          [
+            "blk.2.ffn_gate_exps.weight",
+            4
+          ],
+          [
+            "blk.3.ffn_up_exps.weight",
+            4
+          ],
+          [
+            "blk.3.ffn_down_exps.weight",
+            4
+          ],
+          [
+            "blk.4.ffn_down_exps.weight",
+            4
+          ],
+          [
+            "blk.5.ffn_gate_exps.weight",
+            4
+          ]
+        ]
+      },
+      "decode_ms": 33962.63,
+      "decode_runs": 63,
+      "direct_reads": 0,
+      "memory_peak": 15899996160,
+      "output": "Japan is an island nation in East Asia known for its unique blend of ancient traditions and cutting-edge modernity. With a population of about 125 million, it features bustling cities like Tokyo, a rich cultural heritage including tea ceremonies, temples, and festivals, and a globally influential cuisine. The country is also famous for its",
+      "prompt": "Please introduce Japan in a short paragraph.",
+      "prompt_id": "dev_japan_factual",
+      "quality": "pass",
+      "quality_reason": "ok",
+      "run_dir": ".Agent/runs/20260708-gp85-strided-activation-corpus/dev_japan_factual",
+      "token_rate": 1.85,
+      "ttft_ms": 86401.75
+    },
+    {
+      "activation": {
+        "layer_count": 60,
+        "layers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60
+        ],
+        "records": 512,
+        "role_counts": {
+          "down,decode": 154,
+          "gate,decode": 181,
+          "up,decode": 177
+        },
+        "tensor_count": 173,
+        "top_tensors": [
+          [
+            "blk.60.ffn_up_exps.weight",
+            4
+          ],
+          [
+            "blk.60.ffn_down_exps.weight",
+            4
+          ],
+          [
+            "blk.1.ffn_gate_exps.weight",
+            4
+          ],
+          [
+            "blk.2.ffn_gate_exps.weight",
+            4
+          ],
+          [
+            "blk.3.ffn_up_exps.weight",
+            4
+          ],
+          [
+            "blk.3.ffn_down_exps.weight",
+            4
+          ],
+          [
+            "blk.4.ffn_down_exps.weight",
+            4
+          ],
+          [
+            "blk.5.ffn_gate_exps.weight",
+            4
+          ]
+        ]
+      },
+      "decode_ms": 31661.19,
+      "decode_runs": 54,
+      "direct_reads": 0,
+      "memory_peak": 15899996160,
+      "output": "Solar power offers predictable daytime generation and works well on rooftops, making it easy for small towns to scale gradually. Wind power can produce energy day and night but depends more on location and consistent breezes, so it suits towns with open landscapes more than densely built areas.",
+      "prompt": "In two sentences, compare solar power and wind power for a small town.",
+      "prompt_id": "dev_mixed_summary",
+      "quality": "pass",
+      "quality_reason": "ok",
+      "run_dir": ".Agent/runs/20260708-gp85-strided-activation-corpus/dev_mixed_summary",
+      "token_rate": 1.71,
+      "ttft_ms": 115322.57
+    },
+    {
+      "activation": {
+        "layer_count": 60,
+        "layers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60
+        ],
+        "records": 512,
+        "role_counts": {
+          "down,decode": 154,
+          "gate,decode": 181,
+          "up,decode": 177
+        },
+        "tensor_count": 173,
+        "top_tensors": [
+          [
+            "blk.60.ffn_up_exps.weight",
+            4
+          ],
+          [
+            "blk.60.ffn_down_exps.weight",
+            4
+          ],
+          [
+            "blk.1.ffn_gate_exps.weight",
+            4
+          ],
+          [
+            "blk.2.ffn_gate_exps.weight",
+            4
+          ],
+          [
+            "blk.3.ffn_up_exps.weight",
+            4
+          ],
+          [
+            "blk.3.ffn_down_exps.weight",
+            4
+          ],
+          [
+            "blk.4.ffn_down_exps.weight",
+            4
+          ],
+          [
+            "blk.5.ffn_gate_exps.weight",
+            4
+          ]
+        ]
+      },
+      "decode_ms": 37230.6,
+      "decode_runs": 63,
+      "direct_reads": 0,
+      "memory_peak": 15899996160,
+      "output": "Here's a Python function to reverse a string: ```python def reverse_string(s): return s[::-1] ``` **Example usage:** ```python text = \"Hello, World!\" reversed_text = reverse_string(text) print(reversed_text) # Output: \"!dlroW ,olleH\"",
+      "prompt": "Write a Python function to reverse a string.",
+      "prompt_id": "dev_python_reverse",
+      "quality": "pass",
+      "quality_reason": "ok",
+      "run_dir": ".Agent/runs/20260708-gp85-strided-activation-corpus/dev_python_reverse",
+      "token_rate": 1.69,
+      "ttft_ms": 97770.03
+    }
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_activation_sample_summary.py --root .Agent/runs/20260708-gp85-strided-activation-corpus --out-json .Agent/runs/20260708-gp85-strided-activation-corpus/summary.json --out-md .Agent/runs/20260708-gp85-strided-activation-corpus/summary.md --expected-records-per-prompt 512 --min-layers-per-prompt 60",
+  "root": ".Agent/runs/20260708-gp85-strided-activation-corpus",
+  "total_activation_records": 1536
+}

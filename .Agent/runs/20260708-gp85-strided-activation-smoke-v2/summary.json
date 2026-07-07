@@ -1,0 +1,137 @@
+{
+  "accepted_for_dev_representation_screening": true,
+  "all_direct_reads_zero": true,
+  "all_layer_coverage_passed": true,
+  "all_quality_passed": true,
+  "decision": "Accept this dev-only activation sample for prompt-general representation screening.",
+  "expected_min_records": 216,
+  "expected_records_per_prompt": 216,
+  "kind": "kimi_activation_sample_summary",
+  "max_memory_peak": 15899996160,
+  "min_layers_per_prompt": 60,
+  "prompts": [
+    {
+      "activation": {
+        "layer_count": 60,
+        "layers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60
+        ],
+        "records": 216,
+        "role_counts": {
+          "down,decode": 65,
+          "gate,decode": 76,
+          "up,decode": 75
+        },
+        "tensor_count": 173,
+        "top_tensors": [
+          [
+            "blk.60.ffn_up_exps.weight",
+            3
+          ],
+          [
+            "blk.60.ffn_down_exps.weight",
+            3
+          ],
+          [
+            "blk.2.ffn_gate_exps.weight",
+            3
+          ],
+          [
+            "blk.3.ffn_up_exps.weight",
+            3
+          ],
+          [
+            "blk.4.ffn_down_exps.weight",
+            3
+          ],
+          [
+            "blk.60.ffn_gate_exps.weight",
+            2
+          ],
+          [
+            "blk.1.ffn_up_exps.weight",
+            2
+          ],
+          [
+            "blk.1.ffn_gate_exps.weight",
+            2
+          ]
+        ]
+      },
+      "decode_ms": 17187.99,
+      "decode_runs": 31,
+      "direct_reads": 0,
+      "memory_peak": 15899996160,
+      "output": "France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous",
+      "prompt": "Please introduce France in a short paragraph.",
+      "prompt_id": "dev_france_regression",
+      "quality": "pass",
+      "quality_reason": "ok",
+      "run_dir": ".Agent/runs/20260708-gp85-strided-activation-smoke-v2/dev_france_regression",
+      "token_rate": 1.8,
+      "ttft_ms": 71294.95
+    }
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_activation_sample_summary.py --root .Agent/runs/20260708-gp85-strided-activation-smoke-v2 --out-json .Agent/runs/20260708-gp85-strided-activation-smoke-v2/summary.json --out-md .Agent/runs/20260708-gp85-strided-activation-smoke-v2/summary.md --expected-records-per-prompt 216 --min-layers-per-prompt 60",
+  "root": ".Agent/runs/20260708-gp85-strided-activation-smoke-v2",
+  "total_activation_records": 216
+}

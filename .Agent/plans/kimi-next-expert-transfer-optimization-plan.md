@@ -2097,6 +2097,151 @@ python3 .Agent/run-tools/kimi_output_subspace_oracle.py \
   --torch-threads 8
 ```
 
+## Phase 5H: Strided Multi-Prompt Activation Corpus
+
+Goal:
+
+- Build a better dev-only activation corpus for the next non-expert-local
+  representation search.
+- GP76b only captured the first `72` activation records per prompt. Because the
+  current dump path keeps the first records, it over-represents the earliest
+  decode calls and is too small for designing a new representation.
+
+Scope:
+
+- Default-off instrumentation only.
+- Dev prompts only.
+- No held-out prompts.
+- No runtime SOTA claim.
+
+Implementation:
+
+- Add default-off activation dump stride:
+  - `GGML_MOE_ACTIVATION_DUMP_STRIDE=<n>`;
+  - default `1`, preserving current behavior exactly.
+- Dump logic:
+  - count every eligible activation record;
+  - keep only records where `candidate_id % stride == 0`;
+  - stop after `GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS` kept records.
+- This samples across a longer decode/layer range without creating very large
+  files or changing normal inference.
+
+Experiment:
+
+- Run a dev-only smoke first:
+  - `Please introduce France in a short paragraph.`;
+  - `N=32`;
+  - `GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=216`;
+  - `GGML_MOE_ACTIVATION_DUMP_STRIDE=7`;
+  - 16 GB cgroup cold start.
+- If smoke passes quality/RAM/direct-read gates, collect a larger dev corpus on
+  existing dev prompts with the same stride mechanism.
+
+Acceptance:
+
+- Default behavior is unchanged when `GGML_MOE_ACTIVATION_DUMP_STRIDE` is unset.
+- Smoke output quality passes.
+- Host RAM remains below 16 GB.
+- `direct_reads=0`.
+- Activation dump has records across more tensors/layers than GP76b's first
+  few-call sample.
+- Activation dump includes all three roles: up, gate, and down. Do not use a
+  stride that aliases with the 8 active expert slots and drops a role.
+
+GP85 result on 2026-07-08:
+
+- Code:
+  - activation dump stride in `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - summary tool update in `.Agent/run-tools/kimi_activation_sample_summary.py`.
+- Important sampling note:
+  - initial `stride=8` smoke aliased with the 8 active expert slots and dropped
+    gate records;
+  - accepted runs use `stride=7`, which is coprime with the active-slot count
+    and preserves up/gate/down coverage.
+- Smoke report:
+  - `.Agent/runs/20260708-gp85-strided-activation-smoke-v2/summary.md`
+  - prompt: `Please introduce France in a short paragraph.`
+  - `N=32`, `max_records=216`, `stride=7`;
+  - quality pass;
+  - token rate `1.80 tok/s`;
+  - TTFT `71294.95 ms`;
+  - decode `17187.99 ms / 31`;
+  - Host RAM peak `15899996160`;
+  - `direct_reads=0`;
+  - activation records `216`, layers `60`, tensors `173`;
+  - role counts:
+    - down `65`;
+    - gate `76`;
+    - up `75`.
+- Multi-dev corpus report:
+  - `.Agent/runs/20260708-gp85-strided-activation-corpus/summary.md`
+  - `.Agent/runs/20260708-gp85-strided-activation-corpus/summary.json`
+  - prompts:
+    - `dev_japan_factual`;
+    - `dev_python_reverse`;
+    - `dev_mixed_summary`;
+  - `N=64`, `max_records=512`, `stride=7`;
+  - all quality passed;
+  - all `direct_reads=0`;
+  - max Host RAM peak `15899996160`;
+  - total activation records `1536`;
+  - each prompt has:
+    - records `512`;
+    - layers `60`;
+    - tensors `173`;
+    - role counts: down `154`, gate `181`, up `177`.
+- Decision:
+  - accept GP85 as the current dev-only prompt-general activation corpus for
+    future non-expert-local representation screening;
+  - do not claim token-rate SOTA from GP85 because activation dumping is
+    diagnostic instrumentation;
+  - future representation gates should prefer GP85 over GP76b because GP85 is
+    larger and covers all layers/roles.
+- Reproduce corpus run:
+
+```bash
+cd /root/lfz/tmp/kimi-stage2m-align
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260708-gp85-strided-activation-corpus
+rm -rf "$ROOT"
+run_one() {
+  id="$1"
+  n="$2"
+  prompt="$3"
+  kw="$4"
+  RUN="$ROOT/$id"
+  mkdir -p "$RUN/act"
+  systemd-run --wait --collect --same-dir \
+    -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+    env REPO=/root/lfz/tmp/kimi-stage2m-align \
+      RUN="$RUN" N="$n" PROFILE=0 COPY_PROFILE=0 \
+      PROMPT_ID="$id" PROMPT_USER_TEXT="$prompt" QUALITY_KEYWORDS="$kw" \
+      EXTRA_RUNTIME_ENV="GGML_MOE_ACTIVATION_DUMP_DIR=$RUN/act
+GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=512
+GGML_MOE_ACTIVATION_DUMP_STRIDE=7
+GGML_MOE_ACTIVATION_DUMP_DECODE_ONLY=1" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+}
+run_one dev_japan_factual 64 \
+  "Please introduce Japan in a short paragraph." \
+  "japan,asia|tokyo|island"
+run_one dev_python_reverse 64 \
+  "Write a Python function to reverse a string." \
+  "python|def|string,[::-1]|reverse"
+run_one dev_mixed_summary 64 \
+  "In two sentences, compare solar power and wind power for a small town." \
+  "solar|sun,wind,power|energy"
+```
+- Reproduce summary:
+
+```bash
+python3 .Agent/run-tools/kimi_activation_sample_summary.py \
+  --root .Agent/runs/20260708-gp85-strided-activation-corpus \
+  --out-json .Agent/runs/20260708-gp85-strided-activation-corpus/summary.json \
+  --out-md .Agent/runs/20260708-gp85-strided-activation-corpus/summary.md \
+  --expected-records-per-prompt 512 \
+  --min-layers-per-prompt 60
+```
+
 ## Run Discipline
 
 For every experiment:
@@ -2124,13 +2269,16 @@ Continue from Phase 5E:
    perfect up/gate hide reaches only `1.806 tok/s`.
 5. GP84 rejects dynamic output-subspace compression; rank `<=3` per-call SVD
    remains far above the activation-output error gate.
-6. Next primary direction must be a different non-expert-local byte-reduced
+6. GP85 adds strided activation dumping and collects a better dev-only corpus
+   so the next representation search is not biased to the first few decode
+   calls.
+7. Next primary direction must be a different non-expert-local byte-reduced
    representation or compute/storage-form change. Prediction/prefetch is
    secondary after bytes are reduced.
-7. The next screen must target global moved bytes around `0.30x-0.40x` and
+8. The next screen must target global moved bytes around `0.30x-0.40x` and
    fused up/gate mean rel L2 close to the quality gate before any runtime
    kernel is written.
-8. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+9. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
    gains can regress held-out performance severely.
 
 Rationale:

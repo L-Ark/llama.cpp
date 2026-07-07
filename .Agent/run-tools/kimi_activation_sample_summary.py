@@ -30,8 +30,9 @@ def direct_reads(metrics: dict[str, Any]) -> int:
 def summarize_activation_csv(path: Path) -> dict[str, Any]:
     counts: Counter[str] = Counter()
     tensors: Counter[str] = Counter()
+    layers: set[int] = set()
     if not path.exists():
-        return {"records": 0, "role_counts": {}, "tensor_count": 0, "top_tensors": []}
+        return {"records": 0, "role_counts": {}, "tensor_count": 0, "top_tensors": [], "layer_count": 0, "layers": []}
     with path.open(newline="", encoding="utf-8", errors="replace") as f:
         for row in csv.DictReader(f):
             role = row.get("role", "")
@@ -40,11 +41,16 @@ def summarize_activation_csv(path: Path) -> dict[str, Any]:
             counts[f"{role},{mode}"] += 1
             if tensor:
                 tensors[tensor] += 1
+                match = re.search(r"blk\.(\d+)\.", tensor)
+                if match:
+                    layers.add(int(match.group(1)))
     return {
         "records": sum(counts.values()),
         "role_counts": dict(sorted(counts.items())),
         "tensor_count": len(tensors),
         "top_tensors": tensors.most_common(8),
+        "layer_count": len(layers),
+        "layers": sorted(layers),
     }
 
 
@@ -63,14 +69,15 @@ def write_markdown(path: Path, result: dict[str, Any]) -> None:
         "",
         "## Prompts",
         "",
-        "| prompt | quality | token rate | decode | TTFT | memory peak | direct reads | activation records | role counts |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---|",
+        "| prompt | quality | token rate | decode | TTFT | memory peak | direct reads | activation records | layers | tensors | role counts |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in result["prompts"]:
         lines.append(
             f"| `{row['prompt_id']}` | `{row['quality']}` | `{row['token_rate']:.2f}` | "
             f"`{row['decode_ms']:.2f} ms / {row['decode_runs']}` | `{row['ttft_ms']:.2f} ms` | "
             f"`{row['memory_peak']}` | `{row['direct_reads']}` | `{row['activation']['records']}` | "
+            f"`{row['activation']['layer_count']}` | `{row['activation']['tensor_count']}` | "
             f"`{row['activation']['role_counts']}` |"
         )
     lines += [
@@ -94,6 +101,8 @@ def main() -> int:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--out-json", type=Path, required=True)
     parser.add_argument("--out-md", type=Path, required=True)
+    parser.add_argument("--expected-records-per-prompt", type=int, default=72)
+    parser.add_argument("--min-layers-per-prompt", type=int, default=1)
     args = parser.parse_args()
 
     rows = []
@@ -122,8 +131,9 @@ def main() -> int:
     all_direct_zero = all(row["direct_reads"] == 0 for row in rows) and bool(rows)
     total_records = sum(row["activation"]["records"] for row in rows)
     max_memory = max((row["memory_peak"] for row in rows), default=0)
-    expected_records = 72 * len(rows)
-    accepted = all_quality and all_direct_zero and total_records >= expected_records and max_memory < 16 * 1024**3
+    expected_records = args.expected_records_per_prompt * len(rows)
+    layer_gate = all(row["activation"]["layer_count"] >= args.min_layers_per_prompt for row in rows) and bool(rows)
+    accepted = all_quality and all_direct_zero and total_records >= expected_records and layer_gate and max_memory < 16 * 1024**3
     decision = (
         "Accept this dev-only activation sample for prompt-general representation screening."
         if accepted else
@@ -135,8 +145,11 @@ def main() -> int:
         "prompts": rows,
         "total_activation_records": total_records,
         "expected_min_records": expected_records,
+        "expected_records_per_prompt": args.expected_records_per_prompt,
+        "min_layers_per_prompt": args.min_layers_per_prompt,
         "all_quality_passed": all_quality,
         "all_direct_reads_zero": all_direct_zero,
+        "all_layer_coverage_passed": layer_gate,
         "max_memory_peak": max_memory,
         "accepted_for_dev_representation_screening": accepted,
         "decision": decision,

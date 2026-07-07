@@ -1,0 +1,19 @@
+PROMPT_ID=dev_mixed_summary
+PROMPT_USER_TEXT=In two sentences, compare solar power and wind power for a small town.
+QUALITY_KEYWORDS=solar|sun,wind,power|energy
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260708-gp85-strided-activation-corpus/dev_mixed_summary
+N=64
+PINNED_SLOTS=12
+VRAM_MIB=15000
+THREADS=32
+UPGATE_PCT=62
+IQ2_UPGATE_PARALLEL=1
+MOE_IO_DEPTH=8
+MOE_IO_REFILL_BATCH=4
+MOE_PREFETCH_DOWN_DEPTH=2
+MODEL_PATH=/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf
+EXPERT_GGUF_ALIAS_TSV=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv
+MOE_IO_ALIGNED_ALIAS_BATCH=1
+PROFILE=0
+COPY_PROFILE=0
+build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl 99 --special -m /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf -c 512 -n 64 --temp 0 --top-p 1.0 --top-k 1 --seed 1 --no-display-prompt -no-cnv -t 32 -tb 32 -p \<\|im_user\|\>user\<\|im_middle\|\>In\ two\ sentences\,\ compare\ solar\ power\ and\ wind\ power\ for\ a\ small\ town.\<\|im_end\|\>\<\|im_assistant\|\>assistant\<\|im_middle\|\>\<think\>\</think\> 
