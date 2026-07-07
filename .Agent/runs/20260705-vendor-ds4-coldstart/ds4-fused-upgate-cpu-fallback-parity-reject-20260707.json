@@ -1,0 +1,185 @@
+{
+  "artifact": "ds4-fused-upgate-cpu-fallback-parity-reject-20260707",
+  "attempt_id": "20260707T-act-parity-fused-cpu-fallback",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "build_after_revert": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-debug -j20",
+    "exit_code": 0,
+    "exit_path": "/tmp/ds4-clean-debug-rebuild-after-cpu-fallback-probe.exit",
+    "log_path": "/tmp/ds4-clean-debug-rebuild-after-cpu-fallback-probe.log"
+  },
+  "candidate_env_extra": {
+    "DS4_FUSED_UP_GATE_REF": "1",
+    "DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT": "1"
+  },
+  "common_env_extra": {
+    "GGML_MOE_STREAM": "0"
+  },
+  "comparison": {
+    "atol": 0.0,
+    "candidate_records": 129,
+    "diffs_over_atol": [
+      {
+        "candidate_sums": [
+          5779.373047
+        ],
+        "explicit_sums": [
+          5777.26123
+        ],
+        "max_abs": 2.1118169999999736,
+        "name": "ffn_moe_gate_clamped-41"
+      },
+      {
+        "candidate_sums": [
+          49074.660156
+        ],
+        "explicit_sums": [
+          49061.433594
+        ],
+        "max_abs": 13.226561999996193,
+        "name": "ffn_moe_gate_clamped-42"
+      },
+      {
+        "candidate_sums": [
+          9.174387
+        ],
+        "explicit_sums": [
+          9.174395
+        ],
+        "max_abs": 8.000000001118224e-06,
+        "name": "ffn_moe_swiglu-0"
+      },
+      {
+        "candidate_sums": [
+          -40.430325
+        ],
+        "explicit_sums": [
+          -40.43034
+        ],
+        "max_abs": 1.4999999997655777e-05,
+        "name": "ffn_moe_swiglu-16"
+      },
+      {
+        "candidate_sums": [
+          44.525166
+        ],
+        "explicit_sums": [
+          44.525173
+        ],
+        "max_abs": 7.000000003642981e-06,
+        "name": "ffn_moe_swiglu-2"
+      },
+      {
+        "candidate_sums": [
+          104.649384
+        ],
+        "explicit_sums": [
+          104.649353
+        ],
+        "max_abs": 3.09999999927868e-05,
+        "name": "ffn_moe_swiglu-21"
+      },
+      {
+        "candidate_sums": [
+          -1783.472412
+        ],
+        "explicit_sums": [
+          -1783.473022
+        ],
+        "max_abs": 0.0006099999998241401,
+        "name": "ffn_moe_swiglu-40"
+      },
+      {
+        "candidate_sums": [
+          -4132.708496
+        ],
+        "explicit_sums": [
+          -4132.314941
+        ],
+        "max_abs": 0.39355500000056054,
+        "name": "ffn_moe_swiglu-41"
+      },
+      {
+        "candidate_sums": [
+          4030.224365
+        ],
+        "explicit_sums": [
+          4028.269775
+        ],
+        "max_abs": 1.9545899999998255,
+        "name": "ffn_moe_swiglu-42"
+      },
+      {
+        "candidate_sums": [
+          21.904037
+        ],
+        "explicit_sums": [
+          21.904053
+        ],
+        "max_abs": 1.6000000002236447e-05,
+        "name": "ffn_moe_swiglu-7"
+      },
+      {
+        "candidate_sums": [
+          -1010.967529
+        ],
+        "explicit_sums": [
+          -1010.354187
+        ],
+        "max_abs": 0.6133419999999887,
+        "name": "ffn_moe_up_clamped-41"
+      },
+      {
+        "candidate_sums": [
+          774.366516
+        ],
+        "explicit_sums": [
+          773.865967
+        ],
+        "max_abs": 0.5005490000000918,
+        "name": "ffn_moe_up_clamped-42"
+      }
+    ],
+    "explicit_records": 129,
+    "max_abs_sum_diff": 13.226561999996193,
+    "missing_candidate": [],
+    "missing_explicit": [],
+    "num_diffs_over_atol": 12,
+    "num_missing_candidate": 0,
+    "num_missing_explicit": 0,
+    "pass": false,
+    "record_names": 129
+  },
+  "constraints": {
+    "drop_caches_before_each_case": true,
+    "held_out_test_set_used": false,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "prompt": "Please introduce France in a short paragraph."
+  },
+  "current_commit_after_revert": "2921e30855d362824e57e3efcf0c07c94db8661f",
+  "interpretation": "Disabling GGML_MOE_STREAM did not restore act-level parity. Therefore the fused up/gate mismatch is not only a CUDA stream batch issue; the CPU fused fallback path behind GGML_OP_MOE_FUSED_UP_GATE also diverges from the explicit mul_mat_id + clamp + swiglu graph. X10-O force-explicit pass remains the correctness reference.",
+  "key_result": {
+    "candidate_records": 129,
+    "earliest_mismatch": "ffn_moe_swiglu-0 max_abs about 8e-6",
+    "explicit_records": 129,
+    "largest_mismatch": "ffn_moe_gate_clamped-42 max_abs 13.226561999996193",
+    "max_abs_sum_diff": 13.226561999996193,
+    "num_diffs_over_atol": 12,
+    "num_missing_candidate": 0
+  },
+  "llama_debug_sha256_at_probe": "7d355ca27f337e44763f0defb2fd84bfc08ab6e323ff3813b50988d90644f9dd  /root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-debug",
+  "next_action": "Do not benchmark/promote fused up/gate. Fix or replace ggml_compute_forward_moe_up_gate / wdata row mapping / quant-dequant / accumulation order until layer-0 act parity is exact, or retain the explicit dataflow while optimizing source movement.",
+  "probe_returncodes": {
+    "candidate_systemd_returncode": "0",
+    "explicit_systemd_returncode": "0"
+  },
+  "purpose": "Distinguish CUDA stream-batch fused up/gate mismatch from CPU fused fallback mismatch by disabling GGML_MOE_STREAM.",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-cpu-fallback",
+  "run_source_commit": "251506952a699e2940fcf933eb9ea9289ed95817",
+  "run_source_commit_oneline": "251506952 vendor-ds4: isolate fused upgate parity gap",
+  "source_diff_path": ".Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-cpu-fallback-parity-reject-source-diff-20260707.patch",
+  "source_diff_sha256": "a44c8fc4d4cff5f77b90b4728e572935700b6a590117651fa76bb884341f024d",
+  "status": "diagnostic_reject_reverted_not_sota",
+  "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-cpu-fallback/summary.json"
+}

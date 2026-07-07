@@ -6363,3 +6363,36 @@ Decision:
 - The act mismatch from X10-N is isolated to the real `GGML_OP_MOE_FUSED_UP_GATE` execution path, likely row mapping, wdata preparation, quantization/dequantization, or accumulation/order inside `ggml_compute_forward_moe_up_gate` and its CUDA helper.
 - Do not benchmark or promote fused up/gate until layer-0 act parity is exact.
 - Clean `llama-debug` rebuild after revert passed (`/tmp/ds4-clean-debug-rebuild-after-force-explicit.exit = 0`).
+
+## 2026-07-07 X10-P execution result：fused up/gate CPU fallback also fails act parity
+
+- attempt_id: `20260707T-act-parity-fused-cpu-fallback`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-upgate-cpu-fallback-parity-reject-20260707.json`
+- candidate source diff: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-cpu-fallback-parity-reject-source-diff-20260707.patch`
+- status: `diagnostic_reject_reverted_not_sota`
+
+Purpose:
+- Follow X10-O by checking whether the act mismatch is only in the CUDA stream-batch fused up/gate helper.
+- Disable `GGML_MOE_STREAM` for both explicit and candidate runs, then test the same default-off fused branch with debug-visible explicit gate/up tensors.
+- This used only the fixed France calibration prompt; `held_out_test_set_v1_locked` was not used.
+
+Strict probe result:
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-cpu-fallback`
+- common env delta: `GGML_MOE_STREAM=0`
+- candidate env: `DS4_FUSED_UP_GATE_REF=1`, `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`
+- constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+- returncodes: explicit `0`, candidate `0`.
+- records: explicit `129`, candidate `129`, missing candidate `0`.
+- result: act-level parity still failed with `12` diffs over atol and max sum diff `13.226561999996193`.
+- earliest mismatch remains `ffn_moe_swiglu-0` at about `8e-6`; largest late mismatch is `ffn_moe_gate_clamped-42` at `13.226561999996193`.
+
+Decision:
+- Reject and keep reverted. This candidate is not a SOTA and must not be benchmark-promoted.
+- Disabling stream did not restore parity, so the bug is not only in CUDA stream batch. The CPU fused fallback behind `GGML_OP_MOE_FUSED_UP_GATE` also diverges from the explicit `mul_mat_id + clamp + swiglu_split` graph.
+- X10-O force-explicit remains the correctness reference: DS4 graph wiring and explicit fallback are correct; the remaining gap is inside the real fused op execution path, likely row mapping, `wdata` preparation, quant/dequant, or accumulation/order in `ggml_compute_forward_moe_up_gate` and its CUDA helper.
+- The source diff was saved and removed with reverse patch. Clean `llama-debug` rebuild after revert passed (`/tmp/ds4-clean-debug-rebuild-after-cpu-fallback-probe.exit = 0`).
+
+Next action:
+- Do not continue token-rate benchmarking for fused up/gate until layer-0 act parity is exact.
+- Either fix the fused op to match the explicit path exactly, or avoid replacing explicit math and instead optimize source movement / retained dataflow around the explicit gate/up/clamp/swiglu outputs.
+- The broader token-rate path remains prompt-general: no France-specific traces, prompt profiles, or packs may be used for promotion; accepted improvements must beat the no-prompt-specific generalized baseline and then be recorded and pushed to `ssd/vendor/deepseek-token-rate-16gb`.

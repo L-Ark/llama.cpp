@@ -1,0 +1,282 @@
+diff --git a/ggml/include/ggml.h b/ggml/include/ggml.h
+index 51541f56a..0e8de97d0 100644
+--- a/ggml/include/ggml.h
++++ b/ggml/include/ggml.h
+@@ -1478,6 +1478,15 @@ extern "C" {
+             struct ggml_tensor  * ids,
+             enum ggml_unary_op    op);
+ 
++    GGML_API struct ggml_tensor * ggml_moe_up_gate_limit(
++            struct ggml_context * ctx,
++            struct ggml_tensor  * as_up,
++            struct ggml_tensor  * as_gate,
++            struct ggml_tensor  * b,
++            struct ggml_tensor  * ids,
++            enum ggml_unary_op    op,
++            float                 limit);
++
+     // A: m columns, n rows,
+     // B: p columns, n rows,
+     // result is m columns, p rows
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+index 63793b34a..196ba681c 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -5243,6 +5243,19 @@ static float ggml_moe_up_gate_activate(float x, enum ggml_unary_op op) {
+     }
+ }
+ 
++static float ggml_moe_up_gate_clamp(float x, float lo, float hi) {
++    return MIN(hi, MAX(lo, x));
++}
++
++static float ggml_moe_up_gate_fuse_value(float up, float gate, enum ggml_unary_op op, float limit) {
++    if (op == GGML_UNARY_OP_SILU && limit > 1.0e-6f) {
++        const float gate_v = ggml_silu_f32(MIN(gate, limit));
++        const float up_v = ggml_moe_up_gate_clamp(up, -limit, limit);
++        return up_v * gate_v;
++    }
++    return up * ggml_moe_up_gate_activate(gate, op);
++}
++
+ static void ggml_compute_forward_moe_up_gate_one_chunk(
+     struct ggml_tensor * dst,
+     const struct ggml_tensor * src0_up,
+@@ -5260,7 +5273,8 @@ static void ggml_compute_forward_moe_up_gate_one_chunk(
+     const size_t row_size,
+     const bool src1_cont,
+     const void * wdata,
+-    enum ggml_unary_op op) {
++    enum ggml_unary_op op,
++    float limit) {
+ 
+     const enum ggml_type type_up = src0_up->type;
+     const enum ggml_type type_gate = src0_gate->type;
+@@ -5306,13 +5320,26 @@ static void ggml_compute_forward_moe_up_gate_one_chunk(
+ 
+                 float * dst_col = (float *) ((char *) dst->data + (id*nb1 + i12*nb2));
+ 
+-                for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ++ir0) {
++                const int64_t ir0_stop = MIN(iir0 + blck_0, ir0_end);
++                for (int64_t ir0 = iir0; ir0 < ir0_stop; ++ir0) {
+                     vec_dot_up(ne00,   &up_tmp[ir0 - iir0],   0, src0_up_cur   + ir0*up_nb01,   0, src1_col, 0, 1);
+                     vec_dot_gate(ne00, &gate_tmp[ir0 - iir0], 0, src0_gate_cur + ir0*gate_nb01, 0, src1_col, 0, 1);
+-                    fused_tmp[ir0 - iir0] = up_tmp[ir0 - iir0] * ggml_moe_up_gate_activate(gate_tmp[ir0 - iir0], op);
+                 }
+ 
+-                memcpy(&dst_col[iir0], fused_tmp, (MIN(iir0 + blck_0, ir0_end) - iir0)*sizeof(float));
++                const int64_t n_cur = ir0_stop - iir0;
++                if (op == GGML_UNARY_OP_SILU && limit > 1.0e-6f) {
++                    for (int64_t i = 0; i < n_cur; ++i) {
++                        gate_tmp[i] = MIN(gate_tmp[i], limit);
++                        up_tmp[i]   = ggml_moe_up_gate_clamp(up_tmp[i], -limit, limit);
++                    }
++                    ggml_vec_swiglu_f32((int) n_cur, fused_tmp, gate_tmp, up_tmp);
++                } else {
++                    for (int64_t i = 0; i < n_cur; ++i) {
++                        fused_tmp[i] = ggml_moe_up_gate_fuse_value(up_tmp[i], gate_tmp[i], op, limit);
++                    }
++                }
++
++                memcpy(&dst_col[iir0], fused_tmp, n_cur*sizeof(float));
+             }
+         }
+     }
+@@ -5339,6 +5366,7 @@ static void ggml_compute_forward_moe_up_gate(
+     ggml_from_float_t const from_float   = type_traits_cpu[vec_dot_type].from_float;
+     const bool same_weight_type = up_type == gate_type;
+     const bool scoped_mixed_pair = ggml_kimi_moe_mixed_iq2_iq3_pair(up_type, gate_type);
++    const float fused_limit = ggml_get_op_params_f32(dst, 1);
+ 
+     GGML_ASSERT(src0_gate != NULL);
+     GGML_ASSERT(same_weight_type || scoped_mixed_pair);
+@@ -5518,7 +5546,7 @@ static void ggml_compute_forward_moe_up_gate(
+                 (float *) dst->data,
+                 nb1, nb2,
+                 ggml_get_op_params_i32(dst, 0),
+-                0.0f,
++                fused_limit,
+                 matrix_row_counts,
+                 (const ggml_moe_stream_row_mapping *) matrix_rows,
+                 ids->ne[0]*ids->ne[1]);
+@@ -5599,7 +5627,7 @@ static void ggml_compute_forward_moe_up_gate(
+             ggml_compute_forward_moe_up_gate_one_chunk(
+                 dst, src0_up, src0_gate, src1, ids, cur_a,
+                 ir0_start, ir0_end, ir1_start, ir1_end,
+-                src0_up_cur, src0_gate_cur, matrix_rows, row_size, src1_cont, wdata, op);
++                src0_up_cur, src0_gate_cur, matrix_rows, row_size, src1_cont, wdata, op, fused_limit);
+ 
+             if (trace_cpu_chunk) {
+                 const double trace_t1_ms = ggml_moe_cpu_trace_now_ms();
+diff --git a/ggml/src/ggml-cuda/moe_stream_batch.cu b/ggml/src/ggml-cuda/moe_stream_batch.cu
+index d303d38ba..bebb01dc5 100644
+--- a/ggml/src/ggml-cuda/moe_stream_batch.cu
++++ b/ggml/src/ggml-cuda/moe_stream_batch.cu
+@@ -6026,7 +6026,7 @@ static float moe_host_up_gate_fuse(float u, float g, int unary_op, float limit)
+             if (limit < 1.0e-6f) {
+                 return u * moe_host_silu(g);
+             } else {
+-                const float gate_v = std::min(moe_host_silu(g), limit);
++                const float gate_v = moe_host_silu(std::min(g, limit));
+                 const float up_v = std::max(-limit, std::min(limit, u));
+                 return up_v * gate_v;
+             }
+@@ -7267,7 +7267,7 @@ static __global__ void moe_stream_up_gate_fuse_kernel(
+             if (limit < 1e-6f) {
+                 r = u * moe_stream_silu(g);
+             } else {
+-                float gate_v = fminf(moe_stream_silu(g), limit);
++                float gate_v = moe_stream_silu(fminf(g, limit));
+                 float up_v = fmaxf(-limit, fminf(limit, u));
+                 r = up_v * gate_v;
+             }
+diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
+index 67b03bcdd..0a52efc1d 100644
+--- a/ggml/src/ggml.c
++++ b/ggml/src/ggml.c
+@@ -3431,6 +3431,17 @@ struct ggml_tensor * ggml_moe_up_gate(
+         struct ggml_tensor  * b,
+         struct ggml_tensor  * ids,
+         enum ggml_unary_op    op) {
++    return ggml_moe_up_gate_limit(ctx, as_up, as_gate, b, ids, op, 0.0f);
++}
++
++struct ggml_tensor * ggml_moe_up_gate_limit(
++        struct ggml_context * ctx,
++        struct ggml_tensor  * as_up,
++        struct ggml_tensor  * as_gate,
++        struct ggml_tensor  * b,
++        struct ggml_tensor  * ids,
++        enum ggml_unary_op    op,
++        float                 limit) {
+     const char * mixed_env = getenv("GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES");
+     const bool mixed_enabled = mixed_env && mixed_env[0] && mixed_env[0] != '0';
+     const bool mixed_iq2_iq3 =
+@@ -3443,6 +3454,11 @@ struct ggml_tensor * ggml_moe_up_gate(
+         struct ggml_tensor * up   = ggml_mul_mat_id(ctx, as_up, b, ids);
+         struct ggml_tensor * gate = as_gate ? ggml_mul_mat_id(ctx, as_gate, b, ids) : up;
+ 
++        if (op == GGML_UNARY_OP_SILU && as_gate && limit > 1.0e-6f) {
++            gate = ggml_clamp(ctx, gate, -INFINITY, limit);
++            up   = ggml_clamp(ctx, up,   -limit,   limit);
++        }
++
+         switch (op) {
+             case GGML_UNARY_OP_SILU:
+                 return as_gate ? ggml_swiglu_split(ctx, gate, up) : ggml_swiglu(ctx, up);
+@@ -3473,6 +3489,7 @@ struct ggml_tensor * ggml_moe_up_gate(
+     struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
+ 
+     ggml_set_op_params_i32(result, 0, (int32_t) op);
++    ggml_set_op_params_f32(result, 1, limit);
+ 
+     result->op     = GGML_OP_MOE_FUSED_UP_GATE;
+     result->src[0] = as_up;
+diff --git a/src/models/deepseek4.cpp b/src/models/deepseek4.cpp
+index 0654358c3..a85cd3f37 100644
+--- a/src/models/deepseek4.cpp
++++ b/src/models/deepseek4.cpp
+@@ -94,6 +94,31 @@ static bool deepseek4_hot_dispatch_enabled() {
+     return enabled;
+ }
+ 
++static bool deepseek4_fused_up_gate_ref_enabled() {
++    // Default OFF. This is a DS4 correctness scaffold for separate
++    // ffn_up_exps/ffn_gate_exps with the raw clamp semantics used by
++    // DeepSeek4 before swiglu_split. It is not a promoted performance path.
++    static const bool enabled = []() {
++        const char * value = std::getenv("DS4_FUSED_UP_GATE_REF");
++        if (value == nullptr) return false;
++        return std::strcmp(value, "0") != 0;
++    }();
++    return enabled;
++}
++
++static bool deepseek4_fused_up_gate_ref_debug_explicit_enabled() {
++    // Diagnostic only. When the fused scaffold is enabled, also build the
++    // explicit gate/up clamp tensors so act-level parity can see where the
++    // fused path first diverges. This intentionally adds work and is never a
++    // token-rate path.
++    static const bool enabled = []() {
++        const char * value = std::getenv("DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT");
++        if (value == nullptr) return false;
++        return std::strcmp(value, "0") != 0;
++    }();
++    return enabled;
++}
++
+ struct deepseek4_sparse_retained_graph_probe_state {
+     std::mutex mutex;
+     FILE * fp = nullptr;
+@@ -1324,6 +1349,9 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
+ 
+         // === Default single-path (unchanged) ===
+         ggml_tensor * gate_up_combined = nullptr;
++        ggml_tensor * act = nullptr;
++        const float swiglu_limit = hparams.swiglu_clamp_exp[il];
++        bool fused_up_gate_ref_done = false;
+         if (layer.ffn_gate_up_exps) {
+             gate_up_combined = build_lora_mm_id(layer.ffn_gate_up_exps, cur_experts_in, selected_experts);
+             cb(gate_up_combined, "ffn_moe_gate_up", il);
+@@ -1331,6 +1359,28 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
+             const int64_t n_ff = gate_up_combined->ne[0] / 2;
+             gate = ggml_view_3d(ctx0, gate_up_combined, n_ff, gate_up_combined->ne[1], gate_up_combined->ne[2], gate_up_combined->nb[1], gate_up_combined->nb[2], 0);
+             up = ggml_view_3d(ctx0, gate_up_combined, n_ff, gate_up_combined->ne[1], gate_up_combined->ne[2], gate_up_combined->nb[1], gate_up_combined->nb[2], n_ff * gate_up_combined->nb[0]);
++        } else if (deepseek4_fused_up_gate_ref_enabled()) {
++            ggml_tensor * debug_zero = nullptr;
++            if (deepseek4_fused_up_gate_ref_debug_explicit_enabled()) {
++                ggml_tensor * gate_dbg = build_lora_mm_id(layer.ffn_gate_exps, cur_experts_in, selected_experts);
++                ggml_tensor * up_dbg   = build_lora_mm_id(layer.ffn_up_exps,   cur_experts_in, selected_experts);
++                if (swiglu_limit > 1e-6f) {
++                    gate_dbg = ggml_clamp(ctx0, gate_dbg, -INFINITY, swiglu_limit);
++                    up_dbg   = ggml_clamp(ctx0, up_dbg,   -swiglu_limit, swiglu_limit);
++                    cb(gate_dbg, "ffn_moe_gate_clamped", il);
++                    cb(up_dbg,   "ffn_moe_up_clamped",   il);
++                }
++                debug_zero = ggml_add(ctx0,
++                        ggml_sub(ctx0, gate_dbg, gate_dbg),
++                        ggml_sub(ctx0, up_dbg,   up_dbg));
++            }
++            act = ggml_moe_up_gate_limit(ctx0, layer.ffn_up_exps, layer.ffn_gate_exps,
++                    cur_experts_in, selected_experts, GGML_UNARY_OP_SILU, swiglu_limit);
++            if (debug_zero) {
++                act = ggml_add(ctx0, act, debug_zero);
++            }
++            cb(act, "ffn_moe_swiglu", il);
++            fused_up_gate_ref_done = true;
+         } else {
+             gate = build_lora_mm_id(layer.ffn_gate_exps, cur_experts_in, selected_experts);
+             up = build_lora_mm_id(layer.ffn_up_exps, cur_experts_in, selected_experts);
+@@ -1338,20 +1388,21 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
+             cb(up, "ffn_moe_up", il);
+         }
+ 
+-        const float swiglu_limit = hparams.swiglu_clamp_exp[il];
+         bool gate_was_clamped = false;
+         bool up_was_clamped = false;
+-        if (swiglu_limit > 1e-6f) {
+-            gate = ggml_clamp(ctx0, gate, -INFINITY, swiglu_limit);
+-            up   = ggml_clamp(ctx0, up,   -swiglu_limit, swiglu_limit);
+-            gate_was_clamped = true;
+-            up_was_clamped = true;
+-            cb(gate, "ffn_moe_gate_clamped", il);
+-            cb(up,   "ffn_moe_up_clamped",   il);
+-        }
++        if (!fused_up_gate_ref_done) {
++            if (swiglu_limit > 1e-6f) {
++                gate = ggml_clamp(ctx0, gate, -INFINITY, swiglu_limit);
++                up   = ggml_clamp(ctx0, up,   -swiglu_limit, swiglu_limit);
++                gate_was_clamped = true;
++                up_was_clamped = true;
++                cb(gate, "ffn_moe_gate_clamped", il);
++                cb(up,   "ffn_moe_up_clamped",   il);
++            }
+ 
+-        ggml_tensor * act = ggml_swiglu_split(ctx0, gate, up);
+-        cb(act, "ffn_moe_swiglu", il);
++            act = ggml_swiglu_split(ctx0, gate, up);
++            cb(act, "ffn_moe_swiglu", il);
++        }
+ 
+         ggml_tensor * experts = build_lora_mm_id(layer.ffn_down_exps, act, selected_experts);
+         deepseek4_native_retained_down_probe_write(
