@@ -5488,3 +5488,24 @@
   - `memory_peak_bytes <= 16000000000`, no OOM/kill/swap, correctness pass.
   - Generalized calibration/dev `min_eval_tok_s` improves over `1.8` without prompt-specific artifacts.
 - push_rule: every audit, rejected probe, or accepted improvement must be recorded and pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+
+### X10 result A：native GGUF full-source alias coverage is complete; source-port allowed
+
+- status: coverage_audit_complete_before_source_edit
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gp4-alias-full-source-coverage-audit-20260707.json`
+- generated_static_alias_tsv: `.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv`
+- scope_confirmed: static GGUF tensor-table audit only; no model run, no source edit, no held-out prompt.
+- coverage:
+  - Alias rows: `33024`, exactly `43 layers * 3 roles * 256 experts`.
+  - Roles: `gate=11008`, `up=11008`, `down=11008`.
+  - Payload represented by aliases: `147169738752 bytes` (`137.0625 GiB`), matching the existing full native expert-pack payload exactly.
+  - Per-entry bytes: `4456448`, all entries same size.
+  - This proves that a GP4-style alias source can represent the complete native DeepSeek gate/up/down expert source without copying payload files.
+- alignment:
+  - All entries are `32B` aligned and `nbytes` is `512/4096` aligned.
+  - Raw `model_offset` is **not** `512B` or `4096B` aligned for any entry (`offset_mod_4096` sample `2816`), so a direct/O_DIRECT alias loader cannot simply submit the raw `(offset,nbytes)` pair.
+  - A DeepSeek port needs an aligned-read wrapper equivalent to Kimi GP4's aligned alias batch: read from `floor(offset, alignment)` into a padded pinned slot, then copy the interior payload to the expected expert buffer/H2D range, or use buffered/mmap fallback for unaligned entries.
+- decision:
+  - Proceed to a default-off source-port plan/implementation for `GGML_MOE_EXPERT_GGUF_ALIAS_TSV`.
+  - The first implementation must be metadata/self-check first, then correctness. No token-rate promotion is allowed from static coverage alone.
+  - Runtime success must show lower pack/source misses or staged/direct-read overhead and must beat the no-prompt-specific generalized baseline on calibration/dev before held-out.
