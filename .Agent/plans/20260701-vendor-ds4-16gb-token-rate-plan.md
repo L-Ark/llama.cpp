@@ -6088,3 +6088,31 @@
 - correctness result: `same_top1=145/145`, `first_mismatch_pos=-1`, `max_abs_top12_logit_diff=0.0`, `mean_abs_top12_logit_diff=0.0`, baseline and full-down both have `top1_matches_next_token=122`.
 - decision: down GPU correctness is reproduced on current pushed-source lineage, but this is still `not_sota`; the plan remains to use this CPU-compatible Q8_0 CPU-order path as the correctness reference while pursuing a faster prompt-general up/down retained/batched dataflow. Do not promote the slow full-down path as token-rate SOTA.
 
+## 2026-07-07 X10-I next design plan：DS4 native gate_up retained down microbench
+
+- attempt_id: `20260707-ds4-native-gateup-retained-down-microbench`
+- objective: After down GPU correctness is reproduced, start the next performance route from the actual DeepSeek4 graph, not the generic `llama-graph.cpp` MoE path.
+- current_code_fact:
+  - DeepSeek4 default MoE graph is in `src/models/deepseek4.cpp::build_expert_mix`.
+  - When `layer.ffn_gate_up_exps` exists, the graph calls `build_lora_mm_id(layer.ffn_gate_up_exps, cur_experts_in, selected_experts)`, then splits the result with two `ggml_view_3d` tensors into gate and up.
+  - It then applies optional clamp, `ggml_swiglu_split`, `build_lora_mm_id(layer.ffn_down_exps, act, selected_experts)`, multiplies by weights, permutes, and sums.
+  - Therefore the generic `ggml_moe_up_gate` producer is absent; X10-H correctly found no existing `g_handoff` producer. Re-editing `src/llama-graph.cpp` is not a DeepSeek4 fix unless the DS4 builder is explicitly routed through that path.
+- correctness baseline to preserve:
+  - Current pushed lineage includes `2b01c0a41 vendor-ds4: fix down q80 gpu correctness` and current-head repro artifact `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-down-q80-correctness-repro-20260707.json`.
+  - Any new retained/down path must first match the fixed-text top1 gate: `same_top1=145/145`, `first_mismatch_pos=-1`, and no RAM/cgroup failure.
+- design constraints:
+  - Prompt-general only: no France-derived expert pack, no prompt-specific admission profile, no held-out prompts during tuning.
+  - Default-off source changes only; Kimi and existing GP4/full-source alias behavior must remain functional when envs are unset.
+  - Strict 16GB cgroup including page cache, `MemorySwapMax=0`; TTFT and semantic correctness gates still apply before any SOTA claim.
+- implementation sketch:
+  1. Add a DS4-specific default-off graph/dataflow probe in `src/models/deepseek4.cpp`, around the `gate_up -> view(gate/up) -> swiglu -> down` block, to record tensor names, shapes, buffer types, view offsets, selected expert dimensions, and whether down consumes the exact `act` tensor produced by `ggml_swiglu_split`.
+  2. Add a CUDA/CPU-side retained activation eligibility probe for this real DS4 path, distinct from old `ggml_moe_up_gate` handoff. It should answer whether `act` can be kept GPU-resident and passed to corrected Q8_0 down without host D2H/writeback.
+  3. Only after the probe proves shape/lifetime eligibility, implement a default-off microbench path that fuses or retains `gate_up`/`swiglu` output and feeds down through the already-correct Q8_0 CPU-order down reference path.
+  4. First validation must be fixed-text top1 against baseline and must show full equality before any token-rate run.
+  5. If fixed-text passes, run calibration/dev generalized prompts only; promote only if min/mean token rate beats the no-prompt-specific baseline with RAM/correctness/TTFT passing. Use held-out prompts only after a candidate is frozen.
+- hard-bound requirement before coding the performance path:
+  - The probe artifact must estimate removable seconds/token for `gate_up source movement`, `up/gate compute`, `down source movement`, `down compute`, D2H/writeback, and remaining CPU fallback.
+  - If the hard-bound cannot plausibly exceed the current no-prompt-specific baseline by a useful margin, stop after recording the probe and redesign instead of writing a large kernel.
+- immediate next action:
+  - Implement only the default-off DS4 graph/dataflow probe first, build, run one strict 16GB calibration prompt, and push the source/probe artifact if default-off guard passes.
+
