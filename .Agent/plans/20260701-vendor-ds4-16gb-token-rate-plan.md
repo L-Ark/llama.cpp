@@ -8173,3 +8173,27 @@ Decision:
 - The updated runner dry-run passed and still performs no deletion, no download, and no model execution by default.
 - Refusal path was tested: `--execute-download` without `--confirm-delete-rejected-iq2s` exits `2` and performs no deletion/download.
 - No SOTA changed.
+
+## 2026-07-08 X10-BA 0xSero Spark Mini loader/support audit
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/0xsero-spark-mini-loader-support-audit-20260708.json`
+- status: `candidate_load_correctness_probe_worthwhile_after_cleanup_not_sota`
+
+Purpose:
+- Check whether the new smaller 0xSero candidate is obviously blocked by current vendor metadata/type handling before making it the cleanup-gated default candidate.
+
+Audit result:
+- Header gate says `architecture=deepseek4`, `block_count=43`, `expert_count=144`, `expert_used_count=6`.
+- `src/llama-model.cpp` reads expert count from metadata and uses `n_expert` for MoE tensor shapes in the audited snippets, so a 144-expert candidate is not obviously rejected by a hard-coded 256-expert assumption.
+- Generic CUDA support exists for the observed lowbit types:
+  - `GGML_TYPE_Q2_K` has CUDA MMQ/MMVQ instances and vec-dot dispatch.
+  - `GGML_TYPE_IQ2_XXS` has CUDA MMQ/MMVQ instances and vec-dot dispatch.
+- Risk remains:
+  - dedicated MoE stream fast paths are narrower than generic CUDA support;
+  - this candidate is a different 144-expert / 162B-style representation, not the native 256-expert target;
+  - correctness and quality are completely unproven until a full strict load/generation gate runs.
+
+Decision:
+- Keep `0xsero-spark-mini-q2-reap-ds4` as the guarded runner default because it is smaller and header-pass `deepseek4`.
+- Do not claim correctness, token-rate, or SOTA.
+- After explicit cleanup approval, first run strict `16GB` load plus France semantic correctness. Only if that passes should calibration/dev token-rate be measured.

@@ -1,0 +1,47 @@
+{
+  "artifact_id": "20260708-0xsero-spark-mini-loader-support-audit",
+  "source_head": "6b79ff0fa",
+  "candidate_id": "0xsero-spark-mini-q2-reap-ds4",
+  "candidate_summary": {
+    "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+    "file": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+    "size_bytes": 52593532000,
+    "header_gate": {
+      "range_header_file": "/root/lfz/runs/vendor-ds4-16gb/hf-header-probes-20260708/0xsero-spark-mini-q2.head16m",
+      "architecture": "deepseek4",
+      "block_count": 43,
+      "expert_count": 144,
+      "expert_used_count": 6,
+      "n_tensors": 1328,
+      "type_counts": {
+        "10": 43,
+        "16": 86,
+        "F16": 359,
+        "F32": 492,
+        "I32": 3,
+        "Q8_0": 345
+      },
+      "decision": "metadata_architecture_pass_but_correctness_unverified"
+    }
+  },
+  "source_audit": {
+    "metadata_expert_count_handling": [
+      "src/llama-model.cpp reads LLM_KV_EXPERT_COUNT into hparams.n_expert and asserts n_expert <= LLAMA_MAX_EXPERTS, n_expert_used <= n_expert.",
+      "DeepSeek-family tensor creation uses n_expert from metadata for ffn_gate_inp, ffn_gate_exps, ffn_down_exps, and ffn_up_exps shapes rather than a hard-coded 256 in the audited snippets."
+    ],
+    "generic_cuda_type_support": [
+      "ggml/src/ggml-cuda/template-instances/mmq-instance-q2_k.cu declares GGML_TYPE_Q2_K MMQ instance.",
+      "ggml/src/ggml-cuda/template-instances/mmq-instance-iq2_xxs.cu declares GGML_TYPE_IQ2_XXS MMQ instance.",
+      "ggml/src/ggml-cuda/mmvq.cu dispatches vec_dot_q2_K_q8_1 and vec_dot_iq2_xxs_q8_1.",
+      "ggml/src/ggml-cuda/ggml-cuda.cu includes device buffer/copy handling for Q2_K and IQ2_XXS in audited grep output."
+    ],
+    "moe_stream_risk": [
+      "Prior compact-target audit showed dedicated moe_stream_type_supported/slot-batch fast paths are narrower than generic CUDA support.",
+      "0xSero header type counts include Q2_K and IQ2_XXS; these may load and run via generic/CPU fallback, but prompt-general speed is unproven.",
+      "The candidate differs from native DeepSeek V4 Flash in expert_count=144 vs native 256, so correctness/quality must be evaluated before any performance claim."
+    ]
+  },
+  "decision": "candidate_is_worth_cleanup_gated_load_correctness_probe_but_not_sota_and_not_performance_proven",
+  "next_gate": "After explicit cleanup approval, download exactly this single-file candidate and run strict 16GB load plus France semantic correctness before any calibration/dev token-rate benchmark.",
+  "accepted_sota_changed": false
+}
