@@ -12,6 +12,7 @@ Options:
   -n, --max-tokens N     Maximum generated tokens. Default: 96.
   --run-label LABEL      Label suffix for the run directory. Default: interactive.
   --warm                 Do not drop Linux page cache before the run.
+  --multiline            Read an interactive multi-line prompt until Ctrl-D.
   --print-command        Print the exact llama-cli command used inside the cgroup.
   -h, --help             Show this help.
 
@@ -19,6 +20,8 @@ What this demos:
   Current prompt-general vendor DeepSeek V4 path under strict 16GB host RAM.
   The demo intentionally rejects prompt-specific packs, route profiles, and
   alias TSVs. It is suitable for arbitrary user prompts, not just France.
+  The current generalized dev SOTA remains below the product target: observed
+  dev range is 1.8-2.7 tok/s, target is stable >5 tok/s for random prompts.
 
 Output artifacts:
   /root/lfz/runs/vendor-ds4-16gb/demo-general-sota/<timestamp>-<label>/
@@ -45,6 +48,7 @@ MEMORY_MAX_BYTES=16000000000
 MAX_TOKENS=96
 RUN_LABEL="interactive"
 COLD=1
+MULTILINE=0
 PRINT_COMMAND=0
 PROMPT=""
 PROMPT_FILE=""
@@ -74,6 +78,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --warm)
       COLD=0
+      shift
+      ;;
+    --multiline)
+      MULTILINE=1
       shift
       ;;
     --print-command)
@@ -125,9 +133,11 @@ elif [[ "${#positional[@]}" -gt 0 ]]; then
   PROMPT="${positional[*]}"
 elif [[ -p /dev/stdin || ! -t 0 ]]; then
   PROMPT="$(cat)"
-else
+elif [[ "$MULTILINE" -eq 1 ]]; then
   echo "Enter any prompt, then press Ctrl-D:" >&2
   PROMPT="$(cat)"
+else
+  IFS= read -r -p "Prompt> " PROMPT || true
 fi
 
 PROMPT="$(printf '%s' "$PROMPT" | sed -e 's/[[:space:]]*$//')"
@@ -169,6 +179,12 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="${RUN_ROOT}/${stamp}-${safe_label}"
 mkdir -p "$RUN_DIR"
 printf '%s\n' "$PROMPT" > "$RUN_DIR/prompt.txt"
+source_status="$(git -C "$REPO_DIR" status --short)"
+printf '%s\n' "$source_status" > "$RUN_DIR/source_status.txt"
+source_dirty=false
+if [[ -n "$source_status" ]]; then
+  source_dirty=true
+fi
 
 cat > "$RUN_DIR/config.json" <<EOF_CFG
 {
@@ -177,10 +193,13 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "repo_dir": $(printf '%s' "$REPO_DIR" | json_string),
   "source_head": "$(git -C "$REPO_DIR" rev-parse HEAD)",
   "source_branch": "$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)",
+  "source_dirty": ${source_dirty},
+  "source_status_file": $(printf '%s' "$RUN_DIR/source_status.txt" | json_string),
   "binary": $(printf '%s' "$BINARY" | json_string),
   "model": $(printf '%s' "$MODEL" | json_string),
   "baseline_artifact": $(printf '%s' "$BASELINE_ARTIFACT" | json_string),
   "current_generalized_dev_baseline_tok_s": {"min": 1.8, "mean": 2.18, "max": 2.7},
+  "additional_ad_hoc_general_prompt_checks_tok_s": {"AI infra": 1.6, "database index": 2.4, "today food": 2.3},
   "product_target_tok_s": 5.0,
   "product_target_met": false,
   "prompt_specific_optimization": false,
@@ -362,6 +381,7 @@ printf '\n' >> "$RUN_DIR/systemd_command.txt"
 cat <<EOF_START
 === Vendor DeepSeek V4 generalized demo ===
 Run dir: $RUN_DIR
+Source: $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)@$(git -C "$REPO_DIR" rev-parse --short HEAD) $([[ "$source_dirty" == true ]] && echo dirty || echo clean)
 Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
 Current prompt-general dev range: 1.8-2.7 tok/s; product target is stable >5 tok/s and is not yet met.
@@ -425,6 +445,10 @@ def parse_kv_ints(text):
 stdout = read_text('stdout.txt').replace('\b', '').replace('\r', '\n')
 stderr = read_text('stderr.txt')
 prompt = read_text('prompt.txt').rstrip('\n')
+try:
+    config = json.loads(read_text('config.json'))
+except Exception:
+    config = {}
 
 answer = stdout
 if prompt and prompt in answer:
@@ -476,10 +500,14 @@ summary = {
     'environment_file': str(run_dir / 'environment.txt'),
     'resource_samples_file': str(run_dir / 'resource_samples.tsv'),
 }
+summary['source_dirty'] = config.get('source_dirty')
+summary['source_head'] = config.get('source_head')
+summary['source_branch'] = config.get('source_branch')
 (run_dir / 'summary.json').write_text(json.dumps(summary, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+(run_dir / 'answer.txt').write_text(answer + ('\n' if answer else ''), encoding='utf-8')
 
 print('\n=== Demo summary ===')
-for key in ['eval_tok_s', 'prompt_tok_s', 'first_output_ms', 'elapsed_seconds', 'memory_peak_bytes', 'memory_file_bytes', 'ram_ok', 'answer_present', 'target_gt_5_tok_s_met_by_this_run']:
+for key in ['eval_tok_s', 'prompt_tok_s', 'first_output_ms', 'elapsed_seconds', 'memory_peak_bytes', 'memory_file_bytes', 'ram_ok', 'answer_present', 'target_gt_5_tok_s_met_by_this_run', 'source_dirty']:
     print(f'{key}: {summary.get(key)}')
 print(f'run_dir: {run_dir}')
 print('\n=== Model answer ===')
