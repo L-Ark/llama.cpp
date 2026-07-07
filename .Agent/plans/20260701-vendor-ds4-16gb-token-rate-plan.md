@@ -7606,3 +7606,53 @@ Decision:
   - real compact target/load/correctness if disk cleanup is approved;
   - or real-layout lowbit parity harness before lowbit down GPU production enablement;
   - or another bottleneck-directed plan that keeps the no-prompt-specific and 16GB constraints.
+
+## 2026-07-08 X10-AP lowbit synthetic pattern fix and parity pass
+
+- changed file: `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-lowbit-patternfix-parity-pass-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-lowbit-probe-patternfix`
+- status: `synthetic_lowbit_down_stream_parity_pass_default_off_not_sota`
+
+Purpose:
+- Re-check X10-AN before treating lowbit down-stream as a real blocker.
+- X10-AN showed `NaN/Inf` in both GPU and CPU reference outputs. That could have been a real kernel/layout issue, but the harness data generator needed audit first.
+
+Root cause:
+- The probe's `fill_pattern` used `size_t` arithmetic:
+  - `(i % 17) - 8`
+- For values below 8, unsigned subtraction underflowed and generated huge positive values.
+- Those invalid synthetic floats caused quant/dequant to produce `NaN`/`Inf`, so X10-AN's probe-mode correctness reject was not valid evidence against the lowbit kernel.
+
+Fix:
+- Cast to signed integer before subtracting:
+  - `const int centered = (int) (i % 17) - 8;`
+  - `data[i] = 0.125f + 0.01f * (float) centered;`
+- This keeps the synthetic values in the intended small range.
+
+Verification:
+- Direct probe rebuilt against `build-ds4-moe-stream/bin`.
+- Default-off mode:
+  - env: `GGML_MOE_STREAM=1`
+  - `rc=0`
+  - `IQ1_S`, `IQ1_M`, `Q2_K` all still return `decline-ok`
+  - stderr reason remains `unsupported_type`
+  - conclusion: production/default path is unchanged.
+- Probe mode:
+  - env: `GGML_MOE_STREAM=1 GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+  - `rc=0`
+  - `IQ1_S`: `finite=1`, `max_abs=0.00330495834`, `mean_abs=0.00118012726`
+  - `IQ1_M`: `finite=1`, `max_abs=0.00184059143`, `mean_abs=0.000628918409`
+  - `Q2_K`: `finite=1`, `max_abs=0.00194692612`, `mean_abs=0.000715896487`
+
+Decision:
+- X10-AN's probe-mode correctness rejection is superseded by this harness fix.
+- The lowbit direct down-stream path can produce numerically correct synthetic results for `IQ1_S/IQ1_M/Q2_K` when explicitly enabled by the diagnostic env gate.
+- This is still not a SOTA and not a production enablement:
+  - no full model was run;
+  - no real compact GGUF/expert-pack layout was tested;
+  - no prompt-general token rate, RAM, TTFT, or semantic correctness gate was executed.
+- Next step:
+  - obtain real compact-target tensor/layout evidence before enabling model runs;
+  - if disk cleanup is approved, download exactly one priority compact target and run strict load/correctness first;
+  - if disk cleanup is not approved, build a real-GGUF/expert-pack extraction parity harness using actual lowbit tensor bytes rather than synthetic quantized rows.

@@ -38,7 +38,8 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
 static void fill_pattern(std::vector<float> & data) {
     for (size_t i = 0; i < data.size(); ++i) {
-        data[i] = 0.125f + 0.01f * (float)((i % 17) - 8);
+        const int centered = (int) (i % 17) - 8;
+        data[i] = 0.125f + 0.01f * (float) centered;
     }
 }
 

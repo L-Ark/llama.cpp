@@ -1,0 +1,52 @@
+{
+  "artifact_id": "moe-stream-lowbit-patternfix-parity-pass-20260708",
+  "date_local": "2026-07-08",
+  "purpose": "Fix the synthetic lowbit down-stream probe data pattern and re-run default-off plus probe-mode parity checks for IQ1_S/IQ1_M/Q2_K.",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head_before_commit": "198f2ea374b5137e2c85b662dc90e9b37dc69944",
+  "changed_files": [
+    ".Agent/run-tools/ds4_moe_stream_direct_probe.cpp"
+  ],
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-lowbit-probe-patternfix",
+  "root_cause_fixed": "The previous synthetic fill_pattern used size_t arithmetic in (i % 17) - 8. Values below 8 underflowed, producing huge floats and NaN/Inf after quant/dequant. The harness now casts to int before subtracting.",
+  "default_off_mode": {
+    "env": "GGML_MOE_STREAM=1",
+    "rc": 0,
+    "stdout": "decline-ok type=iq1_s nb01=50 nb02=800\ndecline-ok type=iq1_m nb01=56 nb02=896\ndecline-ok type=q2_K nb01=84 nb02=1344\n",
+    "stderr": "[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight rows_stride=1 type=19 active=0 ne01=16 ne00=256\n[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight rows_stride=1 type=29 active=0 ne01=16 ne00=256\n[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight rows_stride=1 type=10 active=0 ne01=16 ne00=256\n",
+    "decision": "pass_default_off_safe; lowbit types still decline as unsupported_type unless the diagnostic env gate is explicitly enabled."
+  },
+  "probe_mode": {
+    "env": "GGML_MOE_STREAM=1 GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1",
+    "rc": 0,
+    "stdout": "accept type=iq1_s nb01=50 nb02=800 finite=1 max_abs=0.00330495834 mean_abs=0.00118012726 first_gpu=4.75261307 first_ref=4.75274944\naccept type=iq1_m nb01=56 nb02=896 finite=1 max_abs=0.00184059143 mean_abs=0.000628918409 first_gpu=4.79929638 first_ref=4.7991128\naccept type=q2_K nb01=84 nb02=1344 finite=1 max_abs=0.00194692612 mean_abs=0.000715896487 first_gpu=4.55068064 first_ref=4.55053616\n",
+    "stderr": "[moe_stream] batched decode path active: experts=1 ne01=16 ne00=256\n[moe_stream_batch] VRAM cache budget: requested=16384 MiB actual=16384 MiB free=31290 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\nggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.00 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.00 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.00 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n",
+    "decision": "pass_synthetic_parity; stream accepts IQ1_S/IQ1_M/Q2_K with finite outputs and max_abs below 0.25 threshold."
+  },
+  "parsed_results": {
+    "iq1_s": {
+      "finite": true,
+      "max_abs": 0.00330495834,
+      "mean_abs": 0.00118012726
+    },
+    "iq1_m": {
+      "finite": true,
+      "max_abs": 0.00184059143,
+      "mean_abs": 0.000628918409
+    },
+    "q2_K": {
+      "finite": true,
+      "max_abs": 0.00194692612,
+      "mean_abs": 0.000715896487
+    }
+  },
+  "decision": {
+    "sota_changed": false,
+    "production_enable": false,
+    "supersedes": ".Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-lowbit-defaultoff-parity-probe-20260708.json probe-mode reject root cause",
+    "meaning": "The dedicated lowbit down-stream entry can compute correct synthetic rows when given valid quantized data, but this still does not prove full-model correctness, real compact GGUF layout compatibility, prompt-general token rate, RAM, or TTFT.",
+    "next_step": "Use real compact-target tensors or a real GGUF/expert-pack extraction path for parity before enabling any production lowbit down-stream model run."
+  },
+  "committed_source_head": "15c853a1029c862b8185253af4a035e096aefd18",
+  "source_head_note": "source_head_before_commit records the tree used for the run before committing this artifact; committed_source_head records the commit storing the fix, artifact, and plan update."
+}
