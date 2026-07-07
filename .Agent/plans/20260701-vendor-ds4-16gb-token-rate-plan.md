@@ -5318,3 +5318,17 @@
 - correctness: failed. Output was malformed JSON/unknown metadata text, not a coherent France paragraph.
 - decision: Reject IQ2_S route. It is vendor-loadable with existing alias envs but fails the required France correctness check and remains far below the generalized `>5 tok/s` target. Do not run calibration/dev or held-out for this candidate. Accepted SOTA unchanged.
 - cleanup_note: downloaded model remains on disk for now for auditability; because it is a rejected 88GB candidate and `/root` has limited free space, future large-model work should either explicitly approve removal or choose a small/header-only probe.
+
+## 2026-07-07 Phase X6：post-IQ2 route audit and disk-gated next step
+
+- attempt_id: 20260707-post-iq2-route-audit
+- status: planned_before_artifact_audit
+- why_now: IQ2_S was the smallest single-file external GGUF candidate and has now been rejected for France correctness despite strict 16GB load success. Native sparse/exact/dataflow routes have also been closed by hard-bound or correctness/performance gates. `/root` has only about `24GB` free because the rejected IQ2_S file remains on disk, so another full GGUF download is not safe without an explicit cleanup decision.
+- scope: artifact-only audit; no model run, no held-out, no source edit, no large download, and no deletion. Use tracked evidence only: `payload-artifact-breakthrough-refresh-after-membership.json`, `latest-hf-refresh-hard-bound-20260706.json`, IQ2_S rejection artifact, generalized baseline/bounds, and local disk/model inventory.
+- questions_to_answer:
+  - Are any remaining known external GGUF candidates both vendor-loadable and plausibly correct without a large download?
+  - Is there any metadata/header-only candidate with a hard-bound above generalized `>5 tok/s` and enough correctness evidence to justify download?
+  - Does the current disk state itself block empirical candidate testing until rejected IQ2_S is removed or relocated?
+  - What is the next allowed work that still serves the product target: random/generalized prompt `>5 tok/s` on `16GB host RAM` including page cache + `32GB RTX 5090`?
+- expected_decision: If no source/model candidate passes these gates, record that the next step must be either explicit cleanup approval for rejected IQ2_S before another large candidate, or a new small/header-only proof, or a fundamentally new hard-bound/source design that reaches `min >= 5.5 tok/s` on calibration/dev before coding.
+- push_rule: The audit artifact and plan result must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Accepted SOTA remains unchanged unless a future candidate passes all strict RAM/page-cache, correctness, TTFT, generalized dev, and held-out gates.
