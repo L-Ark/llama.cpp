@@ -7853,3 +7853,68 @@ Decision:
 - Next step:
   - repeat the same remote-range method for primary `teamblobfish IQ1_S-XL` if a parseable header is available or can be range-fetched;
   - otherwise, further progress toward actual token-rate improvement requires disk cleanup/download approval for one compact candidate.
+
+## 2026-07-08 X10-AT remote-range teamblobfish IQ1_S-XL down row parity
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-remote-range-teamblobfish-iq1sxl-down-row-parity-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-remote-range-teamblobfish-iq1sxl`
+- status: `remote_range_real_candidate_q2k_iq1s_down_row_parity_pass_not_sota`
+
+Purpose:
+- Apply the X10-AS remote-range method to the primary compact candidate, teamblobfish `IQ1_S-XL`.
+- Fetch only header plus tiny row slices, avoiding full model download and avoiding any file deletion.
+
+Header/offset source:
+- source URL:
+  - `https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf`
+- fetched header:
+  - first `16 MiB`
+- parsed header:
+  - architecture: `deepseek4`
+  - tensors: `1066`
+  - type counts include:
+    - `Q2_K=5`
+    - `IQ1_S=203`
+    - `Q8_0=423`
+    - `F32=430`
+- down tensors include early `Q2_K` and later `IQ1_S`.
+
+Range-fetched row slices:
+- `Q2_K`:
+  - tensor: `blk.0.ffn_down_exps.weight`
+  - absolute shard byte range: `847170240-847180991`
+  - fetched bytes: `10752`
+  - `ne00=2048`, `ne01=16`, `nb01=672`
+- `IQ1_S`:
+  - tensor: `blk.3.ffn_down_exps.weight`
+  - absolute shard byte range: `5884959744-5884966143`
+  - fetched bytes: `6400`
+  - `ne00=2048`, `ne01=16`, `nb01=400`
+
+Verification:
+- Probe mode env:
+  - `GGML_MOE_STREAM=1`
+  - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+- `Q2_K` real rows:
+  - `rc=0`
+  - `finite=1`
+  - `max_abs=0.00108321384`
+  - `mean_abs=0.000358266465`
+- `IQ1_S` real rows:
+  - `rc=0`
+  - `finite=1`
+  - `max_abs=0.00194969773`
+  - `mean_abs=0.00115161485`
+
+Decision:
+- Real candidate down tensor bytes from primary teamblobfish `IQ1_S-XL` pass stream-vs-CPU parity for `Q2_K` and `IQ1_S`.
+- Together with X10-AS, the priority teamblobfish compact candidates now have real-byte down-row parity evidence for their key lowbit down types:
+  - `IQ1_S-XL`: `Q2_K`, `IQ1_S`
+  - `IQ1_M`: `Q2_K`, `IQ1_M`
+- This still is not a SOTA or production model enablement:
+  - only row slices were tested;
+  - no full model load/generation correctness was run;
+  - no prompt-general token-rate, TTFT, RAM, or semantic correctness benchmark was run.
+- Next step:
+  - the correctness risk for down lowbit row math is now reduced enough that the practical blocker is full compact target execution;
+  - to make token-rate progress, either approve disk cleanup/download for exactly one priority compact target, or design a no-full-download execution path that can stream all required tensors by range/alias with strict correctness gates.
