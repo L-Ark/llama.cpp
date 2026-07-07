@@ -2530,6 +2530,191 @@ python3 .Agent/run-tools/kimi_output_subspace_oracle.py \
   --torch-threads 8
 ```
 
+## Phase 5L: GP89 Activation-Guided Exact-Input Correction Screen
+
+Goal:
+
+- Test whether activation-aware partial exact input-channel correction can make
+  low-bit expert representations accurate enough at the required byte budget.
+- This directly targets moved bytes: a runtime form would read a compact
+  low-bit expert plus a tiny exact subset of columns/rows selected from the
+  current activation.
+
+Theory:
+
+- For one expert matvec, if a low-bit representation has byte ratio `r` and
+  exact input-channel correction keeps fraction `k`, the optimistic moved-byte
+  ratio is:
+
+```text
+r * (1 - k) + k
+```
+
+- GP78a showed 1-bit activation-weighted codebook can reach the byte budget but
+  has very high output error.
+- A tiny exact correction might remove the largest activation-weighted error
+  terms without pushing fused up/gate above the `0.30x-0.40x` global byte
+  target.
+- For fused up/gate, the previous 1-bit codebook byte ratio was about
+  `0.391x`, so `k` must be very small:
+  - `k=0.005` gives about `0.394x`;
+  - `k=0.010` gives about `0.397x`;
+  - `k=0.020` already exceeds `0.40x` for that candidate.
+
+Scope:
+
+- Dev-only offline screen.
+- Use the GP88 call-stride corpus.
+- Do not use held-out prompts.
+- Do not change runtime behavior.
+- Do not claim SOTA from this experiment.
+
+Method:
+
+- First run a cheaper smoke with `max_records=128` on the three GP88 dev
+  prompts. If every candidate remains far above the error gate, stop there and
+  record the rejection.
+- Run `.Agent/run-tools/kimi_activation_output_compression_screen.py` on each
+  GP88 dev prompt with:
+  - `bits=1`;
+  - `blocks=256`;
+  - `scale_modes=aw_codebook`;
+  - `keep_input_fracs=0.005,0.01`;
+  - `max_records=128` for smoke, then `512` only if the smoke is close to the
+    gate.
+- Evaluate:
+  - per-role matvec mean rel L2;
+  - fused up/gate mean rel L2;
+  - mean byte ratio;
+  - whether any candidate passes byte ratio `<=0.40x` and mean rel L2 `<=0.10`.
+
+Acceptance:
+
+- Advance only if both down and fused up/gate have a candidate at
+  `<=0.40x` mean byte ratio and `<=0.10` mean rel L2 across multiple dev
+  prompts.
+- If the best candidate remains far above the error gate, reject this specific
+  activation-guided exact-input correction path as a primary route.
+
+Expected result:
+
+- This is expected to fail because GP78a's base low-bit error is very high and
+  only `0.5%-1%` exact input correction is allowed before the fused up/gate byte
+  budget is exceeded.
+- If it fails, the next primary direction should shift from reconstructing the
+  original expert matvec to changing the compute/storage form more aggressively,
+  such as a learned offline surrogate with a strict quality gate, or to
+  architectural/runtime changes that avoid exact expert movement.
+
+GP89 status on 2026-07-08:
+
+- The `aw_codebook + 0.5%-1% exact input correction` smoke was started and then
+  stopped before producing a report because even `128` records per prompt was
+  too slow for rapid screening.
+- Since GP78a already showed the base `aw_codebook` output error is far above
+  the gate, do not spend more time on this exact candidate unless a cheaper
+  implementation is needed for a narrow follow-up.
+- Move to GP90, which tests the underlying partial-transfer idea directly:
+  exact top-activation input-channel reads without a low-bit base.
+
+## Phase 5M: GP90 Exact Top-Activation Input-Channel Oracle
+
+Goal:
+
+- Directly evaluate the user's proposed activation sparsity / partial-transfer
+  idea as an optimistic oracle.
+- Estimate how much of each expert's input dimension must be read exactly for
+  the matvec output to approach the quality gate.
+
+Theory:
+
+- For a linear expert matvec `y = W x`, if only the top-`k` activation channels
+  by `|x_i|` are kept, the moved-byte ratio is approximately `k / D_in` if the
+  storage layout supports reading those columns/rows.
+- This is optimistic:
+  - it ignores scatter/gather IO overhead;
+  - it assumes efficient partial-column storage exists;
+  - it does not include metadata or alignment waste;
+  - it assumes the runtime can compute sparse partial matvec efficiently.
+- Therefore, if the oracle requires `>=0.40x` bytes and still has high error,
+  this path is not suitable for reaching `5 tok/s`.
+
+Implementation:
+
+- Add `.Agent/run-tools/kimi_exact_input_keep_oracle.py`.
+- The tool:
+  - loads GP88 activation rows and vectors;
+  - dequantizes exact GGUF expert matrices;
+  - computes exact matvec output;
+  - computes candidate output using only top-activation input channels;
+  - measures per-role matvec rel L2;
+  - measures fused up/gate rel L2 for matched up/gate pairs.
+
+Experiment:
+
+- Run on the three GP88 dev prompts with:
+  - `keep_fracs=0.01,0.02,0.05,0.1,0.2,0.4`;
+  - `max_records=512`;
+  - `torch_threads=8`.
+- If this is slow, start with `max_records=128`; only expand if the curve is
+  near the `0.10` error gate.
+
+Acceptance:
+
+- Advance only if both down and fused up/gate reach mean rel L2 `<=0.10` at
+  byte ratio `<=0.40x` across dev prompts.
+- If `0.40x` remains far above the error gate, reject activation-guided partial
+  exact reads as a primary path. The runtime scatter/gather implementation
+  would only add overhead beyond this oracle.
+
+GP90 result on 2026-07-08:
+
+- Reports:
+  - `.Agent/runs/20260708-gp90-exact-input-keep-smoke128/dev_japan_factual/report.md`;
+  - `.Agent/runs/20260708-gp90-exact-input-keep-smoke128/dev_python_reverse/report.md`;
+  - `.Agent/runs/20260708-gp90-exact-input-keep-smoke128/dev_mixed_summary/report.md`.
+- Inputs:
+  - GP88 call-stride corpus;
+  - `max_records=128` per prompt;
+  - keep fractions `0.01,0.02,0.05,0.1,0.2,0.4`.
+- At the largest allowed keep fraction `0.4`:
+  - `dev_japan_factual`:
+    - down mean rel L2 `0.160916`;
+    - gate mean rel L2 `0.354779`;
+    - up mean rel L2 `0.354999`;
+    - fused up/gate mean rel L2 `0.489026`.
+  - `dev_python_reverse`:
+    - down mean rel L2 `0.157352`;
+    - gate mean rel L2 `0.359070`;
+    - up mean rel L2 `0.359309`;
+    - fused up/gate mean rel L2 `0.492035`.
+  - `dev_mixed_summary`:
+    - down mean rel L2 `0.162025`;
+    - gate mean rel L2 `0.358405`;
+    - up mean rel L2 `0.354371`;
+    - fused up/gate mean rel L2 `0.489464`.
+- Decision:
+  - reject activation-guided exact input-channel partial reads as a primary
+    route to `5 tok/s`;
+  - even this optimistic oracle fails badly at the `0.40x` byte target;
+  - a real scatter/gather SSD layout would add IO amplification, metadata,
+    alignment waste, and sparse compute overhead beyond this oracle.
+- Reproduce one prompt:
+
+```bash
+cd /root/lfz/tmp/kimi-stage2m-align
+python3 .Agent/run-tools/kimi_exact_input_keep_oracle.py \
+  --activation-csv /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual/act/activations.csv \
+  --activation-bin /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual/act/activations.f32 \
+  --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv \
+  --libggml-base build-cuda-batch/bin/libggml-base.so \
+  --out-json /root/lfz/runs/vendor-kimi-token-rate/20260708-gp90-exact-input-keep-smoke128/dev_japan_factual/report.json \
+  --out-md /root/lfz/runs/vendor-kimi-token-rate/20260708-gp90-exact-input-keep-smoke128/dev_japan_factual/report.md \
+  --keep-fracs 0.01,0.02,0.05,0.1,0.2,0.4 \
+  --max-records 128 \
+  --torch-threads 8
+```
+
 ## Run Discipline
 
 For every experiment:
@@ -2571,13 +2756,22 @@ Continue from Phase 5E:
 11. GP88 rejects dynamic output-subspace compression on multi-prompt
    call-stride data; rank 3 remains far above the `0.10` error gate for both
    down and fused up/gate.
-12. Next primary direction must be a different non-expert-local byte-reduced
+12. Run GP89 activation-guided exact-input correction on the GP88 call-stride
+   corpus before fully closing low-bit-plus-small-exact-correction as a
+   primary path.
+13. GP89 `aw_codebook + tiny exact correction` is too slow for rapid screening
+   and inherits GP78a's high base error; use GP90 exact input-channel keep
+   oracle to evaluate the underlying partial-transfer idea directly.
+14. GP90 rejects activation-guided exact input-channel partial reads; even an
+   optimistic `0.40x` exact-column oracle leaves fused up/gate mean rel L2
+   around `0.49` on three dev prompts.
+15. Next primary direction must be a different non-expert-local byte-reduced
    representation or compute/storage-form change. Prediction/prefetch is
    secondary after bytes are reduced.
-13. The next screen must target global moved bytes around `0.30x-0.40x` and
+16. The next screen must target global moved bytes around `0.30x-0.40x` and
    fused up/gate mean rel L2 close to the quality gate before any runtime
    kernel is written.
-14. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+17. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
    gains can regress held-out performance severely.
 
 Rationale:

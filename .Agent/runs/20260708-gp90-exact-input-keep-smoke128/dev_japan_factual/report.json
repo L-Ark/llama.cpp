@@ -1,0 +1,216 @@
+{
+  "activation_bin": "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual/act/activations.f32",
+  "activation_csv": "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual/act/activations.csv",
+  "aggregate": {
+    "down:0.01": {
+      "max_abs_error": 1.4461520910263062,
+      "max_rel_l2": 0.9237152880345685,
+      "mean_abs_error": 0.05846730526536703,
+      "mean_byte_ratio": 0.010000000000000004,
+      "mean_rel_l2": 0.7838929065126188,
+      "rows": 32
+    },
+    "down:0.02": {
+      "max_abs_error": 1.3337597846984863,
+      "max_rel_l2": 0.8774772222943239,
+      "mean_abs_error": 0.05252119760552887,
+      "mean_byte_ratio": 0.020000000000000007,
+      "mean_rel_l2": 0.7166936692393047,
+      "rows": 32
+    },
+    "down:0.05": {
+      "max_abs_error": 1.035624623298645,
+      "max_rel_l2": 0.7620726020209516,
+      "mean_abs_error": 0.043055632668256294,
+      "mean_byte_ratio": 0.050000000000000024,
+      "mean_rel_l2": 0.5999762184741572,
+      "rows": 32
+    },
+    "down:0.1": {
+      "max_abs_error": 0.7820618152618408,
+      "max_rel_l2": 0.6409046827762088,
+      "mean_abs_error": 0.033960052009206265,
+      "mean_byte_ratio": 0.10000000000000005,
+      "mean_rel_l2": 0.47948224263412853,
+      "rows": 32
+    },
+    "down:0.2": {
+      "max_abs_error": 0.46009910106658936,
+      "max_rel_l2": 0.44880490197405454,
+      "mean_abs_error": 0.02261467139760498,
+      "mean_byte_ratio": 0.2000000000000001,
+      "mean_rel_l2": 0.32893294546398516,
+      "rows": 32
+    },
+    "down:0.4": {
+      "max_abs_error": 0.22890135645866394,
+      "max_rel_l2": 0.22708415111195332,
+      "mean_abs_error": 0.010887909984376165,
+      "mean_byte_ratio": 0.4000000000000002,
+      "mean_rel_l2": 0.160915593327957,
+      "rows": 32
+    },
+    "gate:0.01": {
+      "max_abs_error": 2.053013801574707,
+      "max_rel_l2": 0.9670311015330759,
+      "mean_abs_error": 0.2051746609310309,
+      "mean_byte_ratio": 0.010000000000000005,
+      "mean_rel_l2": 0.9548852587136819,
+      "rows": 48
+    },
+    "gate:0.02": {
+      "max_abs_error": 1.9094676971435547,
+      "max_rel_l2": 0.9400328997390057,
+      "mean_abs_error": 0.1983620625299712,
+      "mean_byte_ratio": 0.02000000000000001,
+      "mean_rel_l2": 0.9238146491565816,
+      "rows": 48
+    },
+    "gate:0.05": {
+      "max_abs_error": 1.7207415103912354,
+      "max_rel_l2": 0.8620853406326496,
+      "mean_abs_error": 0.1813595617034783,
+      "mean_byte_ratio": 0.04999999999999999,
+      "mean_rel_l2": 0.8434262105545002,
+      "rows": 48
+    },
+    "gate:0.1": {
+      "max_abs_error": 1.7077999114990234,
+      "max_rel_l2": 0.7684168215677857,
+      "mean_abs_error": 0.15976047011402747,
+      "mean_byte_ratio": 0.09999999999999998,
+      "mean_rel_l2": 0.7429969508324694,
+      "rows": 48
+    },
+    "gate:0.2": {
+      "max_abs_error": 1.2609412670135498,
+      "max_rel_l2": 0.6153806917843574,
+      "mean_abs_error": 0.12544622737914324,
+      "mean_byte_ratio": 0.19999999999999996,
+      "mean_rel_l2": 0.5850324644908512,
+      "rows": 48
+    },
+    "gate:0.4": {
+      "max_abs_error": 0.8030353784561157,
+      "max_rel_l2": 0.368604930688325,
+      "mean_abs_error": 0.07609941713356723,
+      "mean_byte_ratio": 0.3999999999999999,
+      "mean_rel_l2": 0.3547785940866524,
+      "rows": 48
+    },
+    "up:0.01": {
+      "max_abs_error": 2.017045259475708,
+      "max_rel_l2": 0.9666648057568317,
+      "mean_abs_error": 0.20681618076438704,
+      "mean_byte_ratio": 0.010000000000000005,
+      "mean_rel_l2": 0.9537431846258048,
+      "rows": 48
+    },
+    "up:0.02": {
+      "max_abs_error": 1.9073543548583984,
+      "max_rel_l2": 0.9345259174062543,
+      "mean_abs_error": 0.19993427504474917,
+      "mean_byte_ratio": 0.02000000000000001,
+      "mean_rel_l2": 0.9227397550125865,
+      "rows": 48
+    },
+    "up:0.05": {
+      "max_abs_error": 1.8800724744796753,
+      "max_rel_l2": 0.8649889245889433,
+      "mean_abs_error": 0.18272500314439336,
+      "mean_byte_ratio": 0.04999999999999999,
+      "mean_rel_l2": 0.8439875614082482,
+      "rows": 48
+    },
+    "up:0.1": {
+      "max_abs_error": 1.7528245449066162,
+      "max_rel_l2": 0.7594420897377181,
+      "mean_abs_error": 0.16084956307895482,
+      "mean_byte_ratio": 0.09999999999999998,
+      "mean_rel_l2": 0.7426291546581824,
+      "rows": 48
+    },
+    "up:0.2": {
+      "max_abs_error": 1.3893572092056274,
+      "max_rel_l2": 0.6100314590853201,
+      "mean_abs_error": 0.12644803384318948,
+      "mean_byte_ratio": 0.19999999999999996,
+      "mean_rel_l2": 0.5852417034902319,
+      "rows": 48
+    },
+    "up:0.4": {
+      "max_abs_error": 0.7766664624214172,
+      "max_rel_l2": 0.3758026843923203,
+      "mean_abs_error": 0.07671823957934976,
+      "mean_byte_ratio": 0.3999999999999999,
+      "mean_rel_l2": 0.3549991838559965,
+      "rows": 48
+    }
+  },
+  "decision": "No exact input-channel keep candidate passes the offline error gate within the target byte ratio. Do not implement activation-guided partial exact reads as the next primary runtime path.",
+  "fused_up_gate": {
+    "fused_up_gate:0.01": {
+      "max_abs_error": 1.7802677154541016,
+      "max_rel_l2": 1.0005115764149772,
+      "mean_abs_error": 0.030314979662459034,
+      "mean_byte_ratio": 0.010000000000000005,
+      "mean_rel_l2": 0.9961837864675852,
+      "rows": 48
+    },
+    "fused_up_gate:0.02": {
+      "max_abs_error": 1.7392849922180176,
+      "max_rel_l2": 0.997049181240754,
+      "mean_abs_error": 0.03036243768777543,
+      "mean_byte_ratio": 0.02000000000000001,
+      "mean_rel_l2": 0.9887862201751969,
+      "rows": 48
+    },
+    "fused_up_gate:0.05": {
+      "max_abs_error": 1.6394768953323364,
+      "max_rel_l2": 0.9745274302467815,
+      "mean_abs_error": 0.029982026904084098,
+      "mean_byte_ratio": 0.04999999999999999,
+      "mean_rel_l2": 0.9571129289813175,
+      "rows": 48
+    },
+    "fused_up_gate:0.1": {
+      "max_abs_error": 1.589463233947754,
+      "max_rel_l2": 0.9279910306382811,
+      "mean_abs_error": 0.028585014675627463,
+      "mean_byte_ratio": 0.09999999999999998,
+      "mean_rel_l2": 0.8936351135061891,
+      "rows": 48
+    },
+    "fused_up_gate:0.2": {
+      "max_abs_error": 1.406077265739441,
+      "max_rel_l2": 0.8050499035406247,
+      "mean_abs_error": 0.02471142370389619,
+      "mean_byte_ratio": 0.19999999999999996,
+      "mean_rel_l2": 0.7557222071152389,
+      "rows": 48
+    },
+    "fused_up_gate:0.4": {
+      "max_abs_error": 0.8376854062080383,
+      "max_rel_l2": 0.5143596376031143,
+      "mean_abs_error": 0.01619659389204268,
+      "mean_byte_ratio": 0.3999999999999999,
+      "mean_rel_l2": 0.48902645868034617,
+      "rows": 48
+    }
+  },
+  "generated_at": "2026-07-07T18:42:31+0000",
+  "inventory": ".Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv",
+  "keep_fracs": [
+    0.01,
+    0.02,
+    0.05,
+    0.1,
+    0.2,
+    0.4
+  ],
+  "kind": "kimi_exact_input_keep_oracle",
+  "libggml_base": "build-cuda-batch/bin/libggml-base.so",
+  "records_loaded": 128,
+  "reproduce_command": ".Agent/run-tools/kimi_exact_input_keep_oracle.py --activation-csv /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual/act/activations.csv --activation-bin /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual/act/activations.f32 --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --libggml-base build-cuda-batch/bin/libggml-base.so --out-json /root/lfz/runs/vendor-kimi-token-rate/20260708-gp90-exact-input-keep-smoke128/dev_japan_factual/report.json --out-md /root/lfz/runs/vendor-kimi-token-rate/20260708-gp90-exact-input-keep-smoke128/dev_japan_factual/report.md --keep-fracs 0.01,0.02,0.05,0.1,0.2,0.4 --max-records 128 --torch-threads 8",
+  "unique_tensor_experts": 128
+}
