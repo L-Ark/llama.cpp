@@ -94794,6 +94794,136 @@ GP58 execution result:
   - do not touch the true held-out test set until a candidate passes this
     dev-only generalization proxy.
 
+## GP59: leave-one-dev-out hotset generalization simulation
+
+Timestamp: `2026-07-07T13:02:00+08:00`.
+
+Status: planned before execution.
+
+Context:
+
+- GP57 rejected the budget16 overlay on true held-out prompts.
+- GP58 showed the same overlay still improves multiple dev prompts, including
+  fast/high-coverage and medium-coverage dev factual prompts.
+- Therefore the next bottleneck is not simply runtime overhead; it is selecting
+  hotsets that generalize beyond the prompts used to build them.
+
+Goal:
+
+- Build a dev-only proxy for prompt-agnostic hotset generalization.
+- Do not use true held-out test prompts, true held-out route traces, or true
+  held-out outputs.
+- Quantify whether a hotset trained on `N-1` dev prompts covers the excluded
+  dev prompt's existing-pack misses.
+
+Method:
+
+1. Add a read-only analysis tool:
+   `.Agent/run-tools/kimi_leave_one_dev_hotset_validation.py`.
+2. Inputs:
+   - dev route profiles:
+     `.Agent/runs/20260706-kimi-general-dev-baseline-n96-profile/*/route-profile.csv`;
+   - current production packs:
+     `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+     `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`.
+3. For each dev prompt `p`:
+   - train candidate hotsets from all dev prompts except `p`;
+   - rank missing keys by training traffic (`count * expert_bytes`);
+   - generate budget candidates such as `4/8/16/32 GiB`;
+   - evaluate coverage only on prompt `p`:
+     - existing-pack miss traffic;
+     - candidate-covered miss traffic;
+     - candidate validation coverage percent;
+     - remaining validation miss traffic.
+4. Also report the same candidate's train coverage, pack size, and entries.
+
+Theory:
+
+- A prompt-agnostic overlay must not only cover the prompts that selected it.
+- If leave-one-dev-out validation coverage is low for several prompts, then
+  any all-dev hotset is likely overfit and should not be sent to the true
+  held-out gate.
+- If a small budget has stable leave-one-out validation coverage across dev
+  prompts, it is a better candidate than an all-dev top-N hotset with high train
+  coverage but weak validation coverage.
+
+Validation:
+
+- This is a simulation only; no inference, no quality, no token-rate claim.
+- Record exact command, pack sources, route-root, budget list, per-prompt
+  validation table, and worst/mean validation coverage.
+- Do not generate a new runtime overlay in GP59.
+
+Acceptance:
+
+- Commit and push the tool and report if it identifies whether the current
+  hotset approach generalizes within dev.
+- If leave-one-out validation is weak, the next practical direction should be a
+  routing-distribution-robust policy rather than a larger all-dev overlay.
+
+## GP60: asset cleanup and benchmark generalization correction
+
+Timestamp: `2026-07-07T13:20:00+08:00`.
+
+Status: operational cleanup completed.
+
+Action:
+
+- Removed obsolete server artifact:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack`.
+- Reason:
+  - current default runtime uses
+    `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - the old `kimi-iq3s-france.expert-pack` was only needed for historical
+    experiments and old repro commands;
+  - user explicitly approved deleting the old France main pack.
+- Disk result:
+  - before deletion: `/dev/root` used `926G`, available `67G`, use `94%`;
+  - after deletion: `/dev/root` used `766G`, available `227G`, use `78%`;
+  - freed about `160G`.
+
+Current remaining expert-pack assets:
+
+```text
+164G  kimi-iq3s-france-l12-upgate-v2.expert-pack
+75G   kimi-iq3s-tracefirst-n64-20260630.expert-pack
+16G   kimi-iq3s-general-dev-budget16-overlay.expert-pack
+7.2G  kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack
+4.7G  kimi-iq3s-phase7gz-combined-overlay.expert-pack
+4.6G  kimi-iq3s-l1l2down-overlay.expert-pack
+328M  tmp-hot-upgate-pair-smoke.expert-pack
+190M  kimi-iq3s-phase7gz-missing-down-overlay.expert-pack
+```
+
+Benchmark correction:
+
+- The previous held-out test set is too small to prove random-prompt
+  generalization.
+- The ad-hoc prompt `AI infra 是做什么的` exposed a slow route distribution:
+  - quality `pass`;
+  - TTFT `69779.36 ms`;
+  - decode `410000.63 ms / 95`;
+  - token rate `0.23 tok/s`;
+  - expert-pack misses `32484`;
+  - direct reads `5617`;
+  - host staging `321905.943 ms`.
+- Therefore the current `~1.37 tok/s` should be treated as performance on the
+  small GP4 held-out suite, not as proven stable random-prompt performance.
+
+Next benchmark requirement:
+
+- Expand the generalization suite before claiming random-prompt SOTA.
+- The expanded suite should include broader user-intent categories:
+  - infrastructure / AI systems explanation;
+  - Chinese technical explanations;
+  - coding;
+  - math/reasoning;
+  - multilingual factual;
+  - short and long-form instruction prompts.
+- Continue using a dev/test split:
+  - new dev prompts may be used for route analysis and optimization;
+  - new held-out prompts must remain sealed until a candidate is frozen.
+
 ## GP53: current-code slow dev direct-read copy attribution
 
 Timestamp: `2026-07-07T08:50:00+08:00`.
