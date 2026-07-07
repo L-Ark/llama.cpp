@@ -96336,3 +96336,64 @@ GP64 remote smoke correction:
   - enable the default-off shadow profiler for `LLM_ARCH_DEEPSEEK2` as well;
   - add the same `L -> L+1` prediction hook in `src/models/deepseek2.cpp`.
 - This remains default-off and still does not implement runtime prefetch.
+
+GP64 remote smoke results:
+
+- Remote clean validation repo:
+  `/root/lfz/llama.cpp-vendor-kimi-gp64-shadow`.
+- Remote branch/head:
+  `vendor/kimi-speculative-general-token-rate-16gb`,
+  commit `228df6b53`.
+- Remote CUDA build:
+  - `cmake --build build-cuda-batch --target llama-completion -j 8`
+    passed;
+  - build flags mirror prior `build-cuda-batch` CUDA setup.
+- Failed first smoke:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp64-next-gate-shadow-smoke/dev_france_n8`;
+  - `EXTRA_RUNTIME_ENV` accidentally wrote literal `\n`, so no valid shadow
+    env was set.
+- Failed second smoke:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp64-next-gate-shadow-smoke/dev_france_n4_shadow`;
+  - env was correct, but no CSV was emitted because the Kimi GGUF reports
+    `arch=deepseek2` and the initial graph guard only allowed
+    `kimi-linear`.
+- Passing smoke after DeepSeek2 correction:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp64-next-gate-shadow-smoke/dev_france_n4_shadow_deepseek2`;
+  - command shape: existing `kimi-general-prompt-repro.sh`, cold start,
+    16GB cgroup, `N=4`, France prompt;
+  - env:
+    `GGML_MOE_NEXT_GATE_SHADOW_OUT=$RUN/next-gate-shadow.csv`,
+    `GGML_MOE_NEXT_GATE_SHADOW_TOPK=2`;
+  - CSV rows: `358`;
+  - matched prediction pairs: `177`;
+  - expert recall: `24.72%`;
+  - expert precision: `98.87%`;
+  - byte recall: `24.72%` with `--expert-bytes=1`;
+  - false/actual bytes: `0.0028`;
+  - shadow record overhead: avg `1651.3 us/call`, max `1663 us`;
+  - token rate: `1.17 tok/s` over 3 decode runs;
+  - memory peak: `15899996160` bytes.
+- Passing TopK=8 predictor-bound smoke:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp64-next-gate-shadow-smoke/dev_france_n4_shadow_top8`;
+  - same command shape, `GGML_MOE_NEXT_GATE_SHADOW_TOPK=8`;
+  - CSV rows: `358`;
+  - matched prediction pairs: `177`;
+  - expert recall: `79.24%`;
+  - expert precision: `79.24%`;
+  - byte recall: `79.24%` with `--expert-bytes=1`;
+  - false/actual bytes: `0.2076`;
+  - shadow record overhead: avg `1728.7 us/call`, max `1736 us`;
+  - token rate: `0.97 tok/s` over 3 decode runs;
+  - memory peak: `15899996160` bytes.
+- Interpretation:
+  - TopK=2 has very high precision but recall is too low to justify runtime
+    prefetch by itself.
+  - TopK=8 shows the activation predictor has real signal and passes the
+    initial false-byte ratio gate on this one smoke prompt.
+  - This is **not** sufficient to implement runtime prefetch yet; next step is
+    a dev-prompt shadow sweep (`N>=32` preferred) across multiple prompts and
+    topK values, still without held-out tuning.
