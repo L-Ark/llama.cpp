@@ -1203,6 +1203,62 @@ GP70 result on 2026-07-07:
       information while reducing bytes elsewhere enough to stay under the global
       budget.
 
+GP74 planned mixed-role byte/error budget screen:
+
+- Goal:
+  - determine whether any already-screened compressed representation can be
+    combined asymmetrically across down and fused up/gate to meet the global
+    `0.30x-0.40x` moved-byte target.
+- Method:
+  - no model run and no held-out prompt tuning;
+  - use the accepted held-out SOTA role split from Phase 5:
+    - down `37.6%`;
+    - up `31.2%`;
+    - gate `31.2%`;
+  - use GP70 activation-output error rows:
+    - down matvec candidates for down;
+    - fused up/gate candidates for up+gate;
+  - compute global byte ratio:
+    `0.376 * down_ratio + 0.624 * fused_upgate_ratio`;
+  - report only combinations under `<=0.40x`, sorted by worst error and byte
+    ratio.
+- Acceptance:
+  - a candidate can advance only if global byte ratio is `<=0.40x`, down mean
+    rel L2 `<=0.10`, and fused up/gate mean rel L2 `<=0.10`;
+  - if no combination passes, the next structural work must use a new
+    representation, not more tuning of GP68-GP70 blockwise residuals.
+
+GP74 mixed-role byte/error budget result on 2026-07-07:
+
+- Code:
+  - `.Agent/run-tools/kimi_mixed_role_byte_error_budget.py`.
+- Report:
+  - `.Agent/runs/20260707-gp74-mixed-role-byte-error-budget/report.md`;
+  - `.Agent/runs/20260707-gp74-mixed-role-byte-error-budget/report.json`.
+- Input:
+  - GP70 activation-output screen only;
+  - held-out role split constants from the accepted SOTA bound, not used for
+    hotset or predictor tuning:
+    - down `0.376`;
+    - fused up/gate `0.624`.
+- Result:
+  - combinations under global `<=0.40x` byte target: `15`;
+  - passing combinations: `0`;
+  - best under-budget pair:
+    - down `aw_mse:bits1:block256`;
+    - fused up/gate `aw_mse_keep_input0p1:bits1:block256`;
+    - global ratio `0.3861x`;
+    - down mean rel L2 `0.498586`;
+    - fused up/gate mean rel L2 `0.594271`;
+    - worst mean rel L2 `0.594271`.
+- Decision:
+  - stop tuning GP68-GP70 blockwise 1-bit residuals as a primary path to
+    `5 tok/s`;
+  - next representation must be qualitatively different, for example a
+    prompt-general trained residual/codebook, a calibrated lower-bit pack with
+    activation-output validation, or exact-byte demand-integrated scheduling
+    that avoids the GP72/GP73 host-prefetch cache failure.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
@@ -1233,19 +1289,18 @@ For every experiment:
 
 ## Immediate Next Task
 
-Continue from Phase 5C:
+Continue from Phase 5E:
 
-1. Build a dev-only activation-output error screen for compressed expert
-   compute candidates. It must sample real active up/gate/down experts and real
-   hidden states, then report byte ratio, output error, and estimated runtime
-   overhead.
-2. Prioritize candidates that reduce up/gate and down movement together. A
-   candidate above `0.30x-0.40x` total moved bytes is not a direct `5 tok/s`
-   path unless it also removes exposed IO through direct compressed compute.
-3. Do not build more prompt-specific hot expert overlays. GP57 showed dev
-   overlay gains can regress held-out performance severely.
-4. Keep scheduler/predictor work default-off unless a shadow predictor can show
-   high useful byte recall under a strict extra-read cap.
+1. Run the mixed-role byte/error budget screen against GP70 output.
+2. If no GP68-GP70 combination passes, stop tuning blockwise 1-bit residuals.
+3. Choose the next representation family from:
+   - prompt-general trained residual/codebook with dev/test split;
+   - exact-byte demand-integrated scheduling that avoids the GP72/GP73
+     host-prefetch cache failure;
+   - a calibrated lower-bit expert pack whose activation-output error is
+     tested before runtime implementation.
+4. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+   gains can regress held-out performance severely.
 
 Rationale:
 
