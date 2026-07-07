@@ -1,0 +1,56 @@
+{
+  "artifact_id": "compact-target-after-cleanup-dryrun-20260707T194931Z",
+  "repo_root": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "candidate_id": "teamblobfish-iq1-s-xl",
+  "candidate": {
+    "id": "teamblobfish-iq1-s-xl",
+    "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+    "variant": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-SHARDED.gguf",
+    "priority": "primary_after_cleanup",
+    "file_count": 2,
+    "total_size_bytes": 61540805344,
+    "total_size_gib": 57.314,
+    "complete_metadata": true,
+    "metadata_missing_count": 0,
+    "files": [
+      {
+        "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+        "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+        "size_bytes": 49952658368,
+        "size_gib": 46.522,
+        "etag": "81c1f079af7aef05e54ac9fbc25fd08c9a6ba069d60850a47659c048581a13b6",
+        "status_chain": [
+          "302",
+          "206"
+        ]
+      },
+      {
+        "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+        "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+        "size_bytes": 11588146976,
+        "size_gib": 10.792,
+        "etag": "ef6131d39d822a98bb743864d630feca99097159107eeac0d9ff1dd1f373b2ae",
+        "status_chain": [
+          "302",
+          "206"
+        ]
+      }
+    ]
+  },
+  "destination": "/root/lfz/models/DeepSeek-V4-Flash-compact-targets/teamblobfish-iq1-s-xl",
+  "cleanup_candidate": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+  "available_bytes_now": 35550629888,
+  "cleanup_candidate_bytes_now": 88019539296,
+  "projected_available_after_cleanup_bytes": 123570169184,
+  "candidate_total_size_bytes": 61540805344,
+  "execute_download_requested": false,
+  "confirm_delete_rejected_iq2s": false,
+  "skip_run": false,
+  "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli",
+  "default_behavior": "dry_run_no_delete_no_download_no_model_execution",
+  "required_for_real_execution": [
+    "--execute-download",
+    "--confirm-delete-rejected-iq2s"
+  ],
+  "safety_decision": "real_execution_requires_explicit_flags_and_size_validation"
+}

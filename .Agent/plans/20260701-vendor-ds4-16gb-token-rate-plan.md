@@ -8019,3 +8019,46 @@ Interpretation:
 - Next performance work should not revisit q80 correctness unless later source changes touch this path. Continue with generalized throughput work:
   - if explicit disk cleanup is approved, download exactly one priority compact target and run load/correctness before token-rate;
   - otherwise continue no-download lowbit/compact evidence or a new hard-bound route that can plausibly exceed the generalized baseline and move toward `>5 tok/s` random-prompt target.
+
+## 2026-07-08 X10-AW guarded compact-target after-cleanup runner
+
+- script: `.Agent/run-tools/run_compact_target_after_cleanup.sh`
+- dry-run artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-after-cleanup-dryrun-20260707T194931Z.json`
+- status: `guarded_dryrun_pass_no_delete_no_download_not_sota`
+
+Purpose:
+- Prepare the next compact-target correctness gate so that a future explicit cleanup approval can be executed reproducibly.
+- Preserve the existing safety rule: do not delete the rejected local IQ2_S file unless the command includes an explicit confirmation flag.
+
+Script behavior:
+- Default invocation is dry-run only. It prints and records:
+  - selected candidate: `teamblobfish-iq1-s-xl`
+  - candidate total size: `61540805344` bytes (`57.314 GiB`)
+  - two exact Hugging Face URLs, sizes, and etags from `compact-target-exact-download-manifest-20260708.json`
+  - cleanup candidate: `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - current available bytes and projected available bytes after cleanup
+  - destination: `/root/lfz/models/DeepSeek-V4-Flash-compact-targets/teamblobfish-iq1-s-xl`
+- Real execution requires both:
+  - `--execute-download`
+  - `--confirm-delete-rejected-iq2s`
+- The script refuses `--execute-download` without `--confirm-delete-rejected-iq2s` and exits `2`; this refusal path was tested and performed no deletion or download.
+- If explicitly executed later, it will:
+  1. delete only the already-rejected IQ2_S cleanup file;
+  2. download exactly one manifest-selected compact target;
+  3. validate downloaded file sizes;
+  4. optionally run a strict `16GB` France correctness smoke using `strict_ds4_runner.py`.
+
+Dry-run result:
+- command: `.Agent/run-tools/run_compact_target_after_cleanup.sh`
+- `available_bytes_now=35550629888`
+- `cleanup_candidate_bytes_now=88019539296`
+- `projected_available_after_cleanup_bytes=123570169184`
+- `candidate_total_size_bytes=61540805344`
+- `execute_download_requested=false`
+- `confirm_delete_rejected_iq2s=false`
+- decision: no files were deleted, downloaded, or executed.
+
+Next:
+- Do not run the destructive path without explicit approval from the user.
+- If approval is given, run the guarded script with both flags and treat the result as a load/correctness gate first, not as a SOTA claim.
+- If no cleanup approval is given, continue with no-download lowbit/compact evidence or a new hard-bound route toward generalized `>5 tok/s`.
