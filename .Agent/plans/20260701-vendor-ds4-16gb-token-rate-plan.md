@@ -6074,3 +6074,17 @@
     - produce a GPU-resident fused activation buffer;
     - feed down through a correctness-checked handoff path;
     - first validate on calibration/dev only, then freeze before held-out.
+
+## 2026-07-07 X10-C current-head repro：down GPU correctness remains fixed on pushed branch
+
+- attempt_id: `20260707-current-head-down-q80-correctness-repro2`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-down-q80-correctness-repro-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T112729-current-head-down-q80-correctness-repro2`
+- source_commit: `8ddf900a338f54599068a0863505170058ee4936` (`vendor-ds4: add generalized sota demo script`)
+- build: `cmake --build build-ds4-moe-stream --target llama-results llama-cli -j20` passed; `build-ds4-moe-stream/CMakeCache.txt` has `GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON`.
+- constraint: both cases ran with `systemd-run --property=MemoryMax=16000000000 --property=MemorySwapMax=0`; `drop_caches` was executed before each case; held-out prompts were not used.
+- baseline case: default down CPU fallback under `GGML_MOE_STREAM_DOWN_BATCH=1`; stderr shows `batch_accept=0`, `batch_decline=5800`.
+- full-down GPU case: added `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1` and `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`; stderr shows `batch_accept=5800`, `batch_decline=0`, so all fixed-text down batch calls used the corrected GPU path.
+- correctness result: `same_top1=145/145`, `first_mismatch_pos=-1`, `max_abs_top12_logit_diff=0.0`, `mean_abs_top12_logit_diff=0.0`, baseline and full-down both have `top1_matches_next_token=122`.
+- decision: down GPU correctness is reproduced on current pushed-source lineage, but this is still `not_sota`; the plan remains to use this CPU-compatible Q8_0 CPU-order path as the correctness reference while pursuing a faster prompt-general up/down retained/batched dataflow. Do not promote the slow full-down path as token-rate SOTA.
+
