@@ -1,0 +1,1 @@
+AI infrastructure refers to the underlying hardware, software, and services that enable the development, training, deployment, and scaling of artificial intelligence systems. It includes specialized processors

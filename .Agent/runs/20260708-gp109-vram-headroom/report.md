@@ -56,19 +56,47 @@ The candidate saved about `388.58 ms` over 31 decode steps, about
 `12.54 ms/token`, and raised TTFT by about `3.0%`. This is within the TTFT gate
 but may be noise at n32 scale.
 
+## Multi-Prompt N32 Follow-Up
+
+After the France-only candidate looked mildly positive, two more prompts were
+run with the same paired cold-start setup:
+
+- `Briefly explain why the Moon has phases.`
+- `What is AI infrastructure? Answer in one short paragraph.`
+
+| prompt | config | quality | tok/s | decode ms/runs | TTFT ms | RAM peak | max VRAM used MiB | min VRAM free MiB | upgate hit | down hit |
+|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| France | `15000` | pass | `1.79` | `17325.68 / 31` | `81917.01` | `15899996160` | `31293` | `817` | `45.2%` | `73.4%` |
+| France | `15350` | pass | `1.83` | `16937.10 / 31` | `84380.62` | `15899996160` | `31641` | `469` | `45.3%` | `73.6%` |
+| Moon phases | `15000` | pass | `1.77` | `17501.27 / 31` | `82570.64` | `15899996160` | `31293` | `817` | `40.5%` | `71.1%` |
+| Moon phases | `15350` | pass | `1.74` | `17779.16 / 31` | `94543.96` | `15899996160` | `31641` | `469` | `41.4%` | `71.1%` |
+| AI infra | `15000` | auto fail | `1.77` | `17507.24 / 31` | `98662.00` | `15899996160` | `31293` | `817` | `44.0%` | `72.3%` |
+| AI infra | `15350` | auto fail | `1.79` | `17288.09 / 31` | `88187.85` | `15899996160` | `31641` | `469` | `45.1%` | `73.1%` |
+
+Notes:
+
+- The AI infra answers are semantically reasonable, but the automated keyword
+  gate was too strict for this prompt, so these runs are not usable for
+  acceptance.
+- Mean n32 token rate across the three paired prompts:
+  - `15000`: about `1.777 tok/s`;
+  - `15350`: about `1.787 tok/s`.
+- The mean lift is only about `0.6%`, with one clear regression:
+  - France: `+2.2%`;
+  - Moon phases: `-1.7%`;
+  - AI infra: `+1.1%`, but auto quality failed.
+- `15350` leaves only about `469 MiB` minimum sampled free VRAM on all runs.
+
 ## Decision
 
-`VRAM_MIB=15350` is a valid candidate for further testing, but not accepted
-yet.
+Reject `VRAM_MIB=15350` as a default/SOTA change.
 
-Acceptance gate before changing defaults:
+Reason:
 
-1. Run at least three dev n32 prompts with paired or comparable cold-start
-   evidence.
-2. If the candidate is neutral or better and quality passes, run held-out n96.
-3. Accept only if held-out mean token rate improves, all held-out qualities
-   pass, TTFT increase remains under 20%, host RAM peak stays below 16 GB, and
-   `nvidia-smi` shows no OOM/near-zero free instability.
+- The multi-prompt n32 result is not consistently positive.
+- The average gain is too small to justify a held-out n96 sweep.
+- The candidate leaves little VRAM margin.
+- No default env or runtime code should be changed.
 
 ## Reproduce
 
@@ -100,3 +128,14 @@ ssh -p 51056 root@92.180.27.82 'cd /root/lfz/tmp/kimi-stage2m-align && for cfg i
 done'
 ```
 
+Additional paired prompts used the same command shape with:
+
+```text
+PROMPT_ID=gp109_moon_vram_<cfg>
+PROMPT_USER_TEXT="Briefly explain why the Moon has phases."
+QUALITY_KEYWORDS="Moon|moon,Earth|earth,Sun|sun"
+
+PROMPT_ID=gp109_aiinfra_vram_<cfg>
+PROMPT_USER_TEXT="What is AI infrastructure? Answer in one short paragraph."
+QUALITY_KEYWORDS="AI|artificial,intfrastructure|infrastructure,computing|systems"
+```
