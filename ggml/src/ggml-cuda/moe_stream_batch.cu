@@ -2970,6 +2970,121 @@ static void current_down_overlap_atomic_max(std::atomic<uint64_t> &target, uint6
     }
 }
 
+static const char * moe_activation_dump_dir() {
+    static const char *dir = []() -> const char * {
+        const char *env = std::getenv("GGML_MOE_ACTIVATION_DUMP_DIR");
+        return (env && env[0]) ? env : nullptr;
+    }();
+    return dir;
+}
+
+static int moe_activation_dump_max_records() {
+    static const int max_records = []() {
+        const char *env = std::getenv("GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS");
+        if (!env || !env[0]) return 64;
+        const long v = std::strtol(env, nullptr, 10);
+        return (int)std::max<long>(1, std::min<long>(v, 1000000));
+    }();
+    return max_records;
+}
+
+static bool moe_activation_dump_decode_only() {
+    static const bool decode_only = []() {
+        const char *env = std::getenv("GGML_MOE_ACTIVATION_DUMP_DECODE_ONLY");
+        return !env || !env[0] || env[0] != '0';
+    }();
+    return decode_only;
+}
+
+static void moe_activation_dump_record(
+        const char *role,
+        const char *mode,
+        uint64_t call,
+        const char *tensor,
+        int tensor_type,
+        int expert_idx,
+        int active_slot,
+        int dst_id,
+        int token_id,
+        int64_t ne00,
+        int64_t ne01,
+        size_t expert_bytes,
+        const float *values) {
+    const char *dir = moe_activation_dump_dir();
+    if (!dir || !values || ne00 <= 0 || ne01 <= 0) {
+        return;
+    }
+    if (moe_activation_dump_decode_only() && (!mode || std::strcmp(mode, "decode") != 0)) {
+        return;
+    }
+
+    static std::atomic<uint64_t> next_record{0};
+    const uint64_t record_id = next_record.fetch_add(1, std::memory_order_relaxed);
+    if (record_id >= (uint64_t)moe_activation_dump_max_records()) {
+        return;
+    }
+
+    static std::mutex dump_mu;
+    std::lock_guard<std::mutex> lk(dump_mu);
+
+    char meta_path[1024];
+    char bin_path[1024];
+    std::snprintf(meta_path, sizeof(meta_path), "%s/activations.csv", dir);
+    std::snprintf(bin_path, sizeof(bin_path), "%s/activations.f32", dir);
+
+    FILE *bin = std::fopen(bin_path, "ab");
+    if (!bin) {
+        return;
+    }
+    std::fseek(bin, 0, SEEK_END);
+    const long offset_long = std::ftell(bin);
+    const uint64_t offset = offset_long >= 0 ? (uint64_t)offset_long : 0;
+    const size_t value_count = (size_t)ne00;
+    const size_t wrote = std::fwrite(values, sizeof(float), value_count, bin);
+    std::fclose(bin);
+    if (wrote != value_count) {
+        return;
+    }
+
+    const bool need_header = [&]() {
+        FILE *existing = std::fopen(meta_path, "rb");
+        if (!existing) {
+            return true;
+        }
+        std::fseek(existing, 0, SEEK_END);
+        const long sz = std::ftell(existing);
+        std::fclose(existing);
+        return sz <= 0;
+    }();
+
+    FILE *meta = std::fopen(meta_path, "ab");
+    if (!meta) {
+        return;
+    }
+    if (need_header) {
+        std::fprintf(meta,
+                "record_id,role,mode,call,tensor,type,expert_idx,active_slot,dst_id,token_id,ne00,ne01,expert_bytes,offset_bytes,nbytes\n");
+    }
+    std::fprintf(meta,
+            "%llu,%s,%s,%llu,%s,%d,%d,%d,%d,%d,%lld,%lld,%zu,%llu,%zu\n",
+            (unsigned long long)record_id,
+            role ? role : "",
+            mode ? mode : "",
+            (unsigned long long)call,
+            tensor ? tensor : "",
+            tensor_type,
+            expert_idx,
+            active_slot,
+            dst_id,
+            token_id,
+            (long long)ne00,
+            (long long)ne01,
+            expert_bytes,
+            (unsigned long long)offset,
+            value_count * sizeof(float));
+    std::fclose(meta);
+}
+
 static void current_down_overlap_record_batch(size_t jobs) {
     if (jobs == 0) return;
     ++g_current_down_overlap.submitted_batches;
@@ -8688,6 +8803,37 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     if (src1_dump && src1_dump_count.fetch_add(1) == 0) {
         moe_stream_dump_f32_rows("src1", (const float *)bc.h_src1, n_active, ne00);
     }
+    for (int j = 0; j < n_active; ++j) {
+        const float *row = (const float *)bc.h_src1 + (size_t)j * (size_t)ne00;
+        moe_activation_dump_record(
+                "up",
+                prompt_mode ? "prompt" : "decode",
+                route_detail_call,
+                src0_up_name,
+                src0_up_type_int,
+                active_experts[j],
+                j,
+                flat_dst_ids[j],
+                token_ids[j],
+                ne00,
+                ne01,
+                up_expert_bytes,
+                row);
+        moe_activation_dump_record(
+                "gate",
+                prompt_mode ? "prompt" : "decode",
+                route_detail_call,
+                src0_gate_name,
+                src0_gate_type_int,
+                active_experts[j],
+                j,
+                flat_dst_ids[j],
+                token_ids[j],
+                ne00,
+                ne01,
+                gate_expert_bytes,
+                row);
+    }
 
     if (cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
     if (cudaMemcpyAsync(bc.d_ids_src1, bc.h_ids_src1, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return false;
@@ -10011,6 +10157,20 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                     (const float *)src_row,
                     ne00);
         }
+        moe_activation_dump_record(
+                "down",
+                "decode",
+                (uint64_t)batch_call,
+                src0_name,
+                src0_type_int,
+                active_experts[j],
+                j,
+                dst_ids[j],
+                token_ids[j],
+                ne00,
+                ne01,
+                src0_bytes,
+                (const float *)src_row);
         if (!use_handoff || shadow_error) {
             std::memcpy((char *)bc.h_src1 + (size_t)j * ne00 * sizeof(float), src_row, (size_t)ne00 * sizeof(float));
         }

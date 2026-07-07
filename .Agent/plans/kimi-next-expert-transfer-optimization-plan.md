@@ -653,6 +653,88 @@ Phase 5C lower-byte candidate gate:
   - late-layer down skipping can remain a possible local micro-optimization only
     if it is gated by per-layer error and held-out quality.
 
+Phase 5D activation-output compressed-compute screen:
+
+- Goal:
+  - measure compressed expert output error on real MoE activation vectors before
+    writing any runtime compressed expert kernel.
+- Implementation:
+  - add a default-off runtime dump controlled by:
+    - `GGML_MOE_ACTIVATION_DUMP_DIR=<dir>`;
+    - `GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=<n>`;
+    - `GGML_MOE_ACTIVATION_DUMP_DECODE_ONLY=<0|1>`;
+  - dump metadata to `activations.csv` and raw f32 vectors to
+    `activations.f32`;
+  - record up, gate, and down active experts with tensor name, expert id,
+    dimensions, original expert bytes, and vector offset;
+  - analyze with `.Agent/run-tools/kimi_activation_output_compression_screen.py`.
+- Hypothesis:
+  - weight relative error alone is too pessimistic or too indirect;
+  - activation-output error on real hidden states is the right gate for deciding
+    whether a low-byte direct compute kernel is worth implementing.
+- Experiment:
+  - dev-only cold-start run, initially `N=16`;
+  - include `Please introduce France in a short paragraph.`;
+  - limit activation dump records so Host RAM and TTFT are not used for SOTA
+    claims;
+  - run offline screen on dumped activations for blockwise `1-bit` and `2-bit`
+    candidates.
+- Acceptance for further work:
+  - this phase does not accept a SOTA improvement;
+  - a candidate can advance only if it reaches the `0.30x-0.40x` byte-ratio
+    target and has low activation-output error on up/gate fused output and down
+    output;
+  - if all target-byte candidates still have large output error, reject this
+    low-bit blockwise path and move to a different structural representation.
+
+GP67 dev result on 2026-07-07:
+
+- Code:
+  - runtime dump in `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+  - analysis tool:
+    `.Agent/run-tools/kimi_activation_output_compression_screen.py`.
+- Report:
+  - `.Agent/runs/20260707-gp67-activation-output-screen-n16-france/report.md`;
+  - `.Agent/runs/20260707-gp67-activation-output-screen-n16-france/screen.json`;
+  - activation sample:
+    `.Agent/runs/20260707-gp67-activation-output-screen-n16-france/act/activations.csv`;
+    `.Agent/runs/20260707-gp67-activation-output-screen-n16-france/act/activations.f32`.
+- Runtime:
+  - dev prompt: `Please introduce France in a short paragraph.`;
+  - `N=16`;
+  - cold-start `systemd-run` with `MemoryMax=15900000000` and swap disabled;
+  - `GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=72`;
+  - quality passed;
+  - token rate `1.59 tok/s`;
+  - TTFT `74011.21 ms`;
+  - decode `9430.36 ms / 15`;
+  - Host RAM peak `15899996160`.
+- Screen result:
+  - records loaded: `72`;
+  - up records: `24`, gate records: `24`, down records: `24`;
+  - target gate: byte ratio `<= 0.40x`, mean rel L2 `<= 0.10`;
+  - passing matvec candidates: `0`;
+  - passing fused candidates: `0`;
+  - down 1-bit target-range candidates:
+    - byte ratio `0.3091x-0.3636x`;
+    - mean rel L2 `1.5517-1.9329`;
+  - up/gate 1-bit target-range candidates:
+    - byte ratio `0.3695x-0.3912x` for block128/256;
+    - mean rel L2 about `2.06-2.28`;
+  - fused up/gate 1-bit target-range candidates:
+    - byte ratio `0.3695x-0.3912x`;
+    - mean rel L2 `7.6308-8.9759`;
+  - 2-bit candidates have lower error but byte ratios `0.60x-0.78x`, above
+    the required `0.30x-0.40x`, and fused mean rel L2 still exceeds `1.0`.
+- Decision:
+  - reject naive blockwise 1-bit/2-bit compressed expert compute as the next
+    primary runtime path;
+  - do not implement a direct low-bit blockwise kernel for this candidate;
+  - next structural byte-reduction work must use a qualitatively different
+    representation, such as activation-aware trained codebooks, selective
+    residual correction, or a small calibrated low-byte model/pack, and must
+    pass this activation-output gate before runtime implementation.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
