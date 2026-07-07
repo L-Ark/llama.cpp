@@ -5272,3 +5272,17 @@
 - download_log: aria2 completed at `2026-07-07T01:00:17Z`, avg speed about `79MiB/s`; `.aria2` control file disappeared.
 - note: HF/Xet HEAD etag `4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0` did not equal local file sha256, so use local `sha256 + size` for reproducibility.
 - next_step: Stage 2 strict `16GB/no-swap` load smoke with no prompt-specific env and stdout controlled. This is still not SOTA and must not use held-out.
+
+### X5 Stage 2 result：default IQ2_S load failed
+
+- status: default_load_failed_missing_hc_head_base_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage2-default-load-smoke-failed-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-load-smoke/france-n1-load`
+- command_scope: strict `MemoryMax=16000000000`, `MemorySwapMax=0`, France calibration `n=1`, no prompt-specific pack/profile, no tensor alias env, stdout controlled.
+- result: exit status `1`; stderr reports `missing tensor 'hc_head_base'` and model load failed before inference. `memory_peak_bytes=375943168`, `oom=0`, `oom_kill=0`.
+- interpretation: This is a vendor/external-GGUF tensor naming compatibility failure, not a token-rate or correctness result. Since the current source already contains DeepSeek4 tensor alias flags used for other external DS4 variants, one controlled follow-up is allowed with those alias flags only.
+- Stage 2b allowed_env:
+  - `LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`
+  - `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`
+  - `LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1`
+- Stage 2b constraints: still strict `16GB/no-swap`, still no prompt-specific pack/profile, still no held-out, stdout controlled, calibration France only. If alias load fails, output degenerates, or correctness fails, reject the IQ2_S route and do not proceed to calibration/dev benchmark.
