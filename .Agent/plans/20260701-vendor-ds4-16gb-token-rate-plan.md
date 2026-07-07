@@ -5459,3 +5459,32 @@
 - immediate_record_push_rule:
   - If any configuration exceeds the generalized no-prompt-specific baseline while passing RAM, correctness, and TTFT gates, immediately write a detailed artifact and plan update, then commit and push to `ssd/vendor/deepseek-token-rate-16gb`.
   - If a configuration improves token rate but fails correctness, RAM, TTFT, or generalization, record it as rejected and push the rejected artifact/plan update; do not promote it.
+
+## 2026-07-07 Phase X10：evaluate Kimi GP4 alias/full-source strategy for DeepSeek
+
+- attempt_id: `20260707-gp4-alias-full-source-transfer-audit`
+- status: planned_before_source_port
+- trigger: Kimi GP4 reported its SOTA path from full expert-source coverage, not only expert packs: `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` maps GGUF shards as expert sources, and `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1` lets aligned aliases use batch/io_uring reads. Reported Kimi counters: `entries=69120`, `misses=0`, `direct_reads=0`, `host_stage=0.000 ms`, `memory.peak=15899996160`.
+- DeepSeek current evidence:
+  - Current DeepSeek branch contains `GGML_MOE_EXPERT_PACK`, `GGML_MOE_EXPERT_PACK_OVERLAY`, `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA`, `GGML_MOE_EXPERT_PACK_LIST`, and `GGML_MOE_IO_BACKEND=iouring` support in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+  - Current DeepSeek branch does **not** contain `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` or `GGML_MOE_IO_ALIGNED_ALIAS_BATCH` symbols, so GP4 cannot be enabled by environment variables alone.
+  - Recent no-prompt-specific diagnostic runs still show VRAM-cache misses (`db-index`: `4650`, `what-to-eat`: `6504`) instead of the GP4 target `misses=0`; this keeps full-source coverage relevant.
+- applicability_assessment:
+  - The transferable idea is strong: make the expert source table complete by treating native GGUF tensor offsets as expert-pack entries, then feed those entries through the same batch/io_uring/pinned/H2D path.
+  - It may help DeepSeek if current misses/direct CPU fallback come from source coverage gaps or non-batched source reads. It will not solve cases where the bottleneck is GPU compute, routing shape mismatch, or up/down kernel inefficiency after source bytes are available.
+  - DeepSeek native GGUF is a single large file rather than Kimi split shards, so the alias generator should parse the native GGUF tensor table and emit `tensor,expert_idx,source_path,offset,nbytes` equivalent entries without duplicating payload files.
+  - Correctness should be exact if offsets and tensor names are correct, because the bytes are read from the original GGUF backing store. The main risks are offset alignment, tensor-name/expert-id mapping, O_DIRECT/io_uring alignment, and cgroup page-cache/RSS accounting.
+- planned_sequence:
+  1. Artifact-only coverage audit: compute native DeepSeek expert tensor count/bytes from the GGUF header and compare against current pack entries/hits/misses on `calibration_dev_set_v1`; no model run, no source edit, no held-out.
+  2. If coverage audit says GP4-style alias can cover all gate/up/down expert tensors, write a source-port plan for a default-off `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` loader and aligned alias batch path. Preserve existing Kimi/pack behavior when envs are unset.
+  3. Implement minimum default-off loader only after the plan is committed. First run metadata loader self-check: entries expected, duplicate resolution, offset alignment, no payload copy, no RAM growth.
+  4. Correctness gate: fixed-text top1/parity or France semantic smoke before any token-rate claim.
+  5. Calibration/dev gate: compare against no-prompt-specific baseline (`min=1.8`, `mean=2.18`), strict 16GB/page-cache, TTFT gate, full outputs. If improved, immediately record and push.
+  6. Held-out remains locked until a candidate is frozen after calibration/dev.
+- success_metrics_for_first_runtime_probe:
+  - Expert source entries substantially increase versus current pack-only entries.
+  - Pack/source misses approach zero for the tensors covered by alias.
+  - `direct_reads`/host staging decrease or move to batched `iouring_reads` with recorded low wait/host times.
+  - `memory_peak_bytes <= 16000000000`, no OOM/kill/swap, correctness pass.
+  - Generalized calibration/dev `min_eval_tok_s` improves over `1.8` without prompt-specific artifacts.
+- push_rule: every audit, rejected probe, or accepted improvement must be recorded and pushed to `ssd/vendor/deepseek-token-rate-16gb`.
