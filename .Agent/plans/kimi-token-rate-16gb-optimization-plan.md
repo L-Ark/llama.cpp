@@ -96191,3 +96191,136 @@ GP63 Phase 1 execution result:
     required `>=10%`;
   - the next plan should target a stronger predictor or a lower-byte expert
     representation rather than simple layer-wise cache/overfetch.
+
+## GP64: AdapMoE-style next-layer gate shadow profiler
+
+Timestamp: `2026-07-07T13:08:41+08:00`.
+
+Goal:
+
+- Test whether an AdapMoE-style activation predictor is useful for Kimi before
+  implementing any runtime prefetch.
+- Do **not** change model math, expert residency, IO scheduling, or cache
+  policy in this phase.
+- The profiler must be default-off and must only run when explicitly enabled.
+
+Background:
+
+- AdapMoE predicts the next layer's experts by applying the next layer gate to
+  the current layer hidden state, then prefetches one missing expert on a copy
+  stream.
+- That implementation is PyTorch/HF-specific and cannot be directly reused in
+  this llama.cpp + expert-pack + io_uring runtime.
+- The portable idea is the predictor, not the cache implementation.
+
+Implementation plan:
+
+1. Add a default-off graph shadow output controlled by
+   `GGML_MOE_NEXT_GATE_SHADOW_OUT=<csv>`.
+2. During decode only (`n_tokens == 1`), for Kimi MoE layer `L`, build a
+   predicted top-K tensor for target layer `L+1`:
+   - input activation: current layer's normalized FFN/MoE input;
+   - gate tensor: `layers[L+1].ffn_gate_inp`;
+   - expert bias: `layers[L+1].ffn_exp_probs_b`;
+   - group masking: identical to the runtime MoE routing logic;
+   - top-K: controlled by `GGML_MOE_NEXT_GATE_SHADOW_TOPK`, defaulting to the
+     model's active expert count.
+3. Also expose each real Kimi MoE layer's actual top-K tensor as a shadow output
+   when the profiler is enabled.
+4. After each decode graph compute, copy only these small I32 top-K tensors back
+   to host and append a CSV row containing:
+   - sequence/call id;
+   - source layer and target layer;
+   - kind: `pred` or `actual`;
+   - token count;
+   - top-K values;
+   - graph build predictor overhead estimate;
+   - tensor copy/record overhead.
+5. Add an offline analyzer that joins predicted `L->L+1` rows with actual
+   `L+1` rows and reports:
+   - expert recall;
+   - byte recall;
+   - false-prefetch bytes;
+   - per-layer hit/recall;
+   - predictor and record overhead summaries.
+
+Dev/test discipline:
+
+- Use only dev prompts for choosing `GGML_MOE_NEXT_GATE_SHADOW_TOPK` and any
+  predictor acceptance threshold.
+- Held-out test prompts must not be inspected or tuned against until the shadow
+  profiler passes dev gates.
+- Any later bounded prefetch implementation must be planned separately after
+  this shadow evidence exists.
+
+Shadow acceptance gate before runtime prefetch:
+
+- Expert/byte recall must be high enough to plausibly hide missing expert IO;
+  initial target: byte recall `>= 0.60` on dev prompts.
+- False-prefetch bytes must be bounded; initial target:
+  `false_prefetch_bytes / actual_missing_bytes <= 0.25`.
+- Predictor overhead must not raise TTFT by more than `20%` and must not erase
+  the projected decode benefit.
+- 16GB host RAM limit remains strict, including page cache and profiler output.
+- Output quality must remain unchanged because model math is unchanged; still
+  verify the France regression answer after any accepted runtime change.
+
+If shadow passes:
+
+- Implement bounded prefetch in a new plan:
+  - start with at most `1-2` missing experts per layer;
+  - use only expert pack + io_uring;
+  - never change model output;
+  - hard-cap extra SSD/H2D/VRAM pressure;
+  - commit and push only after reproducible dev and held-out test evidence.
+
+GP64 implementation checkpoint:
+
+- Timestamp: `2026-07-07T13:08:41+08:00` to `2026-07-07T13:20:00+08:00`.
+- Added default-off runtime controls:
+  - `GGML_MOE_NEXT_GATE_SHADOW_OUT=<csv>`;
+  - `GGML_MOE_NEXT_GATE_SHADOW_TOPK=<k>`.
+- Added Kimi decode-only shadow graph nodes:
+  - for MoE layer `L`, predict target layer `L+1` by running
+    `layers[L+1].ffn_gate_inp` on current normalized FFN hidden state;
+  - mirror runtime routing semantics for gating function, expert bias, group
+    mask, and top-K selection;
+  - expose predicted rows as `kind=pred`.
+- Added actual routing shadow rows:
+  - existing `ffn_moe_topk` is exported as `kind=actual` when the shadow
+    profiler is enabled.
+- Added CSV recorder in `process_ubatch`:
+  - copies only contiguous I32 top-K tensors;
+  - writes `call, seq_id, pos, source_layer, target_layer, kind, values`;
+  - records shadow copy/sync overhead as `record_us`.
+- Added analyzer:
+  `.Agent/run-tools/kimi_next_gate_shadow_analyze.py`.
+- Analyzer output metrics:
+  - expert recall;
+  - expert precision;
+  - byte recall using configurable `--expert-bytes`;
+  - false-prefetch bytes;
+  - false/actual bytes;
+  - per-target-layer metrics;
+  - shadow record overhead summary.
+- Validation completed locally:
+  - `git diff --check` passed for all GP64 touched files;
+  - `python3 -m py_compile .Agent/run-tools/kimi_next_gate_shadow_analyze.py`
+    passed;
+  - single-file C++ compilation passed for:
+    `src/llama-context.cpp`, `src/llama-graph.cpp`,
+    `src/models/kimi-linear.cpp`.
+- Local full CPU-only link did not complete because this branch has existing
+  CUDA MoE symbols referenced from the CPU backend even with `GGML_CUDA=OFF`;
+  this is unrelated to GP64 and occurred before linking llama sources:
+  `ggml_cuda_moe_stream_*`, `ggml_cuda_moe_expert_pack_mmap_ptr*`.
+- Synthetic analyzer sanity check:
+  - matched prediction pairs: `2`;
+  - expert recall: `75.00%`;
+  - false/actual bytes: `0.2500`;
+  - shadow record overhead aggregation behaved as expected.
+- Not yet completed:
+  - remote CUDA build;
+  - real Kimi dev-prompt shadow CSV;
+  - dev-prompt recall/false-byte gate decision;
+  - held-out test validation.

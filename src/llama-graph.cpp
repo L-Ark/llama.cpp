@@ -13,6 +13,7 @@
 #include "llama-memory-recurrent.h"
 
 #include <cassert>
+#include <algorithm>
 #include <cinttypes>
 #include <cmath>
 #include <cstdio>
@@ -27,6 +28,25 @@
 static bool llama_kimi_moe_graph_profile_enabled() {
     static const bool enabled = std::getenv("GGML_KIMI_MOE_GRAPH_PROFILE") != nullptr;
     return enabled;
+}
+
+static bool llama_moe_next_gate_shadow_enabled_env() {
+    static const bool enabled = []() {
+        const char * path = std::getenv("GGML_MOE_NEXT_GATE_SHADOW_OUT");
+        return path != nullptr && path[0] != '\0';
+    }();
+    return enabled;
+}
+
+static int64_t llama_moe_next_gate_shadow_topk_env(int64_t default_topk, int64_t n_expert) {
+    int64_t topk = default_topk;
+    if (const char * env = std::getenv("GGML_MOE_NEXT_GATE_SHADOW_TOPK")) {
+        const int64_t parsed = strtoll(env, nullptr, 10);
+        if (parsed > 0) {
+            topk = parsed;
+        }
+    }
+    return std::max<int64_t>(1, std::min<int64_t>(topk, n_expert));
 }
 
 static const char * llama_tensor_name_or_null(const ggml_tensor * t) {
@@ -834,6 +854,7 @@ void llm_graph_result::reset() {
     t_sampled_probs.clear();
     t_sampled_logits.clear();
     t_candidates.clear();
+    t_moe_next_gate_shadow.clear();
 
     params = {};
 
@@ -888,6 +909,11 @@ void llm_graph_result::set_outputs() {
             ggml_set_output(t);
         }
     }
+    for (auto & out : t_moe_next_gate_shadow) {
+        if (out.tensor != nullptr) {
+            ggml_set_output(out.tensor);
+        }
+    }
 }
 
 bool llm_graph_result::can_reuse(const llm_graph_params & params) {
@@ -925,6 +951,14 @@ bool llm_graph_result::can_reuse(const llm_graph_params & params) {
 llm_graph_input_i * llm_graph_result::add_input(llm_graph_input_ptr input) {
     inputs.emplace_back(std::move(input));
     return inputs.back().get();
+}
+
+void llm_graph_result::add_moe_next_gate_shadow_output(
+        int source_layer,
+        int target_layer,
+        bool predicted,
+        ggml_tensor * tensor) {
+    t_moe_next_gate_shadow.push_back({ source_layer, target_layer, predicted, tensor });
 }
 
 void llm_graph_result::set_params(const llm_graph_params & params) {
@@ -1048,6 +1082,96 @@ ggml_tensor * llm_graph_context::build_lora_mm_id(
     }
 
     return res;
+}
+
+bool llm_graph_context::moe_next_gate_shadow_enabled() const {
+    return arch == LLM_ARCH_KIMI_LINEAR && n_tokens == 1 && llama_moe_next_gate_shadow_enabled_env();
+}
+
+int64_t llm_graph_context::moe_next_gate_shadow_topk(int64_t default_topk, int64_t n_expert) const {
+    return llama_moe_next_gate_shadow_topk_env(default_topk, n_expert);
+}
+
+ggml_tensor * llm_graph_context::build_moe_gate_topk_shadow(
+         ggml_tensor * cur,
+         ggml_tensor * gate_inp,
+         ggml_tensor * gate_inp_b,
+         ggml_tensor * exp_probs_b,
+             int64_t   n_expert,
+             int64_t   n_expert_used,
+        llama_expert_gating_func_type gating_op,
+                 int   source_layer,
+                 int   target_layer,
+                bool   predicted) const {
+    if (!moe_next_gate_shadow_enabled() || gate_inp == nullptr || n_expert <= 0) {
+        return nullptr;
+    }
+
+    const int64_t topk = moe_next_gate_shadow_topk(n_expert_used, n_expert);
+
+    ggml_tensor * logits = build_lora_mm(gate_inp, cur); // [n_expert, n_tokens]
+    cb(logits, predicted ? "ffn_moe_next_shadow_logits" : "ffn_moe_shadow_logits", target_layer);
+
+    if (gate_inp_b) {
+        logits = ggml_add(ctx0, logits, gate_inp_b);
+        cb(logits, predicted ? "ffn_moe_next_shadow_logits_biased" : "ffn_moe_shadow_logits_biased", target_layer);
+    }
+
+    ggml_tensor * probs = nullptr;
+    switch (gating_op) {
+        case LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX:
+            {
+                probs = ggml_soft_max(ctx0, logits); // [n_expert, n_tokens]
+            } break;
+        case LLAMA_EXPERT_GATING_FUNC_TYPE_SIGMOID:
+            {
+                probs = ggml_sigmoid(ctx0, logits); // [n_expert, n_tokens]
+            } break;
+        case LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX_WEIGHT:
+            {
+                probs = logits; // [n_expert, n_tokens]
+            } break;
+        default:
+            GGML_ABORT("fatal error");
+    }
+    cb(probs, predicted ? "ffn_moe_next_shadow_probs" : "ffn_moe_shadow_probs", target_layer);
+
+    ggml_tensor * selection_probs = probs;
+    if (exp_probs_b != nullptr) {
+        selection_probs = ggml_add(ctx0, probs, exp_probs_b);
+        cb(selection_probs, predicted ? "ffn_moe_next_shadow_probs_biased" : "ffn_moe_shadow_probs_biased", target_layer);
+    }
+
+    if (hparams.n_expert_groups > 1 && n_tokens > 0) {
+        const int64_t n_exp_per_group = n_expert / hparams.n_expert_groups;
+
+        ggml_tensor * selection_groups = ggml_reshape_3d(ctx0, selection_probs, n_exp_per_group, hparams.n_expert_groups, n_tokens);
+
+        ggml_tensor * group_scores = ggml_argsort_top_k(ctx0, selection_groups, 2);
+        group_scores = ggml_get_rows(ctx0, ggml_reshape_4d(ctx0, selection_groups, 1, selection_groups->ne[0], selection_groups->ne[1], selection_groups->ne[2]), group_scores);
+
+        group_scores = ggml_sum_rows(ctx0, ggml_reshape_3d(ctx0, group_scores, group_scores->ne[1], group_scores->ne[2], group_scores->ne[3]));
+        group_scores = ggml_reshape_2d(ctx0, group_scores, group_scores->ne[1], group_scores->ne[2]);
+
+        ggml_tensor * expert_groups = ggml_argsort_top_k(ctx0, group_scores, hparams.n_group_used);
+        cb(expert_groups, predicted ? "ffn_moe_next_shadow_group_topk" : "ffn_moe_shadow_group_topk", target_layer);
+
+        selection_probs = ggml_get_rows(ctx0, selection_groups, expert_groups);
+        selection_probs = ggml_set_rows(ctx0, ggml_fill(ctx0, selection_groups, -INFINITY), selection_probs, expert_groups);
+        selection_probs = ggml_reshape_2d(ctx0, selection_probs, n_expert, n_tokens);
+        cb(selection_probs, predicted ? "ffn_moe_next_shadow_probs_masked" : "ffn_moe_shadow_probs_masked", target_layer);
+    }
+
+    ggml_tensor * selected_experts =
+        llama_moe_should_use_plain_top_k(arch, hparams)
+        ? ggml_top_k(ctx0, selection_probs, topk)
+        : ggml_argsort_top_k(ctx0, selection_probs, topk); // [topk, n_tokens]
+    cb(selected_experts, predicted ? "ffn_moe_next_shadow_topk" : "ffn_moe_shadow_topk", target_layer);
+
+    res->add_moe_next_gate_shadow_output(source_layer, target_layer, predicted, selected_experts);
+    ggml_build_forward_expand(gf, selected_experts);
+
+    return selected_experts;
 }
 
 ggml_tensor * llm_graph_context::build_norm(
@@ -1481,6 +1605,9 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         : ggml_argsort_top_k(ctx0, selection_probs, n_expert_used); // [n_expert_used, n_tokens]
     cb(selected_experts->src[0], "ffn_moe_argsort", il);
     cb(selected_experts, "ffn_moe_topk", il);
+    if (moe_next_gate_shadow_enabled()) {
+        res->add_moe_next_gate_shadow_output(il, il, false, selected_experts);
+    }
 
     if (arch == LLM_ARCH_GROVEMOE && n_expert != hparams.n_expert) {
         // TODO: Use scalar div instead when/if implemented

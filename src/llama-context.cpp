@@ -17,7 +17,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <limits>
+#include <mutex>
+#include <sstream>
 #include <stdexcept>
 
 //
@@ -86,6 +89,125 @@ static bool kimi_graph_profile_enabled() {
         return on;
     }();
     return enabled;
+}
+
+struct moe_next_gate_shadow_csv_state {
+    std::mutex mutex;
+    std::ofstream file;
+    bool initialized = false;
+    bool disabled = false;
+    uint64_t call = 0;
+};
+
+static moe_next_gate_shadow_csv_state g_moe_next_gate_shadow_csv;
+
+static const char * moe_next_gate_shadow_out_path() {
+    const char * path = std::getenv("GGML_MOE_NEXT_GATE_SHADOW_OUT");
+    return path && path[0] ? path : nullptr;
+}
+
+static std::string moe_next_gate_shadow_values_csv(const std::vector<int32_t> & values) {
+    std::ostringstream oss;
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (i > 0) {
+            oss << '|';
+        }
+        oss << values[i];
+    }
+    return oss.str();
+}
+
+static void moe_next_gate_shadow_record(
+        llm_graph_result * res,
+        const llama_ubatch & ubatch,
+        ggml_backend_sched_t sched) {
+    const auto & outputs = res->get_moe_next_gate_shadow_outputs();
+    if (outputs.empty()) {
+        return;
+    }
+
+    const char * path = moe_next_gate_shadow_out_path();
+    if (!path) {
+        return;
+    }
+
+    struct pending_shadow_copy {
+        llm_moe_next_gate_shadow_output meta;
+        std::vector<int32_t> values;
+        int64_t ne0 = 0;
+        int64_t ne1 = 0;
+    };
+
+    std::vector<pending_shadow_copy> pending;
+    pending.reserve(outputs.size());
+
+    const int64_t copy_start_us = ggml_time_us();
+    for (const auto & out : outputs) {
+        ggml_tensor * t = out.tensor;
+        if (t == nullptr || t->type != GGML_TYPE_I32 || !ggml_is_contiguous(t)) {
+            continue;
+        }
+
+        ggml_backend_t backend = ggml_backend_sched_get_tensor_backend(sched, t);
+        if (backend == nullptr) {
+            continue;
+        }
+
+        pending_shadow_copy copy;
+        copy.meta = out;
+        copy.ne0 = t->ne[0];
+        copy.ne1 = t->ne[1];
+        copy.values.resize((size_t) ggml_nelements(t));
+
+        ggml_backend_tensor_get_async(backend, t, copy.values.data(), 0, ggml_nbytes(t));
+        pending.push_back(std::move(copy));
+    }
+
+    if (pending.empty()) {
+        return;
+    }
+
+    ggml_backend_sched_synchronize(sched);
+    const int64_t record_us = ggml_time_us() - copy_start_us;
+
+    std::lock_guard<std::mutex> lock(g_moe_next_gate_shadow_csv.mutex);
+    if (g_moe_next_gate_shadow_csv.disabled) {
+        return;
+    }
+
+    if (!g_moe_next_gate_shadow_csv.initialized) {
+        g_moe_next_gate_shadow_csv.file.open(path, std::ios::out);
+        if (!g_moe_next_gate_shadow_csv.file) {
+            LLAMA_LOG_ERROR("%s: failed to open GGML_MOE_NEXT_GATE_SHADOW_OUT=%s\n", __func__, path);
+            g_moe_next_gate_shadow_csv.disabled = true;
+            return;
+        }
+        g_moe_next_gate_shadow_csv.file
+            << "call,seq_id,pos,n_tokens,n_seq_tokens,source_layer,target_layer,kind,topk,ne0,ne1,record_us,values\n";
+        g_moe_next_gate_shadow_csv.initialized = true;
+    }
+
+    const uint64_t call = g_moe_next_gate_shadow_csv.call++;
+    const int seq_id = ubatch.n_tokens > 0 && ubatch.seq_id != nullptr && ubatch.seq_id[0] != nullptr ? ubatch.seq_id[0][0] : -1;
+    const int64_t pos = ubatch.n_tokens > 0 && ubatch.pos != nullptr ? ubatch.pos[0] : -1;
+
+    for (const auto & copy : pending) {
+        g_moe_next_gate_shadow_csv.file
+            << call << ','
+            << seq_id << ','
+            << pos << ','
+            << ubatch.n_tokens << ','
+            << ubatch.n_seq_tokens << ','
+            << copy.meta.source_layer << ','
+            << copy.meta.target_layer << ','
+            << (copy.meta.predicted ? "pred" : "actual") << ','
+            << copy.values.size() << ','
+            << copy.ne0 << ','
+            << copy.ne1 << ','
+            << record_us << ','
+            << moe_next_gate_shadow_values_csv(copy.values)
+            << '\n';
+    }
 }
 
 }
@@ -1341,6 +1463,8 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         ret = status;
         return nullptr;
     }
+
+    moe_next_gate_shadow_record(res, ubatch, sched.get());
 
     ret = GGML_STATUS_SUCCESS;
 

@@ -75,6 +75,13 @@ struct llama_cross {
 
 struct llm_graph_params;
 
+struct llm_moe_next_gate_shadow_output {
+    int source_layer = -1;
+    int target_layer = -1;
+    bool predicted = false;
+    ggml_tensor * tensor = nullptr;
+};
+
 //
 // llm_graph_input
 //
@@ -644,6 +651,9 @@ public:
     ggml_tensor * get_logits()      const { return t_logits; }
     ggml_tensor * get_embd()        const { return t_embd; }
     ggml_tensor * get_embd_pooled() const { return t_embd_pooled; }
+    const std::vector<llm_moe_next_gate_shadow_output> & get_moe_next_gate_shadow_outputs() const {
+        return t_moe_next_gate_shadow;
+    }
 
     ggml_cgraph  * get_gf()  const { return gf; }
     ggml_context * get_ctx() const { return ctx_compute.get(); }
@@ -663,6 +673,7 @@ public:
     bool can_reuse(const llm_graph_params & params);
 
     llm_graph_input_i * add_input(llm_graph_input_ptr input);
+    void add_moe_next_gate_shadow_output(int source_layer, int target_layer, bool predicted, ggml_tensor * tensor);
 
     void set_params(const llm_graph_params & params);
 
@@ -677,6 +688,7 @@ public:
     std::map<llama_seq_id, ggml_tensor*> t_candidates;
     std::map<llama_seq_id, ggml_tensor*> t_sampled;
     std::map<llama_seq_id, ggml_tensor*> t_sampled_probs;
+    std::vector<llm_moe_next_gate_shadow_output> t_moe_next_gate_shadow;
 
     std::vector<llm_graph_input_ptr> inputs;
 
@@ -872,6 +884,22 @@ struct llm_graph_context {
              ggml_tensor * up_exps_s = nullptr,
              ggml_tensor * gate_exps_s = nullptr,
              ggml_tensor * down_exps_s = nullptr) const;
+
+    bool moe_next_gate_shadow_enabled() const;
+
+    int64_t moe_next_gate_shadow_topk(int64_t default_topk, int64_t n_expert) const;
+
+    ggml_tensor * build_moe_gate_topk_shadow(
+             ggml_tensor * cur,
+             ggml_tensor * gate_inp,
+             ggml_tensor * gate_inp_b,
+             ggml_tensor * exp_probs_b,
+                 int64_t   n_expert,
+                 int64_t   n_expert_used,
+            llama_expert_gating_func_type gating_op,
+                     int   source_layer,
+                     int   target_layer,
+                    bool   predicted) const;
 
     //
     // inputs
