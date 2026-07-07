@@ -7112,3 +7112,83 @@ Updated cleanup decision:
 - It must not be treated as approval to re-download sleepy K128, antirez IQ2XXS, 0xSero Spark Mini Q2, or rebenchmark IQ2_S.
 - After cleanup, download only a newly discovered or newly corrected compact target candidate whose metadata/load/correctness route is not already rejected.
 - A loader compatibility patch for REAP K128 or 0xSero-style HC tensors requires its own hard-bound and correctness design before implementation.
+
+## 2026-07-08 X10-AF compact target variant classification correction and next gate
+
+- raw artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/hf-compact-target-classification-refresh-20260708.json`
+- corrected artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/hf-compact-target-variant-classification-correction-20260708.json`
+- status: `variant_level_correction_recorded_no_download_not_sota`
+
+Purpose:
+- Continue the compact/lowbit target route after X10-AE, but correct the admission method before making any download or benchmark decision.
+- The raw HF scan checked individual GGUF files/shards and found many apparent `fits_now` rows. That is not sufficient for sharded GGUF models: the unit of admission must be the complete model variant, not one shard.
+- No model body was downloaded, no runtime source was changed, and no token-rate benchmark was run.
+
+Corrected scan result:
+- raw scan scope:
+  - `repo_count=51`
+  - `row_count=296`
+  - raw classes included `fits_now_needs_header_gate=76` and `fits_after_iq2s_cleanup_needs_header_gate=86`, but these were file-level rows and include single shards.
+- corrected variant-level classes:
+  - `closed_or_contains_closed_file=5`
+  - `variant_fits_after_iq2s_cleanup_needs_header_gate=32`
+  - `variant_too_large=36`
+  - `not_original_target=33`
+  - `not_target=73`
+  - `sidecar_or_auxiliary_not_full_target=3`
+  - `metadata_tiny_or_suspicious_needs_header_gate=3`
+  - `incomplete_variant_scan_needs_rescan=1`
+
+Decision:
+- Do not treat the raw file-level `fits_now` rows as usable candidates.
+- Current-disk usable full-target candidates are not ready for promotion:
+  - tiny/suspicious rows require a GGUF header/load gate before they can be considered real target models;
+  - sidecar/auxiliary rows require a separate loader/reconstruction design;
+  - real compact target variants generally require explicit cleanup of the previously rejected local IQ2_S file before download.
+- SOTA unchanged.
+- No source patch is allowed from this evidence.
+
+Priority after explicit cleanup only:
+- If cleanup is approved, delete only the already-rejected IQ2_S file first:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - size: `88,019,539,296 bytes`
+  - restore URL and etag are recorded in X10-AD.
+- Then choose exactly one not-previously-closed complete variant from the corrected artifact and run gates in this order:
+  1. Header/metadata gate:
+     - architecture must be compatible with current vendor DeepSeek4 loader or have a prewritten loader-correctness plan;
+     - tokenizer/vocab must match target semantics closely enough for exact correctness evaluation;
+     - tensor names/shapes must pass a dry load or metadata shape check before downloading more than required.
+  2. Strict 16GB load gate:
+     - `MemoryMax=16000000000`, `MemorySwapMax=0`;
+     - page cache included in the cgroup;
+     - no prompt-specific expert pack or trace.
+  3. Correctness gate:
+     - fixed-text top1/logit parity where applicable;
+     - France prompt must be semantically correct and coherent;
+     - calibration/dev prompts only after correctness passes;
+     - held-out test prompts remain unused until a candidate is frozen.
+  4. Performance gate:
+     - compare against the no-prompt-specific generalized baseline;
+     - promote only if generalized metrics improve under strict RAM and TTFT stays within the accepted bound, or record as rejected if TTFT is intentionally over-bound for diagnosis.
+  5. Reproducibility gate:
+     - every accepted new SOTA must record exact command/env/model hashes/output/metrics and immediately push source plus records to `ssd/vendor/deepseek-token-rate-16gb`.
+
+Initial corrected priority list after cleanup:
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF`, `DeepSeek-V4-Flash-REAP-K128.gguf`, `52.038 GiB`
+  - caveat: related REAP K128 uniform was already closed for `ffn_gate_inp` shape mismatch, so this needs metadata shape proof before a full download.
+- `0xSero/DeepSeek-V4-Flash-180B-GGUF`, `DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf`, `53.522 GiB`
+  - caveat: related 0xSero Spark Mini Q2 was already closed for missing global HC tensors, so this needs metadata proof before a full download.
+- `teamblobfish/DeepSeek-V4-Flash-GGUF`, `IQ1_S-XL`, `57.314 GiB`
+  - caveat: newly classified complete sharded candidate; header and correctness gates required.
+- `teamblobfish/DeepSeek-V4-Flash-GGUF`, `IQ1_M`, `60.078 GiB`
+  - caveat: newly classified complete sharded candidate; header and correctness gates required.
+- `ssweens/DeepSeek-V4-Flash-GGUF-YMMV`, `deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf`, `62.870 GiB`
+  - caveat: YMMV repo; correctness-first only.
+- `ssweens/DeepSeek-V4-Flash-GGUF-YMMV`, `deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS`, `72.557 GiB`
+  - caveat: YMMV repo; correctness-first only.
+
+Immediate next action:
+- Do not implement another down/up runtime patch until the compact target gate above either:
+  - proves a correctness-valid compact target can load under strict 16GB and plausibly reaches the generalized `>5 tok/s` target; or
+  - is closed due to loader/correctness failure.
+- If cleanup is not approved, return to retained gate/source dataflow only after producing a new hard-bound artifact showing a generalized calibration/dev `min_eval_tok_s >= 5.5` before coding.
