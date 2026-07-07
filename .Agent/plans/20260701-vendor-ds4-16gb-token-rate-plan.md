@@ -5756,3 +5756,36 @@
   - If down fallback time drops but token rate still misses target, proceed to up GPU path with the same correctness-first method.
   - If source IO becomes dominant after down correctness, move from single-entry io_uring to true batched alias copy and tune `IO_DEPTH`, refill batch, pinned slots, and cache split.
   - If token rate improves under all gates, immediately record full reproduction info, commit, push to `ssd/vendor/deepseek-token-rate-16gb`, and reproduce from the pushed commit.
+
+## 2026-07-07 X10-C execution：Down GPU correctness fixed with CPU-order Q8_0 path
+
+- attempt_id: `20260707-q80-cpuorder-down-gpu-correctness-pass`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/q80-cpuorder-down-gpu-correctness-pass-20260707.json`
+- status: `correctness_pass_not_sota`
+- branch_target: `ssd/vendor/deepseek-token-rate-16gb`
+- task_context:
+  - 真实目标仍是 vendor DeepSeek 在 `16GB host RAM`（含 page cache）+ `32GB RTX 5090` 上，对用户随机/generalized prompt 稳定达到 `>5 tok/s`。
+  - 本阶段只解决 `ffn_down_exps` GPU writeback correctness，不能作为 token-rate SOTA promotion。
+- root_cause_update:
+  - 前一轮 `batch_accept=0` 不是 Q80 kernel 错误，而是当前 `build-ds4-moe-stream` 的 CMake cache 里 `GGML_CUDA_MOE_STREAM_BATCH=OFF`，导致 `moe_stream_batch.cu` 导出的是 `#ifndef GGML_CUDA_MOE_STREAM_BATCH` 下的 stub；CPU 侧 batch_attempts 很多，但 CUDA batch 函数直接返回 false。
+  - 重新配置 `cmake -S . -B build-ds4-moe-stream -DGGML_CUDA_MOE_STREAM_BATCH=ON` 后，真实 `ggml_cuda_moe_stream_batch` 生效。
+  - 真实接管后，naive scalar-order Q8_0 GPU kernel 的 op-level error 只有约 `1e-7`，但仍能在后续层传播后造成 fixed-text top1 翻转（`141/145`）。所以 correctness gate 需要 CPU accumulation order，而不是只看局部误差阈值。
+- source_fix:
+  - 扩展 `ggml_cuda_moe_stream_batch` ABI，传入 CPU fallback 已生成的 Q8_0 activation rows：`src1_q8_0`, `src1_q8_0_row_size`, `src1_q8_0_ne1`。
+  - 新增 default-off `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`，用于 MXFP4 down tensor 的 Q8_0-compatible GPU path。
+  - 新增 `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`，按 x86 AVX2/VNNI 的 8-lane `accum1/accum2 + hsum_float_8` 顺序累加，使 GPU output 与 CPU fallback bitwise 对齐。
+  - 新增 `GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR=<tensor>` target-only guard；指定 target 时，非 target MXFP4 down 直接 fallback，便于单 tensor correctness。
+  - 新增 batch success compare hook，仍由 `GGML_MOE_STREAM_COMPARE_CPU_OUT` 控制，默认不改变行为。
+- validation:
+  - build: `build-ds4-moe-stream` with `GGML_CUDA_MOE_STREAM_BATCH=ON`，`llama-results` 编译通过。
+  - strict_memory: all probes used `systemd-run --property=MemoryMax=16000000000 --property=MemorySwapMax=0` and completed without OOM/cgroup kill.
+  - op-level compare: `/root/lfz/runs/vendor-ds4-16gb/20260707T080626Z-q80-cpuorder-blk3-compare/blk3-report`, `compare_cpu.csv` first 20 records all `max_abs=0`, `mean_abs=0`.
+  - targeted `blk.3`: `/root/lfz/runs/vendor-ds4-16gb/20260707T080733Z-q80-cpuorder-fresh-default-vs-blk3`, `batch_accept=145`, `batch_decline=5655`, fresh default top1 compare `same_top1=145/145`, `first_mismatch_pos=-1`.
+  - full down: `/root/lfz/runs/vendor-ds4-16gb/20260707T080846Z-q80-cpuorder-full-down-top1`, `batch_accept=5800`, `batch_decline=0`, fresh default top1 compare `same_top1=145/145`, `first_mismatch_pos=-1`.
+- performance_observation:
+  - fixed-text full-down probe shows correctness path is slower: default down `0.519 ms/call`, full-down Q80 CPU-order `0.955 ms/call`.
+  - Therefore this is accepted only as a correctness scaffold, not as a token-rate SOTA or generalized performance improvement.
+- decision:
+  - Down GPU correctness is now fixed for the CPU-compatible Q8_0 path under fixed-text top1 gates.
+  - Do not run generalized SOTA promotion from this kernel as-is. Next work must optimize the CPU-order kernel/dataflow or use it as a reference while building a faster down/up path.
+  - Any future accepted generalized SOTA must still beat `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`, pass strict `16GB` RAM/page-cache, correctness, TTFT, and then locked held-out after candidate freeze.

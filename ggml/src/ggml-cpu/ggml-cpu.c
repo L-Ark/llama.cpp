@@ -176,6 +176,9 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     const float * src1_f32,
     size_t src1_nb1,
     size_t src1_nb2,
+    const void * src1_q8_0,
+    size_t src1_q8_0_row_size,
+    int64_t src1_q8_0_ne1,
     float * dst,
     size_t dst_nb1,
     size_t dst_nb2,
@@ -229,8 +232,8 @@ static bool (*ggml_cuda_moe_stream_one)(
     const ggml_moe_stream_row_mapping *) = NULL;
 static bool (*ggml_cuda_moe_stream_batch)(
     int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t,
-    const float *, size_t, size_t, float *, size_t, size_t, const int64_t *,
-    const ggml_moe_stream_row_mapping *, int64_t) = NULL;
+    const float *, size_t, size_t, const void *, size_t, int64_t, float *, size_t, size_t,
+    const int64_t *, const ggml_moe_stream_row_mapping *, int64_t) = NULL;
 static bool (*ggml_cuda_moe_stream_up_gate_batch)(
     int, int, const char *, const void *, const char *, const void *, int64_t,
     int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *,
@@ -4078,6 +4081,8 @@ static void ggml_compute_forward_mul_mat_id(
     if (use_gpu_stream_batch) {
         if (ith == 0) {
             const uint64_t kimi_cpu_moe_cuda_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;
+            const void * src1_q8_0_batch = (src1->type == vec_dot_type) ? src1->data : params->wdata;
+            const size_t src1_q8_0_row_size_batch = ggml_row_size(vec_dot_type, ne10);
             const bool done = ggml_cuda_moe_stream_batch(
                 src0->type,
                 src0->name,
@@ -4086,6 +4091,9 @@ static void ggml_compute_forward_mul_mat_id(
                 ne01, ne00, nb01, nb02,
                 (const float *) src1->data,
                 nb11, nb12,
+                src1_q8_0_batch,
+                src1_q8_0_row_size_batch,
+                ne11,
                 (float *) dst->data,
                 nb1, nb2,
                 matrix_row_counts,
@@ -4102,6 +4110,22 @@ static void ggml_compute_forward_mul_mat_id(
             }
 
             if (done) {
+                if (ggml_moe_stream_compare_cpu_enabled()) {
+                    for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                        const int64_t cne1 = matrix_row_counts[cur_a];
+                        if (cne1 == 0) {
+                            continue;
+                        }
+                        const char * src0_cur = (const char *) src0->data + cur_a * nb02;
+                        ggml_moe_stream_compare_cpu_result(
+                            dst, src0, src1, cur_a, cne1,
+                            src0_cur,
+                            matrix_rows + cur_a * ids->ne[0] * ids->ne[1],
+                            ggml_row_size(type_traits_cpu[src0->type].vec_dot_type, ne10),
+                            src1_cont,
+                            src1->type == type_traits_cpu[src0->type].vec_dot_type ? src1->data : params->wdata);
+                    }
+                }
                 memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
             }
         }
