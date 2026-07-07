@@ -94649,6 +94649,151 @@ GP57 execution result:
     needed;
   - do not tune on the held-out test outputs; return to dev-only investigation.
 
+## GP58: dev-only diagnosis of budget16 overlay regression
+
+Timestamp: `2026-07-07T12:20:00+08:00`.
+
+Status: planned before execution.
+
+Context:
+
+- GP55/GP56 showed budget16 overlay helps slow dev prompts:
+  - `dev_linear_equation N=48`: `0.16 -> 0.22 tok/s`;
+  - `dev_python_reverse N=96`: `0.17 -> 0.24 tok/s`;
+  - `dev_mixed_summary N=96`: `0.20 -> 0.30 tok/s`.
+- GP57 rejected the same overlay on the held-out test gate:
+  - quality passed, but token rate regressed on every held-out prompt;
+  - one TTFT gate failed;
+  - no tuning on held-out outputs is allowed.
+
+Hypothesis:
+
+- The overlay is useful only for prompts that are dominated by `pack=0` GGUF
+  direct-copy fallback.
+- For prompts already well-covered by the France-oriented pack or with enough
+  VRAM hot hits, the extra overlay can be neutral or harmful because it:
+  - increases pack-hit/iouring traffic that was previously served by faster
+    direct/fallback or cache paths;
+  - changes IO scheduling pressure and page-cache residency under a 16GB cgroup;
+  - adds another pack source and index entries, increasing runtime work without
+    enough miss reduction.
+
+Goal:
+
+- Use only dev prompts to diagnose whether the budget16 overlay hurts
+  high-coverage prompts on the current branch.
+- Do not use held-out test prompts or held-out route traces.
+- If the overlay hurts high-coverage dev prompts, reject any unconditional
+  overlay strategy and move to a dev-only conditional policy investigation
+  later.
+
+Experiment:
+
+1. Run current-branch `dev_france_regression N=96` without budget16 overlay:
+
+```bash
+repo=/root/lfz/tmp/vendor-kimi-speculative-gp33
+run=/root/lfz/tmp/runs/20260707-gp58-budget16-dev-ab/default_dev_france_n96
+cd "$repo"
+ln -sfn build-gp50-runtime build-cuda-batch
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO="$repo" RUN="$run" N=96 PROFILE=1 COPY_PROFILE=0 \
+      PROMPT_ID=dev_france_regression \
+      PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+      QUALITY_KEYWORDS="france,europe|paris|eiffel|louvre|riviera|bordeaux" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+2. Run the same prompt with the rejected budget16 overlay:
+
+```bash
+repo=/root/lfz/tmp/vendor-kimi-speculative-gp33
+run=/root/lfz/tmp/runs/20260707-gp58-budget16-dev-ab/budget16_dev_france_n96
+cd "$repo"
+ln -sfn build-gp50-runtime build-cuda-batch
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO="$repo" RUN="$run" N=96 PROFILE=1 COPY_PROFILE=0 \
+      PROMPT_ID=dev_france_regression \
+      PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+      QUALITY_KEYWORDS="france,europe|paris|eiffel|louvre|riviera|bordeaux" \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_LIST=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+Validation:
+
+- Both runs must be cold start and under `MemoryMax=15900000000`.
+- Quality must pass and the answer must be semantically correct.
+- Compare token rate, TTFT, decode wall, expert-pack hits/misses,
+  direct/iouring reads, VRAM cache hit rates, RAM/page-cache distribution.
+
+Acceptance:
+
+- If budget16 overlay regresses a high-coverage dev prompt, record the evidence
+  and keep it rejected for unconditional use.
+- If budget16 overlay does not regress the dev high-coverage prompt, investigate
+  another dev-only explanation before drawing conclusions.
+- No final SOTA claim in GP58.
+
+GP58 interim result and extension:
+
+- Timestamp: `2026-07-07T12:34:00+08:00`.
+- `dev_france_regression N=96` did not reproduce the held-out regression:
+  - default: quality `pass`, token rate `1.27 tok/s`, TTFT `81785.87 ms`,
+    decode `60514.89 ms / 77`, RAM peak `15899996160`;
+  - budget16 overlay: quality `pass`, token rate `1.33 tok/s`, TTFT
+    `75849.10 ms`, decode `57919.97 ms / 77`, RAM peak `15899996160`;
+  - expert-pack misses dropped from `633` to `543`;
+  - direct reads dropped from `348` to `272`;
+  - iouring wait dropped from `54594171 us` to `53027941 us`.
+- Interpretation:
+  - budget16 overlay is not a uniform overhead on all high-coverage dev prompts;
+  - the held-out regression may be due to route distribution mismatch between
+    dev-trained overlay and unseen prompt routes, or due to comparing against a
+    stronger baseline than the current no-overlay branch for those prompts;
+  - do not test held-out prompts again; continue with dev-only diagnosis.
+- Extension:
+  - run `dev_japan_factual N=96` default vs budget16 overlay;
+  - this dev prompt had GP54 existing-pack hit `82.4%`, between France and the
+    slow dev prompts, so it can test whether medium-coverage factual prompts
+    benefit or regress without touching held-out data.
+
+GP58 execution result:
+
+- Timestamp: `2026-07-07T12:52:00+08:00`.
+- Report:
+  `.Agent/runs/20260707-gp58-budget16-dev-ab/report.md`.
+- `dev_france_regression N=96`:
+  - default: quality `pass`, token rate `1.27`, TTFT `81785.87 ms`, decode
+    `60514.89 ms / 77`, expert-pack misses `633`, direct reads `348`, iouring
+    reads `58416`, RAM peak `15899996160`;
+  - budget16: quality `pass`, token rate `1.33`, TTFT `75849.10 ms`, decode
+    `57919.97 ms / 77`, expert-pack misses `543`, direct reads `272`, iouring
+    reads `58582`, RAM peak `15899996160`.
+- `dev_japan_factual N=96`:
+  - default: quality `pass`, token rate `0.44`, TTFT `77090.97 ms`, decode
+    `194889.58 ms / 85`, expert-pack misses `13383`, direct reads `4095`,
+    iouring reads `48098`, RAM peak `15899996160`;
+  - budget16: quality `pass`, token rate `0.53`, TTFT `76068.10 ms`, decode
+    `160610.34 ms / 85`, expert-pack misses `10344`, direct reads `3392`,
+    iouring reads `51840`, RAM peak `15899996160`.
+- Interpretation:
+  - budget16 overlay is not a uniform runtime overhead on dev prompts;
+  - it helps high-coverage France slightly and medium-coverage Japan more
+    clearly;
+  - GP57 remains authoritative for final/random-prompt acceptance and still
+    rejects budget16;
+  - the likely issue is dev-hotset overfitting or insufficient proxy validation
+    for unseen prompt distributions, not merely pack-index overhead.
+- Next:
+  - do dev-only leave-one-dev-out hotset validation;
+  - simulate hotsets trained on `N-1` dev prompts and validate coverage on the
+    held-out dev prompt;
+  - do not touch the true held-out test set until a candidate passes this
+    dev-only generalization proxy.
+
 ## GP53: current-code slow dev direct-read copy attribution
 
 Timestamp: `2026-07-07T08:50:00+08:00`.

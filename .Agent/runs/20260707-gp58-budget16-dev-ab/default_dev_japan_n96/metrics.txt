@@ -1,0 +1,41 @@
+run=/root/lfz/tmp/runs/20260707-gp58-budget16-dev-ab/default_dev_japan_n96
+prompt_id=dev_japan_factual
+prompt=Please introduce Japan in a short paragraph.
+exit=0
+quality=pass
+quality_reason=ok
+output=Japan is an island nation in East Asia known for its unique blend of ancient traditions and cutting-edge modernity. With a population of about 125 million, it features bustling cities like Tokyo, a rich cultural heritage including tea ceremonies, temples, and festivals, and a globally influential cuisine. The country is also famous for its technological innovation, efficient public transportation, and stunning natural landscapes ranging from snowy mountains to cherry blossom-lined parks.
+ttft_ms=77090.97
+prompt_tokens=17
+decode_ms=194889.58
+decode_runs=85
+token_rate=0.44
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=14958178304
+anon=450560
+file=14625177600
+kernel=328937472
+inactive_file=4951633920
+active_file=9673048064
+pgmajfault=1032714
+pgfault=4204218
+workingset_refault_file=5673969
+expert_pack_0=56161 misses=13383 read_failures=0 direct_reads=4095 direct_fallbacks=0 iouring_reads=48098 iouring_bytes=265641951232 iouring_fallbacks=0 iouring_submit_us=289374 iouring_wait_us=51664476 iouring_h2d_enqueues=48098 entries=31599
+expert_pack_iouring_0=batches=12986 submit_calls=12986 wait_calls=37488 cqes=48098 inflight_avg=3.03 inflight_max=8 batch_hist=1:1106,2-4:8014,5-8:3866,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 6.02 MiB
+pinned_staging_1=: enabled, 12 slots of 4.48 MiB
+pinned_staging_2=: enabled, 12 slots of 7.44 MiB
+pinned_staging_3=: enabled, 12 slots of 5.36 MiB
+pinned_staging_4=: copies=46497 waits=46461 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=162.241 ms host_stage=123634.612 ms enqueue=985.707 ms h2d=10149.720 ms h2d_timed=46497
+pinned_staging_5= iouring: batches=8845 jobs=33476 submit_calls=8845 wait_calls=26274 cqes=33476 inflight_avg=3.05 inflight_max=8 batch_hist=1:705,2-4:5340,5-8:2800,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=18287 waits=18263 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=64.135 ms host_stage=46684.991 ms enqueue=395.997 ms h2d=3842.716 ms h2d_timed=18287
+pinned_staging_7= gate iouring: batches=4141 jobs=14622 submit_calls=4141 wait_calls=11214 cqes=14622 inflight_avg=2.99 inflight_max=8 batch_hist=1:401,2-4:2674,5-8:1066,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=2720 planned_jobs=9987 completed_jobs=9987 cache_hits=9733 missing_tensor=255 missing_pack=2169 submitted_batches=2445 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=41631020 batch_hist=1:104,2-4:1407,5-8:934,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=26397 misses=9619 preloads=9987 pinned=0 hit_rate=73.3%
+vram_down_1=slots=766 slot=7.44 MiB hits=26397 misses=9619 preloads=9987 pinned=0 hit_rate=73.3%
+vram_down_2=slots=766 slot=7.44 MiB hits=26397 misses=9619 preloads=9987 pinned=0 hit_rate=73.3%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=36470 misses=45146 preloads=0 pinned=0 hit_rate=44.7%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=36470 misses=45146 preloads=0 pinned=0 hit_rate=44.7%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=36470 misses=45146 preloads=0 pinned=0 hit_rate=44.7%
