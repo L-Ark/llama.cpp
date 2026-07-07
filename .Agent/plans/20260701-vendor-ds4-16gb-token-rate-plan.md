@@ -8108,3 +8108,33 @@ Next:
 - If explicit cleanup approval is given, run `.Agent/run-tools/run_compact_target_after_cleanup.sh --execute-download --confirm-delete-rejected-iq2s` and treat the result as a strict load/correctness gate first.
 - If cleanup approval is not given, the next useful no-delete task is a hard-bound/design for a combined resident/fused dataflow route. It must prove a credible lower-bound above generalized `5 tok/s` before any new source patch.
 - No SOTA changed.
+
+## 2026-07-08 X10-AY native fused/resident route bound after no-delete audit
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/native-fused-resident-route-bound-after-no-delete-audit-20260708.json`
+- status: `native_up_down_only_bound_insufficient_not_sota`
+
+Purpose:
+- Quantify whether a no-delete native fused/resident up/down route can reach generalized `5 tok/s` after q80 down correctness is fixed.
+- This uses only calibration/dev artifacts; held-out prompts remain unused.
+
+Result:
+- minimum ideal token rate after eliminating all native up+down fallback: `3.837 tok/s`
+- worst prompt after ideal up+down removal: `fibonacci`
+- additional decode saving still needed after ideal up+down removal for worst prompt: `11.580 s`
+- total additional decode saving still needed across dev prompts after ideal up+down removal: `18.603 s`
+- `all_native_up_down_only_sufficient=false`
+
+Interpretation:
+- A pure native up/down fallback removal is not sufficient for the generalized `>5 tok/s` target under the conservative decode-time estimate.
+- Small down-only, q80-only, or existing lane8/shared down patches are therefore not justified as the next implementation step.
+- A native no-delete source route would need to combine up/down removal with another savings source, such as:
+  - page/refault reduction outside the measured fallback bucket;
+  - persistent/resident dataflow that removes source movement and synchronization beyond the current q80 path;
+  - speculative acceptance with a compatible verifier/draft path;
+  - or representation-level changes.
+
+Decision:
+- Do not implement native fused/resident source changes until a design accounts for the extra post-up/down savings.
+- Compact target remains the only prepared route with plausible representation-level upside, but it requires explicit cleanup approval before execution.
+- No SOTA changed.
