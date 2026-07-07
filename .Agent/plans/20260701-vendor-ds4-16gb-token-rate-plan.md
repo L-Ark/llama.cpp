@@ -218,6 +218,10 @@
 - `down_empty_fast_exit_decision`: rejected。runtime `3min26.308s`，比 previous full-down lane8/shared `3min22.80s` 更慢；profile 仍为 `total=9.527 ms/call`, `cuda_batch=4.682 ms/call`, `fallback_t0=4.809 ms/call`。进一步解析显示 `fallback_reason.csv` 中 true down CPU fallback rows 已为 0，剩余 `fallback_t0` 主要来自 ordinary MoE `gate/up` fallback 或统计桶覆盖范围，而不是 down CPU dot。因此 down-only 空 fallback fast-exit 不是有效优化方向。
 - `next_direction_after_fast_exit`: 不再继续做 down-only 框架微调；除非能显著降低 `cuda_batch` 本身或把 up/gate 一并迁到 GPU/融合，否则 full-down path 的额外 CUDA batch 开销会抵消 down CPU fallback 消除收益。下一步应优先设计 prompt-general up/gate/down grouped/fused GPU path，或执行 compact target load/correctness probe（需明确 cleanup approval）。
 
+- `fused_retained_next_source_gate_20260708`: completed artifact-only gate `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-retained-next-source-gate-20260708.json`，未跑模型、未改源码、未使用 held-out prompts。该 artifact 汇总 generalized baseline、fallback profile、simultaneous reduction bound、exact hotset bound、handoff profiler 和 down empty fast-exit rejected 结果，给出下一次源码编辑前的硬门槛。
+- `source_gate_result`: 若目标是 dev-set `min >= 5.5 tok/s`（给最终 `>5 tok/s` 留余量），最差 prompt 需要从 `gate source movement + up/down fallback` 中净省约 `89%` 量级；`min >= 5 tok/s` 也需要约 `82%` 量级。单独 down-only、单独 hotset residency、plain fused up/gate env toggle、或 default graph 上的 `GGML_MOE_GPU_HANDOFF` toggle 都已关闭，不应重复作为下一步。
+- `next_source_edit_requirements`: 下一次源码实现必须 default-off，先证明 DS4 decode graph 真的构造 fused/retained producer；必须复用当前 one-stream gate cache 语义或避免 duplicate gate expert VRAM copy；必须产生 GPU-resident fused activation 并通过 correctness-checked handoff 喂给 down；必须在 microbench 中证明 per-layer fused/down consume path 比对应 CPU up+down fallback 快，而不是仅证明 batch_accept 增加。通过 fixed-text top1/logit parity、France semantic correctness、calibration/dev metrics、16GB RAM/page-cache、TTFT gate 后，才允许冻结候选跑 held-out。
+
 ## 二次回退状态（2026-07-02）
 
 - 已执行回退：当前源码分支重置到 `5d65239a74c9512967eb557743dc3cb5d1cf6c76`（`vendor-ds4: record odirect pack sota`）。

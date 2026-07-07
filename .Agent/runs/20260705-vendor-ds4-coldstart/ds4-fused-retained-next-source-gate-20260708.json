@@ -1,0 +1,309 @@
+{
+  "artifact_id": "20260708-ds4-fused-retained-next-source-gate",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "2d1f0d92a6c60780de2387c48cbb95a25e1cc62c",
+  "created_at_note": "Generated without model run, source edit, or held-out prompt use.",
+  "held_out_test_used": false,
+  "purpose": "Define the hard gate for any next DS4 fused/grouped retained source edit after down correctness is fixed but down-only performance probes failed.",
+  "inputs": [
+    ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-simultaneous-reduction-thresholds-20260707.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/exact-retained-dataflow-source-movement-bound-20260707.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/grouped-retained-handoff-eligibility-profile-20260707.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/down-empty-fast-exit-rejected-20260708.json"
+  ],
+  "current_generalized_baseline": {
+    "all_memory_peak_bytes": [
+      16000000000
+    ],
+    "all_ram_ok": true,
+    "max_eval_tok_s": 2.7,
+    "mean_eval_tok_s": 2.1799999999999997,
+    "min_eval_tok_s": 1.8,
+    "prompt_specific_env_detected_any": false,
+    "target_met_all_prompts_gt_5_tok_s": false
+  },
+  "per_prompt_ms_requirements": [
+    {
+      "prompt_id": "climate",
+      "baseline_tok_s": 2.2,
+      "baseline_ms_per_token": 454.5454545454545,
+      "gate_src0_ms_per_token": 156.3671354166961,
+      "updown_fallback_ms_per_token": 163.97421354166607,
+      "other_ms_per_token": 134.20410558709233,
+      "required_saving_ms_per_token_for_5": 254.5454545454545,
+      "required_fraction_of_gate_plus_updown_for_5": 0.7946069259343108,
+      "residual_ms_per_token_after_100pct_gate_updown_cut": 134.20410558709233,
+      "required_saving_ms_per_token_for_5.5": 272.7272727272727,
+      "required_fraction_of_gate_plus_updown_for_5.5": 0.8513645635010473,
+      "required_saving_ms_per_token_for_6": 287.8787878787879,
+      "required_fraction_of_gate_plus_updown_for_6": 0.8986625948066611
+    },
+    {
+      "prompt_id": "fibonacci",
+      "baseline_tok_s": 1.8,
+      "baseline_ms_per_token": 555.5555555555555,
+      "gate_src0_ms_per_token": 250.81789062484032,
+      "updown_fallback_ms_per_token": 252.69245833333272,
+      "other_ms_per_token": 52.04520659738253,
+      "required_saving_ms_per_token_for_5": 355.55555555555554,
+      "required_fraction_of_gate_plus_updown_for_5": 0.7061534212578653,
+      "residual_ms_per_token_after_100pct_gate_updown_cut": 52.04520659738253,
+      "required_saving_ms_per_token_for_5.5": 373.73737373737373,
+      "required_fraction_of_gate_plus_updown_for_5.5": 0.7422635393903698,
+      "required_saving_ms_per_token_for_6": 388.8888888888889,
+      "required_fraction_of_gate_plus_updown_for_6": 0.7723553045007903
+    },
+    {
+      "prompt_id": "france",
+      "baseline_tok_s": 2.7,
+      "baseline_ms_per_token": 370.3703703703703,
+      "gate_src0_ms_per_token": 131.3071302083581,
+      "updown_fallback_ms_per_token": 121.9617708333339,
+      "other_ms_per_token": 117.10146932867832,
+      "required_saving_ms_per_token_for_5": 170.37037037037032,
+      "required_fraction_of_gate_plus_updown_for_5": 0.6726857094165095,
+      "residual_ms_per_token_after_100pct_gate_updown_cut": 117.10146932867832,
+      "required_saving_ms_per_token_for_5.5": 188.5521885521885,
+      "required_fraction_of_gate_plus_updown_for_5.5": 0.744474302911552,
+      "required_saving_ms_per_token_for_6": 203.70370370370367,
+      "required_fraction_of_gate_plus_updown_for_6": 0.8042981308240875
+    },
+    {
+      "prompt_id": "japan",
+      "baseline_tok_s": 2.4,
+      "baseline_ms_per_token": 416.6666666666667,
+      "gate_src0_ms_per_token": 134.65725000002496,
+      "updown_fallback_ms_per_token": 129.1131614583333,
+      "other_ms_per_token": 152.89625520830845,
+      "required_saving_ms_per_token_for_5": 216.66666666666669,
+      "required_fraction_of_gate_plus_updown_for_5": 0.8214214227772554,
+      "residual_ms_per_token_after_100pct_gate_updown_cut": 152.89625520830845,
+      "required_saving_ms_per_token_for_5.5": 234.84848484848487,
+      "required_fraction_of_gate_plus_updown_for_5.5": 0.8903518918215005,
+      "required_saving_ms_per_token_for_6": 250.00000000000003,
+      "required_fraction_of_gate_plus_updown_for_6": 0.9477939493583716
+    },
+    {
+      "prompt_id": "quantum",
+      "baseline_tok_s": 1.8,
+      "baseline_ms_per_token": 555.5555555555555,
+      "gate_src0_ms_per_token": 198.13174999992313,
+      "updown_fallback_ms_per_token": 260.54565104166664,
+      "other_ms_per_token": 96.87815451396574,
+      "required_saving_ms_per_token_for_5": 355.55555555555554,
+      "required_fraction_of_gate_plus_updown_for_5": 0.7751756566775265,
+      "residual_ms_per_token_after_100pct_gate_updown_cut": 96.87815451396574,
+      "required_saving_ms_per_token_for_5.5": 373.73737373737373,
+      "required_fraction_of_gate_plus_updown_for_5.5": 0.8148153209394455,
+      "required_saving_ms_per_token_for_6": 388.8888888888889,
+      "required_fraction_of_gate_plus_updown_for_6": 0.8478483744910448
+    }
+  ],
+  "worst_prompt_requirements": {
+    "5.0": {
+      "prompt_id": "japan",
+      "required_fraction_of_gate_plus_updown": 0.8214214227772554,
+      "required_saving_ms_per_token": 216.66666666666669
+    },
+    "5.5": {
+      "prompt_id": "japan",
+      "required_fraction_of_gate_plus_updown": 0.8903518918215005,
+      "required_saving_ms_per_token": 234.84848484848487
+    },
+    "6.0": {
+      "prompt_id": "japan",
+      "required_fraction_of_gate_plus_updown": 0.9477939493583716,
+      "required_saving_ms_per_token": 250.00000000000003
+    }
+  },
+  "global_thresholds_from_existing_bound": {
+    "5.0": {
+      "frontier_gate_required_by_updown_cut": [
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.25
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.5
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.6
+        },
+        {
+          "feasible": true,
+          "required_gate_cut_fraction": 0.94,
+          "updown_cut_fraction": 0.7
+        },
+        {
+          "feasible": true,
+          "required_gate_cut_fraction": 0.845,
+          "updown_cut_fraction": 0.8
+        },
+        {
+          "feasible": true,
+          "required_gate_cut_fraction": 0.75,
+          "updown_cut_fraction": 0.9
+        },
+        {
+          "feasible": true,
+          "required_gate_cut_fraction": 0.655,
+          "updown_cut_fraction": 1.0
+        }
+      ],
+      "symmetric_cut_fraction_required": 0.825
+    },
+    "5.5": {
+      "frontier_gate_required_by_updown_cut": [
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.25
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.5
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.6
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.7
+        },
+        {
+          "feasible": true,
+          "required_gate_cut_fraction": 0.98,
+          "updown_cut_fraction": 0.8
+        },
+        {
+          "feasible": true,
+          "required_gate_cut_fraction": 0.885,
+          "updown_cut_fraction": 0.9
+        },
+        {
+          "feasible": true,
+          "required_gate_cut_fraction": 0.79,
+          "updown_cut_fraction": 1.0
+        }
+      ],
+      "symmetric_cut_fraction_required": 0.895
+    },
+    "6.0": {
+      "frontier_gate_required_by_updown_cut": [
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.25
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.5
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.6
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.7
+        },
+        {
+          "feasible": false,
+          "required_gate_cut_fraction": null,
+          "updown_cut_fraction": 0.8
+        },
+        {
+          "feasible": true,
+          "required_gate_cut_fraction": 0.995,
+          "updown_cut_fraction": 0.9
+        },
+        {
+          "feasible": true,
+          "required_gate_cut_fraction": 0.9,
+          "updown_cut_fraction": 1.0
+        }
+      ],
+      "symmetric_cut_fraction_required": 0.95
+    }
+  },
+  "closed_routes": [
+    {
+      "route": "down-only Q8_0 lane8/shared full output",
+      "evidence": "correctness passes but full-down runtime/profile slower than CPU fallback; no accepted SOTA",
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/latest-head-after-demo-down-q80-lane8-shared-correctness-20260708.json"
+    },
+    {
+      "route": "down empty fallback fast-exit",
+      "evidence": "same_top1=145/145 but runtime 3min26.308s > previous 3min22.80s; source reverted",
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/down-empty-fast-exit-rejected-20260708.json"
+    },
+    {
+      "route": "exact prompt-agnostic hotset residency alone",
+      "evidence": "best 13.25GiB split bound min=2.7707 tok/s, below >5",
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/exact-retained-dataflow-source-movement-bound-20260707.json"
+    },
+    {
+      "route": "plain fused up/gate env toggle",
+      "evidence": "historical strict 16GB runs accepted but regressed to 0.5-0.8 tok/s; duplicates/competes with gate cache",
+      "artifact": ".Agent/plans/20260701-vendor-ds4-16gb-token-rate-plan.md#Phase-X2"
+    },
+    {
+      "route": "GPU handoff toggle on default graph",
+      "evidence": "default graph has no moe_up_gate producer; up_gate_serial_max=0, shape_ok=0",
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/grouped-retained-handoff-eligibility-profile-20260707.json"
+    },
+    {
+      "route": "naive up one-stream/cache",
+      "evidence": "eliminates up fallback in short diagnostic but worsens token rate/cache hit rate; rejected",
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/up-one-stream-diagnostics-20260706.json"
+    }
+  ],
+  "next_source_edit_gate": {
+    "minimum_design_claim": "Must credibly cut both gate source movement and up/down fallback, not just down, by about 85-90% combined on calibration/dev before held-out testing.",
+    "target_for_source_edit": "A hard-bound or microbench-derived projection of dev-set min >= 5.5 tok/s, giving margin above the product >5 tok/s target.",
+    "microbench_must_prove": [
+      "A default-off DS4 fused/retained producer is actually constructed in the graph for decode, unlike current default.",
+      "It reuses current one-stream gate cache semantics or avoids storing a duplicate gate expert copy in VRAM.",
+      "It produces fused activation on GPU and hands it to down without D2H/scatter for decode.",
+      "Down consume path must be top1/logit parity checked against CPU fallback before performance runs.",
+      "Per-layer call profile must show cuda_batch/fused path is below CPU up+down fallback on the same route shape, not merely batch_accept>0.",
+      "Strict MemoryMax=16000000000 including page cache, no swap/OOM, and TTFT gate remain mandatory."
+    ],
+    "do_not_do_next": [
+      "Do not rerun plain GGML_MOE_STREAM_FUSED_UP_GATE or GGML_MOE_GPU_HANDOFF toggle without a new producer/cache design.",
+      "Do not spend more VRAM on prompt-agnostic hotsets unless the bound exceeds dev min 5.5 tok/s.",
+      "Do not promote any France-only or prompt-specific trace/pack result."
+    ]
+  },
+  "decision": "No new SOTA. Down GPU correctness remains fixed; next accepted progress requires a new DS4 fused/retained producer+down-consumer microbench or cleanup-approved compact target load/correctness probe."
+}
