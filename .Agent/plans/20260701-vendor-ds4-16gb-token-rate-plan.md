@@ -7328,3 +7328,44 @@ Current gate:
 Decision:
 - Use the manifest only to make future cleanup/download steps reproducible.
 - Do not implement `IQ1_S/IQ1_M/Q2_K` stream kernels until a candidate has actually loaded and passed correctness, or until a separate synthetic correctness harness can prove exact parity for the relevant MoE stream operators.
+
+## 2026-07-08 X10-AJ generic backend lowbit MUL_MAT/MUL_MAT_ID smoke
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/backend-lowbit-mulmat-id-smoke-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat`
+- status: `generic_backend_correctness_smoke_pass_not_moe_stream_not_sota`
+
+Purpose:
+- Continue the no-deletion route by checking whether the lowbit types seen in compact target candidates already work in the generic CUDA backend.
+- This is a small existing-test smoke using `test-backend-ops`; it is not a model run, not a DeepSeek MoE stream fast-path test, and not a SOTA claim.
+
+Command shape:
+- binary: `./build-ds4-moe-stream-batch-probe/bin/test-backend-ops`
+- env: `GGML_CUDA_FORCE_MMQ=1`
+- ops:
+  - `MUL_MAT`
+  - `MUL_MAT_ID`
+- types:
+  - `iq1_s`
+  - `iq1_m`
+  - `q2_K`
+
+Result:
+- Generic CUDA backend smoke passed against CPU reference for:
+  - `MUL_MAT type_a=iq1_s`: `3/3`
+  - `MUL_MAT type_a=iq1_m`: `3/3`
+  - `MUL_MAT type_a=q2_K`: `3/3`
+  - `MUL_MAT_ID type_a=iq1_s`: `1/1`
+  - `MUL_MAT_ID type_a=iq1_m`: `1/1`
+  - `MUL_MAT_ID type_a=q2_K`: `1/1`
+
+Interpretation:
+- This reduces the basic backend-risk for compact target candidates: the generic CUDA path can compute these lowbit types in small tests.
+- It does not prove that the current DeepSeek MoE stream batch fast path supports these types:
+  - X10-AH remains valid: `moe_stream_type_supported(...)` and slot-batch dispatch still exclude `IQ1_S`, `IQ1_M`, and `Q2_K`.
+- It also does not prove full-model correctness, France semantic correctness, generalized token rate, RAM compliance, or TTFT.
+
+Decision:
+- No source patch from this smoke alone.
+- If cleanup is approved, the next real step remains downloading exactly one candidate and running strict load/correctness first.
+- If cleanup is not approved, the next source-side step must be a default-off MoE stream parity harness for `IQ1_S/Q2_K` or `IQ1_M/Q2_K`, not a production stream writeback patch.
