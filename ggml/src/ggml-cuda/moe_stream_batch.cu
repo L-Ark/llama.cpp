@@ -610,6 +610,7 @@ struct expert_pack_entry {
     int32_t source_idx = 0;
     uint64_t offset = 0;
     uint64_t nbytes = 0;
+    bool alias_source = false;
 };
 
 struct expert_pack_source {
@@ -2498,6 +2499,158 @@ static bool expert_pack_load_source(const char *path, int32_t source_idx, std::v
     return true;
 }
 
+static bool expert_pack_open_alias_source(const char *path, int32_t source_idx) {
+    if (!path || !path[0]) return false;
+
+    FILE *file = std::fopen(path, "rb");
+    if (!file) {
+        std::fprintf(stderr, "[moe_stream_batch] expert alias source: open failed: %s\n", path);
+        return false;
+    }
+
+    expert_pack_source source;
+    source.file = file;
+    std::snprintf(source.path, sizeof(source.path), "%s", path);
+#if !defined(_WIN32)
+    source.fd_direct = -1;
+    if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
+#if defined(O_DIRECT)
+        source.fd_direct = ::open(path, O_RDONLY | O_DIRECT);
+#endif
+        if (source.fd_direct < 0) {
+            std::fprintf(stderr, "[moe_stream_batch] expert alias source: direct open failed; using buffered reads: %s\n", path);
+            g_expert_pack.io_backend = 0;
+        } else if (g_expert_pack.io_backend == 2) {
+#if defined(GGML_MOE_HAS_LIBURING)
+            std::fprintf(stderr, "[moe_stream_batch] expert alias source: io_uring direct reads enabled: %s io_bytes=%zu depth=%zu\n",
+                         path, expert_pack_io_bytes(), expert_pack_io_depth());
+#else
+            std::fprintf(stderr, "[moe_stream_batch] expert alias source: io_uring requested but liburing headers are unavailable; using direct fallback\n");
+            g_expert_pack.io_backend = 1;
+#endif
+        } else {
+            std::fprintf(stderr, "[moe_stream_batch] expert alias source: direct reads enabled: %s\n", path);
+        }
+    }
+#else
+    if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
+        std::fprintf(stderr, "[moe_stream_batch] expert alias source: direct/io_uring reads are not supported on this platform; using buffered reads\n");
+        g_expert_pack.io_backend = 0;
+    }
+#endif
+
+    if ((size_t)source_idx != g_expert_pack.sources.size()) {
+        std::fprintf(stderr, "[moe_stream_batch] expert alias source: internal source index mismatch for %s\n", path);
+        std::fclose(file);
+        return false;
+    }
+    g_expert_pack.sources.push_back(source);
+    return true;
+}
+
+static std::vector<std::string> expert_pack_split_row(const std::string &line) {
+    const char delim = line.find('\t') != std::string::npos ? '\t' : ',';
+    std::vector<std::string> cols;
+    size_t start = 0;
+    while (start <= line.size()) {
+        const size_t end = line.find(delim, start);
+        const size_t stop = end == std::string::npos ? line.size() : end;
+        cols.emplace_back(line.substr(start, stop - start));
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return cols;
+}
+
+static bool expert_pack_load_gguf_alias_tsv(const char *path, std::vector<expert_pack_entry> &entries) {
+    if (!path || !path[0]) return true;
+
+    FILE *file = std::fopen(path, "r");
+    if (!file) {
+        std::fprintf(stderr, "[moe_stream_batch] expert alias tsv: open failed: %s\n", path);
+        return false;
+    }
+
+    char line_buf[4096];
+    if (!std::fgets(line_buf, sizeof(line_buf), file)) {
+        std::fprintf(stderr, "[moe_stream_batch] expert alias tsv: empty file: %s\n", path);
+        std::fclose(file);
+        return false;
+    }
+    std::string header(line_buf);
+    while (!header.empty() && (header.back() == '\n' || header.back() == '\r')) header.pop_back();
+    const std::vector<std::string> header_cols = expert_pack_split_row(header);
+    std::unordered_map<std::string, int> col;
+    for (size_t i = 0; i < header_cols.size(); ++i) {
+        col[header_cols[i]] = (int)i;
+    }
+    const char *required[] = {"source_path", "tensor", "expert", "model_offset", "nbytes"};
+    for (const char *name : required) {
+        if (col.find(name) == col.end()) {
+            std::fprintf(stderr, "[moe_stream_batch] expert alias tsv: missing column %s in %s\n", name, path);
+            std::fclose(file);
+            return false;
+        }
+    }
+
+    std::unordered_map<std::string, int32_t> source_index_by_path;
+    uint64_t n_rows = 0;
+    uint64_t n_bad = 0;
+    while (std::fgets(line_buf, sizeof(line_buf), file)) {
+        std::string line(line_buf);
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+        if (line.empty()) continue;
+        const std::vector<std::string> cols = expert_pack_split_row(line);
+        auto get_col = [&](const char *name) -> const char * {
+            const auto it = col.find(name);
+            if (it == col.end() || it->second < 0 || (size_t)it->second >= cols.size()) return "";
+            return cols[(size_t)it->second].c_str();
+        };
+        const char *source_path = get_col("source_path");
+        const char *tensor = get_col("tensor");
+        const char *expert_s = get_col("expert");
+        const char *offset_s = get_col("model_offset");
+        const char *nbytes_s = get_col("nbytes");
+        if (!source_path[0] || !tensor[0] || !expert_s[0] || !offset_s[0] || !nbytes_s[0]) {
+            ++n_bad;
+            continue;
+        }
+
+        int32_t source_idx = -1;
+        const auto found = source_index_by_path.find(source_path);
+        if (found != source_index_by_path.end()) {
+            source_idx = found->second;
+        } else {
+            source_idx = (int32_t)g_expert_pack.sources.size();
+            if (!expert_pack_open_alias_source(source_path, source_idx)) {
+                std::fclose(file);
+                return false;
+            }
+            source_index_by_path[source_path] = source_idx;
+        }
+
+        expert_pack_entry e;
+        std::snprintf(e.tensor, sizeof(e.tensor), "%s", tensor);
+        e.expert_idx = (int32_t)std::strtol(expert_s, nullptr, 10);
+        e.source_idx = source_idx;
+        e.offset = std::strtoull(offset_s, nullptr, 10);
+        e.nbytes = std::strtoull(nbytes_s, nullptr, 10);
+        e.alias_source = true;
+        if (e.expert_idx < 0 || e.nbytes == 0 || !e.tensor[0]) {
+            ++n_bad;
+            continue;
+        }
+        entries.push_back(e);
+        ++n_rows;
+    }
+    std::fclose(file);
+
+    std::fprintf(stderr,
+                 "[moe_stream_batch] expert alias tsv: loaded %lu entries from %s sources=%zu bad_rows=%lu\n",
+                 (unsigned long)n_rows, path, source_index_by_path.size(), (unsigned long)n_bad);
+    return n_rows > 0;
+}
+
 static void expert_pack_append_env_list(std::vector<std::string> &paths, const char *env_name) {
     const char *env = std::getenv(env_name);
     if (!env || !env[0]) return;
@@ -2553,17 +2706,25 @@ static void expert_pack_init_once() {
     }
     expert_pack_append_env_list(source_paths, "GGML_MOE_EXPERT_PACK_LIST");
 
-    if (source_paths.empty()) {
-        g_expert_pack.inited = true;
-        return;
-    }
-
     std::vector<expert_pack_entry> entries;
     for (const std::string &source_path : source_paths) {
         if (!expert_pack_load_source(source_path.c_str(), (int32_t)g_expert_pack.sources.size(), entries)) {
             g_expert_pack.inited = true;
             return;
         }
+    }
+
+    const char *alias_tsv = std::getenv("GGML_MOE_EXPERT_GGUF_ALIAS_TSV");
+    if (alias_tsv && alias_tsv[0]) {
+        if (!expert_pack_load_gguf_alias_tsv(alias_tsv, entries)) {
+            g_expert_pack.inited = true;
+            return;
+        }
+    }
+
+    if (entries.empty()) {
+        g_expert_pack.inited = true;
+        return;
     }
 
     std::sort(entries.begin(), entries.end(),
@@ -3432,8 +3593,20 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
     expert_pack_source *source = expert_pack_source_for_entry(entry);
     if (!entry || !source || source->fd_direct < 0 || entry->nbytes != sz) return false;
     const uint64_t alignment = expert_pack_direct_alignment();
-    const size_t read_sz = (size_t)align_up_u64((uint64_t)sz, alignment);
-    if ((entry->offset % alignment) != 0 ||
+    const bool aligned_alias = expert_pack_env_bool("GGML_MOE_IO_ALIGNED_ALIAS_BATCH", false) &&
+        entry->alias_source && (entry->offset % alignment) != 0;
+    const size_t payload_shift = (size_t)(entry->offset % alignment);
+    const uint64_t read_offset = aligned_alias ? entry->offset - payload_shift : entry->offset;
+    const size_t read_sz = aligned_alias ?
+        (size_t)align_up_u64((uint64_t)payload_shift + (uint64_t)sz, alignment) :
+        (size_t)align_up_u64((uint64_t)sz, alignment);
+    void *read_dst = dst;
+    if (aligned_alias) {
+        if (posix_memalign(&read_dst, (size_t)alignment, read_sz) != 0 || !read_dst) {
+            ++g_expert_pack.iouring_fallbacks;
+            return false;
+        }
+    } else if ((entry->offset % alignment) != 0 ||
             ((uintptr_t)dst % alignment) != 0 ||
             read_sz < sz) {
         ++g_expert_pack.iouring_fallbacks;
@@ -3443,6 +3616,7 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
     io_uring ring_io;
     const unsigned int flags = expert_pack_env_bool("GGML_MOE_IO_SQPOLL", false) ? IORING_SETUP_SQPOLL : 0;
     if (io_uring_queue_init(1, &ring_io, flags) != 0) {
+        if (read_dst != dst) std::free(read_dst);
         ++g_expert_pack.iouring_fallbacks;
         return false;
     }
@@ -3450,11 +3624,12 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
     io_uring_sqe *sqe = io_uring_get_sqe(&ring_io);
     if (!sqe) {
         io_uring_queue_exit(&ring_io);
+        if (read_dst != dst) std::free(read_dst);
         ++g_expert_pack.iouring_fallbacks;
         return false;
     }
 
-    io_uring_prep_read(sqe, source->fd_direct, dst, (unsigned)read_sz, (off_t)entry->offset);
+    io_uring_prep_read(sqe, source->fd_direct, read_dst, (unsigned)read_sz, (off_t)read_offset);
     io_uring_sqe_set_data64(sqe, 1);
 
     const auto submit_start = std::chrono::steady_clock::now();
@@ -3464,6 +3639,7 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
             (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(submit_end - submit_start).count());
     if (submit_rc < 0) {
         io_uring_queue_exit(&ring_io);
+        if (read_dst != dst) std::free(read_dst);
         ++g_expert_pack.iouring_fallbacks;
         return false;
     }
@@ -3482,11 +3658,16 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
     io_uring_queue_exit(&ring_io);
 
     if (ok) {
+        if (read_dst != dst) {
+            std::memcpy(dst, (const char *)read_dst + payload_shift, sz);
+            std::free(read_dst);
+        }
         ++g_expert_pack.iouring_reads;
         g_expert_pack.iouring_bytes.fetch_add(sz);
         return true;
     }
 
+    if (read_dst != dst) std::free(read_dst);
     ++g_expert_pack.iouring_fallbacks;
     return false;
 #else
@@ -3512,15 +3693,29 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
     }
     if ((g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) && source->fd_direct >= 0) {
         const uint64_t alignment = expert_pack_direct_alignment();
-        const size_t read_sz = (size_t)align_up_u64((uint64_t)sz, alignment);
-        if ((entry->offset % alignment) == 0 &&
-                ((uintptr_t)dst % alignment) == 0 &&
-                read_sz >= sz) {
-            char *out = (char *)dst;
+        const bool aligned_alias = expert_pack_env_bool("GGML_MOE_IO_ALIGNED_ALIAS_BATCH", false) &&
+            entry->alias_source && (entry->offset % alignment) != 0;
+        const size_t payload_shift = (size_t)(entry->offset % alignment);
+        const uint64_t read_offset = aligned_alias ? entry->offset - payload_shift : entry->offset;
+        const size_t read_sz = aligned_alias ?
+            (size_t)align_up_u64((uint64_t)payload_shift + (uint64_t)sz, alignment) :
+            (size_t)align_up_u64((uint64_t)sz, alignment);
+        void *read_dst = dst;
+        if (aligned_alias) {
+            if (posix_memalign(&read_dst, (size_t)alignment, read_sz) != 0 || !read_dst) {
+                ++g_expert_pack.direct_fallbacks;
+                read_dst = nullptr;
+            }
+        }
+        if (read_dst &&
+                (aligned_alias || ((entry->offset % alignment) == 0 &&
+                    ((uintptr_t)dst % alignment) == 0 &&
+                    read_sz >= sz))) {
+            char *out = (char *)read_dst;
             size_t done = 0;
             while (done < read_sz) {
                 const size_t chunk = std::min(read_sz - done, (size_t)64 * 1024 * 1024);
-                const ssize_t got = ::pread(source->fd_direct, out + done, chunk, (off_t)(entry->offset + done));
+                const ssize_t got = ::pread(source->fd_direct, out + done, chunk, (off_t)(read_offset + done));
                 if (got <= 0) {
                     ++g_expert_pack.direct_fallbacks;
                     break;
@@ -3528,9 +3723,14 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
                 done += (size_t)got;
             }
             if (done == read_sz) {
+                if (read_dst != dst) {
+                    std::memcpy(dst, (const char *)read_dst + payload_shift, sz);
+                    std::free(read_dst);
+                }
                 ++g_expert_pack.direct_reads;
                 return true;
             }
+            if (read_dst != dst) std::free(read_dst);
         } else {
             ++g_expert_pack.direct_fallbacks;
         }
@@ -4218,9 +4418,20 @@ static bool expert_pack_iouring_copy_jobs(
 #if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
     if (jobs.empty()) return true;
     if (g_expert_pack.io_backend != 2) return false;
-    if (!pinned_stage_ensure(ring, expert_bytes, true)) return false;
-
     const size_t alignment = expert_pack_direct_alignment();
+    const bool aligned_alias_batch = expert_pack_env_bool("GGML_MOE_IO_ALIGNED_ALIAS_BATCH", false);
+    size_t stage_need = expert_bytes;
+    if (aligned_alias_batch) {
+        for (const Job &job : jobs) {
+            if (job.pack_entry && job.pack_entry->alias_source &&
+                    (job.pack_entry->offset % alignment) != 0) {
+                stage_need = expert_bytes + alignment;
+                break;
+            }
+        }
+    }
+    if (!pinned_stage_ensure(ring, stage_need, true)) return false;
+
     const size_t read_sz = (size_t)align_up_u64((uint64_t)expert_bytes, (uint64_t)alignment);
     const size_t depth = std::min(expert_pack_io_depth(), ring.slots.size());
     if (depth == 0 || read_sz == 0) return false;
@@ -4232,8 +4443,16 @@ static bool expert_pack_iouring_copy_jobs(
     for (size_t i = 0; i < jobs.size(); ++i) {
         const Job &job = jobs[i];
         if (!job.pack_entry ||
-                job.pack_entry->nbytes != expert_bytes ||
-                (job.pack_entry->offset % alignment) != 0) {
+                job.pack_entry->nbytes != expert_bytes) {
+            return false;
+        }
+        const size_t payload_shift = (size_t)(job.pack_entry->offset % alignment);
+        if (payload_shift != 0 && !(aligned_alias_batch && job.pack_entry->alias_source)) {
+            return false;
+        }
+        const size_t job_read_sz = payload_shift == 0 ?
+            read_sz : (size_t)align_up_u64((uint64_t)payload_shift + (uint64_t)expert_bytes, (uint64_t)alignment);
+        if (job_read_sz > ring.slot_sz) {
             return false;
         }
         const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
@@ -4370,6 +4589,7 @@ static bool expert_pack_iouring_copy_jobs(
         size_t job_idx = 0;
         size_t slot_idx = 0;
         size_t bytes = 0;
+        size_t payload_shift = 0;
         std::chrono::steady_clock::time_point copy_start;
     };
 
@@ -4452,15 +4672,24 @@ static bool expert_pack_iouring_copy_jobs(
 
         io_uring_sqe *sqe = io_uring_get_sqe(ring_io);
         if (!sqe) return false;
+        const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
+        if (!source || source->fd_direct < 0) return false;
+        const size_t payload_shift = (size_t)(job.pack_entry->offset % alignment);
+        if (payload_shift != 0 && !(aligned_alias_batch && job.pack_entry->alias_source)) {
+            return false;
+        }
+        const uint64_t read_offset = job.pack_entry->offset - payload_shift;
+        const size_t job_read_sz = payload_shift == 0 ?
+            read_sz : (size_t)align_up_u64((uint64_t)payload_shift + (uint64_t)expert_bytes, (uint64_t)alignment);
+        if (job_read_sz > ring.slot_sz) return false;
         pending[pending_idx] = {
             job_idx,
             slot_idx,
-            read_sz,
+            job_read_sz,
+            payload_shift,
             (batch_ttft_trace_enabled() || profile_copy) ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}
         };
-        const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
-        if (!source || source->fd_direct < 0) return false;
-        io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)read_sz, (off_t)job.pack_entry->offset);
+        io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)job_read_sz, (off_t)read_offset);
         io_uring_sqe_set_data64(sqe, (uint64_t)pending_idx + 1);
         return true;
     };
@@ -4541,7 +4770,8 @@ static bool expert_pack_iouring_copy_jobs(
                     return false;
                 }
             }
-            if (cudaMemcpyAsync(job.dst, slot.host, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+            const char *payload_ptr = (const char *)slot.host + done.payload_shift;
+            if (cudaMemcpyAsync(job.dst, payload_ptr, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
                 return false;
             }
             if ((profile_stage || profile_copy_h2d) && slot.copy_done) {

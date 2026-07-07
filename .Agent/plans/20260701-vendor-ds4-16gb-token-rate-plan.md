@@ -5598,3 +5598,42 @@
   - source/batch/fallback counters.
 - reproducibility_rule:
   - Any new accepted SOTA must be committed and pushed immediately, and then reproduced from the pushed commit. A result that cannot be reproduced from the remote branch is not accepted.
+
+### X10-B1 result：full-source alias loader and aligned alias single io_uring path validated
+
+- status: accepted_infrastructure_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gp4-alias-loader-iouring-single-validation-20260707.json`
+- run_root: `/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-results-top1-smoke`
+- main_validation_run: `/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-results-top1-smoke/alias-mxfp4-probe1-iouring-single-mem`
+- source_scope:
+  - Added default-off `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` loader for static GGUF alias rows.
+  - Added `alias_source` tracking for expert source entries.
+  - Added default-off `GGML_MOE_IO_ALIGNED_ALIAS_BATCH` support for unaligned alias offsets.
+  - Added aligned alias support to single `expert_pack_read_entry_iouring()` / direct-read path, gated by the same env.
+  - Existing behavior is unchanged when the alias envs are unset.
+- validation_config:
+  - strict `MemoryMax=16000000000`, `MemorySwapMax=0`, cold `drop_caches`;
+  - `llama-results` fixed France text, `--sequential-logits`, `--check`, `--top1-fail-on-mismatch`;
+  - `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv`;
+  - `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_URING_SINGLE=1`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`;
+  - `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity`, `MAX_CALLS=1`, `MAX_ACTIVE=1`, `MAX_COLS=16`.
+- correctness_result:
+  - top1 check passed: `same_top1=145/145`, `first_mismatch_pos=-1`, `max_abs=0`, `mean_abs=0`, stdout `OK`.
+  - MXFP4 down parity sample passed for `blk.0.ffn_down_exps.weight`: `active=6`, `compared=16`, `max_abs=0.00337298296`, `mean_abs=0.00130869935`, `max_rel=0.0190681965`.
+- memory_result:
+  - `memory_peak_bytes=16000000000`;
+  - `memory_current_bytes=14965194752`;
+  - `memory_file_bytes=14759301120`;
+  - cgroup `oom=0`, `oom_kill=0`, `oom_group_kill=0`.
+- alias_result:
+  - alias source opened with io_uring-capable direct fd;
+  - `expert alias tsv: loaded 33024 entries`, `sources=1`, `bad_rows=0`;
+  - `expert pack: total entries=33024 sources=1`.
+- read_path_result:
+  - Before the aligned single-read fix, the same probe loaded aliases but ended with `direct_fallbacks=6`, `iouring_reads=0`.
+  - After the fix and `GGML_MOE_IO_URING_SINGLE=1`, counters are `hits=6`, `misses=0`, `direct_reads=0`, `direct_fallbacks=0`, `iouring_reads=6`, `iouring_bytes=26738688`, `iouring_fallbacks=0`, `iouring_submit_us=1021`, `iouring_wait_us=7700`.
+  - Stage trace improved from about `stage_jobs_done=147.944ms` in the direct-fallback diagnostic to `stage_jobs_done=106.419ms` in the io_uring-single validation, but this is a one-call diagnostic and not a token-rate claim.
+- decision:
+  - This validates that the Kimi GP4-style full-source alias table can be consumed by DeepSeek and can read unaligned native GGUF expert payloads through aligned io_uring single reads under the 16GB cgroup.
+  - This is not a SOTA and does not replace the generalized baseline, because only one MXFP4 down probe call is enabled and all remaining down calls are declined by `mxfp4_probe_limit`.
+  - Next optimization must turn this from single-entry diagnostic reads into real batched alias copy for down/up source staging, then expand parity/top1 coverage before any calibration/dev token-rate benchmark.
