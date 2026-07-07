@@ -7918,3 +7918,55 @@ Decision:
 - Next step:
   - the correctness risk for down lowbit row math is now reduced enough that the practical blocker is full compact target execution;
   - to make token-rate progress, either approve disk cleanup/download for exactly one priority compact target, or design a no-full-download execution path that can stream all required tensors by range/alias with strict correctness gates.
+
+## 2026-07-08 X10-AU no-full-download compact execution feasibility
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-no-full-download-execution-feasibility-20260708.json`
+- status: `no_full_download_execution_not_currently_feasible_not_sota`
+
+Purpose:
+- Decide whether X10-AS/X10-AT HTTP Range row parity can be extended directly into a runnable compact-target model path without deleting files or downloading a full shard.
+
+Source evidence:
+- Current `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` runtime requires columns:
+  - `source_path`
+  - `tensor`
+  - `expert`
+  - `model_offset`
+  - `nbytes`
+- `expert_pack_open_alias_source(...)` opens `source_path` with:
+  - `fopen(path, "rb")`
+  - optionally `open(path, O_RDONLY | O_DIRECT)`
+- `expert_pack_read_entry(...)` reads from local `FILE`/`pread`/`io_uring`.
+- Therefore current alias runtime does not support `https://...` source paths or HTTP Range callbacks.
+
+Disk context:
+- Current free disk: about `34G`.
+- Local rejected IQ2_S cleanup candidate:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - `du -sh`: `82G`
+- It must not be deleted without explicit approval.
+
+Feasibility conclusion:
+- Current no-full-download execution is not feasible as a small next patch.
+- Reasons:
+  - the model loader still needs a coherent local GGUF for dense tensors, metadata, tokenizer, and graph construction;
+  - expert alias sources are local files only;
+  - sparse local files with missing ranges read zeros and will not pass correctness;
+  - compact candidate expert tensor sizes/types differ from the currently loaded native model, so aliasing only a few compact experts into the native model is not a valid model execution path.
+
+Possible paths:
+- Practical path:
+  - explicit approval to delete the already-rejected local IQ2_S file;
+  - download exactly one priority compact target;
+  - run strict load/correctness/token-rate/TTFT/16GB gates.
+- Larger source project:
+  - implement remote HTTP Range-backed sources for alias/runtime reads;
+  - still solve model-loader/dense tensor access, cache accounting under 16GB, retries, redirects, auth, and correctness gates.
+- Sparse-file path:
+  - unsafe unless all accessed ranges are populated or a FUSE/userfaultfd-like backing layer supplies data on read.
+
+Decision:
+- Stop treating remote-row parity as token-rate progress.
+- The down lowbit math correctness risk is reduced, but full compact execution remains the practical blocker.
+- No SOTA changed; no production enablement.
