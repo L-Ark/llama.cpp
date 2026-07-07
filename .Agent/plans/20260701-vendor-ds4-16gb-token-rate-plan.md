@@ -6503,3 +6503,57 @@ Decision:
 - X10-R remains valid: limited DS4 up/gate must default to explicit math.
 - `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` is only a deliberate debugging switch. It must not be used for token-rate benchmarking or promotion until a future source patch makes layer-0 act parity exact.
 - Next performance work should avoid the real fused op for now and focus on exact explicit retained source/dataflow, or fix the real fused op behind this opt-in env before benchmarking.
+
+## 2026-07-07 X10-T plan update：post-down-correctness generalized route selection
+
+- attempt_id: `20260707-post-x10s-next-route-selection`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/post-x10s-next-route-selection-20260707.json`
+- branch/push target: `ssd/vendor/deepseek-token-rate-16gb`
+- status: `plan_recorded_no_source_change_not_sota`
+
+Current verified state:
+- Down GPU Q8_0 CPU-order correctness has already been fixed and reproduced on latest branch history:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-down-q80-correctness-repro-20260707.json`
+  - status: `latest_head_down_gpu_correctness_reproduced_not_sota`
+  - decision: correctness gate only; not token-rate SOTA.
+- Limited DS4 up/gate now defaults to exact explicit math:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-explicit-default-accepted-20260707.json`
+  - accepted as a correctness guard only.
+- Reopening the real fused op with `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` still fails act parity:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-allow-fused-recheck-reject-20260707.json`
+  - failure: `num_diffs_over_atol=12`, `max_abs_sum_diff=13.226561999996193`
+  - decision: forbidden for token-rate benchmarking until layer-0 act parity is exact.
+- Current no-prompt-specific generalized baseline remains:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`
+  - min/mean/max `eval_tok_s`: `1.8 / 2.18 / 2.7`
+  - all runs strict 16GB RAM including page cache.
+
+Closed or insufficient routes from current evidence:
+- Exact hotset/source residency alone is closed:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/exact-retained-dataflow-source-movement-bound-20260707.json`
+  - best prompt-agnostic min bound only `2.7707 tok/s`, mean `3.1860 tok/s`
+  - source edit not allowed by this bound.
+- Sparse retained top64/top128/top256/top512 is closed for the generalized target:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-generalized-bound-audit-after-membership-20260707.json`
+  - best listed min bound stays around `2.07 tok/s` even for top512 zero-overhead.
+- Current graph/dataflow route is not allowed as a runtime patch:
+  - artifacts:
+    - `.Agent/runs/20260705-vendor-ds4-coldstart/exact-graph-dataflow-current-hard-bound.json`
+    - `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-exact-graph-dataflow-recheck-20260707.json`
+  - reason: accepted graph still lacks a retained gate output usable by `build_expert_mix`; DS4_HOT recomputes gate and adds payload.
+- Current-head duplicate/nonduplicate screening found no existing vendor mechanism with a credible 10 tok/s bound:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-nonduplicate-next-screening-after-mmvq.json`
+  - decision: future runtime patch must start from a new hard-bound artifact.
+
+Next implementation rule:
+- Do not write another token-rate runtime source patch until one of the following has a new hard-bound artifact showing generalized calibration/dev `min_eval_tok_s >= 5.5` before coding:
+  1. an exact retained-gate/up/down dataflow interface that removes or hides both gate source movement and most up/down CPU fallback without changing logits;
+  2. a correctness-verified compact representation/model route that fits 32GB VRAM and strict 16GB host RAM/page cache while preserving fixed-text top1/correctness;
+  3. a fixed real fused up/gate op where `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` first passes act parity with `max_abs_sum_diff=0.0`, followed by a separate generalized hard-bound that still clears the >5 tok/s target after overhead.
+- Held-out test prompts remain reserved until a candidate configuration is frozen. Development may use only calibration/dev prompts and the France correctness guard.
+- Any accepted generalized improvement must immediately record exact reproduction details and push source plus records to `ssd/vendor/deepseek-token-rate-16gb`.
+
+Immediate next action:
+- Build a new hard-bound/proof artifact for the most plausible remaining path before source editing:
+  - preferred first: retained-gate interface feasibility, because full up/down removal alone is not enough for the worst generalized prompts unless gate source movement is also removed/hidden;
+  - fallback: compact representation feasibility if retained-gate proof cannot clear the target.

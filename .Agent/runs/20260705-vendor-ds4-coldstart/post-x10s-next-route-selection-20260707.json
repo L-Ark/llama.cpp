@@ -1,0 +1,81 @@
+{
+  "attempt_id": "20260707-post-x10s-next-route-selection",
+  "created_at_local": "2026-07-07",
+  "status": "plan_recorded_no_source_change_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Record the post-down-correctness route selection before any further generalized token-rate source edits.",
+  "current_verified_state": {
+    "down_gpu_correctness": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/latest-head-down-q80-correctness-repro-20260707.json",
+      "status": "latest_head_down_gpu_correctness_reproduced_not_sota",
+      "decision": "Down GPU Q8_0 CPU-order correctness is fixed and reproducible; this is a correctness gate only, not token-rate SOTA."
+    },
+    "limited_upgate_default": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-explicit-default-accepted-20260707.json",
+      "status": "accepted_default_off_correctness_guard_not_sota",
+      "decision": "Limited DS4 up/gate defaults to exact explicit math unless the bad fused op is deliberately reopened."
+    },
+    "limited_upgate_allow_fused": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-allow-fused-recheck-reject-20260707.json",
+      "status": "diagnostic_reject_not_sota_no_source_change",
+      "num_diffs_over_atol": 12,
+      "max_abs_sum_diff": 13.226561999996193,
+      "decision": "GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1 remains forbidden for token-rate benchmarking until act parity is exact."
+    },
+    "general_prompt_baseline": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+      "status": "baseline_not_sota",
+      "min_eval_tok_s": 1.8,
+      "mean_eval_tok_s": 2.1799999999999997,
+      "max_eval_tok_s": 2.7,
+      "ram_ok_all": true,
+      "prompt_specific_env_detected_any": false
+    }
+  },
+  "closed_or_insufficient_routes": {
+    "exact_hotset_source_residency_alone": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/exact-retained-dataflow-source-movement-bound-20260707.json",
+      "status": "diagnostic_complete_exact_hotset_alone_rejected",
+      "best_min_bound_tok_s": 2.7706693327175755,
+      "best_mean_bound_tok_s": 3.1860363950100736,
+      "source_edit_allowed": false
+    },
+    "sparse_retained_topn": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-generalized-bound-audit-after-membership-20260707.json",
+      "status": "closed_for_generalized_target",
+      "topn_screened": [64, 128, 256, 512],
+      "best_listed_min_bound_tok_s": 2.0742538662165466,
+      "source_edit_allowed": false
+    },
+    "current_exact_graph_dataflow": {
+      "artifacts": [
+        ".Agent/runs/20260705-vendor-ds4-coldstart/exact-graph-dataflow-current-hard-bound.json",
+        ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-exact-graph-dataflow-recheck-20260707.json"
+      ],
+      "status": "rejected_before_source_change",
+      "reason": "The accepted graph still does not expose a retained gate output to build_expert_mix; DS4_HOT recomputes gate and adds payload.",
+      "runtime_source_patch_allowed_now": false
+    },
+    "existing_vendor_mechanism_screening": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-nonduplicate-next-screening-after-mmvq.json",
+      "new_existing_vendor_mechanism_with_10_tok_s_bound_found": false,
+      "runtime_patch_allowed_now": false
+    }
+  },
+  "next_implementation_rule": {
+    "runtime_source_patch_allowed_now": false,
+    "required_before_source_edit": "A new hard-bound artifact showing prompt-general calibration/dev min_eval_tok_s >= 5.5 before coding.",
+    "candidate_routes": [
+      "Exact retained-gate/up/down dataflow interface that removes or hides both gate source movement and most up/down CPU fallback without changing logits.",
+      "Correctness-verified compact representation/model route that fits 32GB VRAM and strict 16GB host RAM/page cache.",
+      "Fixed real fused up/gate op: GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1 must first pass act parity with max_abs_sum_diff=0.0, then a separate generalized hard-bound must clear >5 tok/s after overhead."
+    ],
+    "held_out_policy": "Held-out prompts remain reserved until a candidate configuration is frozen.",
+    "accepted_improvement_policy": "Any accepted generalized improvement must record exact reproduction details and immediately push source plus records to ssd/vendor/deepseek-token-rate-16gb."
+  },
+  "immediate_next_action": {
+    "preferred": "Build a retained-gate interface feasibility hard-bound, because full up/down removal alone is not enough for worst generalized prompts unless gate source movement is also removed or hidden.",
+    "fallback": "Build compact representation feasibility proof if retained-gate cannot clear the target."
+  }
+}
