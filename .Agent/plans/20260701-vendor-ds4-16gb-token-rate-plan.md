@@ -5352,3 +5352,20 @@
   - Or run only a small/header-only proof for a new external candidate.
   - Or produce a new native hard-bound/source design that reaches `min >= 5.5 tok/s` on calibration/dev before coding.
   - Or debug cloudyu 4Expert correctness only, with no performance claim until France correctness passes.
+
+## 2026-07-07 Phase X7：cloudyu 4Expert correctness root-cause audit
+
+- attempt_id: 20260707-4expert-correctness-root-cause-audit
+- status: planned_before_artifact_audit
+- why_now: X6 leaves cloudyu 4Expert as the only local large candidate that does not require a new download. It is not a performance/SOTA candidate because France correctness failed, but it may still inform a smaller prompt-general representation route if the remaining correctness issue can be localized.
+- scope: artifact/source audit first; no benchmark, no held-out, no prompt-specific profile/pack, no new large file, no destructive cleanup. Use existing 4Expert artifacts (`4expert-load-compat-diagnostic`, `4expert-token-type-zero-normal-diagnostic`, `4expert-correctness-followup-reject`, tensor-map/header artifacts) plus static source inspection.
+- known_facts:
+  - Full model is local and readiness previously passed with sha256 `e9e7e22ba585f83330d08235de39e8dcd8cbb513fd9fad6103764da74a4e64bc`.
+  - `LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1` fixed the original empty-token output issue.
+  - Default/deepseek/deepseek3 template checks still failed France correctness; no obvious uncreated tensor dump was observed.
+- questions_to_answer:
+  - Is the remaining failure more likely tensor alias/route mapping, tokenizer/template, quantization quality, or 4Expert model quality?
+  - Is there a small no-logit-change parity probe worth implementing next, such as per-layer tensor presence/map audit, selected expert id route audit, or fixed-token logits/top1 comparison against native?
+  - Would any follow-up be able to preserve Kimi functionality and remain default-off?
+- decision_rule: If audit cannot identify a narrow correctness probe, keep 4Expert closed and do not run more France/template attempts. If it identifies a narrow probe, write a separate default-off plan before any source edit/model run.
+- push_rule: Audit artifact and plan result must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Accepted SOTA unchanged unless a future candidate passes all correctness/RAM/TTFT/generalized/held-out gates.
