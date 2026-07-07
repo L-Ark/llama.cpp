@@ -4249,6 +4249,16 @@ Continue from Phase 5E:
       still exists and is `17179111424` bytes, which would satisfy the gate if
       the user explicitly approves deleting it;
     - no deletion has been performed.
+45. GP107 remote storage gate confirms there is no alternate large mount point
+    for a non-destructive lower-quant smoke:
+    - report:
+      `.Agent/runs/20260708-gp107-remote-storage-gate/report.md`;
+    - `/mnt`, `/home`, `/tmp`, `/var/tmp`, `/root`, and `/root/lfz` all share
+      `/dev/root`;
+    - available bytes remain about `243.7 GB`, still short of the
+      `258.1 GB` requirement for `i1-IQ1_S` plus reserve;
+    - the next lower-quant step requires either explicit deletion approval for
+      the old overlay or a new external storage path.
 
 Rationale:
 
