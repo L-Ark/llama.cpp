@@ -5206,9 +5206,18 @@
 ## 2026-07-07 Phase X3：sparse fused MMVQ membership probe（no-logit-change）
 
 - attempt_id: 20260707-sparse-fused-mmvq-membership-probe
-- status: planned_before_experiment
+- status: timeout_partial_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-fused-mmvq-membership-probe-timeout-20260707.json`
 - why_now: DFlash/MTP、普通 fused up/gate、one-stream gate+up、exact hotset、q2tern sidecar、Q8_0 full-output rowtile 都已经关闭或退回。剩余仍有 hard-bound 支持的路线是 `mmvq-fused-compact-sparse` / `sparse-retained-gpu-path`，但它要求先证明 hot pair 覆盖、图放置、拷贝路径和 correctness。当前源码已有 default-off `GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT` 诊断，只记录 up/down fallback 中命中 calibration-derived top pair 的比例，不改变 logits，适合作为第一步。
 - experiment_scope: 不改源码；不使用 held-out；只用 calibration France short probe；strict `MemoryMax=16000000000`, `MemorySwapMax=0`，page cache 计入 cgroup；不作为 SOTA；stdout 控制。profile 使用 `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top64-updown-20260707.tsv`，该 profile 来自 calibration/dev，不来自 held-out。
 - command_shape: 当前 pushed source `a8ba89213`，no-prompt-specific baseline env（不设置 France pack/profile），额外设置 `GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT=<run>/membership.csv` 和 `GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE=<top64.tsv>`，跑 France `n=32`。记录 output correctness/truncation note、membership summary、decode/prompt hit rows、hit fallback us、hit source bytes、RAM/page-cache/OOM。
+- result_20260707: first n32 attempt was killed because stdout grew to `576MiB`; stdout was deleted and this run is invalid. Rerun with France `n=16` and stdout redirected to `/dev/null` timed out at `240s`, so it is not a correctness/token-rate result and not SOTA. The partial membership data is still useful as a coverage diagnostic: `records=6242`, `rows=7540`, `hit_rows=578`, `hit_row_ratio=7.67%`, `source_bytes=27.817GB`, `hit_source_bytes=2.273GB`, `hit_source_ratio=8.17%`, `fallback_us=13.224s`, `hit_fallback_us=0.732s`, `hit_fallback_ratio=5.53%`.
+- decision_update: Top64 calibration sparse pairs cover too little of the observed up/down fallback in this probe to justify any logit-changing sparse MMVQ implementation or strict-cold performance benchmark. Do not proceed to SOTA/performance for sparse MMVQ from this evidence. If this class is reopened, it needs either a stronger profile/representation hard-bound or a graph placement/copy-count compare probe that proves much higher effective coverage without hidden D2H/H2D or gate-cache loss.
 - pass_gate: 只要求诊断能稳定产出且不改变输出/RAM。若 top64 hit coverage 低或 hit_fallback_us 占比不足，说明 compact sparse route 对当前 generalized path margin 不够，后续应关闭或改 profile/representation hard-bound。若 coverage 可观，下一步仍不能 benchmark，必须进入 graph/backend placement probe，证明 hot branch 不发生 D2H/H2D 中间拷贝、不破坏 gate cache、fixed-text top1 不变。
 - push_rule: 诊断 artifact 和计划更新必须 push 到 `ssd/vendor/deepseek-token-rate-16gb`。任何后续 source edit 仍必须 default-off，先 compare/top1，再 dev set，候选冻结后才跑 held-out。
+
+## 2026-07-07 stale route cleanup：DFlash/MTP planned probe superseded
+
+- status: closed_by_existing_evidence
+- reason: `.Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe-plan.json` 仍显示 `planned`，但后续 `.Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json` 已完成并关闭该 probe：W=2/4/8 exact top1 passed, but elapsed speedup was only about `1.010x/1.013x/1.002x`, below the `1.128x` minimum independence gate and far below practical DFlash verifier needs. `.Agent/runs/20260705-vendor-ds4-coldstart/latest-hf-refresh-hard-bound-20260706.json` also records DFlash as closed because current vendor target verifier lacks sublinear gain and DFlash artifacts are not vendor-loadable.
+- decision: Do not implement DFlash/EAGLE/MTP loader or runtime from the stale planned artifact. Reopen only if a new vendor-loadable draft/verifier artifact appears or a new target-verifier probe proves materially sublinear verification under the same 16GB RAM/page-cache, TTFT, and correctness gates.

@@ -1,0 +1,120 @@
+{
+  "aggregate": {
+    "decode_hit_rows": 454,
+    "decode_rows": 3900,
+    "fallback_us": 13224077,
+    "hit_fallback_ratio": 0.0553240124055539,
+    "hit_fallback_us": 731609,
+    "hit_row_ratio": 0.076657824933687,
+    "hit_rows": 578,
+    "hit_source_bytes": 2272788480,
+    "hit_source_ratio": 0.08170458186478692,
+    "prompt_hit_rows": 124,
+    "prompt_rows": 3640,
+    "records": 6242,
+    "rows": 7540,
+    "source_bytes": 27817148416
+  },
+  "attempt_id": "20260707-sparse-fused-mmvq-membership-probe",
+  "by_phase": {
+    "decode": {
+      "fallback_us": 4870645,
+      "hit_fallback_ratio": 0.10154815224677635,
+      "hit_fallback_us": 494605,
+      "hit_row_ratio": 0.11641025641025642,
+      "hit_rows": 454,
+      "hit_source_bytes": 2023227392,
+      "hit_source_ratio": 0.11641025641025642,
+      "records": 3900,
+      "rows": 3900,
+      "source_bytes": 17380147200
+    },
+    "prompt": {
+      "fallback_us": 8353432,
+      "hit_fallback_ratio": 0.028372051152149202,
+      "hit_fallback_us": 237004,
+      "hit_row_ratio": 0.03406593406593406,
+      "hit_rows": 124,
+      "hit_source_bytes": 249561088,
+      "hit_source_ratio": 0.02391118701964133,
+      "records": 2342,
+      "rows": 3640,
+      "source_bytes": 10437001216
+    }
+  },
+  "by_role": {
+    "down": {
+      "fallback_us": 6161942,
+      "hit_fallback_ratio": 0.04356727148681373,
+      "hit_fallback_us": 268459,
+      "hit_row_ratio": 0.076657824933687,
+      "hit_rows": 289,
+      "hit_source_bytes": 1136394240,
+      "hit_source_ratio": 0.08170458186478692,
+      "records": 3121,
+      "rows": 3770,
+      "source_bytes": 13908574208
+    },
+    "up": {
+      "fallback_us": 7062135,
+      "hit_fallback_ratio": 0.06558215044034134,
+      "hit_fallback_us": 463150,
+      "hit_row_ratio": 0.076657824933687,
+      "hit_rows": 289,
+      "hit_source_bytes": 1136394240,
+      "hit_source_ratio": 0.08170458186478692,
+      "records": 3121,
+      "rows": 3770,
+      "source_bytes": 13908574208
+    }
+  },
+  "decision": {
+    "accepted_sota_changed": false,
+    "next_action": "Do not run SOTA/performance for sparse MMVQ. If continuing this class, first create a graph placement/copy-count probe or improve the hot profile bound; otherwise close top64 sparse retained route.",
+    "reason": "The run timed out at 240s before a valid output/correctness result. Partial membership data shows calibration top64 sparse pairs cover only a small fraction of observed up/down fallback in this cold n16 probe, so this does not justify a logit-changing sparse MMVQ implementation.",
+    "source_edit_allowed_by_this_run": false,
+    "strict_cold_benchmark_valid": false
+  },
+  "exit_status": "124",
+  "membership_csv_bytes": 1230921,
+  "membership_sha256": "fdf89f0c729a98d4e14fc3786a7e5bdf4acf40a3d870dba6e1ec5ea20b27c1e4",
+  "memory": {
+    "events": {
+      "high": 0,
+      "low": 0,
+      "max": 10212,
+      "oom": 0,
+      "oom_group_kill": 0,
+      "oom_kill": 0
+    },
+    "memory_current": 15190405120,
+    "memory_peak": 16000000000
+  },
+  "prompt_scope": "calibration France only; held-out unused",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-sparse-mmvq-membership-probe/france-n16-devnull",
+  "source_head": "32c92721bd273627d84e52484051b7741f2f8e80",
+  "status": "timeout_partial_not_sota",
+  "stderr_tail": [
+    "\tPercent of CPU this job got: 222%",
+    "\tElapsed (wall clock) time (h:mm:ss or m:ss): 4:01.51",
+    "\tAverage shared text size (kbytes): 0",
+    "\tAverage unshared data size (kbytes): 0",
+    "\tAverage stack size (kbytes): 0",
+    "\tAverage total size (kbytes): 0",
+    "\tMaximum resident set size (kbytes): 15598120",
+    "\tAverage resident set size (kbytes): 0",
+    "\tMajor (requiring I/O) page faults: 157350",
+    "\tMinor (reclaiming a frame) page faults: 1099177",
+    "\tVoluntary context switches: 313722",
+    "\tInvoluntary context switches: 10462",
+    "\tSwaps: 0",
+    "\tFile system inputs: 86737752",
+    "\tFile system outputs: 2456",
+    "\tSocket messages sent: 0",
+    "\tSocket messages received: 0",
+    "\tSignals delivered: 0",
+    "\tPage size (bytes): 4096",
+    "\tExit status: 124"
+  ],
+  "stdout_control": "stdout redirected to /dev/null"
+}
