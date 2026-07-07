@@ -5307,3 +5307,14 @@
 - correctness: failed. Output stayed in `[Start thinking]` and degenerated into repeated `geography` text instead of a coherent short paragraph introducing France.
 - interpretation: IQ2_S is vendor-loadable with existing alias envs, but default template/reasoning behavior is not acceptable. Because this may be an interface/template mismatch rather than only quantization quality, one controlled Stage 3b compatibility check is allowed.
 - Stage 3b allowed: rerun France calibration with the same alias env plus `--chat-template deepseek3 --reasoning off --single-turn`; still no prompt-specific pack/profile, strict 16GB/no-swap, stdout bounded, no held-out. If Stage 3b also fails correctness, degenerates, or remains far below target, close IQ2_S and do not run calibration/dev.
+
+### X5 Stage 3b result：IQ2_S rejected
+
+- status: rejected_correctness_failed_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage3b-reasonoff-correctness-reject-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-france-correctness/france-n192-deepseek3-reasonoff`
+- config: same alias env, plus `--chat-template deepseek3 --reasoning off --single-turn`; no prompt-specific pack/profile; strict `MemoryMax=16000000000`, `MemorySwapMax=0`; held-out not used.
+- result: exit `0`, `memory_peak_bytes=16000000000`, `oom=0`, `oom_kill=0`; observed stdout summary `Prompt: 0.9 t/s | Generation: 2.9 t/s`, wall time `1:24.67`.
+- correctness: failed. Output was malformed JSON/unknown metadata text, not a coherent France paragraph.
+- decision: Reject IQ2_S route. It is vendor-loadable with existing alias envs but fails the required France correctness check and remains far below the generalized `>5 tok/s` target. Do not run calibration/dev or held-out for this candidate. Accepted SOTA unchanged.
+- cleanup_note: downloaded model remains on disk for now for auditability; because it is a rejected 88GB candidate and `/root` has limited free space, future large-model work should either explicitly approve removal or choose a small/header-only probe.
