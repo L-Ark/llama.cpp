@@ -3325,6 +3325,97 @@ Decision:
   spending runtime implementation effort on a tiny per-layer output basis.
 - Do not proceed to coefficient prediction for this tiny-basis candidate.
 
+## Phase 5U: GP98 Complete IQ1_S GGUF Preflight
+
+Goal:
+
+- Perform the smallest reversible preflight for the only complete-GGUF
+  candidate that is near the GP93 byte budget: mradermacher `i1-IQ1_S`.
+- Do not download the full model unless this preflight shows the candidate is
+  compatible enough and has enough disk margin to preserve current SOTA assets.
+
+Why this is next:
+
+- GP92/GP93 showed AesSedai `IQ2_S` and `IQ2_XXS` cannot reach the byte budget.
+- GP93 showed `0.505x` scale is borderline: it is not a clean `5 tok/s` path,
+  but it is the only complete-GGUF option near enough to justify a small
+  quality/header compatibility probe.
+- GP95-GP97 rejected several custom `~0.4x` representation families, so a
+  complete existing IQ1-scale model is the next lowest-engineering-cost sanity
+  check.
+
+Method:
+
+1. Query/record the mradermacher `Kimi-K2.7-Code-GGUF` `i1-IQ1_S` file list,
+   sizes, and shard names.
+2. Check current remote disk without deleting current SOTA inputs.
+3. Download at most a tiny prefix or first shard metadata needed to inspect
+   GGUF architecture/tensor types; do not download all shards in this step.
+4. Decide whether a full download is worth asking/running later.
+
+Acceptance to proceed beyond preflight:
+
+- Total model size must fit with enough free space for temporary files and
+  logs while preserving current IQ3_S SOTA assets.
+- Tensor types must be supported or have a bounded implementation path.
+- Expected speed path must be explicitly framed as borderline: full runtime
+  validation is required before any SOTA claim.
+
+Rejection/defer:
+
+- Defer full download if disk margin is too small.
+- Reject if tensor types are unsupported or if shard metadata indicates the
+  model cannot load in the current runtime.
+
+Execution result:
+
+- Timestamp: `2026-07-08T03:50:00+0800`.
+- Status: completed non-destructive preflight; no full download.
+- Report:
+  `.Agent/runs/20260708-gp98-iq1s-gguf-preflight/report.md`.
+- HF repo:
+  `mradermacher/Kimi-K2.7-Code-i1-GGUF`.
+- HF resolver commit:
+  `06671d52123acf7ad3dad395d3628c96d8b690a8`.
+- Current remote disk:
+  - `/dev/root`: `993G` size, `765G` used, `228G` available;
+  - preserved current IQ3_S SOTA model directory:
+    `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S`, `378G`.
+- `i1-IQ1_S` part sizes from resolver `x-linked-size`:
+  - part1: `41875931136`;
+  - part2: `41875931136`;
+  - part3: `41875931136`;
+  - part4: `41875931136`;
+  - part5: `36927147936`.
+- Total size:
+  - `204430872480 bytes`;
+  - `190.391086489 GiB`;
+  - `204.430872480 GB`.
+- The full candidate would leave only about `21.95 GiB` from the current
+  filesystem free-space budget while preserving IQ3_S, which is not enough
+  margin for failed/resumable partials, runtime logs, pack-building, or scratch
+  space.
+- Prior GP32 metadata remains the compatibility evidence:
+  - `general.architecture=deepseek2`;
+  - `general.file_type=24` / `LLAMA_FTYPE_MOSTLY_IQ1_S`;
+  - `deepseek2.expert_count=384`;
+  - `deepseek2.expert_used_count=8`;
+  - expert tensors: `up/IQ1_S=60`, `gate/IQ1_S=60`, `down/IQ1_S=57`,
+    `down/Q2_K=3`.
+- Current code inspection still shows plausible IQ1_S CUDA and Kimi MoE stream
+  support, including generic CUDA matmul support and `moe_stream_batch.cu`
+  IQ1_S/mixed IQ1_S-IQ2_XXS support entries.
+
+Decision:
+
+- Defer full download/runtime smoke until explicit disk cleanup or external
+  storage is available.
+- Do not claim a new SOTA from GP98.
+- Keep current prompt-general GP4 SOTA unchanged.
+- Return to the main path: find a prompt-general representation or
+  compute/storage-form change that targets `0.30x-0.40x` moved bytes before
+  writing runtime kernels.
+
 ## Run Discipline
 
 For every experiment:
@@ -3406,13 +3497,17 @@ Continue from Phase 5E:
     local surrogate before returning to runtime scheduling.
 26. GP97 rejects tiny per-layer MoE output subspace: rank-4 leave-one-prompt-
     out mean rel L2 is `1.194453`, far above the `0.10` gate.
-27. Next primary direction must be a different non-expert-local byte-reduced
+27. GP98 completes the `i1-IQ1_S` GGUF preflight and defers full download:
+    current disk margin is too small for a safe `190.39 GiB` candidate while
+    preserving IQ3_S SOTA assets, although metadata/code compatibility remains
+    plausible.
+28. Next primary direction must be a different non-expert-local byte-reduced
     representation or compute/storage-form change. Prediction/prefetch is
     secondary after bytes are reduced.
-28. The next screen must target global moved bytes around `0.30x-0.40x` and
+29. The next screen must target global moved bytes around `0.30x-0.40x` and
     fused up/gate mean rel L2 close to the quality gate before any runtime
     kernel is written.
-29. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+30. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
     gains can regress held-out performance severely.
 
 Rationale:
