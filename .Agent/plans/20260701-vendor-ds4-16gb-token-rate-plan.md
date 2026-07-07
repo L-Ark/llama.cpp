@@ -6820,3 +6820,42 @@ Decision:
 - No new SOTA and no runtime source patch.
 - Do not download full external multi-shard candidates without an explicit disk/RAM/time plan.
 - Keep the next allowed work as correctness-first representation: acquire only a candidate with a credible correctness path, then run fixed-text top1 and France correctness before any performance benchmark.
+
+## 2026-07-08 X10-Z external lowbit full-shard size admission
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-lowbit-full-shard-size-admission-20260708.json`
+- status: `full_shard_size_admission_not_sota`
+
+Purpose:
+- Before any full external lowbit model download, estimate total shard sizes using HTTP range `bytes=0-0`.
+- This avoids accidentally consuming disk with multi-shard downloads before a correctness gate can run.
+
+Current disk state:
+- Filesystem `/` available: about `33.22 GiB`.
+
+Candidate size results:
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF`
+  - `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`: `46.98 GiB`
+- `eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4`
+  - `DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf`: `63.87 GiB`
+- `teamblobfish/DeepSeek-V4-Flash-GGUF`
+  - `IQ2_XXS-XL`: `73.13 GiB`
+  - `IQ2_XS-XL`: `81.03 GiB`
+- `unsloth/DeepSeek-V4-Flash-GGUF`
+  - `UD-IQ2_XXS`: `84.62 GiB`
+  - `UD-IQ2_M`: `84.68 GiB`
+  - `UD-IQ3_XXS`: `95.93 GiB`
+  - `UD-Q3_K_M`: `120.44 GiB`
+- `tarruda/DeepSeek-V4-Flash-GGUF`
+  - `Q2_K`: `90.30 GiB`
+  - `IQ3_XXS`: `104.41 GiB`
+  - `Q3_K`: `116.51 GiB`
+
+Decision:
+- Full download is not allowed now: every checked candidate exceeds available disk.
+- No correctness gate can run on these full external candidates until disk is freed or a smaller candidate is found.
+- No runtime source patch and no token-rate benchmark.
+- Next allowed actions:
+  - identify explicit, safe disk cleanup candidates and ask before deletion; or
+  - search for a smaller correctness-capable candidate/artifact; or
+  - switch to external draft/verifier artifact search that does not require full lowbit target-model download.
