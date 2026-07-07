@@ -1,0 +1,157 @@
+{
+  "artifact_id": "20260708-no-delete-next-route-audit-after-q80-correctness",
+  "source_head": "2bcf324ac28fbb45ee59b397cea08929bf975db4",
+  "purpose": "Select the next plan-aligned route after current HEAD down q80 correctness passed, without deleting the rejected IQ2_S file or using held-out prompts.",
+  "constraints": {
+    "no_delete_without_explicit_approval": true,
+    "held_out_test_used": false,
+    "strict_ram_target_bytes": 16000000000,
+    "product_goal": "random/general prompts stable >5 tok/s on 16GB host RAM + 32GB RTX 5090"
+  },
+  "inputs": [
+    ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/latest-head-after-demo-down-q80-lane8-shared-correctness-20260708.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/compact-target-after-cleanup-dryrun-20260707T194931Z.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/compact-target-no-full-download-execution-feasibility-20260708.json"
+  ],
+  "per_prompt_bounds": [
+    {
+      "prompt_id": "france",
+      "current_eval_tok_s": 2.7,
+      "elapsed_seconds": 88.52,
+      "ttft_seconds": 37.516648734,
+      "estimated_decode_seconds": 51.003351265999996,
+      "estimated_eval_tokens": 137.70904841819998,
+      "target_decode_seconds_at_5_tok_s": 27.541809683639997,
+      "required_decode_saving_seconds_for_5_tok_s": 23.46154158236,
+      "up_fallback_ms": 17327.24,
+      "down_fallback_ms": 13905.973,
+      "up_down_fallback_ms": 31233.213000000003,
+      "ideal_tok_s_remove_down_only": 3.7120965107232737,
+      "ideal_tok_s_remove_up_only": 4.089220614888321,
+      "ideal_tok_s_remove_up_down": 6.965507603708938,
+      "down_only_reaches_5": false,
+      "up_down_reaches_5": true
+    },
+    {
+      "prompt_id": "quantum",
+      "current_eval_tok_s": 1.8,
+      "elapsed_seconds": 135.36,
+      "ttft_seconds": 36.335945769,
+      "estimated_decode_seconds": 99.02405423100001,
+      "estimated_eval_tokens": 178.24329761580003,
+      "target_decode_seconds_at_5_tok_s": 35.648659523160006,
+      "required_decode_saving_seconds_for_5_tok_s": 63.37539470784,
+      "up_fallback_ms": 31869.984,
+      "down_fallback_ms": 24482.77,
+      "up_down_fallback_ms": 56352.754,
+      "ideal_tok_s_remove_down_only": 2.39120239816948,
+      "ideal_tok_s_remove_up_only": 2.6542441433954727,
+      "ideal_tok_s_remove_up_down": 4.177123655733114,
+      "down_only_reaches_5": false,
+      "up_down_reaches_5": false
+    },
+    {
+      "prompt_id": "fibonacci",
+      "current_eval_tok_s": 1.8,
+      "elapsed_seconds": 145.19,
+      "ttft_seconds": 39.047801183000004,
+      "estimated_decode_seconds": 106.142198817,
+      "estimated_eval_tokens": 191.0559578706,
+      "target_decode_seconds_at_5_tok_s": 38.21119157412,
+      "required_decode_saving_seconds_for_5_tok_s": 67.93100724287999,
+      "up_fallback_ms": 33298.269,
+      "down_fallback_ms": 23052.717,
+      "up_down_fallback_ms": 56350.986000000004,
+      "ideal_tok_s_remove_down_only": 2.2994000406861392,
+      "ideal_tok_s_remove_up_only": 2.622812337974827,
+      "ideal_tok_s_remove_up_down": 3.8371420791214113,
+      "down_only_reaches_5": false,
+      "up_down_reaches_5": false
+    },
+    {
+      "prompt_id": "japan",
+      "current_eval_tok_s": 2.4,
+      "elapsed_seconds": 90.72,
+      "ttft_seconds": 38.760496441,
+      "estimated_decode_seconds": 51.959503559,
+      "estimated_eval_tokens": 124.70280854159999,
+      "target_decode_seconds_at_5_tok_s": 24.940561708319997,
+      "required_decode_saving_seconds_for_5_tok_s": 27.01894185068,
+      "up_fallback_ms": 18715.83,
+      "down_fallback_ms": 14265.937,
+      "up_down_fallback_ms": 32981.767,
+      "ideal_tok_s_remove_down_only": 3.30833136594831,
+      "ideal_tok_s_remove_up_only": 3.751174139051772,
+      "ideal_tok_s_remove_up_down": 6.571005354295581,
+      "down_only_reaches_5": false,
+      "up_down_reaches_5": true
+    },
+    {
+      "prompt_id": "climate",
+      "current_eval_tok_s": 2.2,
+      "elapsed_seconds": 105.17,
+      "ttft_seconds": 39.247277955,
+      "estimated_decode_seconds": 65.922722045,
+      "estimated_eval_tokens": 145.029988499,
+      "target_decode_seconds_at_5_tok_s": 29.0059976998,
+      "required_decode_saving_seconds_for_5_tok_s": 36.916724345199995,
+      "up_fallback_ms": 22262.71,
+      "down_fallback_ms": 17353.875,
+      "up_down_fallback_ms": 39616.585,
+      "ideal_tok_s_remove_down_only": 2.986070234787061,
+      "ideal_tok_s_remove_up_only": 3.3218036758560405,
+      "ideal_tok_s_remove_up_down": 5.513161748184758,
+      "down_only_reaches_5": false,
+      "up_down_reaches_5": true
+    }
+  ],
+  "aggregate": {
+    "current_min_eval_tok_s": 1.8,
+    "current_mean_eval_tok_s": 2.1799999999999997,
+    "min_ideal_tok_s_remove_down_only": 2.2994000406861392,
+    "min_ideal_tok_s_remove_up_only": 2.622812337974827,
+    "min_ideal_tok_s_remove_up_down": 3.8371420791214113,
+    "all_down_only_reaches_5": false,
+    "all_up_down_reaches_5": false,
+    "total_up_fallback_ms": 123474.033,
+    "total_down_fallback_ms": 93061.27200000001,
+    "total_required_decode_saving_seconds_for_5_tok_s": 218.70360972895998
+  },
+  "route_decisions": [
+    {
+      "route": "current q80 down GPU lane8/shared",
+      "status": "correctness_pass_but_performance_rejected",
+      "evidence": ".Agent/runs/20260705-vendor-ds4-coldstart/latest-head-after-demo-down-q80-lane8-shared-correctness-20260708.json",
+      "reason": "full-down GPU accepts all down batch calls and is bit-identical, but correctness probe elapsed is slower than default fallback; not a generalized token-rate route as-is",
+      "next": "do not spend more work on q80 correctness unless source changes touch it; a performance route would need structural dataflow changes, not another correctness recheck"
+    },
+    {
+      "route": "compact target full execution",
+      "status": "best_next_performance_route_but_requires_explicit_cleanup_approval",
+      "evidence": [
+        ".Agent/runs/20260705-vendor-ds4-coldstart/compact-target-after-cleanup-dryrun-20260707T194931Z.json",
+        ".Agent/runs/20260705-vendor-ds4-coldstart/compact-target-no-full-download-execution-feasibility-20260708.json"
+      ],
+      "reason": "lower-bit compact target may reduce model/expert IO and page-cache pressure; current disk cannot hold it without deleting the already-rejected IQ2_S file",
+      "next": "only run .Agent/run-tools/run_compact_target_after_cleanup.sh with both explicit flags after user approval; first gate is load/correctness, not SOTA"
+    },
+    {
+      "route": "no-full-download HTTP range execution",
+      "status": "not_feasible_as_small_patch",
+      "evidence": ".Agent/runs/20260705-vendor-ds4-coldstart/compact-target-no-full-download-execution-feasibility-20260708.json",
+      "reason": "current loader and alias source require local files; remote row parity does not provide runnable GGUF metadata/dense tensors/expert source coverage",
+      "next": "do not implement unless treated as a larger remote-source loader project with separate design"
+    },
+    {
+      "route": "native no-delete up/down fallback elimination",
+      "status": "hard_bound_says_down_only_and_ideal_up_down_insufficient_for_5_tok_s",
+      "evidence": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+      "reason": "down-only ideal does not clear 5 tok/s on all dev prompts; even ideal native up+down fallback removal has conservative min only 3.837 tok/s, so implementation must also reduce other decode costs, page/refault pressure, or change representation rather than simply move existing up/down dot products to GPU",
+      "next": "before source edits, design a fused resident dataflow or compact-representation route that accounts for activation q8 staging, H2D/D2H, row grouping, CPU fallback removal, page/refault reduction, and remaining non-MoE decode cost; do not code small down-only patches"
+    }
+  ],
+  "decision": "Do not implement another small down-only GPU patch. With no deletion approval, the next useful work is a fused resident up/down dataflow hard-bound/design; with deletion approval, run the guarded compact-target load/correctness gate first.",
+  "accepted_sota_changed": false
+}

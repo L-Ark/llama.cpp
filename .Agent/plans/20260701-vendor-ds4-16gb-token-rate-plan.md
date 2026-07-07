@@ -8062,3 +8062,49 @@ Next:
 - Do not run the destructive path without explicit approval from the user.
 - If approval is given, run the guarded script with both flags and treat the result as a load/correctness gate first, not as a SOTA claim.
 - If no cleanup approval is given, continue with no-download lowbit/compact evidence or a new hard-bound route toward generalized `>5 tok/s`.
+
+## 2026-07-08 X10-AX no-delete next-route audit after current down q80 correctness
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/no-delete-next-route-audit-after-q80-correctness-20260708.json`
+- status: `no_delete_route_audit_complete_not_sota`
+
+Purpose:
+- After latest pushed HEAD reverified down q80 correctness, choose the next plan-aligned route without deleting the rejected local IQ2_S file and without using held-out prompts.
+- Avoid spending another cycle on small down-only GPU patches if the hard bound cannot move generalized prompt performance toward the `>5 tok/s` product target.
+
+Inputs:
+- generalized no-prompt-specific baseline: `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`
+- calibration/dev fallback profile: `.Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json`
+- current down q80 correctness reverify: `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-after-demo-down-q80-lane8-shared-correctness-20260708.json`
+- compact target guarded dry-run: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-after-cleanup-dryrun-20260707T194931Z.json`
+- no-full-download compact feasibility: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-no-full-download-execution-feasibility-20260708.json`
+
+Bound summary:
+- current generalized dev min/mean: `1.8 / 2.18 tok/s`
+- total dev up fallback: `123474.033 ms`
+- total dev down fallback: `93061.272 ms`
+- total estimated decode saving required to reach `5 tok/s`: `218.704 s`
+- conservative min ideal if all down fallback vanished: `2.299 tok/s`
+- conservative min ideal if all up fallback vanished: `2.623 tok/s`
+- conservative min ideal if all up+down fallback vanished: `3.837 tok/s`
+- Therefore, a down-only GPU path is not enough for the generalized `>5 tok/s` target, and even a perfect native up+down fallback removal is not enough under this conservative estimate unless other decode costs, page/refault pressure, or model representation are also changed.
+
+Route decisions:
+- Current q80 down GPU lane8/shared:
+  - correctness: pass, `same_top1=145/145`, logits diff `0.0`, full-down `batch_accept=5800`.
+  - performance: rejected as-is; the correctness probe was slower than default fallback.
+  - decision: do not revisit q80 correctness unless a later source change touches that path.
+- Compact target full execution:
+  - best remaining route with plausible representation/page-cache upside.
+  - blocked by explicit cleanup approval because the current disk has about `34G` free and the selected `teamblobfish-iq1-s-xl` target is `57.314 GiB`.
+  - the guarded runner is ready but must not be executed destructively without explicit user approval.
+- No-full-download HTTP range execution:
+  - not feasible as a small patch because current loader and alias source require local files and coherent GGUF metadata/dense tensors.
+- Native no-delete up/down work:
+  - do not implement small down-only patches.
+  - any source work must first produce a larger hard-bound/design that includes more than up/down fallback removal: resident/fused dataflow, activation staging, H2D/D2H, row grouping, page/refault reduction, and possibly representation change.
+
+Next:
+- If explicit cleanup approval is given, run `.Agent/run-tools/run_compact_target_after_cleanup.sh --execute-download --confirm-delete-rejected-iq2s` and treat the result as a strict load/correctness gate first.
+- If cleanup approval is not given, the next useful no-delete task is a hard-bound/design for a combined resident/fused dataflow route. It must prove a credible lower-bound above generalized `5 tok/s` before any new source patch.
+- No SOTA changed.
