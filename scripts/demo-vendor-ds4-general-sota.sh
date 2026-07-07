@@ -1,29 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Demo the current prompt-general vendor DeepSeek V4 configuration.
+# This script is intentionally not allowed to use France/prompt-specific packs,
+# route profiles, admit profiles, or GGUF alias overlays. It is for arbitrary
+# user prompts under the product constraint: 16GB host RAM including page cache.
+
 usage() {
   cat <<'USAGE'
 Usage:
   scripts/demo-vendor-ds4-general-sota.sh [--prompt TEXT | --prompt-file FILE | TEXT...] [options]
 
-Options:
-  --prompt TEXT          Prompt to run. Any user prompt is accepted.
+Prompt input:
+  --prompt TEXT          Run exactly TEXT as the prompt.
   --prompt-file FILE     Read prompt from FILE. Use "-" for stdin.
+  TEXT...                Positional prompt text.
+  --multiline            Read a multi-line prompt from stdin until Ctrl-D.
+
+Options:
   -n, --max-tokens N     Maximum generated tokens. Default: 96.
-  --run-label LABEL      Label suffix for the run directory. Default: interactive.
-  --warm                 Do not drop Linux page cache before the run.
-  --multiline            Read an interactive multi-line prompt until Ctrl-D.
-  --print-command        Print the exact llama-cli command used inside the cgroup.
+  --run-label LABEL      Label suffix for the artifact directory. Default: interactive.
+  --warm                 Skip drop_caches. Default is cold start with drop_caches.
+  --print-command        Print the exact llama-cli command used by the cgroup run.
   -h, --help             Show this help.
 
-What this demos:
-  Current prompt-general vendor DeepSeek V4 path under strict 16GB host RAM.
-  The demo intentionally rejects prompt-specific packs, route profiles, and
-  alias TSVs. It is suitable for arbitrary user prompts, not just France.
-  The current generalized dev SOTA remains below the product target: observed
-  dev range is 1.8-2.7 tok/s, target is stable >5 tok/s for random prompts.
+What this script demonstrates:
+  - Current no-prompt-specific vendor DeepSeek V4 generalized path.
+  - Strict host RAM cap: MemoryMax=16,000,000,000 bytes, MemorySwapMax=0.
+  - Page cache is counted through cgroup memory.stat file bytes.
+  - User may enter any prompt; this is not a France-specialized demo.
 
-Output artifacts:
+Current known generalized status:
+  - Dev prompt range recorded in the repo: 1.8-2.7 tok/s, mean 2.18 tok/s.
+  - Product target remains stable >5 tok/s for random prompts; not yet met.
+
+Artifacts:
   /root/lfz/runs/vendor-ds4-16gb/demo-general-sota/<timestamp>-<label>/
 USAGE
 }
@@ -35,6 +46,10 @@ fail() {
 
 json_string() {
   python3 -c 'import json,sys; print(json.dumps(sys.stdin.read(), ensure_ascii=False))'
+}
+
+trim_trailing_space() {
+  sed -e 's/[[:space:]]*$//'
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -131,22 +146,20 @@ elif [[ -n "$PROMPT" ]]; then
   :
 elif [[ "${#positional[@]}" -gt 0 ]]; then
   PROMPT="${positional[*]}"
-elif [[ -p /dev/stdin || ! -t 0 ]]; then
-  PROMPT="$(cat)"
 elif [[ "$MULTILINE" -eq 1 ]]; then
   echo "Enter any prompt, then press Ctrl-D:" >&2
+  PROMPT="$(cat)"
+elif [[ ! -t 0 ]]; then
   PROMPT="$(cat)"
 else
   IFS= read -r -p "Prompt> " PROMPT || true
 fi
 
-PROMPT="$(printf '%s' "$PROMPT" | sed -e 's/[[:space:]]*$//')"
+PROMPT="$(printf '%s' "$PROMPT" | trim_trailing_space)"
 [[ -n "$PROMPT" ]] || fail "prompt is empty"
 [[ -x "$BINARY" ]] || fail "missing executable: $BINARY"
 [[ -f "$MODEL" ]] || fail "missing model: $MODEL"
 
-# These variables make runs prompt/profile/pack specific. Rejecting them is the
-# main protection that keeps this demo representative of arbitrary prompts.
 prompt_specific_env=(
   GGML_MOE_STREAM_ONE_EXPERT_PACK
   GGML_MOE_EXPERT_PACK
@@ -179,6 +192,7 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="${RUN_ROOT}/${stamp}-${safe_label}"
 mkdir -p "$RUN_DIR"
 printf '%s\n' "$PROMPT" > "$RUN_DIR/prompt.txt"
+
 source_status="$(git -C "$REPO_DIR" status --short)"
 printf '%s\n' "$source_status" > "$RUN_DIR/source_status.txt"
 source_dirty=false
@@ -188,8 +202,8 @@ fi
 
 cat > "$RUN_DIR/config.json" <<EOF_CFG
 {
-  "demo": "vendor-ds4-general-sota",
-  "purpose": "Prompt-general DeepSeek V4 vendor demo for arbitrary prompts under strict 16GB host RAM.",
+  "demo": "vendor-ds4-generalized-sota-current",
+  "purpose": "Run arbitrary prompts on the current no-prompt-specific vendor DeepSeek V4 path under strict 16GB host RAM.",
   "repo_dir": $(printf '%s' "$REPO_DIR" | json_string),
   "source_head": "$(git -C "$REPO_DIR" rev-parse HEAD)",
   "source_branch": "$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)",
@@ -198,12 +212,12 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "binary": $(printf '%s' "$BINARY" | json_string),
   "model": $(printf '%s' "$MODEL" | json_string),
   "baseline_artifact": $(printf '%s' "$BASELINE_ARTIFACT" | json_string),
-  "current_generalized_dev_baseline_tok_s": {"min": 1.8, "mean": 2.18, "max": 2.7},
-  "additional_ad_hoc_general_prompt_checks_tok_s": {"AI infra": 1.6, "database index": 2.4, "today food": 2.3},
-  "product_target_tok_s": 5.0,
-  "product_target_met": false,
+  "prompt_general": true,
   "prompt_specific_optimization": false,
   "france_specialized_path_used": false,
+  "current_generalized_dev_tok_s": {"min": 1.8, "mean": 2.18, "max": 2.7},
+  "product_target_tok_s": 5.0,
+  "product_target_currently_met": false,
   "max_tokens": ${MAX_TOKENS},
   "cold_drop_caches": ${COLD},
   "memory_max_bytes": ${MEMORY_MAX_BYTES},
@@ -215,6 +229,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "batch": 16,
     "ubatch": 16,
     "threads": 20,
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
     "GGML_MOE_STREAM": "1",
     "GGML_MOE_STREAM_DONTNEED": "1",
     "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
@@ -284,7 +299,7 @@ printf '%q ' "\${cmd[@]}" > exact_command.txt
 printf '\n' >> exact_command.txt
 env | sort > environment.txt
 date -Is > start_time.txt
-start_ns=\$(date +%s%N)
+start_ns="\$(date +%s%N)"
 printf '%s\n' "\$start_ns" > start_ns.txt
 
 if [[ "\$PRINT_COMMAND" == "1" ]]; then
@@ -292,7 +307,7 @@ if [[ "\$PRINT_COMMAND" == "1" ]]; then
   cat exact_command.txt
 fi
 
-cg_rel=\$(awk -F: '\$2 == "" { print \$3 }' /proc/self/cgroup | tail -n 1)
+cg_rel="\$(awk -F: '\$2 == "" { print \$3 }' /proc/self/cgroup | tail -n 1)"
 cg_dir="/sys/fs/cgroup\${cg_rel}"
 printf '%s\n' "\$cg_dir" > cgroup_path.txt
 
@@ -301,16 +316,17 @@ set +e
 cmd_pid=\$!
 
 (
-  printf 'time_epoch\tmemory_current\tmemory_peak\tgpu_mem_used_mib\tgpu_mem_free_mib\tgpu_util_pct\n'
+  printf 'time_epoch\tmemory_current\tmemory_peak\tmemory_file\tgpu_mem_used_mib\tgpu_mem_free_mib\tgpu_util_pct\n'
   while kill -0 "\$cmd_pid" 2>/dev/null; do
-    now=\$(date +%s)
-    mem_cur=\$(cat "\$cg_dir/memory.current" 2>/dev/null || true)
-    mem_peak=\$(cat "\$cg_dir/memory.peak" 2>/dev/null || true)
-    gpu=\$(nvidia-smi --query-gpu=memory.used,memory.free,utilization.gpu --format=csv,noheader,nounits 2>/dev/null | head -n 1 | tr -d ' ')
+    now="\$(date +%s)"
+    mem_cur="\$(cat "\$cg_dir/memory.current" 2>/dev/null || true)"
+    mem_peak="\$(cat "\$cg_dir/memory.peak" 2>/dev/null || true)"
+    mem_file="\$(awk '\$1 == "file" {print \$2}' "\$cg_dir/memory.stat" 2>/dev/null || true)"
+    gpu="\$(nvidia-smi --query-gpu=memory.used,memory.free,utilization.gpu --format=csv,noheader,nounits 2>/dev/null | head -n 1 | tr -d ' ')"
     if [[ -n "\$gpu" ]]; then
-      printf '%s\t%s\t%s\t%s\n' "\$now" "\$mem_cur" "\$mem_peak" "\$(printf '%s' "\$gpu" | tr ',' '\t')"
+      printf '%s\t%s\t%s\t%s\t%s\n' "\$now" "\$mem_cur" "\$mem_peak" "\$mem_file" "\$(printf '%s' "\$gpu" | tr ',' '\t')"
     else
-      printf '%s\t%s\t%s\t\t\t\n' "\$now" "\$mem_cur" "\$mem_peak"
+      printf '%s\t%s\t%s\t%s\t\t\t\n' "\$now" "\$mem_cur" "\$mem_peak" "\$mem_file"
     fi
     if [[ "\$mem_cur" =~ ^[0-9]+$ ]] && [[ "\$mem_cur" -gt "\$MEMORY_MAX_BYTES" ]]; then
       printf 'memory.current=%s exceeded %s\n' "\$mem_cur" "\$MEMORY_MAX_BYTES" > ram_limit_exceeded.txt
@@ -325,7 +341,7 @@ monitor_pid=\$!
 (
   while kill -0 "\$cmd_pid" 2>/dev/null; do
     if [[ -s stdout.txt ]]; then
-      first_ns=\$(date +%s%N)
+      first_ns="\$(date +%s%N)"
       python3 - "\$start_ns" "\$first_ns" > first_output_ms.txt <<'PY'
 import sys
 print((int(sys.argv[2]) - int(sys.argv[1])) / 1_000_000.0)
@@ -379,13 +395,14 @@ printf '%q ' "${systemd_cmd[@]}" > "$RUN_DIR/systemd_command.txt"
 printf '\n' >> "$RUN_DIR/systemd_command.txt"
 
 cat <<EOF_START
-=== Vendor DeepSeek V4 generalized demo ===
+=== Vendor DeepSeek V4 generalized SOTA demo ===
 Run dir: $RUN_DIR
 Source: $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)@$(git -C "$REPO_DIR" rev-parse --short HEAD) $([[ "$source_dirty" == true ]] && echo dirty || echo clean)
 Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
-Current prompt-general dev range: 1.8-2.7 tok/s; product target is stable >5 tok/s and is not yet met.
-Prompt-specific France 4.x path: not used.
+Known generalized dev range: 1.8-2.7 tok/s, mean 2.18 tok/s.
+Product target: stable >5 tok/s for random prompts. Current generalized path is not there yet.
+Prompt-specific packs/profiles/aliases: disabled and refused.
 Prompt:
 $PROMPT
 EOF_START
@@ -471,12 +488,16 @@ mem_events = parse_kv_ints(read_text('memory.events'))
 memory_peak = read_int('memory.peak')
 answer_present = bool(re.search(r'[A-Za-z0-9]{2,}|[\u3400-\u9fff]', answer))
 ram_ok = memory_peak is not None and memory_peak <= memory_max and mem_events.get('oom_kill', 0) == 0 and not (run_dir / 'ram_limit_exceeded.txt').exists()
+exit_status = read_int('exit_status.txt')
+systemd_status = read_int('systemd_run_status.txt')
+run_ok = exit_status == 0 and systemd_status == 0 and ram_ok and answer_present
 
 summary = {
     'run_dir': str(run_dir),
     'prompt': prompt,
     'answer': answer,
     'answer_present': answer_present,
+    'run_ok': run_ok,
     'prompt_general': True,
     'prompt_specific_optimization': False,
     'france_specialized_path_used': False,
@@ -484,8 +505,8 @@ summary = {
     'prompt_tok_s': prompt_tok_s,
     'first_output_ms': first_output_ms,
     'elapsed_seconds': parse_elapsed(stderr),
-    'exit_status': read_int('exit_status.txt'),
-    'systemd_status': read_int('systemd_run_status.txt'),
+    'exit_status': exit_status,
+    'systemd_status': systemd_status,
     'memory_max_bytes': memory_max,
     'memory_peak_bytes': memory_peak,
     'memory_current_bytes': read_int('memory.current'),
@@ -493,21 +514,21 @@ summary = {
     'memory_anon_bytes': mem_stat.get('anon'),
     'memory_events': mem_events,
     'ram_ok': ram_ok,
-    'known_general_dev_range_tok_s': {'min': 1.8, 'mean': 2.18, 'max': 2.7},
-    'target_gt_5_tok_s_met_by_this_run': eval_tok_s is not None and eval_tok_s > 5.0,
+    'known_generalized_dev_range_tok_s': {'min': 1.8, 'mean': 2.18, 'max': 2.7},
+    'product_target_gt_5_tok_s_met_by_this_run': eval_tok_s is not None and eval_tok_s > 5.0,
     'manual_quality_review_required': True,
     'exact_command_file': str(run_dir / 'exact_command.txt'),
     'environment_file': str(run_dir / 'environment.txt'),
     'resource_samples_file': str(run_dir / 'resource_samples.tsv'),
+    'source_dirty': config.get('source_dirty'),
+    'source_head': config.get('source_head'),
+    'source_branch': config.get('source_branch'),
 }
-summary['source_dirty'] = config.get('source_dirty')
-summary['source_head'] = config.get('source_head')
-summary['source_branch'] = config.get('source_branch')
 (run_dir / 'summary.json').write_text(json.dumps(summary, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
 (run_dir / 'answer.txt').write_text(answer + ('\n' if answer else ''), encoding='utf-8')
 
 print('\n=== Demo summary ===')
-for key in ['eval_tok_s', 'prompt_tok_s', 'first_output_ms', 'elapsed_seconds', 'memory_peak_bytes', 'memory_file_bytes', 'ram_ok', 'answer_present', 'target_gt_5_tok_s_met_by_this_run', 'source_dirty']:
+for key in ['run_ok', 'eval_tok_s', 'prompt_tok_s', 'first_output_ms', 'elapsed_seconds', 'memory_peak_bytes', 'memory_file_bytes', 'ram_ok', 'answer_present', 'product_target_gt_5_tok_s_met_by_this_run', 'source_dirty']:
     print(f'{key}: {summary.get(key)}')
 print(f'run_dir: {run_dir}')
 print('\n=== Model answer ===')

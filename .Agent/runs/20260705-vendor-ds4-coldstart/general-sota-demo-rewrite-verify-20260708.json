@@ -1,0 +1,56 @@
+{
+  "artifact_id": "20260708-general-sota-demo-rewrite-verify",
+  "purpose": "Record verification of scripts/demo-vendor-ds4-general-sota.sh as an arbitrary-prompt demo for the current prompt-general vendor DeepSeek V4 path.",
+  "script": "scripts/demo-vendor-ds4-general-sota.sh",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head_before_commit": "d499097f7d77e1c4881c2dcc760b3a9ad13b397a",
+  "constraints": {
+    "host_ram_cgroup_memory_max_bytes": 16000000000,
+    "memory_swap_max_bytes": 0,
+    "page_cache_counted_in_memory_file_bytes": true,
+    "prompt_specific_optimization": false,
+    "prompt_specific_envs_refused": true,
+    "cold_drop_caches_default": true
+  },
+  "known_generalized_dev_range_tok_s": {
+    "min": 1.8,
+    "mean": 2.18,
+    "max": 2.7
+  },
+  "product_target_gt_5_tok_s": false,
+  "verification_runs": [
+    {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T220928Z-rewrite-demo-verify-20260708",
+      "prompt": "用两句话解释缓存为什么能提升程序性能。",
+      "answer": "，缓存通过减少数据访问延迟、降低系统负载，从而提升程序性能。  \n具体来说，通过将频繁访问的数据存储在高速存储介质（如",
+      "run_ok": true,
+      "eval_tok_s": 2.0,
+      "prompt_tok_s": 0.9,
+      "first_output_ms": 41608.442961,
+      "elapsed_seconds": 54.97,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15042166784,
+      "ram_ok": true,
+      "answer_present": true,
+      "target_gt_5_met": false,
+      "note": "Smoke check used -n 32 and was expected to be cut short; run_ok only verifies arbitrary-prompt execution and metric capture."
+    },
+    {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T221050Z-rewrite-demo-verify-64-20260708",
+      "prompt": "In one sentence, explain what a database index does.",
+      "answer": "In short, a database index speeds up data retrieval by creating a structured lookup mechanism, similar to a book's index, that allows the database to quickly locate specific rows without scanning the entire table.",
+      "run_ok": true,
+      "eval_tok_s": 1.7,
+      "prompt_tok_s": 0.9,
+      "first_output_ms": 42462.849217,
+      "elapsed_seconds": 63.27,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15021273088,
+      "ram_ok": true,
+      "answer_present": true,
+      "target_gt_5_met": false,
+      "note": "Longer -n 64 smoke check produced a complete coherent one-sentence answer."
+    }
+  ],
+  "conclusion": "The rewritten demo accepts arbitrary prompts, runs under strict 16GB cgroup including file/page cache, records artifacts, and completed two cold-start smoke checks. It demonstrates current generalized behavior; it is not a new performance SOTA and does not meet the >5 tok/s product target."
+}
