@@ -159,6 +159,39 @@ Phase 2A: no-prediction scheduler
 - Only schedule tasks that are already known from current routing and current down overlap.
 - Goal is to prove the scheduler itself does not add latency and can deduplicate/wait/steal correctly.
 
+Phase 2A.1: down prefetch fine-wait probe
+
+- Add a default-off runtime switch:
+  - `GGML_MOE_DOWN_PREFETCH_FINE_WAIT=1`
+- Current SOTA env enables `GGML_MOE_CURRENT_DOWN_OVERLAP=1`; in that mode the old `preload_registered_down_for_active()` path is skipped, while current-down overlap already records per-slot ready events and joins its worker before the up/gate call returns.
+- The down batch entry still performs a coarse `cudaStreamSynchronize(prefetch_stream)` whenever `GGML_MOE_PREFETCH_DOWN=1` is set.
+- Hypothesis: this stream-wide synchronization is redundant under current-down overlap and may add exposed latency or serialize unrelated prefetch-stream work. Skipping it while relying on existing per-slot `batch_cache_wait_slot_ready()` should preserve correctness and may reduce down-stage wall time.
+- Theoretical upper bound:
+  - If the stream sync is a pure no-op, expected gain is approximately zero.
+  - If it waits on stale or unrelated prefetch-stream work, the maximum gain is the measured sync wait at down entry; this is expected to be small but is a low-risk test because it does not change expert IDs, bytes, cache policy, or kernels.
+- Experiment:
+  - n32 cold-start `Please introduce France in a short paragraph.`
+  - compare current SOTA env vs current SOTA env plus `GGML_MOE_DOWN_PREFETCH_FINE_WAIT=1`;
+  - record token rate, TTFT, decode time, host RAM peak, full output, iouring wait, current-down overlap counters, and down batch profile.
+- Acceptance:
+  - if n32 improves or is neutral and quality/RAM/TTFT hold, run held-out n96 before accepting;
+  - if n32 regresses, keep the switch disabled and document the result as rejected.
+
+Result on 2026-07-07:
+
+- Correct GP4-alias n32 A/B run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260707-fine-wait-n32-ab-gp4alias`
+  - baseline: `1.74 tok/s`, decode `17836.48 ms / 31`, TTFT `78236.87 ms`
+  - fine-wait: `1.74 tok/s`, decode `17809.93 ms / 31`, TTFT `85794.85 ms`
+  - quality passed in both runs;
+  - host RAM peak stayed at `15899996160` bytes;
+  - `direct_reads=0`, `missing_pack=0`, `entries=69120`.
+- Rejected as a performance optimization because decode gain was negligible and TTFT rose by about `9.7%`.
+- Runtime code was reverted to the prior SOTA behavior. The separate reproduction-runner fix that adds the GP4 alias env is retained because it prevents invalid non-SOTA sweeps.
+- Invalid run to ignore:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260707-fine-wait-heldout-n96-test`
+  - It omitted `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` and `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`, causing `direct_reads`/`missing_pack` and artificially low token rates. It is not comparable to the accepted GP4 SOTA.
+
 Phase 2B: known-late prefetch
 
 - Once current layer topK is known, enqueue down and any immediately known follow-up work as early as possible.

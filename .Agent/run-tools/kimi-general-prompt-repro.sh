@@ -20,6 +20,8 @@ cd "${REPO:-/root/lfz/llama.cpp-vendor-kimi}" || exit 1
 : "${COPY_PROFILE:=0}"
 : "${EXTRA_RUNTIME_ENV:=}"
 : "${MODEL_PATH:=/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-00001-of-00010.gguf}"
+: "${EXPERT_GGUF_ALIAS_TSV:=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv}"
+: "${MOE_IO_ALIGNED_ALIAS_BATCH:=1}"
 
 PROMPT="<|im_user|>user<|im_middle|>${PROMPT_USER_TEXT}<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>"
 mkdir -p "$RUN"
@@ -78,6 +80,8 @@ GGML_MOE_CPU_FALLBACK_PACK_MMAP=1
 LLAMA_DROP_DENSE_MMAP_CACHE=1
 LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1
 LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1
+GGML_MOE_EXPERT_GGUF_ALIAS_TSV=$EXPERT_GGUF_ALIAS_TSV
+GGML_MOE_IO_ALIGNED_ALIAS_BATCH=$MOE_IO_ALIGNED_ALIAS_BATCH
 EOF
 
 if [ "$IQ2_UPGATE_PARALLEL" != "0" ]; then
@@ -130,6 +134,8 @@ LLAMA_ARGS=(build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl
   echo "MOE_IO_REFILL_BATCH=$MOE_IO_REFILL_BATCH"
   echo "MOE_PREFETCH_DOWN_DEPTH=$MOE_PREFETCH_DOWN_DEPTH"
   echo "MODEL_PATH=$MODEL_PATH"
+  echo "EXPERT_GGUF_ALIAS_TSV=$EXPERT_GGUF_ALIAS_TSV"
+  echo "MOE_IO_ALIGNED_ALIAS_BATCH=$MOE_IO_ALIGNED_ALIAS_BATCH"
   echo "PROFILE=$PROFILE"
   echo "COPY_PROFILE=$COPY_PROFILE"
   printf '%q ' "${LLAMA_ARGS[@]}"
