@@ -6170,3 +6170,38 @@
   - Do not implement a one-line DS4 graph switch to `ggml_moe_up_gate`; it is mathematically incomplete for DS4 clamp and lacks MXFP4 CPU-compatible CUDA support.
   - Next concrete source work should introduce a default-off DS4 fused gate/up correctness scaffold with explicit clamp semantics and MXFP4 Q8_0 parity instrumentation.
 
+## 2026-07-07 X10-K execution result：DS4 fused up/gate CPU reference scaffold rejected
+
+- attempt_id: `20260707-ds4-fused-upgate-ref-correctness-scaffold`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-ref-correctness-reject-20260707.json`
+- rejected_source_diff: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-ref-rejected-source-diff-20260707.patch`
+- source_change_tested:
+  - Added `ggml_moe_up_gate_limit()` with explicit DS4 raw clamp semantics.
+  - Updated CPU fused up/gate fallback to compute `silu(min(raw_gate, limit)) * clamp(raw_up, -limit, limit)`.
+  - Updated CUDA fused up/gate helper limit semantics to match raw-gate clamp instead of clamping `silu(gate)`.
+  - Added default-off `DS4_FUSED_UP_GATE_REF=1` path in `src/models/deepseek4.cpp` for separate `ffn_up_exps`/`ffn_gate_exps`.
+- build: `cmake --build build-ds4-moe-stream --target llama-cli llama-results -j20` passed.
+- default_off_guard:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T122502Z-20260707T-defaultoff-fused-upgate-guard/france-defaultoff-fused-upgate-guard-cpu40-vram0gb`
+  - env: `DS4_FUSED_UP_GATE_REF` unset.
+  - metrics: `eval_tok_s=2.4`, `prompt_tok_s=0.9`, `TTFT=39081.059658 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15004102656`, `ram_ok=true`, `correctness_ok=true`.
+  - decision: default-off behavior was not broken.
+- correctness_result_sota_env:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T123900Z-fused-upgate-ref-top1-current`
+  - compared default SOTA-style graph against `DS4_FUSED_UP_GATE_REF=1` on fixed France text.
+  - result: `same_top1=142/145`, `first_mismatch_pos=78`, `top1_pass=false`, `max_abs_top2_logit_diff=1.1980000000000004`.
+  - batch counters: both default and fused-ref had `up_gate batch_accept=0`, `batch_decline=5800` for this fixed-text run, so the failure is not a promoted CUDA up/gate batch path.
+- correctness_result_cpu_explicit:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T124700Z-fused-upgate-ref-cpu-top1-current`
+  - repeated the comparison with stream env disabled to compare explicit CPU gate/up graph against fused CPU reference.
+  - result remained `same_top1=142/145`, `first_mismatch_pos=78`, `top1_pass=false`, `max_abs_top2_logit_diff=1.1980000000000004`.
+- interpretation:
+  - The fused CPU op is not numerically equivalent enough to the explicit `MUL_MAT_ID(gate) + MUL_MAT_ID(up) + clamp + swiglu_split` graph.
+  - The gap is not explained by gate one-stream GPU vs CPU, because no-stream CPU explicit comparison produced the same mismatches.
+  - Likely remaining causes are fused-op accumulation/order or src1 quantization/work-buffer differences; final-logit top1 is too late to localize the exact layer.
+- decision:
+  - Reject this source path and revert the source diff. It must not be promoted and must not remain as an active default-off implementation because the correctness scaffold itself failed the top1 parity gate.
+  - Keep only the rejected artifact and plan record.
+- next_action:
+  - Before any new fused up/gate implementation, add a default-off act-level parity probe that compares per-layer `gate`, `up`, and `act` tensors for explicit vs candidate fused op before down/logits.
+  - Only if act-level max/mean error is understood and fixed should a future candidate retry fixed-text top1 and then token-rate benchmarking.
