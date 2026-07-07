@@ -8,7 +8,7 @@ Usage:
 
 Options:
   --candidate ID                       Candidate from the exact manifest.
-                                       Default: teamblobfish-iq1-s-xl.
+                                       Default: 0xsero-spark-mini-q2-reap-ds4.
   --execute-download                   Actually delete/download/validate/run.
                                        Default is dry-run only.
   --confirm-delete-rejected-iq2s       Required with --execute-download before
@@ -40,12 +40,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "$REPO_ROOT"
 
-MANIFEST="${MANIFEST:-$REPO_ROOT/.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-exact-download-manifest-20260708.json}"
+MANIFEST="${MANIFEST:-$REPO_ROOT/.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-exact-download-manifest-refresh-0xsero-20260708.json}"
 DOWNLOAD_ROOT="${DOWNLOAD_ROOT:-/root/lfz/models/DeepSeek-V4-Flash-compact-targets}"
 OUT_ROOT="${OUT_ROOT:-/root/lfz/runs/vendor-ds4-16gb}"
 BINARY="${BINARY:-$REPO_ROOT/build-ds4-moe-stream/bin/llama-cli}"
 CPU_MOE="${CPU_MOE:-40}"
-CANDIDATE_ID="teamblobfish-iq1-s-xl"
+CANDIDATE_ID="0xsero-spark-mini-q2-reap-ds4"
 EXECUTE_DOWNLOAD=0
 CONFIRM_DELETE=0
 SKIP_RUN=0
@@ -107,31 +107,41 @@ PY
 }
 
 CANDIDATE_JSON="$(read_candidate_json)"
+CANDIDATE_JSON_FILE="$(mktemp)"
+printf '%s\n' "$CANDIDATE_JSON" > "$CANDIDATE_JSON_FILE"
+trap 'rm -f "$CANDIDATE_JSON_FILE"' EXIT
 
-cleanup_path="$(python3 - <<PY
+cleanup_path="$(python3 - "$CANDIDATE_JSON_FILE" <<'PY'
 import json
-d=json.loads('''$CANDIDATE_JSON''')
+import sys
+from pathlib import Path
+d=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 print(d["manifest"]["cleanup_candidate"])
 PY
 )"
-candidate_total_bytes="$(python3 - <<PY
+candidate_total_bytes="$(python3 - "$CANDIDATE_JSON_FILE" <<'PY'
 import json
-d=json.loads('''$CANDIDATE_JSON''')
+import sys
+from pathlib import Path
+d=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 print(d["candidate"]["total_size_bytes"])
 PY
 )"
-candidate_file_count="$(python3 - <<PY
+candidate_file_count="$(python3 - "$CANDIDATE_JSON_FILE" <<'PY'
 import json
-d=json.loads('''$CANDIDATE_JSON''')
+import sys
+from pathlib import Path
+d=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 print(d["candidate"]["file_count"])
 PY
 )"
 candidate_dest="$DOWNLOAD_ROOT/$CANDIDATE_ID"
-first_model_file="$(python3 - <<PY
+first_model_file="$(python3 - "$CANDIDATE_JSON_FILE" "$candidate_dest" <<'PY'
 import json
+import sys
 from pathlib import Path
-d=json.loads('''$CANDIDATE_JSON''')
-print(Path("$candidate_dest") / d["candidate"]["files"][0]["file"])
+d=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(Path(sys.argv[2]) / d["candidate"]["files"][0]["file"])
 PY
 )"
 
@@ -146,12 +156,12 @@ fi
 projected_after_cleanup=$((available_bytes + cleanup_bytes))
 dry_run_artifact="$ART_DIR/compact-target-after-cleanup-dryrun-${STAMP}.json"
 
-python3 - "$CANDIDATE_JSON" "$dry_run_artifact" "$REPO_ROOT" "$CANDIDATE_ID" "$candidate_dest" "$cleanup_path" "$available_bytes" "$cleanup_bytes" "$projected_after_cleanup" "$EXECUTE_DOWNLOAD" "$CONFIRM_DELETE" "$SKIP_RUN" "$BINARY" <<'PY'
+python3 - "$CANDIDATE_JSON_FILE" "$dry_run_artifact" "$REPO_ROOT" "$CANDIDATE_ID" "$candidate_dest" "$cleanup_path" "$available_bytes" "$cleanup_bytes" "$projected_after_cleanup" "$EXECUTE_DOWNLOAD" "$CONFIRM_DELETE" "$SKIP_RUN" "$BINARY" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-payload = json.loads(sys.argv[1])
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 artifact = Path(sys.argv[2])
 candidate = payload["candidate"]
 out = {
@@ -211,12 +221,12 @@ else
   echo "cleanup candidate already absent: $cleanup_path"
 fi
 
-python3 - "$CANDIDATE_JSON" "$candidate_dest" > "$run_log/download-list.tsv" <<'PY'
+python3 - "$CANDIDATE_JSON_FILE" "$candidate_dest" > "$run_log/download-list.tsv" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-payload = json.loads(sys.argv[1])
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 dest = Path(sys.argv[2])
 for item in payload["candidate"]["files"]:
     path = dest / item["file"]

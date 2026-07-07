@@ -1,0 +1,617 @@
+{
+  "artifact_id": "20260708-hf-targeted-no-delete-candidate-range-refresh",
+  "method": "curl -L --range 0-0 --max-time 12; at most 1 byte per file body",
+  "current_available_bytes_budget": 35550629888,
+  "results": [
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "file": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+      "returncode": 0,
+      "seconds": 0.505,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 52593532000,
+      "fits_no_delete_budget": false,
+      "etag": "\"7f4deb0dc07cdbc01ff88ae11e616fd8d2d1d8263efec15b034c5d731fe83070\"",
+      "stderr": ""
+    },
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-Spark-GGUF",
+      "file": "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf",
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-Spark-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf",
+      "returncode": 0,
+      "seconds": 0.461,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 82382923360,
+      "fits_no_delete_budget": false,
+      "etag": "\"489938b8cde174b5548809b9b7dae726fc6c446542f38f63450578c5c80aab4f\"",
+      "stderr": ""
+    },
+    {
+      "repo": "Preyazz/DeepSeek-V4-Flash-GGUF",
+      "file": "DeepSeek-V4-Flash-Q2_K.gguf",
+      "url": "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash-Q2_K.gguf",
+      "returncode": 0,
+      "seconds": 0.451,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 103283751520,
+      "fits_no_delete_budget": false,
+      "etag": "\"03fed7972dc86b3607a58ac1c8b16e903c338f7077ea8ec41c51cf544f4a6565\"",
+      "stderr": ""
+    },
+    {
+      "repo": "Preyazz/DeepSeek-V4-Flash-GGUF",
+      "file": "DeepSeek-V4-Flash-Q3_K_M.gguf",
+      "url": "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash-Q3_K_M.gguf",
+      "returncode": 0,
+      "seconds": 0.53,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 135535174240,
+      "fits_no_delete_budget": false,
+      "etag": "\"49177718d82f38a175f939084cc4fa14fe81fb7ba20e56d513fabec610239123\"",
+      "stderr": ""
+    },
+    {
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "file": "DeepSeek-V4-Flash.IQ2_S.gguf",
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ2_S.gguf",
+      "returncode": 0,
+      "seconds": 0.455,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 88019539296,
+      "fits_no_delete_budget": false,
+      "etag": "\"4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0\"",
+      "stderr": ""
+    },
+    {
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "file": "DeepSeek-V4-Flash.IQ3_XXS.gguf",
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ3_XXS.gguf",
+      "returncode": 0,
+      "seconds": 0.449,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 113974275424,
+      "fits_no_delete_budget": false,
+      "etag": "\"2fbe678ad9e10ccad840d17942bbb09b5a51b3bcce8dd44f145c5d721889ee0f\"",
+      "stderr": ""
+    },
+    {
+      "repo": "cPilotGod/DeepSeek-V4-Flash-IQ2",
+      "file": "DeepSeek-V4-Flash-IQ2.gguf",
+      "url": "https://huggingface.co/cPilotGod/DeepSeek-V4-Flash-IQ2/resolve/main/DeepSeek-V4-Flash-IQ2.gguf",
+      "returncode": 0,
+      "seconds": 0.627,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 86720111488,
+      "fits_no_delete_budget": false,
+      "etag": "\"38ccf413bd121a82b9023228e4f49e9557fca645a75c1628addcd9f9e2938430\"",
+      "stderr": ""
+    },
+    {
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "file": "ds4flash-4expert.gguf",
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf",
+      "returncode": 0,
+      "seconds": 0.482,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 164465760544,
+      "fits_no_delete_budget": false,
+      "etag": "\"96bcd717ee6a3715d4ba1fd7946d9ee8a1eabb1247737afd009931f0318f000b\"",
+      "stderr": ""
+    },
+    {
+      "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "file": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+      "url": "https://huggingface.co/huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF/resolve/main/Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+      "returncode": 0,
+      "seconds": 0.451,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 86720111200,
+      "fits_no_delete_budget": false,
+      "etag": "\"6ba9aafa78628a7ab4d197895727af40842bba6717d47ac678e282fcec2db1e6\"",
+      "stderr": ""
+    },
+    {
+      "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "file": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+      "url": "https://huggingface.co/huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF/resolve/main/Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+      "returncode": 0,
+      "seconds": 0.452,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 99705676384,
+      "fits_no_delete_budget": false,
+      "etag": "\"59588d5ba2597db3a2e0d85ab01331ec0ca9e2641b514caf4ce0909955ec116a\"",
+      "stderr": ""
+    },
+    {
+      "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF",
+      "file": "ggml-model-Q3_K_S.gguf",
+      "url": "https://huggingface.co/huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF/resolve/main/ggml-model-Q3_K_S.gguf",
+      "returncode": 0,
+      "seconds": 0.453,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 122467948864,
+      "fits_no_delete_budget": false,
+      "etag": "\"f062059d2da933de30536fc92fb59014a2109c699bbf4c7160eae42396da9e71\"",
+      "stderr": ""
+    },
+    {
+      "repo": "cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+      "url": "https://huggingface.co/cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF/resolve/main/cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+      "returncode": 0,
+      "seconds": 0.453,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 98810926400,
+      "fits_no_delete_budget": false,
+      "etag": "\"d0269f80e092bd80de905a26681d3a2ca9fdc89593c00829ba59657a3164993c\"",
+      "stderr": ""
+    },
+    {
+      "repo": "audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+      "url": "https://huggingface.co/audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF/resolve/main/cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+      "returncode": 0,
+      "seconds": 0.455,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 86720106528,
+      "fits_no_delete_budget": false,
+      "etag": "\"dd6c3e5fa844bb10f14a177439e68f803fbd76602a90b73c433f24bb379bb674\"",
+      "stderr": ""
+    },
+    {
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128.gguf",
+      "returncode": 0,
+      "seconds": 0.456,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 55875180192,
+      "fits_no_delete_budget": false,
+      "etag": "\"fb69debc395598ee763d1c094d9671d95f020b12e73bd2252623832c82854b02\"",
+      "stderr": ""
+    },
+    {
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+      "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+      "returncode": 0,
+      "seconds": 1.312,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/2 206"
+      ],
+      "size_bytes": 49952658368,
+      "fits_no_delete_budget": false,
+      "etag": "\"81c1f079af7aef05e54ac9fbc25fd08c9a6ba069d60850a47659c048581a13b6\"",
+      "stderr": ""
+    },
+    {
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+      "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+      "returncode": 0,
+      "seconds": 1.672,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/2 206"
+      ],
+      "size_bytes": 11588146976,
+      "fits_no_delete_budget": true,
+      "etag": "\"ef6131d39d822a98bb743864d630feca99097159107eeac0d9ff1dd1f373b2ae\"",
+      "stderr": ""
+    }
+  ],
+  "fits_no_delete_budget": [
+    {
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+      "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+      "returncode": 0,
+      "seconds": 1.672,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/2 206"
+      ],
+      "size_bytes": 11588146976,
+      "fits_no_delete_budget": true,
+      "etag": "\"ef6131d39d822a98bb743864d630feca99097159107eeac0d9ff1dd1f373b2ae\"",
+      "stderr": ""
+    }
+  ],
+  "decision": "no_complete_candidate_fits_no_delete_budget",
+  "complete_single_file_candidates": [
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "file": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+      "returncode": 0,
+      "seconds": 0.505,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 52593532000,
+      "fits_no_delete_budget": false,
+      "etag": "\"7f4deb0dc07cdbc01ff88ae11e616fd8d2d1d8263efec15b034c5d731fe83070\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-Spark-GGUF",
+      "file": "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf",
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-Spark-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf",
+      "returncode": 0,
+      "seconds": 0.461,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 82382923360,
+      "fits_no_delete_budget": false,
+      "etag": "\"489938b8cde174b5548809b9b7dae726fc6c446542f38f63450578c5c80aab4f\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "Preyazz/DeepSeek-V4-Flash-GGUF",
+      "file": "DeepSeek-V4-Flash-Q2_K.gguf",
+      "url": "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash-Q2_K.gguf",
+      "returncode": 0,
+      "seconds": 0.451,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 103283751520,
+      "fits_no_delete_budget": false,
+      "etag": "\"03fed7972dc86b3607a58ac1c8b16e903c338f7077ea8ec41c51cf544f4a6565\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "Preyazz/DeepSeek-V4-Flash-GGUF",
+      "file": "DeepSeek-V4-Flash-Q3_K_M.gguf",
+      "url": "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash-Q3_K_M.gguf",
+      "returncode": 0,
+      "seconds": 0.53,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 135535174240,
+      "fits_no_delete_budget": false,
+      "etag": "\"49177718d82f38a175f939084cc4fa14fe81fb7ba20e56d513fabec610239123\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "file": "DeepSeek-V4-Flash.IQ2_S.gguf",
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ2_S.gguf",
+      "returncode": 0,
+      "seconds": 0.455,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 88019539296,
+      "fits_no_delete_budget": false,
+      "etag": "\"4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "file": "DeepSeek-V4-Flash.IQ3_XXS.gguf",
+      "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ3_XXS.gguf",
+      "returncode": 0,
+      "seconds": 0.449,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 113974275424,
+      "fits_no_delete_budget": false,
+      "etag": "\"2fbe678ad9e10ccad840d17942bbb09b5a51b3bcce8dd44f145c5d721889ee0f\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "cPilotGod/DeepSeek-V4-Flash-IQ2",
+      "file": "DeepSeek-V4-Flash-IQ2.gguf",
+      "url": "https://huggingface.co/cPilotGod/DeepSeek-V4-Flash-IQ2/resolve/main/DeepSeek-V4-Flash-IQ2.gguf",
+      "returncode": 0,
+      "seconds": 0.627,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 86720111488,
+      "fits_no_delete_budget": false,
+      "etag": "\"38ccf413bd121a82b9023228e4f49e9557fca645a75c1628addcd9f9e2938430\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "file": "ds4flash-4expert.gguf",
+      "url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf",
+      "returncode": 0,
+      "seconds": 0.482,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 164465760544,
+      "fits_no_delete_budget": false,
+      "etag": "\"96bcd717ee6a3715d4ba1fd7946d9ee8a1eabb1247737afd009931f0318f000b\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "file": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+      "url": "https://huggingface.co/huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF/resolve/main/Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+      "returncode": 0,
+      "seconds": 0.451,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 86720111200,
+      "fits_no_delete_budget": false,
+      "etag": "\"6ba9aafa78628a7ab4d197895727af40842bba6717d47ac678e282fcec2db1e6\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "file": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+      "url": "https://huggingface.co/huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF/resolve/main/Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+      "returncode": 0,
+      "seconds": 0.452,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 99705676384,
+      "fits_no_delete_budget": false,
+      "etag": "\"59588d5ba2597db3a2e0d85ab01331ec0ca9e2641b514caf4ce0909955ec116a\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF",
+      "file": "ggml-model-Q3_K_S.gguf",
+      "url": "https://huggingface.co/huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF/resolve/main/ggml-model-Q3_K_S.gguf",
+      "returncode": 0,
+      "seconds": 0.453,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 122467948864,
+      "fits_no_delete_budget": false,
+      "etag": "\"f062059d2da933de30536fc92fb59014a2109c699bbf4c7160eae42396da9e71\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+      "url": "https://huggingface.co/cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF/resolve/main/cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+      "returncode": 0,
+      "seconds": 0.453,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 98810926400,
+      "fits_no_delete_budget": false,
+      "etag": "\"d0269f80e092bd80de905a26681d3a2ca9fdc89593c00829ba59657a3164993c\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+      "url": "https://huggingface.co/audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF/resolve/main/cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+      "returncode": 0,
+      "seconds": 0.455,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 86720106528,
+      "fits_no_delete_budget": false,
+      "etag": "\"dd6c3e5fa844bb10f14a177439e68f803fbd76602a90b73c433f24bb379bb674\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128.gguf",
+      "returncode": 0,
+      "seconds": 0.456,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 55875180192,
+      "fits_no_delete_budget": false,
+      "etag": "\"fb69debc395598ee763d1c094d9671d95f020b12e73bd2252623832c82854b02\"",
+      "stderr": "",
+      "complete_candidate": true
+    }
+  ],
+  "split_family_candidates": [
+    {
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "group": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-SHARDED.gguf",
+      "expected_shards": 2,
+      "known_shards": 2,
+      "known_size_bytes": 61540805344,
+      "files": [
+        {
+          "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+          "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+          "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+          "returncode": 0,
+          "seconds": 1.312,
+          "status": [
+            "HTTP/2 302",
+            "HTTP/2 206"
+          ],
+          "size_bytes": 49952658368,
+          "fits_no_delete_budget": false,
+          "etag": "\"81c1f079af7aef05e54ac9fbc25fd08c9a6ba069d60850a47659c048581a13b6\"",
+          "stderr": ""
+        },
+        {
+          "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+          "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+          "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+          "returncode": 0,
+          "seconds": 1.672,
+          "status": [
+            "HTTP/2 302",
+            "HTTP/2 206"
+          ],
+          "size_bytes": 11588146976,
+          "fits_no_delete_budget": true,
+          "etag": "\"ef6131d39d822a98bb743864d630feca99097159107eeac0d9ff1dd1f373b2ae\"",
+          "stderr": ""
+        }
+      ],
+      "complete_candidate": true,
+      "fits_no_delete_budget": false
+    }
+  ],
+  "complete_candidates_fit_no_delete_budget": [],
+  "smallest_complete_single_file_candidates": [
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "file": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+      "returncode": 0,
+      "seconds": 0.505,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 52593532000,
+      "fits_no_delete_budget": false,
+      "etag": "\"7f4deb0dc07cdbc01ff88ae11e616fd8d2d1d8263efec15b034c5d731fe83070\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128.gguf",
+      "returncode": 0,
+      "seconds": 0.456,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 55875180192,
+      "fits_no_delete_budget": false,
+      "etag": "\"fb69debc395598ee763d1c094d9671d95f020b12e73bd2252623832c82854b02\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-Spark-GGUF",
+      "file": "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf",
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-Spark-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf",
+      "returncode": 0,
+      "seconds": 0.461,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 82382923360,
+      "fits_no_delete_budget": false,
+      "etag": "\"489938b8cde174b5548809b9b7dae726fc6c446542f38f63450578c5c80aab4f\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+      "url": "https://huggingface.co/audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF/resolve/main/cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+      "returncode": 0,
+      "seconds": 0.455,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 86720106528,
+      "fits_no_delete_budget": false,
+      "etag": "\"dd6c3e5fa844bb10f14a177439e68f803fbd76602a90b73c433f24bb379bb674\"",
+      "stderr": "",
+      "complete_candidate": true
+    },
+    {
+      "repo": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "file": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+      "url": "https://huggingface.co/huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF/resolve/main/Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+      "returncode": 0,
+      "seconds": 0.451,
+      "status": [
+        "HTTP/2 302",
+        "HTTP/1.1 206 Partial Content"
+      ],
+      "size_bytes": 86720111200,
+      "fits_no_delete_budget": false,
+      "etag": "\"6ba9aafa78628a7ab4d197895727af40842bba6717d47ac678e282fcec2db1e6\"",
+      "stderr": "",
+      "complete_candidate": true
+    }
+  ]
+}

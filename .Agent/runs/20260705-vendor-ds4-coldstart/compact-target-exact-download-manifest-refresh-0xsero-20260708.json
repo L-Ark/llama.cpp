@@ -1,0 +1,167 @@
+{
+  "attempt_id": "20260708-compact-target-exact-download-manifest-refresh-0xsero",
+  "created_at_local": "2026-07-08",
+  "status": "download_manifest_refreshed_no_download_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "09ce1b3228b34c375d0f401540e902d966f9aaa9",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Refresh compact target priority after targeted metadata/range scan found a smaller DeepSeek4 Spark Mini Q2 REAP candidate. No model body was downloaded except a 16MiB header range for metadata parsing.",
+  "input_artifacts": [
+    ".Agent/runs/20260705-vendor-ds4-coldstart/compact-target-exact-download-manifest-20260708.json",
+    ".Agent/runs/20260705-vendor-ds4-coldstart/hf-targeted-no-delete-candidate-range-refresh-20260708.json"
+  ],
+  "disk_context": {
+    "available_bytes": 35633246208,
+    "available_gib": 33.1860466003418,
+    "rejected_iq2s_cleanup_bytes": 88019539296,
+    "budget_after_iq2s_cleanup_bytes": 123652785504,
+    "budget_after_iq2s_cleanup_gib": 115.1606305539608
+  },
+  "cleanup_required_before_download": true,
+  "cleanup_candidate": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+  "cleanup_candidate_bytes": 88019539296,
+  "download_order": "after explicit cleanup approval, try 0xsero-spark-mini-q2-reap-ds4 first for load/correctness only; fall back to teamblobfish-iq1-s-xl if it fails loader/correctness",
+  "candidates": [
+    {
+      "id": "0xsero-spark-mini-q2-reap-ds4",
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "variant": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+      "priority": "primary_after_cleanup_header_pass_loader_risk",
+      "file_count": 1,
+      "total_size_bytes": 52593532000,
+      "total_size_gib": 48.982,
+      "complete_metadata": true,
+      "metadata_missing_count": 0,
+      "header_gate": {
+        "range_header_file": "/root/lfz/runs/vendor-ds4-16gb/hf-header-probes-20260708/0xsero-spark-mini-q2.head16m",
+        "architecture": "deepseek4",
+        "block_count": 43,
+        "expert_count": 144,
+        "expert_used_count": 6,
+        "n_tensors": 1328,
+        "type_counts": {
+          "10": 43,
+          "16": 86,
+          "F16": 359,
+          "F32": 492,
+          "I32": 3,
+          "Q8_0": 345
+        },
+        "decision": "metadata_architecture_pass_but_correctness_unverified"
+      },
+      "files": [
+        {
+          "file": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+          "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+          "size_bytes": 52593532000,
+          "size_gib": 48.982,
+          "etag": "\"7f4deb0dc07cdbc01ff88ae11e616fd8d2d1d8263efec15b034c5d731fe83070\"",
+          "status_chain": [
+            "302",
+            "206"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "teamblobfish-iq1-s-xl",
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "variant": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-SHARDED.gguf",
+      "priority": "primary_after_cleanup",
+      "file_count": 2,
+      "total_size_bytes": 61540805344,
+      "total_size_gib": 57.314,
+      "complete_metadata": true,
+      "metadata_missing_count": 0,
+      "files": [
+        {
+          "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+          "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+          "size_bytes": 49952658368,
+          "size_gib": 46.522,
+          "etag": "81c1f079af7aef05e54ac9fbc25fd08c9a6ba069d60850a47659c048581a13b6",
+          "status_chain": [
+            "302",
+            "206"
+          ]
+        },
+        {
+          "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+          "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+          "size_bytes": 11588146976,
+          "size_gib": 10.792,
+          "etag": "ef6131d39d822a98bb743864d630feca99097159107eeac0d9ff1dd1f373b2ae",
+          "status_chain": [
+            "302",
+            "206"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "teamblobfish-iq1-m",
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "variant": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-SHARDED.gguf",
+      "priority": "secondary_after_cleanup",
+      "file_count": 2,
+      "total_size_bytes": 64508046688,
+      "total_size_gib": 60.078,
+      "complete_metadata": true,
+      "metadata_missing_count": 0,
+      "files": [
+        {
+          "file": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+          "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+          "size_bytes": 49882725408,
+          "size_gib": 46.457,
+          "etag": "961277e8c7f8e1e016f28d6c5c7deed1764371de40bc2c5ca91700671da80e0b",
+          "status_chain": [
+            "302",
+            "206"
+          ]
+        },
+        {
+          "file": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00002-of-00002.gguf",
+          "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_M/DeepSeek-V4-Flash-IQ1_M-00002-of-00002.gguf",
+          "size_bytes": 14625321280,
+          "size_gib": 13.621,
+          "etag": "3e2bbc2be3514b2f2b69ef41eb511f62e29b12e3e574021261f18ff78db30f6c",
+          "status_chain": [
+            "302",
+            "206"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sleepy-k128-q2q4-mixed",
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "variant": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "priority": "tertiary_loader_risk",
+      "file_count": 1,
+      "total_size_bytes": 55875180192,
+      "total_size_gib": 52.038,
+      "complete_metadata": true,
+      "metadata_missing_count": 0,
+      "files": [
+        {
+          "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+          "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128.gguf",
+          "size_bytes": 55875180192,
+          "size_gib": 52.038,
+          "etag": "fb69debc395598ee763d1c094d9671d95f020b12e73bd2252623832c82854b02",
+          "status_chain": [
+            "302",
+            "200"
+          ]
+        }
+      ]
+    }
+  ],
+  "decision": {
+    "accepted_sota_changed": false,
+    "download_now": false,
+    "source_patch_now": false,
+    "reason": "0xSero candidate is smaller and header-pass deepseek4, but still exceeds no-delete disk budget and correctness is unverified. It only changes future cleanup-gated priority."
+  }
+}

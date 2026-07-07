@@ -8138,3 +8138,38 @@ Decision:
 - Do not implement native fused/resident source changes until a design accounts for the extra post-up/down savings.
 - Compact target remains the only prepared route with plausible representation-level upside, but it requires explicit cleanup approval before execution.
 - No SOTA changed.
+
+## 2026-07-08 X10-AZ no-delete candidate refresh and 0xSero compact priority
+
+- broad metadata artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/hf-deepseek-v4-flash-no-delete-candidate-refresh-20260708.json`
+- targeted range artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/hf-targeted-no-delete-candidate-range-refresh-20260708.json`
+- refreshed manifest: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-exact-download-manifest-refresh-0xsero-20260708.json`
+- guarded dry-run artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-after-cleanup-dryrun-20260707T200914Z.json`
+- status: `no_delete_still_blocked_0xsero_after_cleanup_priority_not_sota`
+
+Purpose:
+- Refresh external DeepSeek V4 Flash GGUF/compact metadata without downloading model bodies, to check whether cleanup is still required and whether a smaller cleanup-gated candidate exists.
+
+Method:
+- Used Hugging Face metadata plus targeted `curl -L --range 0-0 --max-time 12` checks. This downloaded at most one byte per targeted model file.
+- Fetched only the first `16MiB` range of the smallest promising candidate for GGUF header parsing.
+
+Findings:
+- No complete target candidate fits the current no-delete disk budget of about `34GB`.
+- The only file below the no-delete budget in the targeted set was a single teamblobfish shard, not a runnable complete model.
+- Smallest complete single-file candidate found:
+  - repo: `0xSero/DeepSeek-V4-Flash-162B-GGUF`
+  - file: `DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`
+  - size: `52593532000` bytes (`48.982 GiB`)
+  - etag: `"7f4deb0dc07cdbc01ff88ae11e616fd8d2d1d8263efec15b034c5d731fe83070"`
+  - header range result: `architecture=deepseek4`, `block_count=43`, `expert_count=144`, `expert_used_count=6`, `n_tensors=1328`
+  - type counts include `Q2_K` type id `10`, `IQ2_XXS` type id `16`, `Q8_0`, `F16`, and `F32`.
+
+Decision:
+- Update the guarded compact-target runner default to `0xsero-spark-mini-q2-reap-ds4`, using the refreshed manifest.
+- This is not a SOTA and not a correctness claim. The model is smaller and header-pass `deepseek4`, but it differs from the native 256-expert target (`expert_count=144`) and must pass load/correctness before any token-rate benchmark.
+- Real execution still requires explicit cleanup approval:
+  - `.Agent/run-tools/run_compact_target_after_cleanup.sh --execute-download --confirm-delete-rejected-iq2s`
+- The updated runner dry-run passed and still performs no deletion, no download, and no model execution by default.
+- Refusal path was tested: `--execute-download` without `--confirm-delete-rejected-iq2s` exits `2` and performs no deletion/download.
+- No SOTA changed.

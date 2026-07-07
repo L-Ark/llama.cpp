@@ -1,0 +1,2861 @@
+{
+  "artifact_id": "20260708-hf-deepseek-v4-flash-no-delete-candidate-refresh",
+  "created_at": "2026-07-08",
+  "purpose": "Refresh Hugging Face DeepSeek V4 Flash GGUF/compact candidates and check whether any complete candidate fits current no-delete disk budget.",
+  "current_available_bytes_budget": 35550629888,
+  "repos": [
+    {
+      "modelId": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "api_url": "https://huggingface.co/api/models/0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-30T10:14:15.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf.sha256",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf"
+          ]
+        },
+        {
+          "group": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf.sha256",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf.sha256"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "0xSero/DeepSeek-V4-Flash-Spark-GGUF",
+      "api_url": "https://huggingface.co/api/models/0xSero/DeepSeek-V4-Flash-Spark-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-30T18:25:58.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf.sha256",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf"
+          ]
+        },
+        {
+          "group": "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf.sha256",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf.sha256"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-07-04T07:28:18.000Z",
+      "gguf_files": [
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q6_K.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q8_0.gguf",
+          "size": null
+        },
+        {
+          "file": "mmproj.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q6_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q6_K.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q8_0.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q8_0.gguf"
+          ]
+        },
+        {
+          "group": "mmproj.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "mmproj.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "api_url": "https://huggingface.co/api/models/Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-07-07T02:16:40.000Z",
+      "gguf_files": [
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-BF16.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q6_K.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q8_0.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-BF16.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-BF16.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-IQ4_XS.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q2_K.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_L.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q3_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q4_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q5_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q6_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q6_K.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q8_0.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-MTP-Q8_0.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "Preyazz/DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/Preyazz/DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-04-28T11:31:46.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash-Q2_K.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash-Q2_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-Q2_K.gguf"
+          ]
+        },
+        {
+          "group": "DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-Q3_K_M.gguf"
+          ]
+        },
+        {
+          "group": "DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-Q4_K_M.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF",
+      "api_url": "https://huggingface.co/api/models/Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-04-27T22:01:38.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash-Q8_0.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash-Q8_0.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-Q8_0.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "api_url": "https://huggingface.co/api/models/audreyt/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-07-03T08:04:56.000Z",
+      "gguf_files": [
+        {
+          "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-aligned.gguf",
+          "size": null
+        },
+        {
+          "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+          "size": null
+        },
+        {
+          "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-Layers37-42Q4KExperts-mixed.gguf",
+          "size": null
+        },
+        {
+          "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+          "size": null
+        },
+        {
+          "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf",
+          "size": null
+        },
+        {
+          "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-aligned.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-aligned.gguf"
+          ]
+        },
+        {
+          "group": "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "cyberneurova-DeepSeek-V4-Flash-abliterated-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf"
+          ]
+        },
+        {
+          "group": "cyberneurova-DeepSeek-V4-Flash-abliterated-Layers37-42Q4KExperts-mixed.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "cyberneurova-DeepSeek-V4-Flash-abliterated-Layers37-42Q4KExperts-mixed.gguf"
+          ]
+        },
+        {
+          "group": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf"
+          ]
+        },
+        {
+          "group": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "cyberneurova-DeepSeek-V4-Flash-abliterated-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf"
+          ]
+        },
+        {
+          "group": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "bartowski/DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/bartowski/DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-06-30T03:17:40.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00004.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00004.gguf",
+            "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00004.gguf",
+            "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00004.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "batiai/DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/batiai/DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-03T22:22:54.000Z",
+      "gguf_files": [
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q3_K_M-00001-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q3_K_M-00002-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q3_K_M-00003-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-00004-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00001-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00002-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00003-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00004-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00005-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00001-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00002-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00003-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00004-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00005-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00001-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00002-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00003-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00004-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00005-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00006-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00007-of-00007.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "deepseek-ai-DeepSeek-V4-Flash-Q3_K_M-SHARDED.gguf",
+          "files": 3,
+          "known_size_bytes": 0,
+          "unknown_sizes": 3,
+          "examples": [
+            "deepseek-ai-DeepSeek-V4-Flash-Q3_K_M-00001-of-00003.gguf",
+            "deepseek-ai-DeepSeek-V4-Flash-Q3_K_M-00002-of-00003.gguf",
+            "deepseek-ai-DeepSeek-V4-Flash-Q3_K_M-00003-of-00003.gguf"
+          ]
+        },
+        {
+          "group": "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-00001-of-00004.gguf",
+            "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-00002-of-00004.gguf",
+            "deepseek-ai-DeepSeek-V4-Flash-Q4_K_M-00003-of-00004.gguf"
+          ]
+        },
+        {
+          "group": "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-SHARDED.gguf",
+          "files": 5,
+          "known_size_bytes": 0,
+          "unknown_sizes": 5,
+          "examples": [
+            "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00001-of-00005.gguf",
+            "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00002-of-00005.gguf",
+            "deepseek-ai-DeepSeek-V4-Flash-Q5_K_M-00003-of-00005.gguf"
+          ]
+        },
+        {
+          "group": "deepseek-ai-DeepSeek-V4-Flash-Q6_K-SHARDED.gguf",
+          "files": 5,
+          "known_size_bytes": 0,
+          "unknown_sizes": 5,
+          "examples": [
+            "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00001-of-00005.gguf",
+            "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00002-of-00005.gguf",
+            "deepseek-ai-DeepSeek-V4-Flash-Q6_K-00003-of-00005.gguf"
+          ]
+        },
+        {
+          "group": "deepseek-ai-DeepSeek-V4-Flash-Q8_0-SHARDED.gguf",
+          "files": 7,
+          "known_size_bytes": 0,
+          "unknown_sizes": 7,
+          "examples": [
+            "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00001-of-00007.gguf",
+            "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00002-of-00007.gguf",
+            "deepseek-ai-DeepSeek-V4-Flash-Q8_0-00003-of-00007.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "bleysg/DeepSeek-V4-Flash-IQ2XXS-Q2K-FP8-120GB-target",
+      "api_url": "https://huggingface.co/api/models/bleysg/DeepSeek-V4-Flash-IQ2XXS-Q2K-FP8-120GB-target",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-11T03:04:50.000Z",
+      "gguf_files": [],
+      "groups": []
+    },
+    {
+      "modelId": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/bullerwins/DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-07-02T18:41:52.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash.IQ2_S.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash.IQ3_XXS-AS.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash.IQ3_XXS-L21.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash.IQ3_XXS-L39.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash.IQ3_XXS.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash.IQ4_XS.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash.Q8_0.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash.IQ2_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash.IQ2_S.gguf"
+          ]
+        },
+        {
+          "group": "DeepSeek-V4-Flash.IQ3_XXS-AS.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash.IQ3_XXS-AS.gguf"
+          ]
+        },
+        {
+          "group": "DeepSeek-V4-Flash.IQ3_XXS-L21.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash.IQ3_XXS-L21.gguf"
+          ]
+        },
+        {
+          "group": "DeepSeek-V4-Flash.IQ3_XXS-L39.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash.IQ3_XXS-L39.gguf"
+          ]
+        },
+        {
+          "group": "DeepSeek-V4-Flash.IQ3_XXS.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash.IQ3_XXS.gguf"
+          ]
+        },
+        {
+          "group": "DeepSeek-V4-Flash.IQ4_XS.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash.IQ4_XS.gguf"
+          ]
+        },
+        {
+          "group": "DeepSeek-V4-Flash.Q8_0.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash.Q8_0.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "cPilotGod/DeepSeek-V4-Flash-IQ2",
+      "api_url": "https://huggingface.co/api/models/cPilotGod/DeepSeek-V4-Flash-IQ2",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-06-11T06:15:30.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash-IQ2.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash-IQ2.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-IQ2.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "api_url": "https://huggingface.co/api/models/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-07-01T09:30:47.000Z",
+      "gguf_files": [
+        {
+          "file": "ds4flash-4expert.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "ds4flash-4expert.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "ds4flash-4expert.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "api_url": "https://huggingface.co/api/models/cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-06T16:14:55.000Z",
+      "gguf_files": [
+        {
+          "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+          "size": null
+        },
+        {
+          "file": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf"
+          ]
+        },
+        {
+          "group": "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "firedancer/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/firedancer/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-02T22:12:02.000Z",
+      "gguf_files": [
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-BF16.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-IQ4_XS.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q2_K.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_L.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q6_K.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q8_0.gguf",
+          "size": null
+        },
+        {
+          "file": "mmproj.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-BF16.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-BF16.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-IQ4_XS.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-IQ4_XS.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q2_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q2_K.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_L.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_L.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q5_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q6_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q6_K.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q8_0.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q8_0.gguf"
+          ]
+        },
+        {
+          "group": "mmproj.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "mmproj.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF",
+      "api_url": "https://huggingface.co/api/models/huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-07-03T12:52:45.000Z",
+      "gguf_files": [
+        {
+          "file": "ggml-model-Q3_K_S.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "ggml-model-Q3_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "ggml-model-Q3_K_S.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "api_url": "https://huggingface.co/api/models/huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-06-06T23:43:01.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "size": null
+        },
+        {
+          "file": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+          "size": null
+        },
+        {
+          "file": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+          "size": null
+        },
+        {
+          "file": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
+          ]
+        },
+        {
+          "group": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2.gguf"
+          ]
+        },
+        {
+          "group": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q2_K.gguf"
+          ]
+        },
+        {
+          "group": "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Huihui-DeepSeek-V4-Flash-BF16-abliterated-ds4-Q4_K.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "ilintar/DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/ilintar/DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-07-06T17:09:53.000Z",
+      "gguf_files": [
+        {
+          "file": "iq2m/DeepSeek-V4-Flash-IQ2_M-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "iq2m/DeepSeek-V4-Flash-IQ2_M-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "iq2m/DeepSeek-V4-Flash-IQ2_M-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "iq2m/DeepSeek-V4-Flash-IQ2_M-00004-of-00004.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "iq2m/DeepSeek-V4-Flash-IQ2_M-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "iq2m/DeepSeek-V4-Flash-IQ2_M-00001-of-00004.gguf",
+            "iq2m/DeepSeek-V4-Flash-IQ2_M-00002-of-00004.gguf",
+            "iq2m/DeepSeek-V4-Flash-IQ2_M-00003-of-00004.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "jorge-erdb/Qwen3.5-9B-DeepSeek-V4-Flash-4bit-GGUF",
+      "api_url": "https://huggingface.co/api/models/jorge-erdb/Qwen3.5-9B-DeepSeek-V4-Flash-4bit-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-06T18:34:38.000Z",
+      "gguf_files": [
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-D-IQ4_NL.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-D-IQ4_NL.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-D-IQ4_NL.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "lovedheart/DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/lovedheart/DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-04-26T21:44:33.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash-MXFP4_MOE.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00002-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00003-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00004-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00005-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00006-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00007-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00008-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00009-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00010-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00011-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00012-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00013-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00014-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00015-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00016-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00017-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00018-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00019-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00020-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00021-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00022-of-00023.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00023-of-00023.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash-MXFP4_MOE.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-MXFP4_MOE.gguf"
+          ]
+        },
+        {
+          "group": "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-SHARDED.gguf",
+          "files": 23,
+          "known_size_bytes": 0,
+          "unknown_sizes": 23,
+          "examples": [
+            "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00001-of-00023.gguf",
+            "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00002-of-00023.gguf",
+            "Q2_K/DeepSeek-V4-Flash-Q2_K.gguf-00003-of-00023.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "lvyufeng/DeepSeek-V4-Flash-IQ1_M",
+      "api_url": "https://huggingface.co/api/models/lvyufeng/DeepSeek-V4-Flash-IQ1_M",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-06-04T20:16:19.000Z",
+      "gguf_files": [
+        {
+          "file": "dsv4-dynamic-iq1m-antirez.gguf.part-00-of-02",
+          "size": null
+        },
+        {
+          "file": "dsv4-dynamic-iq1m-antirez.gguf.part-01-of-02",
+          "size": null
+        },
+        {
+          "file": "dsv4-dynamic-iq1m-antirez.gguf.parts.txt",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "dsv4-dynamic-iq1m-antirez.gguf.part-00-of-02",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "dsv4-dynamic-iq1m-antirez.gguf.part-00-of-02"
+          ]
+        },
+        {
+          "group": "dsv4-dynamic-iq1m-antirez.gguf.part-01-of-02",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "dsv4-dynamic-iq1m-antirez.gguf.part-01-of-02"
+          ]
+        },
+        {
+          "group": "dsv4-dynamic-iq1m-antirez.gguf.parts.txt",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "dsv4-dynamic-iq1m-antirez.gguf.parts.txt"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "mradermacher/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/mradermacher/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-07T12:56:20.000Z",
+      "gguf_files": [
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.IQ4_XS.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.Q2_K.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_L.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.Q4_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.Q4_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.Q5_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.Q5_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.Q6_K.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.Q8_0.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.f16.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.mmproj-Q8_0.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.mmproj-f16.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.IQ4_XS.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.IQ4_XS.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.Q2_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.Q2_K.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_L.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_L.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.Q3_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.Q4_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.Q4_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.Q4_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.Q4_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.Q5_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.Q5_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.Q5_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.Q5_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.Q6_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.Q6_K.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.Q8_0.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.Q8_0.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.f16.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.f16.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.mmproj-Q8_0.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.mmproj-Q8_0.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.mmproj-f16.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.mmproj-f16.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "mradermacher/Qwen3.5-9B-DeepSeek-V4-Flash-i1-GGUF",
+      "api_url": "https://huggingface.co/api/models/mradermacher/Qwen3.5-9B-DeepSeek-V4-Flash-i1-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-07T13:00:10.000Z",
+      "gguf_files": [
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ1_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ1_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_XS.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_XXS.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_XS.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_XXS.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ4_NL.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ4_XS.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q2_K.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q2_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_L.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_0.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_1.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q5_K_M.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q5_K_S.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q6_K.gguf",
+          "size": null
+        },
+        {
+          "file": "Qwen3.5-9B-DeepSeek-V4-Flash.imatrix.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ1_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ1_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ1_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ1_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_XS.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_XS.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_XXS.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ2_XXS.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_XS.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_XS.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_XXS.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ3_XXS.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ4_NL.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ4_NL.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ4_XS.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-IQ4_XS.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q2_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q2_K.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q2_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q2_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_L.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_L.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q3_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_0.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_0.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_1.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_1.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q4_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q5_K_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q5_K_M.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q5_K_S.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q5_K_S.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q6_K.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.i1-Q6_K.gguf"
+          ]
+        },
+        {
+          "group": "Qwen3.5-9B-DeepSeek-V4-Flash.imatrix.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "Qwen3.5-9B-DeepSeek-V4-Flash.imatrix.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF",
+      "api_url": "https://huggingface.co/api/models/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-04-26T18:47:41.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-FP4-FP8-native.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "persadian/DeepSeek-V4-Flash-IQ1_S-XL",
+      "api_url": "https://huggingface.co/api/models/persadian/DeepSeek-V4-Flash-IQ1_S-XL",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-26T18:44:51.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash-IQ1_S-XL.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash-IQ1_S-XL.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash-IQ1_S-XL.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "setar007/DeepSeek-V4-Flash-Q8xQ5-GGUF",
+      "api_url": "https://huggingface.co/api/models/setar007/DeepSeek-V4-Flash-Q8xQ5-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-07T18:52:23.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00001-of-00011.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00002-of-00011.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00003-of-00011.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00004-of-00011.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00005-of-00011.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00006-of-00011.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00007-of-00011.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00008-of-00011.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00009-of-00011.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00010-of-00011.gguf",
+          "size": null
+        },
+        {
+          "file": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00011-of-00011.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-SHARDED.gguf",
+          "files": 11,
+          "known_size_bytes": 0,
+          "unknown_sizes": 11,
+          "examples": [
+            "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00001-of-00011.gguf",
+            "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00002-of-00011.gguf",
+            "DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf-00003-of-00011.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "sokann/DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/sokann/DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-07-03T23:03:24.000Z",
+      "gguf_files": [
+        {
+          "file": "DeepSeek-V4-Flash.gguf",
+          "size": null
+        },
+        {
+          "file": "kld/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf.kld.txt",
+          "size": null
+        },
+        {
+          "file": "kld/DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf.kld.txt",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "DeepSeek-V4-Flash.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "DeepSeek-V4-Flash.gguf"
+          ]
+        },
+        {
+          "group": "kld/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf.kld.txt",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "kld/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf.kld.txt"
+          ]
+        },
+        {
+          "group": "kld/DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf.kld.txt",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "kld/DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf.kld.txt"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "ssweens/DeepSeek-V4-Flash-GGUF-YMMV",
+      "api_url": "https://huggingface.co/api/models/ssweens/DeepSeek-V4-Flash-GGUF-YMMV",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-12T05:48:50.000Z",
+      "gguf_files": [
+        {
+          "file": "deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-00001-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-00002-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS-00001-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS-00002-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS-00003-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "deepseek-ai__DeepSeek-V4-Flash-bf16.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf"
+          ]
+        },
+        {
+          "group": "deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-SHARDED.gguf",
+          "files": 2,
+          "known_size_bytes": 0,
+          "unknown_sizes": 2,
+          "examples": [
+            "deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-00001-of-00002.gguf",
+            "deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-00002-of-00002.gguf"
+          ]
+        },
+        {
+          "group": "deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS-SHARDED.gguf",
+          "files": 3,
+          "known_size_bytes": 0,
+          "unknown_sizes": 3,
+          "examples": [
+            "deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS-00001-of-00003.gguf",
+            "deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS-00002-of-00003.gguf",
+            "deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS-00003-of-00003.gguf"
+          ]
+        },
+        {
+          "group": "deepseek-ai__DeepSeek-V4-Flash-bf16.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "deepseek-ai__DeepSeek-V4-Flash-bf16.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/tarruda/DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-07-02T05:07:00.000Z",
+      "gguf_files": [
+        {
+          "file": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00004-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "MXFP4/DeepSeek-V4-Flash-MXFP4-00005-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K-00001-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K-00002-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K/DeepSeek-V4-Flash-Q2_K-00003-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "Q3_K/DeepSeek-V4-Flash-Q3_K-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "Q3_K/DeepSeek-V4-Flash-Q3_K-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "Q3_K/DeepSeek-V4-Flash-Q3_K-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "Q3_K/DeepSeek-V4-Flash-Q3_K-00004-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "imatrix.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00001-of-00004.gguf",
+            "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00002-of-00004.gguf",
+            "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00003-of-00004.gguf"
+          ]
+        },
+        {
+          "group": "MXFP4/DeepSeek-V4-Flash-MXFP4-SHARDED.gguf",
+          "files": 5,
+          "known_size_bytes": 0,
+          "unknown_sizes": 5,
+          "examples": [
+            "MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00005.gguf",
+            "MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00005.gguf",
+            "MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00005.gguf"
+          ]
+        },
+        {
+          "group": "Q2_K/DeepSeek-V4-Flash-Q2_K-SHARDED.gguf",
+          "files": 3,
+          "known_size_bytes": 0,
+          "unknown_sizes": 3,
+          "examples": [
+            "Q2_K/DeepSeek-V4-Flash-Q2_K-00001-of-00003.gguf",
+            "Q2_K/DeepSeek-V4-Flash-Q2_K-00002-of-00003.gguf",
+            "Q2_K/DeepSeek-V4-Flash-Q2_K-00003-of-00003.gguf"
+          ]
+        },
+        {
+          "group": "Q3_K/DeepSeek-V4-Flash-Q3_K-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "Q3_K/DeepSeek-V4-Flash-Q3_K-00001-of-00004.gguf",
+            "Q3_K/DeepSeek-V4-Flash-Q3_K-00002-of-00004.gguf",
+            "Q3_K/DeepSeek-V4-Flash-Q3_K-00003-of-00004.gguf"
+          ]
+        },
+        {
+          "group": "imatrix.gguf",
+          "files": 1,
+          "known_size_bytes": 0,
+          "unknown_sizes": 1,
+          "examples": [
+            "imatrix.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-05-19T19:14:44.000Z",
+      "gguf_files": [
+        {
+          "file": "IQ1_M-XL/DeepSeek-V4-Flash-IQ1_M-XL-00001-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ1_M-XL/DeepSeek-V4-Flash-IQ1_M-XL-00002-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00002-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ2_XS-XL/DeepSeek-V4-Flash-IQ2_XS-XL-00001-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ2_XS-XL/DeepSeek-V4-Flash-IQ2_XS-XL-00002-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ2_XXS-XL/DeepSeek-V4-Flash-IQ2_XXS-XL-00001-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "IQ2_XXS-XL/DeepSeek-V4-Flash-IQ2_XXS-XL-00002-of-00002.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K-XL/DeepSeek-V4-Flash-Q2_K-XL-00001-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K-XL/DeepSeek-V4-Flash-Q2_K-XL-00002-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "Q2_K-XL/DeepSeek-V4-Flash-Q2_K-XL-00003-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-00004-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "Q8_0/DeepSeek-V4-Flash-Q8_0-00001-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "Q8_0/DeepSeek-V4-Flash-Q8_0-00002-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "Q8_0/DeepSeek-V4-Flash-Q8_0-00003-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "Q8_0/DeepSeek-V4-Flash-Q8_0-00004-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "Q8_0/DeepSeek-V4-Flash-Q8_0-00005-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "Q8_0/DeepSeek-V4-Flash-Q8_0-00006-of-00007.gguf",
+          "size": null
+        },
+        {
+          "file": "Q8_0/DeepSeek-V4-Flash-Q8_0-00007-of-00007.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "IQ1_M-XL/DeepSeek-V4-Flash-IQ1_M-XL-SHARDED.gguf",
+          "files": 2,
+          "known_size_bytes": 0,
+          "unknown_sizes": 2,
+          "examples": [
+            "IQ1_M-XL/DeepSeek-V4-Flash-IQ1_M-XL-00001-of-00002.gguf",
+            "IQ1_M-XL/DeepSeek-V4-Flash-IQ1_M-XL-00002-of-00002.gguf"
+          ]
+        },
+        {
+          "group": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-SHARDED.gguf",
+          "files": 2,
+          "known_size_bytes": 0,
+          "unknown_sizes": 2,
+          "examples": [
+            "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+            "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00002-of-00002.gguf"
+          ]
+        },
+        {
+          "group": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-SHARDED.gguf",
+          "files": 2,
+          "known_size_bytes": 0,
+          "unknown_sizes": 2,
+          "examples": [
+            "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+            "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00002-of-00002.gguf"
+          ]
+        },
+        {
+          "group": "IQ2_XS-XL/DeepSeek-V4-Flash-IQ2_XS-XL-SHARDED.gguf",
+          "files": 2,
+          "known_size_bytes": 0,
+          "unknown_sizes": 2,
+          "examples": [
+            "IQ2_XS-XL/DeepSeek-V4-Flash-IQ2_XS-XL-00001-of-00002.gguf",
+            "IQ2_XS-XL/DeepSeek-V4-Flash-IQ2_XS-XL-00002-of-00002.gguf"
+          ]
+        },
+        {
+          "group": "IQ2_XXS-XL/DeepSeek-V4-Flash-IQ2_XXS-XL-SHARDED.gguf",
+          "files": 2,
+          "known_size_bytes": 0,
+          "unknown_sizes": 2,
+          "examples": [
+            "IQ2_XXS-XL/DeepSeek-V4-Flash-IQ2_XXS-XL-00001-of-00002.gguf",
+            "IQ2_XXS-XL/DeepSeek-V4-Flash-IQ2_XXS-XL-00002-of-00002.gguf"
+          ]
+        },
+        {
+          "group": "Q2_K-XL/DeepSeek-V4-Flash-Q2_K-XL-SHARDED.gguf",
+          "files": 3,
+          "known_size_bytes": 0,
+          "unknown_sizes": 3,
+          "examples": [
+            "Q2_K-XL/DeepSeek-V4-Flash-Q2_K-XL-00001-of-00003.gguf",
+            "Q2_K-XL/DeepSeek-V4-Flash-Q2_K-XL-00002-of-00003.gguf",
+            "Q2_K-XL/DeepSeek-V4-Flash-Q2_K-XL-00003-of-00003.gguf"
+          ]
+        },
+        {
+          "group": "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-00001-of-00004.gguf",
+            "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-00002-of-00004.gguf",
+            "Q4_K_M-XL/DeepSeek-V4-Flash-Q4_K_M-XL-00003-of-00004.gguf"
+          ]
+        },
+        {
+          "group": "Q8_0/DeepSeek-V4-Flash-Q8_0-SHARDED.gguf",
+          "files": 7,
+          "known_size_bytes": 0,
+          "unknown_sizes": 7,
+          "examples": [
+            "Q8_0/DeepSeek-V4-Flash-Q8_0-00001-of-00007.gguf",
+            "Q8_0/DeepSeek-V4-Flash-Q8_0-00002-of-00007.gguf",
+            "Q8_0/DeepSeek-V4-Flash-Q8_0-00003-of-00007.gguf"
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "api_url": "https://huggingface.co/api/models/unsloth/DeepSeek-V4-Flash-GGUF",
+      "private": false,
+      "gated": false,
+      "lastModified": "2026-07-07T14:52:50.000Z",
+      "gguf_files": [
+        {
+          "file": "UD-IQ1_M/DeepSeek-V4-Flash-UD-IQ1_M-00001-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ1_M/DeepSeek-V4-Flash-UD-IQ1_M-00002-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ1_M/DeepSeek-V4-Flash-UD-IQ1_M-00003-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ1_S/DeepSeek-V4-Flash-UD-IQ1_S-00001-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ1_S/DeepSeek-V4-Flash-UD-IQ1_S-00002-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ1_S/DeepSeek-V4-Flash-UD-IQ1_S-00003-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00001-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00002-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00003-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00001-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00002-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00003-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ3_S/DeepSeek-V4-Flash-UD-IQ3_S-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ3_S/DeepSeek-V4-Flash-UD-IQ3_S-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ3_S/DeepSeek-V4-Flash-UD-IQ3_S-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ3_S/DeepSeek-V4-Flash-UD-IQ3_S-00004-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00004-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ4_NL/DeepSeek-V4-Flash-UD-IQ4_NL-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ4_NL/DeepSeek-V4-Flash-UD-IQ4_NL-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ4_NL/DeepSeek-V4-Flash-UD-IQ4_NL-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ4_NL/DeepSeek-V4-Flash-UD-IQ4_NL-00004-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ4_XS/DeepSeek-V4-Flash-UD-IQ4_XS-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ4_XS/DeepSeek-V4-Flash-UD-IQ4_XS-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ4_XS/DeepSeek-V4-Flash-UD-IQ4_XS-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-IQ4_XS/DeepSeek-V4-Flash-UD-IQ4_XS-00004-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q2_K_XL/DeepSeek-V4-Flash-UD-Q2_K_XL-00001-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q2_K_XL/DeepSeek-V4-Flash-UD-Q2_K_XL-00002-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q2_K_XL/DeepSeek-V4-Flash-UD-Q2_K_XL-00003-of-00003.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00004-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q3_K_XL/DeepSeek-V4-Flash-UD-Q3_K_XL-00001-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q3_K_XL/DeepSeek-V4-Flash-UD-Q3_K_XL-00002-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q3_K_XL/DeepSeek-V4-Flash-UD-Q3_K_XL-00003-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q3_K_XL/DeepSeek-V4-Flash-UD-Q3_K_XL-00004-of-00004.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q4_K_XL/DeepSeek-V4-Flash-UD-Q4_K_XL-00001-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q4_K_XL/DeepSeek-V4-Flash-UD-Q4_K_XL-00002-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q4_K_XL/DeepSeek-V4-Flash-UD-Q4_K_XL-00003-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q4_K_XL/DeepSeek-V4-Flash-UD-Q4_K_XL-00004-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q4_K_XL/DeepSeek-V4-Flash-UD-Q4_K_XL-00005-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q8_K_XL/DeepSeek-V4-Flash-UD-Q8_K_XL-00001-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q8_K_XL/DeepSeek-V4-Flash-UD-Q8_K_XL-00002-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q8_K_XL/DeepSeek-V4-Flash-UD-Q8_K_XL-00003-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q8_K_XL/DeepSeek-V4-Flash-UD-Q8_K_XL-00004-of-00005.gguf",
+          "size": null
+        },
+        {
+          "file": "UD-Q8_K_XL/DeepSeek-V4-Flash-UD-Q8_K_XL-00005-of-00005.gguf",
+          "size": null
+        }
+      ],
+      "groups": [
+        {
+          "group": "UD-IQ1_M/DeepSeek-V4-Flash-UD-IQ1_M-SHARDED.gguf",
+          "files": 3,
+          "known_size_bytes": 0,
+          "unknown_sizes": 3,
+          "examples": [
+            "UD-IQ1_M/DeepSeek-V4-Flash-UD-IQ1_M-00001-of-00003.gguf",
+            "UD-IQ1_M/DeepSeek-V4-Flash-UD-IQ1_M-00002-of-00003.gguf",
+            "UD-IQ1_M/DeepSeek-V4-Flash-UD-IQ1_M-00003-of-00003.gguf"
+          ]
+        },
+        {
+          "group": "UD-IQ1_S/DeepSeek-V4-Flash-UD-IQ1_S-SHARDED.gguf",
+          "files": 3,
+          "known_size_bytes": 0,
+          "unknown_sizes": 3,
+          "examples": [
+            "UD-IQ1_S/DeepSeek-V4-Flash-UD-IQ1_S-00001-of-00003.gguf",
+            "UD-IQ1_S/DeepSeek-V4-Flash-UD-IQ1_S-00002-of-00003.gguf",
+            "UD-IQ1_S/DeepSeek-V4-Flash-UD-IQ1_S-00003-of-00003.gguf"
+          ]
+        },
+        {
+          "group": "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-SHARDED.gguf",
+          "files": 3,
+          "known_size_bytes": 0,
+          "unknown_sizes": 3,
+          "examples": [
+            "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00001-of-00003.gguf",
+            "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00002-of-00003.gguf",
+            "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00003-of-00003.gguf"
+          ]
+        },
+        {
+          "group": "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-SHARDED.gguf",
+          "files": 3,
+          "known_size_bytes": 0,
+          "unknown_sizes": 3,
+          "examples": [
+            "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00001-of-00003.gguf",
+            "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00002-of-00003.gguf",
+            "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00003-of-00003.gguf"
+          ]
+        },
+        {
+          "group": "UD-IQ3_S/DeepSeek-V4-Flash-UD-IQ3_S-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "UD-IQ3_S/DeepSeek-V4-Flash-UD-IQ3_S-00001-of-00004.gguf",
+            "UD-IQ3_S/DeepSeek-V4-Flash-UD-IQ3_S-00002-of-00004.gguf",
+            "UD-IQ3_S/DeepSeek-V4-Flash-UD-IQ3_S-00003-of-00004.gguf"
+          ]
+        },
+        {
+          "group": "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00001-of-00004.gguf",
+            "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00002-of-00004.gguf",
+            "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00003-of-00004.gguf"
+          ]
+        },
+        {
+          "group": "UD-IQ4_NL/DeepSeek-V4-Flash-UD-IQ4_NL-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "UD-IQ4_NL/DeepSeek-V4-Flash-UD-IQ4_NL-00001-of-00004.gguf",
+            "UD-IQ4_NL/DeepSeek-V4-Flash-UD-IQ4_NL-00002-of-00004.gguf",
+            "UD-IQ4_NL/DeepSeek-V4-Flash-UD-IQ4_NL-00003-of-00004.gguf"
+          ]
+        },
+        {
+          "group": "UD-IQ4_XS/DeepSeek-V4-Flash-UD-IQ4_XS-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "UD-IQ4_XS/DeepSeek-V4-Flash-UD-IQ4_XS-00001-of-00004.gguf",
+            "UD-IQ4_XS/DeepSeek-V4-Flash-UD-IQ4_XS-00002-of-00004.gguf",
+            "UD-IQ4_XS/DeepSeek-V4-Flash-UD-IQ4_XS-00003-of-00004.gguf"
+          ]
+        },
+        {
+          "group": "UD-Q2_K_XL/DeepSeek-V4-Flash-UD-Q2_K_XL-SHARDED.gguf",
+          "files": 3,
+          "known_size_bytes": 0,
+          "unknown_sizes": 3,
+          "examples": [
+            "UD-Q2_K_XL/DeepSeek-V4-Flash-UD-Q2_K_XL-00001-of-00003.gguf",
+            "UD-Q2_K_XL/DeepSeek-V4-Flash-UD-Q2_K_XL-00002-of-00003.gguf",
+            "UD-Q2_K_XL/DeepSeek-V4-Flash-UD-Q2_K_XL-00003-of-00003.gguf"
+          ]
+        },
+        {
+          "group": "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00001-of-00004.gguf",
+            "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00002-of-00004.gguf",
+            "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00003-of-00004.gguf"
+          ]
+        },
+        {
+          "group": "UD-Q3_K_XL/DeepSeek-V4-Flash-UD-Q3_K_XL-SHARDED.gguf",
+          "files": 4,
+          "known_size_bytes": 0,
+          "unknown_sizes": 4,
+          "examples": [
+            "UD-Q3_K_XL/DeepSeek-V4-Flash-UD-Q3_K_XL-00001-of-00004.gguf",
+            "UD-Q3_K_XL/DeepSeek-V4-Flash-UD-Q3_K_XL-00002-of-00004.gguf",
+            "UD-Q3_K_XL/DeepSeek-V4-Flash-UD-Q3_K_XL-00003-of-00004.gguf"
+          ]
+        },
+        {
+          "group": "UD-Q4_K_XL/DeepSeek-V4-Flash-UD-Q4_K_XL-SHARDED.gguf",
+          "files": 5,
+          "known_size_bytes": 0,
+          "unknown_sizes": 5,
+          "examples": [
+            "UD-Q4_K_XL/DeepSeek-V4-Flash-UD-Q4_K_XL-00001-of-00005.gguf",
+            "UD-Q4_K_XL/DeepSeek-V4-Flash-UD-Q4_K_XL-00002-of-00005.gguf",
+            "UD-Q4_K_XL/DeepSeek-V4-Flash-UD-Q4_K_XL-00003-of-00005.gguf"
+          ]
+        },
+        {
+          "group": "UD-Q8_K_XL/DeepSeek-V4-Flash-UD-Q8_K_XL-SHARDED.gguf",
+          "files": 5,
+          "known_size_bytes": 0,
+          "unknown_sizes": 5,
+          "examples": [
+            "UD-Q8_K_XL/DeepSeek-V4-Flash-UD-Q8_K_XL-00001-of-00005.gguf",
+            "UD-Q8_K_XL/DeepSeek-V4-Flash-UD-Q8_K_XL-00002-of-00005.gguf",
+            "UD-Q8_K_XL/DeepSeek-V4-Flash-UD-Q8_K_XL-00003-of-00005.gguf"
+          ]
+        }
+      ]
+    }
+  ],
+  "complete_known_groups_fit_no_delete_budget": [],
+  "decision": "no_complete_known_deepseek_v4_flash_gguf_candidate_fits_current_no_delete_disk_budget"
+}
