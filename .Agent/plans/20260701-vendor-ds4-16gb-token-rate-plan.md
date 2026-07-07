@@ -8423,3 +8423,58 @@ Decision:
 - Do not continue with more down-only VRAM cache/source micro-edits as a SOTA route.
 - Keep Q80 lane8/shared as the correct down GPU reference path.
 - Next optimization should target prompt-general up/gate/down grouped GPU execution or a general expert source/prefetch strategy that reduces cold source staging across all MoE tensors.
+
+## 2026-07-08 X10-BH generalized down alias split and non-France Q80 correctness reverify
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-gate-downalias-split-and-q80-nonfrance-reverify-20260708.json`
+- top1 artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/q80-down-nonfrance-top1-reverify-20260708.json`
+- status: `down_q80_correctness_strengthened_alias_split_profile_no_sota`
+
+Purpose:
+- Continue the plan requirement to fix `ffn_down_exps` GPU correctness before treating down GPU as a performance route.
+- Test whether the Kimi-style full-source alias idea helps DeepSeek down staging in a prompt-general way, without using prompt-specific expert packs/profiles or held-out prompts.
+- Reverify down Q80 lane8/shared correctness on a non-France fixed text so the correctness evidence is not limited to the France prompt.
+
+Method:
+- Strict cold `16GB` cgroup, `MemorySwapMax=0`, page cache counted in cgroup memory.
+- Existing correct down env: `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`.
+- Alias source: `.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv` with `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` and `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`.
+- Split profiles compared gate one-stream VRAM and down batch VRAM. Short `n64` runs are profile-only because they truncate output; the complete `n192` France run is the quality check.
+
+Results:
+- Current generalized gate-only profile:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T224617Z-20260708-current-generalized-gate-up-fallback-profile/france-generalized-profile-cpu40-vram0gb`
+  - `eval_tok_s=2.1`, `TTFT=37484.65 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - fallback roles include both `up` and `down`.
+- Q80 down alias without gate cache:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T224913Z-20260708-q80-down-alias-iouring-vram12-profile/france-q80-alias-iouring-vram12-cpu40-vram12gb`
+  - `eval_tok_s=1.5`, `TTFT=37681.56 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - down stage mean improved to about `8.75 ms/call` versus about `27.14 ms/call` in the plain Q80 vram12 profile, but gate/up fallback dominated.
+- Gate8/down4 split:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T225104Z-20260708-generalized-gate8-downalias4-profile/france-gate8-downalias4-cpu40-vram4gb`
+  - `eval_tok_s=2.3`, `TTFT=35507.72 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - down stage mean about `2.38 ms/call`; fallback reason profile shows only `up` remains.
+- Gate10/down2 split:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T225300Z-20260708-generalized-gate10-downalias2-profile/france-gate10-downalias2-cpu40-vram2gb`
+  - `eval_tok_s=2.3`, `TTFT=37925.62 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - not better than gate8/down4.
+- Gate8/down4 complete quality check:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T225451Z-20260708-generalized-gate8-downalias4-france-n192/france-gate8-downalias4-n192-cpu40-vram4gb`
+  - `eval_tok_s=2.5`, `prompt_tok_s=1.0`, `TTFT=34980.39 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14907006976`, `ram_ok=true`, `correctness_ok=true`
+  - below the historical no-prompt-specific generalized France high-water mark `2.7 tok/s`, so not a new SOTA.
+- Non-France Q80 down top1 reverify:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T230600Z-20260708-q80-down-nonfrance-top1-reverify`
+  - prompt text: database-index explanation sentence, not France.
+  - default CPU fallback vs Q80 lane8/shared down GPU: `same_top1=29/29`, `first_mismatch_pos=-1`, strict RAM OK.
+
+Interpretation:
+- Down GPU Q80 lane8/shared correctness is now supported by both the earlier France top1 report and this non-France top1 report.
+- Alias source mapping is useful for reducing down staging, but this alone does not create a new generalized SOTA under the product constraints.
+- After gate+down split, the dominant remaining recorded fallback is `ffn_up_exps`; down math is no longer the main unresolved correctness issue.
+- The next optimization should target prompt-general `ffn_up_exps` GPU correctness/source handling, then re-run the calibration/dev prompt set before using held-out prompts.
+
+Decision:
+- Commit and push the diagnostics because they are reproducibility-critical and clarify the next bottleneck.
+- Do not mark a new SOTA.
+- Treat `ffn_down_exps` Q80 lane8/shared as the current correctness-fixed down reference path. Keep MXFP4 f32 writeback rejected until live CPU-compatible semantics are proven.
+

@@ -1,0 +1,684 @@
+{
+  "artifact_id": "q80-down-nonfrance-top1-reverify-20260708",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T230600Z-20260708-q80-down-nonfrance-top1-reverify",
+  "prompt": "A database index helps queries find rows faster by keeping an ordered lookup structure, but it can slow down writes because the index must also be maintained.",
+  "source_head": "892a5531046153a76a0670d9dbab010cb59fbb79",
+  "source_status": [
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/explicit-swiglu-down-split-profile-20260708.json",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+    "?? prof.nsys-rep"
+  ],
+  "memory_max_bytes": 16000000000,
+  "memory_swap_max": 0,
+  "drop_caches_before_each_case": true,
+  "default_top1": {
+    "mode": "single",
+    "n_tokens": 29,
+    "n_vocab": 129280,
+    "next_token_positions": 28,
+    "top1_matches_next_token": 11,
+    "positions": [
+      {
+        "position": 0,
+        "predicts_token_position": 1,
+        "actual_next_token": {
+          "id": 8476,
+          "piece": " database",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 20,
+          "piece": "2",
+          "logit": 14.8984
+        },
+        "top2": {
+          "id": 21,
+          "piece": "3",
+          "logit": 13.8954
+        },
+        "margin": 1.00296
+      },
+      {
+        "position": 1,
+        "predicts_token_position": 2,
+        "actual_next_token": {
+          "id": 5508,
+          "piece": " index",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 223,
+          "piece": " ",
+          "logit": 17.3534
+        },
+        "top2": {
+          "id": 1999,
+          "piece": " What",
+          "logit": 15.4401
+        },
+        "margin": 1.91332
+      },
+      {
+        "position": 2,
+        "predicts_token_position": 3,
+        "actual_next_token": {
+          "id": 7531,
+          "piece": " helps",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 344,
+          "piece": " is",
+          "logit": 23.123
+        },
+        "top2": {
+          "id": 396,
+          "piece": " that",
+          "logit": 21.4505
+        },
+        "margin": 1.67251
+      },
+      {
+        "position": 3,
+        "predicts_token_position": 4,
+        "actual_next_token": {
+          "id": 30610,
+          "piece": " queries",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 6276,
+          "piece": " speed",
+          "logit": 26.3828
+        },
+        "top2": {
+          "id": 304,
+          "piece": " to",
+          "logit": 25.7633
+        },
+        "margin": 0.619465
+      },
+      {
+        "position": 4,
+        "predicts_token_position": 5,
+        "actual_next_token": {
+          "id": 1783,
+          "piece": " find",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 304,
+          "piece": " to",
+          "logit": 26.0433
+        },
+        "top2": {
+          "id": 1783,
+          "piece": " find",
+          "logit": 25.7597
+        },
+        "margin": 0.283623
+      },
+      {
+        "position": 5,
+        "predicts_token_position": 6,
+        "actual_next_token": {
+          "id": 17721,
+          "piece": " rows",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 1499,
+          "piece": " data",
+          "logit": 27.6602
+        },
+        "top2": {
+          "id": 270,
+          "piece": " the",
+          "logit": 26.0977
+        },
+        "margin": 1.56245
+      },
+      {
+        "position": 6,
+        "predicts_token_position": 7,
+        "actual_next_token": {
+          "id": 13058,
+          "piece": " faster",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 6889,
+          "piece": " quickly",
+          "logit": 27.5381
+        },
+        "top2": {
+          "id": 13058,
+          "piece": " faster",
+          "logit": 27.4322
+        },
+        "margin": 0.105947
+      },
+      {
+        "position": 7,
+        "predicts_token_position": 8,
+        "actual_next_token": {
+          "id": 513,
+          "piece": " by",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 16,
+          "piece": ".",
+          "logit": 26.6069
+        },
+        "top2": {
+          "id": 513,
+          "piece": " by",
+          "logit": 25.764
+        },
+        "margin": 0.842884
+      },
+      {
+        "position": 8,
+        "predicts_token_position": 9,
+        "actual_next_token": {
+          "id": 11779,
+          "piece": " keeping",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 11135,
+          "piece": " reducing",
+          "logit": 27.3827
+        },
+        "top2": {
+          "id": 6706,
+          "piece": " providing",
+          "logit": 27.0622
+        },
+        "margin": 0.320435
+      },
+      {
+        "position": 9,
+        "predicts_token_position": 10,
+        "actual_next_token": {
+          "id": 411,
+          "piece": " an",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 260,
+          "piece": " a",
+          "logit": 27.4653
+        },
+        "top2": {
+          "id": 6781,
+          "piece": " track",
+          "logit": 26.6413
+        },
+        "margin": 0.824038
+      },
+      {
+        "position": 10,
+        "predicts_token_position": 11,
+        "actual_next_token": {
+          "id": 15320,
+          "piece": " ordered",
+          "logit": 0
+        },
+        "top1_matches_next_token": true,
+        "top1": {
+          "id": 15320,
+          "piece": " ordered",
+          "logit": 27.9284
+        },
+        "top2": {
+          "id": 34396,
+          "piece": " ordering",
+          "logit": 26.1156
+        },
+        "margin": 1.81278
+      },
+      {
+        "position": 11,
+        "predicts_token_position": 12,
+        "actual_next_token": {
+          "id": 64018,
+          "piece": " lookup",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 7610,
+          "piece": " copy",
+          "logit": 28.2952
+        },
+        "top2": {
+          "id": 2310,
+          "piece": " list",
+          "logit": 27.9288
+        },
+        "margin": 0.366404
+      },
+      {
+        "position": 12,
+        "predicts_token_position": 13,
+        "actual_next_token": {
+          "id": 4456,
+          "piece": " structure",
+          "logit": 0
+        },
+        "top1_matches_next_token": true,
+        "top1": {
+          "id": 4456,
+          "piece": " structure",
+          "logit": 29.1486
+        },
+        "top2": {
+          "id": 294,
+          "piece": " of",
+          "logit": 27.8103
+        },
+        "margin": 1.33831
+      },
+      {
+        "position": 13,
+        "predicts_token_position": 14,
+        "actual_next_token": {
+          "id": 14,
+          "piece": ",",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 362,
+          "piece": " for",
+          "logit": 28.4698
+        },
+        "top2": {
+          "id": 294,
+          "piece": " of",
+          "logit": 27.5228
+        },
+        "margin": 0.946997
+      },
+      {
+        "position": 14,
+        "predicts_token_position": 15,
+        "actual_next_token": {
+          "id": 790,
+          "piece": " but",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 1277,
+          "piece": " like",
+          "logit": 27.4172
+        },
+        "top2": {
+          "id": 790,
+          "piece": " but",
+          "logit": 27.3994
+        },
+        "margin": 0.0177517
+      },
+      {
+        "position": 15,
+        "predicts_token_position": 16,
+        "actual_next_token": {
+          "id": 436,
+          "piece": " it",
+          "logit": 0
+        },
+        "top1_matches_next_token": true,
+        "top1": {
+          "id": 436,
+          "piece": " it",
+          "logit": 26.3047
+        },
+        "top2": {
+          "id": 990,
+          "piece": " also",
+          "logit": 24.5427
+        },
+        "margin": 1.76203
+      },
+      {
+        "position": 16,
+        "predicts_token_position": 17,
+        "actual_next_token": {
+          "id": 588,
+          "piece": " can",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 990,
+          "piece": " also",
+          "logit": 28.971
+        },
+        "top2": {
+          "id": 5095,
+          "piece": " comes",
+          "logit": 27.9404
+        },
+        "margin": 1.03061
+      },
+      {
+        "position": 17,
+        "predicts_token_position": 18,
+        "actual_next_token": {
+          "id": 6470,
+          "piece": " slow",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 990,
+          "piece": " also",
+          "logit": 28.9575
+        },
+        "top2": {
+          "id": 6470,
+          "piece": " slow",
+          "logit": 28.1536
+        },
+        "margin": 0.803833
+      },
+      {
+        "position": 18,
+        "predicts_token_position": 19,
+        "actual_next_token": {
+          "id": 1910,
+          "piece": " down",
+          "logit": 0
+        },
+        "top1_matches_next_token": true,
+        "top1": {
+          "id": 1910,
+          "piece": " down",
+          "logit": 29.3067
+        },
+        "top2": {
+          "id": 86305,
+          "piece": " inserts",
+          "logit": 26.0424
+        },
+        "margin": 3.26435
+      },
+      {
+        "position": 19,
+        "predicts_token_position": 20,
+        "actual_next_token": {
+          "id": 20366,
+          "piece": " writes",
+          "logit": 0
+        },
+        "top1_matches_next_token": true,
+        "top1": {
+          "id": 20366,
+          "piece": " writes",
+          "logit": 27.8213
+        },
+        "top2": {
+          "id": 86305,
+          "piece": " inserts",
+          "logit": 26.5412
+        },
+        "margin": 1.28012
+      },
+      {
+        "position": 20,
+        "predicts_token_position": 21,
+        "actual_next_token": {
+          "id": 1754,
+          "piece": " because",
+          "logit": 0
+        },
+        "top1_matches_next_token": true,
+        "top1": {
+          "id": 1754,
+          "piece": " because",
+          "logit": 28.7768
+        },
+        "top2": {
+          "id": 305,
+          "piece": " and",
+          "logit": 27.7742
+        },
+        "margin": 1.00268
+      },
+      {
+        "position": 21,
+        "predicts_token_position": 22,
+        "actual_next_token": {
+          "id": 270,
+          "piece": " the",
+          "logit": 0
+        },
+        "top1_matches_next_token": true,
+        "top1": {
+          "id": 270,
+          "piece": " the",
+          "logit": 28.5522
+        },
+        "top2": {
+          "id": 436,
+          "piece": " it",
+          "logit": 27.252
+        },
+        "margin": 1.30021
+      },
+      {
+        "position": 22,
+        "predicts_token_position": 23,
+        "actual_next_token": {
+          "id": 5508,
+          "piece": " index",
+          "logit": 0
+        },
+        "top1_matches_next_token": true,
+        "top1": {
+          "id": 5508,
+          "piece": " index",
+          "logit": 30.5191
+        },
+        "top2": {
+          "id": 50556,
+          "piece": " indexes",
+          "logit": 26.6316
+        },
+        "margin": 3.88754
+      },
+      {
+        "position": 23,
+        "predicts_token_position": 24,
+        "actual_next_token": {
+          "id": 2231,
+          "piece": " must",
+          "logit": 0
+        },
+        "top1_matches_next_token": true,
+        "top1": {
+          "id": 2231,
+          "piece": " must",
+          "logit": 29.9824
+        },
+        "top2": {
+          "id": 990,
+          "piece": " also",
+          "logit": 29.3682
+        },
+        "margin": 0.61425
+      },
+      {
+        "position": 24,
+        "predicts_token_position": 25,
+        "actual_next_token": {
+          "id": 990,
+          "piece": " also",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 366,
+          "piece": " be",
+          "logit": 32.6588
+        },
+        "top2": {
+          "id": 990,
+          "piece": " also",
+          "logit": 31.7816
+        },
+        "margin": 0.877283
+      },
+      {
+        "position": 25,
+        "predicts_token_position": 26,
+        "actual_next_token": {
+          "id": 366,
+          "piece": " be",
+          "logit": 0
+        },
+        "top1_matches_next_token": true,
+        "top1": {
+          "id": 366,
+          "piece": " be",
+          "logit": 33.4214
+        },
+        "top2": {
+          "id": 9502,
+          "piece": " update",
+          "logit": 26.7548
+        },
+        "margin": 6.66661
+      },
+      {
+        "position": 26,
+        "predicts_token_position": 27,
+        "actual_next_token": {
+          "id": 16678,
+          "piece": " maintained",
+          "logit": 0
+        },
+        "top1_matches_next_token": false,
+        "top1": {
+          "id": 11336,
+          "piece": " updated",
+          "logit": 32.2311
+        },
+        "top2": {
+          "id": 16678,
+          "piece": " maintained",
+          "logit": 29.6739
+        },
+        "margin": 2.55724
+      },
+      {
+        "position": 27,
+        "predicts_token_position": 28,
+        "actual_next_token": {
+          "id": 16,
+          "piece": ".",
+          "logit": 0
+        },
+        "top1_matches_next_token": true,
+        "top1": {
+          "id": 16,
+          "piece": ".",
+          "logit": 28.104
+        },
+        "top2": {
+          "id": 339,
+          "piece": ".\n\n",
+          "logit": 27.8521
+        },
+        "margin": 0.251886
+      },
+      {
+        "position": 28,
+        "predicts_token_position": null,
+        "actual_next_token": null,
+        "top1_matches_next_token": null,
+        "top1": {
+          "id": 13145,
+          "piece": " Index",
+          "logit": 22.1817
+        },
+        "top2": {
+          "id": 660,
+          "piece": " In",
+          "logit": 21.9884
+        },
+        "margin": 0.193333
+      }
+    ]
+  },
+  "q80_check_top1": {
+    "n_tokens": 29,
+    "n_vocab": 129280,
+    "same_top1": 29,
+    "same_top1_ratio": 1,
+    "first_mismatch_pos": -1,
+    "next_token_positions": 28,
+    "base_top1_matches_next_token": 11,
+    "calc_top1_matches_next_token": 11,
+    "max_abs": 0,
+    "mean_abs": 0,
+    "mismatches_preview": []
+  },
+  "top1_pass": true,
+  "default": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T230600Z-20260708-q80-down-nonfrance-top1-reverify/default",
+    "exit_status": 0,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15074910208,
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 20819,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "max_rss_kb": 15601148,
+    "profile_line": "[kimi_cpu_moe_profile] down calls=3480 total=8.104 ms/call convert_t0=0.002 route=0.001 route_barrier=0.003 cuda_batch=0.001 cuda_single=0.000 post_cuda_barrier=0.001 fallback_t0=8.092 batch_accept=0 batch_decline=1160 single_accept=0 single_decline=13920",
+    "stderr_tail": "\tPercent of CPU this job got: 1058%\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:52.02\n\tAverage shared text size (kbytes): 0\n\tAverage unshared data size (kbytes): 0\n\tAverage stack size (kbytes): 0\n\tAverage total size (kbytes): 0\n\tMaximum resident set size (kbytes): 15601148\n\tAverage resident set size (kbytes): 0\n\tMajor (requiring I/O) page faults: 205417\n\tMinor (reclaiming a frame) page faults: 1323544\n\tVoluntary context switches: 330344\n\tInvoluntary context switches: 20181\n\tSwaps: 0\n\tFile system inputs: 121949832\n\tFile system outputs: 31472\n\tSocket messages sent: 0\n\tSocket messages received: 0\n\tSignals delivered: 0\n\tPage size (bytes): 4096\n\tExit status: 0"
+  },
+  "q80_check": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T230600Z-20260708-q80-down-nonfrance-top1-reverify/q80-check",
+    "exit_status": 0,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15087886336,
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 20171,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "max_rss_kb": 15603140,
+    "profile_line": "[kimi_cpu_moe_profile] down calls=3480 total=11.174 ms/call convert_t0=0.003 route=0.002 route_barrier=0.005 cuda_batch=5.213 cuda_single=0.000 post_cuda_barrier=0.021 fallback_t0=5.912 batch_accept=1160 batch_decline=0 single_accept=0 single_decline=13920",
+    "stderr_tail": "\tPercent of CPU this job got: 955%\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 1:01.74\n\tAverage shared text size (kbytes): 0\n\tAverage unshared data size (kbytes): 0\n\tAverage stack size (kbytes): 0\n\tAverage total size (kbytes): 0\n\tMaximum resident set size (kbytes): 15603140\n\tAverage resident set size (kbytes): 0\n\tMajor (requiring I/O) page faults: 131980\n\tMinor (reclaiming a frame) page faults: 1335293\n\tVoluntary context switches: 282170\n\tInvoluntary context switches: 20488\n\tSwaps: 0\n\tFile system inputs: 122064440\n\tFile system outputs: 1408\n\tSocket messages sent: 0\n\tSocket messages received: 0\n\tSignals delivered: 0\n\tPage size (bytes): 4096\n\tExit status: 0"
+  },
+  "env_delta": {
+    "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED": "1"
+  },
+  "ram_ok": true,
+  "decision": "pass_nonfrance_down_gpu_q80_lane8_shared_top1_not_sota"
+}
