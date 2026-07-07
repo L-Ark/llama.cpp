@@ -5392,3 +5392,17 @@
 - protected_assets: accepted native GGUF, accepted SOTA run dirs, pushed-source repro artifacts, plan/artifacts, local 4Expert if future correctness work remains possible.
 - expected_output: artifact listing top disk consumers, rejected IQ2_S removal potential, any large stdout/log artifacts already superseded, and exact free-space impact. The artifact must explicitly say that no files were deleted.
 - push_rule: Push artifact and plan update to `ssd/vendor/deepseek-token-rate-16gb`. Any actual cleanup must be a separate explicit decision.
+
+### X8 result：cleanup candidates recorded, no files deleted
+
+- status: diagnostic_complete_no_cleanup_performed
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/disk-cleanup-candidate-audit-after-iq2-20260707.json`
+- current_disk: `/root` free space about `24GiB`.
+- protected_do_not_delete:
+  - `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF` (`~286GiB`), accepted/native model dependency.
+  - `/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF` (`~154GiB`), local candidate for possible correctness-only root-cause.
+  - historical expert packs tied to SOTA/repro records, unless a separate explicit cleanup decision says otherwise.
+- rejected_removable_with_explicit_approval:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins` (`~82GiB`), rejected for France correctness and below-target speed. Removing it would restore free space to about `106GiB`.
+- additional_candidates: several superseded `stdout.txt/stdout.log` files from rejected probes are hundreds of MiB to ~1.7GiB each. These can be cleaned only after preserving required excerpts and with explicit cleanup approval; expert packs and accepted model assets are not included.
+- decision: No files were deleted. Further large external GGUF validation remains disk-blocked unless cleanup is explicitly approved. Small/header-only probes remain allowed.

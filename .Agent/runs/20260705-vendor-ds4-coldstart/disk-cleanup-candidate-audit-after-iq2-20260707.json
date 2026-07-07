@@ -1,0 +1,303 @@
+{
+  "attempt_id": "20260707-disk-cleanup-candidate-audit-after-iq2",
+  "created_at_utc": "2026-07-07T01:56:13.323070Z",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "eed8574cd95ac0541f600cc163a5ff0de6f652f9",
+  "git_status_before_artifact": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "scope": "non-destructive disk audit only; no files deleted; no model run; no source edit; no held-out",
+  "disk_state": {
+    "path": "/root",
+    "total_bytes": 1065418129408,
+    "used_bytes": 1039652130816,
+    "free_bytes": 25749221376,
+    "free_gib": 23.980831146240234
+  },
+  "model_dirs_by_size": [
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF",
+      "size_bytes": 306288840023,
+      "size_gib": 285.2537110662088
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF",
+      "size_bytes": 164466086436,
+      "size_gib": 153.17097905650735
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 156148189760,
+      "size_gib": 145.4243341088295
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins",
+      "size_bytes": 88019539296,
+      "size_gib": 81.974583953619
+    },
+    {
+      "path": "/root/lfz/models/_gguf_header_probe",
+      "size_bytes": 163178575,
+      "size_gib": 0.15197189059108496
+    },
+    {
+      "path": "/root/lfz/models/GLM-5.2-FP8-probe",
+      "size_bytes": 31613124,
+      "size_gib": 0.029442016035318375
+    },
+    {
+      "path": "/root/lfz/models/MiniMax-M3-original-meta",
+      "size_bytes": 12481020,
+      "size_gib": 0.01162385568022728
+    }
+  ],
+  "large_files_over_100MiB_top100": [
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack",
+      "size_bytes": 38420348928,
+      "size_gib": 35.78173828125
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "size_bytes": 20495904768,
+      "size_gib": 19.088298797607422
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top512-down-20260703.pack",
+      "size_bytes": 2281783296,
+      "size_gib": 2.1250762939453125
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T071633Z-20260704_ngram_map_k4v_probe/france-cpu40-vram0gb/stdout.txt",
+      "size_bytes": 1755629825,
+      "size_gib": 1.635057688690722
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T065419Z-20260704_q80_up_compare_probe/france-q80-up-compare/stdout.txt",
+      "size_bytes": 1251927884,
+      "size_gib": 1.1659487001597881
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-perf/france-n96/stdout.txt",
+      "size_bytes": 1231925438,
+      "size_gib": 1.147319970652461
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top256-updown-20260703.pack",
+      "size_bytes": 1140891648,
+      "size_gib": 1.0625381469726562
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-perf/france-n96/stdout.txt",
+      "size_bytes": 903062224,
+      "size_gib": 0.84104223549366
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-batch-on-down-mxfp4-parity-build/france-n1-mxfp4-down-parity/stdout.txt",
+      "size_bytes": 634288710,
+      "size_gib": 0.5907273944467306
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama_migrated/deepseek4-vendor-reference-acquire-20260628T140920Z-iter338/layer0-proj-iter346-raw-vendor/vendor_raw_stdout.log",
+      "size_bytes": 627512336,
+      "size_gib": 0.5844164043664932
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top128-updown-20260703.pack",
+      "size_bytes": 570445824,
+      "size_gib": 0.5312690734863281
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-generalized-updown-batch-eligibility-probe/france-n96-batch-env/stdout.txt",
+      "size_bytes": 520130531,
+      "size_gib": 0.48440930526703596
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama_migrated/deepseek4-vendor-reference-acquire-20260628T140920Z-iter338/vendor-trace-iter341-early-kv/stdout.log",
+      "size_bytes": 499859272,
+      "size_gib": 0.46553022414445877
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama/deepseek-v4-a82-post-a80-moe-movement-profile/perf_attn_safe_n128.data",
+      "size_bytes": 474365002,
+      "size_gib": 0.4417868349701166
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-limited-down-mxfp4-parity-probe/france-n1-active1-cols128/stdout.txt",
+      "size_bytes": 385377182,
+      "size_gib": 0.35891046933829784
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama_migrated/deepseek4-vendor-reference-acquire-20260628T140920Z-iter338/layer0-proj-iter345/vendor/stdout.log",
+      "size_bytes": 350144961,
+      "size_gib": 0.3260979065671563
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama_migrated/deepseek4-vendor-reference-acquire-20260628T140920Z-iter338/vendor-trace-iter343-exec-qk-forced/stdout.log",
+      "size_bytes": 321626922,
+      "size_gib": 0.2995384130626917
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama_migrated/deepseek4-vendor-reference-acquire-20260628T140920Z-iter338/vendor-clean/.git/objects/pack/pack-bbcb1e139a95e57137cd5f6da0175964c26fdd5b.pack",
+      "size_bytes": 306849751,
+      "size_gib": 0.2857761001214385
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama_migrated/deepseek4-vendor-reference-acquire-20260628T140920Z-iter338/vendor-trace-iter342-graph-builder-cb/stdout.log",
+      "size_bytes": 301518178,
+      "size_gib": 0.28081068582832813
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama/deepseek-v4-a96-france-paragraph-history-sweep/build_a93_a94_best/ggml/src/libggml.so",
+      "size_bytes": 289375048,
+      "size_gib": 0.2695015147328377
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama/deepseek-v4-a96-france-paragraph-history-sweep/build_a91_a92_best/ggml/src/libggml.so",
+      "size_bytes": 289370952,
+      "size_gib": 0.26949770003557205
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama/deepseek-v4-a96-france-paragraph-history-sweep/build_a88_broad_f8_control/ggml/src/libggml.so",
+      "size_bytes": 289370952,
+      "size_gib": 0.26949770003557205
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama/deepseek-v4-a96-france-paragraph-history-sweep/build_a80_a88_attn/ggml/src/libggml.so",
+      "size_bytes": 289370952,
+      "size_gib": 0.26949770003557205
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama/deepseek-v4-a96-france-paragraph-history-sweep/build_a88_no_f8_baseline/ggml/src/libggml.so",
+      "size_bytes": 289370952,
+      "size_gib": 0.26949770003557205
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-down-mxfp4-existing-parity-probe/france-n16-mxfp4-down-parity/stdout.txt",
+      "size_bytes": 284525760,
+      "size_gib": 0.26498526334762573
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama_migrated/deepseek4-vendor-reference-acquire-20260628T140920Z-iter338/vendor-trace-iter342-qk-relaxed-layer/stdout.log",
+      "size_bytes": 278434316,
+      "size_gib": 0.2593121640384197
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama_migrated/deepseek4-vendor-reference-acquire-20260628T140920Z-iter338/target-trace-iter344-early-kv/target_vendor_cache_style.jsonl",
+      "size_bytes": 254381296,
+      "size_gib": 0.23691104352474213
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-down-mxfp4-stage-trace-probe/france-n1-stage-trace/stdout.txt",
+      "size_bytes": 168544706,
+      "size_gib": 0.1569694895297289
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama_migrated/deepseek4-vendor-reference-acquire-20260628T140920Z-iter338/target-trace-iter344-early-kv/vendor_cache_trace.csv",
+      "size_bytes": 145105052,
+      "size_gib": 0.1351396106183529
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama_migrated/deepseek4-vendor-reference-acquire-20260628T140920Z-iter338/vendor-trace-iter343-exec-qk-forced/vendor_vendor_cache_style.jsonl",
+      "size_bytes": 131513285,
+      "size_gib": 0.12248129118233919
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260701T193720Z-20260702_cpu_fallback_current_bottleneck_trace/france-cpu40-vram0gb/cpu_chunk_trace.csv",
+      "size_bytes": 125806993,
+      "size_gib": 0.11716689262539148
+    },
+    {
+      "path": "/root/lfz/runs/ik_llama_migrated/deepseek4-vendor-reference-acquire-20260628T140920Z-iter338/vendor-trace-iter341-graph-inventory/stdout.log",
+      "size_bytes": 107947302,
+      "size_gib": 0.1005337592214346
+    }
+  ],
+  "classification": {
+    "protected_do_not_delete_without_new_instruction": [
+      {
+        "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF",
+        "reason": "accepted/native model and current baseline/SOTA dependency"
+      },
+      {
+        "path": "/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF",
+        "reason": "local candidate kept for possible correctness root-cause; not rejected for deletion by plan"
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack",
+        "reason": "historical accepted/repro pack; preserve unless user asks cleanup"
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+        "reason": "historical accepted/repro pack; preserve unless user asks cleanup"
+      }
+    ],
+    "rejected_removable_with_explicit_approval": [
+      {
+        "path": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins",
+        "size_bytes": 88019539296,
+        "size_gib": 81.974583953619,
+        "reason": "IQ2_S route rejected for France correctness and below-target speed; plan requires explicit cleanup decision before removal"
+      }
+    ],
+    "large_stdout_log_candidates_with_approval": [
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T071633Z-20260704_ngram_map_k4v_probe/france-cpu40-vram0gb/stdout.txt",
+        "size_bytes": 1755629825,
+        "size_gib": 1.635057688690722
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260704T065419Z-20260704_q80_up_compare_probe/france-q80-up-compare/stdout.txt",
+        "size_bytes": 1251927884,
+        "size_gib": 1.1659487001597881
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-perf/france-n96/stdout.txt",
+        "size_bytes": 1231925438,
+        "size_gib": 1.147319970652461
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-perf/france-n96/stdout.txt",
+        "size_bytes": 903062224,
+        "size_gib": 0.84104223549366
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-batch-on-down-mxfp4-parity-build/france-n1-mxfp4-down-parity/stdout.txt",
+        "size_bytes": 634288710,
+        "size_gib": 0.5907273944467306
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-generalized-updown-batch-eligibility-probe/france-n96-batch-env/stdout.txt",
+        "size_bytes": 520130531,
+        "size_gib": 0.48440930526703596
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-limited-down-mxfp4-parity-probe/france-n1-active1-cols128/stdout.txt",
+        "size_bytes": 385377182,
+        "size_gib": 0.35891046933829784
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-down-mxfp4-existing-parity-probe/france-n16-mxfp4-down-parity/stdout.txt",
+        "size_bytes": 284525760,
+        "size_gib": 0.26498526334762573
+      },
+      {
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-down-mxfp4-stage-trace-probe/france-n1-stage-trace/stdout.txt",
+        "size_bytes": 168544706,
+        "size_gib": 0.1569694895297289
+      }
+    ],
+    "stdout_log_top20_total_bytes": 7135412260,
+    "vendor_ds4_stdout_candidates_total_bytes": 7135412260
+  },
+  "free_space_scenarios": {
+    "current_free_gib": 23.980831146240234,
+    "if_remove_rejected_iq2_gib": 105.95541509985924,
+    "if_remove_rejected_iq2_and_vendor_stdout_candidates_gib": 112.60078561678529
+  },
+  "decision": {
+    "files_deleted": false,
+    "large_download_allowed_now": false,
+    "cleanup_recommended_before_next_large_candidate": true,
+    "recommended_minimal_cleanup": "With explicit approval, remove rejected IQ2_S directory first; this would restore about 106GiB free. Optionally remove superseded large stdout.txt logs after preserving excerpts, but do not delete expert packs or accepted model assets without a separate decision.",
+    "next_step_requires_user_or_new_small_probe": "Further large external GGUF validation is disk-blocked unless cleanup is approved. Small/header-only probes remain allowed."
+  }
+}
