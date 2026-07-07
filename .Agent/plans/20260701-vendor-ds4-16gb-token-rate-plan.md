@@ -7068,3 +7068,47 @@ Decision:
 - No deletion performed in this step.
 - No runtime source patch is allowed from this evidence.
 - If cleanup is explicitly approved later, delete only the rejected IQ2_S file first, then download exactly one compact target candidate and run load/correctness gates before any token-rate benchmark.
+
+## 2026-07-08 X10-AE compact target cleanup manifest correction
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-cleanup-manifest-correction-20260708.json`
+- status: `correction_recorded_no_deletion_not_sota`
+
+Purpose:
+- Correct X10-AD's cleanup wording so it does not imply already-rejected compact targets should be downloaded or tested again after disk cleanup.
+- No file was deleted, no full model was downloaded, no runtime source was changed, and no token-rate benchmark was run.
+
+Still valid from X10-AD:
+- The best cleanup candidate remains:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - size: `88,019,539,296 bytes`
+  - reason: already rejected for correctness, not used by current SOTA or generalized route, and restore URL/etag are recorded.
+- Must still preserve:
+  - `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`
+  - `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+- Antirez MTP refresh remains valid:
+  - `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` is a small `deepseek4_mtp_support` sidecar, but current vendor has no loader/runtime and no new verifier bound.
+
+Correction:
+- Do not re-download or re-test `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF` from the current evidence.
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-france-load-smoke-reject-20260707.json`
+  - status: `rejected_load_incompatible_not_sota`
+  - reason: REAP K128 changes `ffn_gate_inp` shape; direct load failed at `blk.3.ffn_gate_inp.weight`, expected `[4096,256]`, got `[4096,128]`.
+- Do not re-download or re-test `antirez/deepseek-v4-gguf` IQ2XXS chat-v2 from the current evidence.
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-france-correctness-reject-20260707.json`
+  - status: `rejected_correctness_not_sota`
+  - reason: loaded under strict RAM, but France output was degenerate/semantically incorrect in both default and deepseek3 reasoning-off modes.
+- Do not re-download or re-test `0xSero/DeepSeek-V4-Flash-162B-GGUF` Spark Mini Q2 from the current evidence.
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-0xsero-france-load-smoke-reject-20260707.json`
+  - status: `rejected_load_incompatible_not_sota`
+  - reason: missing global `hc_head_base/hc_head_fn/hc_head_scale`; current loader cannot use its per-layer HC tensors without a new correctness-proven compatibility plan.
+- Do not rebenchmark local bullerwins IQ2_S.
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage3b-reasonoff-correctness-reject-20260707.json`
+  - status: `rejected_correctness_failed_not_sota`
+  - reason: vendor-loadable with alias envs but produced malformed non-France output and only `2.9 tok/s`.
+
+Updated cleanup decision:
+- Deleting the rejected IQ2_S file, if explicitly approved later, is useful only to recover disk for future searches or new candidates.
+- It must not be treated as approval to re-download sleepy K128, antirez IQ2XXS, 0xSero Spark Mini Q2, or rebenchmark IQ2_S.
+- After cleanup, download only a newly discovered or newly corrected compact target candidate whose metadata/load/correctness route is not already rejected.
+- A loader compatibility patch for REAP K128 or 0xSero-style HC tensors requires its own hard-bound and correctness design before implementation.
