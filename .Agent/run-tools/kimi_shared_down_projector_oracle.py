@@ -77,8 +77,12 @@ def prompt_down_groups(torch: Any, root: Path, inventory: dict[str, Any], lib: A
     for key, group_rows in sorted(grouped.items()):
         if len(group_rows) < 2:
             continue
+        group_rows.sort(key=lambda row: row["active_slot"])
         h_stack = torch.stack([vecs[row["record_id"]] for row in group_rows], dim=0).to(torch.float32)
         y_stack = torch.stack([exact_outputs[row["record_id"]] for row in group_rows], dim=0).to(torch.float32)
+        slot_concat_h = None
+        if len(group_rows) == 8:
+            slot_concat_h = h_stack.reshape(-1).contiguous()
         out.append(
             {
                 "prompt_id": root.name,
@@ -88,6 +92,7 @@ def prompt_down_groups(torch: Any, root: Path, inventory: dict[str, Any], lib: A
                 "sum_h": h_stack.sum(dim=0).contiguous(),
                 "sum_abs_h": h_stack.abs().sum(dim=0).contiguous(),
                 "sum_sq_h": (h_stack * h_stack).sum(dim=0).contiguous(),
+                "slot_concat_h": slot_concat_h,
                 "target": y_stack.sum(dim=0).contiguous(),
             }
         )
@@ -103,6 +108,10 @@ def make_features(torch: Any, rows: list[dict[str, Any]], mode: str) -> Any:
             feat = torch.cat([row["sum_h"], row["sum_abs_h"]], dim=0)
         elif mode == "sum_h_abs_sq":
             feat = torch.cat([row["sum_h"], row["sum_abs_h"], row["sum_sq_h"]], dim=0)
+        elif mode == "slot_concat_h":
+            feat = row.get("slot_concat_h")
+            if feat is None:
+                raise RuntimeError(f"group {row['group_key']} does not have 8 active slots for slot_concat_h")
         else:
             raise RuntimeError(f"unknown feature mode: {mode}")
         chunks.append(feat)
@@ -201,6 +210,8 @@ def mode_dim(mode: str, hidden: int = 2048) -> int:
         return hidden * 2
     if mode == "sum_h_abs_sq":
         return hidden * 3
+    if mode == "slot_concat_h":
+        return hidden * 8
     raise RuntimeError(f"unknown mode: {mode}")
 
 
@@ -331,4 +342,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

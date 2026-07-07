@@ -3618,6 +3618,67 @@ Execution result:
     magnitude above the `0.10` gate;
   - do not write runtime kernels for down-cache removal via shared projectors.
 
+## Phase 5X: GP101 Slot-Concat Down Projector Oracle
+
+Goal:
+
+- Check whether GP100 failed because it discarded active-slot information.
+- Test a stronger but much more VRAM-expensive down surrogate:
+  concatenate all 8 active down intermediate vectors by `active_slot` and map
+  that `8 * 2048` feature vector to the summed down output with one projector
+  per layer.
+- This still avoids per-expert down tensor movement, but the resident BF16
+  projector cost is about `224 MiB/layer`, or `13.1 GiB/60 layers`.
+
+Method:
+
+1. Extend `.Agent/run-tools/kimi_shared_down_projector_oracle.py` with
+   `slot_concat_h`.
+2. Use only complete 8-active down groups from the GP88 dev corpus.
+3. Run leave-one-prompt-out kernel ridge with lambdas `1,10,100`.
+4. Compare error against GP100 and the `0.10` gate.
+
+Acceptance:
+
+- Advance only if `slot_concat_h` gets near `<=0.10` mean rel L2 and the VRAM
+  budget can plausibly fit with dense weights and up/gate cache.
+- If error remains far above the gate, reject learned down projectors even when
+  slot information is retained.
+
+Execution result:
+
+- Timestamp: `2026-07-08T04:12:56+0800`.
+- Status: completed dev-only offline oracle; no runtime change and no SOTA
+  claim.
+- Script updated:
+  `.Agent/run-tools/kimi_shared_down_projector_oracle.py`.
+- Report:
+  `.Agent/runs/20260708-gp101-slot-concat-down-projector/report.md`.
+- Remote execution:
+  - worktree: `/root/lfz/tmp/kimi-stage2m-align`;
+  - command ran under `systemd-run --wait --collect --same-dir`;
+  - memory cap: `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Inputs:
+  - dev prompts only:
+    `dev_python_reverse`, `dev_japan_factual`, `dev_mixed_summary`;
+  - source corpus:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus`;
+  - `max-down-records-per-prompt=256`;
+  - mode: `slot_concat_h`;
+  - lambdas: `1.0,10.0,100.0`.
+- Result:
+  - groups: `96`;
+  - layers evaluated: `32`;
+  - resident cost: `224 MiB/layer`, `13.12 GiB/60 layers`;
+  - best candidate:
+    `slot_concat_h`, `lambda=100`, mean rel L2 `1.252990`,
+    max rel L2 `1.778483`.
+- Decision:
+  - reject slot-concat down projector as a primary path;
+  - retaining active-slot information does not materially fix GP100;
+  - learned down-projector replacement is not viable without a much stronger
+    trained model or additional inputs.
+
 ## Run Discipline
 
 For every experiment:
@@ -3720,7 +3781,10 @@ Continue from Phase 5E:
 33. GP100 rejects shared down projectors: the best `sum_h_abs_sq` candidate
     needs `4.92 GiB/60 layers` resident VRAM and still has mean rel L2
     `1.260756`, far above the `0.10` gate.
-34. The next primary direction should either:
+34. GP101 rejects slot-concat down projectors: preserving active-slot
+    information still gives mean rel L2 `1.252990` while consuming about
+    `13.12 GiB/60 layers`.
+35. The next primary direction should either:
     - obtain a smaller full-model quant/runtime smoke with explicit disk
       approval or external storage; or
     - test a materially different learned surrogate that uses richer
