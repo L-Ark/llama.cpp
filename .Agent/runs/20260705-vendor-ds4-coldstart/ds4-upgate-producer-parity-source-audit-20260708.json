@@ -1,0 +1,76 @@
+{
+  "artifact_id": "20260708-ds4-upgate-producer-parity-source-audit",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "550a1456235aeb5ea231f0b507abb1e698d26c57",
+  "held_out_test_used": false,
+  "model_run_performed": false,
+  "purpose": "Current-head source/evidence audit for the next DS4 fused/retained producer step after down GPU correctness is fixed.",
+  "source_snippets": {
+    "deepseek4_ref_env": "src/models/deepseek4.cpp:97 deepseek4_fused_up_gate_ref_enabled() uses DS4_FUSED_UP_GATE_REF and is default-off.",
+    "limit_guard": "ggml/src/ggml.c:3437 ggml_moe_up_gate_limit() returns explicit mul_mat_id + clamp + swiglu_split when limit > 1e-6 unless GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1.",
+    "cpu_fused_op": "ggml/src/ggml-cpu/ggml-cpu.c:5348 ggml_compute_forward_moe_up_gate() executes GGML_OP_MOE_FUSED_UP_GATE CPU fallback.",
+    "cuda_fused_op": "ggml/src/ggml-cuda/moe_stream_batch.cu:7396 ggml_cuda_moe_stream_up_gate_batch() executes CUDA fused up/gate path when graph op is constructed and stream is available."
+  },
+  "evidence": {
+    "cpu_fused_reject": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-upgate-cpu-fallback-parity-reject-20260707.json",
+      "env": {
+        "DS4_FUSED_UP_GATE_REF": "1",
+        "DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT": "1"
+      },
+      "common_env": {
+        "GGML_MOE_STREAM": "0"
+      },
+      "pass": false,
+      "max_abs_sum_diff": 13.226561999996193,
+      "interpretation": "Disabling GGML_MOE_STREAM did not restore act-level parity. Therefore the fused up/gate mismatch is not only a CUDA stream batch issue; the CPU fused fallback path behind GGML_OP_MOE_FUSED_UP_GATE also diverges from the explicit mul_mat_id + clamp + swiglu graph. X10-O force-explicit pass remains the correctness reference."
+    },
+    "force_explicit_pass": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-upgate-force-explicit-parity-pass-20260707.json",
+      "env": {
+        "DS4_FUSED_UP_GATE_REF": "1",
+        "DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT": "1",
+        "GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT": "1"
+      },
+      "pass": true,
+      "max_abs_sum_diff": 0.0,
+      "reason": "Forcing ggml_moe_up_gate_limit through its explicit graph fallback produced exact act-level parity. Therefore DS4 branch wiring and clamp semantics are correct; the mismatch in X10-N is isolated to the real GGML_OP_MOE_FUSED_UP_GATE execution path."
+    },
+    "allow_fused_reject": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-allow-fused-recheck-reject-20260707.json",
+      "env": {
+        "DS4_FUSED_UP_GATE_REF": "1",
+        "DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT": "1",
+        "GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED": "1"
+      },
+      "pass": false,
+      "max_abs_sum_diff": 13.226561999996193,
+      "decision": "reject_not_sota; no source change; do not benchmark-promote GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1 until a future patch makes layer-0 act parity exact."
+    },
+    "explicit_default_guard": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-explicit-default-accepted-20260707.json",
+      "decision": "Accept and push as a correctness guard for future DS4 fused/ref work. Do not claim any token-rate improvement. Real limited fused op can still be tested deliberately with GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1, but must pass act parity before any benchmark.",
+      "implementation": {
+        "behavior": "For limit > 1e-6, ggml_moe_up_gate_limit returns explicit mul_mat_id + clamp + swiglu_split unless GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1 is set. Existing limit=0 callers and default SOTA path are unchanged.",
+        "changed_file": "ggml/src/ggml.c",
+        "new_env": "GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1"
+      },
+      "parity_pass": true,
+      "default_off_france_guard_ram_ok": true,
+      "default_off_france_guard_correctness_ok": true
+    }
+  },
+  "source_audit_conclusion": [
+    "The DS4 producer entry exists only behind DS4_FUSED_UP_GATE_REF=1 and is default-off.",
+    "For DS4 layers with swiglu clamp limit, current ggml_moe_up_gate_limit deliberately avoids GGML_OP_MOE_FUSED_UP_GATE unless GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1 is set.",
+    "Reopening the real fused op is numerically unsafe today: it fails act parity even with GGML_MOE_STREAM=0, so the mismatch is also in CPU fused fallback, not only CUDA.",
+    "The exact forced-explicit subgraph passes act parity and is therefore the only safe producer reference for future retained dataflow."
+  ],
+  "next_impl_implication": {
+    "preferred_route": "Build a default-off explicit-retained producer/consumer scaffold that preserves explicit mul_mat_id + clamp + swiglu_split math while retaining GPU-resident activation for down; do not use real GGML_OP_MOE_FUSED_UP_GATE as benchmark path until parity is fixed.",
+    "first_gate": "Any future patch touching real fused op must make DS4_FUSED_UP_GATE_REF=1 + DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1 + GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1 pass act parity with max_abs_sum_diff=0.0 before token-rate tests.",
+    "alternative_gate": "If implementing explicit-retained dataflow instead, parity must compare against forced-explicit output, then fixed-text top1, then France correctness, then calibration/dev prompt set before held-out."
+  },
+  "decision": "No source change and no SOTA change. This closes real fused-op benchmarking for now and narrows next source work to explicit-retained dataflow or a real fused parity fix."
+}

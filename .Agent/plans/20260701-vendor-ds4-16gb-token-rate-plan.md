@@ -222,6 +222,10 @@
 - `source_gate_result`: 若目标是 dev-set `min >= 5.5 tok/s`（给最终 `>5 tok/s` 留余量），最差 prompt 需要从 `gate source movement + up/down fallback` 中净省约 `89%` 量级；`min >= 5 tok/s` 也需要约 `82%` 量级。单独 down-only、单独 hotset residency、plain fused up/gate env toggle、或 default graph 上的 `GGML_MOE_GPU_HANDOFF` toggle 都已关闭，不应重复作为下一步。
 - `next_source_edit_requirements`: 下一次源码实现必须 default-off，先证明 DS4 decode graph 真的构造 fused/retained producer；必须复用当前 one-stream gate cache 语义或避免 duplicate gate expert VRAM copy；必须产生 GPU-resident fused activation 并通过 correctness-checked handoff 喂给 down；必须在 microbench 中证明 per-layer fused/down consume path 比对应 CPU up+down fallback 快，而不是仅证明 batch_accept 增加。通过 fixed-text top1/logit parity、France semantic correctness、calibration/dev metrics、16GB RAM/page-cache、TTFT gate 后，才允许冻结候选跑 held-out。
 
+- `upgate_producer_parity_audit_20260708`: completed source/evidence audit `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-upgate-producer-parity-source-audit-20260708.json`，未跑模型、未改源码、未使用 held-out prompts。结论：DS4 producer 入口 `DS4_FUSED_UP_GATE_REF=1` 默认关闭；对带 swiglu clamp limit 的 DS4 层，`ggml_moe_up_gate_limit()` 默认走 explicit `mul_mat_id + clamp + swiglu_split`，只有 `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` 才会打开真实 `GGML_OP_MOE_FUSED_UP_GATE`。
+- `upgate_parity_gate`: 真实 fused op 当前仍不允许 benchmark：历史 artifact 证明即使 `GGML_MOE_STREAM=0`，CPU fused fallback 也和 explicit graph 不一致（`max_abs_sum_diff=13.22656`）；forced-explicit 则 `max_abs_sum_diff=0.0`。因此下一步源码若触碰真实 fused op，第一 gate 必须是 `DS4_FUSED_UP_GATE_REF=1 + DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1 + GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` act parity exact；否则只能做 explicit-retained dataflow，不能用真实 fused op 做 token-rate 路径。
+- `preferred_next_impl`: 优先实现 default-off explicit-retained producer/consumer scaffold：保留 explicit 数学作为 correctness reference，避免 duplicate gate expert storage，产生 GPU-resident activation，并通过 correctness-checked down handoff 消除 D2H/scatter 与 down CPU fallback。该 scaffold 先做 parity/top1，不进入 SOTA benchmark，直到满足上一条 source gate 和 `min>=5.5 tok/s` hard-bound。
+
 ## 二次回退状态（2026-07-02）
 
 - 已执行回退：当前源码分支重置到 `5d65239a74c9512967eb557743dc3cb5d1cf6c76`（`vendor-ds4: record odirect pack sota`）。
