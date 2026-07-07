@@ -1,0 +1,39 @@
+{
+  "accepted_sota_changed": false,
+  "answer": "，数据库索引就像一本书的目录，能显著提升数据查询的速度。它通过对数据库表中的一列或多列的值进行排序，创建一个指向表中物理数据位置的指针，从而避免了全表扫描，大大加快了查询速度。同时，索引也能帮助数据库进行排序和分组操作，以及唯一性约束的实现。但需要注意的是，索引会占用额外的存储空间，并且在数据插入、更新和删除时会增加一定的开销。因此，索引的设计需要权衡查询性能与维护成本之间的平衡。",
+  "attempt_id": "20260707-user-db-index-diagnostic-no-prompt-specific",
+  "baseline_comparison": {
+    "diagnostic_status": "above_baseline_min_but_ad_hoc_prompt_not_sota",
+    "generalized_no_prompt_specific_baseline_mean_eval_tok_s": 2.18,
+    "generalized_no_prompt_specific_baseline_min_eval_tok_s": 1.8,
+    "result_eval_tok_s": 2.4
+  },
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T025306Z-20260707-user-db-index-diagnostic-no-prompt-specific/db-index-user-diagnostic-cpu40-vram0gb",
+  "config_scope": "no-prompt-specific baseline config; strict cold drop_caches; MemoryMax=16000000000; MemorySwapMax=0; page cache counted inside cgroup; gate one-stream name_filter=ffn_gate_exps; no prompt-derived pack/profile",
+  "created_at_utc": "2026-07-07T02:55:10.053873+00:00",
+  "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p '请用一小段中文解释数据库索引的作用。' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16",
+  "git_commit": "99dba7799e9c1bcdc4ea7bdd4ea3b2063545e474",
+  "manual_correctness": "pass",
+  "manual_reason": "The answer correctly explains that database indexes speed up queries like a book index, reduce full scans, help sorting/grouping/uniqueness, and add storage/write overhead.",
+  "metrics": {
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "elapsed_seconds": 80.2,
+    "eval_tok_s": 2.4,
+    "first_answer_ms": null,
+    "memory_file_bytes": 15000047616,
+    "memory_max_events": 21839,
+    "memory_peak_bytes": 16000000000,
+    "oom_seen": false,
+    "pgmajfault": 272099,
+    "prompt_tok_s": 0.9,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "ttft_estimate_ms": null,
+    "workingset_refault_file": 2200526
+  },
+  "prompt": "请用一小段中文解释数据库索引的作用。",
+  "prompt_scope": "assistant-selected ad-hoc diagnostic only; not calibration/dev, not held-out, not used for tuning or SOTA promotion",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T025306Z-20260707-user-db-index-diagnostic-no-prompt-specific",
+  "ttft_note": "first_answer watcher did not detect Chinese-only first output, so ttft_estimate_ms is null; elapsed_seconds and token rates are valid from llama output/time -v."
+}
