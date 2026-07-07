@@ -94118,6 +94118,124 @@ GP46 execution result:
   - no runtime behavior changed;
   - no token-rate or output-quality claim is made.
 
+## GP53: current-code slow dev direct-read copy attribution
+
+Timestamp: `2026-07-07T08:50:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- GP52 shows prompt-agnostic dev weighted token rate is only `0.265 tok/s`.
+- The largest measured component is residual unattributed time:
+  `1895.301 ms/token`, `50.3%` of decode.
+- The slowest dev prompts have very high direct-read ratio:
+  - `dev_linear_equation`: `0.874`;
+  - `dev_python_reverse`: `0.867`;
+  - `dev_mixed_summary`: `0.797`;
+  - `dev_photosynthesis_factual`: `0.754`.
+- GP50 reduced mixed-batch direct leakage on France but did not test current
+  code on slow non-France dev prompts.
+
+Goal:
+
+- Run current code on one or more slow dev prompts with `COPY_PROFILE=1` and
+  cold-start 16GB constraints.
+- Rank direct-read copy paths by tensor/type/role/bytes/time.
+- Determine whether the residual/direct-read bottleneck comes from:
+  - valid expert-pack entries not entering batched iouring;
+  - pack misses falling back to GGUF;
+  - prompt-only fallback leaking into decode;
+  - type/shape paths excluded from batch scheduling.
+
+Scope:
+
+- First exploratory run:
+  - prompt id: `dev_linear_equation`;
+  - prompt: `Solve: if x + 3 = 10, what is x?`;
+  - `N=32` if runtime is acceptable, otherwise `N=16` is allowed only for
+    attribution, not token-rate acceptance.
+- Use current branch code and existing `kimi-general-prompt-repro.sh`.
+- Use `PROFILE=1`, `COPY_PROFILE=1`, `MemoryMax=15900000000`,
+  `MemorySwapMax=0`, cold start.
+- Do not use held-out test prompts.
+
+Theory and upper bound:
+
+- If the direct-read residual is mostly pack-hit jobs that bypass iouring, then
+  moving them to batched iouring can in principle recover part of the
+  `~1.9 s/token` residual.
+- If it is mostly pack misses / unsupported GGUF fallback, the fix is not a
+  scheduler tweak; it requires broader expert-pack coverage or a new fallback
+  read path.
+- The upper-bound gain for any identified path is:
+  `saved_ms_per_token = direct_path_ms / decode_runs`, bounded by replacement
+  iouring/H2D/compute cost and TTFT <= +20%.
+
+Validation:
+
+- Output must remain semantically correct for the dev prompt.
+- RAM peak must stay under the cgroup limit.
+- Record command, run dir, answer, token rate, TTFT, memory, and ranked direct
+  paths.
+- No implementation change in GP53 unless the copy attribution points to a
+  clear safe code path; write the implementation plan first if code is needed.
+
+Acceptance:
+
+- Commit and push the attribution report if it identifies a concrete next code
+  target.
+- No SOTA claim for attribution-only results.
+
+GP53 execution result:
+
+- Timestamp: `2026-07-07T09:18:00+08:00`.
+- Remote repo: `/root/lfz/tmp/vendor-kimi-speculative-gp33`.
+- Head: `5144c977c`.
+- Accepted run:
+  - run dir:
+    `/root/lfz/tmp/runs/20260707-gp53-current-code-copy-profile/dev_linear_equation_n48`;
+  - prompt: `Solve: if x + 3 = 10, what is x?`;
+  - `N=48`, `PROFILE=1`, `COPY_PROFILE=1`;
+  - cold start under `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - quality: pass;
+  - output:
+    `To solve for x, subtract 3 from both sides: x + 3 = 10 x = 10 − 3 **x = 7**`;
+  - TTFT: `95795.13 ms`;
+  - decode: `208177.33 ms / 34 runs`;
+  - token rate: `0.16 tok/s`;
+  - RAM peak: `15899996160` bytes.
+- Rejected sanity run:
+  - `N=32` failed quality because output stopped at `**x =`;
+  - not accepted as a quality-valid result.
+- Backend copy attribution from the accepted run:
+  - `runtime_load,pack=0,iouring=0`: `183050.117 ms`,
+    `64.888 GiB`, `12856` jobs;
+  - `runtime_load,pack=1,iouring=1`: `85246.742 ms`,
+    `82.381 GiB`, `16251` jobs;
+  - `current_down_overlap,pack=0,iouring=0`: `41181.273 ms`,
+    `15.809 GiB`, `2691` jobs;
+  - `current_down_overlap,pack=1,iouring=0`: `7143.719 ms`,
+    `16.261 GiB`, `2768` jobs;
+  - `current_down_overlap,pack=1,iouring=1`: `1194.879 ms`,
+    `1.739 GiB`, `296` jobs.
+- Interpretation:
+  - the dominant slow path is broad `pack=0` coverage failure, not pack-hit jobs
+    bypassing iouring;
+  - the current France-oriented expert pack does not cover slow general prompts
+    well enough;
+  - moving `pack=1,iouring=0` jobs to iouring is useful cleanup but too small to
+    be the main next step.
+- Decision:
+  - next implementation should target prompt-agnostic expert-pack coverage for
+    slow general prompts;
+  - build a dev-trained general hotset pack from committed dev route profiles;
+  - do not use held-out test prompts;
+  - compare current France pack vs general hotset pack on dev prompts under the
+    16GB cold-start gate.
+- Report:
+  `.Agent/runs/20260707-gp53-current-code-copy-profile/report.md`.
+
 ## GP52: prompt-agnostic decode bottleneck attribution from dev profiles
 
 Timestamp: `2026-07-07T08:30:00+08:00`.
