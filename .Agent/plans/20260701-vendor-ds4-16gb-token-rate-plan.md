@@ -5382,3 +5382,13 @@
 - assessment: remaining issue is most likely model/interface or numerical compatibility after loading, not a simple missing-tensor or chat-template issue. Native logits/top1 are not a valid exact parity oracle because the 4Expert computation is intentionally different.
 - decision: no 4Expert performance benchmark, generalized run, or SOTA claim is allowed. Accepted SOTA unchanged.
 - only_possible_reopen: A separate default-off plan could add a route-dump diagnostic for `ffn_gate_tid2eid` / hash-layer semantics and selected expert ids under France `n=1`; this would be diagnostic only and would not prove correctness without a known-good reference. Otherwise keep 4Expert closed until a trusted reference runtime/output for this exact GGUF exists.
+
+## 2026-07-07 Phase X8：non-destructive disk cleanup candidate audit
+
+- attempt_id: 20260707-disk-cleanup-candidate-audit-after-iq2
+- status: planned_before_artifact_audit
+- why_now: X6/X7 show no safe benchmark/source route remains, and `/root` free space is about `24GiB` because rejected IQ2_S and local 4Expert/native models occupy most disk. Any further external GGUF validation requires explicit cleanup/removal/relocation decisions. Before asking for or taking cleanup action, produce a precise non-destructive candidate list.
+- scope: no deletion, no model run, no source edit, no held-out, no large download. Inspect disk usage and classify files as protected, rejected-removable-with-approval, or unknown/do-not-touch.
+- protected_assets: accepted native GGUF, accepted SOTA run dirs, pushed-source repro artifacts, plan/artifacts, local 4Expert if future correctness work remains possible.
+- expected_output: artifact listing top disk consumers, rejected IQ2_S removal potential, any large stdout/log artifacts already superseded, and exact free-space impact. The artifact must explicitly say that no files were deleted.
+- push_rule: Push artifact and plan update to `ssd/vendor/deepseek-token-rate-16gb`. Any actual cleanup must be a separate explicit decision.
