@@ -1,0 +1,85 @@
+{
+  "artifact_id": "20260707-q80-full-down-stage-profile-and-empty-fallback-skip-reject",
+  "created_at_utc": "2026-07-07T09:40:00Z",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "status": "diagnostic_profile_patch_reverted_not_sota",
+  "source_commit_before_attempt": "0ffc59a68d41bf73a8d728a71bbf4ba19c2d4b69",
+  "scope": "Profile the corrected Q8_0 lane8/shared MXFP4 down GPU path and test whether empty CPU fallback bookkeeping after batch success is the remaining bottleneck.",
+  "constraints": {
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "cold_drop_caches": true,
+    "held_out_used": false,
+    "sota_promotion": false
+  },
+  "profile_run": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T092325Z-q80-lane8-shared-stage-profile/full-down-lane8-shared-profile",
+    "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-results",
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "fixed_text": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-correctness/top1-full-down/fixed-france-text.txt",
+    "env": {
+      "GGML_MOE_STREAM_DOWN_BATCH": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED": "1",
+      "GGML_MOE_COPY_PROFILE_OUT": "copy_profile.csv",
+      "GGML_MOE_COPY_PROFILE_H2D": "1",
+      "GGML_KIMI_CPU_MOE_PROFILE": "1"
+    },
+    "systemd_result": "success",
+    "service_runtime_seconds": 205.892,
+    "max_rss_kb": 15601160,
+    "vram_cache_down": {
+      "slots": 481,
+      "slot_mib": 4.25,
+      "hits": 18255,
+      "misses": 16545,
+      "hit_rate_pct": 52.5
+    },
+    "copy_profile": {
+      "records": 16545,
+      "bytes_total": 73731932160,
+      "gib_total": 68.668212890625,
+      "wall_ms_sum": 80107.993366,
+      "enqueue_ms_sum": 80102.960927,
+      "avg_wall_ms": 4.841824923904487,
+      "pack_hit_records": 0,
+      "ram_hit_records": 0,
+      "iouring_records": 0
+    },
+    "kimi_cpu_moe_profile_down": {
+      "calls": 17400,
+      "total_ms_per_call": 9.529,
+      "cuda_batch_ms_per_call": 4.727,
+      "fallback_t0_ms_per_call": 4.754,
+      "batch_accept": 5800,
+      "batch_decline": 0,
+      "single_accept": 0,
+      "single_decline": 69600
+    }
+  },
+  "empty_fallback_skip_patch_attempt": {
+    "hypothesis": "If all matrix_row_counts are zero after GPU batch, skip CPU fallback prepare/barriers/loop and reduce fallback_t0.",
+    "source_change": "Temporarily added an early return in ggml_compute_forward_mul_mat_id when no CPU fallback rows remain after GPU stream attempts.",
+    "build": "cmake --build build-ds4-moe-stream -j20 --target llama-results llama-cli succeeded",
+    "validation_run": "/root/lfz/runs/vendor-ds4-16gb/20260707T093051Z-q80-skip-empty-fallback-full-down/full-down-lane8-shared-skip-empty-report",
+    "result": {
+      "systemd_result": "success",
+      "service_runtime_seconds": 205.687,
+      "max_rss_kb": 15603088,
+      "vram_cache_down_hits": 18255,
+      "vram_cache_down_misses": 16545,
+      "kimi_down_total_ms_per_call": 9.486,
+      "kimi_down_cuda_batch_ms_per_call": 4.689,
+      "kimi_down_fallback_t0_ms_per_call": 4.758,
+      "batch_accept": 5800,
+      "batch_decline": 0
+    },
+    "decision": "reverted_not_committed",
+    "reason": "The fallback_t0 and wall time did not improve. The profile bucket has 17400 calls but only 5800 batch-accepted down calls; the remaining non-down/up-gate style fallback dominates the reported fallback_t0."
+  },
+  "conclusion": "Down GPU correctness remains fixed, but the corrected full-down Q8_0 lane8/shared path is not a token-rate SOTA. The remaining bottleneck is a combination of down source movement/cache misses plus non-down/up-gate CPU fallback, not an empty fallback bookkeeping path after successful down batch.",
+  "next_action": "Profile and optimize by tensor role on generalized calibration/dev prompts; future source work must target prompt-general simultaneous reduction of gate/source movement and up/down fallback or provide a hard-bound with min >= 5.5 tok/s before implementation."
+}

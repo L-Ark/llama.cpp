@@ -5815,3 +5815,34 @@
   - Commit as default-off diagnostic/correctness-preserving improvement over the scalar reference.
   - Do not promote as token-rate SOTA and do not run generalized benchmark from this path alone.
   - Next source work must target structural overhead outside the per-output dot loop: Q8_0 staging/H2D, D2H output writeback, retained/fused down dataflow, or avoiding full-output down materialization. More tuning of this full-output Q80 row kernel is unlikely to reach generalized `>5 tok/s` alone.
+
+## 2026-07-07 X10-C profile follow-up：full-down GPU path still blocked by source movement and non-down fallback
+
+- attempt_id: `20260707-q80-full-down-stage-profile-and-empty-fallback-skip-reject`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/q80-full-down-stage-profile-and-empty-fallback-skip-reject-20260707.json`
+- status: `diagnostic_profile_patch_reverted_not_sota`
+- purpose:
+  - After down GPU correctness was fixed, re-profile the corrected lane8/shared full-down path under strict `16GB` cgroup to locate the remaining bottleneck before writing another optimization.
+  - Test the hypothesis that the reported `fallback_t0` after `batch_accept=5800` was mostly empty CPU fallback bookkeeping after down GPU batch success.
+- strict_profile_run:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T092325Z-q80-lane8-shared-stage-profile/full-down-lane8-shared-profile`
+  - command_scope: fixed-text `llama-results`, `--sequential-logits`, `--n-cpu-moe 40`, `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`, strict `MemoryMax=16000000000`, `MemorySwapMax=0`, cold `drop_caches`.
+  - result: completed without OOM/cgroup kill; top1 report produced.
+  - profile_overhead_note: enabling CSV copy/profile tracing increased wall time, so it is only used for decomposition, not token-rate promotion.
+- profile_result:
+  - `VRAM cache down`: `hits=18255`, `misses=16545`, hit rate `52.5%`, slots `481`, slot size `4.25 MiB`.
+  - `copy_profile.csv`: `16545` runtime-load records, total bytes `73731932160` (`68.67 GiB`), summed copy wall `80107.99 ms`, average `4.842 ms/job`, no pack/iouring hits in this run.
+  - `kimi_cpu_moe_profile`: `down calls=17400`, `total=9.529 ms/call`, `cuda_batch=4.727 ms/call`, `fallback_t0=4.754 ms/call`, `batch_accept=5800`, `batch_decline=0`.
+  - Interpretation: only about one third of the profiled MoE calls are the corrected down batch path (`5800/17400`). The remaining two thirds are still non-down/up-gate style CPU fallback work in this profile bucket, so `fallback_t0` is not just empty bookkeeping after down batch success.
+- rejected_patch:
+  - Tried a minimal CPU-side control-flow patch that returned early when all `matrix_row_counts` were zero after GPU batch/single attempts, to skip empty fallback prepare/barriers.
+  - validation_run: `/root/lfz/runs/vendor-ds4-16gb/20260707T093051Z-q80-skip-empty-fallback-full-down/full-down-lane8-shared-skip-empty-report`
+  - result: no improvement; wall time remained `3min 25.687s`, profile still showed `fallback_t0=4.758 ms/call`, `batch_accept=5800`, `batch_decline=0`.
+  - decision: patch was reverted and not committed because it did not improve the measured bottleneck.
+- updated_bottleneck:
+  - Down GPU correctness is solved, but the corrected full-down GPU path is not a token-rate improvement because it still pays large down source movement/cache-miss cost and because non-down/up-gate fallback remains large.
+  - Further tuning of the full-output Q8_0 down kernel or empty-fallback control flow is low priority.
+- next_action:
+  - Return to the required design/execute loop with a new bottleneck decomposition that separates `ffn_gate_exps`, `ffn_up_exps`, and `ffn_down_exps` by tensor role on generalized calibration/dev prompts.
+  - Any next implementation must target prompt-general simultaneous reduction of gate/source movement and up/down fallback, or provide a hard-bound showing `min >= 5.5 tok/s` before coding.
+  - Do not use held-out prompts until a candidate is frozen.
