@@ -8261,3 +8261,34 @@ Next:
   - route MXFP4 down through the already-correct Q8_0-compatible path; or
   - implement a dedicated MXFP4 + f32-activation down kernel and prove top1/logit parity before any token-rate benchmark.
 - Any future accepted path must pass semantic output, strict 16GB RAM including page cache, and TTFT gates before being recorded as SOTA.
+
+## 2026-07-08 X10-BC current-head Q80 down correctness reverify after GLU upload probe
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-after-glu-upload-down-q80-lane8-shared-correctness-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T214741Z-current-head-after-glu-upload-q80-correctness-reverify`
+- source: `3732f8664 vendor-ds4: add safe glu handoff upload probe`
+- status: `pass_current_head_after_glu_upload_down_gpu_q80_lane8_shared_correctness_not_sota`
+
+Purpose:
+- Reverify that the already-correct MXFP4 down Q8_0-compatible lane8/shared path still passes after adding the default-off GLU upload probe and rejecting unsafe MXFP4 generic f32 handoff.
+
+Method:
+- Fixed France text, `llama-results --sequential-logits --top1-report`.
+- Two strict `16GB` cgroup cases with drop_caches before each run:
+  - default down fallback case;
+  - full-down Q80 lane8/shared case with `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`.
+
+Result:
+- `n_compare=145`
+- `same_top1=145/145`
+- `first_mismatch_pos=-1`
+- `max_abs_top2_logit_diff=0.0`
+- default down profile: `batch_accept=0`, `batch_decline=5800`, `down total=6.578 ms/call`
+- full-down Q80 profile: `batch_accept=5800`, `batch_decline=0`, `down total=9.499 ms/call`, `cuda_batch=4.700 ms/call`
+- default memory: `memory_peak_bytes=16000000000`, `memory_file_bytes=14900539392`, `ram_ok=true`
+- full-down memory: `memory_peak_bytes=16000000000`, `memory_file_bytes=14929158144`, `ram_ok=true`
+
+Decision:
+- Down GPU Q80 lane8/shared correctness is still fixed on current pushed head.
+- It remains rejected as a SOTA/performance path because it is slower than default CPU fallback on this fixed-text reverify.
+- Next down work should not revisit correctness for Q80 lane8/shared unless that code changes; performance work must reduce Q8_0 staging/H2D/D2H/fallback overhead, or implement a dedicated MXFP4+f32 activation down kernel with parity before benchmarking.
