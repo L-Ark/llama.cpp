@@ -1,0 +1,29 @@
+{
+  "artifact": "general_sota_demo_script_validation",
+  "date_local": "2026-07-08",
+  "purpose": "Validate scripts/demo-vendor-ds4-general-sota.sh for arbitrary prompt demo under strict 16GB cgroup.",
+  "source_head": "937073b98e04e97eb6fe40731f70af063d761267",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "script": "scripts/demo-vendor-ds4-general-sota.sh",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T170201Z-validation-food-cn-n16-final",
+  "command": "scripts/demo-vendor-ds4-general-sota.sh --prompt 今天吃什么？请给一个简短建议。 --max-tokens 16 --run-label validation-food-cn-n16-final",
+  "prompt_general": true,
+  "prompt_specific_env_allowed": 0,
+  "cold_drop_caches": 1,
+  "memory_max_bytes": 16000000000,
+  "memory_swap_max_bytes": 0,
+  "metrics": {
+    "eval_tok_s": 1.6,
+    "prompt_tok_s": 1.0,
+    "ttft_estimate_ms": 40202.868972,
+    "elapsed_seconds": 46.22,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15096557568,
+    "ram_ok": true,
+    "answer_present": true,
+    "exit_status": 0,
+    "systemd_status": 0
+  },
+  "answer": "，今天可以试试：  \n- **番茄牛",
+  "note": "This is a short n=16 smoke validation of the demo script, not a new SOTA claim. The script uses the current prompt-general SOTA/demo configuration and refuses prompt-specific env by default."
+}

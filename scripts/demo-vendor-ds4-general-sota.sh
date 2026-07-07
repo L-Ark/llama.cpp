@@ -4,21 +4,36 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/demo-vendor-ds4-general-sota.sh [--prompt TEXT] [--max-tokens N] [--run-label NAME] [--warm] [--allow-prompt-specific-env]
+  scripts/demo-vendor-ds4-general-sota.sh [--prompt TEXT | --prompt-file FILE] [options]
 
-Runs the current prompt-general DeepSeek V4 vendor baseline/SOTA demo under the
-strict 16GB host RAM cgroup. If --prompt is omitted, the script asks for one
-line interactively.
+Options:
+  --prompt TEXT                  Run one arbitrary user prompt.
+  --prompt-file FILE             Read the prompt from a file. Use - for stdin.
+  -n, --max-tokens N             Maximum generated tokens. Default: 192.
+  --run-label NAME               Label added to the run directory.
+  --warm                         Skip drop_caches. Default is cold-start.
+  --allow-prompt-specific-env    Diagnostic only; do not use for SOTA demos.
+  -h, --help                     Show this help.
 
-Defaults are intentionally prompt-general:
-  - no prompt-specific expert pack/profile/alias is allowed
-  - strict MemoryMax=16000000000 and MemorySwapMax=0
+This demos the current accepted prompt-general DeepSeek V4 vendor configuration
+under the strict 16GB host RAM cgroup. It accepts arbitrary prompts and records
+all files needed to reproduce the run.
+
+Default behavior is intentionally prompt-general:
+  - prompt-specific expert packs, aliases, and profiles are refused
+  - MemoryMax=16000000000 and MemorySwapMax=0 via systemd-run
+  - page cache is counted inside the cgroup
   - cold drop_caches before launch unless --warm is passed
-  - cpu_moe=40, gate-only DS4 one-stream cache, vram_cache=0
+  - vendor framework, cpu_moe=40, DS4 gate-only one-stream cache, vram_cache=0
 
-Outputs are written under:
+Outputs:
   /root/lfz/runs/vendor-ds4-16gb/demo-general-sota/<timestamp>-<label>/
 EOF
+}
+
+die() {
+  echo "error: $*" >&2
+  exit 2
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,26 +42,33 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BINARY="${BINARY:-${REPO_DIR}/build-ds4-moe-stream/bin/llama-cli}"
 MODEL="${MODEL:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf}"
 RUN_ROOT="${RUN_ROOT:-/root/lfz/runs/vendor-ds4-16gb/demo-general-sota}"
+
 MAX_TOKENS=192
 RUN_LABEL="interactive"
 COLD=1
 ALLOW_PROMPT_SPECIFIC_ENV=0
 PROMPT=""
+PROMPT_FILE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --prompt)
-      [[ $# -ge 2 ]] || { echo "missing value for --prompt" >&2; exit 2; }
+      [[ $# -ge 2 ]] || die "missing value for --prompt"
       PROMPT="$2"
       shift 2
       ;;
+    --prompt-file)
+      [[ $# -ge 2 ]] || die "missing value for --prompt-file"
+      PROMPT_FILE="$2"
+      shift 2
+      ;;
     --max-tokens|-n)
-      [[ $# -ge 2 ]] || { echo "missing value for --max-tokens" >&2; exit 2; }
+      [[ $# -ge 2 ]] || die "missing value for --max-tokens"
       MAX_TOKENS="$2"
       shift 2
       ;;
     --run-label)
-      [[ $# -ge 2 ]] || { echo "missing value for --run-label" >&2; exit 2; }
+      [[ $# -ge 2 ]] || die "missing value for --run-label"
       RUN_LABEL="$2"
       shift 2
       ;;
@@ -63,37 +85,40 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo "unknown argument: $1" >&2
-      usage >&2
-      exit 2
+      die "unknown argument: $1"
       ;;
   esac
 done
 
+if [[ -n "$PROMPT" && -n "$PROMPT_FILE" ]]; then
+  die "use only one of --prompt or --prompt-file"
+fi
+
 if [[ ! "$MAX_TOKENS" =~ ^[0-9]+$ ]] || [[ "$MAX_TOKENS" -le 0 ]]; then
-  echo "--max-tokens must be a positive integer" >&2
-  exit 2
+  die "--max-tokens must be a positive integer"
 fi
 
-if [[ -z "$PROMPT" ]]; then
-  printf 'Enter prompt: ' >&2
-  IFS= read -r PROMPT
+if [[ -n "$PROMPT_FILE" ]]; then
+  if [[ "$PROMPT_FILE" == "-" ]]; then
+    PROMPT="$(cat)"
+  else
+    [[ -f "$PROMPT_FILE" ]] || die "missing prompt file: $PROMPT_FILE"
+    PROMPT="$(cat "$PROMPT_FILE")"
+  fi
+elif [[ -z "$PROMPT" ]]; then
+  if [[ -t 0 ]]; then
+    printf 'Enter prompt: ' >&2
+    IFS= read -r PROMPT
+  else
+    PROMPT="$(cat)"
+  fi
 fi
 
-if [[ -z "$PROMPT" ]]; then
-  echo "prompt is empty" >&2
-  exit 2
-fi
+PROMPT="$(printf '%s' "$PROMPT" | sed -e 's/[[:space:]]*$//')"
+[[ -n "$PROMPT" ]] || die "prompt is empty"
 
-if [[ ! -x "$BINARY" ]]; then
-  echo "missing executable: $BINARY" >&2
-  exit 1
-fi
-
-if [[ ! -f "$MODEL" ]]; then
-  echo "missing model: $MODEL" >&2
-  exit 1
-fi
+[[ -x "$BINARY" ]] || { echo "missing executable: $BINARY" >&2; exit 1; }
+[[ -f "$MODEL" ]] || { echo "missing model: $MODEL" >&2; exit 1; }
 
 prompt_specific_env=(
   GGML_MOE_STREAM_ONE_EXPERT_PACK
@@ -103,6 +128,10 @@ prompt_specific_env=(
   GGML_MOE_STREAM_ONE_PREFILL_PROFILE
   GGML_MOE_EXPERT_GGUF_ALIAS_TSV
   GGML_MOE_IO_ALIGNED_ALIAS_BATCH
+  GGML_MOE_STREAM_UP_DOWN_PROFILE
+  GGML_MOE_STREAM_ONE_ROUTE_PROFILE
+  GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT
+  GGML_DS4_GROUPED_RETAINED_ROUTE_DETAIL_OUT
 )
 
 if [[ "$ALLOW_PROMPT_SPECIFIC_ENV" -eq 0 ]]; then
@@ -113,9 +142,9 @@ if [[ "$ALLOW_PROMPT_SPECIFIC_ENV" -eq 0 ]]; then
     fi
   done
   if [[ "${#found[@]}" -gt 0 ]]; then
-    printf 'Refusing to run with prompt-specific env set:\n' >&2
+    printf 'Refusing to run with prompt-specific or profiling env set:\n' >&2
     printf '  %s\n' "${found[@]}" >&2
-    printf 'Unset these variables or pass --allow-prompt-specific-env for diagnostics only.\n' >&2
+    printf 'Unset these variables, or pass --allow-prompt-specific-env for diagnostics only.\n' >&2
     exit 2
   fi
 fi
@@ -131,49 +160,45 @@ printf '/exit\n' > "${RUN_DIR}/stdin.txt"
 cat > "${RUN_DIR}/config.json" <<EOF
 {
   "demo": "vendor-ds4-general-sota",
-  "note": "Prompt-general baseline/SOTA demo. This intentionally excludes prompt-specific expert packs and profiles.",
+  "description": "Current accepted prompt-general DeepSeek V4 vendor demo configuration. It deliberately excludes prompt-specific expert packs, aliases, and profiles.",
   "repo_dir": "${REPO_DIR}",
+  "source_head": "$(git -C "$REPO_DIR" rev-parse HEAD)",
+  "source_branch": "$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)",
   "binary": "${BINARY}",
   "model": "${MODEL}",
   "max_tokens": ${MAX_TOKENS},
   "memory_max_bytes": 16000000000,
   "memory_swap_max_bytes": 0,
-  "cold_drop_caches": ${COLD}
+  "cold_drop_caches": ${COLD},
+  "prompt_general": true,
+  "prompt_specific_env_allowed": ${ALLOW_PROMPT_SPECIFIC_ENV}
 }
 EOF
 
-cat > "${RUN_DIR}/detect_answer_started.py" <<'PY'
+cat > "${RUN_DIR}/answer_started.py" <<'PY'
 import re
 import sys
 from pathlib import Path
 
-path = Path(sys.argv[1])
-prompt = sys.argv[2]
-if not path.exists():
+stdout = Path(sys.argv[1])
+prompt = Path(sys.argv[2]).read_text(encoding="utf-8", errors="ignore").strip()
+if not stdout.exists():
     raise SystemExit(1)
 
-text = path.read_text(encoding="utf-8", errors="ignore")
+text = stdout.read_text(encoding="utf-8", errors="ignore")
 text = text.replace("\b", "").replace("\r", "\n")
+if prompt not in text:
+    raise SystemExit(1)
+text = text.rsplit(prompt, 1)[-1]
+text = re.sub(r"\[[^\n]*Prompt:\s*[0-9.]+\s*t/s[^\n]*\]", "", text)
+text = re.sub(r"^[>\s|/\\\-\u2580-\u259f]+", "", text).strip()
 
-if prompt in text:
-    tail = text.rsplit(prompt, 1)[-1]
-else:
-    marker = "\n> "
-    if marker not in text:
-        raise SystemExit(1)
-    tail = text.rsplit(marker, 1)[-1]
-    if tail.startswith(prompt):
-        tail = tail[len(prompt):]
-
-tail = re.split(r"\[\s*Prompt\s*:", tail, maxsplit=1)[0]
-tail = re.sub(r"^[>\s|/\\\-\u2580-\u259f]+", "", tail).strip()
-has_text = re.search(r"[A-Za-z0-9]{2,}|[\u3400-\u9fff]{1,}", tail) is not None
-raise SystemExit(0 if has_text else 1)
+has_answer = re.search(r"[A-Za-z0-9]{2,}|[\u3400-\u9fff]{1,}", text) is not None
+raise SystemExit(0 if has_answer else 1)
 PY
 
 cat > "${RUN_DIR}/summarize.py" <<'PY'
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -195,13 +220,10 @@ def read_int(name):
 stdout = read_text("stdout.txt").replace("\b", "").replace("\r", "\n")
 stderr = read_text("stderr.txt")
 
-if prompt in stdout:
-    answer = stdout.rsplit(prompt, 1)[-1]
-else:
-    answer = stdout
-answer = re.split(r"\[\s*Prompt\s*:", answer, maxsplit=1)[0]
-answer = re.sub(r"(?s)^.*?available commands:.*?\n\n", "", answer)
-answer = re.sub(r"^[>\s|/\\-]+", "", answer).strip()
+answer = stdout.rsplit(prompt, 1)[-1] if prompt in stdout else stdout
+answer = re.split(r"\n\[\s*Prompt:\s*[0-9.]+\s*t/s", answer, maxsplit=1)[0]
+answer = re.sub(r"\[[^\n]*Prompt:\s*[0-9.]+\s*t/s[^\n]*\]", "", answer)
+answer = re.sub(r"^[>\s|/\\\-\u2580-\u259f]+", "", answer).strip()
 
 rate_re = re.search(r"\[\s*Prompt:\s*([0-9.]+)\s*t/s\s*\|\s*Generation:\s*([0-9.]+)\s*t/s\s*\]", stdout)
 prompt_tok_s = float(rate_re.group(1)) if rate_re else None
@@ -250,23 +272,27 @@ try:
 except Exception:
     pass
 
+answer_present = re.search(r"[A-Za-z0-9]{2,}|[\u3400-\u9fff]{1,}", answer) is not None
+memory_peak = read_int("memory.peak")
 summary = {
     "run_dir": str(run_dir),
     "prompt": prompt,
     "answer": answer,
+    "answer_present": answer_present,
+    "quality_note": "For arbitrary user prompts this script checks that text was produced; semantic correctness must be reviewed from the captured answer.",
     "eval_tok_s": eval_tok_s,
     "prompt_tok_s": prompt_tok_s,
     "ttft_estimate_ms": first_answer_ms,
     "elapsed_seconds": elapsed,
     "exit_status": read_int("exit_status.txt"),
     "systemd_status": read_int("systemd_run_status.txt"),
-    "memory_peak_bytes": read_int("memory.peak"),
+    "memory_peak_bytes": memory_peak,
     "memory_current_bytes": read_int("memory.current"),
     "memory_file_bytes": memory_stat.get("file"),
     "memory_anon_bytes": memory_stat.get("anon"),
     "memory_events": memory_events,
-    "memory_peak_ok": (read_int("memory.peak") is not None and read_int("memory.peak") <= 16000000000),
-    "ram_ok": (read_int("memory.peak") is not None and read_int("memory.peak") <= 16000000000 and memory_events.get("oom_kill", 0) == 0),
+    "memory_peak_ok": memory_peak is not None and memory_peak <= 16000000000,
+    "ram_ok": memory_peak is not None and memory_peak <= 16000000000 and memory_events.get("oom_kill", 0) == 0,
     "max_rss_kb": max_rss_kb,
     "cold_drop_caches": read_text("cold_start_procedure.txt").strip(),
     "exact_command": read_text("exact_command.txt").strip(),
@@ -277,7 +303,7 @@ summary = {
 (run_dir / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 print("\n=== Demo summary ===")
-for key in ("eval_tok_s", "prompt_tok_s", "ttft_estimate_ms", "elapsed_seconds", "memory_peak_bytes", "memory_file_bytes", "ram_ok"):
+for key in ("eval_tok_s", "prompt_tok_s", "ttft_estimate_ms", "elapsed_seconds", "memory_peak_bytes", "memory_file_bytes", "ram_ok", "answer_present"):
     print(f"{key}: {summary.get(key)}")
 print(f"run_dir: {run_dir}")
 print("\n=== Model answer ===")
@@ -301,7 +327,11 @@ for key in \
   GGML_MOE_STREAM_CACHE_ADMIT_PROFILE \
   GGML_MOE_STREAM_ONE_PREFILL_PROFILE \
   GGML_MOE_EXPERT_GGUF_ALIAS_TSV \
-  GGML_MOE_IO_ALIGNED_ALIAS_BATCH; do
+  GGML_MOE_IO_ALIGNED_ALIAS_BATCH \
+  GGML_MOE_STREAM_UP_DOWN_PROFILE \
+  GGML_MOE_STREAM_ONE_ROUTE_PROFILE \
+  GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT \
+  GGML_DS4_GROUPED_RETAINED_ROUTE_DETAIL_OUT; do
   unset "$key" || true
 done
 
@@ -322,9 +352,9 @@ cmd=(
   -m "$MODEL"
   -p "$PROMPT"
   -n "$MAX_TOKENS"
-  -c 512
-  -b 64
-  -ub 64
+  -c 256
+  -b 16
+  -ub 16
   -t 20
   -tb 20
   -ngl all
@@ -337,9 +367,6 @@ cmd=(
   --no-display-prompt
   --n-cpu-moe 40
   --defer-experts
-  -c 256
-  -b 16
-  -ub 16
 )
 printf '%q ' "${cmd[@]}" > exact_command.txt
 printf '\n' >> exact_command.txt
@@ -365,7 +392,7 @@ CMD_PID=$!
     else
       printf '%s\t%s\t%s\t\t\t\n' "$now" "$mem_cur" "$mem_peak"
     fi
-    if [[ -n "$mem_cur" ]] && [[ "$mem_cur" -gt 16000000000 ]]; then
+    if [[ -n "$mem_cur" ]] && [[ "$mem_cur" =~ ^[0-9]+$ ]] && [[ "$mem_cur" -gt 16000000000 ]]; then
       printf 'ram_limit_exceeded current=%s threshold=16000000000\n' "$mem_cur" > ram_limit_exceeded.txt
       kill "$CMD_PID" 2>/dev/null || true
       exit 0
@@ -376,7 +403,7 @@ CMD_PID=$!
 MONITOR_PID=$!
 (
   while kill -0 "$CMD_PID" 2>/dev/null; do
-    if python3 detect_answer_started.py stdout.txt "$PROMPT"; then
+    if python3 answer_started.py stdout.txt prompt.txt; then
       first_ns=$(date +%s%N)
       python3 - "$start_ns" "$first_ns" > first_answer_ms.txt <<'PY'
 import sys
@@ -411,13 +438,12 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-repl = {
+for key, value in {
     "__RUN_DIR__": sys.argv[2],
     "__BINARY__": sys.argv[3],
     "__MODEL__": sys.argv[4],
     "__MAX_TOKENS__": sys.argv[5],
-}
-for key, value in repl.items():
+}.items():
     text = text.replace(key, value)
 path.write_text(text, encoding="utf-8")
 PY
