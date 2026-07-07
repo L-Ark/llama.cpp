@@ -294,6 +294,28 @@ Acceptance:
 - Host RAM and TTFT constraints hold.
 - If dev improves but held-out does not, reject as prompt-specific.
 
+Offline layout bound on 2026-07-07:
+
+- Dev-only route-detail input:
+  - `.Agent/runs/20260707-gp30-route-detail-dev-n32/*/route-detail.csv`
+- Current physical layout metadata:
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv`
+- Tool:
+  - `.Agent/run-tools/kimi_route_detail_pack_layout_bound.py`
+- Report:
+  - `.Agent/runs/20260707-route-detail-pack-layout-bound/report.md`
+- Result:
+  - current layout: `gap/read ~= 30.0`, `adjacent/job ~= 0.023`, `coalesce rows = 0.0%`;
+  - first-use layout: `gap/read ~= 18.0`, `adjacent/job ~= 0.179`, `coalesce rows = 0.6%`;
+  - frequency layout: `gap/read ~= 19.5`, `adjacent/job ~= 0.084`, `coalesce rows = 0.0%`;
+  - greedy-pair layout: `gap/read ~= 19.2`, `adjacent/job ~= 0.353`, `coalesce rows = 0.1%`.
+- Decision:
+  - do not build a new physical pack for layout-only gains yet;
+  - layout improves locality counters but does not reduce read bytes and rarely creates batches that are cheap to coalesce under the current read path;
+  - if this path is revisited, it must be paired with explicit contiguous/coalesced read support or a larger block layout that changes the number of read commands/wait waves.
+
 ## Phase 4: Conservative Trace Predictor Exploration
 
 Source idea: MoE-Infinity uses historical traces to predict future expert activations. Prior Kimi planned-prefetch failed because the useful-hit rate was too low, so this phase is only allowed after scheduler counters exist.
