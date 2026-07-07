@@ -5202,3 +5202,13 @@
   - 如果 CUDA batch accepted 但慢/错误：只保留 diagnostic，分析 stage/cache/H2D/kernel/D2H 结构，不能 promotion。
   - 只有 short probe 证明 accepted 且正确性/性能方向合理，才允许写下一步 source plan 或 calibration/dev performance probe。
 - source_edit_gate_after_probe: 不得直接把 Kimi 的 IQ2/IQ3 fast path 扩展到 DS4。若需要源码，必须先写清 DS4 MXFP4/F8 up/gate tensor type、expert bytes、active rows、cache slot budget、H2D bytes、kernel path、预期节省的 up fallback 与 gate source movement，并证明它能接近 simultaneous `~90%` reduction 的总目标。
+
+## 2026-07-07 Phase X3：sparse fused MMVQ membership probe（no-logit-change）
+
+- attempt_id: 20260707-sparse-fused-mmvq-membership-probe
+- status: planned_before_experiment
+- why_now: DFlash/MTP、普通 fused up/gate、one-stream gate+up、exact hotset、q2tern sidecar、Q8_0 full-output rowtile 都已经关闭或退回。剩余仍有 hard-bound 支持的路线是 `mmvq-fused-compact-sparse` / `sparse-retained-gpu-path`，但它要求先证明 hot pair 覆盖、图放置、拷贝路径和 correctness。当前源码已有 default-off `GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT` 诊断，只记录 up/down fallback 中命中 calibration-derived top pair 的比例，不改变 logits，适合作为第一步。
+- experiment_scope: 不改源码；不使用 held-out；只用 calibration France short probe；strict `MemoryMax=16000000000`, `MemorySwapMax=0`，page cache 计入 cgroup；不作为 SOTA；stdout 控制。profile 使用 `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top64-updown-20260707.tsv`，该 profile 来自 calibration/dev，不来自 held-out。
+- command_shape: 当前 pushed source `a8ba89213`，no-prompt-specific baseline env（不设置 France pack/profile），额外设置 `GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT=<run>/membership.csv` 和 `GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE=<top64.tsv>`，跑 France `n=32`。记录 output correctness/truncation note、membership summary、decode/prompt hit rows、hit fallback us、hit source bytes、RAM/page-cache/OOM。
+- pass_gate: 只要求诊断能稳定产出且不改变输出/RAM。若 top64 hit coverage 低或 hit_fallback_us 占比不足，说明 compact sparse route 对当前 generalized path margin 不够，后续应关闭或改 profile/representation hard-bound。若 coverage 可观，下一步仍不能 benchmark，必须进入 graph/backend placement probe，证明 hot branch 不发生 D2H/H2D 中间拷贝、不破坏 gate cache、fixed-text top1 不变。
+- push_rule: 诊断 artifact 和计划更新必须 push 到 `ssd/vendor/deepseek-token-rate-16gb`。任何后续 source edit 仍必须 default-off，先 compare/top1，再 dev set，候选冻结后才跑 held-out。
