@@ -5406,3 +5406,16 @@
   - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins` (`~82GiB`), rejected for France correctness and below-target speed. Removing it would restore free space to about `106GiB`.
 - additional_candidates: several superseded `stdout.txt/stdout.log` files from rejected probes are hundreds of MiB to ~1.7GiB each. These can be cleaned only after preserving required excerpts and with explicit cleanup approval; expert packs and accepted model assets are not included.
 - decision: No files were deleted. Further large external GGUF validation remains disk-blocked unless cleanup is explicitly approved. Small/header-only probes remain allowed.
+
+## 2026-07-07 Phase X9：current compact/header-only external candidate refresh
+
+- attempt_id: 20260707-current-compact-header-only-refresh
+- status: planned_before_external_metadata_probe
+- why_now: X8 blocks full downloads without cleanup approval, but small/header-only probes remain allowed. Prior artifacts include many alternate GGUF/REAP/sidecar candidates, but after IQ2_S correctness rejection we need a current, compact refresh focused on candidates that might fit the `24GiB` free-space limit or prove a hard-bound without full download.
+- scope: no full model download, no deletion, no model run, no source edit, no held-out. Use Hugging Face API metadata plus HTTP Range reads limited to small header slices for selected GGUF files. Persist only small metadata/header artifacts.
+- target_filter:
+  - Prefer single-file or split candidates whose total size is plausibly `<=24GiB`, or sidecar/draft artifacts whose header/metadata can prove a new hard-bound.
+  - Include compact REAP/K variants and sidecar/MTP names only as metadata/header candidates; do not treat metadata as correctness.
+  - Exclude already rejected IQ2_S and already-closed DFlash/MTP verifier routes unless new metadata materially changes their loadability/hard-bound.
+- success_gate: A candidate can move to a future download/load plan only if header metadata indicates `general.architecture=deepseek4` or a clearly vendor-loadable DS4-compatible architecture, expected size fits disk or cleanup plan, and there is no obvious tokenizer/tensor-layout red flag already known from rejected IQ2/4Expert routes. Correctness still must be proven later before any benchmark.
+- push_rule: Plan and artifact must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Accepted SOTA unchanged.
