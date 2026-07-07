@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Demonstrate the current prompt-general vendor DeepSeek strict-16GB path.
+# Demonstrate the current prompt-general vendor DeepSeek strict-16GB SOTA path.
 #
 # This script is intentionally prompt-general:
 # - no prompt-specific expert pack
@@ -10,12 +10,13 @@ set -euo pipefail
 #
 # Usage:
 #   .Agent/examples/demo_current_sota.sh --prompt "AI infra is what?"
+#   .Agent/examples/demo_current_sota.sh "AI infra is what?"
 #   .Agent/examples/demo_current_sota.sh --stdin-prompt
 #   .Agent/examples/demo_current_sota.sh --prompt-file prompt.txt
 #   .Agent/examples/demo_current_sota.sh
 #
 # Useful options:
-#   --n-predict 96       Decode length. Default matches the generalized baseline.
+#   --n-predict 192      Decode length. Default matches the generalized baseline.
 #   --warm               Do not drop page cache before this case.
 #   --print-command      Print the strict runner command without executing it.
 #
@@ -34,7 +35,7 @@ PROMPT_FILE=""
 STDIN_PROMPT=0
 RUN_NAME="demo-generalized-sota"
 CASE_NAME=""
-N_PREDICT=96
+N_PREDICT=192
 COLD_START=1
 PRINT_COMMAND=0
 
@@ -106,8 +107,13 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
-    *)
+    --*)
       die "unknown argument: $1"
+      ;;
+    *)
+      [[ -z "$PROMPT" ]] || die "prompt already set; use one prompt argument or --prompt"
+      PROMPT="$1"
+      shift
       ;;
   esac
 done
@@ -146,6 +152,16 @@ for path in "$RUNNER" "$BINARY" "$MODEL"; do
   fi
 done
 [[ "$missing" -eq 0 ]] || exit 2
+
+# Make the demo defensively prompt-general even when the caller's shell has
+# leftovers from prompt-specific SOTA/reproduction experiments.
+unset GGML_MOE_STREAM_ONE_EXPERT_PACK
+unset GGML_MOE_STREAM_CACHE_ADMIT_PROFILE
+unset GGML_MOE_STREAM_ONE_PREFILL_PROFILE
+unset GGML_MOE_EXPERT_PACK
+unset GGML_MOE_EXPERT_PACK_OVERLAY
+unset GGML_MOE_EXPERT_GGUF_ALIAS_TSV
+unset GGML_MOE_IO_ALIGNED_ALIAS_BATCH
 
 if [[ -z "$CASE_NAME" ]]; then
   CASE_NAME="$(slugify "$PROMPT")"
@@ -204,7 +220,7 @@ printf '[demo] commit=%s\n' "$(git rev-parse --short HEAD)"
 printf '[demo] prompt=%s\n' "$PROMPT"
 printf '[demo] n_predict=%s\n' "$N_PREDICT"
 printf '[demo] target_context=random/generalized prompt, 16GB host RAM including page cache, 32GB RTX 5090\n'
-printf '[demo] current_generalized_baseline=min 1.8 tok/s, mean 2.18 tok/s, max 2.7 tok/s on calibration prompts\n'
+printf '[demo] current_prompt_general_sota=min 1.8 tok/s, mean 2.18 tok/s, max 2.7 tok/s on calibration prompts\n'
 printf '[demo] config=no prompt-specific pack/profile; gate one-stream cache only; cpu_moe=40; vram_cache=0\n'
 if [[ "$COLD_START" -eq 1 ]]; then
   printf '[demo] memory_mode=cold strict cgroup, drop_caches before case, MemoryMax=16000000000, MemorySwapMax=0\n'
