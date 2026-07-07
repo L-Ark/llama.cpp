@@ -96454,3 +96454,306 @@ GP64 dev-prompt shadow sweep:
     confirmation run;
   - strict gates are not passed yet because N=16 quality is incomplete and the
     cold-start TTFT comparison has prompt-level excursions above `20%`.
+
+## GP65: bounded next-layer runtime prefetch on current general SOTA
+
+Timestamp: `2026-07-07T14:50:23+0800`.
+
+Status: planned. Do not edit runtime code until this plan is committed in the
+work log and the GP64 confirmation gate below is run.
+
+Goal:
+
+- Starting from the current prompt-general SOTA path, use the GP64
+  AdapMoE-style next-layer gate signal to improve decode token rate without
+  changing model math or making the optimization prompt-specific.
+- The target is an accepted, reproducible token-rate improvement on the
+  held-out general test set. Dev prompts may guide the implementation and
+  thresholds; held-out test prompts must be used only after the candidate is
+  frozen.
+
+Current accepted baseline to compare against:
+
+- Use the latest accepted prompt-general SOTA unless a newer accepted SOTA is
+  explicitly recorded before implementation. At the time of this plan, the
+  authoritative accepted record remains the GP4 post-commit held-out test:
+  `.Agent/runs/20260707-gp4-postcommit-test-n96-profile`.
+- Baseline metrics to cite:
+  - held-out quality pass: `6/6`;
+  - min / median / mean token rate: `1.14 / 1.385 / 1.367 tok/s`;
+  - all prompts `memory.peak=15899996160`;
+  - all prompts `direct_reads=0`;
+  - branch commit for that record:
+    `a6de1a8fcfd085c5c98f520e757b66164909187e`.
+- If a newer accepted general SOTA exists by the time GP65 starts, rerun this
+  section with that exact commit, env, run path, and held-out metrics before
+  making code edits.
+
+Hard constraints:
+
+- Host RAM must stay below 16 GB, including anon memory, mmap/file pages, page
+  cache, pinned buffers, cgroup kernel memory, profiler output, and helper
+  processes.
+- Cold start is required for every baseline, dev candidate, and final test run.
+- VRAM should remain near the accepted SOTA allocation, but prefetch must not
+  evict high-value resident experts enough to reduce cache hit rate.
+- TTFT must not increase by more than `20%` versus the accepted baseline for
+  the same prompt and run shape.
+- The France regression prompt must remain coherent and semantically correct:
+
+```text
+Please introduce France in a short paragraph.
+```
+
+- All dev/test prompts used for gates must produce semantically correct output.
+- Every accepted improvement must be committed and pushed immediately with
+  reproduction commands, env, run paths, and result tables.
+- If token rate drops, output quality regresses, TTFT rises by more than 20%,
+  memory exceeds the limit, or direct/GGUF fallback increases, reject the
+  candidate and return to the prior accepted SOTA settings.
+
+Why this prefetch can help:
+
+- Current general SOTA is movement-bound after `direct_reads=0`; GP4 profiles
+  show exposed io_uring wait around `5.7-6.3 GiB/s`, below the standalone
+  expert-pack IO ceiling of about `10.0-10.4 GiB/s`.
+- The runtime often cannot keep a deep, continuous IO queue because exact
+  expert demand is revealed layer by layer. A next-layer predictor can submit
+  some missing expert reads earlier, potentially filling queue gaps and hiding
+  read/H2D latency behind current-layer compute and current-layer movement.
+- GP64 TopK=8 shadow has useful signal on dev N=16:
+  - expert/byte recall: `77.79%`;
+  - false/actual byte ratio: `0.2221`;
+  - prompts with CSV: `7/7`.
+- This is not enough to prefetch all predicted experts. The runtime experiment
+  must be bounded because extra reads can steal SSD/H2D bandwidth from the
+  current layer and can evict useful VRAM cache entries.
+
+Theoretical bound before implementation:
+
+- GP65 cannot reach `5 tok/s` by itself because it does not reduce total expert
+  bytes for true misses; it only moves some reads earlier and improves overlap.
+- A conservative bound should be computed from the refreshed dev n96 profile:
+
+```text
+saved_decode_s <= min(exposed_iouring_wait_s * useful_prefetch_byte_coverage,
+                      overlap_window_s - predictor_overhead_s)
+new_tok_s       = generated_tokens / (decode_s - saved_decode_s)
+extra_byte_ratio = false_prefetch_bytes / actual_missing_bytes
+```
+
+- Initial expectation:
+  - `cap=1` missing expert per target layer should have lower byte coverage
+    than TopK=8 shadow, but much lower false IO pressure;
+  - if it hides `10-20%` of exposed io_uring wait, current worst-prompt
+    token rate could move roughly from `1.14 tok/s` to about
+    `1.25-1.43 tok/s`;
+  - if overlap reaches `30%`, the same worst prompt could approach
+    `1.55-1.6 tok/s`;
+  - anything above that requires evidence that H2D and cache eviction did not
+    become the new bottleneck.
+
+Phase 1: GP64 n96 dev confirmation before runtime prefetch
+
+Purpose:
+
+- Confirm that the predictor signal survives longer generation and full quality
+  checks.
+- Avoid implementing a runtime prefetch path based on N=16 truncated outputs.
+
+Run:
+
+- Use dev prompts only:
+  `.Agent/evals/kimi-general-dev-prompts.jsonl`.
+- Do not inspect or tune against held-out test prompts.
+- Cold start per prompt, `MemoryMax=15900000000`, `MemorySwapMax=0`, swap off.
+- Use current general SOTA env plus:
+
+```text
+GGML_MOE_NEXT_GATE_SHADOW_OUT=$RUN/next-gate-shadow.csv
+GGML_MOE_NEXT_GATE_SHADOW_TOPK=8
+```
+
+- Run `N=32` first for turnaround. If quality and TTFT gates are clean, run
+  `N=96` on all dev prompts before runtime implementation.
+
+Analyze:
+
+- Use `.Agent/run-tools/kimi_next_gate_shadow_analyze.py` and
+  `.Agent/run-tools/kimi_next_gate_shadow_sweep_summary.py`.
+- Record:
+  - expert recall and byte recall;
+  - false/actual byte ratio;
+  - per-layer recall and false bytes;
+  - per-layer predicted-missing count;
+  - quality verdict and answer text;
+  - token rate, TTFT, decode time;
+  - host memory peak and `memory.stat`;
+  - iouring bytes/wait, H2D, up/gate compute, down compute, CPU fallback.
+
+Gate:
+
+- Continue to runtime prefetch only if:
+  - all dev quality gates pass at the selected length;
+  - France regression passes;
+  - max TTFT ratio versus no-shadow baseline is `<= 1.20`;
+  - aggregate byte recall is `>= 0.60`;
+  - false/actual byte ratio is `<= 0.25`;
+  - per-layer data identifies a subset where bounded prefetch is likely useful.
+- If the gate fails, do not implement GP65 runtime prefetch. Record the failure
+  and return to a different movement-reduction plan.
+
+Phase 2: default-off bounded runtime prefetch implementation
+
+Runtime policy:
+
+- Add a default-off env gate, for example:
+
+```text
+GGML_MOE_NEXT_GATE_PREFETCH=1
+GGML_MOE_NEXT_GATE_PREFETCH_TOPK=8
+GGML_MOE_NEXT_GATE_PREFETCH_CAP_PER_LAYER=1
+GGML_MOE_NEXT_GATE_PREFETCH_MAX_EXTRA_BYTES_PCT=15
+GGML_MOE_NEXT_GATE_PREFETCH_LAYER_ALLOWLIST=<dev-derived layer list>
+GGML_MOE_NEXT_GATE_PREFETCH_PROFILE_OUT=$RUN/next-gate-prefetch.csv
+```
+
+- Default behavior with these env vars unset must be byte-for-byte equivalent
+  to the accepted SOTA path.
+- Start with `CAP_PER_LAYER=1`. Only try `2` after `1` passes quality, TTFT,
+  memory, and net token-rate gates.
+- Prefetch only predicted experts that are:
+  - not already resident in VRAM cache;
+  - present in the expert pack / alias path;
+  - not already queued by current-layer demand or current-down overlap;
+  - not known to require GGUF fallback.
+- Use expert pack + io_uring only. Do not add any GGUF mmap fallback prefetch.
+- Enforce backpressure:
+  - do not submit prefetch if current-layer demand queue is not draining;
+  - do not submit if pinned slots are near exhaustion;
+  - do not submit if VRAM cache free/victim policy would evict protected hot
+    entries;
+  - stop submitting once per-run extra-prefetch bytes exceed the configured
+    percentage cap.
+
+Implementation approach:
+
+1. Add a small prefetch-candidate API beside the existing expert-pack
+   load/cache code in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+2. Reuse existing pack key lookup, cache lookup, pinned staging, io_uring
+   submission, and H2D/cache marking paths where possible.
+3. Keep prefetch jobs lower priority than real current-layer misses. A demand
+   miss must be able to cancel, supersede, or consume a matching prefetch.
+4. Add counters and CSV profile fields:
+   - predicted jobs;
+   - submitted jobs;
+   - skipped resident;
+   - skipped duplicate;
+   - skipped backpressure;
+   - skipped no-pack;
+   - skipped byte-cap;
+   - useful hits;
+   - evicted-unused;
+   - extra bytes;
+   - prefetch submit/wait/H2D time;
+   - current-demand delay while prefetch was active.
+5. The first runnable implementation may use the existing host-visible topK
+   path only if its sync overhead is measured and below the gate. If that
+   overhead is too high, move the predictor closer to the CUDA MoE execution
+   path before continuing.
+
+Important implementation risk:
+
+- GP64 shadow currently records predictions after a decode graph finishes. That
+  is good for recall measurement but too late to prefetch the next layer in the
+  same token.
+- GP65 must therefore explicitly validate where the predictor becomes
+  host-visible:
+  - if per-layer host synchronization is required and costs more than the
+    projected saved IO time, reject that design;
+  - if the CUDA MoE path can produce predicted IDs and submit prefetch without
+    a heavy graph break, proceed with the bounded implementation;
+  - do not split the whole decode graph layer-by-layer unless a microbenchmark
+    shows the added launch/sync overhead is below the projected IO hiding.
+
+Phase 3: dev evaluation ladder
+
+Run order:
+
+1. Build and static validation:
+   - `git diff --check`;
+   - compile touched C++/CUDA files where practical;
+   - CUDA build of `llama-completion` on the remote RTX 5090 machine.
+2. Smoke:
+   - one dev prompt, `N=8` or `N=16`, `CAP_PER_LAYER=1`;
+   - require correct output start, no crash, no memory violation, no direct
+     reads, and nonzero useful prefetch hits.
+3. Dev short gate:
+   - all dev prompts, `N=32`;
+   - compare against accepted SOTA env with prefetch disabled.
+4. Dev full gate:
+   - all dev prompts, `N=96`;
+   - freeze the exact env before any held-out test.
+
+Dev acceptance:
+
+- Quality pass on all dev prompts.
+- France regression pass.
+- Host memory peak `<= 15899996160`.
+- TTFT ratio `<= 1.20` for every prompt.
+- `direct_reads=0` and no new GGUF fallback growth.
+- Extra-prefetch byte ratio `<= 0.15` for the first accepted candidate; only
+  relax toward `0.25` if token-rate gain clearly offsets it and TTFT remains
+  clean.
+- Useful prefetch hit rate high enough to justify the extra bytes:
+  - initial target: `useful_hits / submitted_jobs >= 0.50`;
+  - and net iouring wait or exposed decode time must decrease.
+- Token rate improves on mean and minimum dev token rate versus the same SOTA
+  baseline. A speedup on only one easy prompt is not accepted.
+
+Phase 4: frozen held-out test gate
+
+- Run held-out test prompts only after:
+  - GP65 code is committed locally or at least frozen;
+  - env is frozen;
+  - dev n96 passes all gates;
+  - reproduction command is written.
+- Do not use held-out failures to tune prefetch thresholds directly.
+- The accepted SOTA gate is:
+  - held-out quality pass on every prompt;
+  - held-out minimum token rate improves over the current accepted SOTA;
+  - mean and median token rate do not regress;
+  - TTFT ratio `<= 1.20`;
+  - memory peak within the 16GB cgroup;
+  - `direct_reads=0`;
+  - extra-prefetch bytes and useful-hit metrics recorded.
+
+Commit/push rule:
+
+- If held-out test passes, immediately commit and push:
+  - runtime code;
+  - plan update;
+  - reproduction scripts or env notes;
+  - dev and test reports.
+- If held-out test fails any hard gate, revert the runtime env from SOTA,
+  leave default-off diagnostic code only if it is useful and harmless, and
+  record the rejection.
+
+Expected deliverables:
+
+- Plan update: this GP65 section.
+- Dev confirmation report:
+  `.Agent/runs/20260707-gp65-next-gate-prefetch-shadow-confirm/report.md`.
+- Runtime prefetch profile report:
+  `.Agent/runs/20260707-gp65-next-gate-prefetch-dev/report.md`.
+- Final held-out test report only if dev passes:
+  `.Agent/runs/20260707-gp65-next-gate-prefetch-test/report.md`.
+- Reproduction commands must include:
+  - branch and commit;
+  - remote repo path;
+  - build directory and build command;
+  - exact model and alias/expert-pack paths;
+  - cgroup settings;
+  - all `GGML_MOE_*` env vars;
+  - prompt file path and SHA256;
+  - run output root.
