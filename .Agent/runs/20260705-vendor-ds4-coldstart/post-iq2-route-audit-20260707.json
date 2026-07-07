@@ -1,0 +1,438 @@
+{
+  "attempt_id": "20260707-post-iq2-route-audit",
+  "created_at_utc": "2026-07-07T01:37:21.675186Z",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "4bd6a841104e1fb9c0278285577fcc4a7bc71e49",
+  "git_status_before_artifact": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "scope": "artifact-only; no source edit; no model run; no held-out; no large download; no deletion",
+  "task_context": "vendor DeepSeek target remains stable >5 tok/s for random/generalized prompts on 16GB host RAM including page cache + 32GB RTX 5090, no prompt-specific optimization.",
+  "inputs": {
+    "payload_refresh": ".Agent/runs/20260705-vendor-ds4-coldstart/payload-artifact-breakthrough-refresh-after-membership.json",
+    "latest_hf_refresh": ".Agent/runs/20260705-vendor-ds4-coldstart/latest-hf-refresh-hard-bound-20260706.json",
+    "iq2_reject": ".Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage3b-reasonoff-correctness-reject-20260707.json",
+    "generalized_baseline": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+    "sparse_pair_audit": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-generalized-bound-audit-after-membership-20260707.json"
+  },
+  "baseline_summary": {
+    "all_memory_peak_bytes": [
+      16000000000
+    ],
+    "all_ram_ok": true,
+    "max_eval_tok_s": 2.7,
+    "mean_eval_tok_s": 2.1799999999999997,
+    "min_eval_tok_s": 1.8,
+    "prompt_specific_env_detected_any": false,
+    "target_met_all_prompts_gt_5_tok_s": false
+  },
+  "disk_state": {
+    "path": "/root",
+    "total_bytes": 1065418129408,
+    "used_bytes": 1039650484224,
+    "free_bytes": 25750867968,
+    "free_gib": 23.982364654541016,
+    "free_if_rejected_iq2_removed_bytes": 113770407264,
+    "free_if_rejected_iq2_removed_gib": 105.95694860816002
+  },
+  "largest_local_model_dirs": [
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF",
+      "size_bytes": 306288840023
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF",
+      "size_bytes": 164466086436
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 156148189760
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins",
+      "size_bytes": 88019539296
+    },
+    {
+      "path": "/root/lfz/models/_gguf_header_probe",
+      "size_bytes": 163178575
+    },
+    {
+      "path": "/root/lfz/models/GLM-5.2-FP8-probe",
+      "size_bytes": 31613124
+    },
+    {
+      "path": "/root/lfz/models/MiniMax-M3-original-meta",
+      "size_bytes": 12481020
+    }
+  ],
+  "known_candidate_decisions_compact": [
+    {
+      "repo": "bartowski/DeepSeek-V4-Flash-GGUF",
+      "decision": "lower_bit_GGUF_may_change_bytes_but requires large download and correctness validation; no source patch allowed from metadata only",
+      "total_by_prefix_preview": {
+        "DeepSeek-V4-Flash-MXFP4": 156004658464,
+        "README": 2190
+      },
+      "notable_files": [
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00004.gguf",
+          "size_bytes": 39630611872
+        },
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00004.gguf",
+          "size_bytes": 39628788224
+        },
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00001-of-00004.gguf",
+          "size_bytes": 39546993120
+        },
+        {
+          "name": "DeepSeek-V4-Flash-MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00004.gguf",
+          "size_bytes": 37198265248
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 2190
+        }
+      ]
+    },
+    {
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "decision": "lower_bit_GGUF_may_change_bytes_but requires large download and correctness validation; no source patch allowed from metadata only",
+      "total_by_prefix_preview": {
+        "IQ3_XXS": 112111985344,
+        "MXFP4": 156378344860,
+        "Q2_K": 96962159168,
+        "Q3_K": 125097550528,
+        "README": 1350,
+        "imatrix": 470338784
+      },
+      "notable_files": [
+        {
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00003-of-00004.gguf",
+          "size_bytes": 49994259008
+        },
+        {
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00002-of-00004.gguf",
+          "size_bytes": 49983378752
+        },
+        {
+          "name": "Q2_K/DeepSeek-V4-Flash-Q2_K-00002-of-00003.gguf",
+          "size_bytes": 49310047712
+        },
+        {
+          "name": "Q3_K/DeepSeek-V4-Flash-Q3_K-00003-of-00004.gguf",
+          "size_bytes": 49196411616
+        },
+        {
+          "name": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00002-of-00004.gguf",
+          "size_bytes": 49179918240
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00002-of-00005.gguf",
+          "size_bytes": 49065891232
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00003-of-00005.gguf",
+          "size_bytes": 49056582912
+        },
+        {
+          "name": "MXFP4/DeepSeek-V4-Flash-MXFP4-00004-of-00005.gguf",
+          "size_bytes": 49056582912
+        }
+      ]
+    },
+    {
+      "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+      "decision": "lower_bit_GGUF_may_change_bytes_but requires large download and correctness validation; no source patch allowed from metadata only",
+      "total_by_prefix_preview": {
+        "DeepSeek-V4-Flash.IQ2_S": 88019539296,
+        "DeepSeek-V4-Flash.IQ3_XXS": 113974275424,
+        "DeepSeek-V4-Flash.IQ3_XXS-AS": 102431550816,
+        "DeepSeek-V4-Flash.IQ3_XXS-L21": 134056602976,
+        "DeepSeek-V4-Flash.IQ3_XXS-L39": 151270026592,
+        "DeepSeek-V4-Flash.IQ4_XS": 155095231840,
+        "DeepSeek-V4-Flash.Q8_0": 156378344544,
+        "README": 5256
+      },
+      "notable_files": [
+        {
+          "name": "DeepSeek-V4-Flash.Q8_0.gguf",
+          "size_bytes": 156378344544
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ4_XS.gguf",
+          "size_bytes": 155095231840
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-L39.gguf",
+          "size_bytes": 151270026592
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-L21.gguf",
+          "size_bytes": 134056602976
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS.gguf",
+          "size_bytes": 113974275424
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ3_XXS-AS.gguf",
+          "size_bytes": 102431550816
+        },
+        {
+          "name": "DeepSeek-V4-Flash.IQ2_S.gguf",
+          "size_bytes": 88019539296
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 5256
+        }
+      ]
+    },
+    {
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "decision": "nearest_empirical_candidate_but_disk_blocked_full_164gb_download_required; native_top4_override_already_failed; sidecar_bypass_closed",
+      "total_by_prefix_preview": {
+        "README": 16896,
+        "ds4flash-4expert": 164465760544
+      },
+      "notable_files": [
+        {
+          "name": "ds4flash-4expert.gguf",
+          "size_bytes": 164465760544
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 16896
+        }
+      ]
+    },
+    {
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert",
+      "decision": "safetensors_not_vendor_loadable_without_new_loader; total_sharded_artifact_large; can inform 4Expert semantics only",
+      "total_by_prefix_preview": {
+        "model-00004-of-00046": 3594160776,
+        "model-00012-of-00046": 3590026352,
+        "model-00014-of-00046": 3590026352,
+        "model-00016-of-00046": 3590026352,
+        "model-00018-of-00046": 3590026352,
+        "model-00020-of-00046": 3590026352,
+        "model-00022-of-00046": 3590026352,
+        "model-00024-of-00046": 3590026352,
+        "model-00026-of-00046": 3590026352,
+        "model-00028-of-00046": 3590026352,
+        "model-00030-of-00046": 3590026352,
+        "model-00046-of-00046": 3593956092
+      },
+      "notable_files": [
+        {
+          "name": "model-00004-of-00046.safetensors",
+          "size_bytes": 3594160776
+        },
+        {
+          "name": "model-00046-of-00046.safetensors",
+          "size_bytes": 3593956092
+        },
+        {
+          "name": "model-00012-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00014-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00016-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00018-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00020-of-00046.safetensors",
+          "size_bytes": 3590026352
+        },
+        {
+          "name": "model-00022-of-00046.safetensors",
+          "size_bytes": 3590026352
+        }
+      ]
+    },
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "decision": "smallest metadata GGUF candidate around 52.6GB but prior alternate-GGUF bound did not reach 10tok on current 32GB setup; empirical test disk-blocked",
+      "total_by_prefix_preview": {
+        "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4": 52593532000,
+        "README": 4174,
+        "validation": 4498
+      },
+      "notable_files": [
+        {
+          "name": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+          "size_bytes": 52593532000
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 4174
+        },
+        {
+          "name": "validation/20260528T160633Z/summary.json",
+          "size_bytes": 1828
+        },
+        {
+          "name": "validation/20260528T160633Z/SUMMARY.md",
+          "size_bytes": 1798
+        },
+        {
+          "name": "validation/framework-halo-strix/DeepSeek-V4-Flash-Spark-Mini-Q2/20260528T211908Z/api/models.json",
+          "size_bytes": 465
+        },
+        {
+          "name": "validation/framework-halo-strix/DeepSeek-V4-Flash-Spark-Mini-Q2/20260528T211908Z/api/api-bench-summary-20260529T001105.json",
+          "size_bytes": 407
+        }
+      ]
+    },
+    {
+      "repo": "RedHatAI/DeepSeek-V4-Flash-speculator.dflash",
+      "decision": "speculator_safetensors_not_vendor_loadable; current target-verifier path closed by oracle window probe",
+      "total_by_prefix_preview": {
+        "README": 3109,
+        "config": 1816,
+        "model": 3607596760,
+        "val_metrics": 385
+      },
+      "notable_files": [
+        {
+          "name": "model.safetensors",
+          "size_bytes": 3607596760
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 3109
+        },
+        {
+          "name": "config.json",
+          "size_bytes": 1816
+        },
+        {
+          "name": "val_metrics.json",
+          "size_bytes": 385
+        }
+      ]
+    },
+    {
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-all-swa-muon-speculators-50k",
+      "decision": "speculator_safetensors_not_vendor_loadable; current target-verifier path closed by oracle window probe",
+      "total_by_prefix_preview": {
+        "README": 1427,
+        "config": 1817,
+        "model": 3607596760,
+        "val_metrics": 381
+      },
+      "notable_files": [
+        {
+          "name": "model.safetensors",
+          "size_bytes": 3607596760
+        },
+        {
+          "name": "config.json",
+          "size_bytes": 1817
+        },
+        {
+          "name": "README.md",
+          "size_bytes": 1427
+        },
+        {
+          "name": "val_metrics.json",
+          "size_bytes": 381
+        }
+      ]
+    },
+    {
+      "repo": "inference-optimization/dflash-DeepSeek-V4-Flash-speculators-50k",
+      "decision": "speculator_safetensors_not_vendor_loadable; current target-verifier path closed by oracle window probe",
+      "total_by_prefix_preview": {
+        "config": 1590,
+        "model": 3607596760,
+        "val_metrics": 382
+      },
+      "notable_files": [
+        {
+          "name": "model.safetensors",
+          "size_bytes": 3607596760
+        },
+        {
+          "name": "config.json",
+          "size_bytes": 1590
+        },
+        {
+          "name": "val_metrics.json",
+          "size_bytes": 382
+        }
+      ]
+    }
+  ],
+  "route_matrix": [
+    {
+      "route": "native exact/sparse/dataflow hotset",
+      "status": "closed",
+      "evidence": "exact hotset best min 2.77, sparse top512 zero-overhead min 2.074, simultaneous reduction needs ~90%; source edit not allowed without new hard-bound"
+    },
+    {
+      "route": "Q8_0 full-output down rowtile",
+      "status": "closed",
+      "evidence": "correctness can pass but down total worsened from ~7.55ms/call CPU fallback to ~9.99ms/call GPU rowtile; not a 5 tok/s path"
+    },
+    {
+      "route": "DFlash/MTP/speculator",
+      "status": "closed",
+      "evidence": "latest HF refresh found non-vendor-loadable draft/speculator artifacts; oracle verifier speedup ~1.013x below required gate"
+    },
+    {
+      "route": "cloudyu 4Expert local",
+      "status": "deferred_correctness_failed",
+      "evidence": "local 164GB model exists, prior France smoke correctness failed; not a token-rate candidate until tensor/template correctness root-caused"
+    },
+    {
+      "route": "bullerwins IQ2_S local",
+      "status": "rejected",
+      "evidence": "loadable with alias env but France correctness failed twice; 2.7-2.9 tok/s below target; do not run dev/held-out"
+    },
+    {
+      "route": "bullerwins larger IQ3/IQ4/Q8",
+      "status": "blocked_by_disk_and_no_correctness_evidence",
+      "evidence": "single-file candidates are 102-156GB; current free disk ~24GB; IQ2_S lower-bit sibling already failed correctness"
+    },
+    {
+      "route": "tarruda split Q2_K/IQ3/Q3",
+      "status": "blocked_by_split_loader_and_disk",
+      "evidence": "first shard is metadata-only/no tensors in existing probe; total candidates ~97-125GB, need multi-shard loader validation and cleanup before empirical test"
+    },
+    {
+      "route": "sidecar/lowbit q2tern/codebook",
+      "status": "closed",
+      "evidence": "q2tern diff_count 67936/max_abs 9.4; codebook compression only ~1.31x with nonzero error; no runtime writeback allowed"
+    }
+  ],
+  "hard_constraints_reconfirmed": [
+    "Accepted generalized result must be prompt-general, not France-specialized or prompt-specific pack/profile.",
+    "16GB cgroup must include page cache; MemorySwapMax=0; no OOM/oom_kill.",
+    "France correctness is a hard gate before calibration/dev; held-out only after candidate freeze.",
+    "New source edit needs a hard-bound near min>=5.5 tok/s on calibration/dev or credible simultaneous ~90% gate+up/down reduction before coding.",
+    "Rejected IQ2_S consumes about 82GiB allocated; another large model download is blocked unless cleanup/removal/relocation is explicitly decided."
+  ],
+  "decision": {
+    "accepted_sota_changed": false,
+    "new_source_edit_allowed": false,
+    "new_strict_cold_benchmark_allowed": false,
+    "new_large_download_allowed_without_cleanup": false,
+    "next_allowed_work": [
+      "Ask/record explicit cleanup decision before deleting or relocating rejected IQ2_S; after cleanup, only download a candidate with a written load/correctness plan.",
+      "Alternatively run only small/header-only probes for new external candidates; do not full-download from metadata alone.",
+      "For native source work, first produce a new hard-bound/design showing min>=5.5 tok/s on calibration/dev or simultaneous ~90% gate+up/down reduction; otherwise no runtime patch.",
+      "For cloudyu 4Expert, only correctness root-cause/template/tensor-alias diagnostics are allowed before any performance benchmark."
+    ],
+    "recommended_next": "Do not run another strict-cold benchmark now. Record this audit in the plan, then either get cleanup approval for rejected IQ2_S or pivot to a small/header-only proof or new hard-bound design."
+  }
+}

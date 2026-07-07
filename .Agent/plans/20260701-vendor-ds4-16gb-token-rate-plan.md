@@ -5332,3 +5332,23 @@
   - What is the next allowed work that still serves the product target: random/generalized prompt `>5 tok/s` on `16GB host RAM` including page cache + `32GB RTX 5090`?
 - expected_decision: If no source/model candidate passes these gates, record that the next step must be either explicit cleanup approval for rejected IQ2_S before another large candidate, or a new small/header-only proof, or a fundamentally new hard-bound/source design that reaches `min >= 5.5 tok/s` on calibration/dev before coding.
 - push_rule: The audit artifact and plan result must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Accepted SOTA remains unchanged unless a future candidate passes all strict RAM/page-cache, correctness, TTFT, generalized dev, and held-out gates.
+
+### X6 result：route audit complete, no benchmark/download allowed now
+
+- status: diagnostic_complete_no_new_candidate_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/post-iq2-route-audit-20260707.json`
+- disk_state: `/root` free space is about `24GiB`; rejected IQ2_S occupies about `82GiB`. If that rejected model were explicitly removed/relocated, free space would be about `106GiB`, but no deletion was performed in this audit.
+- route_matrix:
+  - Native exact/sparse/dataflow hotset: closed. Exact hotset and sparse-pair bounds are far below generalized `>5 tok/s`; runtime source edit still requires a new `min >= 5.5 tok/s` hard-bound or credible simultaneous `~90%` gate+up/down reduction.
+  - Q8_0 full-output down rowtile: closed. Correctness can pass, but measured down path was slower than CPU fallback.
+  - DFlash/MTP/speculator: closed. Current artifacts are not vendor-loadable and verifier speedup is below gate.
+  - cloudyu 4Expert local: deferred, correctness failed in prior smoke; only correctness root-cause/template/tensor-alias diagnostics are allowed before any benchmark.
+  - bullerwins IQ2_S local: rejected, loadable with aliases but France correctness failed and speed was only `2.7-2.9 tok/s`.
+  - bullerwins larger IQ3/IQ4/Q8 and tarruda split Q2/IQ3/Q3: blocked by disk and lack of correctness/load proof; no full download from metadata alone.
+  - sidecar/lowbit q2tern/codebook: closed by compare/top1/error evidence.
+- decision: accepted SOTA unchanged. No new source edit, strict-cold benchmark, held-out run, or large model download is allowed from the current evidence.
+- next_allowed_work:
+  - Record explicit cleanup decision before deleting/relocating rejected IQ2_S; only after cleanup may another large candidate be planned.
+  - Or run only a small/header-only proof for a new external candidate.
+  - Or produce a new native hard-bound/source design that reaches `min >= 5.5 tok/s` on calibration/dev before coding.
+  - Or debug cloudyu 4Expert correctness only, with no performance claim until France correctness passes.
