@@ -96397,3 +96397,60 @@ GP64 remote smoke results:
   - This is **not** sufficient to implement runtime prefetch yet; next step is
     a dev-prompt shadow sweep (`N>=32` preferred) across multiple prompts and
     topK values, still without held-out tuning.
+
+GP64 dev-prompt shadow sweep:
+
+- Report:
+  `.Agent/runs/20260707-gp64-next-gate-shadow-dev-sweep/report.md`.
+- Added reproducible sweep summarizer:
+  `.Agent/run-tools/kimi_next_gate_shadow_sweep_summary.py`.
+- Prompt discipline:
+  - used `.Agent/evals/kimi-general-dev-prompts.jsonl`;
+  - did not use held-out test prompts.
+- Remote roots:
+  - baseline:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp64-next-gate-shadow-dev-n16-baseline`;
+  - TopK=4:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp64-next-gate-shadow-dev-n16-top4`;
+  - TopK=8:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp64-next-gate-shadow-dev-n16-top8`;
+  - overhead:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp64-next-gate-shadow-dev-n16-overhead`.
+- Run shape:
+  - cold start per prompt;
+  - 16GB cgroup: `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - `N=16`;
+  - existing `kimi-general-prompt-repro.sh`;
+  - shadow env:
+    `GGML_MOE_NEXT_GATE_SHADOW_OUT=$RUN/next-gate-shadow.csv`,
+    `GGML_MOE_NEXT_GATE_SHADOW_TOPK=<4|8>`.
+- TopK=4 aggregate:
+  - prompts with CSV: `7/7`;
+  - expert recall: `47.26%`;
+  - expert precision: `94.53%`;
+  - byte recall: `47.26%`;
+  - false/actual bytes: `0.0274`;
+  - max shadow record overhead: `2359 us`;
+  - avg token-rate ratio vs baseline: `1.017`;
+  - max TTFT ratio vs baseline: `1.267`.
+- TopK=8 aggregate:
+  - prompts with CSV: `7/7`;
+  - expert recall: `77.79%`;
+  - expert precision: `77.79%`;
+  - byte recall: `77.79%`;
+  - false/actual bytes: `0.2221`;
+  - max shadow record overhead: `2540 us`;
+  - avg token-rate ratio vs baseline: `1.003`;
+  - max TTFT ratio vs baseline: `1.245`.
+- Quality:
+  - France regression passed in baseline, TopK=4, and TopK=8;
+  - `dev_linear_equation` and `dev_mixed_summary` failed keyword checks in all
+    N=16 variants because generation was truncated before the expected keyword;
+  - N=16 is therefore acceptable for predictor signal screening, but not for a
+    final quality gate.
+- Decision:
+  - do **not** implement bounded runtime prefetch yet;
+  - TopK=8 has enough recall/false-byte signal to justify a longer dev
+    confirmation run;
+  - strict gates are not passed yet because N=16 quality is incomplete and the
+    cold-start TTFT comparison has prompt-level excursions above `20%`.
