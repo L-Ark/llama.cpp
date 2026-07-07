@@ -6557,3 +6557,51 @@ Immediate next action:
 - Build a new hard-bound/proof artifact for the most plausible remaining path before source editing:
   - preferred first: retained-gate interface feasibility, because full up/down removal alone is not enough for the worst generalized prompts unless gate source movement is also removed/hidden;
   - fallback: compact representation feasibility if retained-gate proof cannot clear the target.
+
+## 2026-07-07 X10-U feasibility bound：retained-gate interface reopen gate
+
+- attempt_id: `20260707-retained-gate-interface-feasibility-bound`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/retained-gate-interface-feasibility-bound-20260707.json`
+- status: `feasibility_bound_recorded_no_source_change_not_sota`
+
+Purpose:
+- Turn the existing generalized bottleneck evidence into a concrete pre-source-edit gate for the retained-gate path.
+- The goal is not to claim SOTA, but to define what a retained-gate/up/down implementation must prove before any token-rate runtime patch.
+
+Evidence used:
+- `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-source-movement-combination-hard-bound-20260707.json`
+- `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-residual-bottleneck-after-updown-bound-20260707.json`
+- `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-exact-graph-dataflow-recheck-20260707.json`
+- `.Agent/runs/20260705-vendor-ds4-coldstart/exact-graph-dataflow-current-hard-bound.json`
+
+Key numbers:
+- Quantum/generalized observed baseline: `1.9 tok/s`
+- Zero-overhead up/down fallback removal only: `3.7449 tok/s`
+- Zero-overhead gate one-stream/source removal only: `3.1929 tok/s`
+- Zero-overhead removal of both fallback and gate source: `18.5499 tok/s`
+- Symmetric 50% fallback + 50% gate source cut: `3.4469 tok/s`
+- Symmetric 70% fallback + 70% gate source cut: `5.1117 tok/s`
+- Symmetric 80% fallback + 80% gate source cut: `6.7390 tok/s`
+- Symmetric 90% fallback + 90% gate source cut: `9.8864 tok/s`
+
+Interpretation:
+- 70%/70% barely clears the 5 tok/s product target in a zero-overhead bound, so it is not enough margin for a source implementation.
+- 80%/80% is the first symmetric reduction with enough margin above the required pre-source gate (`min_eval_tok_s >= 5.5`).
+- Up/down-only remains insufficient for worst generalized prompts; gate source/cache time and up/down fallback are same-order bottlenecks:
+  - aggregate gate `src0` trace time: `167285.982 ms`
+  - aggregate up/down decode fallback time: `176622.283 ms`
+
+Current blocker:
+- Current accepted graph does not expose a retained gate output usable by `build_expert_mix`.
+- `DS4_HOT` recomputes gate and adds payload, so it cannot be promoted as the retained-gate path without a new dataflow proof.
+
+Implementation rule:
+- Do not write a SOTA candidate runtime patch for retained gate yet.
+- A future retained-gate source patch is allowed only after a new hard-bound/probe shows one of:
+  - `>=80%` gate source cut and `>=80%` up/down fallback cut on calibration/dev; or
+  - another measured cut pair whose generalized calibration/dev `min_eval_tok_s >= 5.5` after estimated overhead.
+- The proof must stay prompt-general: no prompt-specific packs, traces, or admission profiles; held-out prompts remain unused until the candidate is frozen.
+
+Next action:
+- Design/instrument the smallest retained-gate interface probe that can show whether gate/topk/weights can be made available to the expert mix path without recomputing gate and without large payload.
+- If the probe cannot plausibly hit the 80/80 cut under 32GB VRAM and strict 16GB host RAM including page cache, close this path and switch to compact representation feasibility.
