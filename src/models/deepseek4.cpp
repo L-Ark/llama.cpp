@@ -144,6 +144,177 @@ static uint64_t deepseek4_tensor_expert_bytes_u64(const ggml_tensor * tensor) {
     return (uint64_t) (ggml_nbytes(tensor) / tensor->ne[2]);
 }
 
+
+struct deepseek4_native_retained_down_probe_state {
+    std::mutex mutex;
+    FILE * fp = nullptr;
+    bool attempted = false;
+    uint64_t seq = 0;
+};
+
+static deepseek4_native_retained_down_probe_state & deepseek4_native_retained_down_probe() {
+    static deepseek4_native_retained_down_probe_state state;
+    return state;
+}
+
+static const char * deepseek4_native_retained_down_probe_path() {
+    const char * path = std::getenv("DS4_NATIVE_RETAINED_DOWN_PROBE_OUT");
+    if (path == nullptr || path[0] == '\0' || std::strcmp(path, "0") == 0) {
+        return nullptr;
+    }
+    return path;
+}
+
+static const char * deepseek4_tensor_name_or_null(const ggml_tensor * tensor) {
+    return tensor ? tensor->name : "null";
+}
+
+static int64_t deepseek4_tensor_ne_or_neg(const ggml_tensor * tensor, int dim) {
+    return tensor ? tensor->ne[dim] : -1;
+}
+
+static uint64_t deepseek4_tensor_nbytes_or_zero(const ggml_tensor * tensor) {
+    return tensor ? (uint64_t) ggml_nbytes(tensor) : 0;
+}
+
+static FILE * deepseek4_native_retained_down_probe_fp_locked() {
+    auto & state = deepseek4_native_retained_down_probe();
+    if (state.fp != nullptr) {
+        return state.fp;
+    }
+    if (state.attempted) {
+        return nullptr;
+    }
+    state.attempted = true;
+
+    const char * path = deepseek4_native_retained_down_probe_path();
+    if (path == nullptr) {
+        return nullptr;
+    }
+
+    state.fp = std::fopen(path, "w");
+    if (state.fp == nullptr) {
+        std::fprintf(stderr, "deepseek4_native_retained_down_probe: failed to open %s\n", path);
+        return nullptr;
+    }
+
+    std::fprintf(state.fp,
+        "seq,il,mix_tokens,n_embd,selected_ne0,selected_ne1,weights_ne0,weights_ne1,"
+        "gate_up_present,gate_up_name,gate_up_type,gate_up_buft,gate_up_ne0,gate_up_ne1,gate_up_ne2,"
+        "gate_name,gate_type,gate_buft,gate_ne0,gate_ne1,gate_ne2,gate_view_src_is_gate_up,gate_src0_is_gate_up,gate_view_offs,"
+        "up_name,up_type,up_buft,up_ne0,up_ne1,up_ne2,up_view_src_is_gate_up,up_src0_is_gate_up,up_view_offs,"
+        "gate_was_clamped,up_was_clamped,act_name,act_type,act_buft,act_ne0,act_ne1,act_ne2,act_src0_is_gate,act_src1_is_up,"
+        "down_name,down_type,down_buft,down_ne0,down_ne1,down_ne2,down_src0_is_down_weight,down_src1_is_act,down_src2_is_selected,"
+        "down_src0_name,down_src1_name,down_src2_name,down_weight_type,down_weight_expert_bytes,act_nbytes,down_nbytes\n");
+    std::fflush(state.fp);
+    return state.fp;
+}
+
+static void deepseek4_native_retained_down_probe_write(
+        int il,
+        int64_t mix_tokens,
+        int64_t n_embd,
+        const ggml_tensor * selected_experts,
+        const ggml_tensor * weights,
+        const ggml_tensor * gate_up_combined,
+        const ggml_tensor * gate,
+        const ggml_tensor * up,
+        const ggml_tensor * act,
+        const ggml_tensor * down_op,
+        const ggml_tensor * down_weight,
+        bool gate_was_clamped,
+        bool up_was_clamped) {
+    if (deepseek4_native_retained_down_probe_path() == nullptr) {
+        return;
+    }
+
+    auto & state = deepseek4_native_retained_down_probe();
+    std::lock_guard<std::mutex> lock(state.mutex);
+    FILE * fp = deepseek4_native_retained_down_probe_fp_locked();
+    if (fp == nullptr) {
+        return;
+    }
+
+    const bool gate_view_src_is_gate_up = gate && gate->view_src == gate_up_combined;
+    const bool up_view_src_is_gate_up   = up   && up->view_src   == gate_up_combined;
+    const bool gate_src0_is_gate_up     = gate && gate->src[0]   == gate_up_combined;
+    const bool up_src0_is_gate_up       = up   && up->src[0]     == gate_up_combined;
+    const bool act_src0_is_gate         = act  && act->src[0]    == gate;
+    const bool act_src1_is_up           = act  && act->src[1]    == up;
+    const bool down_src0_is_down_weight = down_op && down_op->src[0] == down_weight;
+    const bool down_src1_is_act         = down_op && down_op->src[1] == act;
+    const bool down_src2_is_selected    = down_op && down_op->src[2] == selected_experts;
+
+    std::fprintf(fp,
+        "%llu,%d,%lld,%lld,%lld,%lld,%lld,%lld,"
+        "%d,%s,%s,%s,%lld,%lld,%lld,"
+        "%s,%s,%s,%lld,%lld,%lld,%d,%d,%zu,"
+        "%s,%s,%s,%lld,%lld,%lld,%d,%d,%zu,"
+        "%d,%d,%s,%s,%s,%lld,%lld,%lld,%d,%d,"
+        "%s,%s,%s,%lld,%lld,%lld,%d,%d,%d,"
+        "%s,%s,%s,%s,%llu,%llu,%llu\n",
+        (unsigned long long) state.seq++,
+        il,
+        (long long) mix_tokens,
+        (long long) n_embd,
+        (long long) deepseek4_tensor_ne_or_neg(selected_experts, 0),
+        (long long) deepseek4_tensor_ne_or_neg(selected_experts, 1),
+        (long long) deepseek4_tensor_ne_or_neg(weights, 0),
+        (long long) deepseek4_tensor_ne_or_neg(weights, 1),
+        gate_up_combined ? 1 : 0,
+        deepseek4_tensor_name_or_null(gate_up_combined),
+        deepseek4_tensor_type_name(gate_up_combined),
+        deepseek4_tensor_buft_name(gate_up_combined),
+        (long long) deepseek4_tensor_ne_or_neg(gate_up_combined, 0),
+        (long long) deepseek4_tensor_ne_or_neg(gate_up_combined, 1),
+        (long long) deepseek4_tensor_ne_or_neg(gate_up_combined, 2),
+        deepseek4_tensor_name_or_null(gate),
+        deepseek4_tensor_type_name(gate),
+        deepseek4_tensor_buft_name(gate),
+        (long long) deepseek4_tensor_ne_or_neg(gate, 0),
+        (long long) deepseek4_tensor_ne_or_neg(gate, 1),
+        (long long) deepseek4_tensor_ne_or_neg(gate, 2),
+        gate_view_src_is_gate_up ? 1 : 0,
+        gate_src0_is_gate_up ? 1 : 0,
+        gate ? gate->view_offs : 0,
+        deepseek4_tensor_name_or_null(up),
+        deepseek4_tensor_type_name(up),
+        deepseek4_tensor_buft_name(up),
+        (long long) deepseek4_tensor_ne_or_neg(up, 0),
+        (long long) deepseek4_tensor_ne_or_neg(up, 1),
+        (long long) deepseek4_tensor_ne_or_neg(up, 2),
+        up_view_src_is_gate_up ? 1 : 0,
+        up_src0_is_gate_up ? 1 : 0,
+        up ? up->view_offs : 0,
+        gate_was_clamped ? 1 : 0,
+        up_was_clamped ? 1 : 0,
+        deepseek4_tensor_name_or_null(act),
+        deepseek4_tensor_type_name(act),
+        deepseek4_tensor_buft_name(act),
+        (long long) deepseek4_tensor_ne_or_neg(act, 0),
+        (long long) deepseek4_tensor_ne_or_neg(act, 1),
+        (long long) deepseek4_tensor_ne_or_neg(act, 2),
+        act_src0_is_gate ? 1 : 0,
+        act_src1_is_up ? 1 : 0,
+        deepseek4_tensor_name_or_null(down_op),
+        deepseek4_tensor_type_name(down_op),
+        deepseek4_tensor_buft_name(down_op),
+        (long long) deepseek4_tensor_ne_or_neg(down_op, 0),
+        (long long) deepseek4_tensor_ne_or_neg(down_op, 1),
+        (long long) deepseek4_tensor_ne_or_neg(down_op, 2),
+        down_src0_is_down_weight ? 1 : 0,
+        down_src1_is_act ? 1 : 0,
+        down_src2_is_selected ? 1 : 0,
+        deepseek4_tensor_name_or_null(down_op ? down_op->src[0] : nullptr),
+        deepseek4_tensor_name_or_null(down_op ? down_op->src[1] : nullptr),
+        deepseek4_tensor_name_or_null(down_op ? down_op->src[2] : nullptr),
+        deepseek4_tensor_type_name(down_weight),
+        (unsigned long long) deepseek4_tensor_expert_bytes_u64(down_weight),
+        (unsigned long long) deepseek4_tensor_nbytes_or_zero(act),
+        (unsigned long long) deepseek4_tensor_nbytes_or_zero(down_op));
+    std::fflush(fp);
+}
+
 static FILE * deepseek4_sparse_retained_graph_probe_fp_locked() {
     auto & state = deepseek4_sparse_retained_graph_probe();
     if (state.fp != nullptr) {
@@ -1152,13 +1323,14 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
         }
 
         // === Default single-path (unchanged) ===
+        ggml_tensor * gate_up_combined = nullptr;
         if (layer.ffn_gate_up_exps) {
-            ggml_tensor * gate_up = build_lora_mm_id(layer.ffn_gate_up_exps, cur_experts_in, selected_experts);
-            cb(gate_up, "ffn_moe_gate_up", il);
+            gate_up_combined = build_lora_mm_id(layer.ffn_gate_up_exps, cur_experts_in, selected_experts);
+            cb(gate_up_combined, "ffn_moe_gate_up", il);
 
-            const int64_t n_ff = gate_up->ne[0] / 2;
-            gate = ggml_view_3d(ctx0, gate_up, n_ff, gate_up->ne[1], gate_up->ne[2], gate_up->nb[1], gate_up->nb[2], 0);
-            up = ggml_view_3d(ctx0, gate_up, n_ff, gate_up->ne[1], gate_up->ne[2], gate_up->nb[1], gate_up->nb[2], n_ff * gate_up->nb[0]);
+            const int64_t n_ff = gate_up_combined->ne[0] / 2;
+            gate = ggml_view_3d(ctx0, gate_up_combined, n_ff, gate_up_combined->ne[1], gate_up_combined->ne[2], gate_up_combined->nb[1], gate_up_combined->nb[2], 0);
+            up = ggml_view_3d(ctx0, gate_up_combined, n_ff, gate_up_combined->ne[1], gate_up_combined->ne[2], gate_up_combined->nb[1], gate_up_combined->nb[2], n_ff * gate_up_combined->nb[0]);
         } else {
             gate = build_lora_mm_id(layer.ffn_gate_exps, cur_experts_in, selected_experts);
             up = build_lora_mm_id(layer.ffn_up_exps, cur_experts_in, selected_experts);
@@ -1167,9 +1339,13 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
         }
 
         const float swiglu_limit = hparams.swiglu_clamp_exp[il];
+        bool gate_was_clamped = false;
+        bool up_was_clamped = false;
         if (swiglu_limit > 1e-6f) {
             gate = ggml_clamp(ctx0, gate, -INFINITY, swiglu_limit);
             up   = ggml_clamp(ctx0, up,   -swiglu_limit, swiglu_limit);
+            gate_was_clamped = true;
+            up_was_clamped = true;
             cb(gate, "ffn_moe_gate_clamped", il);
             cb(up,   "ffn_moe_up_clamped",   il);
         }
@@ -1178,6 +1354,10 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
         cb(act, "ffn_moe_swiglu", il);
 
         ggml_tensor * experts = build_lora_mm_id(layer.ffn_down_exps, act, selected_experts);
+        deepseek4_native_retained_down_probe_write(
+            il, mix_tokens, n_embd, selected_experts, weights,
+            gate_up_combined, gate, up, act, experts, layer.ffn_down_exps,
+            gate_was_clamped, up_was_clamped);
         experts = ggml_mul(ctx0, experts, weights);
         cb(experts, "ffn_moe_down", il);
 

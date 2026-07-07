@@ -6116,3 +6116,31 @@
 - immediate next action:
   - Implement only the default-off DS4 graph/dataflow probe first, build, run one strict 16GB calibration prompt, and push the source/probe artifact if default-off guard passes.
 
+## 2026-07-07 X10-I execution result：DS4 native retained-down probe validated
+
+- attempt_id: `20260707-ds4-native-gateup-retained-down-microbench`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-native-retained-down-probe-20260707.json`
+- source_update:
+  - Added default-off `DS4_NATIVE_RETAINED_DOWN_PROBE_OUT=<csv>` in `src/models/deepseek4.cpp`.
+  - The probe records the actual DeepSeek4 default graph dataflow around gate/up, clamp, `ggml_swiglu_split`, and raw down `build_lora_mm_id` before weights are multiplied.
+  - Env unset is a no-op and does not alter logits or Kimi paths.
+- build_validation:
+  - `cmake --build build-ds4-moe-stream --target llama-cli llama-results -j20` passed.
+- probe_run:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T114132Z-20260707-ds4-native-retained-down-probe-france-r2/france-native-retained-down-probe-cpu40-vram0gb`
+  - csv: `native_retained_down_probe.csv`, `1806` records, strict `16GB` cgroup, `drop_caches`, held-out unused.
+  - n32 output was intentionally short and marked `unfinished_sentence`; this run is probe-only, not correctness/SOTA promotion.
+- default_off_guards:
+  - n96 guard: `/root/lfz/runs/vendor-ds4-16gb/20260707T114339Z-20260707-defaultoff-native-retained-down-probe-guard/defaultoff-native-retained-down-probe-guard-cpu40-vram0gb`, `eval_tok_s=2.4`, `ram_ok=true`, truncated at n96.
+  - n192 semantic guard: `/root/lfz/runs/vendor-ds4-16gb/20260707T114521Z-20260707-defaultoff-native-retained-down-probe-guard-n192/defaultoff-native-retained-down-probe-guard-n192-cpu40-vram0gb`, `eval_tok_s=2.5`, `TTFT=37199.507438 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15031795712`, `ram_ok=true`, `correctness_ok=true`.
+- probe_findings:
+  - `gate_up_present=0/1806`: this GGUF does not use combined `ffn_gate_up_exps` on the measured default path.
+  - The actual path is separate `ffn_gate_exps` and `ffn_up_exps`, both clamped: `gate_was_clamped=1806`, `up_was_clamped=1806`.
+  - Dataflow is clean and retained-eligible at graph level: `act_src0_is_gate=1806`, `act_src1_is_up=1806`, `down_src0_is_down_weight=1806`, `down_src1_is_act=1806`, `down_src2_is_selected=1806`.
+  - Each down expert payload is `4456448` bytes, type `mxfp4`; active expert count is `selected_ne0=6` for all records.
+- decision:
+  - Accept this default-off probe and source as a diagnostic scaffold.
+  - Do not implement a combined `gate_up` retained microbench for this GGUF; it would target a non-used path.
+  - Next implementation must target a prompt-general separate `gate/up -> clamp -> swiglu -> down` retained or fused activation path, preserving the existing gate cache and using Q8_0 CPU-order down as the correctness reference.
+  - Still not SOTA; no token-rate promotion.
+
