@@ -7793,3 +7793,63 @@ Decision:
 - Next step:
   - if disk cleanup/download is approved, fetch exactly one priority compact candidate and run strict load/correctness first;
   - otherwise, the current local evidence route is close to exhausted and should not be mistaken for token-rate progress.
+
+## 2026-07-08 X10-AS remote-range teamblobfish IQ1_M down row parity
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-remote-range-teamblobfish-iq1m-down-row-parity-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-remote-range-teamblobfish-iq1m`
+- status: `remote_range_real_candidate_q2k_iq1m_down_row_parity_pass_not_sota`
+
+Purpose:
+- Avoid full model download while obtaining real bytes from a priority compact candidate.
+- Use HTTP Range reads against teamblobfish `IQ1_M` shard1 to fetch only tiny `ffn_down_exps` row slices.
+- This directly tests candidate bytes for two down tensor types found in the `IQ1_M` candidate: `Q2_K` and `IQ1_M`.
+
+Header/offset source:
+- header file:
+  - `/root/lfz/models/_gguf_header_probe/20260707-alt-candidates/teamblobfish_iq1m_part1.head16m`
+- source URL:
+  - `https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf`
+- header parser found:
+  - architecture: `deepseek4`
+  - type counts include `Q2_K=5`, `IQ1_M=329`
+  - down tensors include early `Q2_K` and later `IQ1_M`.
+
+Range-fetched row slices:
+- `Q2_K`:
+  - tensor: `blk.0.ffn_down_exps.weight`
+  - absolute shard byte range: `772629024-772639775`
+  - fetched bytes: `10752`
+  - `ne00=2048`, `ne01=16`, `nb01=672`
+- `IQ1_M`:
+  - tensor: `blk.3.ffn_down_exps.weight`
+  - absolute shard byte range: `5880581088-5880588255`
+  - fetched bytes: `7168`
+  - `ne00=2048`, `ne01=16`, `nb01=448`
+- total downloaded bytes:
+  - `17920`
+
+Verification:
+- Probe mode env:
+  - `GGML_MOE_STREAM=1`
+  - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+- `Q2_K` real rows:
+  - `rc=0`
+  - `finite=1`
+  - `max_abs=0.00108321384`
+  - `mean_abs=0.000358266465`
+- `IQ1_M` real rows:
+  - `rc=0`
+  - `finite=1`
+  - `max_abs=0.000894099474`
+  - `mean_abs=0.000409348926`
+
+Decision:
+- Real candidate down tensor bytes from teamblobfish `IQ1_M` pass stream-vs-CPU parity for `Q2_K` and `IQ1_M`.
+- This is useful correctness evidence for the compact-target path, but still not a SOTA or production model enablement:
+  - only small row slices were tested;
+  - no full model load/generation correctness was run;
+  - no prompt-general token-rate, TTFT, or strict 16GB model-run gate was executed.
+- Next step:
+  - repeat the same remote-range method for primary `teamblobfish IQ1_S-XL` if a parseable header is available or can be range-fetched;
+  - otherwise, further progress toward actual token-rate improvement requires disk cleanup/download approval for one compact candidate.
