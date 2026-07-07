@@ -318,6 +318,27 @@ Acceptance:
 - False-positive bytes must be low enough that real IO would not starve demand.
 - Real-read mode must improve held-out n96 token rate and pass all quality/RAM/TTFT limits.
 
+Route-detail predictor bound on 2026-07-07:
+
+- Dev-only route-detail input:
+  - `.Agent/runs/20260707-gp30-route-detail-dev-n32/*/route-detail.csv`
+- Tool:
+  - `.Agent/run-tools/kimi_route_detail_predictor_bound.py`
+- Report:
+  - `.Agent/runs/20260707-route-detail-predictor-bound/report.md`
+- Result:
+  - no predictor passed the gate;
+  - best under `1.35x` predicted bytes was `previous_same_layer`, but recall was only:
+    - upgate: `32.0%` byte recall, `0.05%` full-step coverage, `0.97x` predicted bytes;
+    - down: `32.2%` byte recall, `0.05%` full-step coverage, `0.97x` predicted bytes;
+  - highest recall was `hybrid_lfu k=64`:
+    - upgate: `63.1%` byte recall but `8.0x` predicted bytes;
+    - down: `63.1%` byte recall but `8.0x` predicted bytes.
+- Decision:
+  - do not implement a simple previous-token/LFU predictor as a real prefetcher;
+  - any runtime predictor must use stronger information than recent route history, such as router-level signals or a much smaller high-confidence candidate set;
+  - otherwise focus on reducing expert bytes or changing pack/layout rather than adding false IO.
+
 ## Phase 5: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
