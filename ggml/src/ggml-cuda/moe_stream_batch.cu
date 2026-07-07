@@ -6306,6 +6306,11 @@ static bool mxfp4_down_probe_parity_mode() {
     return mode && std::strcmp(mode, "perf") != 0;
 }
 
+static bool mxfp4_down_probe_f32_mode() {
+    const char *mode = mxfp4_down_probe_mode();
+    return mode && std::strcmp(mode, "f32") == 0;
+}
+
 static int mxfp4_down_probe_max_calls() {
     const char *env = std::getenv("GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_CALLS");
     long max_calls = (env && env[0]) ? std::atol(env) : 8;
@@ -6714,6 +6719,78 @@ static __global__ void mxfp4_down_q80_cpu_order_lane8_batch_kernel(
         }
         dst[(size_t)row * (size_t)ne01 + (size_t)col] = sumf;
     }
+}
+
+
+static __device__ __forceinline__ float mxfp4_f32_value_dev(uint8_t q) {
+    return (float)mxfp4_q80_value_dev(q);
+}
+
+static __global__ void mxfp4_down_f32_exact_batch_kernel(
+        const char * __restrict__ src0_pool,
+        const int32_t * __restrict__ x_ids,
+        int64_t slot_stride,
+        int64_t ne00,
+        int64_t ne01,
+        int64_t nb01,
+        const float * __restrict__ src1,
+        int64_t src1_row_stride,
+        const int32_t * __restrict__ src1_rows,
+        float * __restrict__ dst,
+        int64_t n_active) {
+    const int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+    const int64_t total = n_active * ne01;
+    if (idx >= total) return;
+
+    const int64_t row = idx / ne01;
+    const int64_t col = idx - row * ne01;
+    const int32_t slot = x_ids[row];
+    if (slot < 0) return;
+
+    const int64_t src1_row = src1_rows ? src1_rows[row] : row;
+    const float *y = src1 + (size_t)src1_row * (size_t)src1_row_stride;
+    const char *src0 = src0_pool + (size_t)slot * (size_t)slot_stride;
+    const block_mxfp4 *x = (const block_mxfp4 *)(src0 + (size_t)col * (size_t)nb01);
+    const int64_t nb = ne00 / QK_MXFP4;
+
+    double sum = 0.0;
+    for (int64_t ib = 0; ib < nb; ++ib) {
+        const float scale = ggml_cuda_e8m0_to_fp32(x[ib].e) * 0.5f;
+#pragma unroll
+        for (int j = 0; j < QK_MXFP4 / 2; ++j) {
+            const uint8_t q = x[ib].qs[j];
+            const int64_t base = ib * QK_MXFP4;
+            sum += (double)(scale * mxfp4_f32_value_dev(q & 0x0F)) * (double)y[base + j];
+            sum += (double)(scale * mxfp4_f32_value_dev(q >> 4)) * (double)y[base + j + QK_MXFP4 / 2];
+        }
+    }
+    dst[(size_t)row * (size_t)ne01 + (size_t)col] = (float)sum;
+}
+
+static bool launch_mxfp4_down_f32_exact_batch(
+        const char *src0_pool,
+        const int32_t *d_x_ids,
+        int64_t slot_stride,
+        int64_t ne00,
+        int64_t ne01,
+        int64_t nb01,
+        const float *d_src1_f32,
+        int64_t src1_row_stride,
+        const int32_t *d_src1_rows,
+        float *d_dst,
+        int64_t n_active,
+        cudaStream_t st) {
+    if (!src0_pool || !d_x_ids || !d_src1_f32 || !d_dst ||
+            ne00 <= 0 || ne01 <= 0 || n_active <= 0 || ne00 % QK_MXFP4 != 0) {
+        return false;
+    }
+    const int threads = 128;
+    const int64_t total = n_active * ne01;
+    const int blocks = (int)((total + threads - 1) / threads);
+    mxfp4_down_f32_exact_batch_kernel<<<blocks, threads, 0, st>>>(
+            src0_pool, d_x_ids, slot_stride, ne00, ne01, nb01,
+            d_src1_f32, src1_row_stride, d_src1_rows, d_dst, n_active);
+    return cudaGetLastError() == cudaSuccess;
 }
 
 static bool launch_mxfp4_down_q80_compat_batch(
@@ -9339,6 +9416,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         g_handoff.d_data &&
         g_handoff.ne01 == ne00 &&
         g_handoff.dst_cols >= dst_cols;
+    const bool mxfp4_f32_exact_candidate = mxfp4_probe_candidate && mxfp4_down_probe_f32_mode();
     const bool down_q8k_requested = down_q8k_candidate && !use_handoff;
     const size_t src1_q8k_bytes = down_q8k_requested ? (size_t)n_active * (ne00 / QK_K) * sizeof(block_q8_K) : 0;
     const size_t dst_bytes = (size_t)dst_cols * ne01 * sizeof(float);
@@ -9562,6 +9640,17 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                 mxfp4_down_q80_cpu_order_lane8_enabled(),
                 mxfp4_down_q80_cpu_order_lane8_shared_enabled(), st)) {
             return decline("launch_mxfp4_down_q80_compat_batch");
+        }
+    } else if (mxfp4_f32_exact_candidate) {
+        static std::atomic<int> first_mxfp4_f32_exact{0};
+        if (first_mxfp4_f32_exact.fetch_add(1) == 0) {
+            std::fprintf(stderr, "[moe_stream_batch] MXFP4 down f32 exact probe path active\n");
+        }
+        if (!launch_mxfp4_down_f32_exact_batch(
+                (const char *)cache->pool, bc.d_x_ids, cache->slot_sz,
+                ne00, ne01, nb01, d_src1_run, src1_run_stride, bc.d_ids_src1,
+                (float *)bc.d_dst, n_active, st)) {
+            return decline("launch_mxfp4_down_f32_exact_batch");
         }
     } else if (down_q8k_requested) {
         if (ne00 % QK_K != 0) return decline("down_q8k_bad_ne00");

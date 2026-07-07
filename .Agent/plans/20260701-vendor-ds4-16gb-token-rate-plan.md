@@ -8292,3 +8292,44 @@ Decision:
 - Down GPU Q80 lane8/shared correctness is still fixed on current pushed head.
 - It remains rejected as a SOTA/performance path because it is slower than default CPU fallback on this fixed-text reverify.
 - Next down work should not revisit correctness for Q80 lane8/shared unless that code changes; performance work must reduce Q8_0 staging/H2D/D2H/fallback overhead, or implement a dedicated MXFP4+f32 activation down kernel with parity before benchmarking.
+
+
+## 2026-07-08 X10-BD MXFP4 f32 exact down parity probe
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mxfp4-f32-exact-down-parity-probe-20260708.json`
+- status: `pass_default_off_down_gpu_mxfp4_f32_parity_probe_not_sota`
+
+Purpose:
+- Continue the down GPU correctness work after rejecting the unsafe generic MXFP4 handoff consume path.
+- Add a dedicated diagnostic MXFP4 down GPU kernel that consumes the original f32 activation rows and compares against the existing CPU probe reference before any writeback/performance path.
+- This uses only calibration/dev France prompt smoke runs. Held-out prompts remain unused.
+
+Source change:
+- `ggml/src/ggml-cuda/moe_stream_batch.cu` adds `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=f32`.
+- The mode is default-off. With the env unset, the default runtime does not enter the new path.
+- In f32 probe mode, the CUDA kernel dequantizes MXFP4 weights and computes dot products against f32 activations with double accumulation, matching the CPU reference semantics used by `mxfp4_down_probe_report`.
+- The probe remains diagnostic: after reporting CPU/GPU error rows it falls back to CPU output, so it is not a token-rate/SOTA path.
+
+Validation:
+- Build passed: `cmake --build build-ds4-moe-stream -j 8 --target llama-cli`.
+- Broad first-eight-layer parity run:
+  - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T221544Z-20260708-mxfp4-f32-exact-parity-broad-absbin`
+  - env: `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=f32`, `MAX_CALLS=8`, `MAX_ACTIVE=2`, `MAX_COLS=512`
+  - rows: `8/8 status=ok`, compared values: `8192`
+  - max abs error: `4.74309786e-07`; max relative error: `5.77317522e-08`
+  - strict RAM: `memory_peak_bytes=16000000000`, `memory_file_bytes=15101530112`, `ram_ok=true`
+- Last-layer full-column parity run:
+  - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T221715Z-20260708-mxfp4-f32-exact-parity-blk39-fullcols`
+  - env: `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=f32`, `TENSOR=blk.39.ffn_down_exps.weight`, `MAX_CALLS=1`, `MAX_ACTIVE=2`, `MAX_COLS=4096`
+  - rows: `1/1 status=ok`, compared values: `8192`
+  - max abs error: `2.38152396e-07`; max relative error: `4.88412371e-08`
+  - strict RAM: `memory_peak_bytes=16000000000`, `memory_file_bytes=15113187328`, `ram_ok=true`
+- Default-off smoke:
+  - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T221843Z-20260708-after-mxfp4-f32-defaultoff-smoke`
+  - probe env unset; stderr contained no `MXFP4 down f32 exact probe path active` or `mxfp4_down_probe active`
+  - strict RAM: `memory_peak_bytes=16000000000`, `memory_file_bytes=15128662016`, `ram_ok=true`
+
+Decision:
+- Accept as a correctness diagnostic building block and commit/push because it is default-off and validated under strict 16GB cgroup.
+- Do not count as SOTA. The exact f32 kernel uses double accumulation and is expected to be too slow as-is.
+- Next step for down GPU correctness/performance: add a separate default-off writeback/top1/logit gate using this f32 path, or derive a faster production MXFP4+f32 kernel, and only then run token-rate benchmarks.
