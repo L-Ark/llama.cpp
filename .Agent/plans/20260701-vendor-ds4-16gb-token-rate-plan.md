@@ -6859,3 +6859,41 @@ Decision:
   - identify explicit, safe disk cleanup candidates and ask before deletion; or
   - search for a smaller correctness-capable candidate/artifact; or
   - switch to external draft/verifier artifact search that does not require full lowbit target-model download.
+
+## 2026-07-08 X10-AA disk cleanup admission for lowbit correctness
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/disk-cleanup-admission-for-lowbit-correctness-20260708.json`
+- status: `cleanup_candidates_recorded_no_deletion_not_sota`
+
+Purpose:
+- Identify disk cleanup candidates before any external lowbit full-model correctness gate download.
+- This is read-only; no files were deleted.
+
+Current disk state:
+- `/` available: about `33.22 GiB`
+- smallest checked full external lowbit candidate:
+  - `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF`
+  - `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`
+  - size: `46.98 GiB`
+- minimum extra free space before any safety margin: about `13.75 GiB`
+- recommended extra free space with margin: at least `25 GiB`
+
+Major cleanup candidates:
+- likely safe after confirming no active download:
+  - `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/.cache/huggingface/download/...incomplete`
+  - size: `2.76 GiB`
+- possible but may affect historical reproduction:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - size: `81.97 GiB`
+  - route was previously rejected for correctness.
+- possible but may affect historical pack-based reproduction:
+  - `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack`
+  - size: `35.78 GiB`
+  - `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+  - size: `19.09 GiB`
+  - current generalized route must not rely on France-specific packs, but historical runs may.
+
+Decision:
+- No deletion performed.
+- Full external lowbit download remains disallowed until disk is freed or a smaller candidate is found.
+- Any deletion must be explicitly approved or have a replacement archival/reproduction plan, because the project requires SOTA/rejected runs to remain reproducible.
