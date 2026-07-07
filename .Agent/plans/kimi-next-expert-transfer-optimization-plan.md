@@ -3103,6 +3103,92 @@ Decision:
 - Future byte-reduced runtime candidates should start with `UPGATE_PCT=62`
   unless their real entry sizes differ materially from the GP94 model.
 
+## Phase 5R: GP95 Joint Intermediate-Dimension Keep Oracle
+
+Goal:
+
+- Test a joint partial-compute idea that can reduce up, gate, and down bytes
+  together: keep only the largest fused up/gate intermediate dimensions, then
+  compute down from only those dimensions.
+- This targets the user's activation-sparsity/partial-transfer idea at the
+  right MoE boundary: the intermediate vector after `up * silu(gate)`, not only
+  the original hidden-state input channels.
+
+Theory:
+
+- For one active expert:
+  - `u = W_up x`;
+  - `g = W_gate x`;
+  - `h = u * silu(g)`;
+  - `y = W_down h`.
+- If the top-`k` entries of `h` dominate the final down output, a future
+  layout could read:
+  - only the corresponding output rows of `W_up`;
+  - only the corresponding output rows of `W_gate`;
+  - only the corresponding input columns of `W_down`.
+- The optimistic moved-byte ratio is approximately `k / D_intermediate` for
+  all three expert tensors, before metadata/alignment overhead.
+- This can in principle hit GP93's `~0.4x` target, unlike down-only activation
+  skipping.
+
+Scope and caveats:
+
+- Dev-only offline oracle on GP88 call-stride activation corpus.
+- Use dumped exact down activation vectors as `h`, so the oracle does not
+  measure the extra cost of selecting top dimensions at runtime.
+- It assumes a future storage layout supports efficient row/column partial
+  reads; current expert pack does not.
+- It ignores scatter/gather and kernel overhead; therefore failure is
+  conclusive, while success only justifies a more concrete implementation
+  design.
+
+Experiment:
+
+1. For every dumped down activation row:
+   - load exact `h`;
+   - dequantize exact down expert matrix;
+   - compute exact `y`;
+   - compute candidate `y_k` from only top `k` entries of `h` for keep fractions
+     `0.05,0.1,0.2,0.3,0.4,0.5`.
+2. Report:
+   - per-expert down output relative error;
+   - grouped active-expert sum relative error by call/layer/token;
+   - optimistic byte ratio.
+3. Acceptance:
+   - at `<=0.4x`, mean grouped sum rel L2 should be close to `<=0.10`;
+   - if much higher, reject joint intermediate-dimension partial reads as the
+     next runtime path.
+
+Result on 2026-07-08:
+
+- Added `.Agent/run-tools/kimi_joint_intermediate_keep_oracle.py`.
+- Remote smoke:
+  - `.Agent/runs/20260708-gp95-joint-intermediate-keep-oracle-smoke64/report.md`;
+  - three dev prompts from GP88 call-stride corpus;
+  - `64` down records per prompt;
+  - no held-out prompts used.
+- Aggregate oracle result:
+
+| keep | optimistic byte ratio | row mean rel L2 | group mean rel L2 |
+|---:|---:|---:|---:|
+| `0.05` | `0.0500` | `0.607228` | `0.585457` |
+| `0.10` | `0.1000` | `0.487549` | `0.466323` |
+| `0.20` | `0.2000` | `0.338423` | `0.319685` |
+| `0.30` | `0.3000` | `0.240277` | `0.225629` |
+| `0.40` | `0.4000` | `0.168237` | `0.157275` |
+| `0.50` | `0.5000` | `0.113524` | `0.105683` |
+
+Decision:
+
+- Reject joint intermediate-dimension partial reads as the next primary runtime
+  path.
+- At the required `0.4x` byte target, grouped down-output error remains
+  `0.157`, above the `0.10` gate.
+- `0.5x` nearly reaches the error gate but misses the GP93 byte target and is
+  only borderline for `5 tok/s` even under optimistic cache/IO assumptions.
+- Do not design a sliced up/gate/down expert-pack format for this candidate
+  unless a new quality correction is found.
+
 ## Run Discipline
 
 For every experiment:
@@ -3172,13 +3258,17 @@ Continue from Phase 5E:
     GP93 kept the current upgate/down split fixed.
 20. GP94 rejects split-only tuning: the accepted `UPGATE_PCT=62` is already
     the dev-global optimum for current IQ3 and the target `0.4x` representation.
-21. Next primary direction must be a different non-expert-local byte-reduced
+21. Run GP95 joint intermediate-dimension keep oracle before designing a
+    sliced up/gate/down storage format.
+22. GP95 rejects top fused-intermediate dimension slicing at the `0.4x` byte
+    target: grouped down-output mean rel L2 is `0.157`, above the `0.10` gate.
+23. Next primary direction must be a different non-expert-local byte-reduced
     representation or compute/storage-form change. Prediction/prefetch is
     secondary after bytes are reduced.
-22. The next screen must target global moved bytes around `0.30x-0.40x` and
+24. The next screen must target global moved bytes around `0.30x-0.40x` and
     fused up/gate mean rel L2 close to the quality gate before any runtime
     kernel is written.
-23. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+25. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
     gains can regress held-out performance severely.
 
 Rationale:

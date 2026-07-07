@@ -1,0 +1,342 @@
+{
+  "aggregate": {
+    "group": {
+      "0.05": {
+        "max_rel_l2": 0.6519318278467215,
+        "mean_byte_ratio": 0.049999999999999996,
+        "mean_rel_l2": 0.585457214119741,
+        "rows": 24
+      },
+      "0.1": {
+        "max_rel_l2": 0.5322282881203202,
+        "mean_byte_ratio": 0.09999999999999999,
+        "mean_rel_l2": 0.4663226579261715,
+        "rows": 24
+      },
+      "0.2": {
+        "max_rel_l2": 0.379036384822314,
+        "mean_byte_ratio": 0.19999999999999998,
+        "mean_rel_l2": 0.3196852861014478,
+        "rows": 24
+      },
+      "0.3": {
+        "max_rel_l2": 0.27561263376421047,
+        "mean_byte_ratio": 0.3,
+        "mean_rel_l2": 0.2256292217384247,
+        "rows": 24
+      },
+      "0.4": {
+        "max_rel_l2": 0.19810676315551576,
+        "mean_byte_ratio": 0.39999999999999997,
+        "mean_rel_l2": 0.1572753921944671,
+        "rows": 24
+      },
+      "0.5": {
+        "max_rel_l2": 0.13814495683166372,
+        "mean_byte_ratio": 0.5,
+        "mean_rel_l2": 0.10568310444353624,
+        "rows": 24
+      }
+    },
+    "row": {
+      "0.05": {
+        "max_rel_l2": 0.8122933886982396,
+        "mean_byte_ratio": 0.049999999999999954,
+        "mean_rel_l2": 0.607228476698276,
+        "rows": 192
+      },
+      "0.1": {
+        "max_rel_l2": 0.7027280705292281,
+        "mean_byte_ratio": 0.09999999999999991,
+        "mean_rel_l2": 0.48754910687747977,
+        "rows": 192
+      },
+      "0.2": {
+        "max_rel_l2": 0.5267098485470514,
+        "mean_byte_ratio": 0.19999999999999982,
+        "mean_rel_l2": 0.33842288797941816,
+        "rows": 192
+      },
+      "0.3": {
+        "max_rel_l2": 0.3920857674117564,
+        "mean_byte_ratio": 0.3000000000000004,
+        "mean_rel_l2": 0.24027705003587893,
+        "rows": 192
+      },
+      "0.4": {
+        "max_rel_l2": 0.2876831147784468,
+        "mean_byte_ratio": 0.39999999999999963,
+        "mean_rel_l2": 0.16823731309828246,
+        "rows": 192
+      },
+      "0.5": {
+        "max_rel_l2": 0.2008214325833152,
+        "mean_byte_ratio": 0.5,
+        "mean_rel_l2": 0.11352446778556984,
+        "rows": 192
+      }
+    }
+  },
+  "decision": "Reject joint intermediate-dimension partial reads as the next primary runtime path: at keep <= 0.4, grouped down-output mean rel L2 is 0.157275, above the 0.1 gate.",
+  "generated_at": "2026-07-07T19:32:34+0000",
+  "keep_fracs": [
+    0.05,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5
+  ],
+  "kind": "kimi_joint_intermediate_keep_oracle",
+  "prompts": [
+    {
+      "group_summary": {
+        "0.05": {
+          "max_rel_l2": 0.6372042909009329,
+          "mean_byte_ratio": 0.049999999999999996,
+          "mean_rel_l2": 0.5712212006718725,
+          "rows": 8
+        },
+        "0.1": {
+          "max_rel_l2": 0.5124523302566018,
+          "mean_byte_ratio": 0.09999999999999999,
+          "mean_rel_l2": 0.4493749057594178,
+          "rows": 8
+        },
+        "0.2": {
+          "max_rel_l2": 0.3546426973077804,
+          "mean_byte_ratio": 0.19999999999999998,
+          "mean_rel_l2": 0.3040305969693038,
+          "rows": 8
+        },
+        "0.3": {
+          "max_rel_l2": 0.24658166801118425,
+          "mean_byte_ratio": 0.3,
+          "mean_rel_l2": 0.21363552488075271,
+          "rows": 8
+        },
+        "0.4": {
+          "max_rel_l2": 0.1703181560040844,
+          "mean_byte_ratio": 0.39999999999999997,
+          "mean_rel_l2": 0.1478827477990401,
+          "rows": 8
+        },
+        "0.5": {
+          "max_rel_l2": 0.11435816800969632,
+          "mean_byte_ratio": 0.5,
+          "mean_rel_l2": 0.09902085306611996,
+          "rows": 8
+        }
+      },
+      "groups": 8,
+      "prompt_id": "dev_japan_factual",
+      "records": 64,
+      "row_summary": {
+        "0.05": {
+          "max_rel_l2": 0.7620726020209516,
+          "mean_byte_ratio": 0.04999999999999995,
+          "mean_rel_l2": 0.5912184487353808,
+          "rows": 64
+        },
+        "0.1": {
+          "max_rel_l2": 0.6409046827762088,
+          "mean_byte_ratio": 0.0999999999999999,
+          "mean_rel_l2": 0.47042997648055,
+          "rows": 64
+        },
+        "0.2": {
+          "max_rel_l2": 0.4650407238008676,
+          "mean_byte_ratio": 0.1999999999999998,
+          "mean_rel_l2": 0.32355432529634764,
+          "rows": 64
+        },
+        "0.3": {
+          "max_rel_l2": 0.3529388381291108,
+          "mean_byte_ratio": 0.3000000000000004,
+          "mean_rel_l2": 0.2287902518505928,
+          "rows": 64
+        },
+        "0.4": {
+          "max_rel_l2": 0.25335261595088626,
+          "mean_byte_ratio": 0.3999999999999996,
+          "mean_rel_l2": 0.15936276597008664,
+          "rows": 64
+        },
+        "0.5": {
+          "max_rel_l2": 0.1767563648135633,
+          "mean_byte_ratio": 0.5,
+          "mean_rel_l2": 0.10719837598247514,
+          "rows": 64
+        }
+      },
+      "unique_tensor_experts": 64
+    },
+    {
+      "group_summary": {
+        "0.05": {
+          "max_rel_l2": 0.6443876946568905,
+          "mean_byte_ratio": 0.049999999999999996,
+          "mean_rel_l2": 0.5885579047522165,
+          "rows": 8
+        },
+        "0.1": {
+          "max_rel_l2": 0.5322282881203202,
+          "mean_byte_ratio": 0.09999999999999999,
+          "mean_rel_l2": 0.4709575138821716,
+          "rows": 8
+        },
+        "0.2": {
+          "max_rel_l2": 0.37017649409971076,
+          "mean_byte_ratio": 0.19999999999999998,
+          "mean_rel_l2": 0.32188351576053825,
+          "rows": 8
+        },
+        "0.3": {
+          "max_rel_l2": 0.2665095908869521,
+          "mean_byte_ratio": 0.3,
+          "mean_rel_l2": 0.22658017237095912,
+          "rows": 8
+        },
+        "0.4": {
+          "max_rel_l2": 0.18984238969791908,
+          "mean_byte_ratio": 0.39999999999999997,
+          "mean_rel_l2": 0.15772037298532687,
+          "rows": 8
+        },
+        "0.5": {
+          "max_rel_l2": 0.1296813837826712,
+          "mean_byte_ratio": 0.5,
+          "mean_rel_l2": 0.10555126184277638,
+          "rows": 8
+        }
+      },
+      "groups": 8,
+      "prompt_id": "dev_mixed_summary",
+      "records": 64,
+      "row_summary": {
+        "0.05": {
+          "max_rel_l2": 0.75000022483347,
+          "mean_byte_ratio": 0.04999999999999995,
+          "mean_rel_l2": 0.6080644679394421,
+          "rows": 64
+        },
+        "0.1": {
+          "max_rel_l2": 0.6382526760292774,
+          "mean_byte_ratio": 0.0999999999999999,
+          "mean_rel_l2": 0.48943530406665264,
+          "rows": 64
+        },
+        "0.2": {
+          "max_rel_l2": 0.48610050873682425,
+          "mean_byte_ratio": 0.1999999999999998,
+          "mean_rel_l2": 0.3403450783354247,
+          "rows": 64
+        },
+        "0.3": {
+          "max_rel_l2": 0.3740038548720391,
+          "mean_byte_ratio": 0.3000000000000004,
+          "mean_rel_l2": 0.2416628260097348,
+          "rows": 64
+        },
+        "0.4": {
+          "max_rel_l2": 0.280207316898688,
+          "mean_byte_ratio": 0.3999999999999996,
+          "mean_rel_l2": 0.16912782733826465,
+          "rows": 64
+        },
+        "0.5": {
+          "max_rel_l2": 0.19718338848566483,
+          "mean_byte_ratio": 0.5,
+          "mean_rel_l2": 0.11411467031134338,
+          "rows": 64
+        }
+      },
+      "unique_tensor_experts": 64
+    },
+    {
+      "group_summary": {
+        "0.05": {
+          "max_rel_l2": 0.6519318278467215,
+          "mean_byte_ratio": 0.049999999999999996,
+          "mean_rel_l2": 0.5965925369351341,
+          "rows": 8
+        },
+        "0.1": {
+          "max_rel_l2": 0.5293722507703538,
+          "mean_byte_ratio": 0.09999999999999999,
+          "mean_rel_l2": 0.47863555413692527,
+          "rows": 8
+        },
+        "0.2": {
+          "max_rel_l2": 0.379036384822314,
+          "mean_byte_ratio": 0.19999999999999998,
+          "mean_rel_l2": 0.33314174557450144,
+          "rows": 8
+        },
+        "0.3": {
+          "max_rel_l2": 0.27561263376421047,
+          "mean_byte_ratio": 0.3,
+          "mean_rel_l2": 0.23667196796356227,
+          "rows": 8
+        },
+        "0.4": {
+          "max_rel_l2": 0.19810676315551576,
+          "mean_byte_ratio": 0.39999999999999997,
+          "mean_rel_l2": 0.16622305579903432,
+          "rows": 8
+        },
+        "0.5": {
+          "max_rel_l2": 0.13814495683166372,
+          "mean_byte_ratio": 0.5,
+          "mean_rel_l2": 0.11247719842171235,
+          "rows": 8
+        }
+      },
+      "groups": 8,
+      "prompt_id": "dev_python_reverse",
+      "records": 64,
+      "row_summary": {
+        "0.05": {
+          "max_rel_l2": 0.8122933886982396,
+          "mean_byte_ratio": 0.04999999999999995,
+          "mean_rel_l2": 0.6224025134200051,
+          "rows": 64
+        },
+        "0.1": {
+          "max_rel_l2": 0.7027280705292281,
+          "mean_byte_ratio": 0.0999999999999999,
+          "mean_rel_l2": 0.5027820400852365,
+          "rows": 64
+        },
+        "0.2": {
+          "max_rel_l2": 0.5267098485470514,
+          "mean_byte_ratio": 0.1999999999999998,
+          "mean_rel_l2": 0.351369260306482,
+          "rows": 64
+        },
+        "0.3": {
+          "max_rel_l2": 0.3920857674117564,
+          "mean_byte_ratio": 0.3000000000000004,
+          "mean_rel_l2": 0.2503780722473092,
+          "rows": 64
+        },
+        "0.4": {
+          "max_rel_l2": 0.2876831147784468,
+          "mean_byte_ratio": 0.3999999999999996,
+          "mean_rel_l2": 0.17622134598649605,
+          "rows": 64
+        },
+        "0.5": {
+          "max_rel_l2": 0.2008214325833152,
+          "mean_byte_ratio": 0.5,
+          "mean_rel_l2": 0.11926035706289098,
+          "rows": 64
+        }
+      },
+      "unique_tensor_experts": 64
+    }
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_joint_intermediate_keep_oracle.py --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_mixed_summary --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --libggml-base build-cuda-batch/bin/libggml-base.so --out-json /root/lfz/runs/vendor-kimi-token-rate/20260708-gp95-joint-intermediate-keep-oracle-smoke64/report.json --out-md /root/lfz/runs/vendor-kimi-token-rate/20260708-gp95-joint-intermediate-keep-oracle-smoke64/report.md --keep-fracs 0.05,0.1,0.2,0.3,0.4,0.5 --max-records-per-prompt 64 --torch-threads 8",
+  "target_group_rel_l2": 0.1,
+  "target_keep_frac": 0.4
+}
