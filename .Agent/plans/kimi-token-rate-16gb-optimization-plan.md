@@ -96324,3 +96324,15 @@ GP64 implementation checkpoint:
   - real Kimi dev-prompt shadow CSV;
   - dev-prompt recall/false-byte gate decision;
   - held-out test validation.
+
+GP64 remote smoke correction:
+
+- The runnable Kimi IQ3_S GGUF reports
+  `general.architecture = deepseek2`, not `kimi-linear`.
+- The first remote shadow smoke therefore produced no
+  `GGML_MOE_NEXT_GATE_SHADOW_OUT` CSV because GP64 initially enabled graph
+  shadow nodes only for `LLM_ARCH_KIMI_LINEAR`.
+- Correction:
+  - enable the default-off shadow profiler for `LLM_ARCH_DEEPSEEK2` as well;
+  - add the same `L -> L+1` prediction hook in `src/models/deepseek2.cpp`.
+- This remains default-off and still does not implement runtime prefetch.

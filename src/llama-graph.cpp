@@ -1085,7 +1085,9 @@ ggml_tensor * llm_graph_context::build_lora_mm_id(
 }
 
 bool llm_graph_context::moe_next_gate_shadow_enabled() const {
-    return arch == LLM_ARCH_KIMI_LINEAR && n_tokens == 1 && llama_moe_next_gate_shadow_enabled_env();
+    return (arch == LLM_ARCH_KIMI_LINEAR || arch == LLM_ARCH_DEEPSEEK2) &&
+        n_tokens == 1 &&
+        llama_moe_next_gate_shadow_enabled_env();
 }
 
 int64_t llm_graph_context::moe_next_gate_shadow_topk(int64_t default_topk, int64_t n_expert) const {
