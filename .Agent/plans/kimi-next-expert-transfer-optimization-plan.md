@@ -1999,6 +1999,104 @@ python3 .Agent/run-tools/kimi_prediction_recall_decode_ceiling.py \
   --target-tps 5.0
 ```
 
+## Phase 5G: Dynamic Output-Subspace Oracle
+
+Goal:
+
+- Test a non-expert-local representation family after expert-local low-bit,
+  partial-exact topK, static cache, and prediction-only paths failed.
+- Instead of approximating individual expert weights, measure whether the 8
+  active expert output contribution vectors in a layer live in a low-dimensional
+  output subspace.
+
+Scope:
+
+- Dev-only offline oracle using GP76b activation dumps.
+- No held-out prompts.
+- No runtime behavior change and no SOTA claim.
+
+Hypothesis:
+
+- If active expert contribution vectors are highly low-rank per call, a future
+  compute/storage form might avoid materializing all 8 full expert outputs and
+  instead compute a small number of basis components plus coefficients.
+- To be a plausible `5 tok/s` path, useful rank should be around `1-3` out of
+  `8` active contributions, corresponding roughly to `0.125x-0.375x` of the
+  active contribution dimension before runtime overhead.
+
+Method:
+
+- Reuse GP76b dev activation dumps.
+- Dequantize referenced exact experts and compute exact output contribution
+  vectors for:
+  - down matvec records;
+  - fused up/gate pairs as `up(x) * silu(gate(x))`.
+- For each prompt/call/layer/role group, form a matrix with one row per active
+  expert contribution.
+- Compute an oracle SVD on that same matrix.
+- For ranks `1,2,3,4`, reconstruct the contribution matrix and compare:
+  - relative L2 error of the summed contribution vector;
+  - relative Frobenius error of all contribution rows.
+- This is intentionally optimistic because the basis is fit on the same call
+  being evaluated. If it fails, dynamic output-subspace compression is not a
+  promising primary path.
+
+Acceptance to advance:
+
+- Advance only if rank `<=3` has summed-output mean rel L2 `<=0.10` for both
+  down and fused up/gate on the multi-prompt dev sample.
+- If rank `<=3` fails badly, do not implement output-subspace runtime kernels;
+  move to a different compute/storage-form idea.
+
+GP84 result on 2026-07-08:
+
+- Code:
+  - `.Agent/run-tools/kimi_output_subspace_oracle.py`
+- Report:
+  - `.Agent/runs/20260708-gp84-output-subspace-oracle/report.md`
+  - `.Agent/runs/20260708-gp84-output-subspace-oracle/report.json`
+- Input:
+  - GP76b dev-only activation dumps for:
+    - `dev_japan_factual`;
+    - `dev_python_reverse`;
+    - `dev_mixed_summary`;
+  - `216` activation records total;
+  - no held-out prompts used.
+- Result:
+  - down:
+    - rank 1 / `0.1250x`: mean sum rel L2 `0.825773`;
+    - rank 2 / `0.2500x`: mean sum rel L2 `0.727538`;
+    - rank 3 / `0.3750x`: mean sum rel L2 `0.614090`;
+    - rank 4 / `0.5000x`: mean sum rel L2 `0.490611`.
+  - fused up/gate:
+    - rank 1 / `0.1250x`: mean sum rel L2 `0.916734`;
+    - rank 2 / `0.2500x`: mean sum rel L2 `0.846610`;
+    - rank 3 / `0.3750x`: mean sum rel L2 `0.728007`;
+    - rank 4 / `0.5000x`: mean sum rel L2 `0.670923`.
+- Decision:
+  - reject dynamic output-subspace compression as the next primary runtime
+    path;
+  - even this optimistic per-call SVD oracle is far from the `<=0.10` rel L2
+    gate at rank `<=3`;
+  - do not implement output-subspace runtime kernels for this family.
+- Reproduce:
+
+```bash
+cd /root/lfz/tmp/kimi-stage2m-align
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260708-gp84-output-subspace-oracle
+python3 .Agent/run-tools/kimi_output_subspace_oracle.py \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_japan_factual \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_python_reverse \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_mixed_summary \
+  --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv \
+  --libggml-base build-cuda-batch/bin/libggml-base.so \
+  --out-json "$ROOT/report.json" \
+  --out-md "$ROOT/report.md" \
+  --ranks 1,2,3,4 \
+  --max-records-per-prompt 72 \
+  --torch-threads 8
+```
+
 ## Run Discipline
 
 For every experiment:
@@ -2024,13 +2122,15 @@ Continue from Phase 5E:
    expert contribution energy is too distributed, especially for fused up/gate.
 4. GP83 confirms prediction/prefetch alone cannot reach `5 tok/s`; even
    perfect up/gate hide reaches only `1.806 tok/s`.
-5. Next primary direction must be a non-expert-local byte-reduced
+5. GP84 rejects dynamic output-subspace compression; rank `<=3` per-call SVD
+   remains far above the activation-output error gate.
+6. Next primary direction must be a different non-expert-local byte-reduced
    representation or compute/storage-form change. Prediction/prefetch is
    secondary after bytes are reduced.
-6. The next screen must target global moved bytes around `0.30x-0.40x` and
+7. The next screen must target global moved bytes around `0.30x-0.40x` and
    fused up/gate mean rel L2 close to the quality gate before any runtime
    kernel is written.
-7. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+8. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
    gains can regress held-out performance severely.
 
 Rationale:
