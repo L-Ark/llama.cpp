@@ -2387,6 +2387,149 @@ GGML_MOE_ACTIVATION_DUMP_DECODE_ONLY=1" \
     .Agent/run-tools/kimi-general-prompt-repro.sh
 ```
 
+## Phase 5K: GP88 Multi-Prompt Call-Stride Group Oracle
+
+Goal:
+
+- Replace the invalid GP86 record-stride group-level corpus with a valid
+  call-stride corpus across multiple dev prompts.
+- Re-run the output-subspace oracle on complete fused up/gate and down groups
+  before deciding whether this representation family is closed.
+
+Scope:
+
+- Dev prompts only:
+  - `dev_japan_factual`;
+  - `dev_python_reverse`;
+  - `dev_mixed_summary`.
+- Do not use held-out prompts.
+- Do not change runtime behavior for normal inference.
+- Do not claim SOTA from this experiment.
+
+Method:
+
+- Collect cold-start `N=64` activation dumps with:
+  - `GGML_MOE_ACTIVATION_DUMP_CALL_STRIDE=7`;
+  - `GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=2048`;
+  - `GGML_MOE_ACTIVATION_DUMP_DECODE_ONLY=1`.
+- Keep the 16 GB cgroup limit and GP4 alias/full-source SOTA env.
+- Summarize each prompt for:
+  - quality;
+  - token rate;
+  - TTFT;
+  - decode time;
+  - host RAM peak;
+  - `direct_reads`;
+  - record count;
+  - layer/tensor/role coverage;
+  - up/gate pair completeness and down group completeness.
+- Run `.Agent/run-tools/kimi_output_subspace_oracle.py` on the call-stride
+  corpus using ranks `1,2,3,4`.
+
+Acceptance:
+
+- Data validity gate:
+  - all three prompts pass quality;
+  - host RAM stays below 16 GB;
+  - `direct_reads=0`;
+  - fused up/gate pairs are present for the sampled calls;
+  - non-tail sampled groups are complete.
+- Representation advancement gate:
+  - rank `<=3`;
+  - summed-output mean rel L2 `<=0.10`;
+  - both down and fused up/gate must pass.
+- If the advancement gate fails, record the failure and move on to another
+  global byte-reduction or compute/storage-form approach. Do not write a
+  runtime kernel for this family.
+
+Expected result:
+
+- GP87 France smoke already showed rank `<=3` is far above the error gate, so
+  GP88 is expected to reject this path with better evidence.
+- If GP88 unexpectedly passes, the next step is a dev-only byte accounting plan
+  for a concrete representation targeting global moved bytes `0.30x-0.40x`.
+
+GP88 result on 2026-07-08:
+
+- Corpus:
+  - `.Agent/runs/20260708-gp88-callstride-activation-corpus`
+  - prompts: `dev_japan_factual`, `dev_python_reverse`,
+    `dev_mixed_summary`;
+  - all three prompts passed quality;
+  - Host RAM peak stayed at `15899996160` bytes;
+  - `direct_reads=0` for all prompts;
+  - each prompt produced `2048` activation records;
+  - each prompt covered `60` layers and `173` tensors;
+  - each prompt role counts:
+    - down `624`;
+    - gate `712`;
+    - up `712`.
+- Runtime metrics during corpus capture:
+  - `dev_japan_factual`: `1.91 tok/s`, decode
+    `33032.75 ms / 63`, TTFT `82411.84 ms`;
+  - `dev_python_reverse`: `1.67 tok/s`, decode
+    `37706.24 ms / 63`, TTFT `83502.24 ms`;
+  - `dev_mixed_summary`: `1.66 tok/s`, decode
+    `32611.60 ms / 54`, TTFT `115262.19 ms`.
+- Oracle:
+  - `.Agent/runs/20260708-gp88-callstride-output-subspace-oracle-512`
+  - used the first `512` call-stride records per prompt because the full
+    `2048` records per prompt oracle was too expensive for this rejected
+    screening path;
+  - total oracle records: `1536`;
+  - groups: down `57`, fused up/gate `69`;
+  - rank 3 down mean sum rel L2: `0.649566`;
+  - rank 3 fused up/gate mean sum rel L2: `0.732757`;
+  - both are far above the `0.10` advancement gate.
+- Decision:
+  - reject dynamic output-subspace compression as the next primary path;
+  - do not implement runtime kernels for this representation family;
+  - keep call-stride activation dump default-off for future group-level
+    diagnostics.
+- Reproduce corpus:
+
+```bash
+cd /root/lfz/tmp/kimi-stage2m-align
+RUNROOT=/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus
+run_one() {
+  id="$1"; prompt="$2"; keywords="$3"
+  RUN="$RUNROOT/$id"
+  mkdir -p "$RUN/act"
+  systemd-run --wait --collect --same-dir \
+    -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+    env REPO=/root/lfz/tmp/kimi-stage2m-align \
+      RUN="$RUN" N=64 PROFILE=0 COPY_PROFILE=0 \
+      PROMPT_ID="$id" \
+      PROMPT_USER_TEXT="$prompt" \
+      QUALITY_KEYWORDS="$keywords" \
+      EXTRA_RUNTIME_ENV="GGML_MOE_ACTIVATION_DUMP_DIR=$RUN/act
+GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=2048
+GGML_MOE_ACTIVATION_DUMP_CALL_STRIDE=7
+GGML_MOE_ACTIVATION_DUMP_DECODE_ONLY=1" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+}
+run_one dev_japan_factual "Please introduce Japan in a short paragraph." "japan,asia|tokyo|island"
+run_one dev_python_reverse "Write a Python function to reverse a string." "python|def|string,[::-1]|reverse"
+run_one dev_mixed_summary "In two sentences, compare solar power and wind power for a small town." "solar|sun,wind,power|energy"
+```
+
+- Reproduce oracle:
+
+```bash
+cd /root/lfz/tmp/kimi-stage2m-align
+python3 .Agent/run-tools/kimi_output_subspace_oracle.py \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_mixed_summary \
+  --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv \
+  --libggml-base build-cuda-batch/bin/libggml-base.so \
+  --out-json /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-output-subspace-oracle-512/report.json \
+  --out-md /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-output-subspace-oracle-512/report.md \
+  --ranks 1,2,3,4 \
+  --max-records-per-prompt 512 \
+  --torch-threads 8
+```
+
 ## Run Discipline
 
 For every experiment:
@@ -2423,13 +2566,18 @@ Continue from Phase 5E:
    implement call-stride sampling and rerun a group-complete smoke.
 9. GP87 adds default-off call-stride activation dump and validates that it
    preserves fused up/gate groups for group-level oracles.
-10. Next primary direction must be a different non-expert-local byte-reduced
+10. Run GP88 multi-prompt call-stride group oracle before closing the dynamic
+   output-subspace family.
+11. GP88 rejects dynamic output-subspace compression on multi-prompt
+   call-stride data; rank 3 remains far above the `0.10` error gate for both
+   down and fused up/gate.
+12. Next primary direction must be a different non-expert-local byte-reduced
    representation or compute/storage-form change. Prediction/prefetch is
    secondary after bytes are reduced.
-11. The next screen must target global moved bytes around `0.30x-0.40x` and
+13. The next screen must target global moved bytes around `0.30x-0.40x` and
    fused up/gate mean rel L2 close to the quality gate before any runtime
    kernel is written.
-12. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+14. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
    gains can regress held-out performance severely.
 
 Rationale:
