@@ -95645,3 +95645,150 @@ GP47 execution result:
   - accepted as non-SOTA planning evidence;
   - no runtime behavior changed;
   - no token-rate or output-quality claim is made.
+
+## GP61: down activation block sparsity shadow profiling
+
+Timestamp: `2026-07-07T11:39:52+08:00`.
+
+Status: planned before execution.
+
+Context:
+
+- The corrected current baseline for random/general prompt testing must use the
+  GP4 alias/full-source SOTA configuration, not the later pack-only speculative
+  branch default:
+  - `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv`;
+  - `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`;
+  - expected runtime signature: `entries=69120`, `misses=0`,
+    `direct_reads=0`, `host_stage=0`.
+- Even with zero pack misses, token rate is still far below the required
+  `>5 tok/s`, so the next byte-reduction idea is approximate block-sparse down
+  streaming driven by the post-SwiGLU down activation.
+
+Bottleneck hypothesis:
+
+- For down projection,
+  `out = h @ W_down`, where `h = silu(x @ W_gate) * (x @ W_up)`.
+- If many contiguous blocks of `h` have very low energy, then future runtime
+  could skip reading the matching `W_down` row/channel blocks and reduce SSD to
+  pinned to H2D bytes.
+- This is only valid if the sparsity is stable across prompt types and the
+  approximate skip has small output/logit impact.
+- First step must be shadow profiling only: record activation block statistics
+  without changing output, routing, expert reads, kernel input, or quality.
+
+Implementation plan:
+
+1. Add a default-off CUDA MoE stream profiler controlled by
+   `GGML_MOE_DOWN_ACT_SPARSITY_PROFILE_OUT`.
+2. The profiler reads only the existing host-side `src1_f32` down activation
+   rows in `ggml_cuda_moe_stream_batch`; it must not copy anything back from
+   GPU and must not change buffers used by compute.
+3. Add env knobs:
+   - `GGML_MOE_DOWN_ACT_SPARSITY_BLOCK`, default `64`;
+   - `GGML_MOE_DOWN_ACT_SPARSITY_THRESHOLDS`, default
+     `0,1e-6,1e-5,1e-4,1e-3,1e-2,5e-2,1e-1,2e-1,5e-1`.
+4. CSV row granularity:
+   - one row per active expert per down batch call;
+   - include `call`, `tensor`, parsed `layer`, `expert_idx`, `dst_id`,
+     `token_id`, `ne00`, `block_size`, `blocks`, `tail`, `l1`, `l2`,
+     `max_abs`, and low-block counts for each threshold.
+5. Run compile validation and a small `n16`/`n32` smoke with the GP4 alias SOTA
+   env to confirm:
+   - model output remains semantically correct;
+   - `entries=69120`, `misses=0`, `direct_reads=0`;
+   - the new CSV is populated;
+   - no crash under the 16GB cgroup.
+6. Run multiple random/dev prompts for profiling only, then aggregate:
+   - per prompt;
+   - per layer;
+   - per expert;
+   - global low-block ratios by threshold.
+
+Gate to continue into an approximate implementation:
+
+- Do not implement partial reads yet.
+- Only proceed if multiple random/general prompts show at least `30%-50%`
+  low-energy down blocks at a threshold that is plausibly quality-safe.
+- Before any real skip/read optimization, add a separate shadow error test that
+  computes the approximate down output or logits/token difference and confirms
+  the change is small.
+- Any real runtime skip must remain rejected unless quality, TTFT, RAM, and
+  token-rate gates pass under cold-start 16GB RAM.
+
+GP61 implementation and first measurement:
+
+- Timestamp: `2026-07-07T12:00:00+08:00`.
+- Added default-off runtime shadow profiler:
+  - env: `GGML_MOE_DOWN_ACT_SPARSITY_PROFILE_OUT=<csv>`;
+  - block env: `GGML_MOE_DOWN_ACT_SPARSITY_BLOCK`, default `64`;
+  - threshold env: `GGML_MOE_DOWN_ACT_SPARSITY_THRESHOLDS`, default
+    `0,1e-6,1e-5,1e-4,1e-3,1e-2,5e-2,1e-1,2e-1,5e-1`.
+- Added offline summarizer:
+  `.Agent/run-tools/kimi_down_act_sparsity_summary.py`.
+- Profiler scope:
+  - reads only host-side down `src1_f32` activation rows already available to
+    `ggml_cuda_moe_stream_batch`;
+  - writes one CSV row per active down expert per down batch;
+  - does not modify routing, expert reads, H2D buffers, CUDA kernel inputs, or
+    output scatter.
+- Validation:
+  - local `git diff --check` passed;
+  - local `python3 -m py_compile` passed;
+  - remote `python3 -m py_compile` passed;
+  - remote `git diff --check` passed;
+  - remote `cmake --build build-cuda-batch -j2 --target llama-completion`
+    passed.
+- Smoke run:
+  - run:
+    `/root/lfz/tmp/runs/20260707-gp61-down-act-sparsity-smoke/ai_infra_n16`;
+  - prompt: `AI infra 是做什么的`;
+  - `N=16`, cold start, 16GB cgroup;
+  - quality `pass`;
+  - `token_rate=1.52`, `ttft_ms=77826.12`;
+  - `memory.peak=15899996160`;
+  - GP4 alias signature confirmed:
+    `entries=69120`, `misses=0`, `direct_reads=0`;
+  - CSV rows: `6368` data rows.
+- Multi-prompt profile run:
+  - remote:
+    `/root/lfz/tmp/runs/20260707-gp61-down-act-sparsity-multiprompt-n32`;
+  - local record:
+    `.Agent/runs/20260707-gp61-down-act-sparsity-multiprompt-n32`;
+  - prompts:
+    - `AI infra 是做什么的`;
+    - `Explain how Kubernetes schedules pods in one short paragraph.`;
+    - `Why do seasons happen? Answer in one short paragraph.`;
+  - all used `N=32`, cold start, 16GB cgroup, GP4 alias/full-source env.
+- Per-prompt runtime gate:
+  - AI infra: quality `pass`, `token_rate=1.73`, `ttft_ms=76165.49`,
+    `entries=69120`, `misses=0`, `direct_reads=0`;
+  - Kubernetes: quality `pass`, `token_rate=1.56`, `ttft_ms=99190.43`,
+    `entries=69120`, `misses=0`, `direct_reads=0`;
+  - seasons: quality `pass`, `token_rate=1.62`, `ttft_ms=103081.51`,
+    `entries=69120`, `misses=0`, `direct_reads=0`;
+  - all had `memory.peak=15899996160`.
+- Combined sparsity headline over `39456` active-expert rows and `1262592`
+  activation blocks:
+  - `<= 0`: `0.000000`;
+  - `<= 0.001`: `0.000169`;
+  - `<= 0.01`: `0.041501`;
+  - `<= 0.05`: `0.121999`;
+  - `<= 0.1`: `0.197987`;
+  - `<= 0.2`: `0.345436`;
+  - `<= 0.5`: `0.665814`.
+- Interpretation:
+  - exact sparsity is effectively zero;
+  - very small thresholds such as `0.01` do not approach the required
+    `30%-50%` candidate range;
+  - threshold `0.2` gives a prompt-stable candidate range
+    (`33.1%-35.7%` per prompt), but it is approximate and not proven
+    quality-safe;
+  - high threshold `0.5` would skip about two thirds of blocks, but is likely
+    too aggressive without a shadow error/logit study.
+- Decision:
+  - accept GP61 as profile infrastructure and first evidence;
+  - do not implement partial down reads yet;
+  - next required phase is a shadow error test for candidate thresholds,
+    starting with `0.1` and `0.2`, comparing exact down output/logit or token
+    changes before any real skip is allowed.

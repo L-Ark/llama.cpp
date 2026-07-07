@@ -1,0 +1,41 @@
+run=/root/lfz/tmp/runs/20260707-gp61-down-act-sparsity-multiprompt-n32/gp61_seasons_en
+prompt_id=gp61_seasons_en
+prompt=Why do seasons happen? Answer in one short paragraph.
+exit=0
+quality=pass
+quality_reason=ok
+output=Seasons happen because Earth's axis is tilted about 23.5 degrees relative to its orbit around the Sun. As Earth travels through its yearly orbit, different
+ttft_ms=103081.51
+prompt_tokens=20
+decode_ms=19086.57
+decode_runs=31
+token_rate=1.62
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=14963843072
+anon=458752
+file=14703034368
+kernel=256086016
+inactive_file=10806005760
+active_file=3896369152
+pgmajfault=1225130
+pgfault=3388555
+workingset_refault_file=108585
+expert_pack_0=26744 misses=0 read_failures=0 direct_reads=0 direct_fallbacks=0 iouring_reads=25008 iouring_bytes=139572428800 iouring_fallbacks=0 iouring_submit_us=116642 iouring_wait_us=12669399 iouring_h2d_enqueues=25008 entries=69120
+expert_pack_iouring_0=batches=5340 submit_calls=5340 wait_calls=19858 cqes=25008 inflight_avg=3.24 inflight_max=8 batch_hist=1:149,2-4:2478,5-8:2713,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 6.02 MiB
+pinned_staging_1=: enabled, 12 slots of 7.44 MiB
+pinned_staging_2=: enabled, 12 slots of 5.36 MiB
+pinned_staging_3=: enabled, 12 slots of 7.44 MiB
+pinned_staging_4=: copies=17980 waits=17920 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=39.524 ms host_stage=0.000 ms enqueue=328.102 ms h2d=5815.697 ms h2d_timed=17980
+pinned_staging_5= iouring: batches=3798 jobs=17980 submit_calls=3798 wait_calls=14173 cqes=17980 inflight_avg=3.20 inflight_max=8 batch_hist=1:97,2-4:1716,5-8:1985,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=7028 waits=7004 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=14.782 ms host_stage=0.000 ms enqueue=112.345 ms h2d=2458.878 ms h2d_timed=7028
+pinned_staging_7= gate iouring: batches=1542 jobs=7028 submit_calls=1542 wait_calls=5685 cqes=7028 inflight_avg=3.34 inflight_max=8 batch_hist=1:52,2-4:762,5-8:728,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=992 planned_jobs=4003 completed_jobs=4003 cache_hits=3189 missing_tensor=93 missing_pack=0 submitted_batches=893 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=1966914 batch_hist=1:37,2-4:441,5-8:415,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=9467 misses=3653 preloads=4003 pinned=0 hit_rate=72.2%
+vram_down_1=slots=766 slot=7.44 MiB hits=9467 misses=3653 preloads=4003 pinned=0 hit_rate=72.2%
+vram_down_2=slots=766 slot=7.44 MiB hits=9467 misses=3653 preloads=4003 pinned=0 hit_rate=72.2%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=12456 misses=17320 preloads=0 pinned=0 hit_rate=41.8%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=12456 misses=17320 preloads=0 pinned=0 hit_rate=41.8%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=12456 misses=17320 preloads=0 pinned=0 hit_rate=41.8%

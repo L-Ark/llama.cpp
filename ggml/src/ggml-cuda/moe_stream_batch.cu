@@ -2362,6 +2362,145 @@ static bool down_batch_profile_enabled() {
     return env && env[0];
 }
 
+static bool down_act_sparsity_profile_enabled() {
+    const char *env = std::getenv("GGML_MOE_DOWN_ACT_SPARSITY_PROFILE_OUT");
+    return env && env[0];
+}
+
+static size_t down_act_sparsity_block_size() {
+    return expert_pack_env_size("GGML_MOE_DOWN_ACT_SPARSITY_BLOCK", 64, 1, 4096);
+}
+
+static const std::vector<double> & down_act_sparsity_thresholds() {
+    static std::vector<double> thresholds;
+    static std::once_flag once;
+    std::call_once(once, []() {
+        const char *env = std::getenv("GGML_MOE_DOWN_ACT_SPARSITY_THRESHOLDS");
+        const char *spec = (env && env[0]) ? env : "0,1e-6,1e-5,1e-4,1e-3,1e-2,5e-2,1e-1,2e-1,5e-1";
+        const char *p = spec;
+        while (*p) {
+            char *end = nullptr;
+            const double v = std::strtod(p, &end);
+            if (end != p && std::isfinite(v) && v >= 0.0) {
+                thresholds.push_back(v);
+            }
+            p = end && end != p ? end : p + 1;
+            while (*p == ',' || *p == ';' || *p == ' ' || *p == '\t') {
+                ++p;
+            }
+        }
+        if (thresholds.empty()) {
+            thresholds = {0.0, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 5e-2, 1e-1, 2e-1, 5e-1};
+        }
+        std::sort(thresholds.begin(), thresholds.end());
+        thresholds.erase(std::unique(thresholds.begin(), thresholds.end()), thresholds.end());
+    });
+    return thresholds;
+}
+
+static void down_act_sparsity_profile_record(
+        uint64_t call,
+        const char *tensor,
+        ggml_type src0_type,
+        int active_index,
+        int expert_idx,
+        int dst_id,
+        int token_id,
+        const float *src_row,
+        int64_t ne00) {
+    const char *path = std::getenv("GGML_MOE_DOWN_ACT_SPARSITY_PROFILE_OUT");
+    if (!path || !path[0] || !src_row || ne00 <= 0) return;
+
+    const size_t block_size = down_act_sparsity_block_size();
+    const std::vector<double> &thresholds = down_act_sparsity_thresholds();
+    const size_t blocks = ((size_t)ne00 + block_size - 1) / block_size;
+    const size_t tail = (size_t)ne00 % block_size;
+
+    std::vector<uint64_t> low_blocks(thresholds.size(), 0);
+    uint64_t exact_zero_values = 0;
+    double l1 = 0.0;
+    double l2_sq = 0.0;
+    double max_abs = 0.0;
+
+    for (size_t b = 0; b < blocks; ++b) {
+        const size_t begin = b * block_size;
+        const size_t end = std::min((size_t)ne00, begin + block_size);
+        double block_max_abs = 0.0;
+        for (size_t i = begin; i < end; ++i) {
+            const double v = (double)src_row[i];
+            const double av = std::fabs(v);
+            if (v == 0.0) {
+                ++exact_zero_values;
+            }
+            l1 += av;
+            l2_sq += v * v;
+            if (max_abs < av) {
+                max_abs = av;
+            }
+            if (block_max_abs < av) {
+                block_max_abs = av;
+            }
+        }
+        for (size_t t = 0; t < thresholds.size(); ++t) {
+            if (block_max_abs <= thresholds[t]) {
+                ++low_blocks[t];
+            }
+        }
+    }
+
+    int layer = -1;
+    char kind[16] = {};
+    batch_route_detail_parse_name(tensor, layer, kind, sizeof(kind));
+
+    char threshold_buf[256] = {};
+    char low_buf[256] = {};
+    for (size_t i = 0; i < thresholds.size(); ++i) {
+        const size_t t_len = std::strlen(threshold_buf);
+        const size_t l_len = std::strlen(low_buf);
+        std::snprintf(threshold_buf + t_len, sizeof(threshold_buf) - t_len,
+                "%s%.9g", i ? ";" : "", thresholds[i]);
+        std::snprintf(low_buf + l_len, sizeof(low_buf) - l_len,
+                "%s%lu", i ? ";" : "", (unsigned long)low_blocks[i]);
+    }
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,call,tensor,layer,kind,src0_type,active_index,expert_idx,dst_id,token_id,"
+                "ne00,block_size,blocks,tail,exact_zero_values,l1,l2,max_abs,thresholds,low_blocks\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%lu,%s,%d,%s,%d,%d,%d,%d,%d,%ld,%zu,%zu,%zu,%lu,%.9g,%.9g,%.9g,%s,%s\n",
+            (unsigned long)++seq,
+            (unsigned long)call,
+            tensor ? tensor : "",
+            layer,
+            kind,
+            (int)src0_type,
+            active_index,
+            expert_idx,
+            dst_id,
+            token_id,
+            (long)ne00,
+            block_size,
+            blocks,
+            tail,
+            (unsigned long)exact_zero_values,
+            l1,
+            std::sqrt(l2_sq),
+            max_abs,
+            threshold_buf,
+            low_buf);
+    std::fclose(f);
+}
+
 static void down_batch_profile_record(
         const char *tensor,
         ggml_type src0_type,
@@ -9512,9 +9651,21 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         if (cache_slot < 0) return decline("cache_insert");
         bc.h_x_ids[j] = cache_slot;
 
+        const char *src1_base = (const char *)src1_f32;
+        const char *src_row = src1_base + (size_t)dst_ids[j] * src1_nb1 + (size_t)token_ids[j] * src1_nb2;
+        if (down_act_sparsity_profile_enabled()) {
+            down_act_sparsity_profile_record(
+                    (uint64_t)batch_call,
+                    src0_name,
+                    src0_type,
+                    j,
+                    active_experts[j],
+                    dst_ids[j],
+                    token_ids[j],
+                    (const float *)src_row,
+                    ne00);
+        }
         if (!use_handoff) {
-            const char *src1_base = (const char *)src1_f32;
-            const char *src_row = src1_base + (size_t)dst_ids[j] * src1_nb1 + (size_t)token_ids[j] * src1_nb2;
             std::memcpy((char *)bc.h_src1 + (size_t)j * ne00 * sizeof(float), src_row, (size_t)ne00 * sizeof(float));
         }
         bc.h_ids_src1[j] = j;

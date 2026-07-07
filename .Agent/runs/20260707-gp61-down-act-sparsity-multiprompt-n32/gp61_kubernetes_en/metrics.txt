@@ -1,0 +1,41 @@
+run=/root/lfz/tmp/runs/20260707-gp61-down-act-sparsity-multiprompt-n32/gp61_kubernetes_en
+prompt_id=gp61_kubernetes_en
+prompt=Explain how Kubernetes schedules pods in one short paragraph.
+exit=0
+quality=pass
+quality_reason=ok
+output=Kubernetes schedules pods by having the kube-scheduler evaluate each pending pod against available nodes, filtering out nodes that don't meet requirements like resource requests, affinity rules, t
+ttft_ms=99190.43
+prompt_tokens=19
+decode_ms=19819.18
+decode_runs=31
+token_rate=1.56
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=14997344256
+anon=454656
+file=14734606336
+kernel=259239936
+inactive_file=2239856640
+active_file=12494147584
+pgmajfault=1157259
+pgfault=3340575
+workingset_refault_file=147477
+expert_pack_0=27067 misses=0 read_failures=0 direct_reads=0 direct_fallbacks=0 iouring_reads=25331 iouring_bytes=141395279872 iouring_fallbacks=0 iouring_submit_us=117584 iouring_wait_us=12803856 iouring_h2d_enqueues=25331 entries=69120
+expert_pack_iouring_0=batches=5363 submit_calls=5363 wait_calls=20268 cqes=25331 inflight_avg=3.24 inflight_max=8 batch_hist=1:99,2-4:2415,5-8:2849,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 7.44 MiB
+pinned_staging_1=: enabled, 12 slots of 4.49 MiB
+pinned_staging_2=: enabled, 12 slots of 5.36 MiB
+pinned_staging_3=: enabled, 12 slots of 7.44 MiB
+pinned_staging_4=: copies=18141 waits=18093 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=38.158 ms host_stage=0.000 ms enqueue=423.441 ms h2d=5997.893 ms h2d_timed=18141
+pinned_staging_5= iouring: batches=3814 jobs=18141 submit_calls=3814 wait_calls=14444 cqes=18141 inflight_avg=3.19 inflight_max=8 batch_hist=1:69,2-4:1689,5-8:2056,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=7190 waits=7158 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=14.901 ms host_stage=0.000 ms enqueue=115.559 ms h2d=2542.198 ms h2d_timed=7190
+pinned_staging_7= gate iouring: batches=1549 jobs=7190 submit_calls=1549 wait_calls=5824 cqes=7190 inflight_avg=3.35 inflight_max=8 batch_hist=1:30,2-4:726,5-8:793,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=992 planned_jobs=3929 completed_jobs=3929 cache_hits=3263 missing_tensor=93 missing_pack=0 submitted_batches=898 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=1939683 batch_hist=1:19,2-4:492,5-8:387,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=9354 misses=3766 preloads=3929 pinned=0 hit_rate=71.3%
+vram_down_1=slots=766 slot=7.44 MiB hits=9354 misses=3766 preloads=3929 pinned=0 hit_rate=71.3%
+vram_down_2=slots=766 slot=7.44 MiB hits=9354 misses=3766 preloads=3929 pinned=0 hit_rate=71.3%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=12172 misses=17604 preloads=0 pinned=0 hit_rate=40.9%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=12172 misses=17604 preloads=0 pinned=0 hit_rate=40.9%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=12172 misses=17604 preloads=0 pinned=0 hit_rate=40.9%

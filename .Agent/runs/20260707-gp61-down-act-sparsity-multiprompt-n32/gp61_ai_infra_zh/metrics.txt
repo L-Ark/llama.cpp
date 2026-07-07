@@ -1,0 +1,41 @@
+run=/root/lfz/tmp/runs/20260707-gp61-down-act-sparsity-multiprompt-n32/gp61_ai_infra_zh
+prompt_id=gp61_ai_infra_zh
+prompt=AI infra 是做什么的
+exit=0
+quality=pass
+quality_reason=ok
+output=# AI Infra（AI 基础设施）是做什么的 AI Infra 是支撑人工智能应用开发、训练、部署和运行的**底层技术体系和
+ttft_ms=76165.49
+prompt_tokens=15
+decode_ms=17899.94
+decode_runs=31
+token_rate=1.73
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=15141273600
+anon=462848
+file=14922756096
+kernel=214614016
+inactive_file=4189696000
+active_file=10732400640
+pgmajfault=880044
+pgfault=2657519
+workingset_refault_file=127499
+expert_pack_0=25145 misses=0 read_failures=0 direct_reads=0 direct_fallbacks=0 iouring_reads=23409 iouring_bytes=130453585920 iouring_fallbacks=0 iouring_submit_us=104726 iouring_wait_us=12123478 iouring_h2d_enqueues=23409 entries=69120
+expert_pack_iouring_0=batches=5335 submit_calls=5335 wait_calls=18454 cqes=23409 inflight_avg=3.12 inflight_max=8 batch_hist=1:241,2-4:2640,5-8:2454,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 6.02 MiB
+pinned_staging_1=: enabled, 12 slots of 4.49 MiB
+pinned_staging_2=: enabled, 12 slots of 7.44 MiB
+pinned_staging_3=: enabled, 12 slots of 5.36 MiB
+pinned_staging_4=: copies=16692 waits=16656 fallbacks=0 slots=12 slot=7.44 MiB slot_wait=36.716 ms host_stage=0.000 ms enqueue=332.044 ms h2d=5425.471 ms h2d_timed=16692
+pinned_staging_5= iouring: batches=3793 jobs=16692 submit_calls=3793 wait_calls=13077 cqes=16692 inflight_avg=3.06 inflight_max=8 batch_hist=1:170,2-4:1861,5-8:1762,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=6717 waits=6693 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=12.958 ms host_stage=0.000 ms enqueue=103.730 ms h2d=2329.850 ms h2d_timed=6717
+pinned_staging_7= gate iouring: batches=1542 jobs=6717 submit_calls=1542 wait_calls=5377 cqes=6717 inflight_avg=3.25 inflight_max=8 batch_hist=1:71,2-4:779,5-8:692,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=992 planned_jobs=3781 completed_jobs=3781 cache_hits=3411 missing_tensor=93 missing_pack=0 submitted_batches=893 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=1884788 batch_hist=1:49,2-4:462,5-8:382,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=9788 misses=3332 preloads=3781 pinned=0 hit_rate=74.6%
+vram_down_1=slots=766 slot=7.44 MiB hits=9788 misses=3332 preloads=3781 pinned=0 hit_rate=74.6%
+vram_down_2=slots=766 slot=7.44 MiB hits=9788 misses=3332 preloads=3781 pinned=0 hit_rate=74.6%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=13512 misses=16264 preloads=0 pinned=0 hit_rate=45.4%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=13512 misses=16264 preloads=0 pinned=0 hit_rate=45.4%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=13512 misses=16264 preloads=0 pinned=0 hit_rate=45.4%
