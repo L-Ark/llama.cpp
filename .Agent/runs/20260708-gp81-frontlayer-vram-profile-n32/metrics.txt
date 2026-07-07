@@ -1,0 +1,39 @@
+run=/root/lfz/runs/vendor-kimi-token-rate/20260708-gp81-frontlayer-vram-profile-n32
+exit=0
+output=France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous
+quality=pass
+quality_reason=ok
+ttft_ms=84064.88
+prompt_tokens=17
+decode_ms=25905.23
+decode_runs=31
+token_rate=1.20
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=15097106432
+anon=450560
+file=14850875392
+kernel=242769920
+inactive_file=4293177344
+active_file=10557026304
+pgmajfault=971410
+pgfault=2981720
+workingset_refault_file=44452
+expert_pack_0=26302 misses=855 read_failures=0 direct_reads=1444 direct_fallbacks=0 iouring_reads=23131 iouring_bytes=128968261632 iouring_fallbacks=0 iouring_submit_us=48316 iouring_wait_us=12060373 iouring_h2d_enqueues=23131 entries=31599
+expert_pack_iouring_0=batches=5317 submit_calls=5317 wait_calls=18395 cqes=23131 inflight_avg=3.09 inflight_max=8 batch_hist=1:180,2-4:2789,5-8:2348,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 6.02 MiB
+pinned_staging_1=: enabled, 12 slots of 7.44 MiB
+pinned_staging_2=: enabled, 12 slots of 4.48 MiB
+pinned_staging_3=: enabled, 12 slots of 5.36 MiB
+pinned_staging_4=: copies=18777 waits=18741 fallbacks=0 slots=12 slot=7.44 MiB
+pinned_staging_5= iouring: batches=3772 jobs=16546 submit_calls=3772 wait_calls=13195 cqes=16546 inflight_avg=3.03 inflight_max=8 batch_hist=1:125,2-4:1943,5-8:1704,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=6644 waits=6620 fallbacks=0 slots=12 slot=5.36 MiB
+pinned_staging_7= gate iouring: batches=1545 jobs=6585 submit_calls=1545 wait_calls=5200 cqes=6585 inflight_avg=3.25 inflight_max=8 batch_hist=1:55,2-4:846,5-8:644,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=992 planned_jobs=3673 completed_jobs=3673 cache_hits=3519 missing_tensor=93 missing_pack=36 submitted_batches=896 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=2297949 batch_hist=1:40,2-4:524,5-8:332,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=9631 misses=3489 preloads=3673 pinned=0 hit_rate=73.4%
+vram_down_1=slots=766 slot=7.44 MiB hits=9631 misses=3489 preloads=3673 pinned=0 hit_rate=73.4%
+vram_down_2=slots=766 slot=7.44 MiB hits=9631 misses=3489 preloads=3673 pinned=0 hit_rate=73.4%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=13507 misses=16269 preloads=1316 pinned=0 hit_rate=45.4%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=13507 misses=16269 preloads=1316 pinned=0 hit_rate=45.4%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=13507 misses=16269 preloads=1316 pinned=0 hit_rate=45.4%

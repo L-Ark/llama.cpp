@@ -1727,6 +1727,72 @@ GP80 IO depth/refill smoke result on 2026-07-08:
     queues do not help because decode exposes at most the current layer's
     active experts and route dependencies keep the queue from staying deep.
 
+GP81 planned split-cache profile preload smoke:
+
+- Goal:
+  - test the actual Kimi split-cache profile path after GP79 showed the generic
+    `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE` hook does not affect this runtime.
+- Why this is still worth one smoke:
+  - `moe_stream_batch.cu` has a real split-cache preload path driven by
+    `GGML_MOE_VRAM_PROFILE`;
+  - the GP79 front-layer TSV used the wrong hook and did not load through this
+    path;
+  - the GP79 simulator says the upper bound is weak but nonzero, so one N32
+    dev smoke is acceptable before rejecting this cache direction.
+- Method:
+  - generate a route-profile-compatible CSV for layers `1..2` from dev route
+    traces;
+  - run N32 France cold-start with:
+    - `GGML_MOE_VRAM_PROFILE=<front-layer-csv>`;
+    - `GGML_MOE_VRAM_PROFILE_PROTECT=0`;
+    - no `profile_lfu_lru` policy;
+  - compare against GP79 baseline N32.
+- Acceptance:
+  - quality pass;
+  - host RAM `<16GB`;
+  - TTFT within +20%;
+  - token rate must beat `1.72 tok/s`;
+  - VRAM hit counters must change in the expected direction, otherwise the
+    profile is not affecting the active path.
+
+GP81 split-cache profile preload smoke result on 2026-07-08:
+
+- Local report:
+  - `.Agent/runs/20260708-gp81-frontlayer-vram-profile-summary.md`
+  - `.Agent/runs/20260708-gp81-frontlayer-vram-profile-summary.json`
+- Candidate run:
+  - `.Agent/runs/20260708-gp81-frontlayer-vram-profile-n32`
+- Profile:
+  - `.Agent/runs/20260708-gp81-layer-profile-preload/front-layers-1-2-profile.csv`
+  - entries: `1974`;
+  - generated from dev route traces only.
+- Hook confirmation:
+  - stderr shows `profile preload: loaded 1974 entries`;
+  - each of `blk.1`/`blk.2` up/gate/down loaded `329` entries.
+- Comparison against GP79 baseline:
+  - baseline:
+    - token rate `1.72`;
+    - TTFT `77778.06 ms`;
+    - decode `18051.43 ms / 31`;
+    - upgate hit `45.2%`, down hit `73.4%`;
+    - preloads `3673`;
+    - iouring wait `11929606 us`.
+  - candidate:
+    - token rate `1.20`;
+    - TTFT `84064.88 ms`;
+    - decode `25905.23 ms / 31`;
+    - upgate hit `45.4%`, down hit `73.4%`;
+    - preloads `4989`;
+    - iouring wait `12060373 us`.
+- Decision:
+  - reject;
+  - the real split-cache profile hook works, but front-layer preload creates
+    large overhead for only `+0.2pp` upgate hit-rate improvement;
+  - do not continue front-layer full-hit preload as a token-rate path;
+  - any future cache-policy attempt must be a low-overhead admission/protection
+    hook and must first show materially stronger offline wave savings than
+    GP79's `2.54%`.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.

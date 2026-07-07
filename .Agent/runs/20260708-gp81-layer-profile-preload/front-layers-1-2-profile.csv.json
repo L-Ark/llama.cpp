@@ -1,0 +1,10 @@
+{
+  "entries": 1974,
+  "format": "profile_csv",
+  "kind": "kimi_layer_admit_profile",
+  "max_layer": 2,
+  "min_layer": 1,
+  "out": ".Agent/runs/20260708-gp81-layer-profile-preload/front-layers-1-2-profile.csv",
+  "route_root": ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct",
+  "total_route_hits_in_source": 23424
+}
