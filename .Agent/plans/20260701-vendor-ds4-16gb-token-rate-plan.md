@@ -5369,3 +5369,16 @@
   - Would any follow-up be able to preserve Kimi functionality and remain default-off?
 - decision_rule: If audit cannot identify a narrow correctness probe, keep 4Expert closed and do not run more France/template attempts. If it identifies a narrow probe, write a separate default-off plan before any source edit/model run.
 - push_rule: Audit artifact and plan result must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Accepted SOTA unchanged unless a future candidate passes all correctness/RAM/TTFT/generalized/held-out gates.
+
+### X7 result：4Expert remains closed for performance; only narrow route dump could be justified
+
+- status: diagnostic_complete_no_benchmark_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-correctness-root-cause-audit-20260707.json`
+- evidence:
+  - Empty-output root cause was token_type handling; `LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1` made sampled pieces visible, but generated France text remained degenerate.
+  - Default, `deepseek`, and `deepseek3` template probes all failed correctness, so continuing template smokes is not useful.
+  - `LLAMA_DUMP_UNCREATED_TENSORS=1` follow-up showed no obvious uncreated/unused tensor lines after current aliases, so the failure is not explained by a simple missing tensor.
+  - 4Expert differs structurally from native: tokenizer `bpe/joyai-llm` vs native `gpt2`, context length, `expert_used_count=4` vs native `6`, many common tensors with different quantization types, and 638 cloudyu-only non-expert tensor names.
+- assessment: remaining issue is most likely model/interface or numerical compatibility after loading, not a simple missing-tensor or chat-template issue. Native logits/top1 are not a valid exact parity oracle because the 4Expert computation is intentionally different.
+- decision: no 4Expert performance benchmark, generalized run, or SOTA claim is allowed. Accepted SOTA unchanged.
+- only_possible_reopen: A separate default-off plan could add a route-dump diagnostic for `ffn_gate_tid2eid` / hash-layer semantics and selected expert ids under France `n=1`; this would be diagnostic only and would not prove correctness without a known-good reference. Otherwise keep 4Expert closed until a trusted reference runtime/output for this exact GGUF exists.

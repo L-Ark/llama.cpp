@@ -1,0 +1,252 @@
+{
+  "attempt_id": "20260707-4expert-correctness-root-cause-audit",
+  "created_at_utc": "2026-07-07T01:50:15.375261Z",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "d6fb39674aa4bf2f0b3ab611d33718405ba6455b",
+  "git_status_before_artifact": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "scope": "artifact/source audit only; no model run; no held-out; no source edit; no deletion",
+  "task_context": "cloudyu 4Expert is local but not a performance candidate until France correctness passes under strict 16GB RAM including page cache.",
+  "inputs": {
+    "load_compat": ".Agent/runs/20260705-vendor-ds4-coldstart/4expert-load-compat-diagnostic-20260706.json",
+    "token_type": ".Agent/runs/20260705-vendor-ds4-coldstart/4expert-token-type-zero-normal-diagnostic-20260707.json",
+    "followup": ".Agent/runs/20260705-vendor-ds4-coldstart/4expert-correctness-followup-reject-20260707.json",
+    "tensor_map": ".Agent/runs/20260705-vendor-ds4-coldstart/4expert-native-overlay-tensor-map-audit-20260706.json",
+    "ready": ".Agent/runs/20260705-vendor-ds4-coldstart/4expert-ready-validation-complete-20260706T143117Z.json"
+  },
+  "model_identity": {
+    "path": "/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf",
+    "size_bytes": 164465760544,
+    "sha256": "e9e7e22ba585f83330d08235de39e8dcd8cbb513fd9fad6103764da74a4e64bc",
+    "metadata_core": {
+      "general.name": "DeepSeek V4 Flash 4Expert",
+      "general.architecture": "deepseek4",
+      "tokenizer.ggml.model": "bpe",
+      "tokenizer.ggml.pre": "joyai-llm",
+      "deepseek4.expert_used_count": 4,
+      "deepseek4.context_length": 65536,
+      "deepseek4.rope.freq_base": 10000.0
+    }
+  },
+  "observed_failures": {
+    "empty_output_root_cause_fixed": "token_type=0 was treated as undefined; LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL makes sampled pieces visible.",
+    "default_after_fix": {
+      "answer": "assistant\n```\n\n### Output:\n```\nFrance, officially known as the French Republic, is a country located in Western Europe. It is known for its rich history, diverse culture, and iconic landmarks such as the Eiff Tower, the Louvre Museum, and the Palace of Versailles. The country is also famous for its cuisine, including the\",\n```\n\n## Assistant\n# \n# \n# \n# France, the\n<!--\n```\n\n## France\n```\n```\n\n## France\n```\n```\n\nFrance is a country in Europe, the\n```\n\n```\n<!-- \n    \n    \n    \n    \n```\n\n## \n##\n##\n### \n##\n## \n## \n## \n## \n```\n\n## \n##, Europe,##,## France Museum,###```<```#```<```<```<```<```<```<```<```<```<`````<```#<```#<```#<```#```<```<",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T163339Z-20260707-4expert-token-type-zero-normal-cli-france-n192/france-4expert-ttype0normal-cli-cpu40-vram0gb",
+      "correctness_ok": false,
+      "correctness_reason": "degenerate_text,truncated_or_corrupt_landmark",
+      "eval_tok_s": 2.0,
+      "memory_file_bytes": 14923116544,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 1.4,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 42943.682616
+    },
+    "deepseek_template": {
+      "answer": "2-latest\": \"deep2:2.1-latest\",\n    \"deep2:2.1-ultralight\": \"deep2:2.1-ultralight\",\n    \"deep2:2.1-ultralight\": \"deep2:2.1-ultralight\",\n    \"deep2:2.1.0\": \"deep2:2.1.0\",\n    \"deep2:2.1.0\": \"deep2:2.2-live\":     \"deep2.1\":        \"   \": \"   \",\n    \"deep2\":     \"",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T165001Z-20260707-4expert-ttype0normal-deepseek-template-france-n128/france-4expert-deepseek-template-n128-cpu40-vram0gb",
+      "correctness_ok": false,
+      "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+      "eval_tok_s": 1.7,
+      "memory_file_bytes": 15030673408,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.9,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 32685.844057
+    },
+    "deepseek3_template": {
+      "answer": "2bChat\n[2025-03-18T14:30:00.000Z] 2025-03-18 14:30:00.000Z\n[2025-03-18T14:30:00.000Z] 2025-03-18T14:30:00.000Z\n[2025-03-18T14:30:00.000Z] 2025-10-10T14:00:00:00:00:30:00:00:00:30:00.000Z\n[2025-00:",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T163647Z-20260707-4expert-ttype0normal-deepseek3-template-france-n128/france-4expert-deepseek3-template-n128-cpu40-vram0gb",
+      "correctness_ok": false,
+      "correctness_reason": "missing_france,missing_europe,missing_expected_context",
+      "eval_tok_s": 1.6,
+      "memory_file_bytes": 15009763328,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.8,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 35921.23686
+    },
+    "uncreated_tensor_check": {
+      "interpretation": "No uncreated/unused tensor dump appeared under LLAMA_DUMP_UNCREATED_TENSORS=1, so remaining correctness failure is not explained by an obvious unconsumed tensor after current aliases.",
+      "matching_log_lines": [],
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260706T164826Z-20260707-4expert-token-type-uncreated-dump-n1/france-4expert-ttype-uncreated-n1-cpu40-vram0gb"
+    }
+  },
+  "structural_differences_vs_native": {
+    "metadata_mismatch": {
+      "deepseek4.context_length": {
+        "cloudyu": 65536,
+        "native": 1048576
+      },
+      "deepseek4.expert_used_count": {
+        "cloudyu": 4,
+        "native": 6
+      },
+      "general.name": {
+        "cloudyu": "DeepSeek V4 Flash 4Expert",
+        "native": "DeepSeek V4 Flash"
+      },
+      "tokenizer.ggml.model": {
+        "cloudyu": "bpe",
+        "native": "gpt2"
+      }
+    },
+    "common_tensor_count": 690,
+    "common_same_shape_type_count": 173,
+    "common_type_diff_count": 517,
+    "cloudyu_only_non_expert_count": 638,
+    "cloudyu_type_hist_all": {
+      "0": 492,
+      "1": 338,
+      "12": 129,
+      "26": 3,
+      "8": 366
+    },
+    "common_type_diff_samples": [
+      {
+        "cloudyu_type": 8,
+        "dims": [
+          4096,
+          8192
+        ],
+        "name": "blk.0.attn_output_a.weight",
+        "native_type": 42
+      },
+      {
+        "cloudyu_type": 8,
+        "dims": [
+          8192,
+          4096
+        ],
+        "name": "blk.0.attn_output_b.weight",
+        "native_type": 42
+      },
+      {
+        "cloudyu_type": 8,
+        "dims": [
+          4096,
+          1024
+        ],
+        "name": "blk.0.attn_q_a.weight",
+        "native_type": 42
+      },
+      {
+        "cloudyu_type": 8,
+        "dims": [
+          1024,
+          32768
+        ],
+        "name": "blk.0.attn_q_b.weight",
+        "native_type": 42
+      },
+      {
+        "cloudyu_type": 12,
+        "dims": [
+          2048,
+          4096,
+          256
+        ],
+        "name": "blk.0.ffn_down_exps.weight",
+        "native_type": 39
+      },
+      {
+        "cloudyu_type": 8,
+        "dims": [
+          2048,
+          4096
+        ],
+        "name": "blk.0.ffn_down_shexp.weight",
+        "native_type": 42
+      },
+      {
+        "cloudyu_type": 12,
+        "dims": [
+          4096,
+          2048,
+          256
+        ],
+        "name": "blk.0.ffn_gate_exps.weight",
+        "native_type": 39
+      },
+      {
+        "cloudyu_type": 1,
+        "dims": [
+          4096,
+          256
+        ],
+        "name": "blk.0.ffn_gate_inp.weight",
+        "native_type": 0
+      },
+      {
+        "cloudyu_type": 8,
+        "dims": [
+          4096,
+          2048
+        ],
+        "name": "blk.0.ffn_gate_shexp.weight",
+        "native_type": 42
+      },
+      {
+        "cloudyu_type": 12,
+        "dims": [
+          4096,
+          2048,
+          256
+        ],
+        "name": "blk.0.ffn_up_exps.weight",
+        "native_type": 39
+      },
+      {
+        "cloudyu_type": 8,
+        "dims": [
+          4096,
+          2048
+        ],
+        "name": "blk.0.ffn_up_shexp.weight",
+        "native_type": 42
+      },
+      {
+        "cloudyu_type": 8,
+        "dims": [
+          4096,
+          8192
+        ],
+        "name": "blk.1.attn_output_a.weight",
+        "native_type": 42
+      }
+    ]
+  },
+  "source_audit_summary": {
+    "alias_layer": "Existing default-off aliases cover hc/output_hc, .weight suffixes, attn_kv_latent->attn_kv, compressor names, exp_probs_b.bias, and tid2eid .weight.",
+    "moe_route": "DeepSeek4 build_moe_v4 uses ffn_gate_tid2eid if present; 4Expert has only 3 tid2eid_weight tensors, not all 43 layers, so later layers fall back to exp_probs_b bias/topk route.",
+    "tokenizer": "4Expert tokenizer is bpe with joyai-llm pre and token_type zeros; native is gpt2. The token_type workaround fixes empty pieces but not semantic correctness.",
+    "known_good_reference": "There is no known-good vendor/HF runtime output for this exact 4Expert GGUF in the current workspace, so layer/logit parity cannot be judged against a trusted implementation. Native model is structurally different (expert_used_count 6 vs 4 and tensor quantization/layout differences), so native logits are not a valid exact parity oracle."
+  },
+  "root_cause_assessment": {
+    "most_likely": "model/interface or numerical compatibility mismatch after loading, not a simple missing tensor or chat-template issue",
+    "why_not_missing_tensor": "LLAMA_DUMP_UNCREATED_TENSORS follow-up showed no obvious uncreated/unused tensor lines after current aliases.",
+    "why_not_template_only": "default, deepseek, and deepseek3 templates all failed with different but clearly invalid outputs.",
+    "why_not_tokenizer_only": "token_type fix made pieces visible and native default-off regression remained correct, but 4Expert generated degenerate text.",
+    "why_not_native_parity": "native and 4Expert are not the same computation: tokenizer/pre/context/expert_used_count/types differ; exact native logits/top1 mismatch would not isolate a bug."
+  },
+  "probe_options": {
+    "not_recommended_more_template_smokes": "Already exhausted low-cost template checks; repeated prompt runs do not isolate root cause and consume strict-cold time.",
+    "possible_small_header_only": "A richer GGUF metadata/tensor naming audit can be done, but existing header evidence already shows no obvious missing tensors and many structural differences.",
+    "possible_default_off_source_probe": "A diagnostic-only route dump could record per-layer selected expert ids/tid2eid use/exp_probs path under France n1, but without a known-good reference it would only confirm behavior, not correctness. It may be useful only if the next question is whether ffn_gate_tid2eid should apply beyond the first 3 hash layers.",
+    "possible_reference_needed": "A meaningful numerical parity plan would need a trusted implementation or official expected outputs for this exact GGUF; otherwise the probe cannot distinguish bad quantized artifact from loader bug."
+  },
+  "decision": {
+    "accepted_sota_changed": false,
+    "source_edit_allowed_now": false,
+    "strict_cold_benchmark_allowed": false,
+    "continue_template_or_speed_runs": false,
+    "recommended_next": "Keep 4Expert closed for performance. If reopened, first write a narrow default-off route-dump plan focused on tid2eid/hash-layer semantics, or obtain a known-good reference output/runtime for this exact 4Expert artifact. Do not benchmark token rate before France correctness passes.",
+    "cleanup_relevance": "4Expert is a protected local candidate only if future correctness work continues; rejected IQ2_S remains the larger immediate disk cleanup question."
+  },
+  "disk_state": {
+    "free_bytes": 25749987328,
+    "free_gib": 23.981544494628906
+  }
+}
