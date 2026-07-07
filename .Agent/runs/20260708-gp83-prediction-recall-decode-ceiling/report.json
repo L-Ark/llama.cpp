@@ -1,0 +1,374 @@
+{
+  "aggregate": {
+    "current_token_rate": 1.3557528553269977,
+    "decode_ms": 390189.11,
+    "decode_runs": 529,
+    "policies": {
+      "cap1_all": {
+        "new_decode_ms": 378094.3074188196,
+        "recall": 0.12427063073075854,
+        "saved_ms": 12094.802581180438,
+        "speedup": 1.0319888513100062,
+        "token_rate": 1.3991218318291694
+      },
+      "cap2_all": {
+        "new_decode_ms": 366273.31115655345,
+        "recall": 0.2457279799944429,
+        "saved_ms": 23915.798843446508,
+        "speedup": 1.065294953563309,
+        "token_rate": 1.4442766750588973
+      },
+      "cap4_all": {
+        "new_decode_ms": 344305.4245510626,
+        "recall": 0.47144171992220063,
+        "saved_ms": 45883.685448937395,
+        "speedup": 1.133264486055556,
+        "token_rate": 1.536426562810503
+      },
+      "cap8_all": {
+        "new_decode_ms": 315003.9230210689,
+        "recall": 0.7725062517365935,
+        "saved_ms": 75185.18697893106,
+        "speedup": 1.238680160735339,
+        "token_rate": 1.6793441647538405
+      },
+      "perfect_upgate_hide": {
+        "new_decode_ms": 292862.7947631785,
+        "recall": 1.0,
+        "saved_ms": 97326.31523682147,
+        "speedup": 1.3323273456962115,
+        "token_rate": 1.806306603157879
+      }
+    },
+    "prompts": 6,
+    "required_recall_for_target_tps": 2.922016612958209,
+    "upgate_exposed_decode_fraction": 0.24943370468955803,
+    "upgate_exposed_ms": 97326.31523682147
+  },
+  "decision": "Even perfect up/gate hide cannot reach the target token rate. Prediction/prefetch is secondary and must be combined with byte reduction or a representation change.",
+  "kind": "kimi_prediction_recall_decode_ceiling",
+  "policy_source": ".Agent/runs/20260707-gp71-next-gate-prefetch-policy-bound/report.json",
+  "profile_root": ".Agent/runs/20260707-gp4-postcommit-test-n96-profile",
+  "prompts": [
+    {
+      "allhit_floor_ms": 0.561394,
+      "allhit_rows": 7,
+      "current_token_rate": 1.4391320609689058,
+      "decode_ms": 66012.01,
+      "decode_runs": 95,
+      "policies": {
+        "cap1_all": {
+          "new_decode_ms": 63883.013456192966,
+          "recall": 0.12427063073075854,
+          "saved_ms": 2128.99654380703,
+          "speedup": 1.0333264889776523,
+          "token_rate": 1.4870932797361718
+        },
+        "cap2_all": {
+          "new_decode_ms": 61802.21387159453,
+          "recall": 0.2457279799944429,
+          "saved_ms": 4209.79612840546,
+          "speedup": 1.0681172382780995,
+          "token_rate": 1.5371617624795768
+        },
+        "cap4_all": {
+          "new_decode_ms": 57935.30043138606,
+          "recall": 0.47144171992220063,
+          "saved_ms": 8076.709568613938,
+          "speedup": 1.1394091254981813,
+          "token_rate": 1.639760203064976
+        },
+        "cap8_all": {
+          "new_decode_ms": 52777.4820158312,
+          "recall": 0.7725062517365935,
+          "saved_ms": 13234.527984168797,
+          "speedup": 1.2507608828363381,
+          "token_rate": 1.8000100870955473
+        },
+        "perfect_upgate_hide": {
+          "new_decode_ms": 48880.073586,
+          "recall": 1.0,
+          "saved_ms": 17131.936414,
+          "speedup": 1.3504891698630104,
+          "token_rate": 1.9435322623411404
+        }
+      },
+      "prompt": "test_chinese_01",
+      "prompt_id": "test_chinese_01",
+      "quality": "pass",
+      "reported_token_rate": 1.44,
+      "required_recall_for_target_tps": 2.744115368160156,
+      "upgate_calls": 2661,
+      "upgate_exposed_decode_fraction": 0.25952756799861115,
+      "upgate_exposed_ms": 17131.936414,
+      "upgate_wall_sum_ms": 18625.50164899999
+    },
+    {
+      "allhit_floor_ms": 0.6875915,
+      "allhit_rows": 2,
+      "current_token_rate": 1.1352425164813313,
+      "decode_ms": 83682.56,
+      "decode_runs": 95,
+      "policies": {
+        "cap1_all": {
+          "new_decode_ms": 81204.02348318699,
+          "recall": 0.12427063073075854,
+          "saved_ms": 2478.536516813004,
+          "speedup": 1.0305223363387428,
+          "token_rate": 1.1698927703954154
+        },
+        "cap2_all": {
+          "new_decode_ms": 78781.59693223811,
+          "recall": 0.2457279799944429,
+          "saved_ms": 4900.963067761879,
+          "speedup": 1.0622094912848405,
+          "token_rate": 1.2058653759165572
+        },
+        "cap4_all": {
+          "new_decode_ms": 74279.81124508369,
+          "recall": 0.47144171992220063,
+          "saved_ms": 9402.748754916298,
+          "speedup": 1.1265855230015631,
+          "token_rate": 1.2789477841637313
+        },
+        "cap8_all": {
+          "new_decode_ms": 68275.17900308696,
+          "recall": 0.7725062517365935,
+          "saved_ms": 15407.380996913034,
+          "speedup": 1.2256659187406365,
+          "token_rate": 1.3914280619565234
+        },
+        "perfect_upgate_hide": {
+          "new_decode_ms": 63737.891639999994,
+          "recall": 1.0,
+          "saved_ms": 19944.668360000003,
+          "speedup": 1.3129169768063575,
+          "token_rate": 1.490479172680711
+        }
+      },
+      "prompt": "test_coding_01",
+      "prompt_id": "test_coding_01",
+      "quality": "pass",
+      "reported_token_rate": 1.14,
+      "required_recall_for_target_tps": 3.2431003029222585,
+      "upgate_calls": 2661,
+      "upgate_exposed_decode_fraction": 0.2383372157830736,
+      "upgate_exposed_ms": 19944.668360000003,
+      "upgate_wall_sum_ms": 21774.34636700001
+    },
+    {
+      "allhit_floor_ms": 0.744211,
+      "allhit_rows": 6,
+      "current_token_rate": 1.476710870581681,
+      "decode_ms": 64332.16,
+      "decode_runs": 95,
+      "policies": {
+        "cap1_all": {
+          "new_decode_ms": 62356.02234656606,
+          "recall": 0.12427063073075854,
+          "saved_ms": 1976.1376534339431,
+          "speedup": 1.0316912076663718,
+          "token_rate": 1.5235096214444737
+        },
+        "cap2_all": {
+          "new_decode_ms": 60424.62117997621,
+          "recall": 0.2457279799944429,
+          "saved_ms": 3907.5388200237976,
+          "speedup": 1.0646679903608347,
+          "token_rate": 1.572206794926197
+        },
+        "cap4_all": {
+          "new_decode_ms": 56835.34656419816,
+          "recall": 0.47144171992220063,
+          "saved_ms": 7496.8134358018415,
+          "speedup": 1.1319040683130848,
+          "token_rate": 1.671495042133562
+        },
+        "cap8_all": {
+          "new_decode_ms": 52047.85209399727,
+          "recall": 0.7725062517365935,
+          "saved_ms": 12284.307906002728,
+          "speedup": 1.2360194976695205,
+          "token_rate": 1.8252434284594896
+        },
+        "perfect_upgate_hide": {
+          "new_decode_ms": 48430.27198499998,
+          "recall": 1.0,
+          "saved_ms": 15901.888015000026,
+          "speedup": 1.3283460398472513,
+          "token_rate": 1.961583036936563
+        }
+      },
+      "prompt": "test_english_factual_01",
+      "prompt_id": "test_english_factual_01",
+      "quality": "pass",
+      "reported_token_rate": 1.48,
+      "required_recall_for_target_tps": 2.8507407395422995,
+      "upgate_calls": 2661,
+      "upgate_exposed_decode_fraction": 0.24718411467919038,
+      "upgate_exposed_ms": 15901.888015000026,
+      "upgate_wall_sum_ms": 17881.799962999987
+    },
+    {
+      "allhit_floor_ms": 0.7336982857142856,
+      "allhit_rows": 7,
+      "current_token_rate": 1.491919746779953,
+      "decode_ms": 63006.07,
+      "decode_runs": 94,
+      "policies": {
+        "cap1_all": {
+          "new_decode_ms": 61076.37069152923,
+          "recall": 0.12427063073075854,
+          "saved_ms": 1929.6993084707747,
+          "speedup": 1.031594858807457,
+          "token_rate": 1.5390567405315227
+        },
+        "cap2_all": {
+          "new_decode_ms": 59190.3565826074,
+          "recall": 0.2457279799944429,
+          "saved_ms": 3815.713417392602,
+          "speedup": 1.06446511961906,
+          "token_rate": 1.5880965317181603
+        },
+        "cap4_all": {
+          "new_decode_ms": 55685.42830398122,
+          "recall": 0.47144171992220063,
+          "saved_ms": 7320.641696018775,
+          "speedup": 1.131464225363521,
+          "token_rate": 1.68805382059492
+        },
+        "cap8_all": {
+          "new_decode_ms": 51010.43779792986,
+          "recall": 0.7725062517365935,
+          "saved_ms": 11995.632202070141,
+          "speedup": 1.23516034599799,
+          "token_rate": 1.8427601106339606
+        },
+        "perfect_upgate_hide": {
+          "new_decode_ms": 47477.86919242858,
+          "recall": 1.0,
+          "saved_ms": 15528.20080757142,
+          "speedup": 1.3270618726513477,
+          "token_rate": 1.9798698130073291
+        }
+      },
+      "prompt": "test_english_factual_02",
+      "prompt_id": "test_english_factual_02",
+      "quality": "pass",
+      "reported_token_rate": 1.49,
+      "required_recall_for_target_tps": 2.84682498299774,
+      "upgate_calls": 2633,
+      "upgate_exposed_decode_fraction": 0.24645563209340657,
+      "upgate_exposed_ms": 15528.20080757142,
+      "upgate_wall_sum_ms": 17459.828772
+    },
+    {
+      "allhit_floor_ms": 0.6234023750000001,
+      "allhit_rows": 8,
+      "current_token_rate": 1.33083938701818,
+      "decode_ms": 71383.52,
+      "decode_runs": 95,
+      "policies": {
+        "cap1_all": {
+          "new_decode_ms": 69093.16786388731,
+          "recall": 0.12427063073075854,
+          "saved_ms": 2290.352136112688,
+          "speedup": 1.033148749824652,
+          "token_rate": 1.374955048915239
+        },
+        "cap2_all": {
+          "new_decode_ms": 66854.66551062123,
+          "recall": 0.2457279799944429,
+          "saved_ms": 4528.854489378778,
+          "speedup": 1.0677417866769414,
+          "token_rate": 1.420992824874837
+        },
+        "cap4_all": {
+          "new_decode_ms": 62694.68061834556,
+          "recall": 0.47144171992220063,
+          "saved_ms": 8688.839381654445,
+          "speedup": 1.1385897383311965,
+          "token_rate": 1.5152800694258795
+        },
+        "cap8_all": {
+          "new_decode_ms": 57145.95370278972,
+          "recall": 0.7725062517365935,
+          "saved_ms": 14237.56629721029,
+          "speedup": 1.2491439091428664,
+          "token_rate": 1.6624099143411855
+        },
+        "perfect_upgate_hide": {
+          "new_decode_ms": 52953.162620749994,
+          "recall": 1.0,
+          "saved_ms": 18430.357379250006,
+          "speedup": 1.348050172399485,
+          "token_rate": 1.7940382651058828
+        }
+      },
+      "prompt": "test_mixed_instruction_01",
+      "prompt_id": "test_mixed_instruction_01",
+      "quality": "pass",
+      "reported_token_rate": 1.33,
+      "required_recall_for_target_tps": 2.842241141725037,
+      "upgate_calls": 2661,
+      "upgate_exposed_decode_fraction": 0.258187847548706,
+      "upgate_exposed_ms": 18430.357379250006,
+      "upgate_wall_sum_ms": 20088.938228000003
+    },
+    {
+      "allhit_floor_ms": 0.53811,
+      "allhit_rows": 2,
+      "current_token_rate": 1.3166465538930965,
+      "decode_ms": 41772.79,
+      "decode_runs": 55,
+      "policies": {
+        "cap1_all": {
+          "new_decode_ms": 40481.709577457004,
+          "recall": 0.12427063073075854,
+          "saved_ms": 1291.0804225429983,
+          "speedup": 1.0318929322901411,
+          "token_rate": 1.3586382732864568
+        },
+        "cap2_all": {
+          "new_decode_ms": 39219.85707951601,
+          "recall": 0.2457279799944429,
+          "saved_ms": 2552.932920483989,
+          "speedup": 1.0650928664861798,
+          "token_rate": 1.4023508522351484
+        },
+        "cap4_all": {
+          "new_decode_ms": 36874.85738806791,
+          "recall": 0.47144171992220063,
+          "saved_ms": 4897.932611932091,
+          "speedup": 1.1328258048671662,
+          "token_rate": 1.4915311921395278
+        },
+        "cap8_all": {
+          "new_decode_ms": 33747.01840743394,
+          "recall": 0.7725062517365935,
+          "saved_ms": 8025.771592566061,
+          "speedup": 1.2378216497727133,
+          "token_rate": 1.6297736095075102
+        },
+        "perfect_upgate_hide": {
+          "new_decode_ms": 31383.525738999997,
+          "recall": 1.0,
+          "saved_ms": 10389.264261000002,
+          "speedup": 1.3310419723839175,
+          "token_rate": 1.7525118260263552
+        }
+      },
+      "prompt": "test_reasoning_math_01",
+      "prompt_id": "test_reasoning_math_01",
+      "quality": "pass",
+      "reported_token_rate": 1.32,
+      "required_recall_for_target_tps": 2.9619797154950813,
+      "upgate_calls": 1541,
+      "upgate_exposed_decode_fraction": 0.24870889066782473,
+      "upgate_exposed_ms": 10389.264261000002,
+      "upgate_wall_sum_ms": 11218.448804999982
+    }
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_prediction_recall_decode_ceiling.py --profile-root .Agent/runs/20260707-gp4-postcommit-test-n96-profile --policy-json .Agent/runs/20260707-gp71-next-gate-prefetch-policy-bound/report.json --out-json .Agent/runs/20260708-gp83-prediction-recall-decode-ceiling/report.json --out-md .Agent/runs/20260708-gp83-prediction-recall-decode-ceiling/report.md --target-tps 5.0",
+  "target_tps": 5.0
+}

@@ -1914,6 +1914,91 @@ python3 .Agent/run-tools/kimi_partial_exact_contribution_oracle.py \
   --torch-threads 8
 ```
 
+## Phase 5F: Prediction-Recall Decode Ceiling
+
+Goal:
+
+- Quantify whether a stronger speculative/predicted-route path could be a
+  primary route to `5 tok/s`, or only a secondary bandwidth-exposure mechanism.
+- This follows GP75, GP71, and GP82:
+  - scheduling exact current bytes alone caps around `2.18 tok/s`;
+  - bounded next-gate prediction had low recall at low false bytes;
+  - partial-exact topK retention fails even as an oracle.
+
+Scope:
+
+- Offline bound only.
+- Use the accepted GP4 held-out SOTA profile only as a target-gap measurement,
+  not to select prompt-specific experts or tune a runtime predictor.
+- No runtime behavior change and no SOTA claim.
+
+Method:
+
+- Parse each prompt's decode `up-gate-profile.csv`.
+- Estimate the all-hit up/gate floor from rows with zero up and gate misses.
+- Compute exposed up/gate wall:
+  `sum(max(0, wall_ms - all_hit_floor_ms))`.
+- Combine this with GP71 next-gate prediction recall policies:
+  - `cap1_all`;
+  - `cap2_all`;
+  - `cap4_all`;
+  - `cap8_all`;
+  - `perfect_upgate_hide`.
+- Optimistic ceiling:
+  `new_decode_ms = decode_ms - recall * exposed_upgate_wall_ms`.
+- Report the token rate for each recall level and the recall required for
+  `5 tok/s`.
+
+Interpretation rule:
+
+- If even perfect up/gate hide cannot approach `5 tok/s`, then route
+  prediction/prefetch must remain secondary and must be combined with a
+  byte-reduction or representation change.
+- If the bound is surprisingly high, design a default-off predictor that uses
+  dev prompts only and validates on held-out before any SOTA claim.
+
+GP83 result on 2026-07-08:
+
+- Code:
+  - `.Agent/run-tools/kimi_prediction_recall_decode_ceiling.py`
+- Report:
+  - `.Agent/runs/20260708-gp83-prediction-recall-decode-ceiling/report.md`
+  - `.Agent/runs/20260708-gp83-prediction-recall-decode-ceiling/report.json`
+- Input:
+  - accepted GP4 held-out SOTA profile root:
+    `.Agent/runs/20260707-gp4-postcommit-test-n96-profile`
+  - GP71 next-gate recall policies:
+    `.Agent/runs/20260707-gp71-next-gate-prefetch-policy-bound/report.json`
+  - no runtime changes and no SOTA claim.
+- Result:
+  - current aggregate token rate in this decode-only calculation:
+    `1.356 tok/s`;
+  - exposed up/gate wall fraction: `0.249` of decode wall;
+  - required up/gate hide recall for `5 tok/s`: `2.922`, which is impossible;
+  - GP71 policy ceilings:
+    - `cap1_all` recall `0.1243` -> `1.399 tok/s`;
+    - `cap2_all` recall `0.2457` -> `1.444 tok/s`;
+    - `cap4_all` recall `0.4714` -> `1.536 tok/s`;
+    - `cap8_all` recall `0.7725` -> `1.679 tok/s`;
+  - even `perfect_upgate_hide` reaches only `1.806 tok/s`.
+- Decision:
+  - prediction/prefetch alone cannot be a primary path to `5 tok/s`;
+  - do not implement another standalone predicted-route runtime path as the
+    next primary optimization;
+  - prediction/prefetch should only be revisited after a byte-reduced
+    representation exists, where it can help keep the reduced byte stream near
+    peak bandwidth.
+- Reproduce:
+
+```bash
+python3 .Agent/run-tools/kimi_prediction_recall_decode_ceiling.py \
+  --profile-root .Agent/runs/20260707-gp4-postcommit-test-n96-profile \
+  --policy-json .Agent/runs/20260707-gp71-next-gate-prefetch-policy-bound/report.json \
+  --out-json .Agent/runs/20260708-gp83-prediction-recall-decode-ceiling/report.json \
+  --out-md .Agent/runs/20260708-gp83-prediction-recall-decode-ceiling/report.md \
+  --target-tps 5.0
+```
+
 ## Run Discipline
 
 For every experiment:
@@ -1937,16 +2022,15 @@ Continue from Phase 5E:
    prompt-general offline gate.
 3. GP82 confirms partial-exact topK retention fails even as an oracle; active
    expert contribution energy is too distributed, especially for fused up/gate.
-4. Next direction is GP83:
-   - quantify a stronger speculative/predicted-route path only as a secondary
-     bandwidth-exposure mechanism;
-   - or design a non-expert-local representation that changes the
-     compute/storage form, because expert-local low-byte approximations have
-     failed the activation-output gate.
-5. The next screen must target global moved bytes around `0.30x-0.40x` and
+4. GP83 confirms prediction/prefetch alone cannot reach `5 tok/s`; even
+   perfect up/gate hide reaches only `1.806 tok/s`.
+5. Next primary direction must be a non-expert-local byte-reduced
+   representation or compute/storage-form change. Prediction/prefetch is
+   secondary after bytes are reduced.
+6. The next screen must target global moved bytes around `0.30x-0.40x` and
    fused up/gate mean rel L2 close to the quality gate before any runtime
    kernel is written.
-6. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+7. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
    gains can regress held-out performance severely.
 
 Rationale:
