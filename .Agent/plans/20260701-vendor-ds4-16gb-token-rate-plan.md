@@ -201,6 +201,18 @@
 5. 只有 GPU path 正确并在 prompt set 上减 fallback 后，才做 W4 的 cache/pack/grouped dispatch。
 6. 暂不优先做 MTP/spec decode、KV cache、TP/DP、allreduce、prompt-specific pack，除非 up/down fallback 已被压下且 prompt-set baseline 证明收益泛化。
 
+
+## 2026-07-08 当前 HEAD correctness 继承与 compact target 审计
+
+- `current_head_after_demo`: `139085ee7bc842eb1a8656fe62f9fcd6826e308b` (`vendor-ds4: rewrite generalized sota demo`)。
+- `down_q80_correctness_status`: 当前 HEAD 继承已验证的 down Q8_0 lane8/shared correctness。最近一次完整 correctness artifact 是 `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-after-demo-down-q80-lane8-shared-correctness-20260708.json`，结果为 `same_top1=145/145`、`first_mismatch_pos=-1`、`max_abs_top2_logit_diff=0.0`，full-down path `batch_accept=5800, batch_decline=0`，两侧均 `memory_peak_bytes=16000000000` 且 `ram_ok=true`。
+- `inheritance_reason`: 从该 correctness 源码点 `d5ce9ecb0` 到当前 HEAD 的 diff 只包含 plan、实验记录、guarded compact runner 和 demo 脚本；没有 `ggml/`、`src/`、`include/`、`common/`、`examples/` 或 build 配置计算源码变更。因此当前 HEAD 的计算路径继承该 down correctness 证据，但它仍不是性能 SOTA，因为 naive full-down GPU path 比 CPU fallback 慢。
+- `inheritance_artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/0xsero-header-inventory-and-current-head-correctness-inheritance-20260708.json`。
+- `0xsero_header_inventory`: 对 cleanup-gated compact candidate `0xSero/DeepSeek-V4-Flash-162B-GGUF` / `DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf` 的 16MiB header 做了非破坏性 inventory。Header 显示 `architecture=deepseek4`、`block_count=43`、`expert_count=144`、`expert_used_count=6`、`n_tensors=1328`。
+- `0xsero_expert_coverage`: expert roles 覆盖完整：`ffn_gate_exps=43` tensors (`IQ2_XXS`)、`ffn_up_exps=43` tensors (`IQ2_XXS`)、`ffn_down_exps=43` tensors (`Q2_K`)。总体 type counts: `IQ2_XXS=86`、`Q2_K=43`、`Q8_0=345`、`F16=359`、`F32=492`、`I32=3`。
+- `0xsero_risk`: 该候选是 144-expert / Q2_K+IQ2_XXS compact representation，不是当前 native FP4/FP8 SOTA 模型。通用 CUDA 有 Q2_K/IQ2_XXS 支持，但 DS4 MoE stream fast path 未证明覆盖该组合；完整 load/generation correctness 和 token rate 都还未验证。
+- `next_action`: 在用户明确允许删除 rejected IQ2_S 文件释放空间之前，不执行 destructive cleanup 或完整下载。若允许，使用 `.Agent/run-tools/run_compact_target_after_cleanup.sh --execute-download --confirm-delete-rejected-iq2s` 做严格 16GB load/correctness smoke。该步骤仅是候选可行性验证；只有在泛化 dev set 提升、RAM/TTFT/correctness 通过，并最终冻结后跑 held-out test，才可能成为 accepted generalized SOTA。
+
 ## 二次回退状态（2026-07-02）
 
 - 已执行回退：当前源码分支重置到 `5d65239a74c9512967eb557743dc3cb5d1cf6c76`（`vendor-ds4: record odirect pack sota`）。

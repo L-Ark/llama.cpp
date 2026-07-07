@@ -1,0 +1,1033 @@
+{
+  "artifact_id": "0xsero-header-inventory-and-current-head-correctness-inheritance-20260708",
+  "source_head": "139085ee7bc842eb1a8656fe62f9fcd6826e308b",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "purpose": "Non-destructive progress after down GPU correctness: inventory the 0xSero compact candidate header and prove latest HEAD only adds docs/scripts/records over the last down-correctness source.",
+  "held_out_test_used": false,
+  "model_header": "/root/lfz/runs/vendor-ds4-16gb/hf-header-probes-20260708/0xsero-spark-mini-q2.head16m",
+  "gguf": {
+    "architecture": "deepseek4",
+    "block_count": 43,
+    "expert_count": 144,
+    "expert_used_count": 6,
+    "n_tensors": 1328,
+    "n_kv": 58,
+    "tensor_info_end": 5333508,
+    "alignment": 32
+  },
+  "type_counts": {
+    "I32": 3,
+    "IQ2_XXS": 86,
+    "Q2_K": 43,
+    "F16": 359,
+    "F32": 492,
+    "Q8_0": 345
+  },
+  "role_counts": {
+    "ffn_gate": 46,
+    "ffn_gate_exps": 43,
+    "ffn_down_exps": 43,
+    "ffn_up_exps": 43,
+    "token_embd": 1,
+    "attention_other": 295,
+    "attn_k": 86,
+    "attn_q": 150,
+    "attn_output": 86,
+    "norm": 148,
+    "ffn_gate_inp": 43,
+    "ffn_down": 43,
+    "ffn_up": 43,
+    "other": 253,
+    "output": 5
+  },
+  "role_type_counts": {
+    "ffn_gate": {
+      "I32": 3,
+      "Q8_0": 43
+    },
+    "ffn_gate_exps": {
+      "IQ2_XXS": 43
+    },
+    "ffn_down_exps": {
+      "Q2_K": 43
+    },
+    "ffn_up_exps": {
+      "IQ2_XXS": 43
+    },
+    "token_embd": {
+      "F16": 1
+    },
+    "attention_other": {
+      "F32": 129,
+      "F16": 166
+    },
+    "attn_k": {
+      "F32": 43,
+      "Q8_0": 43
+    },
+    "attn_q": {
+      "F32": 43,
+      "Q8_0": 86,
+      "F16": 21
+    },
+    "attn_output": {
+      "Q8_0": 86
+    },
+    "norm": {
+      "F32": 148
+    },
+    "ffn_gate_inp": {
+      "F16": 43
+    },
+    "ffn_down": {
+      "Q8_0": 43
+    },
+    "ffn_up": {
+      "Q8_0": 43
+    },
+    "other": {
+      "F32": 126,
+      "F16": 127
+    },
+    "output": {
+      "F32": 3,
+      "F16": 1,
+      "Q8_0": 1
+    }
+  },
+  "layer_role_minmax": {
+    "ffn_gate": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "ffn_gate_exps": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "ffn_down_exps": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "ffn_up_exps": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "attention_other": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "attn_k": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "attn_q": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "attn_output": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "norm": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "ffn_gate_inp": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "ffn_down": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "ffn_up": {
+      "min_layer": 0,
+      "max_layer": 42
+    },
+    "other": {
+      "min_layer": 0,
+      "max_layer": 42
+    }
+  },
+  "expert_tensor_coverage": {
+    "ffn_gate_exps": {
+      "present": true,
+      "count": 43,
+      "type_counts": {
+        "IQ2_XXS": 43
+      }
+    },
+    "ffn_up_exps": {
+      "present": true,
+      "count": 43,
+      "type_counts": {
+        "IQ2_XXS": 43
+      }
+    },
+    "ffn_down_exps": {
+      "present": true,
+      "count": 43,
+      "type_counts": {
+        "Q2_K": 43
+      }
+    }
+  },
+  "expert_tensor_summary": {
+    "ffn_gate_exps": {
+      "count": 43,
+      "types": {
+        "IQ2_XXS": 43
+      },
+      "dims": {
+        "[4096, 2048, 144]": 43
+      },
+      "layer_min": 0,
+      "layer_max": 42,
+      "layer_unique": 43
+    },
+    "ffn_down_exps": {
+      "count": 43,
+      "types": {
+        "Q2_K": 43
+      },
+      "dims": {
+        "[2048, 4096, 144]": 43
+      },
+      "layer_min": 0,
+      "layer_max": 42,
+      "layer_unique": 43
+    },
+    "ffn_up_exps": {
+      "count": 43,
+      "types": {
+        "IQ2_XXS": 43
+      },
+      "dims": {
+        "[4096, 2048, 144]": 43
+      },
+      "layer_min": 0,
+      "layer_max": 42,
+      "layer_unique": 43
+    }
+  },
+  "examples_by_role": {
+    "ffn_gate": [
+      {
+        "name": "blk.0.ffn_gate_tid2eid.weight",
+        "dims": [
+          6,
+          129280
+        ],
+        "type": "I32",
+        "offset": 0
+      },
+      {
+        "name": "blk.1.ffn_gate_tid2eid.weight",
+        "dims": [
+          6,
+          129280
+        ],
+        "type": "I32",
+        "offset": 3102720
+      },
+      {
+        "name": "blk.2.ffn_gate_tid2eid.weight",
+        "dims": [
+          6,
+          129280
+        ],
+        "type": "I32",
+        "offset": 6205440
+      },
+      {
+        "name": "blk.0.ffn_gate_shexp.weight",
+        "dims": [
+          4096,
+          2048
+        ],
+        "type": "Q8_0",
+        "offset": 45009494272
+      },
+      {
+        "name": "blk.1.ffn_gate_shexp.weight",
+        "dims": [
+          4096,
+          2048
+        ],
+        "type": "Q8_0",
+        "offset": 45152664320
+      },
+      {
+        "name": "blk.2.ffn_gate_shexp.weight",
+        "dims": [
+          4096,
+          2048
+        ],
+        "type": "Q8_0",
+        "offset": 45334120192
+      }
+    ],
+    "ffn_gate_exps": [
+      {
+        "name": "blk.0.ffn_gate_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 9308160
+      },
+      {
+        "name": "blk.1.ffn_gate_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 1028524032
+      },
+      {
+        "name": "blk.2.ffn_gate_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 2047739904
+      },
+      {
+        "name": "blk.3.ffn_gate_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 3066955776
+      },
+      {
+        "name": "blk.4.ffn_gate_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 4086171648
+      },
+      {
+        "name": "blk.5.ffn_gate_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 5105387520
+      }
+    ],
+    "ffn_down_exps": [
+      {
+        "name": "blk.0.ffn_down_exps.weight",
+        "dims": [
+          2048,
+          4096,
+          144
+        ],
+        "type": "Q2_K",
+        "offset": 320735232
+      },
+      {
+        "name": "blk.1.ffn_down_exps.weight",
+        "dims": [
+          2048,
+          4096,
+          144
+        ],
+        "type": "Q2_K",
+        "offset": 1339951104
+      },
+      {
+        "name": "blk.2.ffn_down_exps.weight",
+        "dims": [
+          2048,
+          4096,
+          144
+        ],
+        "type": "Q2_K",
+        "offset": 2359166976
+      },
+      {
+        "name": "blk.3.ffn_down_exps.weight",
+        "dims": [
+          2048,
+          4096,
+          144
+        ],
+        "type": "Q2_K",
+        "offset": 3378382848
+      },
+      {
+        "name": "blk.4.ffn_down_exps.weight",
+        "dims": [
+          2048,
+          4096,
+          144
+        ],
+        "type": "Q2_K",
+        "offset": 4397598720
+      },
+      {
+        "name": "blk.5.ffn_down_exps.weight",
+        "dims": [
+          2048,
+          4096,
+          144
+        ],
+        "type": "Q2_K",
+        "offset": 5416814592
+      }
+    ],
+    "ffn_up_exps": [
+      {
+        "name": "blk.0.ffn_up_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 717096960
+      },
+      {
+        "name": "blk.1.ffn_up_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 1736312832
+      },
+      {
+        "name": "blk.2.ffn_up_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 2755528704
+      },
+      {
+        "name": "blk.3.ffn_up_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 3774744576
+      },
+      {
+        "name": "blk.4.ffn_up_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 4793960448
+      },
+      {
+        "name": "blk.5.ffn_up_exps.weight",
+        "dims": [
+          4096,
+          2048,
+          144
+        ],
+        "type": "IQ2_XXS",
+        "offset": 5813176320
+      }
+    ],
+    "token_embd": [
+      {
+        "name": "token_embd.weight",
+        "dims": [
+          4096,
+          129280
+        ],
+        "type": "F16",
+        "offset": 43835590656
+      }
+    ],
+    "attention_other": [
+      {
+        "name": "blk.0.attn_sinks.weight",
+        "dims": [
+          64
+        ],
+        "type": "F32",
+        "offset": 44894652416
+      },
+      {
+        "name": "blk.0.hc_attn_base.weight",
+        "dims": [
+          24
+        ],
+        "type": "F32",
+        "offset": 45036249344
+      },
+      {
+        "name": "blk.0.hc_attn_fn.weight",
+        "dims": [
+          16384,
+          24
+        ],
+        "type": "F16",
+        "offset": 45036249440
+      },
+      {
+        "name": "blk.0.hc_attn_scale.weight",
+        "dims": [
+          3
+        ],
+        "type": "F32",
+        "offset": 45037035872
+      },
+      {
+        "name": "blk.1.attn_sinks.weight",
+        "dims": [
+          64
+        ],
+        "type": "F32",
+        "offset": 45037822464
+      },
+      {
+        "name": "blk.1.hc_attn_base.weight",
+        "dims": [
+          24
+        ],
+        "type": "F32",
+        "offset": 45179419392
+      }
+    ],
+    "attn_k": [
+      {
+        "name": "blk.0.attn_kv_a_norm.weight",
+        "dims": [
+          512
+        ],
+        "type": "F32",
+        "offset": 44894652672
+      },
+      {
+        "name": "blk.0.attn_kv.weight",
+        "dims": [
+          4096,
+          512
+        ],
+        "type": "Q8_0",
+        "offset": 44894658816
+      },
+      {
+        "name": "blk.1.attn_kv_a_norm.weight",
+        "dims": [
+          512
+        ],
+        "type": "F32",
+        "offset": 45037822720
+      },
+      {
+        "name": "blk.1.attn_kv.weight",
+        "dims": [
+          4096,
+          512
+        ],
+        "type": "Q8_0",
+        "offset": 45037828864
+      },
+      {
+        "name": "blk.2.attn_kv_a_norm.weight",
+        "dims": [
+          512
+        ],
+        "type": "F32",
+        "offset": 45219278592
+      },
+      {
+        "name": "blk.2.attn_kv.weight",
+        "dims": [
+          4096,
+          512
+        ],
+        "type": "Q8_0",
+        "offset": 45219284736
+      }
+    ],
+    "attn_q": [
+      {
+        "name": "blk.0.attn_q_a_norm.weight",
+        "dims": [
+          1024
+        ],
+        "type": "F32",
+        "offset": 44894654720
+      },
+      {
+        "name": "blk.0.attn_q_a.weight",
+        "dims": [
+          4096,
+          1024
+        ],
+        "type": "Q8_0",
+        "offset": 44968190208
+      },
+      {
+        "name": "blk.0.attn_q_b.weight",
+        "dims": [
+          1024,
+          32768
+        ],
+        "type": "Q8_0",
+        "offset": 44972646656
+      },
+      {
+        "name": "blk.1.attn_q_a_norm.weight",
+        "dims": [
+          1024
+        ],
+        "type": "F32",
+        "offset": 45037824768
+      },
+      {
+        "name": "blk.1.attn_q_a.weight",
+        "dims": [
+          4096,
+          1024
+        ],
+        "type": "Q8_0",
+        "offset": 45111360256
+      },
+      {
+        "name": "blk.1.attn_q_b.weight",
+        "dims": [
+          1024,
+          32768
+        ],
+        "type": "Q8_0",
+        "offset": 45115816704
+      }
+    ],
+    "attn_output": [
+      {
+        "name": "blk.0.attn_output_a.weight",
+        "dims": [
+          4096,
+          8192
+        ],
+        "type": "Q8_0",
+        "offset": 44896887040
+      },
+      {
+        "name": "blk.0.attn_output_b.weight",
+        "dims": [
+          8192,
+          4096
+        ],
+        "type": "Q8_0",
+        "offset": 44932538624
+      },
+      {
+        "name": "blk.1.attn_output_a.weight",
+        "dims": [
+          4096,
+          8192
+        ],
+        "type": "Q8_0",
+        "offset": 45040057088
+      },
+      {
+        "name": "blk.1.attn_output_b.weight",
+        "dims": [
+          8192,
+          4096
+        ],
+        "type": "Q8_0",
+        "offset": 45075708672
+      },
+      {
+        "name": "blk.2.attn_output_a.weight",
+        "dims": [
+          4096,
+          8192
+        ],
+        "type": "Q8_0",
+        "offset": 45221512960
+      },
+      {
+        "name": "blk.2.attn_output_b.weight",
+        "dims": [
+          8192,
+          4096
+        ],
+        "type": "Q8_0",
+        "offset": 45257164544
+      }
+    ],
+    "norm": [
+      {
+        "name": "blk.0.attn_norm.weight",
+        "dims": [
+          4096
+        ],
+        "type": "F32",
+        "offset": 45008298240
+      },
+      {
+        "name": "blk.0.ffn_norm.weight",
+        "dims": [
+          4096
+        ],
+        "type": "F32",
+        "offset": 45036232960
+      },
+      {
+        "name": "blk.1.attn_norm.weight",
+        "dims": [
+          4096
+        ],
+        "type": "F32",
+        "offset": 45151468288
+      },
+      {
+        "name": "blk.1.ffn_norm.weight",
+        "dims": [
+          4096
+        ],
+        "type": "F32",
+        "offset": 45179403008
+      },
+      {
+        "name": "blk.2.attn_compressor_norm.weight",
+        "dims": [
+          512
+        ],
+        "type": "F32",
+        "offset": 45181000960
+      },
+      {
+        "name": "blk.2.indexer_compressor_norm.weight",
+        "dims": [
+          128
+        ],
+        "type": "F32",
+        "offset": 45197782272
+      }
+    ],
+    "ffn_gate_inp": [
+      {
+        "name": "blk.0.ffn_gate_inp.weight",
+        "dims": [
+          4096,
+          144
+        ],
+        "type": "F16",
+        "offset": 45008314624
+      },
+      {
+        "name": "blk.1.ffn_gate_inp.weight",
+        "dims": [
+          4096,
+          144
+        ],
+        "type": "F16",
+        "offset": 45151484672
+      },
+      {
+        "name": "blk.2.ffn_gate_inp.weight",
+        "dims": [
+          4096,
+          144
+        ],
+        "type": "F16",
+        "offset": 45332940544
+      },
+      {
+        "name": "blk.3.ffn_gate_inp.weight",
+        "dims": [
+          4096,
+          144
+        ],
+        "type": "F16",
+        "offset": 45484632896
+      },
+      {
+        "name": "blk.4.ffn_gate_inp.weight",
+        "dims": [
+          4096,
+          144
+        ],
+        "type": "F16",
+        "offset": 45666089344
+      },
+      {
+        "name": "blk.5.ffn_gate_inp.weight",
+        "dims": [
+          4096,
+          144
+        ],
+        "type": "F16",
+        "offset": 45817781696
+      }
+    ],
+    "ffn_down": [
+      {
+        "name": "blk.0.ffn_down_shexp.weight",
+        "dims": [
+          2048,
+          4096
+        ],
+        "type": "Q8_0",
+        "offset": 45018407168
+      },
+      {
+        "name": "blk.1.ffn_down_shexp.weight",
+        "dims": [
+          2048,
+          4096
+        ],
+        "type": "Q8_0",
+        "offset": 45161577216
+      },
+      {
+        "name": "blk.2.ffn_down_shexp.weight",
+        "dims": [
+          2048,
+          4096
+        ],
+        "type": "Q8_0",
+        "offset": 45343033088
+      },
+      {
+        "name": "blk.3.ffn_down_shexp.weight",
+        "dims": [
+          2048,
+          4096
+        ],
+        "type": "Q8_0",
+        "offset": 45494725440
+      },
+      {
+        "name": "blk.4.ffn_down_shexp.weight",
+        "dims": [
+          2048,
+          4096
+        ],
+        "type": "Q8_0",
+        "offset": 45676181888
+      },
+      {
+        "name": "blk.5.ffn_down_shexp.weight",
+        "dims": [
+          2048,
+          4096
+        ],
+        "type": "Q8_0",
+        "offset": 45827874240
+      }
+    ],
+    "ffn_up": [
+      {
+        "name": "blk.0.ffn_up_shexp.weight",
+        "dims": [
+          4096,
+          2048
+        ],
+        "type": "Q8_0",
+        "offset": 45027320064
+      },
+      {
+        "name": "blk.1.ffn_up_shexp.weight",
+        "dims": [
+          4096,
+          2048
+        ],
+        "type": "Q8_0",
+        "offset": 45170490112
+      },
+      {
+        "name": "blk.2.ffn_up_shexp.weight",
+        "dims": [
+          4096,
+          2048
+        ],
+        "type": "Q8_0",
+        "offset": 45351945984
+      },
+      {
+        "name": "blk.3.ffn_up_shexp.weight",
+        "dims": [
+          4096,
+          2048
+        ],
+        "type": "Q8_0",
+        "offset": 45503638336
+      },
+      {
+        "name": "blk.4.ffn_up_shexp.weight",
+        "dims": [
+          4096,
+          2048
+        ],
+        "type": "Q8_0",
+        "offset": 45685094784
+      },
+      {
+        "name": "blk.5.ffn_up_shexp.weight",
+        "dims": [
+          4096,
+          2048
+        ],
+        "type": "Q8_0",
+        "offset": 45836787136
+      }
+    ],
+    "other": [
+      {
+        "name": "blk.0.hc_ffn_base.weight",
+        "dims": [
+          24
+        ],
+        "type": "F32",
+        "offset": 45037035904
+      },
+      {
+        "name": "blk.0.hc_ffn_fn.weight",
+        "dims": [
+          16384,
+          24
+        ],
+        "type": "F16",
+        "offset": 45037036000
+      },
+      {
+        "name": "blk.0.hc_ffn_scale.weight",
+        "dims": [
+          3
+        ],
+        "type": "F32",
+        "offset": 45037822432
+      },
+      {
+        "name": "blk.1.hc_ffn_base.weight",
+        "dims": [
+          24
+        ],
+        "type": "F32",
+        "offset": 45180205952
+      },
+      {
+        "name": "blk.1.hc_ffn_fn.weight",
+        "dims": [
+          16384,
+          24
+        ],
+        "type": "F16",
+        "offset": 45180206048
+      },
+      {
+        "name": "blk.1.hc_ffn_scale.weight",
+        "dims": [
+          3
+        ],
+        "type": "F32",
+        "offset": 45180992480
+      }
+    ],
+    "output": [
+      {
+        "name": "output_hc_base.weight",
+        "dims": [
+          4
+        ],
+        "type": "F32",
+        "offset": 52025424384
+      },
+      {
+        "name": "output_hc_fn.weight",
+        "dims": [
+          16384,
+          4
+        ],
+        "type": "F16",
+        "offset": 52025424416
+      },
+      {
+        "name": "output_hc_scale.weight",
+        "dims": [
+          1
+        ],
+        "type": "F32",
+        "offset": 52025555488
+      },
+      {
+        "name": "output.weight",
+        "dims": [
+          4096,
+          129280
+        ],
+        "type": "Q8_0",
+        "offset": 52025555520
+      },
+      {
+        "name": "output_norm.weight",
+        "dims": [
+          4096
+        ],
+        "type": "F32",
+        "offset": 52588182080
+      }
+    ]
+  },
+  "loader_risk": [
+    "Header names include DeepSeek4 expert roles and metadata expert_count=144, expert_used_count=6; loader uses metadata n_expert rather than a hard-coded 256 in tensor shape setup.",
+    "Expert tensor quantization is Q2_K/IQ2_XXS/Q8_0 family, not native FP4/FP8 layout; generic CUDA has Q2_K/IQ2_XXS support, but DS4 MoE stream fast paths may not cover these roles without falling back.",
+    "Header inventory is not a correctness or speed proof; complete file download and strict load/generation smoke are still required before any promotion."
+  ],
+  "down_correctness_inheritance": {
+    "previous_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/latest-head-after-demo-down-q80-lane8-shared-correctness-20260708.json",
+    "previous_source_commit": "d5ce9ecb01f45650b125a18ac800b45c91531297",
+    "previous_decision": "pass_current_pushed_head_down_gpu_q80_lane8_shared_correctness_not_sota",
+    "previous_top1_pass": true,
+    "previous_same_top1": 145,
+    "previous_n_compare": 145,
+    "previous_full_down_batch_accept_decline": [
+      5800,
+      0
+    ],
+    "previous_full_down_ram_ok": true,
+    "diff_from_previous_down_correctness_commit_to_current_head": [
+      "M\t.Agent/plans/20260701-vendor-ds4-16gb-token-rate-plan.md",
+      "A\t.Agent/run-tools/run_compact_target_after_cleanup.sh",
+      "A\t.Agent/runs/20260705-vendor-ds4-coldstart/0xsero-spark-mini-loader-support-audit-20260708.json",
+      "A\t.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-after-cleanup-dryrun-20260707T194931Z.json",
+      "A\t.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-after-cleanup-dryrun-20260707T200914Z.json",
+      "A\t.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-exact-download-manifest-refresh-0xsero-20260708.json",
+      "M\t.Agent/runs/20260705-vendor-ds4-coldstart/general-sota-demo-rewrite-validation-20260708.json",
+      "A\t.Agent/runs/20260705-vendor-ds4-coldstart/hf-deepseek-v4-flash-no-delete-candidate-refresh-20260708.json",
+      "A\t.Agent/runs/20260705-vendor-ds4-coldstart/hf-targeted-no-delete-candidate-range-refresh-20260708.json",
+      "A\t.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-after-demo-down-q80-lane8-shared-correctness-20260708.json",
+      "A\t.Agent/runs/20260705-vendor-ds4-coldstart/native-fused-resident-route-bound-after-no-delete-audit-20260708.json",
+      "A\t.Agent/runs/20260705-vendor-ds4-coldstart/no-delete-next-route-audit-after-q80-correctness-20260708.json",
+      "M\tscripts/demo-vendor-ds4-general-sota.sh"
+    ],
+    "compute_source_files_touched_since_previous_down_correctness_commit": [],
+    "inherits_down_q80_correctness_on_current_head": true,
+    "note": "No C/CUDA/model runtime source changed after the previous down correctness reverify; current HEAD only adds docs/scripts/records, so the correctness evidence applies to the same built compute code."
+  },
+  "decision": "0xSero compact route remains cleanup-gated load/correctness probe; current HEAD inherits fixed down Q8_0 correctness, but product >5 tok/s remains unsolved."
+}
