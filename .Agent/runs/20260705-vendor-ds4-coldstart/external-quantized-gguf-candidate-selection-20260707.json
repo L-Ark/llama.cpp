@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260707-external-quantized-gguf-candidate-selection",
+  "created_at_utc": "2026-07-07T00:40:22.715665Z",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "88daf81bb0f613faf61ac46ecbabcc8112993af1",
+  "git_status_before_artifact": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "purpose": "Select the next prompt-general validation entry after native sparse/dataflow routes failed hard bounds. This is not SOTA and not a source change.",
+  "task_context": "Need stable >5 tok/s for random/generalized prompts on 16GB host RAM including page cache + 32GB RTX 5090. No prompt-specific optimization. Held-out test set remains locked until candidate freeze.",
+  "local_models": {
+    "native_fp4_fp8_gguf": {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "size_bytes": 156148189760,
+      "status": "current no-prompt-specific generalized baseline 1.8-2.7 tok/s; France-specialized 4.4 invalid for generalized target"
+    },
+    "cloudyu_4expert": {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf",
+      "size_bytes": 164465760544,
+      "status": "local but correctness failed in prior France smoke; not a performance candidate until correctness root-caused"
+    },
+    "tarruda_q2k_header_shard": {
+      "path": "/root/lfz/models/_gguf_header_probe/tarruda-q2k/DeepSeek-V4-Flash-Q2_K-00001-of-00003.gguf",
+      "size_bytes": 5248448,
+      "status": "metadata/header shard only; first shard has no tensors; not runnable"
+    }
+  },
+  "disk_state": {
+    "path": "/root",
+    "total_bytes": 1065418129408,
+    "used_bytes": 951610028032,
+    "free_bytes": 113791324160
+  },
+  "selected_candidate": {
+    "repo": "bullerwins/DeepSeek-V4-Flash-GGUF",
+    "file": "DeepSeek-V4-Flash.IQ2_S.gguf",
+    "url": "https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ2_S.gguf",
+    "size_bytes_head_20260707": 88019539296,
+    "etag_head_20260707": "4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0",
+    "why_selected": "Smallest single-file prompt-general GGUF candidate seen in current metadata, small enough to fit available disk. It may reduce cold page-cache/file pressure without prompt-specific packs, but correctness/load are unknown."
+  },
+  "rejected_or_deferred_candidates": [
+    {
+      "candidate": "cloudyu 4Expert local",
+      "reason": "already local but correctness failed; do not benchmark token-rate until correctness is fixed"
+    },
+    {
+      "candidate": "tarruda split Q2_K/IQ3/Q3",
+      "reason": "split/header complexity; existing first shard metadata-only; requires multi-shard loader validation before full download"
+    },
+    {
+      "candidate": "native sparse top64-512",
+      "reason": "closed by sparse-pair generalized bound audit; zero-overhead top512 min only about 2.074 tok/s"
+    }
+  ],
+  "validation_plan": {
+    "stage_0_plan_push_required": true,
+    "stage_1_download": "Download to an isolated model directory with resumable tool; do not delete protected accepted SOTA assets; verify size and sha256/etag if practical.",
+    "stage_2_header_load_smoke": "Run a strict 16GB/no-swap n=1 or minimal load smoke using vendor llama-cli, no prompt-specific env, stdout controlled; record tensor metadata/load errors.",
+    "stage_3_france_correctness_smoke": "Only if load passes, run France calibration semantic check under MemoryMax=16000000000 including page cache; not SOTA.",
+    "stage_4_calibration_dev": "Only if France correctness passes, run calibration_dev_set_v1 no-prompt-specific metrics. Candidate must improve min/mean and stay RAM/TTFT compliant before freeze.",
+    "stage_5_held_out": "Only after candidate freeze, run held_out_test_set_v1_locked once and claim generalized result only from held-out metrics."
+  },
+  "decision": {
+    "accepted_sota_changed": false,
+    "source_edit_allowed_by_this_artifact": false,
+    "strict_cold_benchmark_allowed_now": false,
+    "next_action": "Write this plan into the main plan and push. Then, if continuing this route, start the IQ2_S download as a validation candidate, not as SOTA.",
+    "risk": "Large 88GB download may leave limited disk headroom; correctness may fail like other low-bit/4Expert candidates. Stop immediately on load/correctness failure."
+  }
+}

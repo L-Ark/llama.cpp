@@ -5241,3 +5241,21 @@
   - Payload/representation work must first prove prompt-general correctness and effective payload reduction that fits 32GB VRAM without destroying gate cache; lossy sidecar/writeback remains blocked until compare/top1 passes.
   - External quantized GGUF/model variants require a no-prompt-specific load/correctness plan, frozen candidate metadata, calibration/dev validation, then held-out only after candidate freeze.
   - Continue to push all diagnostic artifacts and plan updates to `ssd/vendor/deepseek-token-rate-16gb`; any accepted generalized SOTA must include full reproduction details and pushed-source reproduction.
+
+## 2026-07-07 Phase X5：external prompt-general quantized GGUF candidate plan
+
+- attempt_id: 20260707-external-quantized-gguf-candidate-selection
+- status: planned_before_download_or_model_run
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-quantized-gguf-candidate-selection-20260707.json`
+- why_now: Native exact/dataflow routes now have hard-bound or correctness/performance rejections: exact hotset, sparse top64-512, fused up/gate, one-stream up/down, Q8_0 full-output rowtile, q2tern/codebook sidecars, and DFlash/MTP are not currently credible generalized `>5 tok/s` paths. A prompt-general lower-bit GGUF can change cold source/page-cache pressure without prompt-specific packs, but must pass load/correctness before any performance claim.
+- selected_candidate: `bullerwins/DeepSeek-V4-Flash-GGUF` file `DeepSeek-V4-Flash.IQ2_S.gguf`; HEAD on 2026-07-07 reports `content-length=88019539296` and etag `4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0`. Current `/root` free space is about `106GB`, so this is feasible but leaves limited run headroom.
+- not_sota: This candidate is not an optimization result and not an accepted SOTA. It is a validation candidate only. No held-out prompt may be used until after load, France calibration correctness, and calibration/dev generalized validation pass and the candidate is frozen.
+- protected_assets: Do not delete accepted native GGUF, accepted SOTA run dirs, accepted packs/profiles, or pushed-source reproduction artifacts. Existing local `cloudyu` 4Expert is not a performance candidate because prior France smoke failed correctness.
+- validation_sequence:
+  - Stage 1: resumable download into isolated model directory; verify size and sha256/etag where practical; record exact URL, file size, checksum, disk state.
+  - Stage 2: strict `MemoryMax=16000000000`, `MemorySwapMax=0` load/header smoke with no prompt-specific env and stdout controlled; stop on load/tensor/type errors.
+  - Stage 3: France calibration semantic check only if load passes; record output, TTFT, eval_tok_s, prompt_tok_s, memory_peak/file bytes and page-cache accounting. Still not SOTA.
+  - Stage 4: calibration/dev prompt set only if France correctness passes; compare min/mean against no-prompt-specific generalized baseline, not France-only 4.4.
+  - Stage 5: held-out locked test set only after candidate freeze; accepted generalized SOTA must be held-out-backed, strict 16GB/page-cache, TTFT compliant, correctness pass, and immediately pushed/reproduced from pushed commit.
+- reject_rule: If load fails, correctness fails, output degenerates, RAM/page-cache exceeds 16GB, or TTFT rises beyond gate before an accepted candidate exists, record artifact/plan and stop this model route. Do not tune prompt-specific profiles or packs for this candidate.
+- push_rule: Candidate selection plan and all download/load/correctness artifacts must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Any future source changes remain default-off and must preserve Kimi functionality.
