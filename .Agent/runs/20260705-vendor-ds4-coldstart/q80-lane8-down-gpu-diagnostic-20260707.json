@@ -1,0 +1,82 @@
+{
+  "artifact_id": "20260707-q80-lane8-down-gpu-diagnostic",
+  "created_at_utc": "2026-07-07T08:40:00Z",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_base_commit": "2b01c0a41",
+  "status": "diagnostic_correctness_pass_performance_reject",
+  "scope": "Optimize the CPU-order Q8_0 MXFP4 down GPU correctness path without changing default behavior.",
+  "source_changes": [
+    "Add default-off GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1 kernel: 8 CUDA lanes compute one output column, one lane per CPU AVX accumulator lane, then reduce in hsum_float_8 order.",
+    "Add default-off GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1 option: cache the active Q8_0 row in shared memory for the block while preserving lane-order accumulation.",
+    "Keep GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1 scalar reference path unchanged."
+  ],
+  "theory": {
+    "baseline_correctness_path_problem": "The scalar CPU-order kernel is bitwise correct but one CUDA thread serially scans 2048 dimensions per output column.",
+    "lane8_expected_gain": "Parallelize the 8 independent CPU AVX accumulator lanes across 8 CUDA lanes while keeping the same per-lane FMA sequence and final hsum order.",
+    "shared_expected_gain": "Each block covers multiple output columns for the same active row, so caching the 2176-byte Q8_0 activation row in shared memory should reduce repeated global reads."
+  },
+  "strict_memory": {
+    "method": "systemd-run with MemoryMax=16000000000 and MemorySwapMax=0",
+    "result": "valid correctness/perf probes completed without host cgroup kill or OOM"
+  },
+  "validations": {
+    "lane8_blk3_compare": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T081819Z-q80-lane8-blk3-compare/blk3-report",
+      "config": "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1, GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR=blk.3.ffn_down_exps.weight, GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1, GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1",
+      "compare_records": 20,
+      "max_abs": 0.0,
+      "max_mean_abs": 0.0
+    },
+    "lane8_full_down": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T081917Z-q80-lane8-full-down-top1",
+      "top1_same": "145/145",
+      "top1_pass": true,
+      "batch_accept": 5800,
+      "batch_decline": 0,
+      "default_down_ms_per_call": 0.465,
+      "lane8_down_ms_per_call": 0.881,
+      "lane8_cuda_batch_ms_per_call": 0.558
+    },
+    "lane8_shared_blk3_compare": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T082240Z-q80-lane8-shared-blk3-compare/blk3-report",
+      "config": "lane8 plus GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1",
+      "compare_records": 20,
+      "max_abs": 0.0,
+      "max_mean_abs": 0.0
+    },
+    "lane8_shared_full_down": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T082335Z-q80-lane8-shared-full-down-top1",
+      "top1_same": "145/145",
+      "top1_pass": true,
+      "batch_accept": 5800,
+      "batch_decline": 0,
+      "default_down_ms_per_call": 0.469,
+      "lane8_shared_down_ms_per_call": 0.832,
+      "lane8_shared_cuda_batch_ms_per_call": 0.550
+    },
+    "lane8_shared256_rejected": {
+      "invalid_oom_run": "/root/lfz/runs/vendor-ds4-16gb/20260707T082559Z-q80-lane8-shared256-full-down-top1",
+      "valid_rerun": "/root/lfz/runs/vendor-ds4-16gb/20260707T083245Z-q80-lane8-shared256-full-down-top1-rerun",
+      "top1_same": "145/145",
+      "top1_pass": true,
+      "lane8_shared256_down_ms_per_call": 3.488,
+      "lane8_shared256_cuda_batch_ms_per_call": 1.821,
+      "decision": "rejected and source reverted to 128 threads"
+    }
+  },
+  "comparison_to_previous_correctness_reference": {
+    "scalar_cpuorder_full_down_ms_per_call": 0.955,
+    "scalar_cpuorder_cuda_batch_ms_per_call": 0.674,
+    "lane8_shared_full_down_ms_per_call": 0.832,
+    "lane8_shared_cuda_batch_ms_per_call": 0.550,
+    "improvement": "lane8/shared is faster than the scalar correctness reference but still slower than CPU fallback"
+  },
+  "decision": {
+    "commit_source": true,
+    "reason_to_commit": "Default-off diagnostic kernel preserves bitwise correctness and improves the correctness reference, but it does not change default/SOTA behavior.",
+    "accepted_as_token_rate_sota": false,
+    "reason_not_sota": "Full-down lane8/shared Q80 remains slower than CPU fallback on fixed-text probe.",
+    "next_step": "Do not run generalized SOTA promotion from lane8/shared as-is. Next optimization must target larger structural overhead: Q8_0 staging/H2D, D2H dst writeback, or a fused retained down/up dataflow rather than only per-output dot parallelism."
+  }
+}

@@ -5789,3 +5789,29 @@
   - Down GPU correctness is now fixed for the CPU-compatible Q8_0 path under fixed-text top1 gates.
   - Do not run generalized SOTA promotion from this kernel as-is. Next work must optimize the CPU-order kernel/dataflow or use it as a reference while building a faster down/up path.
   - Any future accepted generalized SOTA must still beat `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`, pass strict `16GB` RAM/page-cache, correctness, TTFT, and then locked held-out after candidate freeze.
+
+## 2026-07-07 X10-C performance diagnostic：lane8/shared Q8_0 down kernel
+
+- attempt_id: `20260707-q80-lane8-down-gpu-diagnostic`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/q80-lane8-down-gpu-diagnostic-20260707.json`
+- status: `diagnostic_correctness_pass_performance_reject`
+- source_scope:
+  - 新增 default-off `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`：8 个 CUDA lanes 共同计算一个 output column，每个 lane 对应 CPU AVX 的一个 accumulator lane，并按 `hsum_float_8` 顺序归约。
+  - 新增 default-off `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`：在 lane8 基础上，把当前 active row 的 Q8_0 activation row 缓存在 shared memory，减少同一 block 内重复 global read。
+  - 已通过的 scalar `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1` correctness reference 保持不变；默认 env unset 行为不变。
+- validation:
+  - `blk.3` lane8 op-level compare: `/root/lfz/runs/vendor-ds4-16gb/20260707T081819Z-q80-lane8-blk3-compare/blk3-report`, first 20 compare records `max_abs=0`, `mean_abs=0`.
+  - full-down lane8 top1: `/root/lfz/runs/vendor-ds4-16gb/20260707T081917Z-q80-lane8-full-down-top1`, `same_top1=145/145`, `batch_accept=5800`, `batch_decline=0`.
+  - `blk.3` lane8+shared op-level compare: `/root/lfz/runs/vendor-ds4-16gb/20260707T082240Z-q80-lane8-shared-blk3-compare/blk3-report`, first 20 compare records `max_abs=0`, `mean_abs=0`.
+  - full-down lane8+shared top1: `/root/lfz/runs/vendor-ds4-16gb/20260707T082335Z-q80-lane8-shared-full-down-top1`, `same_top1=145/145`, `batch_accept=5800`, `batch_decline=0`.
+  - invalid transient OOM: `/root/lfz/runs/vendor-ds4-16gb/20260707T082559Z-q80-lane8-shared256-full-down-top1` failed before model load for both default/case; not a kernel result.
+  - shared256 rerun: `/root/lfz/runs/vendor-ds4-16gb/20260707T083245Z-q80-lane8-shared256-full-down-top1-rerun`, top1 passed but performance regressed badly; source reverted to 128-thread shared.
+- performance:
+  - scalar CPU-order correctness reference: full-down `0.955 ms/call`, `cuda_batch=0.674 ms/call`.
+  - lane8: full-down `0.881 ms/call`, `cuda_batch=0.558 ms/call`.
+  - lane8+shared: full-down `0.832 ms/call`, `cuda_batch=0.550 ms/call`.
+  - fresh default CPU fallback in comparable fixed-text probes is still around `0.465-0.519 ms/call`, so all Q80 full-down GPU variants remain slower than CPU fallback.
+- decision:
+  - Commit as default-off diagnostic/correctness-preserving improvement over the scalar reference.
+  - Do not promote as token-rate SOTA and do not run generalized benchmark from this path alone.
+  - Next source work must target structural overhead outside the per-output dot loop: Q8_0 staging/H2D, D2H output writeback, retained/fused down dataflow, or avoiding full-output down materialization. More tuning of this full-output Q80 row kernel is unlikely to reach generalized `>5 tok/s` alone.

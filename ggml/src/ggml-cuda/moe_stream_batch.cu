@@ -6237,6 +6237,14 @@ static bool mxfp4_down_q80_cpu_order_enabled() {
     return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER", false);
 }
 
+static bool mxfp4_down_q80_cpu_order_lane8_enabled() {
+    return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8", false);
+}
+
+static bool mxfp4_down_q80_cpu_order_lane8_shared_enabled() {
+    return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED", false);
+}
+
 static bool mxfp4_down_probe_parity_mode() {
     const char *mode = mxfp4_down_probe_mode();
     return mode && std::strcmp(mode, "perf") != 0;
@@ -6547,6 +6555,111 @@ static __global__ void mxfp4_down_q80_compat_batch_kernel(
     dst[(size_t)row * (size_t)ne01 + (size_t)col] = sumf;
 }
 
+static __global__ void mxfp4_down_q80_cpu_order_lane8_batch_kernel(
+        const char * __restrict__ src0_pool,
+        const int32_t * __restrict__ x_ids,
+        int64_t slot_stride,
+        int64_t ne00,
+        int64_t ne01,
+        int64_t nb01,
+        const char * __restrict__ q80,
+        size_t q80_row_size,
+        float * __restrict__ dst,
+        int64_t n_active,
+        bool cache_q80) {
+    extern __shared__ char s_q80[];
+    const int64_t tid = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+    const int lane8 = threadIdx.x & 7;
+    const int64_t out = tid >> 3;
+    const int64_t total = n_active * ne01;
+    if (out >= total) return;
+
+    const int64_t row = out / ne01;
+    const int64_t col = out - row * ne01;
+    const int32_t slot = x_ids[row];
+    if (slot < 0) return;
+
+    const int64_t groups_per_block = blockDim.x >> 3;
+    const int64_t first_out = (int64_t)blockIdx.x * groups_per_block;
+    const int64_t last_candidate = first_out + groups_per_block - 1;
+    const int64_t last_out = last_candidate < total ? last_candidate : total - 1;
+    const int64_t block_row = first_out / ne01;
+    const bool block_same_row = cache_q80 && block_row == last_out / ne01;
+    if (block_same_row) {
+        const char *q80_src = q80 + (size_t)block_row * q80_row_size;
+        for (size_t off = threadIdx.x; off < q80_row_size; off += blockDim.x) {
+            s_q80[off] = q80_src[off];
+        }
+    }
+    __syncthreads();
+
+    const char *src0 = src0_pool + (size_t)slot * (size_t)slot_stride;
+    const block_mxfp4 *x = (const block_mxfp4 *)(src0 + (size_t)col * (size_t)nb01);
+    const block_q8_0 *y = block_same_row ?
+        (const block_q8_0 *)s_q80 :
+        (const block_q8_0 *)(q80 + (size_t)row * q80_row_size);
+    const int64_t nb = ne00 / QK_MXFP4;
+
+    float accum1 = 0.0f;
+    float accum2 = 0.0f;
+    int64_t ib = 0;
+    const int base = lane8 * 4;
+    for (; ib + 1 < nb; ib += 2) {
+        int p1 = 0;
+        int p2 = 0;
+#pragma unroll
+        for (int t = 0; t < 4; ++t) {
+            const int qidx = base + t;
+            const int xidx = qidx & 15;
+            const uint8_t q1 = x[ib + 0].qs[xidx];
+            const uint8_t q2 = x[ib + 1].qs[xidx];
+            const int v1 = (qidx < 16) ? mxfp4_q80_value_dev(q1 & 0x0F) : mxfp4_q80_value_dev(q1 >> 4);
+            const int v2 = (qidx < 16) ? mxfp4_q80_value_dev(q2 & 0x0F) : mxfp4_q80_value_dev(q2 >> 4);
+            p1 += y[ib + 0].qs[qidx] * v1;
+            p2 += y[ib + 1].qs[qidx] * v2;
+        }
+        const float scale1 = __fmul_rn(__half2float(y[ib + 0].d), ggml_cuda_e8m0_to_fp32(x[ib + 0].e) * 0.5f);
+        const float scale2 = __fmul_rn(__half2float(y[ib + 1].d), ggml_cuda_e8m0_to_fp32(x[ib + 1].e) * 0.5f);
+        accum1 = __fmaf_rn(scale1, (float)p1, accum1);
+        accum2 = __fmaf_rn(scale2, (float)p2, accum2);
+    }
+
+    const int warp_group_base = (threadIdx.x & 31) & ~7;
+    const unsigned int group_mask = 0xFFu << warp_group_base;
+    const float sum_lane = __fadd_rn(accum1, accum2);
+    const float s0 = __shfl_sync(group_mask, sum_lane, warp_group_base + 0);
+    const float s1 = __shfl_sync(group_mask, sum_lane, warp_group_base + 1);
+    const float s2 = __shfl_sync(group_mask, sum_lane, warp_group_base + 2);
+    const float s3 = __shfl_sync(group_mask, sum_lane, warp_group_base + 3);
+    const float s4 = __shfl_sync(group_mask, sum_lane, warp_group_base + 4);
+    const float s5 = __shfl_sync(group_mask, sum_lane, warp_group_base + 5);
+    const float s6 = __shfl_sync(group_mask, sum_lane, warp_group_base + 6);
+    const float s7 = __shfl_sync(group_mask, sum_lane, warp_group_base + 7);
+
+    if (lane8 == 0) {
+        float r0 = __fadd_rn(s4, s0);
+        float r1 = __fadd_rn(s5, s1);
+        float r2 = __fadd_rn(s6, s2);
+        float r3 = __fadd_rn(s7, s3);
+        r0 = __fadd_rn(r0, r2);
+        r1 = __fadd_rn(r1, r3);
+        float sumf = __fadd_rn(r0, r1);
+        for (; ib < nb; ++ib) {
+            int sumi1 = 0;
+            int sumi2 = 0;
+#pragma unroll
+            for (int j = 0; j < QK_MXFP4 / 2; ++j) {
+                const uint8_t q = x[ib].qs[j];
+                sumi1 += y[ib].qs[j] * mxfp4_q80_value_dev(q & 0x0F);
+                sumi2 += y[ib].qs[j + QK_MXFP4 / 2] * mxfp4_q80_value_dev(q >> 4);
+            }
+            const float scale = __fmul_rn(__half2float(y[ib].d), ggml_cuda_e8m0_to_fp32(x[ib].e) * 0.5f);
+            sumf = __fadd_rn(sumf, __fmul_rn(scale, (float)(sumi1 + sumi2)));
+        }
+        dst[(size_t)row * (size_t)ne01 + (size_t)col] = sumf;
+    }
+}
+
 static bool launch_mxfp4_down_q80_compat_batch(
         const char *src0_pool,
         const int32_t *d_x_ids,
@@ -6559,10 +6672,22 @@ static bool launch_mxfp4_down_q80_compat_batch(
         float *d_dst,
         int64_t n_active,
         bool cpu_order,
+        bool cpu_order_lane8,
+        bool cpu_order_lane8_shared,
         cudaStream_t st) {
     if (!src0_pool || !d_x_ids || !d_q80 || !d_dst ||
             ne00 <= 0 || ne01 <= 0 || n_active <= 0 || ne00 % QK_MXFP4 != 0) {
         return false;
+    }
+    if (cpu_order_lane8) {
+        const int threads = 128;
+        const int64_t total_threads = n_active * ne01 * 8;
+        const int blocks = (int)((total_threads + threads - 1) / threads);
+        const size_t shared_bytes = cpu_order_lane8_shared ? q80_row_size : 0;
+        mxfp4_down_q80_cpu_order_lane8_batch_kernel<<<blocks, threads, shared_bytes, st>>>(
+                src0_pool, d_x_ids, slot_stride, ne00, ne01, nb01,
+                d_q80, q80_row_size, d_dst, n_active, cpu_order_lane8_shared);
+        return cudaGetLastError() == cudaSuccess;
     }
     const int threads = 128;
     const int64_t total = n_active * ne01;
@@ -9371,7 +9496,10 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         if (!launch_mxfp4_down_q80_compat_batch(
                 (const char *)cache->pool, bc.d_x_ids, cache->slot_sz,
                 ne00, ne01, nb01, (const char *)bc.d_src1_q8, src1_q8_0_row_size,
-                (float *)bc.d_dst, n_active, mxfp4_down_q80_cpu_order_enabled(), st)) {
+                (float *)bc.d_dst, n_active,
+                mxfp4_down_q80_cpu_order_enabled(),
+                mxfp4_down_q80_cpu_order_lane8_enabled(),
+                mxfp4_down_q80_cpu_order_lane8_shared_enabled(), st)) {
             return decline("launch_mxfp4_down_q80_compat_batch");
         }
     } else if (down_q8k_requested) {
