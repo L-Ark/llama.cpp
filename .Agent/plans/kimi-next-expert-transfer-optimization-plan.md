@@ -566,6 +566,43 @@ Phase 5B cold-start SOTA audit gate:
   - any apparent gain with identical bytes/hits must be treated as measurement
     instability until proven by stronger cold-device controls.
 
+Phase 5C lower-byte candidate gate:
+
+- Report:
+  - `.Agent/runs/20260707-lower-byte-candidate-gate/report.md`
+- Purpose:
+  - gate the existing lower-byte ideas before writing a runtime path;
+  - require any primary path toward `5 tok/s` to plausibly reduce total moved
+    bytes to about `0.30x-0.40x` while preserving output quality.
+- Result:
+  - naive blockwise `1-bit` re-encode can reach about `0.367x-0.408x` on
+    sampled gate tensors, but rel L2 is about `1.86-2.07`, so it is too
+    destructive;
+  - naive blockwise `2-bit` re-encode has rel L2 about `0.69-0.79` and still
+    moves too many bytes at about `0.673x-0.878x`;
+  - D2MoE one-base residual rank128 can reach some byte ratios near the target,
+    but residual norm remains about `0.945`, so the base does not explain the
+    expert weights;
+  - D2MoE clustered bases improve some tensors, but a top32 sample still has
+    rank128 error/weight `0.500` for down and `0.306` for gate at 16 clusters,
+    while one tensor's bf16 bases already cost about `448 MiB`;
+  - full external IQ1_S scale is about `0.504x`, above the required
+    `0.30x-0.40x` range and carries quality/runtime risk;
+  - selected IQ1_S/v2 hotsets remain coverage-limited or prompt-specific, and
+    prior GP57 held-out overlay testing regressed badly;
+  - down activation block skipping can skip `19.8%` blocks at threshold `0.1`
+    or `34.5%` at threshold `0.2`, but mean relative output error is about
+    `0.210` / `0.368`; early layers are inaccurate and down-only skipping cannot
+    close the gap because up/gate is about `62%` of miss bytes.
+- Decision:
+  - do not implement any of these rejected candidates as the next primary
+    runtime optimization;
+  - lower-byte work must next measure activation-output error on real hidden
+    states for compressed up/gate/down candidates, not rely only on weight
+    reconstruction error;
+  - late-layer down skipping can remain a possible local micro-optimization only
+    if it is gated by per-layer error and held-out quality.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
@@ -596,14 +633,15 @@ For every experiment:
 
 ## Immediate Next Task
 
-Continue from Phase 5:
+Continue from Phase 5C:
 
-1. Build a dev-only lower-byte representation screen that samples real active
-   up/gate/down experts and reports byte ratio plus reconstruction/activation
-   error.
-2. Prioritize candidates that can plausibly reach `0.30x-0.40x` total moved
-   bytes; reject candidates above that bound unless they also remove exposed IO
-   through direct compressed compute.
+1. Build a dev-only activation-output error screen for compressed expert
+   compute candidates. It must sample real active up/gate/down experts and real
+   hidden states, then report byte ratio, output error, and estimated runtime
+   overhead.
+2. Prioritize candidates that reduce up/gate and down movement together. A
+   candidate above `0.30x-0.40x` total moved bytes is not a direct `5 tok/s`
+   path unless it also removes exposed IO through direct compressed compute.
 3. Do not build more prompt-specific hot expert overlays. GP57 showed dev
    overlay gains can regress held-out performance severely.
 4. Keep scheduler/predictor work default-off unless a shadow predictor can show
