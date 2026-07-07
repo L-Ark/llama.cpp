@@ -7286,3 +7286,45 @@ Updated next execution order:
    - a hard-bound showing generalized calibration/dev `min_eval_tok_s >= 5.5`;
    - strict RAM/page-cache and TTFT gates.
 5. Accepted improvements must record full reproduction details and immediately push to `ssd/vendor/deepseek-token-rate-16gb`.
+
+## 2026-07-08 X10-AI compact target exact download manifest
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-exact-download-manifest-20260708.json`
+- status: `download_manifest_recorded_no_download_not_sota`
+
+Purpose:
+- Preserve exact reproducibility inputs for the compact target route before any cleanup or download.
+- This step records per-file URLs, sizes, and etags for the priority candidates selected by X10-AG/X10-AH.
+- No model body was downloaded, no file was deleted, no source was changed, and no SOTA changed.
+
+Recorded candidates:
+- `teamblobfish-iq1-s-xl`
+  - repo: `teamblobfish/DeepSeek-V4-Flash-GGUF`
+  - files: `2`
+  - total size: `57.314 GiB`
+  - shard etags recorded for both shards.
+  - current role: first candidate only after explicit cleanup approval; correctness/load candidate, not guaranteed performance candidate.
+- `teamblobfish-iq1-m`
+  - repo: `teamblobfish/DeepSeek-V4-Flash-GGUF`
+  - files: `2`
+  - total size: `60.078 GiB`
+  - shard etags recorded for both shards.
+  - current role: second candidate only after IQ1_S-XL fails or is closed.
+- `sleepy-k128-q2q4-mixed`
+  - repo: `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF`
+  - files: `1`
+  - total size: `52.038 GiB`
+  - etag recorded.
+  - current role: fallback only after a REAP loader-risk review, because related K128 variants have already failed shape/load checks.
+
+Current gate:
+- No full download is allowed on current disk state.
+- The required cleanup target, if explicitly approved, remains only:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - size: `88,019,539,296 bytes`
+  - reason: already rejected for correctness and not used by current SOTA.
+- Without cleanup approval, the next source-edit route must not use compact target assumptions. It must return to a non-download hard-bound route and prove generalized `min_eval_tok_s >= 5.5` before coding.
+
+Decision:
+- Use the manifest only to make future cleanup/download steps reproducible.
+- Do not implement `IQ1_S/IQ1_M/Q2_K` stream kernels until a candidate has actually loaded and passed correctness, or until a separate synthetic correctness harness can prove exact parity for the relevant MoE stream operators.
