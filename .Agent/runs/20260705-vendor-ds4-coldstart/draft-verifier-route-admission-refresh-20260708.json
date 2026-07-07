@@ -1,0 +1,100 @@
+{
+  "attempt_id": "20260708-draft-verifier-route-admission-refresh",
+  "created_at_local": "2026-07-08",
+  "status": "draft_verifier_route_screened_no_download_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "dc4b60cfc2a669f24a68bb90cb698aaaee1d2301",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Check whether current external draft/MTP or no-draft speculative routes can reopen a generalized >5 tok/s path without downloading full lowbit target models.",
+  "repo_support_observed": {
+    "binaries": [
+      "build-ds4-moe-stream/bin/llama-speculative",
+      "build-ds4-moe-stream/bin/llama-speculative-simple"
+    ],
+    "llama_cli_options": [
+      "--spec-draft-model",
+      "--spec-draft-n-max",
+      "--spec-type ngram-cache|ngram-simple|ngram-map-k|ngram-map-k4v|ngram-mod"
+    ],
+    "interpretation": "The framework has speculative runners/options, but a draft-model route still requires tokenizer/vocab compatibility and exact target verification semantics."
+  },
+  "target_model_metadata": {
+    "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "general_architecture": "deepseek4",
+    "general_name": "DeepSeek V4 Flash",
+    "tokenizer_ggml_model": "gpt2",
+    "tokenizer_ggml_pre": "joyai-llm",
+    "vocab_size": 129280,
+    "bos_token_id": 0,
+    "eos_token_id": 1,
+    "add_bos_token": false,
+    "add_eos_token": false
+  },
+  "external_draft_candidates": [
+    {
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF",
+      "sizes_gib": {
+        "Q3_K_M": 4.306,
+        "Q4_K_M": 5.243,
+        "Q5_K_M": 6.024,
+        "Q6_K": 6.854,
+        "Q8_0": 8.873
+      },
+      "source_model": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+      "source_config_observation": "model_type=qwen3_5, architecture=Qwen3_5ForConditionalGeneration, eos_token_id=248046, pad_token_id=248055",
+      "compatibility": "reject_for_target_speculative_tokenizer_mismatch"
+    },
+    {
+      "repo": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF",
+      "sizes_gib": {
+        "MTP-Q2_K": 3.646,
+        "MTP-Q3_K_S": 4.064,
+        "MTP-Q3_K_M": 4.412,
+        "MTP-IQ4_XS": 4.99,
+        "MTP-Q4_K_M": 5.383,
+        "MTP-Q8_0": 9.114,
+        "MTP-BF16": 17.143
+      },
+      "source_model": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash plus unsloth/Qwen3.5-9B fallback per README",
+      "compatibility": "reject_for_target_speculative_tokenizer_mismatch_and_no_ds4_mtp_runtime"
+    },
+    {
+      "repo": "mradermacher/Qwen3.5-9B-DeepSeek-V4-Flash-i1-GGUF",
+      "sizes_gib": {
+        "i1-IQ1_S": 2.554,
+        "i1-IQ1_M": 2.68,
+        "i1-IQ2_XXS": 2.889,
+        "i1-IQ2_XS": 3.06,
+        "i1-IQ2_S": 3.193,
+        "i1-IQ2_M": 3.36
+      },
+      "source_model": "Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash",
+      "compatibility": "reject_for_target_speculative_tokenizer_mismatch"
+    }
+  ],
+  "partial_header_probe": {
+    "downloaded_bytes": "64MiB header slices only for MTP-Q2_K and i1-IQ1_S; temporary files removed after audit",
+    "mtp_q2k_gguf_reader_result": "partial file insufficient for full GGUFReader tensor build; error exposed Qwen-sized tensor shape (248320,3360), consistent with Qwen tokenizer family rather than target vocab 129280",
+    "decision": "Do not download full draft GGUF because HF source config already proves tokenizer family mismatch."
+  },
+  "no_draft_ngram_status": {
+    "historical_artifacts": [
+      ".Agent/runs/20260703-vendor-ds4-coldstart/ngram-simple-spec-probe-summary.json",
+      ".Agent/runs/20260704-vendor-ds4-coldstart/ngram-map-k4v-probe-result.json",
+      ".Agent/runs/20260704-vendor-ds4-coldstart/server-spec-partial-fallback-result.json"
+    ],
+    "summary": "ngram-simple completed but regressed to 3.7 tok/s on the older France SOTA path; k4v timed out with runaway prompt output; server partial fallback completed at 3.7 tok/s. These do not justify a new generalized SOTA run."
+  },
+  "decision": {
+    "download_full_draft_now": false,
+    "benchmark_now": false,
+    "source_patch_allowed_from_this_evidence": false,
+    "accepted_sota_changed": false,
+    "reason": "Available small draft/MTP models are Qwen3.5-family tokenizer artifacts, not tokenizer-compatible DeepSeek4 drafts for exact target verification. No-draft ngram speculative routes were already rejected by progress/performance evidence."
+  },
+  "next_allowed_actions": [
+    "Continue searching only for tokenizer-compatible DeepSeek4/joyai-llm draft or verifier artifacts, or for compact target representations that pass the existing size/correctness gates.",
+    "Do not run speculative token-rate benchmarks until tokenizer/vocab compatibility and target verification semantics are proven.",
+    "If no such artifact exists, the remaining route still requires disk cleanup for compact target correctness gates or a new dataflow/interface hard-bound."
+  ]
+}

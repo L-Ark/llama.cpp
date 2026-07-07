@@ -6945,3 +6945,64 @@ Next allowed actions:
 - If deletion is explicitly approved, free space from already rejected or prompt-specific artifacts first, while preserving reproduction records.
 - If deletion is not approved, continue external artifact search for a genuinely smaller correctness-capable representation or switch to a draft/verifier path that does not require downloading a full lowbit target model.
 - Any candidate that becomes downloadable must still pass fixed-text top1 / France semantic correctness before any calibration/dev token-rate benchmark; held-out prompts remain reserved until candidate freeze.
+
+## 2026-07-08 X10-AC draft/verifier route admission refresh
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/draft-verifier-route-admission-refresh-20260708.json`
+- status: `draft_verifier_route_screened_no_download_not_sota`
+
+Purpose:
+- Follow X10-AB's fallback path: if no compact target model fits current disk, check whether a smaller external draft/MTP/verifier artifact can reopen exact speculative decoding without downloading a full lowbit target model.
+- This is metadata/source audit only. No full draft model was downloaded, no runtime source was changed, and no token-rate benchmark was run.
+
+Current framework support:
+- Current build exposes speculative binaries and options:
+  - `build-ds4-moe-stream/bin/llama-speculative`
+  - `build-ds4-moe-stream/bin/llama-speculative-simple`
+  - `llama-cli` / `llama-server` options include `--spec-draft-model`, `--spec-draft-n-max`, and no-draft `--spec-type ngram-*`.
+- This only proves runtime support exists. A draft-model route still requires tokenizer/vocab compatibility with the target plus exact target-verification semantics.
+
+Target tokenizer facts:
+- Target model: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`
+- metadata:
+  - `general.architecture=deepseek4`
+  - `tokenizer.ggml.model=gpt2`
+  - `tokenizer.ggml.pre=joyai-llm`
+  - `deepseek4.vocab_size=129280`
+  - `bos_token_id=0`, `eos_token_id=1`
+
+External draft candidates checked:
+- `Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF`
+  - downloadable GGUF sizes: `4.306-8.873 GiB`
+  - source config: `model_type=qwen3_5`, `Qwen3_5ForConditionalGeneration`, `eos_token_id=248046`, `pad_token_id=248055`
+  - decision: reject for target speculative route due tokenizer/vocab mismatch.
+- `Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF`
+  - downloadable MTP GGUF sizes: `3.646-17.143 GiB`
+  - source/readme points to the same Qwen3.5-family model/fallback.
+  - decision: reject for current target route due tokenizer/vocab mismatch and no DS4 MTP verifier runtime.
+- `mradermacher/Qwen3.5-9B-DeepSeek-V4-Flash-i1-GGUF`
+  - downloadable small GGUF sizes: `2.554-5.046 GiB` for checked variants.
+  - source model is Jackrong's Qwen3.5-family distill.
+  - decision: reject for target speculative route due tokenizer/vocab mismatch.
+
+No-draft n-gram speculative status:
+- Historical artifacts already cover this family:
+  - `.Agent/runs/20260703-vendor-ds4-coldstart/ngram-simple-spec-probe-summary.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/ngram-map-k4v-probe-result.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/server-spec-partial-fallback-result.json`
+- Summary:
+  - `ngram-simple` completed under strict RAM/correctness but regressed to `3.7 tok/s` on the older France SOTA path.
+  - `ngram-map-k4v` timed out with runaway prompt output.
+  - server partial fallback completed but still only reached `3.7 tok/s`.
+- Decision: do not re-run no-draft n-gram speculative as a generalized SOTA candidate without new evidence or instrumentation proving high accepted draft rate on calibration/dev prompts.
+
+Decision:
+- Small Qwen3.5-derived draft/MTP files are disk-feasible, but they are not tokenizer-compatible DeepSeek4/joyai-llm drafts for exact target verification.
+- Do not download full draft files or run speculative token-rate benchmarks from these candidates.
+- Do not write a source patch from this evidence.
+- SOTA unchanged.
+
+Next allowed actions:
+- Continue searching only for tokenizer-compatible DeepSeek4/joyai-llm draft/verifier artifacts, or return to compact target representations gated by disk/correctness.
+- Any future draft candidate must first prove tokenizer/vocab compatibility and exact target-verification semantics; only then may it run France correctness and calibration/dev token-rate benchmarks.
+- If no such artifact appears, the project needs either approved disk cleanup for compact target correctness gates or a new dataflow/interface hard-bound with generalized `min_eval_tok_s >= 5.5` before implementation.
