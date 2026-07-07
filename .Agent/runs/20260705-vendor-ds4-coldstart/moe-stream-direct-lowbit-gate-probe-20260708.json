@@ -1,0 +1,50 @@
+{
+  "attempt_id": "20260708-moe-stream-direct-lowbit-gate-probe",
+  "created_at_local": "2026-07-08",
+  "status": "direct_harness_proves_lowbit_down_stream_gate_unsupported_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head_before_commit": "e9c304cfa7bdc9868cc576b0290e049f6a37464b",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "source_tool": ".Agent/run-tools/ds4_moe_stream_direct_probe.cpp",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-direct-probe",
+  "compile_command": "g++ -std=c++17 -O2 -Iggml/include -Iggml/src -Iggml/src/ggml-cpu .Agent/run-tools/ds4_moe_stream_direct_probe.cpp -Lbuild-ds4-moe-stream/bin -Wl,-rpath,/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin -lggml -lggml-base -lggml-cpu -lggml-cuda -ldl -lpthread -o ds4_moe_stream_direct_probe_current",
+  "run_command": "GGML_MOE_STREAM=1 LD_LIBRARY_PATH=build-ds4-moe-stream/bin:$LD_LIBRARY_PATH ds4_moe_stream_direct_probe_current",
+  "verification_rc": 0,
+  "stdout": [
+    "decline-ok type=iq1_s nb01=50 nb02=800",
+    "decline-ok type=iq1_m nb01=56 nb02=896",
+    "decline-ok type=q2_K nb01=84 nb02=1344"
+  ],
+  "stderr": [
+    "[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight rows_stride=1 type=19 active=0 ne01=16 ne00=256",
+    "[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight rows_stride=1 type=29 active=0 ne01=16 ne00=256",
+    "[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight rows_stride=1 type=10 active=0 ne01=16 ne00=256"
+  ],
+  "cases": [
+    {
+      "type": "IQ1_S",
+      "type_id": 19,
+      "expected": "decline unsupported_type",
+      "observed": "unsupported_type"
+    },
+    {
+      "type": "IQ1_M",
+      "type_id": 29,
+      "expected": "decline unsupported_type",
+      "observed": "unsupported_type"
+    },
+    {
+      "type": "Q2_K",
+      "type_id": 10,
+      "expected": "decline unsupported_type",
+      "observed": "unsupported_type"
+    }
+  ],
+  "decision": {
+    "accepted_sota_changed": false,
+    "runtime_behavior_changed": false,
+    "what_this_proves": "A direct synthetic call with src0_name=blk.0.ffn_down_exps.weight reaches the vendor down stream batch gate, and IQ1_S/IQ1_M/Q2_K are rejected specifically by unsupported_type under current source.",
+    "what_this_does_not_prove": "It does not prove numerical parity or performance for a future enabled lowbit stream path; no production type gate was changed.",
+    "next_action": "A future source patch may add a default-off diagnostic allow-list for these lowbit types, but only with parity comparison against generic CPU/CUDA reference before any performance run."
+  }
+}

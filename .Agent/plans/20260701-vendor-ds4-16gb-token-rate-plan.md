@@ -7444,3 +7444,50 @@ Verification:
 Decision:
 - Keep this source change because it only broadens regression coverage for the compact-target route.
 - It still does not prove DeepSeek MoE stream fast-path correctness or performance; X10-AK remains the active gate before any stream writeback patch.
+
+## 2026-07-08 X10-AM direct MoE stream lowbit gate probe
+
+- source tool: `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-direct-lowbit-gate-probe-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-direct-probe`
+- status: `direct_harness_proves_lowbit_down_stream_gate_unsupported_not_sota`
+
+Purpose:
+- Move beyond generic backend tests and prove the dedicated vendor down-stream batch entry can be reached with synthetic compact-target lowbit types and a real `ffn_down_exps` tensor name.
+- This is a diagnostic harness only. It does not change runtime behavior, does not enable a new type, and is not a SOTA claim.
+
+Implementation:
+- Added a standalone run-tool source file, not wired into default builds.
+- The tool:
+  - constructs synthetic quantized expert data for `IQ1_S`, `IQ1_M`, and `Q2_K`;
+  - calls `ggml_cuda_moe_stream_batch(...)` directly;
+  - uses `src0_name="blk.0.ffn_down_exps.weight"` so the down-stream name gate is satisfied;
+  - sets `GGML_MOE_STREAM_DECLINE_DEBUG=1`;
+  - expects current source to return `false`.
+
+Important build note:
+- The first compile against `build-ds4-moe-stream-batch-probe` used a stale 2026-07-05 `libggml-cuda.so`, whose ABI no longer matched the current source.
+- The accepted probe uses `build-ds4-moe-stream/bin/libggml-cuda.so`, which contains the current q80 argument signature.
+
+Verification:
+- command shape:
+  - compile with `g++ ... -Lbuild-ds4-moe-stream/bin ... -lggml -lggml-base -lggml-cpu -lggml-cuda`
+  - run with `GGML_MOE_STREAM=1`
+- result:
+  - `rc=0`
+  - `IQ1_S`: `decline-ok`, stderr reason `unsupported_type`
+  - `IQ1_M`: `decline-ok`, stderr reason `unsupported_type`
+  - `Q2_K`: `decline-ok`, stderr reason `unsupported_type`
+- This proves:
+  - the synthetic direct-call harness can reach the vendor down-stream gate;
+  - the tensor-name gate is no longer the blocker for this harness;
+  - the current blocker for compact-target lowbit down-stream is the type allow-list / implementation gate.
+
+Decision:
+- No production stream type support is enabled.
+- No performance benchmark is allowed from this evidence.
+- The next source step, if cleanup is still not approved, may be a default-off diagnostic allow-list plus parity mode for `IQ1_S/IQ1_M/Q2_K`, but it must:
+  - compare against CPU/generic CUDA reference;
+  - report numerical error thresholds;
+  - return false unless parity mode explicitly passes;
+  - remain disabled by default.
