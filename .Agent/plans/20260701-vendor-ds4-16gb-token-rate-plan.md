@@ -213,6 +213,11 @@
 - `0xsero_risk`: 该候选是 144-expert / Q2_K+IQ2_XXS compact representation，不是当前 native FP4/FP8 SOTA 模型。通用 CUDA 有 Q2_K/IQ2_XXS 支持，但 DS4 MoE stream fast path 未证明覆盖该组合；完整 load/generation correctness 和 token rate 都还未验证。
 - `next_action`: 在用户明确允许删除 rejected IQ2_S 文件释放空间之前，不执行 destructive cleanup 或完整下载。若允许，使用 `.Agent/run-tools/run_compact_target_after_cleanup.sh --execute-download --confirm-delete-rejected-iq2s` 做严格 16GB load/correctness smoke。该步骤仅是候选可行性验证；只有在泛化 dev set 提升、RAM/TTFT/correctness 通过，并最终冻结后跑 held-out test，才可能成为 accepted generalized SOTA。
 
+- `down_empty_fast_exit_probe_20260708`: 尝试了 default-off `GGML_MOE_STREAM_DOWN_EMPTY_FAST_EXIT=1`，逻辑是在 down batch 已接受且 `matrix_row_counts` 全清零时跳过后续 CPU fallback 框架。该源码改动只用于诊断，未提交，实验后已回退并重建。
+- `down_empty_fast_exit_result`: Artifact `.Agent/runs/20260705-vendor-ds4-coldstart/down-empty-fast-exit-rejected-20260708.json`；run dir `/root/lfz/runs/vendor-ds4-16gb/20260707T203206Z-down-empty-fast-exit-probe`。Top1 correctness 与 previous default 完全一致：`same_top1=145/145`、`first_mismatch=-1`，`memory_peak_bytes=16000000000`、`ram_ok=true`。
+- `down_empty_fast_exit_decision`: rejected。runtime `3min26.308s`，比 previous full-down lane8/shared `3min22.80s` 更慢；profile 仍为 `total=9.527 ms/call`, `cuda_batch=4.682 ms/call`, `fallback_t0=4.809 ms/call`。进一步解析显示 `fallback_reason.csv` 中 true down CPU fallback rows 已为 0，剩余 `fallback_t0` 主要来自 ordinary MoE `gate/up` fallback 或统计桶覆盖范围，而不是 down CPU dot。因此 down-only 空 fallback fast-exit 不是有效优化方向。
+- `next_direction_after_fast_exit`: 不再继续做 down-only 框架微调；除非能显著降低 `cuda_batch` 本身或把 up/gate 一并迁到 GPU/融合，否则 full-down path 的额外 CUDA batch 开销会抵消 down CPU fallback 消除收益。下一步应优先设计 prompt-general up/gate/down grouped/fused GPU path，或执行 compact target load/correctness probe（需明确 cleanup approval）。
+
 ## 二次回退状态（2026-07-02）
 
 - 已执行回退：当前源码分支重置到 `5d65239a74c9512967eb557743dc3cb5d1cf6c76`（`vendor-ds4: record odirect pack sota`）。
