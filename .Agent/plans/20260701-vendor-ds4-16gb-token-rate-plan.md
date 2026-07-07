@@ -5436,3 +5436,26 @@
 - next_allowed_work:
   - If cleanup/relocation is approved, select one standalone header-compatible candidate and write a separate staged plan: download -> load smoke -> France correctness -> calibration/dev correctness -> only then benchmark.
   - Without cleanup approval, continue native/dataflow work only if a prompt-general hard-bound shows `>=5.5 tok/s` calibration/dev min after realistic overhead.
+
+## 2026-07-07 Standing Rule：generalized no-prompt-specific baseline is the promotion baseline
+
+- status: active_rule
+- baseline_artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`
+- baseline_scope: prompt-general / no prompt-specific expert pack / calibration-dev prompts only. France-only SOTA (`4.4-4.5 tok/s`) is useful as a regression reference for that single prompt, but it is not the optimization baseline for the product task.
+- product_task: on a `16GB` host-RAM machine (including page cache) plus `32GB` RTX 5090, a random user prompt should produce stable `>5 tok/s` output without prompt-specific tuning.
+- baseline_metrics:
+  - France: `2.7 eval_tok_s`, `0.9 prompt_tok_s`, `ram_ok=true`, correctness recorded pass.
+  - Quantum: `1.8 eval_tok_s`, `0.9 prompt_tok_s`, `ram_ok=true`, correctness recorded pass.
+  - Fibonacci: `1.8 eval_tok_s`, `0.9 prompt_tok_s`, `ram_ok=true`, correctness recorded pass.
+  - Japan: `2.4 eval_tok_s`, `0.9 prompt_tok_s`, `ram_ok=true`, correctness recorded pass.
+  - Climate: `2.2 eval_tok_s`, `0.9 prompt_tok_s`, `ram_ok=true`, correctness recorded pass.
+  - Current generalized baseline summary: `min_eval_tok_s=1.8`, `mean_eval_tok_s=2.18`, `max_eval_tok_s=2.7`.
+- promotion_rule:
+  - A new configuration is a generalized improvement if it is not prompt-specific and improves the no-prompt-specific baseline on calibration/dev with all required gates satisfied.
+  - Primary comparison is `min_eval_tok_s` across the calibration/dev prompt set, because the product target is stable random-prompt speed. Mean and per-prompt values must still be recorded.
+  - A result with a higher mean but a lower prompt-set minimum is not accepted as generalized SOTA unless explicitly marked as a diagnostic tradeoff and followed by a separate decision.
+  - Correctness, TTFT, 16GB cgroup RAM including page cache, OOM/kill status, exact command, git commit, run directory, and output text for every prompt must be recorded.
+  - Held-out prompts remain unused during tuning and are only run after a candidate is frozen from calibration/dev evidence.
+- immediate_record_push_rule:
+  - If any configuration exceeds the generalized no-prompt-specific baseline while passing RAM, correctness, and TTFT gates, immediately write a detailed artifact and plan update, then commit and push to `ssd/vendor/deepseek-token-rate-16gb`.
+  - If a configuration improves token rate but fails correctness, RAM, TTFT, or generalization, record it as rejected and push the rejected artifact/plan update; do not promote it.
