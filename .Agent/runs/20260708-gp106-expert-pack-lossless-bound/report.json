@@ -1,0 +1,4057 @@
+{
+  "codecs": [
+    "zlib6",
+    "zlib9",
+    "lzma6"
+  ],
+  "decision": "Reject as primary: neither raw lossless compression nor exact base-XOR residual compression approaches the 0.40 target ratio. Generic exact expert-byte compression cannot close the Kimi 5 tok/s byte gap.",
+  "generated_at": "2026-07-07T21:34:12+0000",
+  "kind": "kimi_expert_pack_lossless_bound",
+  "packs": [
+    {
+      "entries": 30831,
+      "path": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "payload_bytes": 175128346624,
+      "payload_gib": 163.10098266601562,
+      "sampled_entries": 72
+    },
+    {
+      "entries": 768,
+      "path": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack",
+      "payload_bytes": 4844421120,
+      "payload_gib": 4.51171875,
+      "sampled_entries": 8
+    }
+  ],
+  "per_role": 24,
+  "per_tensor": 4,
+  "raw_summary": {
+    "by_codec": {
+      "lzma6": {
+        "aggregate_ratio": 0.994531648344022,
+        "compressed_bytes": 449399732,
+        "entries": 80,
+        "max_ratio": 1.0000620984864983,
+        "mean_ratio": 0.9960563104552248,
+        "min_ratio": 0.9198275013130253,
+        "raw_bytes": 451870720
+      },
+      "zlib6": {
+        "aggregate_ratio": 0.9931270408492057,
+        "compressed_bytes": 448765031,
+        "entries": 80,
+        "max_ratio": 1.0003061269784903,
+        "mean_ratio": 0.994488818668535,
+        "min_ratio": 0.920552357906053,
+        "raw_bytes": 451870720
+      },
+      "zlib9": {
+        "aggregate_ratio": 0.9931270408492057,
+        "compressed_bytes": 448765031,
+        "entries": 80,
+        "max_ratio": 1.0003061269784903,
+        "mean_ratio": 0.994488818668535,
+        "min_ratio": 0.920552357906053,
+        "raw_bytes": 451870720
+      }
+    },
+    "by_role_codec": {
+      "down:lzma6": {
+        "aggregate_ratio": 0.9880375905730152,
+        "compressed_bytes": 205328692,
+        "entries": 32,
+        "max_ratio": 1.0000596083603897,
+        "mean_ratio": 0.9900486266367116,
+        "min_ratio": 0.9198275013130253,
+        "raw_bytes": 207814656
+      },
+      "down:zlib6": {
+        "aggregate_ratio": 0.9883589201716361,
+        "compressed_bytes": 205395469,
+        "entries": 32,
+        "max_ratio": 1.0003061269784903,
+        "mean_ratio": 0.9903574418985178,
+        "min_ratio": 0.920552357906053,
+        "raw_bytes": 207814656
+      },
+      "down:zlib9": {
+        "aggregate_ratio": 0.9883589201716361,
+        "compressed_bytes": 205395469,
+        "entries": 32,
+        "max_ratio": 1.0003061269784903,
+        "mean_ratio": 0.9903574418985178,
+        "min_ratio": 0.920552357906053,
+        "raw_bytes": 207814656
+      },
+      "gate:lzma6": {
+        "aggregate_ratio": 1.0000609724274152,
+        "compressed_bytes": 127540832,
+        "entries": 24,
+        "max_ratio": 1.0000620984864983,
+        "mean_ratio": 1.0000610337095426,
+        "min_ratio": 1.0000605013210642,
+        "raw_bytes": 127533056
+      },
+      "gate:zlib6": {
+        "aggregate_ratio": 0.996881404614032,
+        "compressed_bytes": 127135332,
+        "entries": 24,
+        "max_ratio": 0.9978312316256533,
+        "mean_ratio": 0.9969307001318196,
+        "min_ratio": 0.9964350486288265,
+        "raw_bytes": 127533056
+      },
+      "gate:zlib9": {
+        "aggregate_ratio": 0.996881404614032,
+        "compressed_bytes": 127135332,
+        "entries": 24,
+        "max_ratio": 0.9978312316256533,
+        "mean_ratio": 0.9969307001318196,
+        "min_ratio": 0.9964350486288265,
+        "raw_bytes": 127533056
+      },
+      "up:lzma6": {
+        "aggregate_ratio": 1.0000617903719067,
+        "compressed_bytes": 116530208,
+        "entries": 24,
+        "max_ratio": 1.0000620984864983,
+        "mean_ratio": 1.0000618322922594,
+        "min_ratio": 1.0000605013210642,
+        "raw_bytes": 116523008
+      },
+      "up:zlib6": {
+        "aggregate_ratio": 0.9975217083307701,
+        "compressed_bytes": 116234230,
+        "entries": 24,
+        "max_ratio": 0.9979203387004573,
+        "mean_ratio": 0.9975554395652737,
+        "min_ratio": 0.9964291764417821,
+        "raw_bytes": 116523008
+      },
+      "up:zlib9": {
+        "aggregate_ratio": 0.9975217083307701,
+        "compressed_bytes": 116234230,
+        "entries": 24,
+        "max_ratio": 0.9979203387004573,
+        "mean_ratio": 0.9975554395652737,
+        "min_ratio": 0.9964291764417821,
+        "raw_bytes": 116523008
+      }
+    }
+  },
+  "reproduce_command": ".Agent/run-tools/kimi_expert_pack_lossless_bound.py --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack --out-json /root/lfz/runs/vendor-kimi-token-rate/20260708-gp106-expert-pack-lossless-bound/report.json --out-md /root/lfz/runs/vendor-kimi-token-rate/20260708-gp106-expert-pack-lossless-bound/report.md --per-role 24 --per-tensor 4 --seed 1 --codecs zlib6,zlib9,lzma6 --target-ratio 0.40",
+  "sample_rows": [
+    {
+      "base_expert_idx": 68,
+      "entry_idx": 15859,
+      "expert_idx": 208,
+      "layer": 33,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.355636827996932,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.15337018799618818,
+          "compressed_bytes": 4691427,
+          "ratio": 0.9977072473187064
+        },
+        "zlib9": {
+          "compress_s": 0.16523431400128175,
+          "compressed_bytes": 4691427,
+          "ratio": 0.9977072473187064
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "cb47941cf960e6dc",
+      "tensor": "blk.33.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.2995078340027248,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12467271099740174,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.1260605619972921,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 68,
+      "entry_idx": 15854,
+      "expert_idx": 192,
+      "layer": 33,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.2669390729934094,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.14087016999837942,
+          "compressed_bytes": 4691620,
+          "ratio": 0.9977482918662892
+        },
+        "zlib9": {
+          "compress_s": 0.14100664899888216,
+          "compressed_bytes": 4691620,
+          "ratio": 0.9977482918662892
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "576bd0260eec3fb5",
+      "tensor": "blk.33.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.296456957999908,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12338522299978649,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.11959525500424206,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 68,
+      "entry_idx": 15796,
+      "expert_idx": 68,
+      "layer": 33,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.3315106769950944,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.1376187649948406,
+          "compressed_bytes": 4691799,
+          "ratio": 0.9977863590891768
+        },
+        "zlib9": {
+          "compress_s": 0.14269771299586864,
+          "compressed_bytes": 4691799,
+          "ratio": 0.9977863590891768
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "c464bcd11ecd535c",
+      "tensor": "blk.33.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.11484215200471226,
+          "compressed_bytes": 816,
+          "ratio": 0.00017353549651567945
+        },
+        "zlib6": {
+          "compress_s": 0.022555143004865386,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        },
+        "zlib9": {
+          "compress_s": 0.022392311999283265,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 68,
+      "entry_idx": 15841,
+      "expert_idx": 163,
+      "layer": 33,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.1956102359981742,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.14343360799830407,
+          "compressed_bytes": 4691588,
+          "ratio": 0.9977414865527003
+        },
+        "zlib9": {
+          "compress_s": 0.14183741699525854,
+          "compressed_bytes": 4691588,
+          "ratio": 0.9977414865527003
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "3403f934a1bab82c",
+      "tensor": "blk.33.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.5646246219985187,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12888501300039934,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.13049271600175416,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 25,
+      "entry_idx": 3604,
+      "expert_idx": 71,
+      "layer": 9,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.8440493399975821,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.19087892300012754,
+          "compressed_bytes": 5600139,
+          "ratio": 0.996517081302387
+        },
+        "zlib9": {
+          "compress_s": 0.19038586899841903,
+          "compressed_bytes": 5600139,
+          "ratio": 0.996517081302387
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "up",
+      "sha256_16": "eebc12c2172542d2",
+      "tensor": "blk.9.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.6849511539985542,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1747306870020111,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.146381721002399,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 25,
+      "entry_idx": 3727,
+      "expert_idx": 320,
+      "layer": 9,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.652218711002206,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.17244693000247935,
+          "compressed_bytes": 5599959,
+          "ratio": 0.9964850511912354
+        },
+        "zlib9": {
+          "compress_s": 0.19480307199410163,
+          "compressed_bytes": 5599959,
+          "ratio": 0.9964850511912354
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "up",
+      "sha256_16": "231bee7d698f685a",
+      "tensor": "blk.9.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.5626270249995287,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.17879219700262183,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.14794431300106226,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 25,
+      "entry_idx": 3585,
+      "expert_idx": 25,
+      "layer": 9,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.7828757589959423,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.16440509200037923,
+          "compressed_bytes": 5600080,
+          "ratio": 0.9965065825437318
+        },
+        "zlib9": {
+          "compress_s": 0.16731188399717212,
+          "compressed_bytes": 5600080,
+          "ratio": 0.9965065825437318
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "up",
+      "sha256_16": "b1f8b6b7deab325d",
+      "tensor": "blk.9.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.12454132399579976,
+          "compressed_bytes": 948,
+          "ratio": 0.00016869191873177843
+        },
+        "zlib6": {
+          "compress_s": 0.02793607299827272,
+          "compressed_bytes": 5481,
+          "ratio": 0.0009753168845663265
+        },
+        "zlib9": {
+          "compress_s": 0.027267037999990862,
+          "compressed_bytes": 5481,
+          "ratio": 0.0009753168845663265
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 25,
+      "entry_idx": 3596,
+      "expert_idx": 54,
+      "layer": 9,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.6947355550000793,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.17720529699727194,
+          "compressed_bytes": 5599645,
+          "ratio": 0.9964291764417821
+        },
+        "zlib9": {
+          "compress_s": 0.17015619500307366,
+          "compressed_bytes": 5599645,
+          "ratio": 0.9964291764417821
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "up",
+      "sha256_16": "216e2110a0b5c518",
+      "tensor": "blk.9.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.5433988310032873,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1500080390032963,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.17458077800256433,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 84,
+      "entry_idx": 14331,
+      "expert_idx": 253,
+      "layer": 30,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.374846210994292,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.1767217239976162,
+          "compressed_bytes": 4691565,
+          "ratio": 0.9977365952335584
+        },
+        "zlib9": {
+          "compress_s": 0.14794363499822794,
+          "compressed_bytes": 4691565,
+          "ratio": 0.9977365952335584
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "e936d90038e200a4",
+      "tensor": "blk.30.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.265314086995204,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.1404417510057101,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12355805799597874,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 84,
+      "entry_idx": 14254,
+      "expert_idx": 84,
+      "layer": 30,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.293800817002193,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.14092919299582718,
+          "compressed_bytes": 4691546,
+          "ratio": 0.997732554578615
+        },
+        "zlib9": {
+          "compress_s": 0.1398701060024905,
+          "compressed_bytes": 4691546,
+          "ratio": 0.997732554578615
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "d9522cd62a942e45",
+      "tensor": "blk.30.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.10362246300064726,
+          "compressed_bytes": 816,
+          "ratio": 0.00017353549651567945
+        },
+        "zlib6": {
+          "compress_s": 0.02223436100030085,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        },
+        "zlib9": {
+          "compress_s": 0.02391673399688443,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 84,
+      "entry_idx": 14285,
+      "expert_idx": 150,
+      "layer": 30,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.2610020520005492,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.1356520970002748,
+          "compressed_bytes": 4691706,
+          "ratio": 0.9977665811465593
+        },
+        "zlib9": {
+          "compress_s": 0.13375475200155051,
+          "compressed_bytes": 4691706,
+          "ratio": 0.9977665811465593
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "d7769a53b748aa9a",
+      "tensor": "blk.30.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.2887934570026118,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12863222399755614,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12710958399839,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 84,
+      "entry_idx": 14371,
+      "expert_idx": 346,
+      "layer": 30,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.2787608869984979,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13870941800269065,
+          "compressed_bytes": 4691654,
+          "ratio": 0.9977555225119773
+        },
+        "zlib9": {
+          "compress_s": 0.13887896200321848,
+          "compressed_bytes": 4691654,
+          "ratio": 0.9977555225119773
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "4e06960ca3ce32e3",
+      "tensor": "blk.30.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.2070131669970579,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12474643799941987,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12404106299800333,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 211,
+      "entry_idx": 8320,
+      "expert_idx": 285,
+      "layer": 18,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.2685866480023833,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13933578399883118,
+          "compressed_bytes": 4691717,
+          "ratio": 0.9977689204731054
+        },
+        "zlib9": {
+          "compress_s": 0.13761050299945055,
+          "compressed_bytes": 4691717,
+          "ratio": 0.9977689204731054
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "dab6322c899d0dbc",
+      "tensor": "blk.18.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.294704191001074,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.1279040319932392,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12666734300000826,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 211,
+      "entry_idx": 8331,
+      "expert_idx": 316,
+      "layer": 18,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.2095110430018394,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13696512800379423,
+          "compressed_bytes": 4691694,
+          "ratio": 0.9977640291539634
+        },
+        "zlib9": {
+          "compress_s": 0.1382983579969732,
+          "compressed_bytes": 4691694,
+          "ratio": 0.9977640291539634
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "90d69ccc1697f91c",
+      "tensor": "blk.18.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.2412937369954307,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.13296260800416349,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12685088500438724,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 211,
+      "entry_idx": 8283,
+      "expert_idx": 211,
+      "layer": 18,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.1942212760041002,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13898224299919093,
+          "compressed_bytes": 4691613,
+          "ratio": 0.9977468032039416
+        },
+        "zlib9": {
+          "compress_s": 0.13807219699810958,
+          "compressed_bytes": 4691613,
+          "ratio": 0.9977468032039416
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "5daac55e3d8f2012",
+      "tensor": "blk.18.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.10903347500425298,
+          "compressed_bytes": 816,
+          "ratio": 0.00017353549651567945
+        },
+        "zlib6": {
+          "compress_s": 0.022884367004735395,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        },
+        "zlib9": {
+          "compress_s": 0.022795595999923535,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 211,
+      "entry_idx": 8285,
+      "expert_idx": 214,
+      "layer": 18,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.1788302879940602,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.1555202460003784,
+          "compressed_bytes": 4691792,
+          "ratio": 0.9977848704268293
+        },
+        "zlib9": {
+          "compress_s": 0.1377800229965942,
+          "compressed_bytes": 4691792,
+          "ratio": 0.9977848704268293
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "4754c0bba71c7465",
+      "tensor": "blk.18.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.1789989509998122,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12123375499504618,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12040945800254121,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 180,
+      "entry_idx": 4866,
+      "expert_idx": 328,
+      "layer": 11,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.1971596059956937,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.1395585780046531,
+          "compressed_bytes": 4692429,
+          "ratio": 0.9979203387004573
+        },
+        "zlib9": {
+          "compress_s": 0.14274196099722758,
+          "compressed_bytes": 4692429,
+          "ratio": 0.9979203387004573
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "92cdfb35edb91ead",
+      "tensor": "blk.11.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.2375762230003602,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.13017182100156788,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12369670200132532,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 180,
+      "entry_idx": 4796,
+      "expert_idx": 180,
+      "layer": 11,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.1948916550027207,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13876579299540026,
+          "compressed_bytes": 4691762,
+          "ratio": 0.9977784904453397
+        },
+        "zlib9": {
+          "compress_s": 0.13835993999964558,
+          "compressed_bytes": 4691762,
+          "ratio": 0.9977784904453397
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "62c064eb3e9cc577",
+      "tensor": "blk.11.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.10921323799993843,
+          "compressed_bytes": 816,
+          "ratio": 0.00017353549651567945
+        },
+        "zlib6": {
+          "compress_s": 0.022200013998372015,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        },
+        "zlib9": {
+          "compress_s": 0.02195608899637591,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 180,
+      "entry_idx": 4846,
+      "expert_idx": 271,
+      "layer": 11,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.2994950210049865,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.14478623800096102,
+          "compressed_bytes": 4691604,
+          "ratio": 0.9977448892094948
+        },
+        "zlib9": {
+          "compress_s": 0.13761802600492956,
+          "compressed_bytes": 4691604,
+          "ratio": 0.9977448892094948
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "9f9d608755bb605f",
+      "tensor": "blk.11.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.267156387999421,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12149777800368611,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12112266400072258,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 180,
+      "entry_idx": 4874,
+      "expert_idx": 344,
+      "layer": 11,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.2832869780031615,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.1494746030002716,
+          "compressed_bytes": 4691608,
+          "ratio": 0.9977457398736934
+        },
+        "zlib9": {
+          "compress_s": 0.13821095000457717,
+          "compressed_bytes": 4691608,
+          "ratio": 0.9977457398736934
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "3fa8231050d614f1",
+      "tensor": "blk.11.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.2290084140040562,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.1518212590017356,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12440728099318221,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 98,
+      "entry_idx": 6399,
+      "expert_idx": 353,
+      "layer": 14,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.3317880090035032,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.14024954599881312,
+          "compressed_bytes": 4691851,
+          "ratio": 0.9977974177237587
+        },
+        "zlib9": {
+          "compress_s": 0.1391227069980232,
+          "compressed_bytes": 4691851,
+          "ratio": 0.9977974177237587
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "a4d13880f6bf68e6",
+      "tensor": "blk.14.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.3283941259942367,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12695557800179813,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.1497472260016366,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 98,
+      "entry_idx": 6323,
+      "expert_idx": 176,
+      "layer": 14,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.3445288869988872,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13630206699599512,
+          "compressed_bytes": 4691829,
+          "ratio": 0.9977927390706663
+        },
+        "zlib9": {
+          "compress_s": 0.1394295999998576,
+          "compressed_bytes": 4691829,
+          "ratio": 0.9977927390706663
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "0a52279a7ac36cc2",
+      "tensor": "blk.14.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.258968713998911,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.13947944099345477,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.11870799999451265,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 98,
+      "entry_idx": 6315,
+      "expert_idx": 162,
+      "layer": 14,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.3400402510014828,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13617702599731274,
+          "compressed_bytes": 4691852,
+          "ratio": 0.9977976303898084
+        },
+        "zlib9": {
+          "compress_s": 0.14241193199995905,
+          "compressed_bytes": 4691852,
+          "ratio": 0.9977976303898084
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "6ac785c24933d949",
+      "tensor": "blk.14.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.2533003279968398,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.1286628220041166,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12464664300205186,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 98,
+      "entry_idx": 6285,
+      "expert_idx": 98,
+      "layer": 14,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.250310998999339,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13977236499340506,
+          "compressed_bytes": 4691751,
+          "ratio": 0.9977761511187936
+        },
+        "zlib9": {
+          "compress_s": 0.13796803000150248,
+          "compressed_bytes": 4691751,
+          "ratio": 0.9977761511187936
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "up",
+      "sha256_16": "a2ae547b75bbdcb8",
+      "tensor": "blk.14.ffn_up_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.11668222500156844,
+          "compressed_bytes": 816,
+          "ratio": 0.00017353549651567945
+        },
+        "zlib6": {
+          "compress_s": 0.022648046004178468,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        },
+        "zlib9": {
+          "compress_s": 0.02168238900048891,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 127,
+      "entry_idx": 5057,
+      "expert_idx": 373,
+      "layer": 11,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.2695381919984357,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.14604850100295153,
+          "compressed_bytes": 4691688,
+          "ratio": 0.9977627531576655
+        },
+        "zlib9": {
+          "compress_s": 0.16669025100418366,
+          "compressed_bytes": 4691688,
+          "ratio": 0.9977627531576655
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "gate",
+      "sha256_16": "b4c563e9984ecee4",
+      "tensor": "blk.11.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.2763068439962808,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12677496000105748,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12930443799996283,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 127,
+      "entry_idx": 5062,
+      "expert_idx": 383,
+      "layer": 11,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.2576626209993265,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.1398931950025144,
+          "compressed_bytes": 4691830,
+          "ratio": 0.997792951736716
+        },
+        "zlib9": {
+          "compress_s": 0.16182797699730145,
+          "compressed_bytes": 4691830,
+          "ratio": 0.997792951736716
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "gate",
+      "sha256_16": "b42cf0aac0ceb874",
+      "tensor": "blk.11.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.2898184980003862,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.1304029359962442,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.1266292889995384,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 127,
+      "entry_idx": 5061,
+      "expert_idx": 378,
+      "layer": 11,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.2131080990002374,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13858468800026458,
+          "compressed_bytes": 4692010,
+          "ratio": 0.9978312316256533
+        },
+        "zlib9": {
+          "compress_s": 0.13808584400248947,
+          "compressed_bytes": 4692010,
+          "ratio": 0.9978312316256533
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "gate",
+      "sha256_16": "772ba985dc5cb5c0",
+      "tensor": "blk.11.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.2073271080007544,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12468353499571094,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12509516799764242,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 127,
+      "entry_idx": 4938,
+      "expert_idx": 127,
+      "layer": 11,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.202103632997023,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13736014899768634,
+          "compressed_bytes": 4691691,
+          "ratio": 0.9977633911558145
+        },
+        "zlib9": {
+          "compress_s": 0.13682677399629029,
+          "compressed_bytes": 4691691,
+          "ratio": 0.9977633911558145
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "gate",
+      "sha256_16": "06690199a3728882",
+      "tensor": "blk.11.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.10626639100519242,
+          "compressed_bytes": 816,
+          "ratio": 0.00017353549651567945
+        },
+        "zlib6": {
+          "compress_s": 0.022202102998562623,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        },
+        "zlib9": {
+          "compress_s": 0.02270612599386368,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 210,
+      "entry_idx": 24555,
+      "expert_idx": 332,
+      "layer": 50,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.6337396949966205,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1607822509977268,
+          "compressed_bytes": 5600052,
+          "ratio": 0.9965016000819971
+        },
+        "zlib9": {
+          "compress_s": 0.15936782999779098,
+          "compressed_bytes": 5600052,
+          "ratio": 0.9965016000819971
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "11e98eec51939abf",
+      "tensor": "blk.50.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.6163668620065437,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1580432600021595,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.14758295399951749,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 210,
+      "entry_idx": 24522,
+      "expert_idx": 228,
+      "layer": 50,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.5765749440033687,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1656455670017749,
+          "compressed_bytes": 5599929,
+          "ratio": 0.9964797128393769
+        },
+        "zlib9": {
+          "compress_s": 0.16369433200452477,
+          "compressed_bytes": 5599929,
+          "ratio": 0.9964797128393769
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "8041b6c6e46ace7d",
+      "tensor": "blk.50.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.5921874120031134,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.15098230999865336,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.15367183899797965,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 210,
+      "entry_idx": 24513,
+      "expert_idx": 210,
+      "layer": 50,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.567169522997574,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.16174128800048493,
+          "compressed_bytes": 5600107,
+          "ratio": 0.9965113870604045
+        },
+        "zlib9": {
+          "compress_s": 0.17006062000291422,
+          "compressed_bytes": 5600107,
+          "ratio": 0.9965113870604045
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "748e5185623b180d",
+      "tensor": "blk.50.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.12131637200218393,
+          "compressed_bytes": 948,
+          "ratio": 0.00016869191873177843
+        },
+        "zlib6": {
+          "compress_s": 0.02715693000209285,
+          "compressed_bytes": 5481,
+          "ratio": 0.0009753168845663265
+        },
+        "zlib9": {
+          "compress_s": 0.026094941997143906,
+          "compressed_bytes": 5481,
+          "ratio": 0.0009753168845663265
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 210,
+      "entry_idx": 24523,
+      "expert_idx": 243,
+      "layer": 50,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.6119509749987628,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1607083800045075,
+          "compressed_bytes": 5599834,
+          "ratio": 0.9964628080584913
+        },
+        "zlib9": {
+          "compress_s": 0.15791914200235624,
+          "compressed_bytes": 5599834,
+          "ratio": 0.9964628080584913
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "b80600897e9a2baa",
+      "tensor": "blk.50.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.6520602649979992,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.15491265900345752,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.14902405600150814,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 156,
+      "entry_idx": 18063,
+      "expert_idx": 348,
+      "layer": 37,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.5756422970007407,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1608541339955991,
+          "compressed_bytes": 5600001,
+          "ratio": 0.9964925248838374
+        },
+        "zlib9": {
+          "compress_s": 0.1693985870006145,
+          "compressed_bytes": 5600001,
+          "ratio": 0.9964925248838374
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "a08a31b949e8f638",
+      "tensor": "blk.37.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.64291038599913,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1571877769965795,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.14579835300537525,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 156,
+      "entry_idx": 17986,
+      "expert_idx": 156,
+      "layer": 37,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.6730556510010501,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.16186062199994922,
+          "compressed_bytes": 5600045,
+          "ratio": 0.9965003544665634
+        },
+        "zlib9": {
+          "compress_s": 0.1654721789964242,
+          "compressed_bytes": 5600045,
+          "ratio": 0.9965003544665634
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "d0cb9f5ef2fad73a",
+      "tensor": "blk.37.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.13349382399610477,
+          "compressed_bytes": 948,
+          "ratio": 0.00016869191873177843
+        },
+        "zlib6": {
+          "compress_s": 0.030409863997192588,
+          "compressed_bytes": 5481,
+          "ratio": 0.0009753168845663265
+        },
+        "zlib9": {
+          "compress_s": 0.0298421289990074,
+          "compressed_bytes": 5481,
+          "ratio": 0.0009753168845663265
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 156,
+      "entry_idx": 18032,
+      "expert_idx": 268,
+      "layer": 37,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.6018402430054266,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.16350357399642235,
+          "compressed_bytes": 5600346,
+          "ratio": 0.9965539159302114
+        },
+        "zlib9": {
+          "compress_s": 0.15945980499964207,
+          "compressed_bytes": 5600346,
+          "ratio": 0.9965539159302114
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "e388f4d80842996a",
+      "tensor": "blk.37.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.6113856060037506,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.15927137399557978,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.1596282069949666,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 156,
+      "entry_idx": 18014,
+      "expert_idx": 228,
+      "layer": 37,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.626221419996,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.17402353099896573,
+          "compressed_bytes": 5599855,
+          "ratio": 0.9964665449047923
+        },
+        "zlib9": {
+          "compress_s": 0.1640107880011783,
+          "compressed_bytes": 5599855,
+          "ratio": 0.9964665449047923
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "73540dde67cff944",
+      "tensor": "blk.37.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.6049289560032776,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.15599864999967394,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.15144440699805273,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 97,
+      "entry_idx": 15013,
+      "expert_idx": 247,
+      "layer": 31,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.5769118829994113,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.16184186399914324,
+          "compressed_bytes": 5600176,
+          "ratio": 0.9965236652696793
+        },
+        "zlib9": {
+          "compress_s": 0.16579281199665274,
+          "compressed_bytes": 5600176,
+          "ratio": 0.9965236652696793
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "83777410745e4dec",
+      "tensor": "blk.31.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.5629746740014525,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.15499822400306584,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.15147796800010838,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 97,
+      "entry_idx": 15050,
+      "expert_idx": 325,
+      "layer": 31,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.5636046329964302,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.17975255800411105,
+          "compressed_bytes": 5600482,
+          "ratio": 0.996578116458637
+        },
+        "zlib9": {
+          "compress_s": 0.1660476059987559,
+          "compressed_bytes": 5600482,
+          "ratio": 0.996578116458637
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "02e75376116dab5f",
+      "tensor": "blk.31.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.5828454779984895,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.15757043399935355,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.147437188999902,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 97,
+      "entry_idx": 14954,
+      "expert_idx": 118,
+      "layer": 31,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.5840476999946986,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.16435703499882948,
+          "compressed_bytes": 5600042,
+          "ratio": 0.9964998206313775
+        },
+        "zlib9": {
+          "compress_s": 0.16366213900619186,
+          "compressed_bytes": 5600042,
+          "ratio": 0.9964998206313775
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "4e638ffcf1179eaf",
+      "tensor": "blk.31.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.5476748859946383,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1515826000031666,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.15052702100365423,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 97,
+      "entry_idx": 14942,
+      "expert_idx": 97,
+      "layer": 31,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.6377111449983204,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1633084070053883,
+          "compressed_bytes": 5600072,
+          "ratio": 0.9965051589832361
+        },
+        "zlib9": {
+          "compress_s": 0.16718037499958882,
+          "compressed_bytes": 5600072,
+          "ratio": 0.9965051589832361
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "fd95a428b25219bf",
+      "tensor": "blk.31.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.11915143200167222,
+          "compressed_bytes": 948,
+          "ratio": 0.00016869191873177843
+        },
+        "zlib6": {
+          "compress_s": 0.026513566997891758,
+          "compressed_bytes": 5481,
+          "ratio": 0.0009753168845663265
+        },
+        "zlib9": {
+          "compress_s": 0.026084683995577507,
+          "compressed_bytes": 5481,
+          "ratio": 0.0009753168845663265
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 90,
+      "entry_idx": 29972,
+      "expert_idx": 294,
+      "layer": 60,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.6270295889989939,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1645063649993972,
+          "compressed_bytes": 5599678,
+          "ratio": 0.9964350486288265
+        },
+        "zlib9": {
+          "compress_s": 0.16768686899740715,
+          "compressed_bytes": 5599678,
+          "ratio": 0.9964350486288265
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "ba65fb6b4c7bf28a",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.5848255300006713,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.15564965000521624,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.14687747599964496,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 90,
+      "entry_idx": 29923,
+      "expert_idx": 178,
+      "layer": 60,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.5693668909952976,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1680227830001968,
+          "compressed_bytes": 5600099,
+          "ratio": 0.996509963499909
+        },
+        "zlib9": {
+          "compress_s": 0.163404459002777,
+          "compressed_bytes": 5600099,
+          "ratio": 0.996509963499909
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "469dd0c7fbd1d6bd",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.5723724849958671,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.15187636400514748,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.15699030100222444,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 90,
+      "entry_idx": 29884,
+      "expert_idx": 90,
+      "layer": 60,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.6424790589953773,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.16074941999977455,
+          "compressed_bytes": 5600130,
+          "ratio": 0.9965154797968294
+        },
+        "zlib9": {
+          "compress_s": 0.17039798099722248,
+          "compressed_bytes": 5600130,
+          "ratio": 0.9965154797968294
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "501d19ef04fb947f",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.12026730100478744,
+          "compressed_bytes": 948,
+          "ratio": 0.00016869191873177843
+        },
+        "zlib6": {
+          "compress_s": 0.030387295002583414,
+          "compressed_bytes": 5481,
+          "ratio": 0.0009753168845663265
+        },
+        "zlib9": {
+          "compress_s": 0.026271495000401046,
+          "compressed_bytes": 5481,
+          "ratio": 0.0009753168845663265
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 90,
+      "entry_idx": 29958,
+      "expert_idx": 263,
+      "layer": 60,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.5730475199961802,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.16227936200448312,
+          "compressed_bytes": 5600060,
+          "ratio": 0.9965030236424927
+        },
+        "zlib9": {
+          "compress_s": 0.15962147200480103,
+          "compressed_bytes": 5600060,
+          "ratio": 0.9965030236424927
+        }
+      },
+      "raw_bytes": 5619712,
+      "role": "gate",
+      "sha256_16": "c9a6797c692bce17",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.6104304489999777,
+          "compressed_bytes": 5620052,
+          "ratio": 1.0000605013210642
+        },
+        "zlib6": {
+          "compress_s": 0.1548367670038715,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        },
+        "zlib9": {
+          "compress_s": 0.15021959200385027,
+          "compressed_bytes": 5621433,
+          "ratio": 1.0003062434516217
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 56,
+      "entry_idx": 8940,
+      "expert_idx": 228,
+      "layer": 19,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.3525651629970525,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.1427504079983919,
+          "compressed_bytes": 4691819,
+          "ratio": 0.9977906124101699
+        },
+        "zlib9": {
+          "compress_s": 0.15781728900037706,
+          "compressed_bytes": 4691819,
+          "ratio": 0.9977906124101699
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "gate",
+      "sha256_16": "da01246c23bcec60",
+      "tensor": "blk.19.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.1959895640029572,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12242176700237906,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.11840177699923515,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 56,
+      "entry_idx": 8891,
+      "expert_idx": 102,
+      "layer": 19,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.2671278320049169,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13736444700043648,
+          "compressed_bytes": 4691812,
+          "ratio": 0.9977891237478222
+        },
+        "zlib9": {
+          "compress_s": 0.13737268800468883,
+          "compressed_bytes": 4691812,
+          "ratio": 0.9977891237478222
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "gate",
+      "sha256_16": "c2bec46ade479f0c",
+      "tensor": "blk.19.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.2666349720020662,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12959466200118186,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.12401464900176506,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 56,
+      "entry_idx": 8871,
+      "expert_idx": 56,
+      "layer": 19,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.1948111709934892,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.13983591699798126,
+          "compressed_bytes": 4691830,
+          "ratio": 0.997792951736716
+        },
+        "zlib9": {
+          "compress_s": 0.14001735900092172,
+          "compressed_bytes": 4691830,
+          "ratio": 0.997792951736716
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "gate",
+      "sha256_16": "b5946751f7a2af65",
+      "tensor": "blk.19.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.10996702600095887,
+          "compressed_bytes": 816,
+          "ratio": 0.00017353549651567945
+        },
+        "zlib6": {
+          "compress_s": 0.023054062003211584,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        },
+        "zlib9": {
+          "compress_s": 0.021959923004033044,
+          "compressed_bytes": 4592,
+          "ratio": 0.0009765625
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 56,
+      "entry_idx": 8894,
+      "expert_idx": 109,
+      "layer": 19,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.3362478429990006,
+          "compressed_bytes": 4702500,
+          "ratio": 1.0000620984864983
+        },
+        "zlib6": {
+          "compress_s": 0.15525089199945796,
+          "compressed_bytes": 4691744,
+          "ratio": 0.997774662456446
+        },
+        "zlib9": {
+          "compress_s": 0.14522399700217647,
+          "compressed_bytes": 4691744,
+          "ratio": 0.997774662456446
+        }
+      },
+      "raw_bytes": 4702208,
+      "role": "gate",
+      "sha256_16": "48152b7b49f4646c",
+      "tensor": "blk.19.ffn_gate_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.184703011000238,
+          "compressed_bytes": 4702504,
+          "ratio": 1.000062949150697
+        },
+        "zlib6": {
+          "compress_s": 0.12339285600319272,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        },
+        "zlib9": {
+          "compress_s": 0.11957705699751386,
+          "compressed_bytes": 4703649,
+          "ratio": 1.000306451777548
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 40,
+      "entry_idx": 25131,
+      "expert_idx": 51,
+      "layer": 51,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.8352881419996265,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1747970670039649,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1742021219979506,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "1d3d6c591319c527",
+      "tensor": "blk.51.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.8764820930009591,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1719324570003664,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16272377799759852,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 40,
+      "entry_idx": 25128,
+      "expert_idx": 40,
+      "layer": 51,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.906554811001115,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.17282563200569712,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.17085761999624083,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "f9bdbe2497dab640",
+      "tensor": "blk.51.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.1414757520033163,
+          "compressed_bytes": 1052,
+          "ratio": 0.0001667765827922078
+        },
+        "zlib6": {
+          "compress_s": 0.031045990996062756,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        },
+        "zlib9": {
+          "compress_s": 0.029945192000013776,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 40,
+      "entry_idx": 25152,
+      "expert_idx": 93,
+      "layer": 51,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.857733344004373,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.17943207300413633,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16847711100126617,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "a9a46ea72ab783fa",
+      "tensor": "blk.51.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.8585412739994354,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1627920999962953,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.178733139000542,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 40,
+      "entry_idx": 25266,
+      "expert_idx": 331,
+      "layer": 51,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.8041215239936719,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.17507951199513627,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16851350299839396,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "52d9eea11915ef19",
+      "tensor": "blk.51.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.7425800999990315,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16717774300195742,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1640574899938656,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 48,
+      "entry_idx": 21050,
+      "expert_idx": 111,
+      "layer": 43,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.7421665599977132,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16450558399810689,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.17149224599415902,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "1cd46836f20a0b7d",
+      "tensor": "blk.43.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.7248857659942587,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16478627600008622,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1607134860023507,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 48,
+      "entry_idx": 21016,
+      "expert_idx": 48,
+      "layer": 43,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.7340673490034533,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16649321099976078,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.17202471099881222,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "8ab230264111363f",
+      "tensor": "blk.43.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.13741649300209247,
+          "compressed_bytes": 1052,
+          "ratio": 0.0001667765827922078
+        },
+        "zlib6": {
+          "compress_s": 0.030018873992958106,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        },
+        "zlib9": {
+          "compress_s": 0.03020938499685144,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 48,
+      "entry_idx": 21081,
+      "expert_idx": 188,
+      "layer": 43,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.7471027589999721,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1624369690034655,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16156162200059043,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "5415715d9ffa4760",
+      "tensor": "blk.43.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.7766745330009144,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16633227899728809,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16336225699342322,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 48,
+      "entry_idx": 21069,
+      "expert_idx": 166,
+      "layer": 43,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.860387920998619,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16394144199875882,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.17173616000218317,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "f1c656072669b4d6",
+      "tensor": "blk.43.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 2.1388835920006386,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.17511443400144344,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1667941530031385,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 93,
+      "entry_idx": 23602,
+      "expert_idx": 93,
+      "layer": 48,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 2.0468569720032974,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1703870220007957,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16254577100335155,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "e6df23d98fe33336",
+      "tensor": "blk.48.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.13227928600099403,
+          "compressed_bytes": 1052,
+          "ratio": 0.0001667765827922078
+        },
+        "zlib6": {
+          "compress_s": 0.03130510399932973,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        },
+        "zlib9": {
+          "compress_s": 0.029626240000652615,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 93,
+      "entry_idx": 23686,
+      "expert_idx": 265,
+      "layer": 48,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 2.05528908999986,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.17738956300308928,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1840455209967331,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "f220bfd50a1b9e97",
+      "tensor": "blk.48.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.9917177310053376,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1669104949978646,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.162415239996335,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 93,
+      "entry_idx": 23718,
+      "expert_idx": 341,
+      "layer": 48,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.959642737005197,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1680632229981711,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.20331461800378747,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "8f198d8010cdb7c5",
+      "tensor": "blk.48.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.9186552640021546,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.19011174899787875,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1685712489997968,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 93,
+      "entry_idx": 23738,
+      "expert_idx": 383,
+      "layer": 48,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.9441947710001841,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16640108200226678,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.162761594998301,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "a3e28c670c943a12",
+      "tensor": "blk.48.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.9219578080010251,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16213017100380966,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.19046226299542468,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 240,
+      "entry_idx": 16243,
+      "expert_idx": 280,
+      "layer": 33,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.9793354809953598,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.17573903300217353,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1739140799982124,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "d49e9ae589cef557",
+      "tensor": "blk.33.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.915303498004505,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16588027100078762,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16416847800428513,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 240,
+      "entry_idx": 16222,
+      "expert_idx": 240,
+      "layer": 33,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.8751758520011208,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1657801390028908,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.173720428996603,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "56a9f0c0c4a91fa0",
+      "tensor": "blk.33.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.1381260630005272,
+          "compressed_bytes": 1052,
+          "ratio": 0.0001667765827922078
+        },
+        "zlib6": {
+          "compress_s": 0.029887525000958703,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        },
+        "zlib9": {
+          "compress_s": 0.030666729995573405,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 240,
+      "entry_idx": 16254,
+      "expert_idx": 305,
+      "layer": 33,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.8760312430022168,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.18234283300262177,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16774233499745606,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "dcbde6bcdd6e5d2f",
+      "tensor": "blk.33.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.8192806920051225,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16197975199611392,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16725082100310829,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 240,
+      "entry_idx": 16266,
+      "expert_idx": 332,
+      "layer": 33,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.8226180510027916,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16766975500650005,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16801355699863052,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "a997706f80ee1c4c",
+      "tensor": "blk.33.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.8583942929981276,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1758848060053424,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.17238517999794567,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 29,
+      "entry_idx": 7678,
+      "expert_idx": 338,
+      "layer": 16,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 2.664545186999021,
+          "compressed_bytes": 7175184,
+          "ratio": 0.9200388163077731
+        },
+        "zlib6": {
+          "compress_s": 0.27654559000075096,
+          "compressed_bytes": 7181169,
+          "ratio": 0.9208062436400342
+        },
+        "zlib9": {
+          "compress_s": 0.2748058870056411,
+          "compressed_bytes": 7181169,
+          "ratio": 0.9208062436400342
+        }
+      },
+      "raw_bytes": 7798784,
+      "role": "down",
+      "sha256_16": "903dec36f01ff754",
+      "tensor": "blk.16.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 2.556365842996456,
+          "compressed_bytes": 7799232,
+          "ratio": 1.0000574448529411
+        },
+        "zlib6": {
+          "compress_s": 0.23667323400150053,
+          "compressed_bytes": 7795058,
+          "ratio": 0.9995222332096901
+        },
+        "zlib9": {
+          "compress_s": 0.23414711400255328,
+          "compressed_bytes": 7795058,
+          "ratio": 0.9995222332096901
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 29,
+      "entry_idx": 7563,
+      "expert_idx": 42,
+      "layer": 16,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 2.648626101996342,
+          "compressed_bytes": 7176248,
+          "ratio": 0.9201752478335085
+        },
+        "zlib6": {
+          "compress_s": 0.2803374419963802,
+          "compressed_bytes": 7182140,
+          "ratio": 0.9209307502297794
+        },
+        "zlib9": {
+          "compress_s": 0.2754370940019726,
+          "compressed_bytes": 7182140,
+          "ratio": 0.9209307502297794
+        }
+      },
+      "raw_bytes": 7798784,
+      "role": "down",
+      "sha256_16": "7621fe72f1274a82",
+      "tensor": "blk.16.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 2.6486325899968506,
+          "compressed_bytes": 7799232,
+          "ratio": 1.0000574448529411
+        },
+        "zlib6": {
+          "compress_s": 0.23080240999843227,
+          "compressed_bytes": 7795077,
+          "ratio": 0.9995246694869354
+        },
+        "zlib9": {
+          "compress_s": 0.23316261699801544,
+          "compressed_bytes": 7795077,
+          "ratio": 0.9995246694869354
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 29,
+      "entry_idx": 7592,
+      "expert_idx": 105,
+      "layer": 16,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 2.6667477049995796,
+          "compressed_bytes": 7173536,
+          "ratio": 0.9198275013130253
+        },
+        "zlib6": {
+          "compress_s": 0.29299474800063763,
+          "compressed_bytes": 7179383,
+          "ratio": 0.9205772335789785
+        },
+        "zlib9": {
+          "compress_s": 0.27265875400189543,
+          "compressed_bytes": 7179383,
+          "ratio": 0.9205772335789785
+        }
+      },
+      "raw_bytes": 7798784,
+      "role": "down",
+      "sha256_16": "f837b29b4042e8d4",
+      "tensor": "blk.16.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 2.572753335996822,
+          "compressed_bytes": 7799232,
+          "ratio": 1.0000574448529411
+        },
+        "zlib6": {
+          "compress_s": 0.2540317849998246,
+          "compressed_bytes": 7795051,
+          "ratio": 0.9995213356338629
+        },
+        "zlib9": {
+          "compress_s": 0.23135238700342597,
+          "compressed_bytes": 7795051,
+          "ratio": 0.9995213356338629
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 29,
+      "entry_idx": 7556,
+      "expert_idx": 29,
+      "layer": 16,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 3.6762243889970705,
+          "compressed_bytes": 7173676,
+          "ratio": 0.9198454528295693
+        },
+        "zlib6": {
+          "compress_s": 0.30303083499893546,
+          "compressed_bytes": 7179189,
+          "ratio": 0.920552357906053
+        },
+        "zlib9": {
+          "compress_s": 0.2706517420010641,
+          "compressed_bytes": 7179189,
+          "ratio": 0.920552357906053
+        }
+      },
+      "raw_bytes": 7798784,
+      "role": "down",
+      "sha256_16": "dd0cdcdba7196394",
+      "tensor": "blk.16.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.18692967300012242,
+          "compressed_bytes": 1264,
+          "ratio": 0.0001620765493697479
+        },
+        "zlib6": {
+          "compress_s": 0.03903417399851605,
+          "compressed_bytes": 7592,
+          "ratio": 0.0009734850971638656
+        },
+        "zlib9": {
+          "compress_s": 0.03793960499751847,
+          "compressed_bytes": 7592,
+          "ratio": 0.0009734850971638656
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 78,
+      "entry_idx": 8134,
+      "expert_idx": 263,
+      "layer": 17,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 2.4094852280031773,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1917521110008238,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.18016073299804702,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "137da185c07a005d",
+      "tensor": "blk.17.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 2.1502262560024974,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1959223719968577,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.18218993899790803,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 78,
+      "entry_idx": 8077,
+      "expert_idx": 111,
+      "layer": 17,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 2.2038299740015646,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16785111100034555,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1961998830010998,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "49415c7f16c94dfe",
+      "tensor": "blk.17.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 2.1713469050009735,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.17768495599739254,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16737119799654465,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 78,
+      "entry_idx": 8105,
+      "expert_idx": 175,
+      "layer": 17,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 2.1195585210007266,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16459564799879445,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1813007529999595,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "eec24627488861c9",
+      "tensor": "blk.17.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 2.26750195799832,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.164462086999265,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.17333310400135815,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 78,
+      "entry_idx": 8063,
+      "expert_idx": 78,
+      "layer": 17,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 2.100402436000877,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.17023617099766852,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16862740900251083,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "6c069272968088ce",
+      "tensor": "blk.17.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.1421892910002498,
+          "compressed_bytes": 1052,
+          "ratio": 0.0001667765827922078
+        },
+        "zlib6": {
+          "compress_s": 0.029693803000554908,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        },
+        "zlib9": {
+          "compress_s": 0.029984995002450887,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 76,
+      "entry_idx": 76,
+      "expert_idx": 76,
+      "layer": 1,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 2.2114314349964843,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.17883449700457277,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1714622910003527,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "792b84a3e04d285e",
+      "tensor": "blk.1.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.144915591001336,
+          "compressed_bytes": 1052,
+          "ratio": 0.0001667765827922078
+        },
+        "zlib6": {
+          "compress_s": 0.03096941400144715,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        },
+        "zlib9": {
+          "compress_s": 0.030115657005808316,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 76,
+      "entry_idx": 199,
+      "expert_idx": 199,
+      "layer": 1,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 2.465043701995455,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.172472848003963,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16698339599679457,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "570a69eb72f2670e",
+      "tensor": "blk.1.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.9261636989976978,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16917284399823984,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.17904815799556673,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 76,
+      "entry_idx": 236,
+      "expert_idx": 236,
+      "layer": 1,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.891477880999446,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16633859299327014,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16198344000440557,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "34ab29a16b62aafa",
+      "tensor": "blk.1.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.8217238900033408,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1618901910042041,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1630733779966249,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 76,
+      "entry_idx": 243,
+      "expert_idx": 243,
+      "layer": 1,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.8751598650051164,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16523987500113435,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.1681479879989638,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "fe0baf9473964cd3",
+      "tensor": "blk.1.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.8392836499988334,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16839135000191163,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16453577000356745,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 128,
+      "entry_idx": 528,
+      "expert_idx": 144,
+      "layer": 2,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.8725125730052241,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16580506999889622,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.17562701499991817,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "fb43befb2b84c69c",
+      "tensor": "blk.2.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.9649608449981315,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16299040900048567,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16653867500281194,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 128,
+      "entry_idx": 572,
+      "expert_idx": 188,
+      "layer": 2,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.8464216840002337,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16511369499494322,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16162644999712938,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "fd83483e4409ecb3",
+      "tensor": "blk.2.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.8168175829996471,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.1623128249993897,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16450409200479044,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    },
+    {
+      "base_expert_idx": 128,
+      "entry_idx": 512,
+      "expert_idx": 128,
+      "layer": 2,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.7768053940017126,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16754013399622636,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.17129371500050183,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "f4bc19a4e7000854",
+      "tensor": "blk.2.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 0.14364601399574894,
+          "compressed_bytes": 1052,
+          "ratio": 0.0001667765827922078
+        },
+        "zlib6": {
+          "compress_s": 0.03002183600619901,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        },
+        "zlib9": {
+          "compress_s": 0.029816705005941913,
+          "compressed_bytes": 6147,
+          "ratio": 0.0009745015726461039
+        }
+      },
+      "xor_delta_is_base_self": true
+    },
+    {
+      "base_expert_idx": 128,
+      "entry_idx": 576,
+      "expert_idx": 192,
+      "layer": 2,
+      "pack": "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack",
+      "raw": {
+        "lzma6": {
+          "compress_s": 1.7363209329996607,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16539794900018023,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16682936899451306,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "raw_bytes": 6307840,
+      "role": "down",
+      "sha256_16": "74ffa3d82f2cfd9d",
+      "tensor": "blk.2.ffn_down_exps.weight",
+      "xor": {
+        "lzma6": {
+          "compress_s": 1.7138813139972626,
+          "compressed_bytes": 6308216,
+          "ratio": 1.0000596083603897
+        },
+        "zlib6": {
+          "compress_s": 0.16432044099929044,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        },
+        "zlib9": {
+          "compress_s": 0.16172774200094864,
+          "compressed_bytes": 6309771,
+          "ratio": 1.0003061269784903
+        }
+      },
+      "xor_delta_is_base_self": false
+    }
+  ],
+  "sampled_entries": 80,
+  "sampled_raw_bytes": 451870720,
+  "seed": 1,
+  "target_ratio": 0.4,
+  "xor_nonbase_summary": {
+    "by_codec": {
+      "lzma6": {
+        "aggregate_ratio": 1.0000606545164068,
+        "compressed_bytes": 338923596,
+        "entries": 60,
+        "max_ratio": 1.000062949150697,
+        "mean_ratio": 1.000060892701793,
+        "min_ratio": 1.0000574448529411,
+        "raw_bytes": 338903040
+      },
+      "zlib6": {
+        "aggregate_ratio": 1.0002521694700643,
+        "compressed_bytes": 338988501,
+        "entries": 60,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 1.000267100733028,
+        "min_ratio": 0.9995213356338629,
+        "raw_bytes": 338903040
+      },
+      "zlib9": {
+        "aggregate_ratio": 1.0002521694700643,
+        "compressed_bytes": 338988501,
+        "entries": 60,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 1.000267100733028,
+        "min_ratio": 0.9995213356338629,
+        "raw_bytes": 338903040
+      }
+    },
+    "by_role_codec": {
+      "down:lzma6": {
+        "aggregate_ratio": 1.0000592835954747,
+        "compressed_bytes": 155870232,
+        "entries": 24,
+        "max_ratio": 1.0000596083603897,
+        "mean_ratio": 1.000059337921958,
+        "min_ratio": 1.0000574448529411,
+        "raw_bytes": 155860992
+      },
+      "down:zlib6": {
+        "aggregate_ratio": 1.0001885333823617,
+        "compressed_bytes": 155890377,
+        "entries": 24,
+        "max_ratio": 1.0003061269784903,
+        "mean_ratio": 1.0002082043699494,
+        "min_ratio": 0.9995213356338629,
+        "raw_bytes": 155860992
+      },
+      "down:zlib9": {
+        "aggregate_ratio": 1.0001885333823617,
+        "compressed_bytes": 155890377,
+        "entries": 24,
+        "max_ratio": 1.0003061269784903,
+        "mean_ratio": 1.0002082043699494,
+        "min_ratio": 0.9995213356338629,
+        "raw_bytes": 155860992
+      },
+      "gate:lzma6": {
+        "aggregate_ratio": 1.0000612233427544,
+        "compressed_bytes": 95655648,
+        "entries": 18,
+        "max_ratio": 1.000062949150697,
+        "mean_ratio": 1.000061317264275,
+        "min_ratio": 1.0000605013210642,
+        "raw_bytes": 95649792
+      },
+      "gate:zlib6": {
+        "aggregate_ratio": 1.0003063049002763,
+        "compressed_bytes": 95679090,
+        "entries": 18,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 1.000306312893597,
+        "min_ratio": 1.0003062434516217,
+        "raw_bytes": 95649792
+      },
+      "gate:zlib9": {
+        "aggregate_ratio": 1.0003063049002763,
+        "compressed_bytes": 95679090,
+        "entries": 18,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 1.000306312893597,
+        "min_ratio": 1.0003062434516217,
+        "raw_bytes": 95649792
+      },
+      "up:lzma6": {
+        "aggregate_ratio": 1.0000624769315944,
+        "compressed_bytes": 87397716,
+        "entries": 18,
+        "max_ratio": 1.000062949150697,
+        "mean_ratio": 1.0000625411790915,
+        "min_ratio": 1.0000605013210642,
+        "raw_bytes": 87392256
+      },
+      "up:zlib6": {
+        "aggregate_ratio": 1.0003064115886882,
+        "compressed_bytes": 87419034,
+        "entries": 18,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 1.0003064170565596,
+        "min_ratio": 1.0003062434516217,
+        "raw_bytes": 87392256
+      },
+      "up:zlib9": {
+        "aggregate_ratio": 1.0003064115886882,
+        "compressed_bytes": 87419034,
+        "entries": 18,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 1.0003064170565596,
+        "min_ratio": 1.0003062434516217,
+        "raw_bytes": 87392256
+      }
+    }
+  },
+  "xor_summary": {
+    "by_codec": {
+      "lzma6": {
+        "aggregate_ratio": 0.7500877153536304,
+        "compressed_bytes": 338942676,
+        "entries": 80,
+        "max_ratio": 1.000062949150697,
+        "mean_ratio": 0.7500880160350722,
+        "min_ratio": 0.0001620765493697479,
+        "raw_bytes": 451870720
+      },
+      "zlib6": {
+        "aggregate_ratio": 0.7504329357741967,
+        "compressed_bytes": 339098671,
+        "entries": 80,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 0.7504441695251277,
+        "min_ratio": 0.0009734850971638656,
+        "raw_bytes": 451870720
+      },
+      "zlib9": {
+        "aggregate_ratio": 0.7504329357741967,
+        "compressed_bytes": 339098671,
+        "entries": 80,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 0.7504441695251277,
+        "min_ratio": 0.0009734850971638656,
+        "raw_bytes": 451870720
+      }
+    },
+    "by_role_codec": {
+      "down:lzma6": {
+        "aggregate_ratio": 0.7500859804613588,
+        "compressed_bytes": 155878860,
+        "entries": 32,
+        "max_ratio": 1.0000596083603897,
+        "mean_ratio": 0.7500860507111221,
+        "min_ratio": 0.0001620765493697479,
+        "raw_bytes": 207814656
+      },
+      "down:zlib6": {
+        "aggregate_ratio": 0.7503849872840538,
+        "compressed_bytes": 155940998,
+        "entries": 32,
+        "max_ratio": 1.0003061269784903,
+        "mean_ratio": 0.7503997469057647,
+        "min_ratio": 0.0009734850971638656,
+        "raw_bytes": 207814656
+      },
+      "down:zlib9": {
+        "aggregate_ratio": 0.7503849872840538,
+        "compressed_bytes": 155940998,
+        "entries": 32,
+        "max_ratio": 1.0003061269784903,
+        "mean_ratio": 0.7503997469057647,
+        "min_ratio": 0.0009734850971638656,
+        "raw_bytes": 207814656
+      },
+      "gate:lzma6": {
+        "aggregate_ratio": 0.750088447657053,
+        "compressed_bytes": 95661072,
+        "entries": 24,
+        "max_ratio": 1.000062949150697,
+        "mean_ratio": 0.7500885645593711,
+        "min_ratio": 0.00016869191873177843,
+        "raw_bytes": 127533056
+      },
+      "gate:zlib6": {
+        "aggregate_ratio": 0.7504736497492854,
+        "compressed_bytes": 95710198,
+        "entries": 24,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 0.7504736676926255,
+        "min_ratio": 0.0009753168845663265,
+        "raw_bytes": 127533056
+      },
+      "gate:zlib9": {
+        "aggregate_ratio": 0.7504736497492854,
+        "compressed_bytes": 95710198,
+        "entries": 24,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 0.7504736676926255,
+        "min_ratio": 0.0009753168845663265,
+        "raw_bytes": 127533056
+      },
+      "up:lzma6": {
+        "aggregate_ratio": 0.7500900079750773,
+        "compressed_bytes": 87402744,
+        "entries": 24,
+        "max_ratio": 1.000062949150697,
+        "mean_ratio": 0.7500900879427065,
+        "min_ratio": 0.00016869191873177843,
+        "raw_bytes": 116523008
+      },
+      "up:zlib6": {
+        "aggregate_ratio": 0.7504738892425434,
+        "compressed_bytes": 87447475,
+        "entries": 24,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 0.7504739015167767,
+        "min_ratio": 0.0009753168845663265,
+        "raw_bytes": 116523008
+      },
+      "up:zlib9": {
+        "aggregate_ratio": 0.7504738892425434,
+        "compressed_bytes": 87447475,
+        "entries": 24,
+        "max_ratio": 1.000306451777548,
+        "mean_ratio": 0.7504739015167767,
+        "min_ratio": 0.0009753168845663265,
+        "raw_bytes": 116523008
+      }
+    }
+  }
+}

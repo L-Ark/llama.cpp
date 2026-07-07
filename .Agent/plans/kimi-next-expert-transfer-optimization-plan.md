@@ -4012,6 +4012,98 @@ Execution result:
     approved disk cleanup, or from an exact/near-exact representation change
     rather than a small learned surrogate.
 
+Phase GP106 expert-pack lossless/exact-residual compression bound:
+
+- Purpose:
+  - test an exact/near-exact representation family that does not alter model
+    arithmetic;
+  - quantify whether current quantized expert-pack payload bytes are
+    compressible enough to reduce moved bytes toward the `0.30x-0.40x` target.
+- Candidate mechanism:
+  - raw lossless compression of expert-pack entries;
+  - per-tensor base expert resident in VRAM plus exact XOR residual bytes from
+    SSD, also losslessly compressed;
+  - both preserve exact quantized expert bytes before compute, so output quality
+    would be unchanged if decompression overhead were acceptable.
+- Theory:
+  - if quantized expert payload bytes are high entropy, raw lossless compression
+    should remain near `1.0x`;
+  - if same-tensor experts share exact byte-level structure, XOR residuals
+    against a resident base should compress materially;
+  - a viable path must approach `0.30x-0.40x` moved bytes before runtime
+    overhead; any result above about `0.70x` is not competitive with IQ1-scale
+    full-model quantization and cannot plausibly reach `5 tok/s`.
+- Experiment:
+  - sample entries from the current Kimi main pack and current down overlay;
+  - stratify by tensor role and layer where possible;
+  - report raw payload compression ratio and base-XOR residual compression
+    ratio using built-in lossless codecs (`zlib`, `bz2`, `lzma`);
+  - do not create compressed packs and do not change runtime.
+- Acceptance to continue:
+  - a codec/representation must produce mean compressed ratio in the
+    `0.30x-0.40x` range on both up/gate and down samples;
+  - decompression must have a plausible GPU/CPU implementation that does not
+    violate TTFT or host RAM constraints.
+- Rejection:
+  - if best exact residual ratio is far above `0.40x`, close generic lossless
+    expert-byte compression as a primary route and keep focus on full-model
+    lower quant or a compute-native exact/near-exact transform.
+
+Execution result, 2026-07-08:
+
+- Local tool: `.Agent/run-tools/kimi_expert_pack_lossless_bound.py`.
+- Report:
+  `.Agent/runs/20260708-gp106-expert-pack-lossless-bound/report.md`.
+- Remote report root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp106-expert-pack-lossless-bound`.
+- Run discipline:
+  - non-destructive offline bound only; no runtime behavior changed;
+  - remote command ran under `systemd-run` with `MemoryMax=15900000000`,
+    `MemorySwapMax=0`, and `RuntimeMaxSec=900`;
+  - final run duration: about `5min 12s`;
+  - pack-stratified sampling covered both current packs:
+    - main pack: `72` sampled entries;
+    - down overlay: `8` sampled entries.
+- Final command:
+
+```bash
+cd /root/lfz/tmp/kimi-stage2m-align
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 \
+  -p MemorySwapMax=0 \
+  -p RuntimeMaxSec=900 \
+  python3 .Agent/run-tools/kimi_expert_pack_lossless_bound.py \
+    --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+    --pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+    --out-json /root/lfz/runs/vendor-kimi-token-rate/20260708-gp106-expert-pack-lossless-bound/report.json \
+    --out-md /root/lfz/runs/vendor-kimi-token-rate/20260708-gp106-expert-pack-lossless-bound/report.md \
+    --per-role 24 \
+    --per-tensor 4 \
+    --seed 1 \
+    --codecs zlib6,zlib9,lzma6 \
+    --target-ratio 0.40
+```
+
+- Metrics:
+  - sampled entries: `80`;
+  - sampled raw bytes: `451870720` (`430.94 MiB`);
+  - raw payload best aggregate ratio: `0.9931` with `zlib6`;
+  - base-XOR aggregate ratio including base-self rows: `0.7501`, but this is
+    not a valid savings estimate because each sampled tensor group includes a
+    zero residual for the base expert itself;
+  - base-XOR aggregate ratio excluding base-self rows: `1.0001` with `lzma6`;
+  - role-level non-base residual ratios:
+    - down: `1.0001`;
+    - gate: `1.0001`;
+    - up: `1.0001`.
+- Decision:
+  - reject generic exact lossless expert-byte compression as a primary route;
+  - quantized expert payloads are effectively high entropy at the byte level;
+  - exact base-XOR residuals are also effectively incompressible once the
+    artificial base-self zero rows are excluded;
+  - this cannot approach the `0.30x-0.40x` moved-byte requirement for
+    `5 tok/s`.
+
 ## Run Discipline
 
 For every experiment:
@@ -4139,7 +4231,10 @@ Continue from Phase 5E:
 41. GP105 rejects the richer input-route full-MoE-output surrogate: best
     leave-one-prompt-out mean rel L2 is `0.885045`, far above the `0.10` gate.
     Close the small prototype/kernel learned-surrogate family for now.
-42. The next primary direction should either:
+42. GP106 rejects exact lossless expert-byte compression and exact base-XOR
+    residual compression: raw best ratio is `0.9931`, and true non-base
+    base-XOR residual ratio is `1.0001`, far from the `0.30x-0.40x` target.
+43. The next primary direction should either:
     - obtain a smaller full-model quant/runtime smoke with explicit disk
       approval or external storage; or
     - test an exact/near-exact representation change that is not a small
