@@ -4271,6 +4271,16 @@ Continue from Phase 5E:
       `5.018 tok/s` bound;
     - do not spend runtime work on naive re-encode or v2 selected-hotset
       execution as a standalone route.
+47. GP109 starts a small VRAM headroom probe:
+    - report:
+      `.Agent/runs/20260708-gp109-vram-headroom/report.md`;
+    - `VRAM_MIB=15350` is stable on a dev France n32 cold run:
+      `1.83 tok/s` vs `1.79 tok/s` for `VRAM_MIB=15000`;
+    - max VRAM used rose from `31293 MiB` to `31641 MiB`, min free fell from
+      `817 MiB` to `469 MiB`;
+    - TTFT rose about `3.0%`, within the `20%` limit;
+    - this is only a candidate; do not change defaults until it passes
+      multi-prompt n32 and then held-out n96.
 
 Rationale:
 
