@@ -1,0 +1,25 @@
+{
+  "attempt_id": "20260707-iq2s-download-stage1-started",
+  "created_at_utc": "2026-07-07T00:46:20.200967Z",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "ac920cff8204bec704ea040a0161b39c31cb992a",
+  "git_status_before_artifact": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "status": "download_active_not_validated",
+  "service": "vendor-ds4-iq2s-download.service",
+  "command": "aria2c -c -x8 -s8 -k16M --file-allocation=none --allow-overwrite=true --auto-file-renaming=false -o DeepSeek-V4-Flash.IQ2_S.gguf https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ2_S.gguf",
+  "model_path": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+  "expected_size_bytes": 88019539296,
+  "expected_etag": "4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0",
+  "current_service_state": "active",
+  "current_apparent_size_bytes": 79569092608,
+  "current_allocated_bytes": 18826137600,
+  "aria2_control_file_present": true,
+  "disk_state": {
+    "total_bytes": 1065418129408,
+    "used_bytes": 970440888320,
+    "free_bytes": 94960463872
+  },
+  "prompt_scope": "no prompt/model run yet; held_out not used",
+  "accepted_sota_changed": false,
+  "next_step": "Wait for service completion, verify final size/checksum if practical, then run strict 16GB load smoke only if complete."
+}
