@@ -1,0 +1,275 @@
+{
+  "attempt_id": "20260707-sparse-pair-generalized-bound-audit-after-membership",
+  "created_at_utc": "2026-07-07T00:36:56.130771Z",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "a531db1914a5d4e29b53eaca9bb96b692b8b282d",
+  "git_status_before_artifact": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "purpose": "Close or reprioritize sparse retained hot-pair work under the real product target: random/generalized prompts >5 tok/s on 16GB host RAM including page cache + 32GB RTX 5090, no prompt-specific optimization.",
+  "prompt_scope": "calibration_dev_set_v1 only; held_out_test_set_v1_locked not used; no model run; no source change.",
+  "inputs": {
+    "baseline": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+    "membership_probe": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-fused-mmvq-membership-probe-timeout-20260707.json",
+    "profiles": [
+      ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top64-updown-20260707.profile.json",
+      ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top128-updown-20260707.profile.json",
+      ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top256-updown-20260707.profile.json",
+      ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top512-updown-20260707.profile.json"
+    ],
+    "simultaneous_threshold": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-simultaneous-reduction-thresholds-20260707.json"
+  },
+  "baseline_summary": {
+    "all_memory_peak_bytes": [
+      16000000000
+    ],
+    "all_ram_ok": true,
+    "max_eval_tok_s": 2.7,
+    "mean_eval_tok_s": 2.1799999999999997,
+    "min_eval_tok_s": 1.8,
+    "prompt_specific_env_detected_any": false,
+    "target_met_all_prompts_gt_5_tok_s": false
+  },
+  "zero_overhead_sparse_pair_bounds": [
+    {
+      "top_n": 64,
+      "profile": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top64-updown-20260707.profile.json",
+      "payload_mib": 544.0,
+      "active_layers": 33,
+      "max_pairs_per_layer": 4,
+      "mean_zero_overhead_bound_tok_s": 2.2672922010861742,
+      "min_zero_overhead_bound_tok_s": 1.8638471560423453,
+      "worst_prompt": "fibonacci",
+      "per_prompt": [
+        {
+          "prompt_id": "climate",
+          "baseline_eval_tok_s": 2.2,
+          "baseline_decode_window_ms_model": 87272.72727272726,
+          "zero_overhead_saved_decode_ms": 3535.7,
+          "zero_overhead_bound_tok_s": 2.2928924784332945,
+          "covered_updown_calls": 5776
+        },
+        {
+          "prompt_id": "fibonacci",
+          "baseline_eval_tok_s": 1.8,
+          "baseline_decode_window_ms_model": 106666.66666666666,
+          "zero_overhead_saved_decode_ms": 3653.928,
+          "zero_overhead_bound_tok_s": 1.8638471560423453,
+          "covered_updown_calls": 4588
+        },
+        {
+          "prompt_id": "france",
+          "baseline_eval_tok_s": 2.7,
+          "baseline_decode_window_ms_model": 71111.1111111111,
+          "zero_overhead_saved_decode_ms": 2576.04,
+          "zero_overhead_bound_tok_s": 2.801485383866078,
+          "covered_updown_calls": 5452
+        },
+        {
+          "prompt_id": "japan",
+          "baseline_eval_tok_s": 2.4,
+          "baseline_decode_window_ms_model": 80000.0,
+          "zero_overhead_saved_decode_ms": 2698.123,
+          "zero_overhead_bound_tok_s": 2.4837689258179334,
+          "covered_updown_calls": 5454
+        },
+        {
+          "prompt_id": "quantum",
+          "baseline_eval_tok_s": 1.8,
+          "baseline_decode_window_ms_model": 106666.66666666666,
+          "zero_overhead_saved_decode_ms": 5318.903,
+          "zero_overhead_bound_tok_s": 1.894467061271219,
+          "covered_updown_calls": 6756
+        }
+      ]
+    },
+    {
+      "top_n": 128,
+      "profile": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top128-updown-20260707.profile.json",
+      "payload_mib": 1088.0,
+      "active_layers": 39,
+      "max_pairs_per_layer": 7,
+      "mean_zero_overhead_bound_tok_s": 2.3133195660257324,
+      "min_zero_overhead_bound_tok_s": 1.908162150014282,
+      "worst_prompt": "fibonacci",
+      "per_prompt": [
+        {
+          "prompt_id": "climate",
+          "baseline_eval_tok_s": 2.2,
+          "baseline_decode_window_ms_model": 87272.72727272726,
+          "zero_overhead_saved_decode_ms": 4820.2,
+          "zero_overhead_bound_tok_s": 2.3286126738714006,
+          "covered_updown_calls": 7882
+        },
+        {
+          "prompt_id": "fibonacci",
+          "baseline_eval_tok_s": 1.8,
+          "baseline_decode_window_ms_model": 106666.66666666666,
+          "zero_overhead_saved_decode_ms": 6046.287,
+          "zero_overhead_bound_tok_s": 1.908162150014282,
+          "covered_updown_calls": 7596
+        },
+        {
+          "prompt_id": "france",
+          "baseline_eval_tok_s": 2.7,
+          "baseline_decode_window_ms_model": 71111.1111111111,
+          "zero_overhead_saved_decode_ms": 3442.97,
+          "zero_overhead_bound_tok_s": 2.8373765977217547,
+          "covered_updown_calls": 7066
+        },
+        {
+          "prompt_id": "japan",
+          "baseline_eval_tok_s": 2.4,
+          "baseline_decode_window_ms_model": 80000.0,
+          "zero_overhead_saved_decode_ms": 4248.337,
+          "zero_overhead_bound_tok_s": 2.5345978213045965,
+          "covered_updown_calls": 7990
+        },
+        {
+          "prompt_id": "quantum",
+          "baseline_eval_tok_s": 1.8,
+          "baseline_decode_window_ms_model": 106666.66666666666,
+          "zero_overhead_saved_decode_ms": 8599.839,
+          "zero_overhead_bound_tok_s": 1.9578485872166298,
+          "covered_updown_calls": 11530
+        }
+      ]
+    },
+    {
+      "top_n": 256,
+      "profile": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top256-updown-20260707.profile.json",
+      "payload_mib": 2176.0,
+      "active_layers": 40,
+      "max_pairs_per_layer": 12,
+      "mean_zero_overhead_bound_tok_s": 2.393833030049618,
+      "min_zero_overhead_bound_tok_s": 1.976162973282112,
+      "worst_prompt": "fibonacci",
+      "per_prompt": [
+        {
+          "prompt_id": "climate",
+          "baseline_eval_tok_s": 2.2,
+          "baseline_decode_window_ms_model": 87272.72727272726,
+          "zero_overhead_saved_decode_ms": 7707.739,
+          "zero_overhead_bound_tok_s": 2.4131217030017766,
+          "covered_updown_calls": 12298
+        },
+        {
+          "prompt_id": "fibonacci",
+          "baseline_eval_tok_s": 1.8,
+          "baseline_decode_window_ms_model": 106666.66666666666,
+          "zero_overhead_saved_decode_ms": 9508.688,
+          "zero_overhead_bound_tok_s": 1.976162973282112,
+          "covered_updown_calls": 11746
+        },
+        {
+          "prompt_id": "france",
+          "baseline_eval_tok_s": 2.7,
+          "baseline_decode_window_ms_model": 71111.1111111111,
+          "zero_overhead_saved_decode_ms": 5649.725,
+          "zero_overhead_bound_tok_s": 2.9330268026116677,
+          "covered_updown_calls": 11136
+        },
+        {
+          "prompt_id": "japan",
+          "baseline_eval_tok_s": 2.4,
+          "baseline_decode_window_ms_model": 80000.0,
+          "zero_overhead_saved_decode_ms": 6675.918,
+          "zero_overhead_bound_tok_s": 2.618512155392549,
+          "covered_updown_calls": 12194
+        },
+        {
+          "prompt_id": "quantum",
+          "baseline_eval_tok_s": 1.8,
+          "baseline_decode_window_ms_model": 106666.66666666666,
+          "zero_overhead_saved_decode_ms": 12008.051,
+          "zero_overhead_bound_tok_s": 2.0283415159599825,
+          "covered_updown_calls": 15266
+        }
+      ]
+    },
+    {
+      "top_n": 512,
+      "profile": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top512-updown-20260707.profile.json",
+      "payload_mib": 4352.0,
+      "active_layers": 40,
+      "max_pairs_per_layer": 32,
+      "mean_zero_overhead_bound_tok_s": 2.518726003984672,
+      "min_zero_overhead_bound_tok_s": 2.0742538662165466,
+      "worst_prompt": "fibonacci",
+      "per_prompt": [
+        {
+          "prompt_id": "climate",
+          "baseline_eval_tok_s": 2.2,
+          "baseline_decode_window_ms_model": 87272.72727272726,
+          "zero_overhead_saved_decode_ms": 11393.752,
+          "zero_overhead_bound_tok_s": 2.5303451886363244,
+          "covered_updown_calls": 17516
+        },
+        {
+          "prompt_id": "fibonacci",
+          "baseline_eval_tok_s": 1.8,
+          "baseline_decode_window_ms_model": 106666.66666666666,
+          "zero_overhead_saved_decode_ms": 14103.262,
+          "zero_overhead_bound_tok_s": 2.0742538662165466,
+          "covered_updown_calls": 16496
+        },
+        {
+          "prompt_id": "france",
+          "baseline_eval_tok_s": 2.7,
+          "baseline_decode_window_ms_model": 71111.1111111111,
+          "zero_overhead_saved_decode_ms": 8926.875,
+          "zero_overhead_bound_tok_s": 3.087599237480918,
+          "covered_updown_calls": 17016
+        },
+        {
+          "prompt_id": "japan",
+          "baseline_eval_tok_s": 2.4,
+          "baseline_decode_window_ms_model": 80000.0,
+          "zero_overhead_saved_decode_ms": 9978.796,
+          "zero_overhead_bound_tok_s": 2.7420265438452045,
+          "covered_updown_calls": 16914
+        },
+        {
+          "prompt_id": "quantum",
+          "baseline_eval_tok_s": 1.8,
+          "baseline_decode_window_ms_model": 106666.66666666666,
+          "zero_overhead_saved_decode_ms": 17753.293,
+          "zero_overhead_bound_tok_s": 2.1594051837443686,
+          "covered_updown_calls": 21318
+        }
+      ]
+    }
+  ],
+  "membership_partial_observation": {
+    "decode_hit_rows": 454,
+    "decode_rows": 3900,
+    "fallback_us": 13224077,
+    "hit_fallback_ratio": 0.0553240124055539,
+    "hit_fallback_us": 731609,
+    "hit_row_ratio": 0.076657824933687,
+    "hit_rows": 578,
+    "hit_source_bytes": 2272788480,
+    "hit_source_ratio": 0.08170458186478692,
+    "prompt_hit_rows": 124,
+    "prompt_rows": 3640,
+    "records": 6242,
+    "rows": 7540,
+    "source_bytes": 27817148416
+  },
+  "interpretation": {
+    "top512_profile_bound": "Even an ideal zero-overhead implementation of the calibration-derived top512 sparse up/down pairs reaches only 2.074 tok/s min and 2.519 tok/s mean on the calibration/dev prompts.",
+    "membership_probe": "The latest runtime membership probe timed out and its partial data showed only low effective coverage, so it is weaker than the already-insufficient profile-only topN bound.",
+    "target_gap": "The product gate is stable >5 tok/s on generalized prompts; the sparse-pair profile family is not close enough to justify logit-changing source edits."
+  },
+  "decision": {
+    "accepted_sota_changed": false,
+    "source_edit_allowed_by_this_artifact": false,
+    "strict_cold_benchmark_allowed": false,
+    "sparse_retained_top64_128_256_512_status": "closed_for_generalized_target",
+    "reason": "Profile-only zero-overhead bounds remain far below >5 tok/s and the runtime membership probe had low partial hit coverage plus timeout. Continuing topN sparse-pair runtime work would consume time without a credible generalized ceiling.",
+    "next_allowed_work": [
+      "Do not implement sparse-pair writeback or hot branch for top64/top128/top256/top512 from current evidence.",
+      "Reopen native source work only with a hard-bound showing simultaneous gate-source and up/down fallback reduction near the previously measured ~90% threshold or min >=5.5 tok/s on calibration/dev.",
+      "For payload/representation work, require a prompt-general representation with correctness proof and effective payload reduction large enough to fit 32GB VRAM without breaking the gate cache; no held-out tuning.",
+      "If testing external quantized GGUF/model variants, first write a no-prompt-specific load/correctness plan, freeze candidate metadata, and run calibration/dev before held-out."
+    ]
+  }
+}

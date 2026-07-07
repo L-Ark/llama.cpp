@@ -5221,3 +5221,23 @@
 - status: closed_by_existing_evidence
 - reason: `.Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe-plan.json` 仍显示 `planned`，但后续 `.Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json` 已完成并关闭该 probe：W=2/4/8 exact top1 passed, but elapsed speedup was only about `1.010x/1.013x/1.002x`, below the `1.128x` minimum independence gate and far below practical DFlash verifier needs. `.Agent/runs/20260705-vendor-ds4-coldstart/latest-hf-refresh-hard-bound-20260706.json` also records DFlash as closed because current vendor target verifier lacks sublinear gain and DFlash artifacts are not vendor-loadable.
 - decision: Do not implement DFlash/EAGLE/MTP loader or runtime from the stale planned artifact. Reopen only if a new vendor-loadable draft/verifier artifact appears or a new target-verifier probe proves materially sublinear verification under the same 16GB RAM/page-cache, TTFT, and correctness gates.
+
+## 2026-07-07 Phase X4：sparse-pair generalized bound audit after membership probe
+
+- attempt_id: 20260707-sparse-pair-generalized-bound-audit-after-membership
+- status: diagnostic_complete_route_closed_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-generalized-bound-audit-after-membership-20260707.json`
+- task_context: 真实目标仍是 vendor DeepSeek 在 `16GB host RAM`（含 page cache）+ `32GB RTX 5090` 上，对用户随机/generalized prompt 稳定达到 `>5 tok/s`；不得做 prompt-specific 优化。该审计只使用 `calibration_dev_set_v1` 与既有 profile，不使用 held-out，不跑模型，不改源码。
+- method: 将 no-prompt-specific generalized baseline (`general-prompt-baseline-no-prompt-specific-20260706.json`) 与 calibration/dev sparse-pair profiles (`top64/128/256/512`) 结合，计算“理想零开销地完全消除这些 topN pair 的 up/down decode fallback”后的 per-prompt token-rate 上界；并结合最新 membership probe 的 timeout/low coverage 结果判断是否允许继续 runtime。
+- zero_overhead_bounds:
+  - top64, payload `544MiB`: mean `2.267 tok/s`, min `1.864 tok/s`.
+  - top128, payload `1088MiB`: mean `2.313 tok/s`, min `1.908 tok/s`.
+  - top256, payload `2176MiB`: mean `2.394 tok/s`, min `1.976 tok/s`.
+  - top512, payload `4352MiB`: mean `2.519 tok/s`, min `2.074 tok/s`.
+- membership_cross_check: X3 runtime membership probe timed out at 240s and partial data only showed `hit_row_ratio=7.67%`, `hit_source_ratio=8.17%`, `hit_fallback_ratio=5.53%`; this is weaker than the already-insufficient profile-only ideal bound.
+- decision: close sparse retained hot-pair runtime work for `top64/top128/top256/top512` under the generalized product target. Do not implement sparse-pair writeback, hot branch, or strict-cold SOTA benchmark from current evidence. The accepted SOTA is unchanged.
+- next_allowed_work:
+  - Native source work may reopen only with a new hard-bound showing simultaneous gate-source and up/down fallback reduction near the previously measured `~90%` threshold, or `min >= 5.5 tok/s` on calibration/dev before coding.
+  - Payload/representation work must first prove prompt-general correctness and effective payload reduction that fits 32GB VRAM without destroying gate cache; lossy sidecar/writeback remains blocked until compare/top1 passes.
+  - External quantized GGUF/model variants require a no-prompt-specific load/correctness plan, frozen candidate metadata, calibration/dev validation, then held-out only after candidate freeze.
+  - Continue to push all diagnostic artifacts and plan updates to `ssd/vendor/deepseek-token-rate-16gb`; any accepted generalized SOTA must include full reproduction details and pushed-source reproduction.
