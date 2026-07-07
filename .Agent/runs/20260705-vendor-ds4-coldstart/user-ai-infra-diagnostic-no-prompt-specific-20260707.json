@@ -1,0 +1,38 @@
+{
+  "accepted_sota_changed": false,
+  "answer": "的翻译是：What does AI infrastructure do?",
+  "attempt_id": "20260707-user-ai-infra-diagnostic-no-prompt-specific",
+  "baseline_comparison": {
+    "generalized_no_prompt_specific_baseline_mean_eval_tok_s": 2.18,
+    "generalized_no_prompt_specific_baseline_min_eval_tok_s": 1.8,
+    "promotion_status": "rejected_not_improvement_and_correctness_failed",
+    "result_eval_tok_s": 1.6
+  },
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T024622Z-20260707-user-ai-infra-diagnostic-no-prompt-specific/ai-infra-user-diagnostic-cpu40-vram0gb",
+  "config_scope": "no-prompt-specific baseline config; strict cold drop_caches; MemoryMax=16000000000; MemorySwapMax=0; page cache counted inside cgroup; gate one-stream name_filter=ffn_gate_exps; no prompt-derived pack/profile",
+  "created_at_utc": "2026-07-07T02:48:40.097284+00:00",
+  "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'AI infra 是做什么的' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16",
+  "git_commit": "529cbe8203b07d67b556762e5825f941cf12badb",
+  "manual_correctness": "fail",
+  "manual_reason": "The output only translates the prompt as an English question and does not answer what AI infrastructure does.",
+  "metrics": {
+    "correctness_ok": false,
+    "correctness_reason": "too_short",
+    "elapsed_seconds": 40.7,
+    "eval_tok_s": 1.6,
+    "first_answer_ms": 37941.322646,
+    "memory_file_bytes": 15143317504,
+    "memory_max_events": 7031,
+    "memory_peak_bytes": 16000000000,
+    "oom_seen": false,
+    "pgmajfault": 131334,
+    "prompt_tok_s": 0.9,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "ttft_estimate_ms": 37941.322646,
+    "workingset_refault_file": 33604
+  },
+  "prompt": "AI infra 是做什么的",
+  "prompt_scope": "user-requested ad-hoc diagnostic only; not calibration/dev, not held-out, not used for tuning or SOTA promotion",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T024622Z-20260707-user-ai-infra-diagnostic-no-prompt-specific"
+}
