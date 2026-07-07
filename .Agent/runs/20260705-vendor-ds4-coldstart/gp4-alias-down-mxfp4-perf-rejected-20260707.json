@@ -1,0 +1,81 @@
+{
+  "artifact": "gp4-alias-down-mxfp4-perf-rejected-20260707",
+  "status": "rejected_correctness_failure",
+  "date": "2026-07-07",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit": "bb8a127e3",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-down-perf-top1/perf1",
+  "baseline_result": "/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-results-top1-smoke/baseline-all/result.gguf",
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "alias_tsv": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv",
+  "attempt": {
+    "purpose": "After validating full-source alias + aligned io_uring reads in parity mode, try MXFP4 down perf writeback under fixed-text top1.",
+    "scope": "diagnostic only; calibration/dev and held-out prompts not used",
+    "command": "llama-results --sequential-logits --check --top1-fail-on-mismatch with GGML_MOE_STREAM_DOWN_MXFP4_PROBE=perf",
+    "memory_wrapper": "systemd-run MemoryMax=16000000000 MemorySwapMax=0; memory files were not captured for this rejected run"
+  },
+  "env": {
+    "GGML_MOE_EXPERT_GGUF_ALIAS_TSV": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv",
+    "GGML_MOE_IO_ALIGNED_ALIAS_BATCH": "1",
+    "GGML_MOE_IO_BACKEND": "iouring",
+    "GGML_MOE_IO_URING_SINGLE": "1",
+    "GGML_MOE_STREAM_DOWN_BATCH": "1",
+    "GGML_MOE_STREAM_BATCH_ONLY": "1",
+    "GGML_MOE_STREAM_DOWN_MXFP4_PROBE": "perf",
+    "GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_CALLS": "1",
+    "note": "perf mode did not stop at MAX_CALLS; stage trace shows 5800 down batch calls reached the GPU path"
+  },
+  "top1_result": {
+    "exit_status": 1,
+    "stdout": "FAIL",
+    "n_tokens": 145,
+    "same_top1": 141,
+    "same_top1_ratio": 0.972414,
+    "first_mismatch_pos": 9,
+    "max_abs": 4.5455,
+    "mean_abs": 0.159527,
+    "mismatch_positions_preview": [9, 10, 78, 135]
+  },
+  "alias_and_read_counters": {
+    "entries_loaded": 33024,
+    "sources": 1,
+    "bad_rows": 0,
+    "hits": 5123,
+    "misses": 0,
+    "read_failures": 0,
+    "direct_reads": 0,
+    "direct_fallbacks": 0,
+    "iouring_reads": 5123,
+    "iouring_bytes": 22830383104,
+    "iouring_fallbacks": 0,
+    "iouring_submit_us": 839698,
+    "iouring_wait_us": 5316126
+  },
+  "stage_trace": {
+    "down_batch_calls": 5800,
+    "stages_observed": [
+      "sizes",
+      "ensure_buffers_ok",
+      "cache_get_ok",
+      "stage_jobs_done",
+      "parallel_stage_done",
+      "h2d_meta_enqueued",
+      "pre_kernel",
+      "kernel_enqueued",
+      "d2h_enqueued",
+      "pre_sync",
+      "sync_done"
+    ],
+    "late_call_examples": {
+      "blk38_stage_jobs_done_ms": 3.453645,
+      "blk39_stage_jobs_done_ms": 4.683477
+    }
+  },
+  "decision": {
+    "accepted": false,
+    "reason": "MXFP4 down GPU writeback changes logits/top1, so correctness gate fails before any token-rate benchmark.",
+    "sota_impact": "none",
+    "next_action": "Debug MXFP4 down numerical/row-mapping/writeback parity before enabling perf. The GP4 alias source path itself is working at scale: misses=0 and iouring_reads=5123."
+  }
+}

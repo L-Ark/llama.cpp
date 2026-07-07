@@ -5637,3 +5637,28 @@
   - This validates that the Kimi GP4-style full-source alias table can be consumed by DeepSeek and can read unaligned native GGUF expert payloads through aligned io_uring single reads under the 16GB cgroup.
   - This is not a SOTA and does not replace the generalized baseline, because only one MXFP4 down probe call is enabled and all remaining down calls are declined by `mxfp4_probe_limit`.
   - Next optimization must turn this from single-entry diagnostic reads into real batched alias copy for down/up source staging, then expand parity/top1 coverage before any calibration/dev token-rate benchmark.
+
+### X10-B2 result：MXFP4 down perf writeback rejected; source path works but math/writeback is not token-stable
+
+- status: rejected_correctness_failure
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gp4-alias-down-mxfp4-perf-rejected-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-down-perf-top1/perf1`
+- source_commit: `bb8a127e3`
+- scope: fixed-text `llama-results` top1 diagnostic only; calibration/dev and held-out prompts were not used.
+- config:
+  - `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv`;
+  - `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_URING_SINGLE=1`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`;
+  - `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_STREAM_BATCH_ONLY=1`;
+  - `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=perf`.
+- correctness_result:
+  - top1 failed: `same_top1=141/145`, `first_mismatch_pos=9`, `max_abs=4.5455`, `mean_abs=0.159527`;
+  - stdout reported `FAIL`;
+  - therefore this path is rejected before any token-rate benchmark.
+- important_finding:
+  - Although correctness failed, the GP4 alias source path worked at scale: `expert alias tsv loaded 33024 entries`, `hits=5123`, `misses=0`, `direct_fallbacks=0`, `iouring_reads=5123`, `iouring_bytes=22830383104`, `iouring_fallbacks=0`.
+  - Stage trace shows `5800` MXFP4 down batch calls reached GPU stages through `sync_done`.
+  - Therefore the current blocker is no longer source coverage for down perf; it is MXFP4 down numerical parity / row mapping / writeback correctness.
+- decision:
+  - Do not run token-rate benchmark or calibration/dev with `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=perf`.
+  - Keep GP4 alias source infrastructure because it is default-off and validated by top1 in parity mode.
+  - Next work must debug down GPU output against CPU for the exact rows that flip top1, then fix math/row mapping/writeback before expanding perf coverage.
