@@ -3189,6 +3189,69 @@ Decision:
 - Do not design a sliced up/gate/down expert-pack format for this candidate
   unless a new quality correction is found.
 
+## Phase 5S: GP96 Scalar-Corrected Intermediate Keep Oracle
+
+Goal:
+
+- Test whether GP95's `0.4x` top-intermediate candidate is close enough that a
+  tiny correction term could make it viable.
+- Use the strongest cheap correction oracle first: multiply the partial down
+  output by the optimal scalar that minimizes L2 error.
+
+Theory:
+
+- GP95 at `0.4x` has grouped down-output mean rel L2 `0.157`, not far from the
+  `0.10` gate.
+- If the error is mainly a magnitude loss from dropping lower-energy
+  intermediate dimensions, an optimal scalar `alpha` should reduce it:
+  - row oracle: `alpha = <cand, exact> / <cand, cand>` per expert output;
+  - group oracle: same scalar on the summed active-expert contribution.
+- This scalar is not directly deployable because it uses the exact output, but
+  it is an upper bound for any cheap norm/energy-based correction.
+- If even this oracle fails at `0.4x`, then scalar correction cannot rescue the
+  intermediate top-k layout.
+
+Experiment:
+
+1. Reuse the GP95 down activation setup on three dev prompts.
+2. For keep fractions around the boundary, initially
+   `0.35,0.4,0.45,0.5`.
+3. Report row and group errors for:
+   - raw partial output;
+   - row-optimal scalar;
+   - group-optimal scalar.
+4. Acceptance:
+   - at `0.4x`, group-optimal scalar mean rel L2 must be `<=0.10` before any
+     practical scalar predictor is considered;
+   - if it only passes at `>=0.45x`, keep it as a possible quality/speed
+     tradeoff but not a primary `5 tok/s` path.
+
+Result on 2026-07-08:
+
+- Added `.Agent/run-tools/kimi_joint_intermediate_scalar_oracle.py`.
+- Remote smoke:
+  - `.Agent/runs/20260708-gp96-intermediate-scalar-oracle-smoke64/report.md`;
+  - same three dev prompts and `64` down records per prompt as GP95;
+  - no held-out prompts used.
+- Aggregate group error:
+
+| keep | raw mean rel L2 | row-scalar-sum mean rel L2 | group-scalar mean rel L2 | mean group alpha |
+|---:|---:|---:|---:|---:|
+| `0.35` | `0.188441` | `0.188425` | `0.188425` | `1.000491` |
+| `0.40` | `0.157275` | `0.157262` | `0.157266` | `1.000280` |
+| `0.45` | `0.129764` | `0.129756` | `0.129755` | `1.000023` |
+| `0.50` | `0.105683` | `0.105676` | `0.105678` | `0.999897` |
+
+Decision:
+
+- Reject scalar correction as a rescue for the GP95 top-intermediate path.
+- The optimal scalar is essentially `1.0`, so the error is not primarily a
+  magnitude loss from dropped dimensions. It is missing directional
+  information.
+- Even the strongest group scalar oracle leaves `0.4x` at `0.157266`, above
+  the `0.10` gate.
+- Do not pursue norm/energy scalar predictors for this candidate.
+
 ## Run Discipline
 
 For every experiment:
@@ -3262,13 +3325,17 @@ Continue from Phase 5E:
     sliced up/gate/down storage format.
 22. GP95 rejects top fused-intermediate dimension slicing at the `0.4x` byte
     target: grouped down-output mean rel L2 is `0.157`, above the `0.10` gate.
-23. Next primary direction must be a different non-expert-local byte-reduced
+23. Run GP96 scalar-corrected intermediate keep oracle to see whether GP95 is
+    magnitude-limited or fundamentally missing directional information.
+24. GP96 rejects scalar correction: optimal alpha is effectively `1.0`, and
+    `0.4x` group error remains `0.157266`.
+25. Next primary direction must be a different non-expert-local byte-reduced
     representation or compute/storage-form change. Prediction/prefetch is
     secondary after bytes are reduced.
-24. The next screen must target global moved bytes around `0.30x-0.40x` and
+26. The next screen must target global moved bytes around `0.30x-0.40x` and
     fused up/gate mean rel L2 close to the quality gate before any runtime
     kernel is written.
-25. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+27. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
     gains can regress held-out performance severely.
 
 Rationale:

@@ -1,0 +1,596 @@
+{
+  "aggregate": {
+    "group": {
+      "0.35": {
+        "group_scalar": {
+          "max_rel_l2": 0.23430113463238333,
+          "mean_alpha": 1.0004909214321605,
+          "mean_rel_l2": 0.1884253331216915,
+          "rows": 24
+        },
+        "raw": {
+          "max_rel_l2": 0.23431744115633488,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.1884407452338829,
+          "rows": 24
+        },
+        "row_scalar_sum": {
+          "max_rel_l2": 0.23430355330340008,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.18842467350581912,
+          "rows": 24
+        }
+      },
+      "0.4": {
+        "group_scalar": {
+          "max_rel_l2": 0.19810113259341766,
+          "mean_alpha": 1.000279829980706,
+          "mean_rel_l2": 0.15726564458477413,
+          "rows": 24
+        },
+        "raw": {
+          "max_rel_l2": 0.19810676315551576,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.1572753921944671,
+          "rows": 24
+        },
+        "row_scalar_sum": {
+          "max_rel_l2": 0.1980767248219208,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.15726213210779474,
+          "rows": 24
+        }
+      },
+      "0.45": {
+        "group_scalar": {
+          "max_rel_l2": 0.16592438173307297,
+          "mean_alpha": 1.000023263568505,
+          "mean_rel_l2": 0.12975479437343615,
+          "rows": 24
+        },
+        "raw": {
+          "max_rel_l2": 0.16592873794162463,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.12976357305659525,
+          "rows": 24
+        },
+        "row_scalar_sum": {
+          "max_rel_l2": 0.16594266480538228,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.12975629801760075,
+          "rows": 24
+        }
+      },
+      "0.5": {
+        "group_scalar": {
+          "max_rel_l2": 0.13814290226166026,
+          "mean_alpha": 0.9998965123792134,
+          "mean_rel_l2": 0.10567826161745426,
+          "rows": 24
+        },
+        "raw": {
+          "max_rel_l2": 0.13814495683166372,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.10568310444353624,
+          "rows": 24
+        },
+        "row_scalar_sum": {
+          "max_rel_l2": 0.13815685513263315,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.105675508305072,
+          "rows": 24
+        }
+      }
+    },
+    "row": {
+      "0.35": {
+        "raw": {
+          "max_rel_l2": 0.3359756173275934,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.20147291864178793,
+          "rows": 192
+        },
+        "row_scalar": {
+          "max_rel_l2": 0.3359302077213946,
+          "mean_alpha": 0.9997666001220838,
+          "mean_rel_l2": 0.2014595945276829,
+          "rows": 192
+        }
+      },
+      "0.4": {
+        "raw": {
+          "max_rel_l2": 0.2876831147784468,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.16823731309828246,
+          "rows": 192
+        },
+        "row_scalar": {
+          "max_rel_l2": 0.28763130403009174,
+          "mean_alpha": 0.9997778510373668,
+          "mean_rel_l2": 0.16822553548793384,
+          "rows": 192
+        }
+      },
+      "0.45": {
+        "raw": {
+          "max_rel_l2": 0.2404297871230389,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.1388872086543323,
+          "rows": 192
+        },
+        "row_scalar": {
+          "max_rel_l2": 0.24042800635416836,
+          "mean_alpha": 0.9999345592168533,
+          "mean_rel_l2": 0.13887653941225833,
+          "rows": 192
+        }
+      },
+      "0.5": {
+        "raw": {
+          "max_rel_l2": 0.2008214325833152,
+          "mean_alpha": 1.0,
+          "mean_rel_l2": 0.11352446778556984,
+          "rows": 192
+        },
+        "row_scalar": {
+          "max_rel_l2": 0.20081728146669128,
+          "mean_alpha": 0.9999210308268395,
+          "mean_rel_l2": 0.11351692519213585,
+          "rows": 192
+        }
+      }
+    }
+  },
+  "decision": "Reject scalar correction as a rescue for the 0.4x intermediate top-k path: even the optimal group scalar has mean rel L2 0.157266, above the 0.1 gate.",
+  "generated_at": "2026-07-07T19:37:16+0000",
+  "keep_fracs": [
+    0.35,
+    0.4,
+    0.45,
+    0.5
+  ],
+  "kind": "kimi_joint_intermediate_scalar_oracle",
+  "prompts": [
+    {
+      "group_summary": {
+        "0.35": {
+          "group_scalar": {
+            "max_rel_l2": 0.20705503699736294,
+            "mean_alpha": 0.9999313311501539,
+            "mean_rel_l2": 0.17813096376148074,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.20706997720646392,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.1781376452734105,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.20708380904639379,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.17812999221815737,
+            "rows": 8
+          }
+        },
+        "0.4": {
+          "group_scalar": {
+            "max_rel_l2": 0.17030146973396043,
+            "mean_alpha": 0.9998533448111286,
+            "mean_rel_l2": 0.14787966343111228,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.1703181560040844,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.1478827477990401,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.1703281920591817,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.14787396922417353,
+            "rows": 8
+          }
+        },
+        "0.45": {
+          "group_scalar": {
+            "max_rel_l2": 0.1403639477449789,
+            "mean_alpha": 0.9995385509422229,
+            "mean_rel_l2": 0.12180476035874759,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.14037647383492635,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.12180950711084135,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.14039814017475064,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.1218069247761296,
+            "rows": 8
+          }
+        },
+        "0.5": {
+          "group_scalar": {
+            "max_rel_l2": 0.11435817560126599,
+            "mean_alpha": 0.9997258992067761,
+            "mean_rel_l2": 0.09901806172356202,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.11435816800969632,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.09902085306611996,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.11435432667544576,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.09901383347112193,
+            "rows": 8
+          }
+        }
+      },
+      "groups": 8,
+      "prompt_id": "dev_japan_factual",
+      "records": 64,
+      "row_summary": {
+        "0.35": {
+          "raw": {
+            "max_rel_l2": 0.2981592386236013,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.19137083954368064,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.2981515080882283,
+            "mean_alpha": 0.9996592666722652,
+            "mean_rel_l2": 0.19136100157666083,
+            "rows": 64
+          }
+        },
+        "0.4": {
+          "raw": {
+            "max_rel_l2": 0.25335261595088626,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.15936276597008664,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.2533525243568652,
+            "mean_alpha": 0.9997134487124464,
+            "mean_rel_l2": 0.15935433422590586,
+            "rows": 64
+          }
+        },
+        "0.45": {
+          "raw": {
+            "max_rel_l2": 0.21316042678124175,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.1313435347709724,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.21312639044303588,
+            "mean_alpha": 0.9998254824696937,
+            "mean_rel_l2": 0.13133443620984386,
+            "rows": 64
+          }
+        },
+        "0.5": {
+          "raw": {
+            "max_rel_l2": 0.1767563648135633,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.10719837598247514,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.17675275600913565,
+            "mean_alpha": 1.0000129636930817,
+            "mean_rel_l2": 0.10719134784513909,
+            "rows": 64
+          }
+        }
+      },
+      "unique_tensor_experts": 64
+    },
+    {
+      "group_summary": {
+        "0.35": {
+          "group_scalar": {
+            "max_rel_l2": 0.22732422989886758,
+            "mean_alpha": 1.002257301529045,
+            "mean_rel_l2": 0.18902094547115042,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.22734243457386402,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.18904887923681418,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.22733200839599013,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.1890459944625807,
+            "rows": 8
+          }
+        },
+        "0.4": {
+          "group_scalar": {
+            "max_rel_l2": 0.18982850807228496,
+            "mean_alpha": 1.0013820554485602,
+            "mean_rel_l2": 0.15769880264242359,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.18984238969791908,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.15772037298532687,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.1898367203702086,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.15772008569725915,
+            "rows": 8
+          }
+        },
+        "0.45": {
+          "group_scalar": {
+            "max_rel_l2": 0.1573682262752846,
+            "mean_alpha": 1.0011161200762064,
+            "mean_rel_l2": 0.1297579813217756,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.15738492012680147,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.1297739640794936,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.15739038003343558,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.1297732196261397,
+            "rows": 8
+          }
+        },
+        "0.5": {
+          "group_scalar": {
+            "max_rel_l2": 0.1296633586114545,
+            "mean_alpha": 1.000626181976768,
+            "mean_rel_l2": 0.10554509253060605,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.1296813837826712,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.10555126184277638,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.12967792833491099,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.10554441209616527,
+            "rows": 8
+          }
+        }
+      },
+      "groups": 8,
+      "prompt_id": "dev_mixed_summary",
+      "records": 64,
+      "row_summary": {
+        "0.35": {
+          "raw": {
+            "max_rel_l2": 0.3238495169146307,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.20251786715992373,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.32380375308379544,
+            "mean_alpha": 0.9998031315980294,
+            "mean_rel_l2": 0.2025066406817478,
+            "rows": 64
+          }
+        },
+        "0.4": {
+          "raw": {
+            "max_rel_l2": 0.280207316898688,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.16912782733826465,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.28013614688574984,
+            "mean_alpha": 0.9999296621971094,
+            "mean_rel_l2": 0.16911614525516064,
+            "rows": 64
+          }
+        },
+        "0.45": {
+          "raw": {
+            "max_rel_l2": 0.23649662443204,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.13964528990498382,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.2364551733159462,
+            "mean_alpha": 1.0002125184825625,
+            "mean_rel_l2": 0.13963524492090448,
+            "rows": 64
+          }
+        },
+        "0.5": {
+          "raw": {
+            "max_rel_l2": 0.19718338848566483,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.11411467031134338,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.1971780538006054,
+            "mean_alpha": 1.000008531252674,
+            "mean_rel_l2": 0.1141069126964993,
+            "rows": 64
+          }
+        }
+      },
+      "unique_tensor_experts": 64
+    },
+    {
+      "group_summary": {
+        "0.35": {
+          "group_scalar": {
+            "max_rel_l2": 0.23430113463238333,
+            "mean_alpha": 0.9992841316172821,
+            "mean_rel_l2": 0.1981240901324432,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.23431744115633488,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.198135711191424,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.23430355330340008,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.19809803383671928,
+            "rows": 8
+          }
+        },
+        "0.4": {
+          "group_scalar": {
+            "max_rel_l2": 0.19810113259341766,
+            "mean_alpha": 0.9996040896824295,
+            "mean_rel_l2": 0.16621846768078655,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.19810676315551576,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.16622305579903432,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.1980767248219208,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.16619234140195163,
+            "rows": 8
+          }
+        },
+        "0.45": {
+          "group_scalar": {
+            "max_rel_l2": 0.16592438173307297,
+            "mean_alpha": 0.9994151196870856,
+            "mean_rel_l2": 0.13770164143978522,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.16592873794162463,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.13770724797945078,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.16594266480538228,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.13768874965053296,
+            "rows": 8
+          }
+        },
+        "0.5": {
+          "group_scalar": {
+            "max_rel_l2": 0.13814290226166026,
+            "mean_alpha": 0.9993374559540966,
+            "mean_rel_l2": 0.1124716305981947,
+            "rows": 8
+          },
+          "raw": {
+            "max_rel_l2": 0.13814495683166372,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.11247719842171235,
+            "rows": 8
+          },
+          "row_scalar_sum": {
+            "max_rel_l2": 0.13815685513263315,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.11246827934792877,
+            "rows": 8
+          }
+        }
+      },
+      "groups": 8,
+      "prompt_id": "dev_python_reverse",
+      "records": 64,
+      "row_summary": {
+        "0.35": {
+          "raw": {
+            "max_rel_l2": 0.3359756173275934,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.21053004922175939,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.3359302077213946,
+            "mean_alpha": 0.9998374020959572,
+            "mean_rel_l2": 0.21051114132464,
+            "rows": 64
+          }
+        },
+        "0.4": {
+          "raw": {
+            "max_rel_l2": 0.2876831147784468,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.17622134598649605,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.28763130403009174,
+            "mean_alpha": 0.9996904422025448,
+            "mean_rel_l2": 0.17620612698273497,
+            "rows": 64
+          }
+        },
+        "0.45": {
+          "raw": {
+            "max_rel_l2": 0.2404297871230389,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.1456728012870407,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.24042800635416836,
+            "mean_alpha": 0.9997656766983037,
+            "mean_rel_l2": 0.14565993710602665,
+            "rows": 64
+          }
+        },
+        "0.5": {
+          "raw": {
+            "max_rel_l2": 0.2008214325833152,
+            "mean_alpha": 1.0,
+            "mean_rel_l2": 0.11926035706289098,
+            "rows": 64
+          },
+          "row_scalar": {
+            "max_rel_l2": 0.20081728146669128,
+            "mean_alpha": 0.9997415975347628,
+            "mean_rel_l2": 0.11925251503476918,
+            "rows": 64
+          }
+        }
+      },
+      "unique_tensor_experts": 64
+    }
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_joint_intermediate_scalar_oracle.py --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_mixed_summary --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --libggml-base build-cuda-batch/bin/libggml-base.so --out-json /root/lfz/runs/vendor-kimi-token-rate/20260708-gp96-intermediate-scalar-oracle-smoke64/report.json --out-md /root/lfz/runs/vendor-kimi-token-rate/20260708-gp96-intermediate-scalar-oracle-smoke64/report.md --keep-fracs 0.35,0.4,0.45,0.5 --max-records-per-prompt 64 --torch-threads 8",
+  "target_group_rel_l2": 0.1,
+  "target_keep_frac": 0.4
+}
