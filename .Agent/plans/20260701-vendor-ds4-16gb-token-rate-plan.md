@@ -6790,3 +6790,33 @@ Next implementation rule:
   - it must prove fixed-text top1 and France semantic correctness before any performance run.
 - Fallback:
   - if no correctness-verified representation appears, switch to external high-acceptance draft/verifier artifact search instead of more local cache/source tuning.
+
+## 2026-07-08 X10-Y external lowbit header refresh
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-lowbit-header-refresh-20260708.json`
+- status: `metadata_refresh_not_sota`
+
+Purpose:
+- Check whether newly observed external lowbit DeepSeek-V4-Flash GGUF candidates can immediately enter the offline correctness gate without downloading full models.
+
+Metadata-only range check:
+- `unsloth/DeepSeek-V4-Flash-GGUF`
+  - `UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00001-of-00004.gguf`
+  - `UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00001-of-00003.gguf`
+  - `UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00001-of-00004.gguf`
+- `tarruda/DeepSeek-V4-Flash-GGUF`
+  - `IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00001-of-00004.gguf`
+
+Result:
+- All checked first shards identify as:
+  - `general.architecture=deepseek4`
+  - `deepseek4.block_count=43`
+  - `deepseek4.expert_count=256`
+  - `deepseek4.expert_used_count=6`
+- All checked first shards reported `n_tensors=0` in the header range parse, so they are metadata-only first shards.
+- They cannot provide expert payload/header tensor statistics from the first shard alone; a real correctness gate would require full multi-shard acquisition and a load/alias plan.
+
+Decision:
+- No new SOTA and no runtime source patch.
+- Do not download full external multi-shard candidates without an explicit disk/RAM/time plan.
+- Keep the next allowed work as correctness-first representation: acquire only a candidate with a credible correctness path, then run fixed-text top1 and France correctness before any performance benchmark.
