@@ -1,0 +1,28 @@
+# Kimi multi-prompt activation sample
+
+This is a dev-only activation sample for representation screening. It is not a SOTA run.
+
+- root: `.Agent/runs/20260707-gp76b-dev-activation-sample`
+- prompts: `3`
+- total activation records: `216`
+- all quality passed: `True`
+- all direct_reads zero: `True`
+- max memory peak: `15899996160`
+
+## Prompts
+
+| prompt | quality | token rate | decode | TTFT | memory peak | direct reads | activation records | role counts |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| `dev_japan_factual` | `pass` | `1.54` | `9727.81 ms / 15` | `86056.69 ms` | `15899996160` | `0` | `72` | `{'down,decode': 24, 'gate,decode': 24, 'up,decode': 24}` |
+| `dev_mixed_summary` | `pass` | `1.59` | `19454.73 ms / 31` | `111750.48 ms` | `15899996160` | `0` | `72` | `{'down,decode': 24, 'gate,decode': 24, 'up,decode': 24}` |
+| `dev_python_reverse` | `pass` | `1.53` | `9824.16 ms / 15` | `94270.20 ms` | `15899996160` | `0` | `72` | `{'down,decode': 24, 'gate,decode': 24, 'up,decode': 24}` |
+
+## Decision
+
+Accept this dev-only activation sample for prompt-general representation screening.
+
+## Reproduce
+
+```bash
+.Agent/run-tools/kimi_activation_sample_summary.py --root .Agent/runs/20260707-gp76b-dev-activation-sample --out-json .Agent/runs/20260707-gp76b-dev-activation-sample/summary.json --out-md .Agent/runs/20260707-gp76b-dev-activation-sample/summary.md
+```

@@ -1,0 +1,5 @@
+Here's a Python function to reverse a string:
+
+```python
+def reverse_string(s
+

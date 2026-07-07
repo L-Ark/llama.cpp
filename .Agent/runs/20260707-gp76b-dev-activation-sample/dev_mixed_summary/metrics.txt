@@ -1,0 +1,41 @@
+run=/root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_mixed_summary
+prompt_id=dev_mixed_summary
+prompt=In two sentences, compare solar power and wind power for a small town.
+exit=0
+quality=pass
+quality_reason=ok
+output=Solar power offers predictable daytime generation and works well on rooftops, making it easy for small towns to scale gradually. Wind power can produce energy day and night but
+ttft_ms=111750.48
+prompt_tokens=24
+decode_ms=19454.73
+decode_runs=31
+token_rate=1.59
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=15899996160
+memory.current.final=15007047680
+anon=462848
+file=14712758272
+kernel=290250752
+inactive_file=5870260224
+active_file=8841838592
+pgmajfault=1420615
+pgfault=3834742
+workingset_refault_file=142226
+expert_pack_0=29424 misses=0 read_failures=0 direct_reads=0 direct_fallbacks=0 iouring_reads=27688 iouring_bytes=154472464384 iouring_fallbacks=0 iouring_submit_us=60463 iouring_wait_us=14012135 iouring_h2d_enqueues=27688 entries=69120
+expert_pack_iouring_0=batches=5363 submit_calls=5363 wait_calls=21751 cqes=27688 inflight_avg=3.44 inflight_max=8 batch_hist=1:76,2-4:1962,5-8:3325,9-16:0,17-32:0,gt32:0
+pinned_staging_0=: enabled, 12 slots of 4.49 MiB
+pinned_staging_1=: enabled, 12 slots of 6.02 MiB
+pinned_staging_2=: enabled, 12 slots of 7.44 MiB
+pinned_staging_3=: enabled, 12 slots of 5.36 MiB
+pinned_staging_4=: copies=19855 waits=19807 fallbacks=0 slots=12 slot=7.44 MiB
+pinned_staging_5= iouring: batches=3813 jobs=19855 submit_calls=3813 wait_calls=15414 cqes=19855 inflight_avg=3.38 inflight_max=8 batch_hist=1:52,2-4:1356,5-8:2405,9-16:0,17-32:0,gt32:0
+pinned_staging_6= gate: copies=7833 waits=7809 fallbacks=0 slots=12 slot=5.36 MiB
+pinned_staging_7= gate iouring: batches=1550 jobs=7833 submit_calls=1550 wait_calls=6337 cqes=7833 inflight_avg=3.57 inflight_max=8 batch_hist=1:24,2-4:606,5-8:920,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=992 planned_jobs=4351 completed_jobs=4351 cache_hits=2841 missing_tensor=93 missing_pack=0 submitted_batches=899 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=2116245 batch_hist=1:18,2-4:392,5-8:489,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=766 slot=7.44 MiB hits=9077 misses=4043 preloads=4351 pinned=0 hit_rate=69.2%
+vram_down_1=slots=766 slot=7.44 MiB hits=9077 misses=4043 preloads=4351 pinned=0 hit_rate=69.2%
+vram_down_2=slots=766 slot=7.44 MiB hits=9077 misses=4043 preloads=4351 pinned=0 hit_rate=69.2%
+vram_upgate_0=slots=1735 slot=5.36 MiB hits=10514 misses=19262 preloads=0 pinned=0 hit_rate=35.3%
+vram_upgate_1=slots=1735 slot=5.36 MiB hits=10514 misses=19262 preloads=0 pinned=0 hit_rate=35.3%
+vram_upgate_2=slots=1735 slot=5.36 MiB hits=10514 misses=19262 preloads=0 pinned=0 hit_rate=35.3%

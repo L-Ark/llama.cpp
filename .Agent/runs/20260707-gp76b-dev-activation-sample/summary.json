@@ -1,0 +1,185 @@
+{
+  "accepted_for_dev_representation_screening": true,
+  "all_direct_reads_zero": true,
+  "all_quality_passed": true,
+  "decision": "Accept this dev-only activation sample for prompt-general representation screening.",
+  "expected_min_records": 216,
+  "kind": "kimi_activation_sample_summary",
+  "max_memory_peak": 15899996160,
+  "prompts": [
+    {
+      "activation": {
+        "records": 72,
+        "role_counts": {
+          "down,decode": 24,
+          "gate,decode": 24,
+          "up,decode": 24
+        },
+        "tensor_count": 9,
+        "top_tensors": [
+          [
+            "blk.60.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.60.ffn_gate_exps.weight",
+            8
+          ],
+          [
+            "blk.60.ffn_down_exps.weight",
+            8
+          ],
+          [
+            "blk.1.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.1.ffn_gate_exps.weight",
+            8
+          ],
+          [
+            "blk.1.ffn_down_exps.weight",
+            8
+          ],
+          [
+            "blk.2.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.2.ffn_gate_exps.weight",
+            8
+          ]
+        ]
+      },
+      "decode_ms": 9727.81,
+      "decode_runs": 15,
+      "direct_reads": 0,
+      "memory_peak": 15899996160,
+      "output": "Japan is an island nation in East Asia known for its unique blend of ancient traditions",
+      "prompt": "Please introduce Japan in a short paragraph.",
+      "prompt_id": "dev_japan_factual",
+      "quality": "pass",
+      "quality_reason": "ok",
+      "run_dir": ".Agent/runs/20260707-gp76b-dev-activation-sample/dev_japan_factual",
+      "token_rate": 1.54,
+      "ttft_ms": 86056.69
+    },
+    {
+      "activation": {
+        "records": 72,
+        "role_counts": {
+          "down,decode": 24,
+          "gate,decode": 24,
+          "up,decode": 24
+        },
+        "tensor_count": 9,
+        "top_tensors": [
+          [
+            "blk.60.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.60.ffn_gate_exps.weight",
+            8
+          ],
+          [
+            "blk.60.ffn_down_exps.weight",
+            8
+          ],
+          [
+            "blk.1.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.1.ffn_gate_exps.weight",
+            8
+          ],
+          [
+            "blk.1.ffn_down_exps.weight",
+            8
+          ],
+          [
+            "blk.2.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.2.ffn_gate_exps.weight",
+            8
+          ]
+        ]
+      },
+      "decode_ms": 19454.73,
+      "decode_runs": 31,
+      "direct_reads": 0,
+      "memory_peak": 15899996160,
+      "output": "Solar power offers predictable daytime generation and works well on rooftops, making it easy for small towns to scale gradually. Wind power can produce energy day and night but",
+      "prompt": "In two sentences, compare solar power and wind power for a small town.",
+      "prompt_id": "dev_mixed_summary",
+      "quality": "pass",
+      "quality_reason": "ok",
+      "run_dir": ".Agent/runs/20260707-gp76b-dev-activation-sample/dev_mixed_summary",
+      "token_rate": 1.59,
+      "ttft_ms": 111750.48
+    },
+    {
+      "activation": {
+        "records": 72,
+        "role_counts": {
+          "down,decode": 24,
+          "gate,decode": 24,
+          "up,decode": 24
+        },
+        "tensor_count": 9,
+        "top_tensors": [
+          [
+            "blk.60.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.60.ffn_gate_exps.weight",
+            8
+          ],
+          [
+            "blk.60.ffn_down_exps.weight",
+            8
+          ],
+          [
+            "blk.1.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.1.ffn_gate_exps.weight",
+            8
+          ],
+          [
+            "blk.1.ffn_down_exps.weight",
+            8
+          ],
+          [
+            "blk.2.ffn_up_exps.weight",
+            8
+          ],
+          [
+            "blk.2.ffn_gate_exps.weight",
+            8
+          ]
+        ]
+      },
+      "decode_ms": 9824.16,
+      "decode_runs": 15,
+      "direct_reads": 0,
+      "memory_peak": 15899996160,
+      "output": "Here's a Python function to reverse a string: ```python def reverse_string(s",
+      "prompt": "Write a Python function to reverse a string.",
+      "prompt_id": "dev_python_reverse",
+      "quality": "pass",
+      "quality_reason": "ok",
+      "run_dir": ".Agent/runs/20260707-gp76b-dev-activation-sample/dev_python_reverse",
+      "token_rate": 1.53,
+      "ttft_ms": 94270.2
+    }
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_activation_sample_summary.py --root .Agent/runs/20260707-gp76b-dev-activation-sample --out-json .Agent/runs/20260707-gp76b-dev-activation-sample/summary.json --out-md .Agent/runs/20260707-gp76b-dev-activation-sample/summary.md",
+  "root": ".Agent/runs/20260707-gp76b-dev-activation-sample",
+  "total_activation_records": 216
+}

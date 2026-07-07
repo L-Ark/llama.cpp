@@ -1313,6 +1313,80 @@ GP75 exact-byte scheduler ceiling result on 2026-07-07:
   - only revisit scheduling once a byte-reduced representation exists, or as a
     secondary improvement to keep the reduced bytes moving near peak bandwidth.
 
+GP76 planned multi-prompt activation sample for prompt-general representation:
+
+- Goal:
+  - replace the France-only activation-output screen with a dev-only
+    multi-prompt sample before testing any trained residual/codebook or
+    calibrated lower-bit expert pack.
+- Scope:
+  - dev prompts only;
+  - held-out test prompts remain sealed and unused for candidate design;
+  - no SOTA claim;
+  - no runtime behavior change.
+- Prompt sample:
+  - `dev_japan_factual`;
+  - `dev_python_reverse`;
+  - `dev_mixed_summary`;
+  - keep `dev_france_regression` only as a regression reference, not as the
+    only design signal.
+- Runtime:
+  - cold-start `systemd-run` for each prompt;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - `N=16`;
+  - `GGML_MOE_ACTIVATION_DUMP_DIR=<run>/act`;
+  - `GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=72`;
+  - `GGML_MOE_ACTIVATION_DUMP_DECODE_ONLY=1`;
+  - all usual GP4 SOTA env, including alias and direct-read checks.
+- Output:
+  - one run directory per prompt with full answer, metrics, memory stats, and
+    activation dump;
+  - a merged index/report that records record counts by prompt/role/tensor;
+  - no compression candidate may advance unless it is evaluated on this
+    multi-prompt dev sample and later frozen before held-out testing.
+- Acceptance:
+  - each prompt quality passes;
+  - Host RAM peak remains `<16GB`;
+  - `direct_reads=0`;
+  - activation dump contains up/gate/down records from decode.
+
+GP76b multi-prompt activation sample result on 2026-07-07:
+
+- Note:
+  - the first GP76 attempt is rejected because `<run>/act` was not created
+    before launch, and the dump path does not auto-create directories;
+  - `dev_mixed_summary` at `N=16` also produced too short an answer for the
+    `wind` quality keyword.
+- Corrected run:
+  - remote:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample`;
+  - local:
+    `.Agent/runs/20260707-gp76b-dev-activation-sample`.
+- Summary:
+  - `.Agent/runs/20260707-gp76b-dev-activation-sample/summary.md`;
+  - `.Agent/runs/20260707-gp76b-dev-activation-sample/summary.json`.
+- Runtime:
+  - `dev_japan_factual`: `N=16`, quality pass, token rate `1.54`, TTFT
+    `86056.69 ms`, decode `9727.81 ms / 15`;
+  - `dev_python_reverse`: `N=16`, quality pass, token rate `1.53`, TTFT
+    `94270.20 ms`, decode `9824.16 ms / 15`;
+  - `dev_mixed_summary`: `N=32`, quality pass, token rate `1.59`, TTFT
+    `111750.48 ms`, decode `19454.73 ms / 31`.
+- Constraints:
+  - Host RAM peak stayed at `15899996160` for all three runs;
+  - `direct_reads=0` for all three runs;
+  - each prompt has `72` decode activation records:
+    - `24` up;
+    - `24` gate;
+    - `24` down.
+- Decision:
+  - accept GP76b as a dev-only prompt-general activation sample for future
+    representation screening;
+  - do not use it as a token-rate SOTA claim because activation dump adds
+    diagnostic overhead;
+  - next compression/representation screen must evaluate on this multi-prompt
+    sample before any runtime kernel or pack conversion is built.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
@@ -1347,14 +1421,15 @@ Continue from Phase 5E:
 
 1. Stop treating scheduling-only work as the primary path; GP75 caps it around
    `2.18 tok/s` mean on held-out.
-2. Choose the next representation family:
+2. Run GP76 multi-prompt activation collection.
+3. Choose the next representation family:
    - prompt-general trained residual/codebook with dev/test split; or
    - a calibrated lower-bit expert pack whose activation-output error is
      tested before runtime implementation.
-3. The next screen must target global moved bytes around `0.30x-0.40x` and
+4. The next screen must target global moved bytes around `0.30x-0.40x` and
    fused up/gate mean rel L2 close to the quality gate before any runtime
    kernel is written.
-4. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+5. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
    gains can regress held-out performance severely.
 
 Rationale:
