@@ -4358,6 +4358,61 @@ Continue from Phase 5E:
       - do not promote to SOTA env yet;
       - next step is full dev n96 A/B, then held-out n96 only if dev n96 passes
         quality, TTFT, RAM, direct-read, and token-rate gates.
+50. GP110 dev and held-out n96 result on 2026-07-08:
+    - dev n96 Q4-on:
+      - 7/7 quality pass;
+      - mean token rate about `1.81 tok/s` vs GP4 dev baseline about
+        `1.33 tok/s`;
+      - all runs stayed under the 16GB cgroup limit and had `direct_reads=0`.
+    - held-out n96 Q4-on:
+      - 6/6 quality pass;
+      - mean token rate `1.802 tok/s` vs GP4 held-out baseline
+        `1.367 tok/s`;
+      - min held-out token rate `1.59 tok/s`;
+      - all runs stayed under the 16GB cgroup limit and had `direct_reads=0`.
+    - rejection for promotion:
+      - TTFT gate failed despite the token-rate gain;
+      - Q4-on held-out TTFT exceeded the `+20%` limit for most held-out prompts,
+        e.g. Brazil `53196 -> 85678 ms` and coding `84073 -> 115983 ms`;
+      - do not add `GGML_MOE_Q4_DOWN_BATCH=1` to SOTA env yet.
+51. GP111 planned decode-only Q4 down batch gate:
+    - hypothesis:
+      - Q4 down batch is valuable in decode because it removes
+        `decode,type=2` CPU fallback;
+      - prompt/prefill calls have multirow routing and the current CUDA down
+        batch path declines them, so allowing Q4 eligibility during prompt may
+        add TTFT overhead without benefit.
+    - implementation:
+      - when `src0->type == GGML_TYPE_Q4_0` and `ids->ne[1] > 1`, keep CPU-side
+        down-batch eligibility false even if `GGML_MOE_Q4_DOWN_BATCH=1`;
+      - preserve the existing Q4 decode path for `ids->ne[1] == 1`;
+      - keep default behavior unchanged when `GGML_MOE_Q4_DOWN_BATCH` is unset.
+    - validation:
+      - rebuild `llama-completion`;
+      - first run held-out TTFT-worst prompts (`test_english_factual_01`,
+        `test_coding_01`) n96 with Q4-on;
+      - accept only if token-rate gain remains and TTFT returns within the
+        `+20%` gate;
+      - if it passes the worst prompts, rerun full held-out n96 before any SOTA
+        promotion.
+52. GP111 result on 2026-07-08:
+    - report:
+      `.Agent/runs/20260708-gp111-q4-decode-only/report.md`;
+    - build passed after adding the decode-only CPU eligibility guard;
+    - held-out TTFT-worst n96 smoke:
+      - Brazil: `1.94 tok/s`, quality pass, TTFT `84346 ms`;
+      - coding: `1.60 tok/s`, quality pass, TTFT `106272 ms`;
+    - compared with GP110, TTFT improved only slightly:
+      - Brazil `85678 -> 84346 ms`;
+      - coding `115983 -> 106272 ms`;
+    - the `+20%` TTFT gate still fails:
+      - Brazil remains about `+58.6%` over GP4 TTFT;
+      - coding remains about `+26.4%` over GP4 TTFT.
+    - decision:
+      - keep Q4 down batch default-off;
+      - do not promote it to SOTA env;
+      - next work must profile TTFT before decode and locate the actual Q4-on
+        prompt overhead.
 
 Rationale:
 

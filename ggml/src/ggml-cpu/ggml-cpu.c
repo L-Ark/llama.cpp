@@ -3596,6 +3596,8 @@ static void ggml_compute_forward_mul_mat_id(
         kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FN;
     } else if (!ggml_cuda_moe_stream_available()) {
         kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FALSE;
+    } else if (src0->type == GGML_TYPE_Q4_0 && ids->ne[1] > 1) {
+        kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED;
     } else if (!ggml_cuda_moe_stream_supports_down_batch(src0->type, src0->name)) {
         kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED;
     } else if (src1->type != GGML_TYPE_F32) {

@@ -90,15 +90,48 @@ This is useful cleanup, but it is not a path to `5 tok/s` by itself.
 
 ## Decision
 
-Keep `GGML_MOE_Q4_DOWN_BATCH` default-off and commit the implementation plus
-this reproducible report. Do not add it to the SOTA environment yet.
+Keep `GGML_MOE_Q4_DOWN_BATCH` default-off. Do not add it to the SOTA
+environment yet.
+
+## N96 Validation
+
+After the n32 smoke, the same Q4-on gate was run on the full dev n96 set and
+then on held-out n96 because dev passed.
+
+Dev n96:
+
+- 7/7 quality pass.
+- Mean token rate: about `1.81 tok/s`.
+- GP4 dev baseline mean: about `1.33 tok/s`.
+- All runs stayed under the 16GB cgroup limit.
+- All runs had `direct_reads=0`.
+
+Held-out n96:
+
+| prompt | GP4 tok/s | Q4 tok/s | GP4 TTFT | Q4 TTFT | quality |
+|---|---:|---:|---:|---:|---|
+| `test_chinese_01` | `1.44` | `1.88` | `70343 ms` | `88223 ms` | pass |
+| `test_coding_01` | `1.14` | `1.59` | `84073 ms` | `115983 ms` | pass |
+| `test_english_factual_01` | `1.48` | `1.91` | `53196 ms` | `85678 ms` | pass |
+| `test_english_factual_02` | `1.49` | `1.83` | `69820 ms` | `93128 ms` | pass |
+| `test_mixed_instruction_01` | `1.33` | `1.83` | `79872 ms` | `108551 ms` | pass |
+| `test_reasoning_math_01` | `1.32` | `1.77` | `231632 ms` | `227827 ms` | pass |
+
+Held-out mean token rate:
+
+- GP4 baseline: `1.367 tok/s`;
+- Q4-on: `1.802 tok/s`.
+
+Promotion was rejected because the TTFT gate failed. Most held-out prompts
+exceeded the allowed `+20%` TTFT increase even though token rate and quality
+improved. GP111 tests a decode-only Q4 gate to reduce this TTFT overhead.
 
 Next validation before promotion:
 
-1. Run a full dev n96 A/B with `GGML_MOE_Q4_DOWN_BATCH=0/1`.
-2. If dev n96 passes quality, TTFT, RAM, and token-rate gates, run held-out n96.
-3. Promote only if held-out prompt-general mean improves without quality loss or
-   TTFT > `+20%`.
+1. Fix the TTFT overhead.
+2. Rerun held-out n96 with the frozen candidate.
+3. Promote only if held-out prompt-general mean improves without quality loss
+   and without TTFT > `+20%`.
 
 ## Reproduce
 
