@@ -1259,6 +1259,60 @@ GP74 mixed-role byte/error budget result on 2026-07-07:
     activation-output validation, or exact-byte demand-integrated scheduling
     that avoids the GP72/GP73 host-prefetch cache failure.
 
+GP75 planned exact-byte scheduler ceiling:
+
+- Goal:
+  - quantify whether an exact-byte demand-integrated scheduler can be a primary
+    `5 tok/s` path before writing runtime code.
+- Scope:
+  - offline analysis only;
+  - no model run, no routing change, no held-out tuning;
+  - use the accepted GP4 held-out SOTA profile only as a ceiling measurement.
+- Method:
+  - parse `metrics.json` for token rate, decode runs, decode wall, and
+    `iouring_bytes`;
+  - parse `ttft-trace.csv` `runtime_load`, `call_upgate`, and `call_down`
+    events to estimate exposed MoE call wall and moved bytes per decode token;
+  - compute optimistic ceilings at `10.4 GiB/s`:
+    - transfer-only ceiling with current moved bytes;
+    - transfer plus all-hit MoE floor ceiling using the accepted Phase 5 floor
+      of about `40 ms/token`;
+    - measured exposed MoE-call replacement ceiling, replacing call wall with
+      `max(all-hit floor, moved_bytes / 10.4 GiB/s)`.
+- Acceptance:
+  - if the ceiling is below `5 tok/s`, do not implement a full exact-byte
+    scheduler as the next primary path;
+  - only revisit scheduler work if it is combined with byte reduction or if a
+    future trace proves a much higher fraction of decode wall is non-byte
+    scheduler overhead.
+
+GP75 exact-byte scheduler ceiling result on 2026-07-07:
+
+- Code:
+  - `.Agent/run-tools/kimi_exact_byte_scheduler_ceiling.py`.
+- Report:
+  - `.Agent/runs/20260707-gp75-exact-byte-scheduler-ceiling/report.md`;
+  - `.Agent/runs/20260707-gp75-exact-byte-scheduler-ceiling/report.json`.
+- Input:
+  - accepted GP4 held-out profile root only:
+    `.Agent/runs/20260707-gp4-postcommit-test-n96-profile`;
+  - no model run, no routing change, no held-out tuning.
+- Result:
+  - measured held-out mean token rate: `1.367 tok/s`;
+  - transfer-only mean ceiling at `10.4 GiB/s`: `2.396 tok/s`;
+  - floor+transfer mean ceiling with `40.1 ms/token` all-hit floor:
+    `2.184 tok/s`;
+  - best prompt floor+transfer ceiling: `2.395 tok/s`;
+  - worst prompt floor+transfer ceiling: `1.812 tok/s`;
+  - mean byte ratio needed for `5 tok/s` after floor: `0.383x`.
+- Decision:
+  - exact-byte scheduling without byte reduction is not a primary `5 tok/s`
+    path;
+  - do not implement a full demand-integrated exact-byte scheduler as the next
+    main runtime change;
+  - only revisit scheduling once a byte-reduced representation exists, or as a
+    secondary improvement to keep the reduced bytes moving near peak bandwidth.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
@@ -1291,14 +1345,15 @@ For every experiment:
 
 Continue from Phase 5E:
 
-1. Run the mixed-role byte/error budget screen against GP70 output.
-2. If no GP68-GP70 combination passes, stop tuning blockwise 1-bit residuals.
-3. Choose the next representation family from:
-   - prompt-general trained residual/codebook with dev/test split;
-   - exact-byte demand-integrated scheduling that avoids the GP72/GP73
-     host-prefetch cache failure;
+1. Stop treating scheduling-only work as the primary path; GP75 caps it around
+   `2.18 tok/s` mean on held-out.
+2. Choose the next representation family:
+   - prompt-general trained residual/codebook with dev/test split; or
    - a calibrated lower-bit expert pack whose activation-output error is
      tested before runtime implementation.
+3. The next screen must target global moved bytes around `0.30x-0.40x` and
+   fused up/gate mean rel L2 close to the quality gate before any runtime
+   kernel is written.
 4. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
    gains can regress held-out performance severely.
 
