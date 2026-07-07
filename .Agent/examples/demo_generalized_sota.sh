@@ -1,27 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prompt-general demo for the current vendor DeepSeek SOTA baseline.
+# General-prompt demo for the current vendor DeepSeek SOTA baseline.
 #
-# This script accepts any user prompt and runs it through the current
-# no-prompt-specific vendor DeepSeek path under the project constraints:
-#   - 16 GB host RAM cgroup, including page cache
-#   - MemorySwapMax=0 through strict_ds4_runner.py/systemd-run
-#   - cold start by default via drop_caches
-#   - no France-specific trace, expert pack, prompt profile, or admission file
+# This script is intentionally prompt-general:
+#   - accepts any user prompt
+#   - does not load prompt-specific expert packs, traces, or profiles
+#   - runs under a strict 16 GB host RAM cgroup, including page cache
+#   - disables swap through strict_ds4_runner.py/systemd-run
+#   - uses cold start by default with drop_caches
 #
 # Examples:
 #   .Agent/examples/demo_generalized_sota.sh --prompt "What does AI infrastructure do?"
 #   .Agent/examples/demo_generalized_sota.sh "今天吃什么？"
-#   printf 'Introduce Brazil briefly.\n' | .Agent/examples/demo_generalized_sota.sh --stdin-prompt
-#   .Agent/examples/demo_generalized_sota.sh --prompt-file prompt.txt
+#   printf 'Introduce Japan briefly.\n' | .Agent/examples/demo_generalized_sota.sh --stdin-prompt
+#   .Agent/examples/demo_generalized_sota.sh --prompt-file prompt.txt --n-predict 192
 #   .Agent/examples/demo_generalized_sota.sh --fast-smoke --prompt "Explain database indexes briefly."
 #
-# Notes:
-#   Default --n-predict is 192 for comparable metrics.
-#   --fast-smoke uses 32 decode tokens only to prove that the path runs.
-#   The current prompt-general baseline is below the product target of stable
-#   >5 tok/s for random prompts; this demo reports the real measured result.
+# The default n_predict=192 is meant for comparable measurements. Use
+# --fast-smoke only to check that the runnable path works.
 
 ROOT="${ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 RUNNER="${RUNNER:-$ROOT/.Agent/run-tools/strict_ds4_runner.py}"
@@ -51,7 +48,7 @@ die() {
 }
 
 usage() {
-  sed -n '1,32p' "$0"
+  sed -n '1,31p' "$0"
   cat <<'EOF'
 
 Options:
@@ -59,10 +56,11 @@ Options:
   --prompt-file FILE   Read prompt from FILE.
   --stdin-prompt       Read prompt from stdin.
   --n-predict N        Decode token budget, default 192.
-  --fast-smoke         Use --n-predict 32 for quick path validation.
+  --fast-smoke         Use n_predict=32 for quick runnable validation.
   --warm               Do not drop page cache first; not a cold SOTA metric.
   --case-name NAME     Case directory prefix.
   --run-name NAME      Run directory suffix.
+  --min-tok-s N        Fail the demo if eval_tok_s is below N.
   --print-command      Print strict runner command and exit.
   --json               Emit a final [demo-json] line.
 EOF
@@ -77,7 +75,10 @@ import sys
 raw = sys.argv[1]
 text = raw.strip().lower()
 text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
-print(text[:56] if text else "prompt-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10])
+if text:
+    print(text[:56])
+else:
+    print("prompt-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10])
 PY
 }
 
@@ -123,14 +124,18 @@ unset_prompt_specific_env() {
     GGML_MOE_IO_ALIGNED_ALIAS_BATCH \
     GGML_MOE_STREAM_ONE_TRACE_IN \
     GGML_MOE_STREAM_ONE_TRACE_OUT \
+    GGML_MOE_EXPERT_ADMISSION_PROFILE \
+    GGML_MOE_PROMPT_PROFILE \
     DS4_NATIVE_RETAINED_DOWN_PROBE_OUT \
     DS4_FUSED_UP_GATE_REF \
-    DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT
+    DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT \
+    GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED
   do
     unset "$var" || true
   done
 }
 
+positional=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --prompt)
@@ -162,6 +167,11 @@ while [[ $# -gt 0 ]]; do
       N_PREDICT="$2"
       shift 2
       ;;
+    --min-tok-s)
+      [[ $# -ge 2 ]] || die "missing value for --min-tok-s"
+      MIN_DEMO_TOK_S="$2"
+      shift 2
+      ;;
     --fast-smoke|--smoke)
       N_PREDICT=32
       FAST_SMOKE=1
@@ -187,12 +197,16 @@ while [[ $# -gt 0 ]]; do
       die "unknown argument: $1"
       ;;
     *)
-      [[ -z "$PROMPT" ]] || die "prompt already set; pass only one prompt"
-      PROMPT="$1"
+      positional+=("$1")
       shift
       ;;
   esac
 done
+
+if [[ ${#positional[@]} -gt 0 ]]; then
+  [[ -z "$PROMPT" ]] || die "prompt already set; use --prompt or positional text, not both"
+  PROMPT="${positional[*]}"
+fi
 
 input_modes=0
 [[ -n "$PROMPT" ]] && input_modes=$((input_modes + 1))
@@ -210,13 +224,14 @@ elif [[ -z "${PROMPT//[[:space:]]/}" ]]; then
     printf 'Prompt: ' >&2
     IFS= read -r PROMPT
   else
-    die "missing prompt; pass --prompt TEXT, --prompt-file FILE, --stdin-prompt, or a positional prompt"
+    die "missing prompt; pass --prompt TEXT, --prompt-file FILE, --stdin-prompt, or positional text"
   fi
 fi
 
 [[ -n "${PROMPT//[[:space:]]/}" ]] || die "prompt is empty"
 [[ "$N_PREDICT" =~ ^[0-9]+$ ]] || die "--n-predict must be a positive integer"
 [[ "$N_PREDICT" -gt 0 ]] || die "--n-predict must be a positive integer"
+[[ "$MIN_DEMO_TOK_S" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "--min-tok-s must be numeric"
 
 cd "$ROOT"
 for path in "$RUNNER" "$BINARY" "$MODEL"; do
@@ -276,7 +291,7 @@ after=$(mktemp)
 trap 'rm -f "$before" "$after"' EXIT
 find "$OUT_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%p\n' 2>/dev/null | sort > "$before"
 
-printf '[demo] task=prompt-general vendor DeepSeek SOTA baseline demo\n'
+printf '[demo] task=prompt-general vendor DeepSeek SOTA demo\n'
 printf '[demo] repo=%s\n' "$ROOT"
 printf '[demo] branch=%s\n' "$(git rev-parse --abbrev-ref HEAD)"
 printf '[demo] commit=%s\n' "$(git rev-parse --short HEAD)"
@@ -288,7 +303,7 @@ printf '[demo] memory_limit_bytes=16000000000\n'
 printf '[demo] page_cache_counted_in_cgroup=true\n'
 printf '[demo] swap=disabled\n'
 printf '[demo] prompt_specific_optimization=false\n'
-printf '[demo] config=cpu_moe=40,vram_cache=0,gate_one_stream_cache_mib=13568,no_prompt_pack,no_profile,no_trace\n'
+printf '[demo] config=vendor_ds4,cpu_moe=40,vram_cache=0,gate_cache_mib=13568,no_prompt_pack,no_profile,no_trace\n'
 printf '[demo] product_target=random prompts stable >5 tok/s on 16GB host RAM + 32GB RTX 5090\n'
 print_generalized_baseline
 if [[ "$FAST_SMOKE" -eq 1 ]]; then
@@ -357,9 +372,9 @@ else:
 
 print(f"\n[demo] status={status}")
 if s.get("correctness_ok") is not True:
-    print("[demo] correctness_note=automatic heuristic is conservative for arbitrary prompts; manually review the answer above")
+    print("[demo] correctness_note=runner heuristic is conservative for arbitrary prompts; manually review the answer above")
 if answer and answer[-1] not in ".!?。！？)]}\"'`":
-    print("[demo] answer_note=possibly_truncated_by_n_predict; increase --n-predict for a longer demo answer")
+    print("[demo] answer_note=possibly_truncated_by_n_predict; increase --n-predict for a longer answer")
 
 payload = {
     "status": status,
