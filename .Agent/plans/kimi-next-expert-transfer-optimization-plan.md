@@ -445,6 +445,92 @@ Next actions:
    default-off runtime path and run cold-start n32 dev quality/perf.
 4. Run held-out n96 only once the candidate is frozen.
 
+Phase 5A low-risk VRAM cache margin check:
+
+- Current SOTA uses `GGML_MOE_VRAM_CACHE_MIB=15000`.
+- Because the deployment target says to use VRAM as fully as possible, run a
+  small dev-only cold-start A/B with `VRAM_MIB=15500` before changing any code.
+- Hypothesis:
+  - a small cache increase may reduce misses without touching Host RAM;
+  - if the runtime auto-clamps or CUDA allocation pressure increases, the result
+    should be neutral or rejected.
+- Experiment:
+  - n32 dev `Please introduce France in a short paragraph.`;
+  - baseline `VRAM_MIB=15000` vs candidate `VRAM_MIB=15500`;
+  - record token rate, TTFT, RAM peak, answer, cache hit rates, iouring bytes,
+    and direct reads.
+- Acceptance:
+  - quality pass;
+  - Host RAM remains below 16 GB;
+  - TTFT <= baseline * 1.20;
+  - decode token rate improves;
+  - no `direct_reads` or missing pack regression.
+
+Phase 5A n32 dev result on 2026-07-07:
+
+- Run root:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260707-vram15500-n32-ab`
+- Prompt:
+  - `Please introduce France in a short paragraph.`
+- Baseline `VRAM_MIB=15000`:
+  - quality pass;
+  - token rate `1.78 tok/s`;
+  - decode `17437.84 ms / 31`;
+  - TTFT `93581.89 ms`;
+  - RAM peak `15899996160`;
+  - `direct_reads=0`;
+  - iouring bytes `131119579136`;
+  - down hit `73.4%`;
+  - upgate hit `45.2%`.
+- Candidate `VRAM_MIB=15500`:
+  - quality pass;
+  - token rate `1.82 tok/s`;
+  - decode `17053.06 ms / 31`;
+  - TTFT `93185.55 ms`;
+  - RAM peak `15899996160`;
+  - `direct_reads=0`;
+  - iouring bytes `130773565440`;
+  - down hit `73.6%`;
+  - upgate hit `45.3%`.
+- Decision:
+  - small positive dev signal only;
+  - run held-out n96 before changing the default or claiming SOTA.
+
+Phase 5A held-out result on 2026-07-07:
+
+- Report:
+  - `.Agent/runs/20260707-vram-cache-margin-heldout/report.md`
+- Candidate run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260707-vram15500-heldout-n96-candidate`
+- Paired baseline run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260707-vram15000-paired-heldout-n96-baseline`
+- Historical GP4 accepted baseline:
+  - `.Agent/runs/20260707-gp4-postcommit-test-n96-profile`
+- Result:
+  - historical GP4 mean: `1.3667 tok/s`;
+  - paired `VRAM_MIB=15000` mean: `1.7000 tok/s`;
+  - candidate `VRAM_MIB=15500` mean: `1.7083 tok/s`;
+  - candidate vs paired mean: `+0.49%`;
+  - candidate regressed on `test_coding_01` and `test_reasoning_math_01`
+    versus the paired `15000` run;
+  - candidate TTFT versus historical GP4 exceeded +20% on most prompts;
+  - quality/RAM/direct-read gates passed.
+- Decision:
+  - reject `VRAM_MIB=15500` as a new default;
+  - do not claim it as SOTA;
+  - investigate why the paired `VRAM_MIB=15000` baseline now reproduces around
+    `1.70 tok/s` before changing SOTA records.
+- Audit:
+  - historical and paired `15000` runs moved the same GiB and had the same hit
+    rates;
+  - paired iouring wait was much lower, e.g. `test_chinese_01`
+    `66449.2 ms -> 38436.9 ms` with the same `378.0 GiB`;
+  - this points to storage/device/runtime state rather than a model-path
+    improvement;
+  - keep the historical GP4 SOTA as accepted until a stronger cold-start
+    protocol proves the faster baseline is reproducible from a cold device
+    state.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
