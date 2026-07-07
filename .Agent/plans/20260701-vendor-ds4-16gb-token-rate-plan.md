@@ -5185,3 +5185,17 @@
   - 新 down path 必须先有 microbench 证明 `cuda_batch_ms/call < CPU fallback_ms/call`，否则不再进入 n96 strict cold run。
 - validation_gates: 每次 source edit 必须 default-off；先 fixed-text top1/parity，再 France semantic correctness，再 calibration/dev prompt set；候选冻结后才跑 held-out。所有 run 必须 strict `MemoryMax=16000000000`, `MemorySwapMax=0`, page cache inside cgroup, stdout 控制，记录 TTFT/token rate/输出/正确性。
 - push_rule: 任何符合要求的新 SOTA 必须详细记录复现信息并立即 push 源码到 `ssd/vendor/deepseek-token-rate-16gb`；rejected/closed 诊断也必须记录 artifact 并 push，确保未来回顾不会重复无效路线。
+
+## 2026-07-07 Phase X2：现有 fused up/gate path 对 DeepSeek DS4 的准入诊断
+
+- attempt_id: 20260707-existing-fused-upgate-ds4-probe
+- status: planned_before_experiment
+- why_now: 源码已存在 `GGML_MOE_STREAM_FUSED_UP_GATE` graph path 和 `ggml_cuda_moe_stream_up_gate_batch()`；`llama-graph.cpp` 在 decode `n_tokens == 1`、up/gate 同 type/shape、无 bias/scale、SILU 时可构造 `GGML_OP_MOE_FUSED_UP_GATE`。当前计划要求下一步必须同时压 gate source movement 和 up/down fallback，现有 fused up/gate 是最小风险候选：它可能让 gate 与 up 在同一 fused op 中被调度，减少 separate gate/up graph 和 up CPU fallback。
+- constraints: 仅使用 `calibration_dev_set_v1`，先只跑 France short probe；禁止使用 `held_out_test_set_v1_locked`；不改源码；不作为 SOTA；strict `MemoryMax=16000000000`, `MemorySwapMax=0`，page cache 计入 cgroup；stdout 必须控制，避免多 GB artifact。
+- experiment: 用当前 pushed source，设置 `GGML_MOE_STREAM_FUSED_UP_GATE=1`、`GGML_MOE_STREAM_DECLINE_DEBUG=1`、`GGML_MOE_UP_GATE_PROFILE_OUT=<run>/up-gate-profile.csv`、`LLAMA_KIMI_MOE_GRAPH_PROFILE=1`（若 env 名在源码/runner中可用则开启），跑 France `n=16` 或 `n=32` short probe。记录 fused graph 是否构造、`up_gate batch accepted/declined`、decline reason、fallback reason profile、RAM/page-cache、TTFT、输出片段。
+- expected_outcomes:
+  - 如果 graph 未构造：记录阻塞条件（type/shape/env/bias/scale/n_tokens）并决定是否需要 default-off graph allowlist source edit。
+  - 如果 graph 构造但 CUDA batch declined：记录 exact reason；若是 DS4 type guard 或 mixed/type-specific branch 限制，再设计 default-off DS4 fused path。
+  - 如果 CUDA batch accepted 但慢/错误：只保留 diagnostic，分析 stage/cache/H2D/kernel/D2H 结构，不能 promotion。
+  - 只有 short probe 证明 accepted 且正确性/性能方向合理，才允许写下一步 source plan 或 calibration/dev performance probe。
+- source_edit_gate_after_probe: 不得直接把 Kimi 的 IQ2/IQ3 fast path 扩展到 DS4。若需要源码，必须先写清 DS4 MXFP4/F8 up/gate tensor type、expert bytes、active rows、cache slot budget、H2D bytes、kernel path、预期节省的 up fallback 与 gate source movement，并证明它能接近 simultaneous `~90%` reduction 的总目标。
