@@ -5895,3 +5895,38 @@
   - Do not implement an up-only kernel or rerun old fused up/gate envs as a SOTA attempt.
   - A source edit is allowed only if it is a prompt-general joint dataflow route that credibly cuts both gate/source movement and up/down fallback at the required scale, or if it first lands as a default-off correctness/microbench scaffold explicitly marked not SOTA.
   - Next practical design target is `grouped-retained up/down + gate-cache-aware source path`: reuse or preserve the current gate cache behavior, batch active up/down experts by layer, avoid per-expert `src0` staging, and avoid D2H/writeback unless the next CPU op actually needs it.
+
+## 2026-07-07 X10-F next implementation plan：default-off grouped-retained route/source profiler first
+
+- attempt_id: `20260707-grouped-retained-scaffold-plan`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/grouped-retained-scaffold-plan-20260707.json`
+- status: `planned_next_source_scaffold`
+- background:
+  - Down GPU correctness is fixed, but the full-output Q8_0 down GPU path is slower than CPU fallback.
+  - Up-only and down-only hard bounds are not enough for generalized `>5 tok/s`.
+  - Existing fused up/gate and one-stream up/down paths are rejected; repeating them is forbidden.
+  - Existing `g_handoff` can retain fused up/gate output on GPU and feed down, but it is tied to the old fused up/gate route that regresses DeepSeek performance. It cannot be used as-is for SOTA.
+- objective:
+  - Implement the smallest default-off no-logit-change scaffold that measures whether a grouped-retained joint route has enough real prompt-general coverage and source-movement reduction before writing kernels.
+  - This scaffold must not change model outputs, accepted SOTA behavior, or held-out state.
+- source_edit_scope:
+  - Add `GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT=<csv>` as a default-off profiler.
+  - Record per MoE call: role (`gate`, `up`, `down`, `up_gate`), layer, phase (`prompt`/`decode`), tensor name/type, active experts, rows, unique experts, expert bytes, logical source bytes, whether current one-stream/batch cache already contains each expert, and whether the call is eligible for grouped-retained handling.
+  - For `ggml_compute_forward_moe_up_gate`, record both the fused op view and the underlying up/gate expert sets; for normal `mul_mat_id`, record up/down/gate separately.
+  - Do not allocate new GPU buffers, do not alter `matrix_row_counts`, do not change cache admission, and do not change logits.
+- metrics_to_compute_from_profiler:
+  - Per prompt and per decode token: active unique up/down/gate experts by layer; total logical bytes; duplicate source movement that grouped staging could remove; number of current per-expert calls that could become one grouped layer call.
+  - Upper bound if grouped-retained removes only launch/source duplication but still streams full expert payload.
+  - Upper bound if grouped-retained uses existing gate cache unchanged and reduces up/down fallback by `80%`, `90%`, `95%`.
+  - Required VRAM cache slots for grouped up/down active experts without evicting the current gate cache; reject if it would violate the `16GB` host RAM/page-cache or `32GB` VRAM constraints.
+- validation_sequence:
+  1. Build only; confirm default behavior unchanged when env unset.
+  2. Run one calibration prompt already used before (`Describe database indexing in one concise paragraph.` or France) under strict `16GB` with profiler enabled; verify `eval_tok_s`, output, RAM, and cache behavior remain within normal diagnostic variance.
+  3. Parse CSV into `.Agent/runs/.../grouped-retained-route-profile-*.json`.
+  4. Only if the profile shows a credible path to at least `gate/source >=75%` and `up/down >=90%` effective reduction on calibration/dev should a real grouped-retained GPU dataflow implementation be planned.
+- rejection_conditions:
+  - If route coverage is low, logical bytes remain close to current full expert streaming, or required VRAM slots collide with gate cache, close this route before writing kernels.
+  - If the profiler itself changes correctness, RAM, or TTFT materially, revert and record as rejected.
+- branch_policy:
+  - All scaffold source and artifacts must be committed and pushed to `ssd/vendor/deepseek-token-rate-16gb` with full reproduction details.
+  - Any later performance SOTA must still be prompt-general, strict `16GB` including page cache, correctness passing, TTFT compliant, then held-out tested only after candidate freeze.
