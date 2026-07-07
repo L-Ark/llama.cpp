@@ -96881,3 +96881,51 @@ GGML_MOE_NEXT_GATE_SHADOW_TOPK=8
     and extra-byte accounting.
   - Do not run held-out test until the runtime prefetch candidate passes dev
     N96 with quality, TTFT, memory, `direct_reads=0`, and net token-rate gates.
+
+GP65 planned host-prefetch N32 probe:
+
+- Timestamp: `2026-07-07T18:32:00+0800`.
+- Local report:
+  `.Agent/runs/20260707-gp65-planned-host-prefetch-n32-analysis/report.md`.
+- Run roots:
+  - baseline:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp65-correct-gp4env-n32-baseline`;
+  - planned host-prefetch:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp65-planned-host-prefetch-n32`.
+- Env on top of the required GP4 alias/aligned-batch SOTA env:
+
+```text
+GGML_MOE_PLANNED_HOST_PREFETCH=1
+GGML_MOE_HOST_PREFETCH_SLOTS=32
+GGML_MOE_HOST_PREFETCH_MAX_MIB=512
+```
+
+- The probe ran two dev prompts before rejection:
+  - `dev_france_regression`: `1.69 -> 1.65 tok/s`,
+    decode `18326.06 -> 18753.90 ms`, quality pass;
+  - `dev_japan_factual`: `1.65 -> 1.62 tok/s`,
+    decode `18776.77 -> 19193.82 ms`, quality pass.
+- Both runs stayed within the 16GB cgroup and kept `direct_reads=0`.
+- Slowdown root cause:
+  - useful host-prefetch hits were nearly zero:
+    `32/9172` submitted on France and `45/9194` submitted on Japan;
+  - the worker read about `40.5 GiB` per prompt into host-prefetch slots, but
+    demand-path expert-pack bytes did not materially fall;
+  - host-prefetch evicted almost everything it submitted:
+    `9108` and `9117` evictions;
+  - demand-path iouring wait increased:
+    France `12237.546 -> 12632.243 ms`, Japan
+    `12278.905 -> 12957.835 ms`;
+  - up/gate/down profile times did not show a compensating reduction.
+- Decision:
+  - reject existing `GGML_MOE_PLANNED_HOST_PREFETCH=1` as a SOTA candidate;
+  - stop this sweep before held-out testing;
+  - do not treat generic planned host-prefetch as the GP65 runtime
+    implementation.
+- Follow-up constraint:
+  - the next GP65 implementation must make predicted expert IDs available early
+    enough in the CUDA/MoE layer path to prefetch before demand copy creation.
+    It must also report useful hits, wasted bytes, evicted-unused entries, and
+    current-demand delay. If this timing cannot be achieved without a graph
+    break whose cost exceeds projected IO hiding, reject runtime prefetch and
+    move to another movement-reduction direction.
