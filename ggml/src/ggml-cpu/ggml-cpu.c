@@ -5243,6 +5243,19 @@ static float ggml_moe_up_gate_activate(float x, enum ggml_unary_op op) {
     }
 }
 
+static float ggml_moe_up_gate_clamp(float x, float lo, float hi) {
+    return MIN(hi, MAX(lo, x));
+}
+
+static float ggml_moe_up_gate_fuse_value(float up, float gate, enum ggml_unary_op op, float limit) {
+    if (op == GGML_UNARY_OP_SILU && limit > 1.0e-6f) {
+        const float gate_v = ggml_silu_f32(MIN(gate, limit));
+        const float up_v = ggml_moe_up_gate_clamp(up, -limit, limit);
+        return up_v * gate_v;
+    }
+    return up * ggml_moe_up_gate_activate(gate, op);
+}
+
 static void ggml_compute_forward_moe_up_gate_one_chunk(
     struct ggml_tensor * dst,
     const struct ggml_tensor * src0_up,
@@ -5260,7 +5273,8 @@ static void ggml_compute_forward_moe_up_gate_one_chunk(
     const size_t row_size,
     const bool src1_cont,
     const void * wdata,
-    enum ggml_unary_op op) {
+    enum ggml_unary_op op,
+    float limit) {
 
     const enum ggml_type type_up = src0_up->type;
     const enum ggml_type type_gate = src0_gate->type;
@@ -5306,13 +5320,26 @@ static void ggml_compute_forward_moe_up_gate_one_chunk(
 
                 float * dst_col = (float *) ((char *) dst->data + (id*nb1 + i12*nb2));
 
-                for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ++ir0) {
+                const int64_t ir0_stop = MIN(iir0 + blck_0, ir0_end);
+                for (int64_t ir0 = iir0; ir0 < ir0_stop; ++ir0) {
                     vec_dot_up(ne00,   &up_tmp[ir0 - iir0],   0, src0_up_cur   + ir0*up_nb01,   0, src1_col, 0, 1);
                     vec_dot_gate(ne00, &gate_tmp[ir0 - iir0], 0, src0_gate_cur + ir0*gate_nb01, 0, src1_col, 0, 1);
-                    fused_tmp[ir0 - iir0] = up_tmp[ir0 - iir0] * ggml_moe_up_gate_activate(gate_tmp[ir0 - iir0], op);
                 }
 
-                memcpy(&dst_col[iir0], fused_tmp, (MIN(iir0 + blck_0, ir0_end) - iir0)*sizeof(float));
+                const int64_t n_cur = ir0_stop - iir0;
+                if (op == GGML_UNARY_OP_SILU && limit > 1.0e-6f) {
+                    for (int64_t i = 0; i < n_cur; ++i) {
+                        gate_tmp[i] = MIN(gate_tmp[i], limit);
+                        up_tmp[i]   = ggml_moe_up_gate_clamp(up_tmp[i], -limit, limit);
+                    }
+                    ggml_vec_swiglu_f32((int) n_cur, fused_tmp, gate_tmp, up_tmp);
+                } else {
+                    for (int64_t i = 0; i < n_cur; ++i) {
+                        fused_tmp[i] = ggml_moe_up_gate_fuse_value(up_tmp[i], gate_tmp[i], op, limit);
+                    }
+                }
+
+                memcpy(&dst_col[iir0], fused_tmp, n_cur*sizeof(float));
             }
         }
     }
@@ -5339,6 +5366,7 @@ static void ggml_compute_forward_moe_up_gate(
     ggml_from_float_t const from_float   = type_traits_cpu[vec_dot_type].from_float;
     const bool same_weight_type = up_type == gate_type;
     const bool scoped_mixed_pair = ggml_kimi_moe_mixed_iq2_iq3_pair(up_type, gate_type);
+    const float fused_limit = ggml_get_op_params_f32(dst, 1);
 
     GGML_ASSERT(src0_gate != NULL);
     GGML_ASSERT(same_weight_type || scoped_mixed_pair);
@@ -5518,7 +5546,7 @@ static void ggml_compute_forward_moe_up_gate(
                 (float *) dst->data,
                 nb1, nb2,
                 ggml_get_op_params_i32(dst, 0),
-                0.0f,
+                fused_limit,
                 matrix_row_counts,
                 (const ggml_moe_stream_row_mapping *) matrix_rows,
                 ids->ne[0]*ids->ne[1]);
@@ -5599,7 +5627,7 @@ static void ggml_compute_forward_moe_up_gate(
             ggml_compute_forward_moe_up_gate_one_chunk(
                 dst, src0_up, src0_gate, src1, ids, cur_a,
                 ir0_start, ir0_end, ir1_start, ir1_end,
-                src0_up_cur, src0_gate_cur, matrix_rows, row_size, src1_cont, wdata, op);
+                src0_up_cur, src0_gate_cur, matrix_rows, row_size, src1_cont, wdata, op, fused_limit);
 
             if (trace_cpu_chunk) {
                 const double trace_t1_ms = ggml_moe_cpu_trace_now_ms();

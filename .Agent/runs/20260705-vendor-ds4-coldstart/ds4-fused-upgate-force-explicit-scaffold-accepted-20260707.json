@@ -1,0 +1,91 @@
+{
+  "artifact": "ds4-fused-upgate-force-explicit-scaffold-accepted-20260707",
+  "base_commit_before_this_source_change": "20b6d5df9cf2db0fd6c3ae41cc0bd2472460169b",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "builds": {
+    "llama_cli": {
+      "command": "cmake --build build-ds4-moe-stream --target llama-cli -j20",
+      "exit_code": 0,
+      "log_path": "/tmp/ds4-force-explicit-scaffold-cli-build.log"
+    },
+    "llama_debug": {
+      "command": "cmake --build build-ds4-moe-stream --target llama-debug -j20",
+      "exit_code": 0,
+      "log_path": "/tmp/ds4-force-explicit-scaffold-build.log"
+    }
+  },
+  "decision": "Keep and push this scaffold because it is default-off, passes strict act parity when forced explicit, and the normal prompt-general demo path still runs under strict 16GB. It is not a token-rate SOTA and must not be promoted as performance work.",
+  "default_off_smoke_validation": {
+    "answer": "Vector databases are specialized databases designed to store, index, and retrieve high-dimensional vector embeddings—numerical representations of data like text, images, or audio.",
+    "metrics": {
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "elapsed_seconds": 54.8,
+      "eval_tok_s": 1.8,
+      "memory_file_bytes": 15111622656,
+      "memory_max_events": 11885,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 182343,
+      "prompt_tok_s": 0.9,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 39298.263597,
+      "workingset_refault_file": 267033
+    },
+    "mode": "fast_smoke_n_predict_32_not_sota_metric",
+    "prompt": "Describe vector databases in one short paragraph.",
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T151023Z-demo-generalized-sota/describe-vector-databases-in-one-short-paragraph-cpu40-vram0gb",
+    "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T151023Z-demo-generalized-sota/describe-vector-databases-in-one-short-paragraph-cpu40-vram0gb/summary.json"
+  },
+  "next_action": "Use GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT=1 as the exact reference while debugging the real GGML_OP_MOE_FUSED_UP_GATE CPU/CUDA path. A future fused implementation must match layer-0 act parity before any token-rate benchmark.",
+  "parity_validation": {
+    "candidate_env": {
+      "DS4_FUSED_UP_GATE_REF": "1",
+      "DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT": "1",
+      "GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT": "1"
+    },
+    "comparison": {
+      "atol": 0.0,
+      "candidate_records": 129,
+      "diffs_over_atol": [],
+      "explicit_records": 129,
+      "max_abs_sum_diff": 0.0,
+      "missing_candidate": [],
+      "missing_explicit": [],
+      "num_diffs_over_atol": 0,
+      "num_missing_candidate": 0,
+      "num_missing_explicit": 0,
+      "pass": true,
+      "record_names": 129
+    },
+    "drop_caches_before_each_case": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "returncodes": {
+      "candidate": 0,
+      "explicit": 0
+    },
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-force-explicit-scaffold-current",
+    "runtime": {
+      "candidate": {
+        "elapsed": "0:33.22",
+        "exit_status": 0,
+        "major_page_faults": 191873,
+        "max_rss_kb": 15602312
+      },
+      "explicit": {
+        "elapsed": "0:33.71",
+        "exit_status": 0,
+        "major_page_faults": 196795,
+        "max_rss_kb": 15601632
+      }
+    },
+    "status": "pass",
+    "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-force-explicit-scaffold-current/summary.json"
+  },
+  "purpose": "Keep a default-off DS4 fused up/gate parity scaffold and force-explicit reference switch so future fused-op fixes can be checked against an exact explicit graph.",
+  "source_diff_path": ".Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-force-explicit-scaffold-source-diff-20260707.patch",
+  "source_diff_sha256": "05849309a669db8074fbb77748c4dadc9be5138d9b548bd23a214c11c37cb205",
+  "status": "accepted_default_off_diagnostic_scaffold_not_sota"
+}

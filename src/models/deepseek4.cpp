@@ -94,6 +94,31 @@ static bool deepseek4_hot_dispatch_enabled() {
     return enabled;
 }
 
+static bool deepseek4_fused_up_gate_ref_enabled() {
+    // Default OFF. This is a DS4 correctness scaffold for separate
+    // ffn_up_exps/ffn_gate_exps with the raw clamp semantics used by
+    // DeepSeek4 before swiglu_split. It is not a promoted performance path.
+    static const bool enabled = []() {
+        const char * value = std::getenv("DS4_FUSED_UP_GATE_REF");
+        if (value == nullptr) return false;
+        return std::strcmp(value, "0") != 0;
+    }();
+    return enabled;
+}
+
+static bool deepseek4_fused_up_gate_ref_debug_explicit_enabled() {
+    // Diagnostic only. When the fused scaffold is enabled, also build the
+    // explicit gate/up clamp tensors so act-level parity can see where the
+    // fused path first diverges. This intentionally adds work and is never a
+    // token-rate path.
+    static const bool enabled = []() {
+        const char * value = std::getenv("DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT");
+        if (value == nullptr) return false;
+        return std::strcmp(value, "0") != 0;
+    }();
+    return enabled;
+}
+
 struct deepseek4_sparse_retained_graph_probe_state {
     std::mutex mutex;
     FILE * fp = nullptr;
@@ -1324,6 +1349,9 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
 
         // === Default single-path (unchanged) ===
         ggml_tensor * gate_up_combined = nullptr;
+        ggml_tensor * act = nullptr;
+        const float swiglu_limit = hparams.swiglu_clamp_exp[il];
+        bool fused_up_gate_ref_done = false;
         if (layer.ffn_gate_up_exps) {
             gate_up_combined = build_lora_mm_id(layer.ffn_gate_up_exps, cur_experts_in, selected_experts);
             cb(gate_up_combined, "ffn_moe_gate_up", il);
@@ -1331,6 +1359,28 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
             const int64_t n_ff = gate_up_combined->ne[0] / 2;
             gate = ggml_view_3d(ctx0, gate_up_combined, n_ff, gate_up_combined->ne[1], gate_up_combined->ne[2], gate_up_combined->nb[1], gate_up_combined->nb[2], 0);
             up = ggml_view_3d(ctx0, gate_up_combined, n_ff, gate_up_combined->ne[1], gate_up_combined->ne[2], gate_up_combined->nb[1], gate_up_combined->nb[2], n_ff * gate_up_combined->nb[0]);
+        } else if (deepseek4_fused_up_gate_ref_enabled()) {
+            ggml_tensor * debug_zero = nullptr;
+            if (deepseek4_fused_up_gate_ref_debug_explicit_enabled()) {
+                ggml_tensor * gate_dbg = build_lora_mm_id(layer.ffn_gate_exps, cur_experts_in, selected_experts);
+                ggml_tensor * up_dbg   = build_lora_mm_id(layer.ffn_up_exps,   cur_experts_in, selected_experts);
+                if (swiglu_limit > 1e-6f) {
+                    gate_dbg = ggml_clamp(ctx0, gate_dbg, -INFINITY, swiglu_limit);
+                    up_dbg   = ggml_clamp(ctx0, up_dbg,   -swiglu_limit, swiglu_limit);
+                    cb(gate_dbg, "ffn_moe_gate_clamped", il);
+                    cb(up_dbg,   "ffn_moe_up_clamped",   il);
+                }
+                debug_zero = ggml_add(ctx0,
+                        ggml_sub(ctx0, gate_dbg, gate_dbg),
+                        ggml_sub(ctx0, up_dbg,   up_dbg));
+            }
+            act = ggml_moe_up_gate_limit(ctx0, layer.ffn_up_exps, layer.ffn_gate_exps,
+                    cur_experts_in, selected_experts, GGML_UNARY_OP_SILU, swiglu_limit);
+            if (debug_zero) {
+                act = ggml_add(ctx0, act, debug_zero);
+            }
+            cb(act, "ffn_moe_swiglu", il);
+            fused_up_gate_ref_done = true;
         } else {
             gate = build_lora_mm_id(layer.ffn_gate_exps, cur_experts_in, selected_experts);
             up = build_lora_mm_id(layer.ffn_up_exps, cur_experts_in, selected_experts);
@@ -1338,20 +1388,21 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
             cb(up, "ffn_moe_up", il);
         }
 
-        const float swiglu_limit = hparams.swiglu_clamp_exp[il];
         bool gate_was_clamped = false;
         bool up_was_clamped = false;
-        if (swiglu_limit > 1e-6f) {
-            gate = ggml_clamp(ctx0, gate, -INFINITY, swiglu_limit);
-            up   = ggml_clamp(ctx0, up,   -swiglu_limit, swiglu_limit);
-            gate_was_clamped = true;
-            up_was_clamped = true;
-            cb(gate, "ffn_moe_gate_clamped", il);
-            cb(up,   "ffn_moe_up_clamped",   il);
-        }
+        if (!fused_up_gate_ref_done) {
+            if (swiglu_limit > 1e-6f) {
+                gate = ggml_clamp(ctx0, gate, -INFINITY, swiglu_limit);
+                up   = ggml_clamp(ctx0, up,   -swiglu_limit, swiglu_limit);
+                gate_was_clamped = true;
+                up_was_clamped = true;
+                cb(gate, "ffn_moe_gate_clamped", il);
+                cb(up,   "ffn_moe_up_clamped",   il);
+            }
 
-        ggml_tensor * act = ggml_swiglu_split(ctx0, gate, up);
-        cb(act, "ffn_moe_swiglu", il);
+            act = ggml_swiglu_split(ctx0, gate, up);
+            cb(act, "ffn_moe_swiglu", il);
+        }
 
         ggml_tensor * experts = build_lora_mm_id(layer.ffn_down_exps, act, selected_experts);
         deepseek4_native_retained_down_probe_write(

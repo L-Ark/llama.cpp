@@ -6396,3 +6396,42 @@ Next action:
 - Do not continue token-rate benchmarking for fused up/gate until layer-0 act parity is exact.
 - Either fix the fused op to match the explicit path exactly, or avoid replacing explicit math and instead optimize source movement / retained dataflow around the explicit gate/up/clamp/swiglu outputs.
 - The broader token-rate path remains prompt-general: no France-specific traces, prompt profiles, or packs may be used for promotion; accepted improvements must beat the no-prompt-specific generalized baseline and then be recorded and pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+
+## 2026-07-07 X10-Q execution result：default-off force-explicit fused up/gate scaffold accepted
+
+- attempt_id: `20260707-ds4-fused-upgate-force-explicit-scaffold`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-upgate-force-explicit-scaffold-accepted-20260707.json`
+- source diff: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-force-explicit-scaffold-source-diff-20260707.patch`
+- status: `accepted_default_off_diagnostic_scaffold_not_sota`
+
+Purpose:
+- Keep the useful X10-O force-explicit diagnostic as a permanent default-off scaffold, instead of leaving it only as a temporary rejected/pass patch.
+- This gives future fused up/gate work an exact in-branch reference switch: the same DS4 fused branch can be forced back to explicit `mul_mat_id + clamp + swiglu_split` via `GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT=1`.
+- This is not a performance path and must not be treated as token-rate SOTA.
+
+Implementation kept:
+- Added `ggml_moe_up_gate_limit(...)` so DS4 can pass the per-layer `swiglu_clamp_exp` limit into a fused/ref scaffold.
+- Added default-off DS4 envs:
+  - `DS4_FUSED_UP_GATE_REF=1`: route separate `ffn_up_exps` + `ffn_gate_exps` through the scaffold.
+  - `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`: also materialize explicit gate/up clamped tensors for act-level parity.
+  - `GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT=1`: force the scaffold to return the explicit subgraph instead of `GGML_OP_MOE_FUSED_UP_GATE`.
+- Default accepted path is unchanged because all envs are off by default.
+
+Validation:
+- Build passed: `cmake --build build-ds4-moe-stream --target llama-debug -j20`.
+- Build passed: `cmake --build build-ds4-moe-stream --target llama-cli -j20`.
+- Strict act parity run:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-force-explicit-scaffold-current`
+  - candidate env: `DS4_FUSED_UP_GATE_REF=1`, `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`, `GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT=1`
+  - constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+  - result: pass, explicit records `129`, candidate records `129`, missing `0`, `num_diffs_over_atol=0`, `max_abs_sum_diff=0.0`.
+- Default-off generalized smoke:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T151023Z-demo-generalized-sota/describe-vector-databases-in-one-short-paragraph-cpu40-vram0gb`
+  - prompt: `Describe vector databases in one short paragraph.`
+  - result: `eval_tok_s=1.8`, `prompt_tok_s=0.9`, `TTFT=39298.263597 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15111622656`, `ram_ok=true`, `correctness_ok=true`.
+  - This is only a fast-smoke guard (`n_predict=32`), not a comparable SOTA metric.
+
+Decision:
+- Accept and push the scaffold because it is default-off, strict parity passes when force-explicit is enabled, and default prompt-general execution still runs under the 16GB cgroup.
+- Do not claim any token-rate improvement from this commit.
+- The next implementation step remains the real fused-op fix: make `GGML_OP_MOE_FUSED_UP_GATE` itself match layer-0 act parity, or keep explicit math and optimize retained source/dataflow around it.

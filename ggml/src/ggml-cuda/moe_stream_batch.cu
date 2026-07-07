@@ -6026,7 +6026,7 @@ static float moe_host_up_gate_fuse(float u, float g, int unary_op, float limit) 
             if (limit < 1.0e-6f) {
                 return u * moe_host_silu(g);
             } else {
-                const float gate_v = std::min(moe_host_silu(g), limit);
+                const float gate_v = moe_host_silu(std::min(g, limit));
                 const float up_v = std::max(-limit, std::min(limit, u));
                 return up_v * gate_v;
             }
@@ -7267,7 +7267,7 @@ static __global__ void moe_stream_up_gate_fuse_kernel(
             if (limit < 1e-6f) {
                 r = u * moe_stream_silu(g);
             } else {
-                float gate_v = fminf(moe_stream_silu(g), limit);
+                float gate_v = moe_stream_silu(fminf(g, limit));
                 float up_v = fmaxf(-limit, fminf(limit, u));
                 r = up_v * gate_v;
             }
