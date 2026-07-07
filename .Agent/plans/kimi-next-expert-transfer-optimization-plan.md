@@ -3754,6 +3754,95 @@ Execution result:
   - close learned down-projector replacement unless a much stronger trained
     model with richer inputs is introduced.
 
+## Phase 5Z: GP103 Complete Lower-Quant Candidate Refresh and Disk Gate
+
+Goal:
+
+- Non-destructively refresh complete Kimi-K2.7-Code GGUF lower-quant candidates
+  after GP98/GP102:
+  - do not delete current SOTA assets;
+  - do not download full models;
+  - identify whether any complete lower-quant candidate can fit the current
+    remote disk with enough margin for a cold-start n32 smoke.
+- This is a planning/gating step for the full-model-quant path and does not
+  claim SOTA.
+
+Why this is next:
+
+- GP100-GP102 close the learned-down-replacement family for now.
+- GP98 found `i1-IQ1_S` is metadata-compatible but too tight on disk:
+  `190.39 GiB` final size with only about `228 GB` free.
+- Before asking for disk cleanup or external storage, verify whether there is
+  any smaller complete GGUF candidate that fits without displacing current
+  IQ3_S SOTA assets.
+
+Method:
+
+1. Query current Hugging Face metadata for known Kimi-K2.7-Code GGUF repos and
+   siblings.
+2. Record filenames, shard counts, and linked sizes for candidates below the
+   current IQ3_S size.
+3. Re-check remote disk without deleting anything.
+4. Apply gates:
+   - final model must fit while preserving IQ3_S SOTA assets;
+   - leave at least `50 GiB` safety margin for failed/resumable partials, logs,
+     and runtime scratch;
+   - tensor types must be in the current runtime support set or have a bounded
+     implementation path.
+
+Acceptance:
+
+- Proceed to a full download/smoke plan only if a candidate satisfies the disk
+  margin and compatibility gates.
+- If no candidate fits, record the blocker precisely and keep the next runtime
+  path blocked on explicit disk cleanup or external storage.
+
+Expected risk:
+
+- Public "smaller" files may be non-GGUF adapters, incomplete shards, or
+  unsupported TQ types.
+- Some candidates may be smaller than `i1-IQ1_S` but have unacceptable quality
+  risk, so even a disk pass still requires cold-start France n32 quality smoke.
+
+Execution result:
+
+- Timestamp: `2026-07-08T04:40:00+0800`.
+- Status: completed non-destructive candidate refresh; no deletion and no full
+  model download.
+- Report:
+  `.Agent/runs/20260708-gp103-lower-quant-candidate-refresh/report.md`.
+- Repro probe:
+  `.Agent/run-tools/kimi_hf_candidate_size_probe.py`.
+- Current remote disk:
+  - available: `243991797760 bytes` (`227.235 GiB`);
+  - preserved current IQ3_S SOTA model:
+    `/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S`,
+    `405392141472 bytes`.
+- Safety gate:
+  - reserve `50 GiB`;
+  - maximum final model size without deleting SOTA assets:
+    `190304706560 bytes` (`177.235 GiB`).
+- Candidate results:
+  - mradermacher `i1-IQ1_S`: `204430872480 bytes` (`190.391 GiB`),
+    leaves `36.844 GiB`, fails disk gate;
+  - mradermacher `i1-IQ1_M`: `227937931680 bytes` (`212.284 GiB`),
+    leaves `14.951 GiB`, fails;
+  - mradermacher `i1-IQ2_XXS`: `267116363680 bytes` (`248.771 GiB`),
+    does not fit;
+  - Unsloth/NullVoider `UD-IQ1_M`: `303909170464 bytes` (`283.037 GiB`),
+    does not fit;
+  - Huihui `UD-IQ1_M-MXFP4`: `303627382432 bytes` (`282.775 GiB`),
+    does not fit;
+  - freakyskittle `deep55` pruned derivative:
+    `202657355840 bytes` (`188.739 GiB`), leaves `38.496 GiB`,
+    fails disk gate and is not the current original Kimi-K2.7-Code model.
+- Decision:
+  - no complete lower-quant candidate currently passes the disk gate while
+    preserving IQ3_S SOTA assets;
+  - full-model-quant runtime smoke remains gated on explicit cleanup approval,
+    external storage, or a newly discovered compatible candidate below
+    `177.235 GiB`.
+
 ## Run Discipline
 
 For every experiment:
@@ -3863,7 +3952,10 @@ Continue from Phase 5E:
     `slot_expert_scalar_h` variant needs `26.25 GiB/60 layers` and still has
     mean rel L2 `1.252953`.
 36. Close the learned down-projector replacement family for now.
-37. The next primary direction should either:
+37. GP103 refreshes complete lower-quant candidates and finds no candidate that
+    passes the current disk gate while preserving IQ3_S SOTA assets and a
+    `50 GiB` safety margin.
+38. The next primary direction should either:
     - obtain a smaller full-model quant/runtime smoke with explicit disk
       approval or external storage; or
     - test a materially different learned surrogate that uses richer
