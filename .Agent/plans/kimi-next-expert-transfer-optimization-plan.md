@@ -1808,6 +1808,112 @@ Acceptance:
 - Only pursue after transfer stalls are reduced or profiles show compute dominates.
 - Any activation quantization or activation sparsity scan must include total M=1 overhead, not just GEMM time.
 
+## Phase 5E: Partial-Exact Expert Contribution Oracle
+
+Goal:
+
+- Decide whether a mixed representation of "keep the highest-contribution
+  active experts exact, compress or approximate the rest" is worth runtime work.
+- This is the next structural-byte gate after GP77/GP78a rejected simple
+  low-bit block/codebook representations.
+
+Scope:
+
+- Dev-only offline analysis using GP76b activation dumps.
+- No held-out prompt route or activation data may be used for candidate design.
+- No runtime behavior change and no SOTA claim.
+
+Hypothesis:
+
+- If per-call expert contribution energy is highly concentrated, then a
+  partial-exact format could keep a small exact subset and apply a cheaper
+  residual representation to the rest.
+- If even an oracle that chooses the largest exact contributions per active set
+  needs most active experts to keep output error low, then partial-exact topK
+  preservation cannot be the primary path to `5 tok/s`.
+
+Method:
+
+- Dequantize the exact experts referenced by GP76b activation records.
+- Compute exact output vectors for:
+  - down matvec records;
+  - fused up/gate pairs, using `up(x) * silu(gate(x))`.
+- Group records by decode call and tensor role.
+- For each group, sort active experts by exact output L2 contribution.
+- Simulate oracle exact retention for `keep=1,2,4,6,8` active experts and for
+  energy targets `90%,95%,99%`.
+- Report:
+  - mean/max relative output error if the unkept contributions were zero;
+  - exact-byte ratio implied by the retained active experts;
+  - how many active experts must remain exact to reach `<=0.10` rel L2;
+  - whether the exact-byte ratio can still fit the `0.30x-0.40x` global budget.
+
+Acceptance to advance:
+
+- Advance only if the oracle shows `<=0.10` mean rel L2 while keeping exact
+  bytes within the `0.30x-0.40x` global target.
+- If the oracle requires most active experts exact, reject this partial-exact
+  family as a primary `5 tok/s` path and move to either:
+  - a non-expert-local representation that changes the compute/storage form; or
+  - a stronger predictor/prefetch path combined with another byte-reduction
+    method.
+
+GP82 result on 2026-07-08:
+
+- Code:
+  - `.Agent/run-tools/kimi_partial_exact_contribution_oracle.py`
+- Report:
+  - `.Agent/runs/20260708-gp82-partial-exact-contribution-oracle/summary.md`
+  - `.Agent/runs/20260708-gp82-partial-exact-contribution-oracle/summary.json`
+- Input:
+  - GP76b dev-only activation dumps for:
+    - `dev_japan_factual`;
+    - `dev_python_reverse`;
+    - `dev_mixed_summary`;
+  - `216` activation records total;
+  - no held-out prompts used.
+- Result:
+  - down, keep top 4 of 8 active exact experts:
+    - exact byte ratio `0.5000x`;
+    - mean rel L2 `0.509682`.
+  - fused up/gate, keep top 4 of 8 active exact experts:
+    - exact byte ratio `0.5000x`;
+    - mean rel L2 `0.667950`.
+  - down, keep top 6 of 8:
+    - exact byte ratio `0.7500x`;
+    - mean rel L2 `0.320483`.
+  - fused up/gate, keep top 6 of 8:
+    - exact byte ratio `0.7500x`;
+    - mean rel L2 `0.458450`.
+  - to reach the `<=0.10` rel L2 gate:
+    - down requires `8.00/8` experts exact on average and max;
+    - fused up/gate requires `8.00/8` experts exact on average and max.
+  - energy concentration is also weak:
+    - down needs `6.22/8` experts for 90% energy;
+    - fused up/gate needs `7.78/8` experts for 90% energy.
+- Decision:
+  - reject partial-exact topK retention as a primary `5 tok/s` path;
+  - the active experts' contribution energy is too distributed, especially for
+    fused up/gate;
+  - do not implement a runtime path that keeps only the largest active expert
+    contributions exact and drops or cheaply approximates the rest.
+- Reproduce:
+
+```bash
+cd /root/lfz/tmp/kimi-stage2m-align
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260708-gp82-partial-exact-contribution-oracle
+python3 .Agent/run-tools/kimi_partial_exact_contribution_oracle.py \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_japan_factual \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_python_reverse \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_mixed_summary \
+  --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv \
+  --libggml-base build-cuda-batch/bin/libggml-base.so \
+  --out-json "$ROOT/summary.json" \
+  --out-md "$ROOT/summary.md" \
+  --max-records-per-prompt 72 \
+  --torch-threads 8
+```
+
 ## Run Discipline
 
 For every experiment:
@@ -1827,16 +1933,20 @@ Continue from Phase 5E:
 
 1. Stop treating scheduling-only work as the primary path; GP75 caps it around
    `2.18 tok/s` mean on held-out.
-2. GP77 confirms blockwise 1-bit residual candidates fail the prompt-general
-   offline gate.
-3. Run GP78 to screen qualitatively different representation families:
-   - prompt-general trained residual/codebook with dev/test split;
-   - clustered base expert plus residual;
-   - mixed precision expert pack guided by activation sensitivity.
-4. The next screen must target global moved bytes around `0.30x-0.40x` and
+2. GP77/GP78a confirm blockwise 1-bit residual/codebook candidates fail the
+   prompt-general offline gate.
+3. GP82 confirms partial-exact topK retention fails even as an oracle; active
+   expert contribution energy is too distributed, especially for fused up/gate.
+4. Next direction is GP83:
+   - quantify a stronger speculative/predicted-route path only as a secondary
+     bandwidth-exposure mechanism;
+   - or design a non-expert-local representation that changes the
+     compute/storage form, because expert-local low-byte approximations have
+     failed the activation-output gate.
+5. The next screen must target global moved bytes around `0.30x-0.40x` and
    fused up/gate mean rel L2 close to the quality gate before any runtime
    kernel is written.
-5. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+6. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
    gains can regress held-out performance severely.
 
 Rationale:

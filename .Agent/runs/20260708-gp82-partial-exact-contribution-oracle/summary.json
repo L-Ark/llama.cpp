@@ -1,0 +1,690 @@
+{
+  "decision": "The oracle requires too many exact active expert contributions to meet the rel L2 gate inside the 0.30x-0.40x byte budget. Do not implement partial-exact topK retention as a primary runtime path.",
+  "energy_targets": [
+    0.9,
+    0.95,
+    0.99
+  ],
+  "generated_at": "2026-07-07T17:17:39+0000",
+  "keep_counts": [
+    1,
+    2,
+    4,
+    6,
+    8
+  ],
+  "kind": "kimi_partial_exact_contribution_oracle",
+  "max_rel_l2": 0.1,
+  "prompts": [
+    {
+      "dequantized": 72,
+      "prompt_id": "dev_japan_factual",
+      "records": 72,
+      "root": "/root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_japan_factual",
+      "unique_tensor_experts": 72
+    },
+    {
+      "dequantized": 72,
+      "prompt_id": "dev_python_reverse",
+      "records": 72,
+      "root": "/root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_python_reverse",
+      "unique_tensor_experts": 72
+    },
+    {
+      "dequantized": 72,
+      "prompt_id": "dev_mixed_summary",
+      "records": 72,
+      "root": "/root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_mixed_summary",
+      "unique_tensor_experts": 72
+    }
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_partial_exact_contribution_oracle.py --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_japan_factual --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_python_reverse --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260707-gp76b-dev-activation-sample/dev_mixed_summary --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --libggml-base build-cuda-batch/bin/libggml-base.so --out-json /root/lfz/runs/vendor-kimi-token-rate/20260708-gp82-partial-exact-contribution-oracle/summary.json --out-md /root/lfz/runs/vendor-kimi-token-rate/20260708-gp82-partial-exact-contribution-oracle/summary.md --max-records-per-prompt 72 --torch-threads 8",
+  "summary": {
+    "by_role": {
+      "down": {
+        "groups": 9,
+        "keep_counts": {
+          "1": {
+            "byte_ratio": {
+              "max": 0.125,
+              "mean": 0.125,
+              "n": 9,
+              "p50": 0.125,
+              "p90": 0.125
+            },
+            "rel_l2": {
+              "max": 0.914021674816855,
+              "mean": 0.8477240696989108,
+              "n": 9,
+              "p50": 0.8717486579825584,
+              "p90": 0.8969963777867301
+            }
+          },
+          "2": {
+            "byte_ratio": {
+              "max": 0.25,
+              "mean": 0.25,
+              "n": 9,
+              "p50": 0.25,
+              "p90": 0.25
+            },
+            "rel_l2": {
+              "max": 0.8279692259956348,
+              "mean": 0.7394921420561666,
+              "n": 9,
+              "p50": 0.7394142652403579,
+              "p90": 0.8183018262041558
+            }
+          },
+          "4": {
+            "byte_ratio": {
+              "max": 0.5,
+              "mean": 0.5,
+              "n": 9,
+              "p50": 0.5,
+              "p90": 0.5
+            },
+            "rel_l2": {
+              "max": 0.6424356445779059,
+              "mean": 0.5096821286690285,
+              "n": 9,
+              "p50": 0.4880948764551022,
+              "p90": 0.6387701926701966
+            }
+          },
+          "6": {
+            "byte_ratio": {
+              "max": 0.75,
+              "mean": 0.75,
+              "n": 9,
+              "p50": 0.75,
+              "p90": 0.75
+            },
+            "rel_l2": {
+              "max": 0.4320933968189187,
+              "mean": 0.3204825469397043,
+              "n": 9,
+              "p50": 0.29533290217573943,
+              "p90": 0.42938609896243896
+            }
+          },
+          "8": {
+            "byte_ratio": {
+              "max": 1.0,
+              "mean": 1.0,
+              "n": 9,
+              "p50": 1.0,
+              "p90": 1.0
+            },
+            "rel_l2": {
+              "max": 0.0,
+              "mean": 0.0,
+              "n": 9,
+              "p50": 0.0,
+              "p90": 0.0
+            }
+          }
+        },
+        "needed_for_energy": {
+          "0.9": {
+            "byte_ratio": {
+              "max": 0.875,
+              "mean": 0.7777777777777778,
+              "n": 9,
+              "p50": 0.75,
+              "p90": 0.875
+            },
+            "count": {
+              "max": 7.0,
+              "mean": 6.222222222222222,
+              "n": 9,
+              "p50": 6.0,
+              "p90": 7.0
+            }
+          },
+          "0.95": {
+            "byte_ratio": {
+              "max": 1.0,
+              "mean": 0.9027777777777778,
+              "n": 9,
+              "p50": 0.875,
+              "p90": 1.0
+            },
+            "count": {
+              "max": 8.0,
+              "mean": 7.222222222222222,
+              "n": 9,
+              "p50": 7.0,
+              "p90": 8.0
+            }
+          },
+          "0.99": {
+            "byte_ratio": {
+              "max": 1.0,
+              "mean": 1.0,
+              "n": 9,
+              "p50": 1.0,
+              "p90": 1.0
+            },
+            "count": {
+              "max": 8.0,
+              "mean": 8.0,
+              "n": 9,
+              "p50": 8.0,
+              "p90": 8.0
+            }
+          }
+        },
+        "needed_for_rel_l2": {
+          "max": 8.0,
+          "mean": 8.0,
+          "n": 9,
+          "p50": 8.0,
+          "p90": 8.0
+        },
+        "needed_for_rel_l2_byte_ratio": {
+          "max": 1.0,
+          "mean": 1.0,
+          "n": 9,
+          "p50": 1.0,
+          "p90": 1.0
+        }
+      },
+      "fused_up_gate": {
+        "groups": 9,
+        "keep_counts": {
+          "1": {
+            "byte_ratio": {
+              "max": 0.125,
+              "mean": 0.125,
+              "n": 9,
+              "p50": 0.125,
+              "p90": 0.125
+            },
+            "rel_l2": {
+              "max": 0.9267941554735275,
+              "mean": 0.9217265792387855,
+              "n": 9,
+              "p50": 0.9216226809000372,
+              "p90": 0.9258258891207721
+            }
+          },
+          "2": {
+            "byte_ratio": {
+              "max": 0.25,
+              "mean": 0.25,
+              "n": 9,
+              "p50": 0.25,
+              "p90": 0.25
+            },
+            "rel_l2": {
+              "max": 0.8487922812385928,
+              "mean": 0.8418265610702417,
+              "n": 9,
+              "p50": 0.8427212454386543,
+              "p90": 0.8485575388791007
+            }
+          },
+          "4": {
+            "byte_ratio": {
+              "max": 0.5,
+              "mean": 0.5,
+              "n": 9,
+              "p50": 0.5,
+              "p90": 0.5
+            },
+            "rel_l2": {
+              "max": 0.6816425449648006,
+              "mean": 0.6679497269893413,
+              "n": 9,
+              "p50": 0.6735608875239271,
+              "p90": 0.6769340425631102
+            }
+          },
+          "6": {
+            "byte_ratio": {
+              "max": 0.75,
+              "mean": 0.75,
+              "n": 9,
+              "p50": 0.75,
+              "p90": 0.75
+            },
+            "rel_l2": {
+              "max": 0.4709866608738029,
+              "mean": 0.45845048090440316,
+              "n": 9,
+              "p50": 0.4624033995299487,
+              "p90": 0.470295397910852
+            }
+          },
+          "8": {
+            "byte_ratio": {
+              "max": 1.0,
+              "mean": 1.0,
+              "n": 9,
+              "p50": 1.0,
+              "p90": 1.0
+            },
+            "rel_l2": {
+              "max": 0.0,
+              "mean": 0.0,
+              "n": 9,
+              "p50": 0.0,
+              "p90": 0.0
+            }
+          }
+        },
+        "needed_for_energy": {
+          "0.9": {
+            "byte_ratio": {
+              "max": 1.0,
+              "mean": 0.9722222222222222,
+              "n": 9,
+              "p50": 1.0,
+              "p90": 1.0
+            },
+            "count": {
+              "max": 8.0,
+              "mean": 7.777777777777778,
+              "n": 9,
+              "p50": 8.0,
+              "p90": 8.0
+            }
+          },
+          "0.95": {
+            "byte_ratio": {
+              "max": 1.0,
+              "mean": 1.0,
+              "n": 9,
+              "p50": 1.0,
+              "p90": 1.0
+            },
+            "count": {
+              "max": 8.0,
+              "mean": 8.0,
+              "n": 9,
+              "p50": 8.0,
+              "p90": 8.0
+            }
+          },
+          "0.99": {
+            "byte_ratio": {
+              "max": 1.0,
+              "mean": 1.0,
+              "n": 9,
+              "p50": 1.0,
+              "p90": 1.0
+            },
+            "count": {
+              "max": 8.0,
+              "mean": 8.0,
+              "n": 9,
+              "p50": 8.0,
+              "p90": 8.0
+            }
+          }
+        },
+        "needed_for_rel_l2": {
+          "max": 8.0,
+          "mean": 8.0,
+          "n": 9,
+          "p50": 8.0,
+          "p90": 8.0
+        },
+        "needed_for_rel_l2_byte_ratio": {
+          "max": 1.0,
+          "mean": 1.0,
+          "n": 9,
+          "p50": 1.0,
+          "p90": 1.0
+        }
+      }
+    },
+    "groups": [
+      {
+        "active": 8,
+        "group_key": "dev_japan_factual|down|decode|0|blk.60|blk.60.ffn_down_exps.weight|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.8847592177861502,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.7542075313198214,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.400760111680523,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.24600285128133248,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "down",
+        "top1_energy": 0.21720112654243967,
+        "total_bytes": 50462720
+      },
+      {
+        "active": 8,
+        "group_key": "dev_japan_factual|down|decode|1|blk.1|blk.1.ffn_down_exps.weight|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.8056407808397194,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.6925683029406109,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.46912890603229157,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.3229613448739478,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "down",
+        "top1_energy": 0.35094293224796724,
+        "total_bytes": 50462720
+      },
+      {
+        "active": 8,
+        "group_key": "dev_japan_factual|down|decode|2|blk.2|blk.2.ffn_down_exps.weight|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.914021674816855,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8279692259956348,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.627727163367525,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.3935046838516512,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "down",
+        "top1_energy": 0.1645643779649912,
+        "total_bytes": 50462720
+      },
+      {
+        "active": 8,
+        "group_key": "dev_japan_factual|fused_up_gate|decode|0|blk.60|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.9216507811168395,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8417015479981855,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.6597360153487806,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.4400429030203633,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "fused_up_gate",
+        "top1_energy": 0.15055983766671957,
+        "total_bytes": 89915392
+      },
+      {
+        "active": 8,
+        "group_key": "dev_japan_factual|fused_up_gate|decode|1|blk.1|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.9267941554735275,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8485575388791007,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.6738079373837149,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.4624033995299487,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "fused_up_gate",
+        "top1_energy": 0.14105259338011097,
+        "total_bytes": 75235328
+      },
+      {
+        "active": 8,
+        "group_key": "dev_japan_factual|fused_up_gate|decode|2|blk.2|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.9223250739391823,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8487922812385928,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.6816425449648006,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.470295397910852,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "fused_up_gate",
+        "top1_energy": 0.14931645798308205,
+        "total_bytes": 89915392
+      },
+      {
+        "active": 8,
+        "group_key": "dev_mixed_summary|down|decode|0|blk.60|blk.60.ffn_down_exps.weight|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.8717486579825584,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.7263531394334878,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.44082956534022166,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.2724281673956277,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "down",
+        "top1_energy": 0.24005427730560838,
+        "total_bytes": 50462720
+      },
+      {
+        "active": 8,
+        "group_key": "dev_mixed_summary|down|decode|1|blk.1|blk.1.ffn_down_exps.weight|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.8621607064603545,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.7394142652403579,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.5131011376659466,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.29533290217573943,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "down",
+        "top1_energy": 0.2566789162357825,
+        "total_bytes": 50462720
+      },
+      {
+        "active": 8,
+        "group_key": "dev_mixed_summary|down|decode|2|blk.2|blk.2.ffn_down_exps.weight|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.8969963777867301,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8178687551732575,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.6424356445779059,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.42938609896243896,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "down",
+        "top1_energy": 0.19539749823748578,
+        "total_bytes": 50462720
+      },
+      {
+        "active": 8,
+        "group_key": "dev_mixed_summary|fused_up_gate|decode|0|blk.60|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.9180374189615883,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8317535404809733,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.6367780906014958,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.43463590650262035,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "fused_up_gate",
+        "top1_energy": 0.15720729738634506,
+        "total_bytes": 89915392
+      },
+      {
+        "active": 8,
+        "group_key": "dev_mixed_summary|fused_up_gate|decode|1|blk.1|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.9178660217084814,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8346427626318265,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.6621170961582056,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.45892503640964905,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "fused_up_gate",
+        "top1_energy": 0.1575219661930456,
+        "total_bytes": 75235328
+      },
+      {
+        "active": 8,
+        "group_key": "dev_mixed_summary|fused_up_gate|decode|2|blk.2|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.9216226809000372,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8429517537368986,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.6735608875239271,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.46126919497486896,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "fused_up_gate",
+        "top1_energy": 0.15061163405062825,
+        "total_bytes": 89915392
+      },
+      {
+        "active": 8,
+        "group_key": "dev_python_reverse|down|decode|0|blk.60|blk.60.ffn_down_exps.weight|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.8493104133946515,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.7212587563149173,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.4880948764551022,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.27394429617399085,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "down",
+        "top1_energy": 0.2786718216994061,
+        "total_bytes": 50462720
+      },
+      {
+        "active": 8,
+        "group_key": "dev_python_reverse|down|decode|1|blk.1|blk.1.ffn_down_exps.weight|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.648856126002909,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.5574874758832562,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.36629156023154397,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.21868918092369138,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "down",
+        "top1_energy": 0.5789857277484971,
+        "total_bytes": 50462720
+      },
+      {
+        "active": 8,
+        "group_key": "dev_python_reverse|down|decode|2|blk.2|blk.2.ffn_down_exps.weight|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.8960226722202681,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8183018262041558,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.6387701926701966,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.4320933968189187,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "down",
+        "top1_energy": 0.1971433708672501,
+        "total_bytes": 50462720
+      },
+      {
+        "active": 8,
+        "group_key": "dev_python_reverse|fused_up_gate|decode|0|blk.60|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.9258258891207721,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8471303841088461,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.676567957541281,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.4643654156301039,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "fused_up_gate",
+        "top1_energy": 0.14284642303373188,
+        "total_bytes": 89915392
+      },
+      {
+        "active": 8,
+        "group_key": "dev_python_reverse|fused_up_gate|decode|1|blk.1|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.9215552810697785,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8381879951190976,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.6704029708187551,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.4631304132874189,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "fused_up_gate",
+        "top1_energy": 0.1507358639324017,
+        "total_bytes": 75235328
+      },
+      {
+        "active": 8,
+        "group_key": "dev_python_reverse|fused_up_gate|decode|2|blk.2|0",
+        "keep1_byte_ratio": 0.125,
+        "keep1_rel_l2": 0.919861910858863,
+        "keep2_byte_ratio": 0.25,
+        "keep2_rel_l2": 0.8427212454386543,
+        "keep4_byte_ratio": 0.5,
+        "keep4_rel_l2": 0.6769340425631102,
+        "keep6_byte_ratio": 0.75,
+        "keep6_rel_l2": 0.4709866608738029,
+        "keep8_byte_ratio": 1.0,
+        "keep8_rel_l2": 0.0,
+        "needed_for_rel_l2": 8,
+        "needed_for_rel_l2_ratio": 1.0,
+        "role": "fused_up_gate",
+        "top1_energy": 0.15385406495108106,
+        "total_bytes": 89915392
+      }
+    ]
+  },
+  "target_byte_ratio": 0.4,
+  "total_records": 216
+}
