@@ -7192,3 +7192,49 @@ Immediate next action:
   - proves a correctness-valid compact target can load under strict 16GB and plausibly reaches the generalized `>5 tok/s` target; or
   - is closed due to loader/correctness failure.
 - If cleanup is not approved, return to retained gate/source dataflow only after producing a new hard-bound artifact showing a generalized calibration/dev `min_eval_tok_s >= 5.5` before coding.
+
+## 2026-07-08 X10-AG compact target priority header gate
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-priority-header-gate-20260708.json`
+- status: `header_gate_recorded_no_full_download_not_sota`
+
+Purpose:
+- Execute the first cheap gate from X10-AF without deleting files or downloading full model bodies.
+- For each priority candidate, fetch only `Range: bytes=0-268435455` from the first/single GGUF file, parse GGUF metadata/tensor tables, then delete the temporary slice immediately.
+- This step is metadata-only. It does not run the model, does not claim SOTA, and does not change source.
+
+Direct metadata-pass candidates after post-audit:
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF`, `DeepSeek-V4-Flash-REAP-K128.gguf`, `52.038 GiB`
+  - metadata: `general.architecture=deepseek4`, `tokenizer.ggml.model=gpt2`, `tokenizer.ggml.pre=joyai-llm`, `deepseek4.expert_count=256`, `ffn_gate_inp=[4096,256]`.
+  - caveat: related REAP K128 uniform was previously closed for a shape mismatch; this mixed file has a better header, but still needs strict load and correctness proof before any benchmark.
+- `teamblobfish/DeepSeek-V4-Flash-GGUF`, `IQ1_S-XL`, `57.314 GiB`
+  - metadata: `general.architecture=deepseek4`, `tokenizer.ggml.model=gpt2`, `tokenizer.ggml.pre=joyai-llm`, `deepseek4.expert_count=256`, `ffn_gate_inp=[4096,256]`.
+  - caveat: first shard only was parsed; full download requires explicit cleanup and then strict load/correctness gates.
+- `teamblobfish/DeepSeek-V4-Flash-GGUF`, `IQ1_M`, `60.078 GiB`
+  - metadata: `general.architecture=deepseek4`, `tokenizer.ggml.model=gpt2`, `tokenizer.ggml.pre=joyai-llm`, `deepseek4.expert_count=256`, `ffn_gate_inp=[4096,256]`.
+  - caveat: first shard only was parsed; full download requires explicit cleanup and then strict load/correctness gates.
+
+Downgraded / not direct-priority:
+- `0xSero/DeepSeek-V4-Flash-180B-GGUF`, `DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf`, `53.522 GiB`
+  - reject/direct-load block: `deepseek4.expert_count=160`, `ffn_gate_inp=[4096,160]`.
+  - decision: requires a loader/shape plan; do not download as a direct compact target candidate.
+- `ssweens/DeepSeek-V4-Flash-GGUF-YMMV`, `IQ1_M`, `62.870 GiB`
+  - shape metadata passes, but `tokenizer.ggml.pre=deepseek-v3` instead of target `joyai-llm`.
+  - decision: correctness-first fallback only; not priority over joyai-metadata candidates.
+- `ssweens/DeepSeek-V4-Flash-GGUF-YMMV`, `IQ2_XXS`, `72.557 GiB`
+  - shape metadata passes, but `tokenizer.ggml.pre=deepseek-v3` instead of target `joyai-llm`.
+  - decision: correctness-first fallback only; not priority over joyai-metadata candidates.
+
+Next execution plan:
+1. Do not delete any file unless explicitly approved.
+2. If deletion is approved, remove only the already-rejected local IQ2_S cleanup candidate recorded in X10-AD/X10-AF.
+3. Download exactly one direct metadata-pass candidate, in this order:
+   - `teamblobfish IQ1_S-XL` first, because it is the smallest newly classified standard-shape sharded candidate;
+   - `teamblobfish IQ1_M` second;
+   - `sleepyeldrazi REAP-K128 Q2-Q4 Mixed` only if the teamblobfish candidates fail or if a separate REAP loader-risk review clears it.
+4. For the chosen candidate, run:
+   - strict 16GB load smoke;
+   - fixed-text/logit or top1 correctness where applicable;
+   - France semantic correctness;
+   - calibration/dev generalized prompt benchmark only after correctness passes.
+5. Promote only if the result beats the no-prompt-specific generalized baseline with RAM/page-cache and TTFT constraints satisfied, then immediately commit and push to `ssd/vendor/deepseek-token-rate-16gb`.
