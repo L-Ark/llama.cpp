@@ -7970,3 +7970,52 @@ Decision:
 - Stop treating remote-row parity as token-rate progress.
 - The down lowbit math correctness risk is reduced, but full compact execution remains the practical blocker.
 - No SOTA changed; no production enablement.
+
+## 2026-07-08 X10-AV current pushed HEAD down q80 correctness reverify after demo refresh
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-after-demo-down-q80-lane8-shared-correctness-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T193822Z-latest-head-down-q80-correctness-reverify-after-demo`
+- source commit: `d5ce9ecb01f45650b125a18ac800b45c91531297`
+- source commit oneline: `d5ce9ecb0 vendor-ds4: record generalized demo validation`
+- status: `pass_current_pushed_head_down_gpu_q80_lane8_shared_correctness_not_sota`
+
+Purpose:
+- Reverify that the current pushed source still preserves the fixed down GPU q80 correctness after the generalized demo script and validation artifact commits.
+- This is a correctness guard only. It is not a token-rate SOTA run and must not be promoted as performance evidence.
+
+Method:
+- Rebuilt `build-ds4-moe-stream/bin/llama-results` from current HEAD.
+- Ran two strict cold `llama-results --sequential-logits --top1-report` cases under `MemoryMax=16000000000` and `MemorySwapMax=0`, using the fixed France text from the prior down-q80 gate:
+  - default case: `GGML_MOE_STREAM_DOWN_BATCH=1`, no q80 down GPU compatibility env.
+  - full-down GPU case: default case plus `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, and `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`.
+- Compared the generated `top1-check.json` files over all fixed-text positions.
+
+Results:
+- `n_base=145`, `n_case=145`, `n_compare=145`
+- `same_top1=145`
+- `first_mismatch_pos=-1`
+- `top1_pass=true`
+- `max_abs_top2_logit_diff=0.0`
+- `mean_abs_top2_logit_diff=0.0`
+- baseline `top1_matches_next_token=122`
+- full-down GPU `top1_matches_next_token=122`
+- default memory:
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=14910865408`
+  - `oom_kill=0`
+  - `ram_ok=true`
+  - profile: `batch_accept=0`, `batch_decline=5800`
+- full-down GPU memory:
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=14931202048`
+  - `oom_kill=0`
+  - `ram_ok=true`
+  - profile: `batch_accept=5800`, `batch_decline=0`
+
+Interpretation:
+- Current pushed HEAD still has bit-identical top1/top2 logits between default CPU-fallback down and the q80 lane8/shared full-down GPU path on the fixed-text correctness gate.
+- The down GPU q80 correctness requirement remains satisfied for the current source.
+- The q80 lane8/shared full-down path remains slower in this correctness probe (`elapsed_raw=3:22.80`) than the default fallback case (`elapsed_raw=2:42.07`), so this is not a SOTA candidate.
+- Next performance work should not revisit q80 correctness unless later source changes touch this path. Continue with generalized throughput work:
+  - if explicit disk cleanup is approved, download exactly one priority compact target and run load/correctness before token-rate;
+  - otherwise continue no-download lowbit/compact evidence or a new hard-bound route that can plausibly exceed the generalized baseline and move toward `>5 tok/s` random-prompt target.
