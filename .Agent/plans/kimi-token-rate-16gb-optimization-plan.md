@@ -94254,6 +94254,161 @@ python3 .Agent/run-tools/kimi_general_hotset_pack_feasibility.py \
   - if accepted or clearly IO-limited rather than index/TTFT-limited, test
     `top4096` / `budget32gib`.
 
+## GP55: build and runtime-test budget16GiB general overlay
+
+Timestamp: `2026-07-07T10:24:00+08:00`.
+
+Status: planned before execution.
+
+Current bottleneck:
+
+- GP54 showed the current France-oriented pack has `70.1%` aggregate dev
+  traffic hit rate, but only `54.0-59.0%` hit on several slow general dev
+  prompts.
+- GP53 showed an accepted `dev_linear_equation` current-code run with:
+  - output quality pass;
+  - `N=48`;
+  - token rate `0.16 tok/s`;
+  - TTFT `95795.13 ms`;
+  - RAM peak `15899996160`;
+  - `pack=0` copy wall dominated by `runtime_load,pack=0,iouring=0`
+    `183050.117 ms / 64.888 GiB` and
+    `current_down_overlap,pack=0,iouring=0`
+    `41181.273 ms / 15.809 GiB`.
+
+Candidate:
+
+- Build a real v1 expert-pack overlay from
+  `.Agent/runs/20260707-gp54-general-hotset-pack-feasibility/budget16gib-entries.txt`.
+- Expected overlay:
+  - `2978` entries;
+  - about `16.00 GiB` pack size;
+  - covers `448.14 GiB` dev miss traffic (`42.8%`);
+  - optimistic direct-copy saving `1210.0 s` over the full dev profile.
+
+Implementation method:
+
+1. Extend `scripts/kimi-build-missing-down-overlay.py` with `--entry-file` so
+   thousands of selected `tensor:expert` keys can be passed reproducibly
+   without shell command-line length risk.
+2. Build the overlay on the 5090 server from the same GGUF shards used by the
+   runtime:
+
+```bash
+cd /root/lfz/tmp/vendor-kimi-speculative-gp33
+python3 scripts/kimi-build-missing-down-overlay.py \
+  --model-glob '/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S/IQ3_S/Kimi-K2.7-Code-IQ3_S-*-of-00010.gguf' \
+  --reject-pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack \
+  --reject-pack /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack \
+  --entry-file .Agent/runs/20260707-gp54-general-hotset-pack-feasibility/budget16gib-entries.txt \
+  --out /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack
+```
+
+3. Runtime-test by appending the overlay through `GGML_MOE_EXPERT_PACK_LIST`
+   while keeping the existing main pack and l1/l2 down overlay unchanged:
+
+```bash
+repo=/root/lfz/tmp/vendor-kimi-speculative-gp33
+run=/root/lfz/tmp/runs/20260707-gp55-general-budget16/dev_linear_equation_n48
+cd "$repo"
+ln -sfn build-gp50-runtime build-cuda-batch
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO="$repo" RUN="$run" N=48 PROFILE=1 COPY_PROFILE=1 \
+      PROMPT_ID=dev_linear_equation \
+      PROMPT_USER_TEXT="Solve: if x + 3 = 10, what is x?" \
+      QUALITY_KEYWORDS="7|seven" \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_LIST=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+Theory and upper bound:
+
+- The overlay should convert a fraction of `pack=0` GGUF direct-copy traffic
+  into expert-pack iouring traffic.
+- On GP53's direct-copy cost (`2.6-2.8 s/GiB`), every `10 GiB` of direct-copy
+  traffic removed can save roughly `26-28 s` before replacement iouring/H2D
+  overhead.
+- The real upper bound is smaller because:
+  - the dev aggregate candidate coverage may not match one specific prompt;
+  - iouring wait and H2D do not disappear;
+  - larger pack lists may add index setup and TTFT;
+  - cold-start storage/page-cache behavior must stay under the 16GB host-RAM
+    cap.
+
+Validation:
+
+- Build output must be recorded with exact entry count and size.
+- The first runtime gate is `dev_linear_equation N=48`, matching GP53's accepted
+  quality-pass baseline.
+- Quality must pass and answer must contain a semantically correct solution
+  (`x = 7`).
+- TTFT must be no more than `1.2 * 95795.13 ms = 114954.16 ms`.
+- RAM peak must stay under `15900000000` bytes.
+- Token rate must improve over `0.16 tok/s` before the runtime candidate is
+  accepted.
+- Record answer text, token rate, TTFT, RAM peak, expert-pack counters, and
+  copy-profile attribution.
+
+Acceptance:
+
+- If the runtime candidate passes all gates, commit the builder change, plan,
+  overlay reproduction report, and push immediately.
+- If token rate regresses, quality fails, TTFT exceeds `114954.16 ms`, or RAM
+  exceeds the limit, do not accept the runtime candidate; keep only the
+  builder/analysis if useful and document the rejected run.
+- Do not use held-out test prompts during this candidate selection.
+
+GP55 execution result:
+
+- Timestamp: `2026-07-07T10:32:00+08:00`.
+- Added `--entry-file` to `scripts/kimi-build-missing-down-overlay.py` so
+  large GP54 hotsets can be built reproducibly.
+- Built:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack`.
+- Build result:
+  - entries: `2978`;
+  - size: `17179111424` bytes;
+  - wall time: `0:40.28`;
+  - max RSS: `378664 KB`.
+- Runtime report:
+  `.Agent/runs/20260707-gp55-general-budget16/report.md`.
+- Runtime command used the GP55 planned `systemd-run` command with:
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - `N=48`;
+  - `PROFILE=1`;
+  - `COPY_PROFILE=1`;
+  - `GGML_MOE_EXPERT_PACK_LIST=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack`;
+  - `GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1`.
+- Result on `dev_linear_equation`:
+  - quality: `pass`;
+  - answer: `To solve for x, subtract 3 from both sides: x + 3 = 10 x = 10 − 3 **x = 7**`;
+  - token rate: `0.22 tok/s` versus GP53 baseline `0.16 tok/s`;
+  - decode wall: `156463.54 ms` versus `208177.33 ms`;
+  - TTFT: `95778.96 ms`, below the `114954.16 ms` limit and slightly below
+    GP53 baseline `95795.13 ms`;
+  - RAM peak: `15899996160`, under the configured cgroup limit but with no
+    margin.
+- Copy-profile attribution:
+  - `runtime_load,pack=0` dropped from `64.888 GiB / 183050.117 ms` to
+    `49.149 GiB / 125695.146 ms`;
+  - `current_down_overlap,pack=0` dropped from `15.809 GiB / 41181.273 ms` to
+    `11.403 GiB / 26951.775 ms`;
+  - direct GGUF copy traffic dropped by about `20.145 GiB`;
+  - iouring traffic rose to `109455474688` bytes with `21943125 us` wait, but
+    decode still improved by `51713.79 ms`.
+- Acceptance:
+  - accepted as a dev runtime improvement because quality, TTFT, 16GB cgroup,
+    cold-start, and token-rate gates passed;
+  - not yet a final general SOTA because additional dev prompts and held-out
+    test-set validation are still required.
+- Next:
+  - run at least two more slow dev prompts with the budget16 overlay;
+  - if the gains generalize, run held-out test set once as SOTA gate;
+  - because RAM peak has no margin, do not increase overlay size before
+    profiling memory/page-cache distribution.
+
 ## GP53: current-code slow dev direct-read copy attribution
 
 Timestamp: `2026-07-07T08:50:00+08:00`.

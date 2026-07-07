@@ -1,0 +1,10 @@
+repo=/root/lfz/tmp/vendor-kimi-speculative-gp33
+pwd=/root/lfz/tmp/vendor-kimi-speculative-gp33
+branch=vendor/kimi-speculative-general-token-rate-16gb
+head=a0d82e507271f71177587b59a9fc4ac9a779e5d6
+short=a0d82e507
+status_short:
+ M scripts/kimi-build-missing-down-overlay.py
+diff_stat:
+ scripts/kimi-build-missing-down-overlay.py | 30 ++++++++++++++++++++++++++----
+ 1 file changed, 26 insertions(+), 4 deletions(-)

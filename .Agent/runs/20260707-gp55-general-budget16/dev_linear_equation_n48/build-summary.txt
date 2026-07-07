@@ -1,0 +1,9 @@
+overlay=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack
+-rw-r--r-- 1 root root 16G Jul  7 00:20 /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack
+wrote /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack
+entries=2978 data_start=454656 size=17179111424
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:40.28
+	Maximum resident set size (kbytes): 378664
+	File system inputs: 36908296
+	File system outputs: 33554848
+	Exit status: 0

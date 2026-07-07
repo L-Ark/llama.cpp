@@ -32,6 +32,20 @@ def parse_entry(value: str) -> tuple[str, int]:
     return tensor, expert_idx
 
 
+def load_entry_file(path: Path) -> list[tuple[str, int]]:
+    entries = []
+    with path.open(encoding="utf-8", errors="replace") as f:
+        for lineno, raw in enumerate(f, 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                entries.append(parse_entry(line))
+            except argparse.ArgumentTypeError as exc:
+                raise RuntimeError(f"{path}:{lineno}: {exc}") from exc
+    return entries
+
+
 def install_gguf_import(repo_root: Path) -> None:
     gguf_py = repo_root / "gguf-py"
     if str(gguf_py) not in sys.path:
@@ -110,8 +124,10 @@ def main() -> int:
     )
     parser.add_argument("--model-glob", required=True, help="Glob for GGUF shards.")
     parser.add_argument("--out", required=True, type=Path, help="Output overlay pack.")
-    parser.add_argument("--entry", action="append", type=parse_entry, required=True,
+    parser.add_argument("--entry", action="append", type=parse_entry, default=[],
                         help="Tensor/expert key, for example blk.9.ffn_down_exps.weight:264.")
+    parser.add_argument("--entry-file", action="append", type=Path, default=[],
+                        help="File with one TENSOR:EXPERT key per line. May be repeated.")
     parser.add_argument("--n-experts", type=int, default=384,
                         help="Experts per tensor used to infer each expert slice size.")
     parser.add_argument("--expert-bytes", type=int, default=0,
@@ -136,9 +152,15 @@ def main() -> int:
     if not model_paths:
         raise RuntimeError(f"model glob matched no files: {args.model_glob}")
 
-    unique_entries = sorted(set(args.entry), key=lambda item: (item[0], item[1]))
-    if len(unique_entries) != len(args.entry):
-        print(f"deduplicated entries: requested={len(args.entry)} unique={len(unique_entries)}", file=sys.stderr)
+    requested_entries = list(args.entry or [])
+    for entry_file in args.entry_file:
+        requested_entries.extend(load_entry_file(entry_file))
+    if not requested_entries:
+        raise RuntimeError("at least one --entry or --entry-file item is required")
+
+    unique_entries = sorted(set(requested_entries), key=lambda item: (item[0], item[1]))
+    if len(unique_entries) != len(requested_entries):
+        print(f"deduplicated entries: requested={len(requested_entries)} unique={len(unique_entries)}", file=sys.stderr)
 
     wanted_names = {name for name, _expert in unique_entries}
     tensors = find_tensors(model_paths, wanted_names)
