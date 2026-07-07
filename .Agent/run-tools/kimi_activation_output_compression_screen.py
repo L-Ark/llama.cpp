@@ -82,6 +82,53 @@ def load_vector(torch: Any, bin_path: Path, row: dict[str, Any]) -> Any:
     return torch.frombuffer(bytearray(raw), dtype=torch.float32).clone()
 
 
+def quantize_blockwise_codebook(torch: Any, grouped: Any, weights: Any, bits: int) -> tuple[Any, dict[str, Any]]:
+    if bits < 1 or bits > 2:
+        raise RuntimeError(f"aw_codebook supports bits=1 or bits=2, got bits={bits}")
+    k = 1 << bits
+    min_v = grouped.amin(dim=1)
+    max_v = grouped.amax(dim=1)
+    if k == 2:
+        c0 = torch.where(grouped < 0, grouped, torch.zeros_like(grouped))
+        w0 = torch.where(grouped < 0, weights, torch.zeros_like(weights))
+        c1 = torch.where(grouped >= 0, grouped, torch.zeros_like(grouped))
+        w1 = torch.where(grouped >= 0, weights, torch.zeros_like(weights))
+        denom0 = w0.sum(dim=1).clamp_min(1e-12)
+        denom1 = w1.sum(dim=1).clamp_min(1e-12)
+        centers = torch.stack(
+            [
+                torch.where(denom0 > 1e-11, (w0 * c0).sum(dim=1) / denom0, min_v),
+                torch.where(denom1 > 1e-11, (w1 * c1).sum(dim=1) / denom1, max_v),
+            ],
+            dim=1,
+        )
+    else:
+        steps = torch.linspace(0.0, 1.0, k, dtype=grouped.dtype, device=grouped.device)
+        centers = min_v[:, None] * (1.0 - steps[None, :]) + max_v[:, None] * steps[None, :]
+
+    for _ in range(8):
+        dist = (grouped[:, :, None] - centers[:, None, :]).square()
+        assign = dist.argmin(dim=2)
+        new_centers = centers.clone()
+        for idx in range(k):
+            mask = assign == idx
+            weighted_mask = torch.where(mask, weights, torch.zeros_like(weights))
+            denom = weighted_mask.sum(dim=1)
+            numer = (weighted_mask * grouped).sum(dim=1)
+            update = numer / denom.clamp_min(1e-12)
+            new_centers[:, idx] = torch.where(denom > 1e-11, update, centers[:, idx])
+        centers = new_centers
+
+    dist = (grouped[:, :, None] - centers[:, None, :]).square()
+    assign = dist.argmin(dim=2)
+    recon = torch.gather(centers, 1, assign)
+    info = {
+        "center_count": k,
+        "center_bytes": int(centers.numel() * 2),
+    }
+    return recon, info
+
+
 def quantize_blockwise(torch: Any, values: Any, bits: int, block: int, scale_mode: str, act_weight: Any | None) -> tuple[Any, dict[str, Any]]:
     flat = values.reshape(-1).to(torch.float32)
     n = flat.numel()
@@ -93,15 +140,32 @@ def quantize_blockwise(torch: Any, values: Any, bits: int, block: int, scale_mod
     grouped = flat_padded.reshape(-1, block)
     if scale_mode == "maxabs":
         weights = None
-    elif scale_mode == "aw_mse":
+    elif scale_mode in ("aw_mse", "aw_codebook"):
         if act_weight is None:
-            raise RuntimeError("aw_mse scale mode requires activation weights")
+            raise RuntimeError(f"{scale_mode} scale mode requires activation weights")
         wflat = act_weight.reshape(-1).to(torch.float32).clamp_min(0.0)
         if pad:
             wflat = torch.nn.functional.pad(wflat, (0, pad))
         weights = wflat.reshape(-1, block)
     else:
         raise RuntimeError(f"unsupported scale mode: {scale_mode}")
+
+    if scale_mode == "aw_codebook":
+        recon_grouped, codebook_info = quantize_blockwise_codebook(torch, grouped, weights, bits)
+        recon = recon_grouped.reshape(-1)[:n].reshape_as(values)
+        payload_bytes = math.ceil(n * bits / 8)
+        center_bytes = codebook_info["center_bytes"]
+        info = {
+            "bits": bits,
+            "block": block,
+            "scale_mode": scale_mode,
+            "payload_bytes": int(payload_bytes),
+            "scale_bytes": 0,
+            "center_bytes": int(center_bytes),
+            "center_count": codebook_info["center_count"],
+            "total_bytes": int(payload_bytes + center_bytes),
+        }
+        return recon, info
 
     if scale_mode == "maxabs":
         scales = grouped.abs().amax(dim=1).clamp_min(1e-12)

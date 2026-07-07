@@ -772,6 +772,76 @@ GP68 activation-aware scale result on 2026-07-07:
   - next byte-reduction screen should test residual correction or trained
     codebooks against the same activation-output gate.
 
+GP69 planned activation-aware codebook upper-bound screen:
+
+- Goal:
+  - test whether a richer per-block low-byte representation can plausibly pass
+    the activation-output gate before any runtime implementation.
+- Candidate:
+  - activation-weighted 1-bit / 2-bit codebooks per block;
+  - each block stores packed code indices plus fp16 codebook centers;
+  - centers are fit by weighted 1D k-means using `x_i^2` from the dumped real
+    activation vectors.
+- Scope:
+  - dev-only offline upper-bound screen using the GP67 activation dump;
+  - no held-out prompts;
+  - no runtime path;
+  - not a SOTA claim.
+- Why this is only an upper bound:
+  - the screen fits codebook centers using the same activation sample used for
+    evaluation;
+  - if it fails, this codebook family is not worth runtime work;
+  - if it passes, a later phase must train/freeze codebooks from dev prompts and
+    validate on held-out prompts before any SOTA claim.
+- Acceptance to advance:
+  - byte ratio in the `0.30x-0.40x` target range for up/gate and down;
+  - fused up/gate and down mean rel L2 `<=0.10`;
+  - 2-bit results may be kept only as diagnostic evidence if their byte ratio
+    is above the target.
+
+GP69 target-range result on 2026-07-07:
+
+- Code:
+  - extended `.Agent/run-tools/kimi_activation_output_compression_screen.py`
+    with `--scale-modes aw_codebook`;
+  - codebook mode uses activation-weighted 1D k-means per block;
+  - runtime remains unchanged.
+- Report:
+  - `.Agent/runs/20260707-gp69-activation-codebook-screen-n16-france-target/report.md`;
+  - `.Agent/runs/20260707-gp69-activation-codebook-screen-n16-france-target/screen.json`.
+- Input:
+  - reused the GP67 dev France `N=16` activation dump;
+  - 72 real decode activation records;
+  - target-range subset only: `bits=1`, `block=128,256`;
+  - the earlier full matrix run was stopped because the CPU offline k-means
+    path was too slow; the target-range subset is the relevant decision gate.
+- Result:
+  - automatic gate failed:
+    - passing matvec candidates: `0`;
+    - passing fused candidates: `0`;
+    - advance blockwise low-bit path: `False`.
+  - down 1-bit codebook:
+    - byte ratio `0.327x-0.364x`;
+    - mean rel L2 `0.568-0.571`.
+  - up/gate 1-bit codebook:
+    - byte ratio `0.391x-0.435x`;
+    - mean rel L2 about `0.589-0.594`.
+  - fused up/gate:
+    - byte ratio `0.391x-0.435x`;
+    - mean rel L2 about `0.764-0.768`.
+- Interpretation:
+  - 1-bit codebook does not beat the GP68 activation-aware scalar scale in the
+    target byte range;
+  - even this optimistic per-sample upper-bound screen is far above the
+    `<=0.10` mean rel L2 gate.
+- Decision:
+  - reject per-block 1-bit activation-weighted codebook as the next runtime
+    path;
+  - do not spend time on direct codebook kernels for this representation;
+  - next structural byte-reduction work should move to residual correction or
+    mixed precision with a small preserved high-error subset, and must keep the
+    same activation-output gate.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
