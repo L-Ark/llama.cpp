@@ -2953,6 +2953,85 @@ GP92 preliminary result on 2026-07-08:
     prompts or whether a smaller auxiliary representation can be tested
     without displacing current SOTA artifacts.
 
+## Phase 5P: GP93 Quant-Scaled VRAM Cache Bound
+
+Goal:
+
+- Correct the GP92 standalone bound by also accounting for the larger effective
+  VRAM cache that a smaller expert representation would provide.
+- Keep the same VRAM cache byte budget, scale each expert cache entry by a
+  candidate quant byte ratio, and replay existing dev route traces.
+
+Why this is necessary:
+
+- GP92 only scaled miss bytes after the current hit/miss pattern.
+- In a real lower-byte expert representation, the same `~15GB` cache can hold
+  more expert entries, increasing hit rate as well as shrinking miss bytes.
+- This combination can materially change whether a candidate is worth the
+  next implementation/download step.
+
+Implementation:
+
+- Added `.Agent/run-tools/kimi_quant_scaled_cache_bound.py`.
+- Inputs:
+  - dev GP4 route traces:
+    `.Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct`;
+  - quant ratios:
+    `1.0,0.827,0.696,0.563,0.505,0.4,0.3`.
+- Policies:
+  - `global LFU`: prompt-general static hotset over the dev set;
+  - `prompt LFU`: prompt-specific oracle, not acceptable as SOTA;
+  - `LRU`: deployable-style online policy bound, but still offline replay;
+  - `farthest-next`: implemented but default-off because exact byte-capacity
+    replay is slow and is not needed for the primary deployable conclusion.
+
+Result on 2026-07-08:
+
+- Report:
+  - `.Agent/runs/20260708-gp93-quant-scaled-cache-bound/report.md`;
+  - `.Agent/runs/20260708-gp93-quant-scaled-cache-bound/report.json`.
+- Mean dev route-trace bound:
+
+| ratio | global LFU hit | global LFU miss GiB/token | prompt LFU miss GiB/token | LRU miss GiB/token |
+|---:|---:|---:|---:|---:|
+| `1.000` | `28.9%` | `5.123` | `3.702` | `4.211` |
+| `0.827` | `32.2%` | `4.041` | `2.805` | `3.258` |
+| `0.696` | `35.4%` | `3.241` | `2.158` | `2.573` |
+| `0.563` | `39.6%` | `2.453` | `1.533` | `1.932` |
+| `0.505` | `41.9%` | `2.118` | `1.276` | `1.661` |
+| `0.400` | `47.1%` | `1.528` | `0.840` | `1.197` |
+| `0.300` | `54.2%` | `0.993` | `0.465` | `0.794` |
+
+Interpretation:
+
+- AesSedai `IQ2_S` (`0.827x`) and `IQ2_XXS` (`0.696x`) remain far above the
+  `5 tok/s` byte budget even after accounting for larger effective cache.
+- A representation around `0.505x` (`i1-IQ1_S` size scale) is still slightly
+  above the perfect-overlap budget under prompt-general global LFU
+  (`2.118 GiB/token` vs `2.08 GiB/token`) and above the non-overlap budget
+  (`1.664 GiB/token`).
+- The same `0.505x` ratio reaches `1.661 GiB/token` under LRU replay, exactly
+  at the non-overlap budget, but this is dev-only and still assumes:
+  - quality survives IQ1-scale representation;
+  - runtime IO reaches pure-IO peak;
+  - compute floor remains unchanged;
+  - no extra pack/build/disk overhead.
+- A prompt-general representation around `0.4x` is the first clear target:
+  global LFU reaches `1.528 GiB/token`, inside the non-overlap `5 tok/s`
+  transfer budget.
+
+Decision:
+
+- Refine the target: future byte-reduced representations should aim for
+  `<=0.4x` effective expert bytes, not merely `IQ2_XXS`.
+- Do not spend disk on AesSedai `IQ2_S` or `IQ2_XXS`.
+- `i1-IQ1_S` is worth only a small quality/header compatibility probe if it can
+  be done without displacing current SOTA assets; it is not strong enough to
+  justify a full download plus pack build by itself.
+- Next runtime-relevant path should be a prompt-general `~0.4x` auxiliary
+  expert representation or a dynamic cache policy paired with such a
+  representation.
+
 ## Run Discipline
 
 For every experiment:
@@ -3014,13 +3093,17 @@ Continue from Phase 5E:
     standalone `5 tok/s` paths because their advertised byte ratios are still
     too high; even `i1-IQ1_S` is only near `4-4.7 tok/s` under optimistic
     transfer assumptions and carries substantial quality/disk risk.
-18. Next primary direction must be a different non-expert-local byte-reduced
+18. GP93 shows that scaling entry bytes also increases effective VRAM hit rate:
+    `IQ2_XXS` remains insufficient, `0.505x` is only borderline under an LRU
+    replay, and `~0.4x` is the first prompt-general global-LFU target that
+    clears the `5 tok/s` byte budget on dev traces.
+19. Next primary direction must be a different non-expert-local byte-reduced
     representation or compute/storage-form change. Prediction/prefetch is
     secondary after bytes are reduced.
-19. The next screen must target global moved bytes around `0.30x-0.40x` and
+20. The next screen must target global moved bytes around `0.30x-0.40x` and
     fused up/gate mean rel L2 close to the quality gate before any runtime
     kernel is written.
-20. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+21. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
     gains can regress held-out performance severely.
 
 Rationale:
