@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -135,6 +136,88 @@ static bool run_decline_case(ggml_type type, const char * type_name) {
     return true;
 }
 
+static long parse_env_long(const char * name, long fallback) {
+    const char * value = std::getenv(name);
+    if (!value || !value[0]) {
+        return fallback;
+    }
+    return std::strtol(value, nullptr, 10);
+}
+
+static bool run_real_rows_case() {
+    const char * path = std::getenv("GGML_MOE_STREAM_REAL_ROWS_BIN");
+    if (!path || !path[0]) {
+        return true;
+    }
+
+    const ggml_type type = (ggml_type) parse_env_long("GGML_MOE_STREAM_REAL_ROWS_TYPE", (long) GGML_TYPE_IQ3_S);
+    const char * type_name = ggml_type_name(type);
+    const int64_t ne00 = parse_env_long("GGML_MOE_STREAM_REAL_ROWS_NE00", 2048);
+    const int64_t ne01 = parse_env_long("GGML_MOE_STREAM_REAL_ROWS_NE01", 16);
+    const size_t nb01 = (size_t) parse_env_long("GGML_MOE_STREAM_REAL_ROWS_NB01", (long) ggml_row_size(type, ne00));
+    const size_t nb02 = nb01 * (size_t) ne01;
+    const size_t bytes = nb01 * (size_t) ne01;
+
+    std::vector<uint8_t> src0_q(bytes);
+    std::ifstream in(path, std::ios::binary);
+    if (!in.read((char *) src0_q.data(), (std::streamsize) src0_q.size())) {
+        std::fprintf(stderr, "failed to read real rows path=%s expected_bytes=%zu got=%lld\n",
+                path, src0_q.size(), (long long) in.gcount());
+        return false;
+    }
+
+    std::vector<float> src1_f32((size_t) ne00);
+    std::vector<float> dst((size_t) ne01, 0.0f);
+    std::vector<float> ref((size_t) ne01, 0.0f);
+    int64_t counts[1] = {1};
+    ggml_moe_stream_row_mapping_probe rows[1] = {{0, 0}};
+
+    fill_pattern(src1_f32);
+    compute_reference(type, src0_q, nb01, nb02, ne01, ne00, src1_f32, ref);
+
+    const bool done = ggml_cuda_moe_stream_batch(
+        (int) type,
+        "blk.0.ffn_down_exps.weight",
+        src0_q.data(),
+        1,
+        ne01,
+        ne00,
+        nb01,
+        nb02,
+        src1_f32.data(),
+        (size_t) ne00 * sizeof(float),
+        (size_t) ne00 * sizeof(float),
+        nullptr,
+        0,
+        0,
+        dst.data(),
+        sizeof(float),
+        (size_t) ne01 * sizeof(float),
+        counts,
+        rows,
+        1);
+
+    if (!done) {
+        std::fprintf(stderr, "real-rows unexpected stream decline type=%s path=%s\n", type_name, path);
+        return false;
+    }
+
+    float max_abs = 0.0f;
+    double mean_abs = 0.0;
+    bool finite = true;
+    for (int64_t i = 0; i < ne01; ++i) {
+        finite = finite && std::isfinite(dst[(size_t) i]) && std::isfinite(ref[(size_t) i]);
+        const float err = std::fabs(dst[(size_t) i] - ref[(size_t) i]);
+        finite = finite && std::isfinite(err);
+        if (max_abs < err) max_abs = err;
+        mean_abs += err;
+    }
+    mean_abs /= (double) ne01;
+    std::fprintf(stdout, "real-rows accept type=%s ne00=%ld ne01=%ld nb01=%zu finite=%d max_abs=%.9g mean_abs=%.9g first_gpu=%.9g first_ref=%.9g\n",
+            type_name, (long) ne00, (long) ne01, nb01, finite ? 1 : 0, max_abs, mean_abs, dst[0], ref[0]);
+    return finite && max_abs < 0.25f;
+}
+
 int main() {
     setenv("GGML_MOE_STREAM_DECLINE_DEBUG", "1", 1);
     ggml_cpu_init();
@@ -143,6 +226,7 @@ int main() {
     ok = run_decline_case(GGML_TYPE_IQ1_S, "iq1_s") && ok;
     ok = run_decline_case(GGML_TYPE_IQ1_M, "iq1_m") && ok;
     ok = run_decline_case(GGML_TYPE_Q2_K, "q2_K") && ok;
+    ok = run_real_rows_case() && ok;
 
     return ok ? 0 : 1;
 }

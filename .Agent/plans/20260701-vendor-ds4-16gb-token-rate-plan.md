@@ -7656,3 +7656,62 @@ Decision:
   - obtain real compact-target tensor/layout evidence before enabling model runs;
   - if disk cleanup is approved, download exactly one priority compact target and run strict load/correctness first;
   - if disk cleanup is not approved, build a real-GGUF/expert-pack extraction parity harness using actual lowbit tensor bytes rather than synthetic quantized rows.
+
+## 2026-07-08 X10-AQ real GGUF IQ3_S down row parity probe
+
+- changed file: `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-real-gguf-iq3s-down-row-parity-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-real-rows-iq3s`
+- status: `real_gguf_iq3s_down_row_parity_pass_not_sota`
+
+Purpose:
+- Move from synthetic quantized rows toward real tensor-layout evidence without downloading a new compact target.
+- Use an already-local GGUF file that had been rejected as a full model, only as a source of real lowbit tensor bytes.
+
+Input tensor:
+- source file:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+- tensor:
+  - `blk.0.ffn_down_exps.weight`
+- type:
+  - `IQ3_S`
+- shape:
+  - `[2048, 4096, 256]`
+- byte layout observed by `gguf-py`:
+  - data shape `[256, 4096, 880]`
+  - extracted expert `0`, first `16` rows
+  - `ne00=2048`, `ne01=16`, `nb01=880`
+  - extracted bytes: `14080`
+
+Implementation:
+- Extended `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp` with optional env-driven real-row mode:
+  - `GGML_MOE_STREAM_REAL_ROWS_BIN`
+  - `GGML_MOE_STREAM_REAL_ROWS_TYPE`
+  - `GGML_MOE_STREAM_REAL_ROWS_NE00`
+  - `GGML_MOE_STREAM_REAL_ROWS_NE01`
+  - `GGML_MOE_STREAM_REAL_ROWS_NB01`
+- The tool reads raw row bytes, computes CPU reference via `ggml_get_type_traits(type)->to_float`, then calls `ggml_cuda_moe_stream_batch(...)`.
+
+Verification:
+- Env:
+  - `GGML_MOE_STREAM=1`
+  - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+  - `GGML_MOE_STREAM_REAL_ROWS_TYPE=21`
+  - `GGML_MOE_STREAM_REAL_ROWS_NE00=2048`
+  - `GGML_MOE_STREAM_REAL_ROWS_NE01=16`
+  - `GGML_MOE_STREAM_REAL_ROWS_NB01=880`
+- Result:
+  - `rc=0`
+  - real rows: `real-rows accept type=iq3_s ne00=2048 ne01=16 nb01=880 finite=1`
+  - `max_abs=0.00103905052`
+  - `mean_abs=0.000351050141`
+
+Decision:
+- This proves the dedicated down-stream entry can compute a real GGUF `IQ3_S` `ffn_down_exps` row slice correctly against CPU dequant reference.
+- It is still not a SOTA and not a model-run acceptance gate:
+  - only one tensor slice was tested;
+  - the source model was previously rejected for full-model correctness;
+  - no generation, prompt-general benchmark, TTFT, or 16GB model-run correctness gate was executed.
+- Next step:
+  - for compact-target path, parity evidence must cover the actual candidate types and real tensor bytes (`IQ1_S/IQ1_M/Q2_K` if those are the selected candidates);
+  - if no local real bytes exist for those exact types, disk cleanup/download approval is the practical path to continue.
