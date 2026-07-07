@@ -7550,3 +7550,59 @@ Decision:
   - either use a real compact target/expert pack layout for parity;
   - or revise the synthetic harness to mirror real GGUF lowbit row layout before attempting any production lowbit down kernel enablement.
   - Until then, generalized SOTA remains unchanged and the random-prompt `>5 tok/s` target is still unmet.
+
+## 2026-07-08 X10-AO latest-head q80 down GPU correctness reverify
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-down-q80-lane8-shared-correctness-reverify-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T184220Z-latest-head-down-q80-correctness-reverify`
+- source commit: `f4153fdbf vendor-ds4: record lowbit down stream parity probe`
+- status: `pass_latest_head_down_gpu_q80_lane8_shared_correctness_not_sota`
+
+Purpose:
+- After X10-AN's default-off lowbit diagnostic source change, re-run the accepted q80 down GPU correctness gate on latest HEAD.
+- This checks that the existing fixed down GPU path remains correct and that the lowbit diagnostic gate did not change default q80 behavior.
+
+Method:
+- Rebuilt `build-ds4-moe-stream/bin/llama-results`.
+- Used the same fixed France correctness prompt as the previous q80 down checks:
+  - prompt sha256: `6504bcedd48f2587016aeac360c1202241e4ccd3e989b7d91b67f1a67b0ef1c2`
+- Ran two strict 16GB systemd-cgroup cases with cold `drop_caches` before each case:
+  1. default down path:
+     - `GGML_MOE_STREAM=1`
+     - `GGML_MOE_STREAM_DOWN_BATCH=1`
+     - no q80 compat env.
+  2. full down q80 lane8 shared path:
+     - `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`
+     - `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`
+     - `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`
+     - `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`
+
+Results:
+- token/logit correctness:
+  - `n_base=145`
+  - `n_case=145`
+  - `same_top1=145`
+  - `first_mismatch_pos=-1`
+  - `max_abs_top12_logit_diff=0.0`
+  - `mean_abs_top12_logit_diff=0.0`
+- default memory:
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=14937509888`
+  - `oom_kill=0`
+  - `ram_ok=true`
+- full-down lane8 shared memory:
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=14925918208`
+  - `oom_kill=0`
+  - `ram_ok=true`
+- down batch routing:
+  - default: `batch_accept=0`, `batch_decline=5800`
+  - full-down lane8 shared: `batch_accept=5800`, `batch_decline=0`
+
+Decision:
+- The latest HEAD still satisfies the down GPU q80 correctness gate under the 16GB host-RAM cgroup.
+- This is not a SOTA performance claim; it is a correctness revalidation.
+- The next optimization step should not revisit q80 down correctness unless a later source change touches that path. Focus should shift back to generalized random-prompt throughput:
+  - real compact target/load/correctness if disk cleanup is approved;
+  - or real-layout lowbit parity harness before lowbit down GPU production enablement;
+  - or another bottleneck-directed plan that keeps the no-prompt-specific and 16GB constraints.
