@@ -3925,6 +3925,93 @@ Execution result:
   - after cleanup, run the `i1-IQ1_S` full-model cold-start smoke under the
     same 16 GB RAM, France-quality, TTFT, and prompt-general gates.
 
+Phase GP105 input-route MoE output surrogate oracle:
+
+- Purpose:
+  - test a materially stronger learned surrogate than GP100-GP102;
+  - predict the full per-layer MoE output directly from the pre-MoE hidden
+    input plus selected route/expert IDs, instead of predicting down output
+    from already-computed down intermediates.
+- Why this is different:
+  - GP100-GP102 could only remove down movement and failed with mean rel L2
+    around `1.25`;
+  - an input-route surrogate would, if accurate, replace up/gate/down expert
+    reads for covered layers and therefore targets the whole active expert
+    footprint rather than only the down `37.6%` miss-byte share;
+  - it uses richer runtime-available inputs: hidden vector, active expert IDs,
+    active-slot order, and route hash/scalar features.
+- Theory:
+  - a small per-layer prototype/codebook or kernel regressor resident in VRAM
+    would move `0` expert bytes on matched layers;
+  - storing `K` BF16 prototypes per layer with one hidden feature and one output
+    vector costs roughly `K * (2048 + 2048) * 2` bytes, so even `K=64` is about
+    `0.5 MiB/layer` or `30 MiB/60 layers`;
+  - if a leave-one-prompt-out nearest-prototype/kernel upper bound cannot reach
+    the `0.10` output rel-L2 gate, this family is not worth a runtime path.
+- Experiment:
+  - use the GP88 dev-only call-stride activation corpus;
+  - reconstruct exact per-layer MoE output by summing exact down matvecs for
+    complete active expert groups;
+  - build feature rows from the corresponding up/gate input activation and
+    selected expert IDs;
+  - run leave-one-prompt-out by layer;
+  - compare prototype nearest-neighbor and kernel-ridge variants.
+- Acceptance to continue:
+  - mean rel L2 must be near or below `0.10` on leave-one-prompt-out dev prompts;
+  - worst-layer/prompt errors must not show systematic prompt memorization;
+  - resident prototype/projector VRAM must fit while preserving current
+    `GGML_MOE_VRAM_CACHE_MIB=15000` intent;
+  - only after this offline gate passes may a default-off runtime path be
+    considered.
+- Rejection:
+  - if best leave-one-prompt-out mean rel L2 remains far above `0.10`, close
+    this small learned surrogate family for now and return to either full-model
+    lower-quant smoke or a representation change with exact/near-exact expert
+    arithmetic.
+
+Execution result:
+
+- Timestamp: `2026-07-08T05:10:00+0800` to `2026-07-08T05:40:00+0800`
+  remote wall-clock window.
+- Status: completed dev-only corpus and offline oracle; no runtime/SOTA change.
+- Tool:
+  `.Agent/run-tools/kimi_input_route_moe_surrogate_oracle.py`.
+- Report:
+  `.Agent/runs/20260708-gp105-input-route-moe-surrogate/report.md`.
+- Corpus:
+  - remote root:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp105-groupcomplete-activation-corpus-r2`;
+  - dev prompts: France, Japan, photosynthesis;
+  - `n=16`, strict cold-start per prompt, `MemoryMax=15900000000`,
+    `MemorySwapMax=0`;
+  - `GGML_MOE_ACTIVATION_DUMP_CALL_STRIDE=1`;
+  - `GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=4096`;
+  - all three prompts passed quality;
+  - RAM peak stayed at `15899996160`;
+  - each prompt produced `4096` activation records and `156` complete paired
+    same-layer groups.
+- Important correction:
+  - the first corpus attempt used `GGML_MOE_ACTIVATION_DUMP_DIR=$RUN/act`;
+  - the runtime dump helper does not create directories, so no activation dump
+    was produced;
+  - r2 writes directly under `$RUN`, and the oracle now supports both `$RUN`
+    and `$RUN/act` layouts.
+- Oracle result:
+  - groups evaluated: `468`;
+  - layers evaluated: `53`;
+  - best method: `nn_scaled:input_route_stats`;
+  - best mean rel L2: `0.885045`;
+  - best max rel L2: `1.298097`;
+  - KRR variants were worse, with best KRR mean rel L2 `0.946113`.
+- Decision:
+  - reject as primary;
+  - close the small prototype/kernel full-MoE-output surrogate family for now;
+  - this route is far above the `0.10` output-error gate even with
+    runtime-available hidden input plus route features;
+  - next progress should come from a full-model lower-quant smoke after
+    approved disk cleanup, or from an exact/near-exact representation change
+    rather than a small learned surrogate.
+
 ## Run Discipline
 
 For every experiment:
@@ -4046,12 +4133,17 @@ Continue from Phase 5E:
     (`15.999 GiB`). Deleting only this file would leave `52.843 GiB` after
     downloading `i1-IQ1_S`, enough for the `50 GiB` reserve, but no deletion
     was performed.
-40. The next primary direction should either:
+40. While deletion approval is absent, run GP105 to test a richer input-route
+    full-MoE-output surrogate on dev-only activation data. This is the
+    non-destructive alternate path named by GP103/GP104.
+41. GP105 rejects the richer input-route full-MoE-output surrogate: best
+    leave-one-prompt-out mean rel L2 is `0.885045`, far above the `0.10` gate.
+    Close the small prototype/kernel learned-surrogate family for now.
+42. The next primary direction should either:
     - obtain a smaller full-model quant/runtime smoke with explicit disk
       approval or external storage; or
-    - test a materially different learned surrogate that uses richer
-      inputs than aggregated down intermediates and has a strict
-      leave-one-prompt-out gate before any runtime work.
+    - test an exact/near-exact representation change that is not a small
+      learned surrogate and can plausibly preserve arithmetic quality.
 
 Rationale:
 
