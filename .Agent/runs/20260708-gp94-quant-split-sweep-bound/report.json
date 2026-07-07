@@ -1,0 +1,428 @@
+{
+  "kind": "kimi_quant_split_sweep_bound",
+  "generated_at": "2026-07-08T03:25:58+0800",
+  "runs_root": ".Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct",
+  "ratios": [
+    1.0,
+    0.505,
+    0.4
+  ],
+  "pcts": [
+    40,
+    45,
+    50,
+    55,
+    60,
+    62,
+    65,
+    70,
+    75,
+    80
+  ],
+  "current_pct": 62,
+  "prompts": 7,
+  "total_capacity_gib": 14.647109374403954,
+  "best_by_ratio": {
+    "1.0": {
+      "ratio": 1.0,
+      "upgate_pct": 62,
+      "up_capacity_gib": 9.081207811832428,
+      "down_capacity_gib": 5.565901562571526,
+      "upgate_hit_pct": 29.332126882234437,
+      "down_hit_pct": 30.223512813575045,
+      "upgate_miss_gib_per_token": 3.2691868654775695,
+      "down_miss_gib_per_token": 1.8537177970923349,
+      "total_miss_gib_per_token": 5.122904662569904
+    },
+    "0.505": {
+      "ratio": 0.505,
+      "upgate_pct": 65,
+      "up_capacity_gib": 9.52062109299004,
+      "down_capacity_gib": 5.126488281413913,
+      "upgate_hit_pct": 43.2352665004951,
+      "down_hit_pct": 41.595802249623134,
+      "upgate_miss_gib_per_token": 1.332706496414665,
+      "down_miss_gib_per_token": 0.7847966676339236,
+      "total_miss_gib_per_token": 2.1175031640485886
+    },
+    "0.4": {
+      "ratio": 0.4,
+      "upgate_pct": 62,
+      "up_capacity_gib": 9.081207811832428,
+      "down_capacity_gib": 5.565901562571526,
+      "upgate_hit_pct": 47.352494280738895,
+      "down_hit_pct": 48.608480538054195,
+      "upgate_miss_gib_per_token": 0.9802677585410688,
+      "down_miss_gib_per_token": 0.547760273202081,
+      "total_miss_gib_per_token": 1.5280280317431498
+    }
+  },
+  "current_by_ratio": {
+    "1.0": {
+      "ratio": 1.0,
+      "upgate_pct": 62,
+      "up_capacity_gib": 9.081207811832428,
+      "down_capacity_gib": 5.565901562571526,
+      "upgate_hit_pct": 29.332126882234437,
+      "down_hit_pct": 30.223512813575045,
+      "upgate_miss_gib_per_token": 3.2691868654775695,
+      "down_miss_gib_per_token": 1.8537177970923349,
+      "total_miss_gib_per_token": 5.122904662569904
+    },
+    "0.505": {
+      "ratio": 0.505,
+      "upgate_pct": 62,
+      "up_capacity_gib": 9.081207811832428,
+      "down_capacity_gib": 5.565901562571526,
+      "upgate_hit_pct": 42.215402738416365,
+      "down_hit_pct": 43.33085307873681,
+      "upgate_miss_gib_per_token": 1.3558243521531261,
+      "down_miss_gib_per_token": 0.7617284741820498,
+      "total_miss_gib_per_token": 2.1175528263351757
+    },
+    "0.4": {
+      "ratio": 0.4,
+      "upgate_pct": 62,
+      "up_capacity_gib": 9.081207811832428,
+      "down_capacity_gib": 5.565901562571526,
+      "upgate_hit_pct": 47.352494280738895,
+      "down_hit_pct": 48.608480538054195,
+      "upgate_miss_gib_per_token": 0.9802677585410688,
+      "down_miss_gib_per_token": 0.547760273202081,
+      "total_miss_gib_per_token": 1.5280280317431498
+    }
+  },
+  "rows": [
+    {
+      "ratio": 1.0,
+      "upgate_pct": 40,
+      "up_capacity_gib": 5.858843749389052,
+      "down_capacity_gib": 8.788265625014901,
+      "upgate_hit_pct": 22.70589339980196,
+      "down_hit_pct": 38.60500173939933,
+      "upgate_miss_gib_per_token": 3.5668400694498694,
+      "down_miss_gib_per_token": 1.6327712323086383,
+      "total_miss_gib_per_token": 5.199611301758508
+    },
+    {
+      "ratio": 1.0,
+      "upgate_pct": 45,
+      "up_capacity_gib": 6.591199218295515,
+      "down_capacity_gib": 8.055910156108439,
+      "upgate_hit_pct": 24.358503773005086,
+      "down_hit_pct": 36.894109234277764,
+      "upgate_miss_gib_per_token": 3.494141003339654,
+      "down_miss_gib_per_token": 1.6778975205206543,
+      "total_miss_gib_per_token": 5.172038523860309
+    },
+    {
+      "ratio": 1.0,
+      "upgate_pct": 50,
+      "up_capacity_gib": 7.323554687201977,
+      "down_capacity_gib": 7.323554687201977,
+      "upgate_hit_pct": 25.924044798033258,
+      "down_hit_pct": 35.104943759421744,
+      "upgate_miss_gib_per_token": 3.422114413263784,
+      "down_miss_gib_per_token": 1.7251783034645096,
+      "total_miss_gib_per_token": 5.147292716728294
+    },
+    {
+      "ratio": 1.0,
+      "upgate_pct": 55,
+      "up_capacity_gib": 8.055910155177116,
+      "down_capacity_gib": 6.591199219226837,
+      "upgate_hit_pct": 27.420015706627513,
+      "down_hit_pct": 33.17082834061304,
+      "upgate_miss_gib_per_token": 3.355911976837372,
+      "down_miss_gib_per_token": 1.7755285828116574,
+      "total_miss_gib_per_token": 5.13144055964903
+    },
+    {
+      "ratio": 1.0,
+      "upgate_pct": 60,
+      "up_capacity_gib": 8.788265624083579,
+      "down_capacity_gib": 5.858843750320375,
+      "upgate_hit_pct": 28.804802472086593,
+      "down_hit_pct": 31.075818484016853,
+      "upgate_miss_gib_per_token": 3.294453687981799,
+      "down_miss_gib_per_token": 1.8314167850939829,
+      "total_miss_gib_per_token": 5.125870473075781
+    },
+    {
+      "ratio": 1.0,
+      "upgate_pct": 62,
+      "up_capacity_gib": 9.081207811832428,
+      "down_capacity_gib": 5.565901562571526,
+      "upgate_hit_pct": 29.332126882234437,
+      "down_hit_pct": 30.223512813575045,
+      "upgate_miss_gib_per_token": 3.2691868654775695,
+      "down_miss_gib_per_token": 1.8537177970923349,
+      "total_miss_gib_per_token": 5.122904662569904
+    },
+    {
+      "ratio": 1.0,
+      "upgate_pct": 65,
+      "up_capacity_gib": 9.52062109299004,
+      "down_capacity_gib": 5.126488281413913,
+      "upgate_hit_pct": 30.118525284255814,
+      "down_hit_pct": 28.882725832012678,
+      "upgate_miss_gib_per_token": 3.2340233012445614,
+      "down_miss_gib_per_token": 1.8895187554798378,
+      "total_miss_gib_per_token": 5.123542056724399
+    },
+    {
+      "ratio": 1.0,
+      "upgate_pct": 70,
+      "up_capacity_gib": 10.252976561896503,
+      "down_capacity_gib": 4.394132812507451,
+      "upgate_hit_pct": 31.379963806467032,
+      "down_hit_pct": 26.485253759035214,
+      "upgate_miss_gib_per_token": 3.176073673896561,
+      "down_miss_gib_per_token": 1.9499877627080153,
+      "total_miss_gib_per_token": 5.126061436604576
+    },
+    {
+      "ratio": 1.0,
+      "upgate_pct": 75,
+      "up_capacity_gib": 10.985332030802965,
+      "down_capacity_gib": 3.6617773436009884,
+      "upgate_hit_pct": 32.601922354628336,
+      "down_hit_pct": 23.796432298712844,
+      "upgate_miss_gib_per_token": 3.120661637287462,
+      "down_miss_gib_per_token": 2.021721952405495,
+      "total_miss_gib_per_token": 5.142383589692956
+    },
+    {
+      "ratio": 1.0,
+      "upgate_pct": 80,
+      "up_capacity_gib": 11.717687498778105,
+      "down_capacity_gib": 2.9294218756258488,
+      "upgate_hit_pct": 33.76775531805921,
+      "down_hit_pct": 20.788720961694562,
+      "upgate_miss_gib_per_token": 3.0671577486412493,
+      "down_miss_gib_per_token": 2.0973504456970202,
+      "total_miss_gib_per_token": 5.16450819433827
+    },
+    {
+      "ratio": 0.505,
+      "upgate_pct": 40,
+      "up_capacity_gib": 5.858843749389052,
+      "down_capacity_gib": 8.788265625014901,
+      "upgate_hit_pct": 33.581025711066346,
+      "down_hit_pct": 54.1102972440184,
+      "upgate_miss_gib_per_token": 1.5530354828825959,
+      "down_miss_gib_per_token": 0.6177008631144523,
+      "total_miss_gib_per_token": 2.170736345997048
+    },
+    {
+      "ratio": 0.505,
+      "upgate_pct": 45,
+      "up_capacity_gib": 6.591199218295515,
+      "down_capacity_gib": 8.055910156108439,
+      "upgate_hit_pct": 35.77611226824188,
+      "down_hit_pct": 51.92638475513123,
+      "upgate_miss_gib_per_token": 1.5022885202035845,
+      "down_miss_gib_per_token": 0.647087140127381,
+      "total_miss_gib_per_token": 2.1493756603309655
+    },
+    {
+      "ratio": 0.505,
+      "upgate_pct": 50,
+      "up_capacity_gib": 7.323554687201977,
+      "down_capacity_gib": 7.323554687201977,
+      "upgate_hit_pct": 37.79321883429508,
+      "down_hit_pct": 49.594623323412314,
+      "upgate_miss_gib_per_token": 1.457195181295278,
+      "down_miss_gib_per_token": 0.6785293424167637,
+      "total_miss_gib_per_token": 2.1357245237120415
+    },
+    {
+      "ratio": 0.505,
+      "upgate_pct": 55,
+      "up_capacity_gib": 8.055910155177116,
+      "down_capacity_gib": 6.591199219226837,
+      "upgate_hit_pct": 39.7256035100898,
+      "down_hit_pct": 47.11936144718024,
+      "upgate_miss_gib_per_token": 1.4131406722757756,
+      "down_miss_gib_per_token": 0.7113692428849474,
+      "total_miss_gib_per_token": 2.124509915160723
+    },
+    {
+      "ratio": 0.505,
+      "upgate_pct": 60,
+      "up_capacity_gib": 8.788265624083579,
+      "down_capacity_gib": 5.858843750320375,
+      "upgate_hit_pct": 41.520982005668046,
+      "down_hit_pct": 44.45759730972904,
+      "upgate_miss_gib_per_token": 1.3716138347115,
+      "down_miss_gib_per_token": 0.7467129926818925,
+      "total_miss_gib_per_token": 2.118326827393392
+    },
+    {
+      "ratio": 0.505,
+      "upgate_pct": 62,
+      "up_capacity_gib": 9.081207811832428,
+      "down_capacity_gib": 5.565901562571526,
+      "upgate_hit_pct": 42.215402738416365,
+      "down_hit_pct": 43.33085307873681,
+      "upgate_miss_gib_per_token": 1.3558243521531261,
+      "down_miss_gib_per_token": 0.7617284741820498,
+      "total_miss_gib_per_token": 2.1175528263351757
+    },
+    {
+      "ratio": 0.505,
+      "upgate_pct": 65,
+      "up_capacity_gib": 9.52062109299004,
+      "down_capacity_gib": 5.126488281413913,
+      "upgate_hit_pct": 43.2352665004951,
+      "down_hit_pct": 41.595802249623134,
+      "upgate_miss_gib_per_token": 1.332706496414665,
+      "down_miss_gib_per_token": 0.7847966676339236,
+      "total_miss_gib_per_token": 2.1175031640485886
+    },
+    {
+      "ratio": 0.505,
+      "upgate_pct": 70,
+      "up_capacity_gib": 10.252976561896503,
+      "down_capacity_gib": 4.394132812507451,
+      "upgate_hit_pct": 44.84071431010346,
+      "down_hit_pct": 38.39482432066793,
+      "upgate_miss_gib_per_token": 1.2958102888024234,
+      "down_miss_gib_per_token": 0.8273083278932452,
+      "total_miss_gib_per_token": 2.1231186166956686
+    },
+    {
+      "ratio": 0.505,
+      "upgate_pct": 75,
+      "up_capacity_gib": 10.985332030802965,
+      "down_capacity_gib": 3.6617773436009884,
+      "upgate_hit_pct": 46.37083006111927,
+      "down_hit_pct": 34.913609833404195,
+      "upgate_miss_gib_per_token": 1.2610505563498122,
+      "down_miss_gib_per_token": 0.8736333406968624,
+      "total_miss_gib_per_token": 2.1346838970466746
+    },
+    {
+      "ratio": 0.505,
+      "upgate_pct": 80,
+      "up_capacity_gib": 11.717687498778105,
+      "down_capacity_gib": 2.9294218756258488,
+      "upgate_hit_pct": 47.85442346433571,
+      "down_hit_pct": 30.91057554791079,
+      "upgate_miss_gib_per_token": 1.226124790576079,
+      "down_miss_gib_per_token": 0.9270356029075274,
+      "total_miss_gib_per_token": 2.1531603934836063
+    },
+    {
+      "ratio": 0.4,
+      "upgate_pct": 40,
+      "up_capacity_gib": 5.858843749389052,
+      "down_capacity_gib": 8.788265625014901,
+      "upgate_hit_pct": 37.998087888824394,
+      "down_hit_pct": 60.31850334351204,
+      "upgate_miss_gib_per_token": 1.1507767244046723,
+      "down_miss_gib_per_token": 0.4244754036395684,
+      "total_miss_gib_per_token": 1.5752521280442409
+    },
+    {
+      "ratio": 0.4,
+      "upgate_pct": 45,
+      "up_capacity_gib": 6.591199218295515,
+      "down_capacity_gib": 8.055910156108439,
+      "upgate_hit_pct": 40.39505582681736,
+      "down_hit_pct": 57.936492597889526,
+      "upgate_miss_gib_per_token": 1.1073220684949747,
+      "down_miss_gib_per_token": 0.4494310624648187,
+      "total_miss_gib_per_token": 1.5567531309597935
+    },
+    {
+      "ratio": 0.4,
+      "upgate_pct": 50,
+      "up_capacity_gib": 7.323554687201977,
+      "down_capacity_gib": 7.323554687201977,
+      "upgate_hit_pct": 42.60934885785502,
+      "down_hit_pct": 55.421611070310384,
+      "upgate_miss_gib_per_token": 1.06673957425859,
+      "down_miss_gib_per_token": 0.47577592250002604,
+      "total_miss_gib_per_token": 1.5425154967586159
+    },
+    {
+      "ratio": 0.4,
+      "upgate_pct": 55,
+      "up_capacity_gib": 8.055910155177116,
+      "down_capacity_gib": 6.591199219226837,
+      "upgate_hit_pct": 44.666575613753544,
+      "down_hit_pct": 52.742452939584865,
+      "upgate_miss_gib_per_token": 1.029408141345715,
+      "down_miss_gib_per_token": 0.5033321198104376,
+      "total_miss_gib_per_token": 1.5327402611561527
+    },
+    {
+      "ratio": 0.4,
+      "upgate_pct": 60,
+      "up_capacity_gib": 8.788265624083579,
+      "down_capacity_gib": 5.858843750320375,
+      "upgate_hit_pct": 46.59661283163178,
+      "down_hit_pct": 49.827992733176146,
+      "upgate_miss_gib_per_token": 0.9947914494805005,
+      "down_miss_gib_per_token": 0.5349602097290601,
+      "total_miss_gib_per_token": 1.5297516592095606
+    },
+    {
+      "ratio": 0.4,
+      "upgate_pct": 62,
+      "up_capacity_gib": 9.081207811832428,
+      "down_capacity_gib": 5.565901562571526,
+      "upgate_hit_pct": 47.352494280738895,
+      "down_hit_pct": 48.608480538054195,
+      "upgate_miss_gib_per_token": 0.9802677585410688,
+      "down_miss_gib_per_token": 0.547760273202081,
+      "total_miss_gib_per_token": 1.5280280317431498
+    },
+    {
+      "ratio": 0.4,
+      "upgate_pct": 65,
+      "up_capacity_gib": 9.52062109299004,
+      "down_capacity_gib": 5.126488281413913,
+      "upgate_hit_pct": 48.4459828592891,
+      "down_hit_pct": 46.697073943798074,
+      "upgate_miss_gib_per_token": 0.9604788678353724,
+      "down_miss_gib_per_token": 0.5682308968864938,
+      "total_miss_gib_per_token": 1.5287097647218661
+    },
+    {
+      "ratio": 0.4,
+      "upgate_pct": 70,
+      "up_capacity_gib": 10.252976561896503,
+      "down_capacity_gib": 4.394132812507451,
+      "upgate_hit_pct": 50.20252159661283,
+      "down_hit_pct": 43.27045726875652,
+      "upgate_miss_gib_per_token": 0.928644216766663,
+      "down_miss_gib_per_token": 0.6040132229923396,
+      "total_miss_gib_per_token": 1.5326574397590027
+    },
+    {
+      "ratio": 0.4,
+      "upgate_pct": 75,
+      "up_capacity_gib": 10.985332030802965,
+      "down_capacity_gib": 3.6617773436009884,
+      "upgate_hit_pct": 51.90016048075938,
+      "down_hit_pct": 39.41768775849407,
+      "upgate_miss_gib_per_token": 0.8970496171689296,
+      "down_miss_gib_per_token": 0.6445912965140133,
+      "total_miss_gib_per_token": 1.541640913682943
+    },
+    {
+      "ratio": 0.4,
+      "upgate_pct": 80,
+      "up_capacity_gib": 11.717687498778105,
+      "down_capacity_gib": 2.9294218756258488,
+      "upgate_hit_pct": 53.500913374534775,
+      "down_hit_pct": 35.104943759421744,
+      "upgate_miss_gib_per_token": 0.8669585881150587,
+      "down_miss_gib_per_token": 0.6900713443138563,
+      "total_miss_gib_per_token": 1.557029932428915
+    }
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_quant_split_sweep_bound.py --runs-root .Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct --ratios 1.0,0.505,0.4 --pcts 40,45,50,55,60,62,65,70,75,80 --current-pct 62 --out-json .Agent/runs/20260708-gp94-quant-split-sweep-bound/report.json --out-md .Agent/runs/20260708-gp94-quant-split-sweep-bound/report.md"
+}

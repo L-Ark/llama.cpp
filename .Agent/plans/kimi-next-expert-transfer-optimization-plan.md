@@ -3032,6 +3032,77 @@ Decision:
   expert representation or a dynamic cache policy paired with such a
   representation.
 
+## Phase 5Q: GP94 Split-Pool Byte-Ratio Sweep
+
+Goal:
+
+- Test whether the current upgate/down VRAM split is still near-optimal for
+  prompt-general traces, both for current IQ3 exact bytes and for a future
+  `~0.4x` auxiliary expert representation.
+- This is a low-risk offline gate before any runtime sweep: it changes neither
+  model quality nor expert selection, only the simulated cache budget split.
+
+Why this is worth checking:
+
+- GP93 held the current split fixed while scaling entry bytes.
+- Kimi miss bytes are split across up/gate and down; if one pool is
+  over-provisioned relative to the other, changing `GGML_MOE_VRAM_CACHE_UPGATE_PCT`
+  could reduce moved bytes without new kernels.
+- A runtime split change is acceptable only if the dev prompt-general bound
+  shows a clear margin; otherwise runtime variance and cold-start noise can
+  hide the effect.
+
+Method:
+
+1. Use only dev route traces from
+   `.Agent/runs/20260707-gp4-aligned-alias-dev-n96-profile-correct`.
+2. Keep total VRAM cache bytes fixed from current metrics.
+3. Sweep upgate budget percentage, initially `40..80`.
+4. For each split and byte ratio, build dev-global LFU hotsets separately for
+   upgate and down and report total miss GiB/token.
+5. Candidate ratios:
+   - `1.0` for current IQ3 exact bytes;
+   - `0.505` for an IQ1-scale complete representation;
+   - `0.4` for the target effective expert representation.
+
+Acceptance to run a real n32 split sweep:
+
+- For current IQ3 bytes, best split must improve dev-global LFU miss
+  GiB/token by at least `5%` versus the current `UPGATE_PCT=62`.
+- For `0.4x`, the best split should materially improve the `5 tok/s` margin or
+  reduce sensitivity to runtime policy.
+- If the offline gain is below this threshold, do not spend cold-start runtime
+  budget on split-only experiments.
+
+Rejection:
+
+- Reject split-only as a near-term token-rate path if the current split is
+  already within `5%` of the best dev-global bound.
+
+Result on 2026-07-08:
+
+- Added `.Agent/run-tools/kimi_quant_split_sweep_bound.py`.
+- Report:
+  - `.Agent/runs/20260708-gp94-quant-split-sweep-bound/report.md`;
+  - `.Agent/runs/20260708-gp94-quant-split-sweep-bound/report.json`.
+- Dev prompt-general global-LFU bound:
+
+| ratio | current split | current miss GiB/token | best split | best miss GiB/token | gain |
+|---:|---:|---:|---:|---:|---:|
+| `1.000` | `62` | `5.123` | `62` | `5.123` | `0.00%` |
+| `0.505` | `62` | `2.118` | `65` | `2.118` | `~0.00%` |
+| `0.400` | `62` | `1.528` | `62` | `1.528` | `0.00%` |
+
+Decision:
+
+- Reject split-only as a runtime experiment for current IQ3 bytes.
+- The current `GGML_MOE_VRAM_CACHE_UPGATE_PCT=62` is already at the dev-global
+  optimum for current IQ3 and the target `0.4x` representation, and `65` only
+  ties within rounding for the `0.505x` case.
+- Do not spend cold-start runtime budget on a split sweep.
+- Future byte-reduced runtime candidates should start with `UPGATE_PCT=62`
+  unless their real entry sizes differ materially from the GP94 model.
+
 ## Run Discipline
 
 For every experiment:
@@ -3097,13 +3168,17 @@ Continue from Phase 5E:
     `IQ2_XXS` remains insufficient, `0.505x` is only borderline under an LRU
     replay, and `~0.4x` is the first prompt-general global-LFU target that
     clears the `5 tok/s` byte budget on dev traces.
-19. Next primary direction must be a different non-expert-local byte-reduced
+19. Run GP94 split-pool byte-ratio sweep before changing runtime split, because
+    GP93 kept the current upgate/down split fixed.
+20. GP94 rejects split-only tuning: the accepted `UPGATE_PCT=62` is already
+    the dev-global optimum for current IQ3 and the target `0.4x` representation.
+21. Next primary direction must be a different non-expert-local byte-reduced
     representation or compute/storage-form change. Prediction/prefetch is
     secondary after bytes are reduced.
-20. The next screen must target global moved bytes around `0.30x-0.40x` and
+22. The next screen must target global moved bytes around `0.30x-0.40x` and
     fused up/gate mean rel L2 close to the quality gate before any runtime
     kernel is written.
-21. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+23. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
     gains can regress held-out performance severely.
 
 Rationale:
