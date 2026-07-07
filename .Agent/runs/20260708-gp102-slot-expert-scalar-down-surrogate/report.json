@@ -1,0 +1,820 @@
+{
+  "decision": "Reject as primary: best shared down projector slot_expert_scalar_h lambda=100 has mean rel L2 1.252953, above the 0.10 gate.",
+  "generated_at": "2026-07-07T20:27:44+0000",
+  "groups": 96,
+  "inventory": ".Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv",
+  "kind": "kimi_shared_down_projector_oracle",
+  "lambdas": [
+    10.0,
+    100.0,
+    1000.0
+  ],
+  "layer_summary": {
+    "blk.11:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.11",
+      "max_rel_l2": 1.2352042969309753,
+      "mean_rel_l2": 1.2138644661161433,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.11:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.11",
+      "max_rel_l2": 1.2367153382054286,
+      "mean_rel_l2": 1.213151483926769,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.11:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.11",
+      "max_rel_l2": 1.2369445144458115,
+      "mean_rel_l2": 1.213189972319286,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.12:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.12",
+      "max_rel_l2": 1.3303351748064471,
+      "mean_rel_l2": 1.1994078738197518,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.12:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.12",
+      "max_rel_l2": 1.3030566350072454,
+      "mean_rel_l2": 1.1929766657335559,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.12:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.12",
+      "max_rel_l2": 1.3004124503324117,
+      "mean_rel_l2": 1.1925390783944405,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.14:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.14",
+      "max_rel_l2": 1.3571607654798952,
+      "mean_rel_l2": 1.244009378795672,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.14:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.14",
+      "max_rel_l2": 1.3458376744831868,
+      "mean_rel_l2": 1.2379999692685917,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.14:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.14",
+      "max_rel_l2": 1.3449733323532054,
+      "mean_rel_l2": 1.237496995020473,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.16:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.16",
+      "max_rel_l2": 1.5831764327184255,
+      "mean_rel_l2": 1.3271057477602957,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.16:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.16",
+      "max_rel_l2": 1.6110217945176746,
+      "mean_rel_l2": 1.306790157111119,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.16:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.16",
+      "max_rel_l2": 1.615485274722263,
+      "mean_rel_l2": 1.311193469971137,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.20:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.20",
+      "max_rel_l2": 1.4542541492116847,
+      "mean_rel_l2": 1.3004035288138365,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.20:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.20",
+      "max_rel_l2": 1.3602046256330478,
+      "mean_rel_l2": 1.2549517430531247,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.20:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.20",
+      "max_rel_l2": 1.3678015476329926,
+      "mean_rel_l2": 1.2538501722686133,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.21:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.21",
+      "max_rel_l2": 1.3565866553687915,
+      "mean_rel_l2": 1.1970087166429115,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.21:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.21",
+      "max_rel_l2": 1.359108878474335,
+      "mean_rel_l2": 1.1979914260702564,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.21:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.21",
+      "max_rel_l2": 1.359481897841401,
+      "mean_rel_l2": 1.1981834890118668,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.23:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.23",
+      "max_rel_l2": 1.3079830277097604,
+      "mean_rel_l2": 1.2416928863896832,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.23:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.23",
+      "max_rel_l2": 1.2632765073544203,
+      "mean_rel_l2": 1.2196655878671112,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.23:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.23",
+      "max_rel_l2": 1.2622475663920436,
+      "mean_rel_l2": 1.2189960591462146,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.24:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.24",
+      "max_rel_l2": 1.9158820120669637,
+      "mean_rel_l2": 1.44351161873942,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.24:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.24",
+      "max_rel_l2": 1.718914376026387,
+      "mean_rel_l2": 1.3772719056324805,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.24:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.24",
+      "max_rel_l2": 1.6998965460688673,
+      "mean_rel_l2": 1.3710126842383037,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.27:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.27",
+      "max_rel_l2": 1.2656392234147036,
+      "mean_rel_l2": 1.211604655612067,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.27:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.27",
+      "max_rel_l2": 1.2648641266975063,
+      "mean_rel_l2": 1.2099029188687505,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.27:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.27",
+      "max_rel_l2": 1.2647911215958862,
+      "mean_rel_l2": 1.2101471985825751,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.28:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.28",
+      "max_rel_l2": 1.4671083833891054,
+      "mean_rel_l2": 1.2465237375599247,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.28:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.28",
+      "max_rel_l2": 1.4558495751732663,
+      "mean_rel_l2": 1.2447913727505864,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.28:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.28",
+      "max_rel_l2": 1.4551230364824574,
+      "mean_rel_l2": 1.2448677338301393,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.2:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.2",
+      "max_rel_l2": 1.2991503267571696,
+      "mean_rel_l2": 1.2396041829656264,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.2:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.2",
+      "max_rel_l2": 1.2987778627580917,
+      "mean_rel_l2": 1.2385892589075198,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.2:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.2",
+      "max_rel_l2": 1.2987340736260415,
+      "mean_rel_l2": 1.2385057555385302,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.30:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.30",
+      "max_rel_l2": 1.2925388419043227,
+      "mean_rel_l2": 1.2519770546089755,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.30:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.30",
+      "max_rel_l2": 1.27020630174103,
+      "mean_rel_l2": 1.2319207849939058,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.30:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.30",
+      "max_rel_l2": 1.2712162484527931,
+      "mean_rel_l2": 1.2316662207457512,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.31:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.31",
+      "max_rel_l2": 1.2578798139829679,
+      "mean_rel_l2": 1.2356217836125714,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.31:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.31",
+      "max_rel_l2": 1.247553583157921,
+      "mean_rel_l2": 1.2242940711039314,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.31:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.31",
+      "max_rel_l2": 1.2475862973728817,
+      "mean_rel_l2": 1.2246090139840946,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.34:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.34",
+      "max_rel_l2": 1.4328325504866397,
+      "mean_rel_l2": 1.2762566485955953,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.34:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.34",
+      "max_rel_l2": 1.3829760866088538,
+      "mean_rel_l2": 1.2492464143599842,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.34:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.34",
+      "max_rel_l2": 1.3796695482026966,
+      "mean_rel_l2": 1.24712082814186,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.35:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.35",
+      "max_rel_l2": 1.5026153054314946,
+      "mean_rel_l2": 1.3558323001369494,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.35:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.35",
+      "max_rel_l2": 1.4945990430387375,
+      "mean_rel_l2": 1.300280668982834,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.35:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.35",
+      "max_rel_l2": 1.49367497379331,
+      "mean_rel_l2": 1.2965587382403645,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.37:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.37",
+      "max_rel_l2": 1.257874089374406,
+      "mean_rel_l2": 1.229263932520981,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.37:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.37",
+      "max_rel_l2": 1.2616809424006146,
+      "mean_rel_l2": 1.2311232866877322,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.37:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.37",
+      "max_rel_l2": 1.2623392716343076,
+      "mean_rel_l2": 1.231620651532232,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.38:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.38",
+      "max_rel_l2": 1.294403192233296,
+      "mean_rel_l2": 1.2784177011811961,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.38:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.38",
+      "max_rel_l2": 1.2643044401930155,
+      "mean_rel_l2": 1.2285643830168638,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.38:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.38",
+      "max_rel_l2": 1.2652352747392213,
+      "mean_rel_l2": 1.228132925258625,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.3:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.3",
+      "max_rel_l2": 1.6203733575670174,
+      "mean_rel_l2": 1.3666583959768064,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.3:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.3",
+      "max_rel_l2": 1.6061800949903957,
+      "mean_rel_l2": 1.3604816916770528,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.3:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.3",
+      "max_rel_l2": 1.6045149982257632,
+      "mean_rel_l2": 1.3597560247406317,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.41:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.41",
+      "max_rel_l2": 1.5561153771358593,
+      "mean_rel_l2": 1.3357995199593573,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.41:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.41",
+      "max_rel_l2": 1.5441485732906555,
+      "mean_rel_l2": 1.2984597283604769,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.41:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.41",
+      "max_rel_l2": 1.5514699126997893,
+      "mean_rel_l2": 1.298307577358294,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.42:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.42",
+      "max_rel_l2": 1.5547236239976843,
+      "mean_rel_l2": 1.3204487914656242,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.42:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.42",
+      "max_rel_l2": 1.394216852849882,
+      "mean_rel_l2": 1.2512415824989784,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.42:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.42",
+      "max_rel_l2": 1.4011660168898437,
+      "mean_rel_l2": 1.2531523867633265,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.44:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.44",
+      "max_rel_l2": 1.277298297524787,
+      "mean_rel_l2": 1.2379321275777047,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.44:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.44",
+      "max_rel_l2": 1.2656228524146327,
+      "mean_rel_l2": 1.228392931397611,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.44:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.44",
+      "max_rel_l2": 1.2650950769248182,
+      "mean_rel_l2": 1.2283301898988983,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.45:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.45",
+      "max_rel_l2": 1.49610109506709,
+      "mean_rel_l2": 1.300694230556269,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.45:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.45",
+      "max_rel_l2": 1.4711725636889887,
+      "mean_rel_l2": 1.296399129600754,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.45:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.45",
+      "max_rel_l2": 1.4683817905422676,
+      "mean_rel_l2": 1.2959697673999233,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.48:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.48",
+      "max_rel_l2": 1.5290320172457696,
+      "mean_rel_l2": 1.3065296560654762,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.48:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.48",
+      "max_rel_l2": 1.5145284817225664,
+      "mean_rel_l2": 1.2781229306458144,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.48:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.48",
+      "max_rel_l2": 1.514661651310279,
+      "mean_rel_l2": 1.276570842928116,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.49:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.49",
+      "max_rel_l2": 1.3613828403680692,
+      "mean_rel_l2": 1.2542582233114121,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.49:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.49",
+      "max_rel_l2": 1.3833715812691685,
+      "mean_rel_l2": 1.255127919097971,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.49:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.49",
+      "max_rel_l2": 1.386837977069342,
+      "mean_rel_l2": 1.2618531695083757,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.51:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.51",
+      "max_rel_l2": 1.3924603679222256,
+      "mean_rel_l2": 1.2435760775964837,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.51:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.51",
+      "max_rel_l2": 1.3715297172325465,
+      "mean_rel_l2": 1.2439082779149777,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.51:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.51",
+      "max_rel_l2": 1.3692747882644067,
+      "mean_rel_l2": 1.244165109711182,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.52:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.52",
+      "max_rel_l2": 1.6353580655371107,
+      "mean_rel_l2": 1.3718428253950137,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.52:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.52",
+      "max_rel_l2": 1.2612079672749281,
+      "mean_rel_l2": 1.2274546194843163,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.52:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.52",
+      "max_rel_l2": 1.2634776231974487,
+      "mean_rel_l2": 1.2279683973355395,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.55:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.55",
+      "max_rel_l2": 1.485245808948356,
+      "mean_rel_l2": 1.2867333448971416,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.55:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.55",
+      "max_rel_l2": 1.5258888533662438,
+      "mean_rel_l2": 1.3159727523342264,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.55:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.55",
+      "max_rel_l2": 1.531335510297534,
+      "mean_rel_l2": 1.3308487726553038,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.56:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.56",
+      "max_rel_l2": 1.7419739913283623,
+      "mean_rel_l2": 1.385290156675613,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.56:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.56",
+      "max_rel_l2": 1.7132673311822246,
+      "mean_rel_l2": 1.3174700014169494,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.56:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.56",
+      "max_rel_l2": 1.7118576360876951,
+      "mean_rel_l2": 1.31287063383243,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.58:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.58",
+      "max_rel_l2": 1.4371523822803882,
+      "mean_rel_l2": 1.2552527996140659,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.58:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.58",
+      "max_rel_l2": 1.454275639470545,
+      "mean_rel_l2": 1.265305099168944,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.58:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.58",
+      "max_rel_l2": 1.4569915393005004,
+      "mean_rel_l2": 1.2731908630168887,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.59:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.59",
+      "max_rel_l2": 1.4970395984675173,
+      "mean_rel_l2": 1.2855587139392959,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.59:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.59",
+      "max_rel_l2": 1.5425963832401155,
+      "mean_rel_l2": 1.2901210882875738,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.59:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.59",
+      "max_rel_l2": 1.5491503549150354,
+      "mean_rel_l2": 1.2973004332562816,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.5:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.5",
+      "max_rel_l2": 1.7883744139753952,
+      "mean_rel_l2": 1.3613602065322434,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.5:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.5",
+      "max_rel_l2": 1.7744973090306104,
+      "mean_rel_l2": 1.362088029672628,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.5:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.5",
+      "max_rel_l2": 1.7730987965873697,
+      "mean_rel_l2": 1.3623616569110293,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.60:slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "layer": "blk.60",
+      "max_rel_l2": 1.342542644458772,
+      "mean_rel_l2": 1.028006296327894,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.60:slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "layer": "blk.60",
+      "max_rel_l2": 1.0871552465973984,
+      "mean_rel_l2": 0.9444430703118648,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    },
+    "blk.60:slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "layer": "blk.60",
+      "max_rel_l2": 1.0734013992724643,
+      "mean_rel_l2": 0.9402878286643395,
+      "mode": "slot_expert_scalar_h",
+      "rows": 3
+    }
+  },
+  "layers": 32,
+  "libggml_base": "build-cuda-batch/bin/libggml-base.so",
+  "max_down_records_per_prompt": 256,
+  "modes": [
+    "slot_expert_scalar_h"
+  ],
+  "prompt_roots": [
+    "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse",
+    "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual",
+    "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_mixed_summary"
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_shared_down_projector_oracle.py --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_mixed_summary --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --libggml-base build-cuda-batch/bin/libggml-base.so --out-json /root/lfz/runs/vendor-kimi-token-rate/20260708-gp102-slot-expert-scalar-down-surrogate/report.json --out-md /root/lfz/runs/vendor-kimi-token-rate/20260708-gp102-slot-expert-scalar-down-surrogate/report.md --max-down-records-per-prompt 256 --modes slot_expert_scalar_h --lambdas 10.0,100.0,1000.0 --torch-threads 8",
+  "resident_mib_per_layer": {
+    "slot_expert_scalar_h": 448.0
+  },
+  "summary": {
+    "slot_expert_scalar_h:lambda=10": {
+      "lambda": 10.0,
+      "max_rel_l2": 1.9158820120669637,
+      "mean_rel_l2": 1.276001486867562,
+      "mode": "slot_expert_scalar_h",
+      "rows": 96
+    },
+    "slot_expert_scalar_h:lambda=100": {
+      "lambda": 100.0,
+      "max_rel_l2": 1.7744973090306104,
+      "mean_rel_l2": 1.2529531546939139,
+      "mode": "slot_expert_scalar_h",
+      "rows": 96
+    },
+    "slot_expert_scalar_h:lambda=1000": {
+      "lambda": 1000.0,
+      "max_rel_l2": 1.7730987965873697,
+      "mean_rel_l2": 1.253519520006409,
+      "mode": "slot_expert_scalar_h",
+      "rows": 96
+    }
+  }
+}

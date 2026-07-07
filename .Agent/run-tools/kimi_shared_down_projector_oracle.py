@@ -80,6 +80,7 @@ def prompt_down_groups(torch: Any, root: Path, inventory: dict[str, Any], lib: A
         group_rows.sort(key=lambda row: row["active_slot"])
         h_stack = torch.stack([vecs[row["record_id"]] for row in group_rows], dim=0).to(torch.float32)
         y_stack = torch.stack([exact_outputs[row["record_id"]] for row in group_rows], dim=0).to(torch.float32)
+        expert_ids = [int(row["expert_idx"]) for row in group_rows]
         slot_concat_h = None
         if len(group_rows) == 8:
             slot_concat_h = h_stack.reshape(-1).contiguous()
@@ -92,6 +93,8 @@ def prompt_down_groups(torch: Any, root: Path, inventory: dict[str, Any], lib: A
                 "sum_h": h_stack.sum(dim=0).contiguous(),
                 "sum_abs_h": h_stack.abs().sum(dim=0).contiguous(),
                 "sum_sq_h": (h_stack * h_stack).sum(dim=0).contiguous(),
+                "expert_ids": expert_ids,
+                "slot_h_stack": h_stack.contiguous(),
                 "slot_concat_h": slot_concat_h,
                 "target": y_stack.sum(dim=0).contiguous(),
             }
@@ -99,23 +102,60 @@ def prompt_down_groups(torch: Any, root: Path, inventory: dict[str, Any], lib: A
     return out
 
 
+def make_feature(torch: Any, row: dict[str, Any], mode: str) -> Any:
+    if mode == "sum_h":
+        return row["sum_h"]
+    if mode == "sum_h_abs":
+        return torch.cat([row["sum_h"], row["sum_abs_h"]], dim=0)
+    if mode == "sum_h_abs_sq":
+        return torch.cat([row["sum_h"], row["sum_abs_h"], row["sum_sq_h"]], dim=0)
+    if mode == "slot_concat_h":
+        feat = row.get("slot_concat_h")
+        if feat is None:
+            raise RuntimeError(f"group {row['group_key']} does not have 8 active slots for slot_concat_h")
+        return feat
+    if mode == "route_scalar_sum_h":
+        expert = torch.tensor(row["expert_ids"], dtype=torch.float32)
+        scale = (expert / 383.0).reshape(-1, 1)
+        stack = row["slot_h_stack"]
+        return torch.cat(
+            [
+                stack.sum(dim=0),
+                (stack * scale).sum(dim=0),
+                (stack * scale * scale).sum(dim=0),
+            ],
+            dim=0,
+        )
+    if mode == "route_hash4_sum_h":
+        expert = torch.tensor(row["expert_ids"], dtype=torch.float32)
+        stack = row["slot_h_stack"]
+        chunks = [stack.sum(dim=0)]
+        for seed in (0.37, 1.19, 2.31, 3.73):
+            # Deterministic smooth hash in [-1, 1]; avoids a large one-hot route feature.
+            scale = torch.sin((expert + 1.0) * seed).reshape(-1, 1)
+            chunks.append((stack * scale).sum(dim=0))
+        return torch.cat(chunks, dim=0)
+    if mode == "slot_expert_scalar_h":
+        if len(row["expert_ids"]) != 8:
+            raise RuntimeError(f"group {row['group_key']} does not have 8 active slots for slot_expert_scalar_h")
+        expert = torch.tensor(row["expert_ids"], dtype=torch.float32)
+        scale = (expert / 383.0).reshape(-1, 1)
+        stack = row["slot_h_stack"]
+        return torch.cat([stack.reshape(-1), (stack * scale).reshape(-1)], dim=0)
+    raise RuntimeError(f"unknown feature mode: {mode}")
+
+
 def make_features(torch: Any, rows: list[dict[str, Any]], mode: str) -> Any:
-    chunks = []
-    for row in rows:
-        if mode == "sum_h":
-            feat = row["sum_h"]
-        elif mode == "sum_h_abs":
-            feat = torch.cat([row["sum_h"], row["sum_abs_h"]], dim=0)
-        elif mode == "sum_h_abs_sq":
-            feat = torch.cat([row["sum_h"], row["sum_abs_h"], row["sum_sq_h"]], dim=0)
-        elif mode == "slot_concat_h":
-            feat = row.get("slot_concat_h")
-            if feat is None:
-                raise RuntimeError(f"group {row['group_key']} does not have 8 active slots for slot_concat_h")
-        else:
-            raise RuntimeError(f"unknown feature mode: {mode}")
-        chunks.append(feat)
-    return torch.stack(chunks, dim=0).to(torch.float32)
+    return torch.stack([make_feature(torch, row, mode) for row in rows], dim=0).to(torch.float32)
+
+
+def feature_dim_compatible(torch: Any, row: dict[str, Any], mode: str) -> bool:
+    if not mode_compatible(row, mode):
+        return False
+    try:
+        return int(make_feature(torch, row, mode).numel()) == mode_dim(mode)
+    except RuntimeError:
+        return False
 
 
 def standardize(torch: Any, train_x: Any, test_x: Any) -> tuple[Any, Any]:
@@ -131,6 +171,12 @@ def kernel_ridge_predict(torch: Any, train_x: Any, train_y: Any, test_x: Any, la
     alpha = torch.linalg.solve(k_train + lam * eye, train_y)
     k_test = (test_x @ train_x.t()) / dim
     return k_test @ alpha
+
+
+def mode_compatible(row: dict[str, Any], mode: str) -> bool:
+    if mode in {"slot_concat_h", "slot_expert_scalar_h", "route_scalar_sum_h", "route_hash4_sum_h"}:
+        return len(row.get("expert_ids", [])) == 8
+    return True
 
 
 class Acc:
@@ -169,16 +215,21 @@ def evaluate(torch: Any, groups: list[dict[str, Any]], modes: list[str], lambdas
             if len(train_rows) < 2 or not test_rows:
                 continue
             train_y = torch.stack([row["target"] for row in train_rows], dim=0).to(torch.float32)
-            test_y = torch.stack([row["target"] for row in test_rows], dim=0).to(torch.float32)
-            y_mean = train_y.mean(dim=0, keepdim=True)
-            centered_train_y = train_y - y_mean
             for mode in modes:
-                train_x = make_features(torch, train_rows, mode)
-                test_x = make_features(torch, test_rows, mode)
+                train_mode_rows = [row for row in train_rows if feature_dim_compatible(torch, row, mode)]
+                test_mode_rows = [row for row in test_rows if feature_dim_compatible(torch, row, mode)]
+                if len(train_mode_rows) < 2 or not test_mode_rows:
+                    continue
+                train_y = torch.stack([row["target"] for row in train_mode_rows], dim=0).to(torch.float32)
+                test_y = torch.stack([row["target"] for row in test_mode_rows], dim=0).to(torch.float32)
+                y_mean = train_y.mean(dim=0, keepdim=True)
+                centered_train_y = train_y - y_mean
+                train_x = make_features(torch, train_mode_rows, mode)
+                test_x = make_features(torch, test_mode_rows, mode)
                 train_x, test_x = standardize(torch, train_x, test_x)
                 for lam in lambdas:
                     pred = kernel_ridge_predict(torch, train_x, centered_train_y, test_x, lam) + y_mean
-                    for idx, row in enumerate(test_rows):
+                    for idx, row in enumerate(test_mode_rows):
                         err = rel_l2(torch, test_y[idx], pred[idx])
                         accs[(mode, lam)].add(err)
                         layer_accs[(layer, mode, lam)].add(err)
@@ -212,6 +263,12 @@ def mode_dim(mode: str, hidden: int = 2048) -> int:
         return hidden * 3
     if mode == "slot_concat_h":
         return hidden * 8
+    if mode == "route_scalar_sum_h":
+        return hidden * 3
+    if mode == "route_hash4_sum_h":
+        return hidden * 5
+    if mode == "slot_expert_scalar_h":
+        return hidden * 16
     raise RuntimeError(f"unknown mode: {mode}")
 
 

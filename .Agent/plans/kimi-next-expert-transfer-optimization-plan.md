@@ -3679,6 +3679,81 @@ Execution result:
   - learned down-projector replacement is not viable without a much stronger
     trained model or additional inputs.
 
+## Phase 5Y: GP102 Route-Conditioned Down Surrogate Oracle
+
+Goal:
+
+- Test whether learned down replacement fails because GP100/GP101 did not give
+  the surrogate enough route identity information.
+- Add active expert IDs to the down-projector feature set without reading down
+  expert tensors at runtime.
+- This is still dev-only/offline and does not claim SOTA.
+
+Feature modes:
+
+- `route_scalar_sum_h`: concatenate `sum(h)`, `sum(expert_id*h)`, and
+  `sum(expert_id^2*h)`; resident cost matches GP100 `sum_h_abs_sq`, about
+  `84 MiB/layer`.
+- `route_hash4_sum_h`: concatenate `sum(h)` plus four deterministic hashed
+  expert-ID weighted sums; resident cost about `140 MiB/layer`.
+- `slot_expert_scalar_h`: concatenate per-slot `h` and per-slot
+  `expert_id*h`; resident cost about `448 MiB/layer`, or `26.25 GiB/60 layers`.
+
+Method:
+
+1. Extend `.Agent/run-tools/kimi_shared_down_projector_oracle.py` with the
+   three route-conditioned modes.
+2. Use only the GP88 dev call-stride activation corpus.
+3. Run leave-one-prompt-out kernel ridge with lambdas `10,100,1000`.
+4. Reject unless the best route-conditioned candidate approaches the `0.10`
+   mean rel L2 gate and has plausible resident VRAM.
+
+Expected risk:
+
+- Route identity alone may not be enough because the down matrices differ in
+  high-dimensional directions not recoverable from a tiny route feature.
+- The strongest `slot_expert_scalar_h` variant may be too large for 32GB even
+  if it improves error.
+
+Execution result:
+
+- Timestamp: `2026-07-08T04:27:44+0800`.
+- Status: completed dev-only offline oracle; no runtime change and no SOTA
+  claim.
+- Script updated:
+  `.Agent/run-tools/kimi_shared_down_projector_oracle.py`.
+- Reports:
+  - route-conditioned aggregate:
+    `.Agent/runs/20260708-gp102-route-conditioned-down-surrogate/report.md`;
+  - strongest route+slot variant:
+    `.Agent/runs/20260708-gp102-slot-expert-scalar-down-surrogate/report.md`.
+- Remote execution:
+  - worktree: `/root/lfz/tmp/kimi-stage2m-align`;
+  - command ran under `systemd-run --wait --collect --same-dir`;
+  - memory cap: `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- Inputs:
+  - dev prompts only:
+    `dev_python_reverse`, `dev_japan_factual`, `dev_mixed_summary`;
+  - source corpus:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus`;
+  - `max-down-records-per-prompt=256`.
+- Results:
+  - `route_scalar_sum_h`, `lambda=1000`:
+    resident `84 MiB/layer` (`4.92 GiB/60 layers`), mean rel L2
+    `1.253345`;
+  - `route_hash4_sum_h`, `lambda=1000`:
+    resident `140 MiB/layer` (`8.20 GiB/60 layers`), mean rel L2
+    `1.253637`;
+  - `slot_expert_scalar_h`, `lambda=100`:
+    resident `448 MiB/layer` (`26.25 GiB/60 layers`), mean rel L2
+    `1.252953`.
+- Decision:
+  - reject route-conditioned down surrogate as a primary path;
+  - route identity and active-slot information do not materially improve over
+    GP100/GP101;
+  - close learned down-projector replacement unless a much stronger trained
+    model with richer inputs is introduced.
+
 ## Run Discipline
 
 For every experiment:
@@ -3784,7 +3859,11 @@ Continue from Phase 5E:
 34. GP101 rejects slot-concat down projectors: preserving active-slot
     information still gives mean rel L2 `1.252990` while consuming about
     `13.12 GiB/60 layers`.
-35. The next primary direction should either:
+35. GP102 rejects route-conditioned down surrogate: even the strongest
+    `slot_expert_scalar_h` variant needs `26.25 GiB/60 layers` and still has
+    mean rel L2 `1.252953`.
+36. Close the learned down-projector replacement family for now.
+37. The next primary direction should either:
     - obtain a smaller full-model quant/runtime smoke with explicit disk
       approval or external storage; or
     - test a materially different learned surrogate that uses richer
