@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Demo for the current prompt-general vendor DeepSeek strict-16GB baseline/SOTA.
+# Prompt-general vendor DeepSeek SOTA demo under the project constraints.
 #
-# This is deliberately not the old France-specific SOTA path. It accepts any
-# user prompt and clears prompt-derived packs/profiles before launching the
-# strict runner. The run is cold by default: page cache is dropped inside the
-# runner and the model process is placed in a 16GB cgroup including file cache.
+# This demo intentionally does not use France-specific traces, prompt-specific
+# expert packs, or prompt admission profiles. The user may pass any prompt; the
+# run is cold by default and is executed by strict_ds4_runner.py inside a 16 GB
+# cgroup that includes page cache.
 #
-# Usage:
-#   .Agent/examples/demo_generalized_sota.sh --prompt "AI infra is what?"
-#   .Agent/examples/demo_generalized_sota.sh "Today what should I eat?"
-#   printf 'Introduce Japan briefly.\n' | .Agent/examples/demo_generalized_sota.sh --stdin-prompt
+# Examples:
+#   .Agent/examples/demo_generalized_sota.sh --prompt "What does AI infrastructure do?"
+#   .Agent/examples/demo_generalized_sota.sh "今天吃什么？"
+#   printf 'Introduce Japan in one paragraph.\n' | .Agent/examples/demo_generalized_sota.sh --stdin-prompt
 #   .Agent/examples/demo_generalized_sota.sh --prompt-file prompt.txt
 #   .Agent/examples/demo_generalized_sota.sh
 #
 # Useful options:
-#   --n-predict 192      Comparable decode length; default matches the baseline.
+#   --n-predict 192      Default comparable decode length.
 #   --fast-smoke         Use n_predict=32 only to prove the path runs.
 #   --warm               Keep page cache; not a cold-start SOTA metric.
 #   --print-command      Print the strict runner command and exit.
+#   --json               Print a final machine-readable JSON line.
 
 ROOT="${ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 RUNNER="${RUNNER:-$ROOT/.Agent/run-tools/strict_ds4_runner.py}"
@@ -36,10 +37,11 @@ CASE_NAME=""
 N_PREDICT=192
 COLD_START=1
 PRINT_COMMAND=0
+PRINT_JSON=0
 FAST_SMOKE=0
 
 usage() {
-  sed -n '1,28p' "$0"
+  sed -n '1,31p' "$0"
 }
 
 die() {
@@ -56,14 +58,11 @@ import sys
 raw = sys.argv[1]
 text = raw.strip().lower()
 text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
-if text:
-    print(text[:48])
-else:
-    print("prompt-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10])
+print(text[:48] if text else "prompt-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10])
 PY
 }
 
-print_generalized_baseline() {
+print_baseline_banner() {
   python3 - "$BASELINE_JSON" <<'PY'
 import json
 import sys
@@ -72,17 +71,16 @@ from pathlib import Path
 path = Path(sys.argv[1])
 if not path.exists():
     print("[demo] generalized_baseline_artifact=missing")
-    return_code = 0
-    raise SystemExit(return_code)
+    raise SystemExit(0)
 
 data = json.loads(path.read_text())
 agg = data.get("aggregate", {})
 print(f"[demo] generalized_baseline_artifact={path}")
-print("[demo] generalized_baseline_no_prompt_specific=true")
-print(f"[demo] generalized_eval_tok_s_min={agg.get('min_eval_tok_s')}")
-print(f"[demo] generalized_eval_tok_s_mean={agg.get('mean_eval_tok_s')}")
-print(f"[demo] generalized_eval_tok_s_max={agg.get('max_eval_tok_s')}")
-print(f"[demo] generalized_ram_ok_all={agg.get('all_ram_ok')}")
+print("[demo] prompt_specific_optimization=disabled")
+print(f"[demo] baseline_eval_tok_s_min={agg.get('min_eval_tok_s')}")
+print(f"[demo] baseline_eval_tok_s_mean={agg.get('mean_eval_tok_s')}")
+print(f"[demo] baseline_eval_tok_s_max={agg.get('max_eval_tok_s')}")
+print(f"[demo] baseline_ram_ok_all={agg.get('all_ram_ok')}")
 print(f"[demo] product_target_met_all_prompts_gt_5_tok_s={agg.get('target_met_all_prompts_gt_5_tok_s')}")
 PY
 }
@@ -131,6 +129,10 @@ while [[ $# -gt 0 ]]; do
       PRINT_COMMAND=1
       shift
       ;;
+    --json)
+      PRINT_JSON=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -162,7 +164,7 @@ elif [[ -z "${PROMPT//[[:space:]]/}" ]]; then
     printf 'Prompt: ' >&2
     IFS= read -r PROMPT
   else
-    die "missing prompt; pass --prompt TEXT, --prompt-file FILE, or --stdin-prompt"
+    die "missing prompt; pass --prompt TEXT, --prompt-file FILE, --stdin-prompt, or a positional prompt"
   fi
 fi
 
@@ -176,17 +178,23 @@ for path in "$RUNNER" "$BINARY" "$MODEL"; do
   [[ -e "$path" ]] || die "missing required artifact: $path"
 done
 
-# Defensive cleanup: this demo must stay prompt-general even if the caller has
-# leftovers from France/Kimi/GP experiments in the parent shell.
-unset GGML_MOE_STREAM_ONE_EXPERT_PACK
-unset GGML_MOE_STREAM_CACHE_ADMIT_PROFILE
-unset GGML_MOE_STREAM_ONE_PREFILL_PROFILE
-unset GGML_MOE_EXPERT_PACK
-unset GGML_MOE_EXPERT_PACK_OVERLAY
-unset GGML_MOE_EXPERT_GGUF_ALIAS_TSV
-unset GGML_MOE_IO_ALIGNED_ALIAS_BATCH
-unset GGML_MOE_STREAM_ONE_TRACE_IN
-unset GGML_MOE_STREAM_ONE_TRACE_OUT
+# Keep this demo prompt-general even if the caller's shell has leftovers from
+# France/Kimi/GP experiments.
+for var in \
+  GGML_MOE_STREAM_ONE_EXPERT_PACK \
+  GGML_MOE_STREAM_CACHE_ADMIT_PROFILE \
+  GGML_MOE_STREAM_ONE_PREFILL_PROFILE \
+  GGML_MOE_EXPERT_PACK \
+  GGML_MOE_EXPERT_PACK_OVERLAY \
+  GGML_MOE_EXPERT_GGUF_ALIAS_TSV \
+  GGML_MOE_IO_ALIGNED_ALIAS_BATCH \
+  GGML_MOE_STREAM_ONE_TRACE_IN \
+  GGML_MOE_STREAM_ONE_TRACE_OUT \
+  DS4_NATIVE_RETAINED_DOWN_PROBE_OUT \
+  DS4_FUSED_UP_GATE_REF
+do
+  unset "$var" || true
+done
 
 if [[ -z "$CASE_NAME" ]]; then
   CASE_NAME="$(slugify "$PROMPT")"
@@ -248,11 +256,12 @@ printf '[demo] branch=%s\n' "$(git rev-parse --abbrev-ref HEAD)"
 printf '[demo] commit=%s\n' "$(git rev-parse --short HEAD)"
 printf '[demo] prompt=%s\n' "$PROMPT"
 printf '[demo] n_predict=%s\n' "$N_PREDICT"
-printf '[demo] target=random prompt, 16GB host RAM including page cache, 32GB RTX 5090\n'
-printf '[demo] config=vendor DeepSeek, no prompt-specific pack/profile, gate one-stream cache, cpu_moe=40, vram_cache=0\n'
-print_generalized_baseline
+printf '[demo] target=random prompt, stable >5 tok/s, 16GB host RAM including page cache, 32GB RTX 5090\n'
+printf '[demo] current_status=generalized baseline/SOTA path, below product target; no prompt-specific optimization\n'
+printf '[demo] config=vendor DeepSeek, cpu_moe=40, vram_cache=0, DS4 gate one-stream cache, cold strict cgroup\n'
+print_baseline_banner
 if [[ "$FAST_SMOKE" -eq 1 ]]; then
-  printf '[demo] metric_mode=fast_smoke; use --n-predict 192 for comparable baseline numbers\n'
+  printf '[demo] metric_mode=fast_smoke; use default --n-predict 192 for comparable numbers\n'
 else
   printf '[demo] metric_mode=comparable_default\n'
 fi
@@ -274,46 +283,73 @@ summary="$case_dir/summary.json"
 
 [[ -f "$summary" ]] || die "summary not found: $summary"
 
-python3 - "$summary" <<'PY'
+python3 - "$summary" "$PRINT_JSON" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 summary = Path(sys.argv[1])
+print_json = sys.argv[2] == "1"
 s = json.loads(summary.read_text())
 
-print("\n[demo] metrics")
-for key in [
-    "eval_tok_s",
-    "prompt_tok_s",
-    "ttft_estimate_ms",
-    "elapsed_seconds",
-    "memory_peak_bytes",
-    "memory_file_bytes",
-    "memory_max_events",
-    "pgmajfault",
-    "workingset_refault_file",
-    "ram_ok",
-    "ram_limit_killed",
-    "oom_seen",
-    "correctness_ok",
-    "correctness_reason",
-]:
-    print(f"{key}={s.get(key)}")
+fields = [
+    ("eval_tok_s", s.get("eval_tok_s")),
+    ("prompt_tok_s", s.get("prompt_tok_s")),
+    ("ttft_estimate_ms", s.get("ttft_estimate_ms")),
+    ("elapsed_seconds", s.get("elapsed_seconds")),
+    ("memory_peak_bytes", s.get("memory_peak_bytes")),
+    ("memory_file_bytes", s.get("memory_file_bytes")),
+    ("memory_max_events", s.get("memory_max_events")),
+    ("pgmajfault", s.get("pgmajfault")),
+    ("workingset_refault_file", s.get("workingset_refault_file")),
+    ("ram_ok", s.get("ram_ok")),
+    ("ram_limit_killed", s.get("ram_limit_killed")),
+    ("oom_seen", s.get("oom_seen")),
+    ("correctness_ok", s.get("correctness_ok")),
+    ("correctness_reason", s.get("correctness_reason")),
+]
 
-print("\n[demo] answer")
+print("\n[demo] metrics")
+for key, value in fields:
+    print(f"{key}={value}")
+
 answer = (s.get("answer") or "").strip()
-print(answer)
+print("\n[demo] answer")
+print(answer if answer else "<empty>")
 
 ram_ok = s.get("ram_ok") is True and not s.get("ram_limit_killed") and not s.get("oom_seen")
+has_answer = bool(answer)
 if not ram_ok:
-    print("\n[demo] status=FAILED_STRICT_16GB_RAM_GATE")
-    raise SystemExit(1)
+    status = "FAILED_STRICT_16GB_RAM_GATE"
+elif not has_answer:
+    status = "FAILED_EMPTY_ANSWER"
+else:
+    status = "RUN_COMPLETED_STRICT_16GB"
 
-print("\n[demo] status=RUN_COMPLETED_STRICT_16GB")
-print("[demo] note=For arbitrary prompts, manually review the printed answer for semantic correctness.")
+print(f"\n[demo] status={status}")
+if s.get("correctness_ok") is not True:
+    print("[demo] correctness_note=runner heuristic is conservative for arbitrary prompts; review the answer above.")
 if answer and answer[-1] not in ".!?。！？)]}\"'":
-    print("[demo] answer_note=possibly_truncated; increase --n-predict for a longer demo answer.")
+    print("[demo] answer_note=possibly_truncated; increase --n-predict for a longer answer.")
+
+if print_json:
+    payload = {
+        "status": status,
+        "summary": str(summary),
+        "eval_tok_s": s.get("eval_tok_s"),
+        "prompt_tok_s": s.get("prompt_tok_s"),
+        "ttft_estimate_ms": s.get("ttft_estimate_ms"),
+        "memory_peak_bytes": s.get("memory_peak_bytes"),
+        "memory_file_bytes": s.get("memory_file_bytes"),
+        "ram_ok": s.get("ram_ok"),
+        "correctness_ok": s.get("correctness_ok"),
+        "correctness_reason": s.get("correctness_reason"),
+        "answer": answer,
+    }
+    print("[demo-json] " + json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+if status != "RUN_COMPLETED_STRICT_16GB":
+    raise SystemExit(1)
 PY
 
 printf '\n[demo] cache/source counters\n'
