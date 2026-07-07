@@ -1,0 +1,99 @@
+{
+  "attempt_id": "20260707-existing-fused-upgate-ds4-evidence-review",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "created_at_utc": "2026-07-07T00:11:13.332762Z",
+  "decision": {
+    "accepted_sota_changed": false,
+    "next_allowed_work": "Only consider a new DS4 up/gate source edit if it reuses the accepted one-stream gate cache or avoids duplicating gate storage, provides a DS4-specific parallel/fused compute microbench, and has a hard bound showing simultaneous gate/updown reduction near the ~90% threshold. Plain GGML_MOE_STREAM_FUSED_UP_GATE or one-stream gate+up sharing remains rejected.",
+    "reason": "Existing DeepSeek4 fused up/gate path already proved CUDA acceptance but was far slower (0.5-0.8 tok/s) and had TTFT regressions. The failure was structural: it either used a tiny zero-hit batch cache or consumed the large gate-cache budget and still ran serial up then gate compute. Re-running a short probe would not add new evidence.",
+    "rerun_same_fused_upgate_path": false,
+    "source_edit_allowed_by_this_artifact": false
+  },
+  "evidence_runs": {
+    "deepseek4_fused_512mib": {
+      "batch_active_evidence": true,
+      "correctness_ok": true,
+      "elapsed_seconds": 399.5,
+      "eval_tok_s": 0.5,
+      "fused_graph_evidence": true,
+      "memory_file_bytes": 12678258688,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260702T084212Z-20260702_ds_deepseek4_up_gate_fused_gpu_only_13056_512/france-cpu40-vram0gb",
+      "stderr_key_tail": [
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.33.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.34.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.35.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.36.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.37.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.38.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.39.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=CPU#blk.40.ffn_up_exps.weight#0",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=CPU#blk.41.ffn_up_exps.weight#0",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=CPU#blk.42.ffn_up_exps.weight#0",
+        "[moe_stream_batch] VRAM cache: hits=0 misses=98556 preloads=0 hit_rate=0.0%",
+        "[moe_stream] VRAM cache: hits=553 misses=1478 hit_rate=27.2%"
+      ],
+      "ttft_ms": 47854.061177
+    },
+    "deepseek4_fused_batchcache13056": {
+      "batch_active_evidence": true,
+      "correctness_ok": true,
+      "elapsed_seconds": 273.12,
+      "eval_tok_s": 0.8,
+      "fused_graph_evidence": true,
+      "memory_file_bytes": 12675284992,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 1.1,
+      "ram_ok": true,
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260702T091648Z-20260702_ds_deepseek4_up_gate_fused_gpu_only_batchcache13056/france-cpu40-vram0gb",
+      "stderr_key_tail": [
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.32.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.33.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.34.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.35.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.36.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.37.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.38.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=blk.39.ffn_up_exps.weight",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=CPU#blk.40.ffn_up_exps.weight#0",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=CPU#blk.41.ffn_up_exps.weight#0",
+        "[moe_stream] up/gate prompt mode disabled: env= exact_requested=0 exact_type=0 stream_enabled=0 tensor=CPU#blk.42.ffn_up_exps.weight#0",
+        "[moe_stream_batch] VRAM cache: hits=75110 misses=23446 preloads=0 hit_rate=76.2%"
+      ],
+      "ttft_ms": 45519.453728
+    },
+    "deepseek4_fused_profile_n32": {
+      "batch_active_evidence": true,
+      "correctness_ok": true,
+      "elapsed_seconds": 95.50999999999999,
+      "eval_tok_s": 0.6,
+      "fused_graph_evidence": true,
+      "memory_file_bytes": 12816809984,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260702T085352Z-20260702_ds_deepseek4_up_gate_fused_profile_n32/france-cpu40-vram0gb",
+      "stderr_key_tail": [
+        "[deepseek4] fused up/gate decode path enabled limit=10",
+        "[moe_stream] VRAM cache: 12.8 GiB, 3072 slots (4.25 MiB each)",
+        "[moe_stream] batched up/gate decode path active: rows=6 ne01=2048 ne00=4096",
+        "[moe_stream] up/gate routes: #0:e29->dst5/flat5/tok0 #1:e62->dst4/flat4/tok0 #2:e74->dst3/flat3/tok0 #3:e106->dst0/flat0/tok0 #4:e107->dst2/flat2/tok0 #5:e132->dst1/flat1/tok0",
+        "[moe_stream_batch] VRAM cache: 0.5 GiB, 120 slots (4.25 MiB each)",
+        "[moe_stream_batch] VRAM cache: hits=0 misses=15996 preloads=0 hit_rate=0.0%",
+        "[moe_stream] VRAM cache: hits=553 misses=1478 hit_rate=27.2%"
+      ],
+      "ttft_ms": 48876.805293
+    }
+  },
+  "prompt_scope": "historical France calibration runs only; held-out test prompts were not used; no new model run performed",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "source_head": "d51da523a5796c816dd7bba6b70ffc5b25b81176",
+  "source_notes": {
+    "cuda_batch_guard": "ggml_cuda_moe_stream_up_gate_batch accepts DS4 type only through generic moe_stream_type_supported; current fast parallel branch is restricted to same-type IQ2_S, so DS4 MXFP4/F8 does not get the Kimi parallel fast path.",
+    "graph_builder": "src/llama-graph.cpp constructs ggml_moe_up_gate only when GGML_MOE_STREAM_FUSED_UP_GATE=1, n_tokens==1, up/gate same type/shape, no bias/scale, and SILU.",
+    "historical_profile": "large 13056MiB batch cache improved up/gate cache hit rate to about 76%, but eval_tok_s stayed 0.8 and TTFT exceeded the accepted gate. Earlier profile split showed serial up+gate compute about 15.7 ms/call."
+  },
+  "status": "diagnostic_complete_no_rerun_existing_path_rejected"
+}

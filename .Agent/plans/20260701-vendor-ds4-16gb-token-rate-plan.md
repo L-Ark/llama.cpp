@@ -5189,10 +5189,13 @@
 ## 2026-07-07 Phase X2：现有 fused up/gate path 对 DeepSeek DS4 的准入诊断
 
 - attempt_id: 20260707-existing-fused-upgate-ds4-probe
-- status: planned_before_experiment
+- status: diagnostic_complete_no_rerun_existing_path_rejected
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/existing-fused-upgate-ds4-evidence-review-20260707.json`
 - why_now: 源码已存在 `GGML_MOE_STREAM_FUSED_UP_GATE` graph path 和 `ggml_cuda_moe_stream_up_gate_batch()`；`llama-graph.cpp` 在 decode `n_tokens == 1`、up/gate 同 type/shape、无 bias/scale、SILU 时可构造 `GGML_OP_MOE_FUSED_UP_GATE`。当前计划要求下一步必须同时压 gate source movement 和 up/down fallback，现有 fused up/gate 是最小风险候选：它可能让 gate 与 up 在同一 fused op 中被调度，减少 separate gate/up graph 和 up CPU fallback。
 - constraints: 仅使用 `calibration_dev_set_v1`，先只跑 France short probe；禁止使用 `held_out_test_set_v1_locked`；不改源码；不作为 SOTA；strict `MemoryMax=16000000000`, `MemorySwapMax=0`，page cache 计入 cgroup；stdout 必须控制，避免多 GB artifact。
 - experiment: 用当前 pushed source，设置 `GGML_MOE_STREAM_FUSED_UP_GATE=1`、`GGML_MOE_STREAM_DECLINE_DEBUG=1`、`GGML_MOE_UP_GATE_PROFILE_OUT=<run>/up-gate-profile.csv`、`LLAMA_KIMI_MOE_GRAPH_PROFILE=1`（若 env 名在源码/runner中可用则开启），跑 France `n=16` 或 `n=32` short probe。记录 fused graph 是否构造、`up_gate batch accepted/declined`、decline reason、fallback reason profile、RAM/page-cache、TTFT、输出片段。
+- result_20260707: no new model run performed, because historical strict-16GB DeepSeek4 fused-upgate evidence already answers this probe. Prior runs showed CUDA fused-upgate acceptance but severe regression: `20260702T084212Z` with 512MiB batch cache had `eval_tok_s=0.5`, `TTFT=47854ms`, `ram_ok=true`, `correctness_ok=true`; `20260702T091648Z` with 13056MiB batch cache had `eval_tok_s=0.8`, `TTFT=45519ms`, `ram_ok=true`, `correctness_ok=true`, batch cache `3072 slots`, hit rate about `76%`. Both are far below accepted SOTA and violate/approach TTFT gates.
+- decision_update: Do not rerun plain `GGML_MOE_STREAM_FUSED_UP_GATE` and do not rerun one-stream gate+up sharing. Existing evidence shows the failure is structural: tiny batch cache gives zero hits; large batch cache consumes the gate-cache budget and still runs serial up then gate compute; one-stream gate+up sharing destroys gate hit rate. A future DS4 up/gate source edit must reuse accepted one-stream gate cache or avoid duplicating gate storage, then prove a DS4-specific parallel/fused compute microbench and a hard-bound near the simultaneous `~90%` reduction threshold.
 - expected_outcomes:
   - 如果 graph 未构造：记录阻塞条件（type/shape/env/bias/scale/n_tokens）并决定是否需要 default-off graph allowlist source edit。
   - 如果 graph 构造但 CUDA batch declined：记录 exact reason；若是 DS4 type guard 或 mixed/type-specific branch 限制，再设计 default-off DS4 fused path。
