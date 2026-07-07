@@ -2715,6 +2715,148 @@ python3 .Agent/run-tools/kimi_exact_input_keep_oracle.py \
   --torch-threads 8
 ```
 
+## Phase 5N: GP91 Model-Based Speculative Draft Feasibility
+
+Goal:
+
+- Test whether model-based speculative decoding can change the basic economics
+  by producing more than one accepted output token per expensive Kimi target
+  step.
+- This is a different compute/storage-form direction from exact expert byte
+  reconstruction: instead of making each target step cheap enough, try to
+  amortize target expert movement over multiple accepted tokens.
+
+Why this remains plausible after GP83:
+
+- GP83 rejected expert-route prediction/prefetch alone; even perfect up/gate
+  hide reaches only `1.806 tok/s`.
+- Speculative decoding is different: if acceptance is high, target verification
+  can retire multiple tokens per expensive target pass.
+- To reach `5 tok/s` from the prompt-general SOTA mean `~1.37 tok/s`, a
+  zero-overhead speculative path needs roughly `3.6x` effective tokens per
+  target step. Real overhead means the practical gate is higher.
+
+Known prior result:
+
+- GP26 rejected no-extra-model ngram lookup:
+  - best effective text tokens per step only `1.0658`;
+  - not enough for `5 tok/s`.
+- Therefore GP91 must use a model-based draft, not self-ngram lookup.
+
+Candidate external asset:
+
+- `jukofyork/Kimi-K2-Instruct-DRAFT-0.6B-v3.0-GGUF`
+  - described as a `0.6B` draft/speculative decoding model for
+    `Kimi-K2-Instruct`;
+  - GGUF Q4 variants are available.
+- Compatibility risk:
+  - current target is Kimi-K2.7-Code IQ3_S, not necessarily exactly
+    Kimi-K2-Instruct;
+  - tokenizer/chat template/vocab mismatch can make speculative verification
+    invalid or low-acceptance;
+  - loader support in this vendor branch is unknown.
+
+Scope:
+
+- Dev-only smoke first.
+- Do not use held-out prompts until:
+  - draft GGUF loads;
+  - tokenizer/vocab compatibility is confirmed by the binary;
+  - output quality passes France;
+  - RAM remains below 16 GB;
+  - TTFT increase stays within the `20%` gate;
+  - acceptance/effective tokens per target step is high enough to justify
+    runtime work.
+- Do not claim SOTA from a compatibility smoke.
+
+Method:
+
+1. Inspect local/remote `build-cuda-batch/bin` for speculative binaries or
+   `llama-completion` draft-model flags.
+2. If supported, download the smallest suitable draft GGUF to remote scratch
+   storage and record URL, size, sha256, and filename.
+3. Run a strict cold-start `N=32` France smoke under the 16 GB cgroup:
+   - target model: current Kimi IQ3_S GP4 alias/full-source env;
+   - draft model: external 0.6B Kimi draft GGUF;
+   - temp/top-p/top-k/seed unchanged;
+   - collect answer, token rate, TTFT, RAM peak, draft acceptance counters, and
+     target/draft timings.
+4. If the binary lacks counters, record stderr and derive only what is
+   available; do not promote without acceptance evidence.
+
+Acceptance to continue:
+
+- Binary loads both target and draft models successfully.
+- Output is semantically correct for
+  `Please introduce France in a short paragraph.`
+- Host RAM peak remains below 16 GB including page cache.
+- TTFT increase is `<=20%` versus the GP4 accepted baseline for comparable
+  prompt length.
+- Effective accepted tokens per target step is plausibly `>=3.6x` before
+  overhead, or the measured token rate already improves enough to justify a
+  longer dev run.
+
+Rejection:
+
+- Reject if tokenizer/vocab mismatch, output quality failure, RAM violation,
+  TTFT violation, no acceptance counters, or measured speed is neutral/slower.
+- If rejected, model-based speculation remains possible only with a better
+  compatible draft asset or a trained draft/router sidecar.
+
+GP91 result on 2026-07-08:
+
+- Built diagnostic binary:
+
+```bash
+cd /root/lfz/tmp/kimi-stage2m-align
+cmake --build build-cuda-batch --target llama-speculative-simple -j 16
+```
+
+- Draft asset:
+  - `Kimi-K2-Instruct-DRAFT-0.6B-32k-Q4_0.gguf`;
+  - URL:
+    `https://huggingface.co/jukofyork/Kimi-K2-Instruct-DRAFT-0.6B-v3.0-GGUF/resolve/main/Kimi-K2-Instruct-DRAFT-0.6B-32k-Q4_0.gguf`;
+  - remote path:
+    `/root/lfz/models/kimi-draft/Kimi-K2-Instruct-DRAFT-0.6B-32k-Q4_0.gguf`;
+  - size `427M` on disk, GGUF-reported `419.73 MiB`;
+  - sha256
+    `d2d602be55b40bdac44ed17a6d24f69237a0ae7c3da69b24d13fc54c686c93d8`;
+  - architecture `qwen2`, `651.50M` params, tokenizer pre `kimi-k2`.
+- Report:
+  - `.Agent/runs/20260708-gp91-spec-draft-q4-report.md`.
+- Runs:
+  - `.Agent/runs/20260708-gp91-spec-draft-q4-france-n32-v3`
+    - raw Kimi ChatML France, N32;
+    - GPU draft, default 32k draft context;
+    - rejected: draft context OOM after target SOTA VRAM cache leaves only
+      about `864 MiB` free;
+    - error: `allocating 321.75 MiB on device 0: cudaMalloc failed`.
+  - `.Agent/runs/20260708-gp91-spec-draft-q4-france-n32-cpudraft`
+    - raw Kimi ChatML France, N32;
+    - CPU draft, draft context `512`;
+    - rejected: target/draft vocab reported incompatible and raw special-token
+      prompt hit `GGML_ASSERT(... failed to detokenize id_last)`.
+  - `.Agent/runs/20260708-gp91-spec-draft-q4-plaintext-n16-cpudraft`
+    - plain France prompt, N16;
+    - CPU draft, draft context `512`;
+    - rejected: began output but was too slow and was terminated; incompatible
+      vocab warning remained.
+  - `.Agent/runs/20260708-gp91-spec-draft-q4-plaintext-n16-gpudraft512`
+    - plain France prompt, N16;
+    - GPU draft, draft context `512`;
+    - rejected: loaded and began output, but stayed slower than the
+      non-speculative baseline and was terminated after more than 3 minutes;
+      incompatible vocab warning remained.
+- Decision:
+  - reject `Kimi-K2-Instruct-DRAFT-0.6B-32k-Q4_0` with the current
+    `llama-speculative-simple` path as a primary token-rate route;
+  - this asset is not cleanly compatible with the Kimi-K2.7-Code target and
+    does not show a plausible speed path under the current 16 GB RAM / 32 GB
+    VRAM constraints;
+  - revisit model-based speculation only with a draft proven compatible with
+    Kimi-K2.7-Code special tokens and tokenizer, or after a dedicated patch
+    proves safe token translation plus high acceptance.
+
 ## Run Discipline
 
 For every experiment:
@@ -2765,13 +2907,20 @@ Continue from Phase 5E:
 14. GP90 rejects activation-guided exact input-channel partial reads; even an
    optimistic `0.40x` exact-column oracle leaves fused up/gate mean rel L2
    around `0.49` on three dev prompts.
-15. Next primary direction must be a different non-expert-local byte-reduced
+15. Run GP91 model-based speculative draft feasibility because exact expert
+   byte-reduction screens have failed and speculation is a distinct way to
+   amortize target expert movement.
+16. GP91 rejects the available external Kimi-K2-Instruct 0.6B draft for the
+   current Kimi-K2.7-Code target: default GPU draft OOMs under current VRAM
+   cache, CPU/GPU ctx512 runs report vocab incompatibility, ChatML special
+   tokens assert, and plain-text runs are too slow.
+17. Next primary direction must be a different non-expert-local byte-reduced
    representation or compute/storage-form change. Prediction/prefetch is
    secondary after bytes are reduced.
-16. The next screen must target global moved bytes around `0.30x-0.40x` and
+18. The next screen must target global moved bytes around `0.30x-0.40x` and
    fused up/gate mean rel L2 close to the quality gate before any runtime
    kernel is written.
-17. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+19. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
    gains can regress held-out performance severely.
 
 Rationale:

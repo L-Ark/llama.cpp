@@ -1,0 +1,49 @@
+
+
+<|im_user|>user<|im_middle|>Please introduce France in a short paragraph.<|im_end|><|im_assistant|>assistant<|im_middle|><think></think>[New LWP 1257838]
+[New LWP 1257845]
+[New LWP 1257846]
+[New LWP 1257847]
+[New LWP 1257910]
+[New LWP 1257911]
+[New LWP 1257912]
+[New LWP 1257913]
+[New LWP 1257914]
+[New LWP 1257915]
+[New LWP 1257916]
+[New LWP 1257917]
+[New LWP 1257918]
+[New LWP 1257919]
+[New LWP 1257920]
+[New LWP 1257921]
+[New LWP 1257922]
+[New LWP 1257923]
+[New LWP 1257924]
+[New LWP 1257925]
+[New LWP 1257926]
+[New LWP 1257927]
+[New LWP 1257928]
+[New LWP 1257929]
+[New LWP 1257930]
+[New LWP 1257931]
+[New LWP 1257932]
+[New LWP 1257933]
+[New LWP 1257934]
+[New LWP 1257935]
+[New LWP 1257936]
+[New LWP 1257937]
+[New LWP 1257938]
+[New LWP 1257939]
+[New LWP 1257940]
+[New LWP 1257990]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00007e1341eea42f in __GI___wait4 (pid=1258364, stat_loc=0x0, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+#0  0x00007e1341eea42f in __GI___wait4 (pid=1258364, stat_loc=0x0, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x00007e1342f7a85b in ggml_print_backtrace () from /root/lfz/tmp/kimi-stage2m-align/build-cuda-batch/bin/libggml-base.so.0
+#2  0x00007e1342f7a9f3 in ggml_abort () from /root/lfz/tmp/kimi-stage2m-align/build-cuda-batch/bin/libggml-base.so.0
+#3  0x00007e1342cb8c3c in common_speculative_state_draft::draft(common_params_speculative const&, std::vector<int, std::allocator<int> > const&, int, std::vector<int, std::allocator<int> >&) () from /root/lfz/tmp/kimi-stage2m-align/build-cuda-batch/bin/libllama-common.so.0
+#4  0x00007e1342cb0bb3 in common_speculative_draft(common_speculative*, common_params_speculative const&, std::vector<int, std::allocator<int> > const&, int) () from /root/lfz/tmp/kimi-stage2m-align/build-cuda-batch/bin/libllama-common.so.0
+#5  0x0000569837f90b3e in main ()
+[Inferior 1 (process 1257835) detached]

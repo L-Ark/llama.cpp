@@ -1,0 +1,5 @@
+Running as unit: run-u1925.service
+Finished with result: exit-code
+Main processes terminated with: code=exited/status=139
+Service runtime: 1min 50.601s
+CPU time consumed: 38min 55.958s

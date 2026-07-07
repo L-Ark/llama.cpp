@@ -1,0 +1,5 @@
+Running as unit: run-u1919.service
+Finished with result: exit-code
+Main processes terminated with: code=exited/status=1
+Service runtime: 1.478s
+CPU time consumed: 776ms
