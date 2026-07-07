@@ -17,6 +17,7 @@ set -euo pipefail
 #
 # Useful options:
 #   --n-predict 192      Decode length. Default matches the generalized baseline.
+#   --fast-smoke         Quick run-through with n_predict=32; not a SOTA metric.
 #   --warm               Do not drop page cache before this case.
 #   --print-command      Print the strict runner command without executing it.
 #
@@ -33,11 +34,12 @@ OUT_ROOT="${OUT_ROOT:-/root/lfz/runs/vendor-ds4-16gb}"
 PROMPT=""
 PROMPT_FILE=""
 STDIN_PROMPT=0
-RUN_NAME="demo-generalized-sota"
+RUN_NAME=""
 CASE_NAME=""
 N_PREDICT=192
 COLD_START=1
 PRINT_COMMAND=0
+FAST_SMOKE=0
 
 usage() {
   sed -n '1,29p' "$0"
@@ -94,6 +96,11 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || die "missing value for --n-predict"
       N_PREDICT="$2"
       shift 2
+      ;;
+    --fast-smoke)
+      N_PREDICT=32
+      FAST_SMOKE=1
+      shift
       ;;
     --warm|--no-drop-caches)
       COLD_START=0
@@ -166,6 +173,9 @@ unset GGML_MOE_IO_ALIGNED_ALIAS_BATCH
 if [[ -z "$CASE_NAME" ]]; then
   CASE_NAME="$(slugify "$PROMPT")"
 fi
+if [[ -z "$RUN_NAME" ]]; then
+  RUN_NAME="$(date -u +%Y%m%dT%H%M%SZ)-demo-generalized-sota"
+fi
 
 cmd=(
   python3 "$RUNNER"
@@ -222,6 +232,11 @@ printf '[demo] n_predict=%s\n' "$N_PREDICT"
 printf '[demo] target_context=random/generalized prompt, 16GB host RAM including page cache, 32GB RTX 5090\n'
 printf '[demo] current_prompt_general_sota=min 1.8 tok/s, mean 2.18 tok/s, max 2.7 tok/s on calibration prompts\n'
 printf '[demo] config=no prompt-specific pack/profile; gate one-stream cache only; cpu_moe=40; vram_cache=0\n'
+if [[ "$FAST_SMOKE" -eq 1 ]]; then
+  printf '[demo] metric_mode=fast smoke only; rerun without --fast-smoke for comparable SOTA/baseline numbers\n'
+else
+  printf '[demo] metric_mode=default comparable run\n'
+fi
 if [[ "$COLD_START" -eq 1 ]]; then
   printf '[demo] memory_mode=cold strict cgroup, drop_caches before case, MemoryMax=16000000000, MemorySwapMax=0\n'
 else
