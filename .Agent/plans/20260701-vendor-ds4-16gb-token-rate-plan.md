@@ -8391,3 +8391,35 @@ Decision:
 - Keep the committed f32 parity probe as a diagnostic tool only.
 - Do not run token-rate benchmarks with f32 writeback.
 - Next down correctness work should continue from CPU-compatible Q80 semantics or first define a live-CPU-compatible reference for any new writeback route.
+
+
+## 2026-07-08 X10-BG Q80 lane8/shared VRAM cache stage profile
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/q80-lane8-shared-vram-cache-stage-profile-20260708.json`
+- status: `profile_down_q80_stage_bottleneck_no_sota`
+
+Purpose:
+- After rejecting f32 exact writeback, profile the currently correct Q80 lane8/shared down GPU path on current pushed head.
+- Test whether increasing down batch VRAM cache solves the Q80 stage bottleneck.
+- This used only a short France dev smoke prompt; held-out prompts remain unused.
+
+Method:
+- Strict cold `16GB` cgroup, `MemorySwapMax=0`.
+- Common env: `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`, `GGML_MOE_BATCH_PROFILE=1`, `GGML_KIMI_CPU_MOE_PROFILE=1`.
+- Compared batch VRAM cache sizes: `2GB`, `8GB`, `12GB`.
+
+Results:
+- `2GB`: `eval_tok_s=0.9`, `memory_peak_bytes=16000000000`, `ram_ok=true`, hit rate `44.6%`, down stage mean `31.96 ms/call`, kernel mean `0.376 ms/call`, D2H mean `0.011 ms/call`.
+- `8GB`: `eval_tok_s=1.0`, `memory_peak_bytes=16000000000`, `ram_ok=true`, hit rate `60.2%`, down stage mean `27.78 ms/call`, kernel mean `0.375 ms/call`, D2H mean `0.011 ms/call`.
+- `12GB`: `eval_tok_s=1.0`, `memory_peak_bytes=16000000000`, `ram_ok=true`, hit rate `60.3%`, down stage mean `27.14 ms/call`, kernel mean `0.376 ms/call`, D2H mean `0.011 ms/call`.
+- fallback reason aggregation still shows only `gate` and `up` fallback entries for the unresolved CPU side; down batch itself is accepted.
+
+Interpretation:
+- Q80 down math is fast enough; the down GPU bottleneck is source staging/cold first-touch miss cost, not kernel/D2H/scatter.
+- Bigger VRAM cache helps from `2GB` to `8GB`, but `8GB` to `12GB` is flat. The remaining misses are mostly unique cold first-touch down experts rather than eviction.
+- Down-only cache sizing cannot move generalized token rate near the `>5 tok/s` target and currently remains below the no-prompt-specific baseline.
+
+Decision:
+- Do not continue with more down-only VRAM cache/source micro-edits as a SOTA route.
+- Keep Q80 lane8/shared as the correct down GPU reference path.
+- Next optimization should target prompt-general up/gate/down grouped GPU execution or a general expert source/prefetch strategy that reduces cold source staging across all MoE tensors.
