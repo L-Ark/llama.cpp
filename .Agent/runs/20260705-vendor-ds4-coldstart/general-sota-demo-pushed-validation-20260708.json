@@ -1,0 +1,38 @@
+{
+  "artifact_id": "20260708-general-sota-demo-pushed-validation",
+  "purpose": "Validate the rewritten prompt-general vendor DeepSeek demo script from pushed source with an arbitrary user prompt.",
+  "script": "scripts/demo-vendor-ds4-general-sota.sh",
+  "source_commit": "a581bfcb12e375429ee57cd9b25d2a986b0a7eb7",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "pushed_remote_branch": "ssd/vendor/deepseek-token-rate-16gb",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T193324Z-pushed-validation-20260708",
+  "prompt": "What is AI infrastructure? Answer in two concise sentences.",
+  "answer": "AI infrastructure refers to the integrated hardware and software systems—such as data centers, servers, and machine learning frameworks—that support the development, training, and deployment of artificial intelligence models. It encompasses everything from computing power and data storage to networking and specialized hardware like GPUs or TPUs, enabling efficient AI operations.",
+  "metrics": {
+    "eval_tok_s": 2.4,
+    "prompt_tok_s": 1.0,
+    "first_output_ms": 40732.470081,
+    "elapsed_seconds": 65.43,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15007789056,
+    "memory_anon_bytes": 1138688,
+    "ram_ok": true,
+    "answer_present": true,
+    "target_gt_5_tok_s_met_by_this_run": false
+  },
+  "constraints": {
+    "strict_16gb_cgroup": true,
+    "memory_swap_max_bytes": 0,
+    "page_cache_counted_in_cgroup": true,
+    "prompt_specific_pack_profile_alias_used": false,
+    "france_specialized_path_used": false
+  },
+  "known_generalized_status": "Current no-prompt-specific generalized baseline remains about 1.8-2.7 tok/s; this demo validation is not a new SOTA and does not meet the >5 tok/s product target.",
+  "files": {
+    "summary": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T193324Z-pushed-validation-20260708/summary.json",
+    "config": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T193324Z-pushed-validation-20260708/config.json",
+    "exact_command": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T193324Z-pushed-validation-20260708/exact_command.txt",
+    "environment": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T193324Z-pushed-validation-20260708/environment.txt",
+    "resource_samples": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T193324Z-pushed-validation-20260708/resource_samples.tsv"
+  }
+}
