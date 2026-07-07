@@ -531,6 +531,41 @@ Phase 5A held-out result on 2026-07-07:
     protocol proves the faster baseline is reproducible from a cold device
     state.
 
+Phase 5B cold-start SOTA audit gate:
+
+- Tool:
+  - `.Agent/run-tools/kimi_cold_start_sota_audit.py`
+- Purpose:
+  - prevent warmed-IO/device-state runs from being accepted as model/runtime
+    improvements.
+- Gate rule:
+  - if token rate improves while iouring bytes and VRAM hit rates are unchanged,
+    and the improvement is explained mainly by lower `iouring_wait`, the run is
+    marked as wait-only suspicious;
+  - wait-only suspicious runs must not replace the accepted SOTA without a
+    stronger cold-device reproduction protocol.
+- Reports:
+  - `.Agent/runs/20260707-cold-start-sota-audit/report.md`
+  - `.Agent/runs/20260707-cold-start-sota-audit/paired-vs-historical.md`
+- Results:
+  - `VRAM_MIB=15500` versus paired `15000`:
+    - mean `1.7000 -> 1.7083 tok/s`;
+    - token-rate gate failed because min rate regressed and two prompts
+      regressed;
+    - acceptance safe `False`.
+  - paired `15000` versus historical GP4:
+    - mean `1.3667 -> 1.7000 tok/s`;
+    - all prompts had identical bytes and hit rates;
+    - iouring wait dropped by about `37.8%-45.9%`;
+    - TTFT gate failed with max `+56.18%`;
+    - wait-only suspicion `True`;
+    - acceptance safe `False`.
+- Decision:
+  - keep historical GP4 as accepted SOTA;
+  - require this audit for future held-out SOTA claims;
+  - any apparent gain with identical bytes/hits must be treated as measurement
+    instability until proven by stronger cold-device controls.
+
 ## Phase 6: Lower-Priority Compute Work
 
 These are not first because the current bottleneck is expert movement, not compute.
