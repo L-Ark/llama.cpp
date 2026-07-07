@@ -5419,3 +5419,20 @@
   - Exclude already rejected IQ2_S and already-closed DFlash/MTP verifier routes unless new metadata materially changes their loadability/hard-bound.
 - success_gate: A candidate can move to a future download/load plan only if header metadata indicates `general.architecture=deepseek4` or a clearly vendor-loadable DS4-compatible architecture, expected size fits disk or cleanup plan, and there is no obvious tokenizer/tensor-layout red flag already known from rejected IQ2/4Expert routes. Correctness still must be proven later before any benchmark.
 - push_rule: Plan and artifact must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Accepted SOTA unchanged.
+
+### X9 result：header-compatible candidates exist, but no standalone candidate can be promoted under current disk
+
+- status: metadata_header_probe_complete_no_download_no_benchmark
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-compact-header-only-refresh-20260707.json`
+- scope_confirmed: no full model download, no deletion, no model run, no source edit, no held-out prompt. Each GGUF probe used Hugging Face API metadata plus at most a `16MiB` HTTP Range read.
+- search_scope: current HF search plus historical candidate repos for REAP, sidecar, IQ1/Q1/Q2, 4Expert, MTP, compact GGUF.
+- result:
+  - `17` repos considered; `12` GGUF headers probed.
+  - `11` candidates parsed as `general.architecture=deepseek4` with `tokenizer.ggml.model=gpt2`, so they are header-compatible enough to keep as future load/correctness candidates.
+  - One file fits current `~24GiB` free disk: `shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs/dense/model-dense.gguf` (`~8.8GiB`), but it appears to be a sidecar/dense component, not a complete standalone DS4 GGUF, so it cannot be promoted directly.
+  - Standalone-looking header-compatible candidates are about `50-105GiB` (`eouya2` REAP25/50, `sleepyeldrazi` REAP K128/K150/K180, `persadian` IQ1_S-XL, `antirez` mixed expert GGUF), so they require explicit cleanup/relocation before full validation.
+  - `Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF` parses as `qwen35`, not DS4, and is not a DeepSeek runtime candidate.
+- decision: no candidate promoted to download, load, correctness test, or benchmark. Accepted generalized SOTA unchanged; France-only SOTA unchanged.
+- next_allowed_work:
+  - If cleanup/relocation is approved, select one standalone header-compatible candidate and write a separate staged plan: download -> load smoke -> France correctness -> calibration/dev correctness -> only then benchmark.
+  - Without cleanup approval, continue native/dataflow work only if a prompt-general hard-bound shows `>=5.5 tok/s` calibration/dev min after realistic overhead.
