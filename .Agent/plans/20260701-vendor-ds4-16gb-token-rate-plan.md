@@ -6205,3 +6205,40 @@
 - next_action:
   - Before any new fused up/gate implementation, add a default-off act-level parity probe that compares per-layer `gate`, `up`, and `act` tensors for explicit vs candidate fused op before down/logits.
   - Only if act-level max/mean error is understood and fixed should a future candidate retry fixed-text top1 and then token-rate benchmarking.
+
+## 2026-07-07 X10-C3 latest-head repro：down GPU correctness passes after clean rebuild
+
+- attempt_id: `20260707-latest-head-down-q80-correctness-repro`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-down-q80-correctness-repro-20260707.json`
+- status: `latest_head_down_gpu_correctness_reproduced_not_sota`
+- purpose:
+  - After reverting the failed fused up/gate candidate, prove that the current pushed head still has the corrected down GPU Q8_0 CPU-order path.
+  - Avoid relying on an older binary or an older source commit for the down correctness claim.
+- source/build:
+  - source commit: `656f0b6e5b1d2e886af65383a732bd922aa7560c` (`vendor-ds4: refresh generalized sota demo rerun`)
+  - clean rebuild command: `cmake --build build-ds4-moe-stream --target llama-cli llama-results -j20`
+  - build result: passed
+  - build option: `GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON`
+  - `llama-results` sha256: `1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10`
+- run:
+  - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T132051Z-latest-head-down-q80-correctness-repro`
+  - prompt scope: fixed France correctness text only; `held_out_test_set_v1_locked` was not used.
+  - memory: both cases ran through `systemd-run --wait --collect` with `MemoryMax=16000000000` and `MemorySwapMax=0`; `drop_caches` was executed before each case.
+- config:
+  - common env: `CUDA_VISIBLE_DEVICES=0`, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM=1`, `GGML_MOE_STREAM_DONTNEED=1`, `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_VRAM_CACHE_GB=2`, `GGML_KIMI_CPU_MOE_PROFILE=1`.
+  - full-down env delta: `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`.
+- correctness:
+  - default case: `batch_accept=0`, `batch_decline=5800`, `n_tokens=145`, `top1_matches_next_token=122`.
+  - full-down GPU case: `batch_accept=5800`, `batch_decline=0`, `n_tokens=145`, `top1_matches_next_token=122`.
+  - comparison: `same_top1=145/145`, `first_mismatch_pos=-1`, `max_abs_top12_logit_diff=0.0`, `mean_abs_top12_logit_diff=0.0`, `top1_pass=true`.
+- runtime notes:
+  - default systemd result: success; service runtime `2min 40.704s`; max RSS `15603628 KB`; exit status `0`.
+  - full-down systemd result: success; service runtime `3min 29.005s`; max RSS `15603096 KB`; exit status `0`.
+  - full-down stderr confirmed `MXFP4 down Q8_0-compatible batch path active`.
+- decision:
+  - Down GPU correctness is now fixed and reproducible on the latest pushed head after a clean rebuild.
+  - This closes the down correctness gate needed before further retained/fused dataflow work.
+  - This is still not a token-rate SOTA: the full-down correctness path remains slower than the default CPU fallback in this sequential-logits gate and must not be promoted as an accepted performance result.
+- next_action:
+  - Continue with the plan after X10-K: add an act-level parity probe for separate `gate/up -> clamp -> swiglu` before retrying any fused up/gate or retained down handoff.
+  - Do not use held-out prompts until a prompt-general candidate is frozen.

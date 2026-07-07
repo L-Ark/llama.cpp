@@ -1,0 +1,86 @@
+{
+  "artifact_id": "20260707-latest-head-down-q80-correctness-repro",
+  "created_at_utc": "2026-07-07T13:31:00Z",
+  "status": "latest_head_down_gpu_correctness_reproduced_not_sota",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit": "656f0b6e5b1d2e886af65383a732bd922aa7560c",
+  "source_commit_oneline": "656f0b6e5 vendor-ds4: refresh generalized sota demo rerun",
+  "build_command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j20",
+  "build_result": "passed_after_reverting_failed_fused_upgate_candidate",
+  "build_option": "GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON",
+  "binary_sha256": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10  /root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-results",
+  "model_stat": "path=/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf size=156148189760 mtime=2026-06-22 14:12:05.810122536 +0000",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T132051Z-latest-head-down-q80-correctness-repro",
+  "constraints": {
+    "framework": "vendor DeepSeek",
+    "systemd_memory_max_bytes": 16000000000,
+    "systemd_memory_swap_max": 0,
+    "drop_caches_before_each_case": true,
+    "held_out_used": false,
+    "prompt_scope": "fixed France text correctness gate only, not held-out and not SOTA"
+  },
+  "env_delta": {
+    "common": {
+      "CUDA_VISIBLE_DEVICES": "0",
+      "GGML_CUDA_DISABLE_GRAPHS": "1",
+      "GGML_MOE_STREAM": "1",
+      "GGML_MOE_STREAM_DONTNEED": "1",
+      "GGML_MOE_STREAM_DOWN_BATCH": "1",
+      "GGML_MOE_VRAM_CACHE_GB": "2",
+      "GGML_KIMI_CPU_MOE_PROFILE": "1"
+    },
+    "full_down": {
+      "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1"
+    }
+  },
+  "reports": {
+    "baseline_report": "/root/lfz/runs/vendor-ds4-16gb/20260707T132051Z-latest-head-down-q80-correctness-repro/default-report/top1-check.json",
+    "full_down_report": "/root/lfz/runs/vendor-ds4-16gb/20260707T132051Z-latest-head-down-q80-correctness-repro/full-down-report/top1-check.json"
+  },
+  "correctness": {
+    "n_base": 145,
+    "n_case": 145,
+    "n_compare": 145,
+    "same_top1": 145,
+    "first_mismatch_pos": -1,
+    "mismatches": [],
+    "top1_pass": true,
+    "max_abs_top12_logit_diff": 0.0,
+    "mean_abs_top12_logit_diff": 0.0,
+    "baseline_top1_matches_next_token": 122,
+    "full_down_top1_matches_next_token": 122
+  },
+  "batch_counters": {
+    "default": {
+      "batch_accept": 0,
+      "batch_decline": 5800
+    },
+    "full_down": {
+      "batch_accept": 5800,
+      "batch_decline": 0
+    }
+  },
+  "runtime": {
+    "default_timev": {
+      "max_rss_kb": 15603628,
+      "elapsed": "2:40.67",
+      "major_page_faults": 838606,
+      "minor_page_faults": 3480197,
+      "file_system_inputs": 373793416,
+      "exit_status": 0
+    },
+    "full_down_timev": {
+      "max_rss_kb": 15603096,
+      "elapsed": "3:28.98",
+      "major_page_faults": 532688,
+      "minor_page_faults": 3482106,
+      "file_system_inputs": 371305808,
+      "exit_status": 0
+    },
+    "default_systemd": "Running as unit: ds4-down-q80-default-report-132051.service\nFinished with result: success\nMain processes terminated with: code=exited/status=0\nService runtime: 2min 40.704s\nCPU time consumed: 36min 39.354s",
+    "full_down_systemd": "Running as unit: ds4-down-q80-full-down-report-132339.service\nFinished with result: success\nMain processes terminated with: code=exited/status=0\nService runtime: 3min 29.005s\nCPU time consumed: 41min 51.435s"
+  },
+  "decision": "Down GPU Q8_0 CPU-order correctness is fixed and reproducible on latest pushed head. This remains a correctness gate only; the path is not promoted as token-rate SOTA."
+}
