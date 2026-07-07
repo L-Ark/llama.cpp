@@ -1,0 +1,76 @@
+{
+  "artifact_id": "current-head-down-q80-correctness-repro-20260708",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T163626Z-current-head-down-q80-correctness-repro",
+  "source_commit": "ba360b9a719f1bbbe531a4c161bd2c391d629c97",
+  "source_commit_oneline": "ba360b9a7 vendor-ds4: add general sota demo script",
+  "build_option": "673:GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON",
+  "binary_sha256": "1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10  /root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-results",
+  "model_stat": "path=/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf size=156148189760 mtime=2026-06-22 14:12:05.810122536 +0000",
+  "prompt_sha256": "6504bcedd48f2587016aeac360c1202241e4ccd3e989b7d91b67f1a67b0ef1c2  /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-correctness/top1-full-down/fixed-france-text.txt",
+  "memory_max_bytes": 16000000000,
+  "memory_swap_max": 0,
+  "drop_caches_before_each_case": true,
+  "held_out_used": false,
+  "n_base": 145,
+  "n_case": 145,
+  "n_compare": 145,
+  "same_top1": 145,
+  "first_mismatch_pos": -1,
+  "mismatches_preview": [],
+  "top1_pass": true,
+  "max_abs_top12_logit_diff": 0.0,
+  "mean_abs_top12_logit_diff": 0.0,
+  "baseline_top1_matches_next_token": 122,
+  "full_down_top1_matches_next_token": 122,
+  "default": {
+    "memory": {
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 14940688384,
+      "memory_anon_bytes": 307200,
+      "memory_events": {
+        "low": 0,
+        "high": 0,
+        "max": 87771,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "ram_ok": true
+    },
+    "runtime": {
+      "max_rss_kb": 15600616,
+      "elapsed": "39.28",
+      "major_faults": 833538,
+      "last_batch_accept_decline": [
+        0,
+        5800
+      ]
+    }
+  },
+  "full_down": {
+    "memory": {
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 14924996608,
+      "memory_anon_bytes": 462848,
+      "memory_events": {
+        "low": 0,
+        "high": 0,
+        "max": 84989,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "ram_ok": true
+    },
+    "runtime": {
+      "max_rss_kb": 15603136,
+      "elapsed": "26.59",
+      "major_faults": 522092,
+      "last_batch_accept_decline": [
+        5800,
+        0
+      ]
+    }
+  },
+  "decision": "pass_down_gpu_q80_cpu_order_correctness_current_head_not_sota"
+}
