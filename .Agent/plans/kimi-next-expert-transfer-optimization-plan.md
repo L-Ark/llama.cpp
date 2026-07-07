@@ -2857,6 +2857,102 @@ cmake --build build-cuda-batch --target llama-speculative-simple -j 16
     Kimi-K2.7-Code special tokens and tokenizer, or after a dedicated patch
     proves safe token translation plus high acceptance.
 
+## Phase 5O: GP92 Complete Lower-Quant GGUF Bound
+
+Goal:
+
+- Evaluate whether replacing the current complete `IQ3_S` Kimi GGUF with an
+  existing lower-byte complete GGUF can plausibly move the prompt-general
+  runtime toward `5 tok/s` before spending disk, download time, and validation
+  time.
+- This is a compute/storage-form screen: it changes the model representation
+  rather than trying to schedule the same IQ3 bytes better.
+
+Why this is checked after GP90/GP91:
+
+- GP90 rejects exact activation-channel partial reads: even an optimistic
+  `0.40x` exact-column oracle leaves fused up/gate mean rel L2 around `0.49`.
+- GP91 rejects the available 0.6B Kimi draft under the current target/runtime.
+- A full lower-quant GGUF is therefore the next lowest-risk way to reduce
+  moved expert bytes without inventing a new approximation format.
+
+Method:
+
+1. Query public model file lists for Kimi-K2.7-Code lower-quant GGUF variants.
+2. Record exact source URLs, file counts, total advertised size, and whether
+   the candidate fits the current remote disk budget without deleting current
+   SOTA assets.
+3. Estimate token-rate bounds using the accepted GP4 held-out SOTA movement:
+   - current moved bytes: mean `4.39 GiB/token`;
+   - active expert footprint: about `8.10 GiB/token`;
+   - all-hit MoE floor: about `40 ms/token`;
+   - pure IO peak: about `10.4 GiB/s`;
+   - current real runtime bandwidth: about `6.1 GiB/s`.
+4. Only download headers or shards after the size-ratio bound shows a plausible
+   path to `5 tok/s`; do not download hundreds of GB for a candidate that
+   cannot meet the byte budget.
+
+Acceptance to continue:
+
+- Candidate total expert/model byte ratio must be close to the required
+  `0.30x-0.40x` moved-byte target, or it must combine with a separately
+  plausible hit-rate/prefetch improvement that closes the remaining gap.
+- The quant format must be supported by the current loader/runtime for both
+  prompt and decode, or have a clearly bounded implementation path.
+- Full validation still requires:
+  - cold-start dev run first;
+  - host RAM below 16 GB including page cache;
+  - TTFT increase `<=20%`;
+  - correct France answer;
+  - held-out test-set pass before any SOTA claim.
+
+Rejection:
+
+- Reject as a primary `5 tok/s` path if the size ratio is above the required
+  budget and no independent byte/hit-rate improvement can close the gap.
+- Reject or defer if the model cannot fit on disk without deleting current SOTA
+  reproduction assets.
+
+GP92 preliminary result on 2026-07-08:
+
+- Current remote disk:
+  - current local IQ3_S shards occupy `378G`;
+  - root filesystem has `228G` free;
+  - this is not enough to download AesSedai `IQ2_XXS` (`~282GB`) or `IQ2_S`
+    (`~335GB`) while preserving current SOTA inputs.
+- Public file-list sources:
+  - AesSedai `Kimi-K2.7-Code-GGUF`:
+    - `IQ3_S`: 10 files, about `405 GB` advertised;
+    - `IQ2_XXS`: 7 files, about `282 GB` advertised;
+    - `IQ2_S`: 8 files, about `335 GB` advertised.
+  - mradermacher `Kimi-K2.7-Code-GGUF` imatrix variants:
+    - `i1-IQ1_S`: 4 files, about `204.5GB` advertised;
+    - `i1-IQ1_M`: 4 files, about `228GB` advertised;
+    - `i1-IQ2_XXS`: 5 files, about `267.2GB` advertised.
+- Size-ratio bound versus current AesSedai `IQ3_S` advertised size:
+  - AesSedai `IQ2_S`: `335 / 405 = 0.827x`;
+  - AesSedai `IQ2_XXS`: `282 / 405 = 0.696x`;
+  - mradermacher `i1-IQ1_S`: `204.5 / 405 = 0.505x`.
+- Token-rate bound if moved bytes scale with model/expert bytes:
+  - `IQ2_S`: moved bytes about `3.63 GiB/token`; even at `10.4 GiB/s`,
+    non-overlap bound is about `2.57 tok/s`;
+  - `IQ2_XXS`: moved bytes about `3.06 GiB/token`; even at `10.4 GiB/s`,
+    non-overlap bound is about `2.99 tok/s`;
+  - `i1-IQ1_S`: moved bytes about `2.22 GiB/token`; at `10.4 GiB/s`,
+    non-overlap bound is about `3.94 tok/s` and perfect-overlap transfer bound
+    is about `4.68 tok/s`.
+- Decision:
+  - AesSedai `IQ2_S` and `IQ2_XXS` are rejected as standalone `5 tok/s`
+    paths; they may still be useful only as part of another hit-rate or
+    prefetch improvement.
+  - mradermacher `i1-IQ1_S` is the only listed complete-GGUF candidate near
+    the disk budget and byte budget, but still does not clear `5 tok/s` by
+    itself, has higher quality risk, and nearly fills the remaining disk.
+  - Do not download a complete lower-quant model yet. Next work should first
+    check whether an IQ1/IQ2 quality-preserving path exists for Kimi on dev
+    prompts or whether a smaller auxiliary representation can be tested
+    without displacing current SOTA artifacts.
+
 ## Run Discipline
 
 For every experiment:
@@ -2911,17 +3007,21 @@ Continue from Phase 5E:
    byte-reduction screens have failed and speculation is a distinct way to
    amortize target expert movement.
 16. GP91 rejects the available external Kimi-K2-Instruct 0.6B draft for the
-   current Kimi-K2.7-Code target: default GPU draft OOMs under current VRAM
-   cache, CPU/GPU ctx512 runs report vocab incompatibility, ChatML special
-   tokens assert, and plain-text runs are too slow.
-17. Next primary direction must be a different non-expert-local byte-reduced
-   representation or compute/storage-form change. Prediction/prefetch is
-   secondary after bytes are reduced.
-18. The next screen must target global moved bytes around `0.30x-0.40x` and
-   fused up/gate mean rel L2 close to the quality gate before any runtime
-   kernel is written.
-19. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
-   gains can regress held-out performance severely.
+    current Kimi-K2.7-Code target: default GPU draft OOMs under current VRAM
+    cache, CPU/GPU ctx512 runs report vocab incompatibility, ChatML special
+    tokens assert, and plain-text runs are too slow.
+17. GP92 rejects available complete `IQ2_S`/`IQ2_XXS` GGUF variants as
+    standalone `5 tok/s` paths because their advertised byte ratios are still
+    too high; even `i1-IQ1_S` is only near `4-4.7 tok/s` under optimistic
+    transfer assumptions and carries substantial quality/disk risk.
+18. Next primary direction must be a different non-expert-local byte-reduced
+    representation or compute/storage-form change. Prediction/prefetch is
+    secondary after bytes are reduced.
+19. The next screen must target global moved bytes around `0.30x-0.40x` and
+    fused up/gate mean rel L2 close to the quality gate before any runtime
+    kernel is written.
+20. Do not build prompt-specific hot expert overlays. GP57 showed dev overlay
+    gains can regress held-out performance severely.
 
 Rationale:
 
