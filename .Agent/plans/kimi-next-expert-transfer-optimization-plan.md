@@ -568,8 +568,11 @@ Phase 5B cold-start SOTA audit gate:
 
 Phase 5C lower-byte candidate gate:
 
+- Tool:
+  - `.Agent/run-tools/kimi_lower_byte_candidate_gate.py`
 - Report:
   - `.Agent/runs/20260707-lower-byte-candidate-gate/report.md`
+  - `.Agent/runs/20260707-lower-byte-candidate-gate/report.json`
 - Purpose:
   - gate the existing lower-byte ideas before writing a runtime path;
   - require any primary path toward `5 tok/s` to plausibly reduce total moved

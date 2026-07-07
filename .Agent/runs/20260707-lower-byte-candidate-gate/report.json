@@ -1,0 +1,189 @@
+{
+  "d2moe": {
+    "down": {
+      "cluster16": {
+        "base_bf16_mib": 448.0,
+        "clusters": 16,
+        "rank128_error_weight": 0.5002,
+        "rank128_residual_ratio": 0.9467,
+        "rank64_error_weight": 0.5133,
+        "raw_residual_weight": 0.6407
+      },
+      "path": ".Agent/runs/20260706-kimi-d2moe-phase0/cluster-base-blk56-down-top32.md",
+      "tensor": "blk.56.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "gate": {
+      "cluster16": {
+        "base_bf16_mib": 448.0,
+        "clusters": 16,
+        "rank128_error_weight": 0.3064,
+        "rank128_residual_ratio": 0.9448,
+        "rank64_error_weight": 0.3145,
+        "raw_residual_weight": 0.665
+      },
+      "path": ".Agent/runs/20260706-kimi-d2moe-phase0/cluster-base-blk56-gate-top32.md",
+      "tensor": "blk.56.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    }
+  },
+  "decisions": [
+    {
+      "candidate": "naive blockwise 1-bit re-encode",
+      "decision": "reject",
+      "reason": "Some rows approach the byte target, but weight rel L2 is far above a quality-preserving range."
+    },
+    {
+      "candidate": "naive blockwise 2-bit re-encode",
+      "decision": "reject",
+      "reason": "Weight error remains large and byte ratio is above the 0.30x-0.40x target."
+    },
+    {
+      "candidate": "D2MoE clustered/base residual",
+      "decision": "reject as primary",
+      "reason": "Clustered bases still leave large rank128 error and require too much resident base memory."
+    },
+    {
+      "candidate": "selected IQ1_S/v2 hotsets",
+      "decision": "reject as prompt-general primary path",
+      "reason": "Realistic ratios are above target or require nearly complete coverage with no runtime overhead margin."
+    },
+    {
+      "candidate": "down activation block skipping",
+      "decision": "reject as primary",
+      "reason": "Down-only skip has too much output error at useful skip rates and cannot reduce up/gate bytes."
+    }
+  ],
+  "down_activation_shadow": {
+    "path": ".Agent/runs/20260707-gp62-shadow-error-multiprompt-n32/summary.csv",
+    "thresholds": {
+      "0.1": {
+        "max_abs_err": 0.102448998,
+        "max_l2_rel": 1.0,
+        "mean_abs_err": 0.0020266203203520715,
+        "mean_l2_rel": 0.2096515584965782,
+        "skip_block_ratio": 0.19798715657948093,
+        "skip_value_ratio": 0.19798715657948093
+      },
+      "0.2": {
+        "max_abs_err": 0.228624359,
+        "max_l2_rel": 1.0,
+        "mean_abs_err": 0.007550446485668078,
+        "mean_l2_rel": 0.36754207106468045,
+        "skip_block_ratio": 0.3454362137570965,
+        "skip_value_ratio": 0.3454362137570965
+      }
+    }
+  },
+  "inputs": {
+    "d2moe_down_report": ".Agent/runs/20260706-kimi-d2moe-phase0/cluster-base-blk56-down-top32.md",
+    "d2moe_gate_report": ".Agent/runs/20260706-kimi-d2moe-phase0/cluster-base-blk56-gate-top32.md",
+    "iq1_report": ".Agent/runs/20260707-gp34-iq1s-budgeted-hotset-bound/report.md",
+    "quant_report": ".Agent/runs/20260707-gp11-quant-reencode-bound/report.md",
+    "shadow_error_csv": ".Agent/runs/20260707-gp62-shadow-error-multiprompt-n32/summary.csv",
+    "v2_hotset_report": ".Agent/runs/20260707-gp46-v2-hotset-sweep/report.md"
+  },
+  "iq1": {
+    "all_dev_hybrid_ratio": 0.5205,
+    "budget_worst_62": 0.6503,
+    "path": ".Agent/runs/20260707-gp34-iq1s-budgeted-hotset-bound/report.md",
+    "runtime_nbytes_mismatch": true
+  },
+  "kind": "kimi_lower_byte_candidate_gate",
+  "next_step": "Measure activation-output error for compressed up/gate/down candidates on real hidden states before writing runtime support.",
+  "quant": {
+    "by_bits": {
+      "1": {
+        "ratio_max": 0.488,
+        "ratio_min": 0.347,
+        "rel_l2_max": 2.2746,
+        "rel_l2_min": 1.7774
+      },
+      "2": {
+        "ratio_max": 0.878,
+        "ratio_min": 0.673,
+        "rel_l2_max": 0.7911,
+        "rel_l2_min": 0.6872
+      },
+      "3": {
+        "ratio_max": 1.268,
+        "ratio_min": 1.0,
+        "rel_l2_max": 0.3252,
+        "rel_l2_min": 0.2322
+      },
+      "4": {
+        "ratio_max": 1.659,
+        "ratio_min": 1.327,
+        "rel_l2_max": 0.1278,
+        "rel_l2_min": 0.0878
+      }
+    },
+    "path": ".Agent/runs/20260707-gp11-quant-reencode-bound/report.md",
+    "rows": 96,
+    "target_ratio_rows": [
+      {
+        "bits": 1,
+        "block": 128,
+        "current_mib": 5.36,
+        "expert": 27,
+        "finite": true,
+        "ratio": 0.367,
+        "rel_l2": 2.0741,
+        "rel_max": 0.9813,
+        "role": "gate",
+        "tensor": "blk.41.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      },
+      {
+        "bits": 1,
+        "block": 256,
+        "current_mib": 5.36,
+        "expert": 27,
+        "finite": true,
+        "ratio": 0.347,
+        "rel_l2": 2.2746,
+        "rel_max": 0.9854,
+        "role": "gate",
+        "tensor": "blk.41.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      },
+      {
+        "bits": 1,
+        "block": 128,
+        "current_mib": 5.36,
+        "expert": 179,
+        "finite": true,
+        "ratio": 0.367,
+        "rel_l2": 2.0716,
+        "rel_max": 0.9688,
+        "role": "gate",
+        "tensor": "blk.41.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      },
+      {
+        "bits": 1,
+        "block": 256,
+        "current_mib": 5.36,
+        "expert": 179,
+        "finite": true,
+        "ratio": 0.347,
+        "rel_l2": 2.2723,
+        "rel_max": 0.9688,
+        "role": "gate",
+        "tensor": "blk.41.ffn_gate_exps.weight",
+        "type": "IQ3_XXS"
+      }
+    ]
+  },
+  "reproduce_command": ".Agent/run-tools/kimi_lower_byte_candidate_gate.py --out-json .Agent/runs/20260707-lower-byte-candidate-gate/report.json --out-md .Agent/runs/20260707-lower-byte-candidate-gate/report.md",
+  "target_total_moved_byte_ratio": [
+    0.3,
+    0.4
+  ],
+  "v2_hotset": {
+    "best_hybrid_byte_ratio": 0.276,
+    "best_ideal_transfer_only_tps": 5.018114,
+    "best_packed_ratio": 0.276,
+    "path": ".Agent/runs/20260707-gp46-v2-hotset-sweep/report.md"
+  }
+}
