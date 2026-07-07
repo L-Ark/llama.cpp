@@ -6647,3 +6647,63 @@ Next diagnostic probe design:
 Decision:
 - A default-off diagnostic source probe is allowed next because it does not claim token-rate improvement and does not alter logits.
 - A SOTA candidate runtime patch is still not allowed until the probe plus a new hard-bound show generalized calibration/dev `min_eval_tok_s >= 5.5`.
+
+## 2026-07-07 X10-W execution result：retained-gate interface probe accepted
+
+- attempt_id: `20260707-retained-gate-interface-probe`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/retained-gate-interface-probe-accepted-20260707.json`
+- status: `accepted_default_off_diagnostic_probe_not_sota`
+
+Source update:
+- File: `src/models/deepseek4.cpp`
+- Added default-off env: `DS4_RETAINED_GATE_INTERFACE_PROBE_OUT`
+- The probe writes CSV rows at the DeepSeek4 `build_moe_v4 -> build_expert_mix` handoff.
+- It records tensor name/type/buffer/shape/stride/size for `cur_ffn`, `scores`, `selection`, `selected_experts`, and `weights`, plus handoff booleans.
+- It does not change logits and is not a token-rate path.
+
+Build validation:
+- `cmake --build build-ds4-moe-stream --target llama-cli llama-debug -j20`
+- result: passed.
+
+Probe-enabled strict smoke:
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T155914Z-retained-gate-interface-probe-smoke-v2/retained-gate-probe-smoke-cpu40-vram0gb`
+- prompt: `Explain database indexes briefly.`
+- `n_predict=32`
+- strict cgroup: `MemoryMax=16000000000`, `MemorySwapMax=0`, drop caches before case; page cache counted.
+- result:
+  - `eval_tok_s=1.5`
+  - `prompt_tok_s=0.9`
+  - `TTFT=34433.814523 ms`
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15080050688`
+  - `ram_ok=true`
+  - `correctness_ok=true`
+  - probe CSV rows: `1806`
+
+Probe observation:
+- `graph_gate_output_input_available=0` for all sampled rows.
+- `build_expert_mix_receives_scores=0`.
+- `selected_weights_retained_available=1`.
+- `selected_src0_is_selection=1`.
+- `weights_src0_is_scores=0`, `weights_src1_is_selected=0`.
+- Interpretation:
+  - The current handoff already retains `selected_experts` and `weights`.
+  - The missing interface is not top-k/weights availability; it is a retained gate/source context that can avoid recomputing/restaging gate-side expert source while also reducing up/down fallback.
+
+Default-off strict smoke:
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T160042Z-retained-gate-probe-default-off-smoke/introduce-canada-in-a-short-paragraph-cpu40-vram0gb`
+- prompt: `Introduce Canada in a short paragraph.`
+- result:
+  - `eval_tok_s=1.9`
+  - `prompt_tok_s=0.9`
+  - `TTFT=40122.589339 ms`
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15125778432`
+  - `ram_ok=true`
+  - `correctness_ok=true`
+  - status: `RUN_COMPLETED_STRICT_16GB`
+
+Decision:
+- Accept and push as a diagnostic scaffold only.
+- SOTA unchanged.
+- Next step remains hard-bound-driven: use the probe facts to design a retained gate/source context only if a new generalized bound clears `min_eval_tok_s >= 5.5`; otherwise close this path and switch to compact representation feasibility.

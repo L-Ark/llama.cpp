@@ -198,8 +198,139 @@ static int64_t deepseek4_tensor_ne_or_neg(const ggml_tensor * tensor, int dim) {
     return tensor ? tensor->ne[dim] : -1;
 }
 
+static int64_t deepseek4_tensor_nb_or_neg(const ggml_tensor * tensor, int dim) {
+    return tensor ? tensor->nb[dim] : -1;
+}
+
 static uint64_t deepseek4_tensor_nbytes_or_zero(const ggml_tensor * tensor) {
     return tensor ? (uint64_t) ggml_nbytes(tensor) : 0;
+}
+
+struct deepseek4_retained_gate_interface_probe_state {
+    std::mutex mutex;
+    FILE * fp = nullptr;
+    bool attempted = false;
+    uint64_t seq = 0;
+};
+
+static deepseek4_retained_gate_interface_probe_state & deepseek4_retained_gate_interface_probe() {
+    static deepseek4_retained_gate_interface_probe_state state;
+    return state;
+}
+
+static const char * deepseek4_retained_gate_interface_probe_path() {
+    const char * path = std::getenv("DS4_RETAINED_GATE_INTERFACE_PROBE_OUT");
+    if (path == nullptr || path[0] == '\0' || std::strcmp(path, "0") == 0) {
+        return nullptr;
+    }
+    return path;
+}
+
+static FILE * deepseek4_retained_gate_interface_probe_fp_locked() {
+    auto & state = deepseek4_retained_gate_interface_probe();
+    if (state.fp != nullptr) {
+        return state.fp;
+    }
+    if (state.attempted) {
+        return nullptr;
+    }
+    state.attempted = true;
+
+    const char * path = deepseek4_retained_gate_interface_probe_path();
+    if (path == nullptr) {
+        return nullptr;
+    }
+
+    state.fp = std::fopen(path, "w");
+    if (state.fp == nullptr) {
+        std::fprintf(stderr, "deepseek4_retained_gate_interface_probe: failed to open %s\n", path);
+        return nullptr;
+    }
+
+    std::fprintf(state.fp,
+        "seq,il,moe_tokens,n_expert_used,"
+        "cur_name,cur_type,cur_buft,cur_ne0,cur_ne1,cur_ne2,cur_ne3,cur_nb0,cur_nb1,cur_nb2,cur_nb3,cur_nbytes,"
+        "scores_name,scores_type,scores_buft,scores_ne0,scores_ne1,scores_ne2,scores_ne3,scores_nb0,scores_nb1,scores_nb2,scores_nb3,scores_nbytes,"
+        "selection_name,selection_type,selection_buft,selection_ne0,selection_ne1,selection_ne2,selection_ne3,selection_nb0,selection_nb1,selection_nb2,selection_nb3,selection_nbytes,"
+        "selected_name,selected_type,selected_buft,selected_ne0,selected_ne1,selected_ne2,selected_ne3,selected_nb0,selected_nb1,selected_nb2,selected_nb3,selected_nbytes,"
+        "weights_name,weights_type,weights_buft,weights_ne0,weights_ne1,weights_ne2,weights_ne3,weights_nb0,weights_nb1,weights_nb2,weights_nb3,weights_nbytes,"
+        "selected_src0_is_selection,weights_src0_is_scores,weights_src1_is_selected,"
+        "build_expert_mix_receives_selected_and_weights,build_expert_mix_receives_scores,graph_gate_output_input_available,"
+        "selected_weights_retained_available,handoff_payload_nbytes\n");
+    std::fflush(state.fp);
+    return state.fp;
+}
+
+static void deepseek4_retained_gate_interface_probe_write_tensor(FILE * fp, const ggml_tensor * tensor) {
+    std::fprintf(fp,
+        "%s,%s,%s,%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld,%llu",
+        deepseek4_tensor_name_or_null(tensor),
+        deepseek4_tensor_type_name(tensor),
+        deepseek4_tensor_buft_name(tensor),
+        (long long) deepseek4_tensor_ne_or_neg(tensor, 0),
+        (long long) deepseek4_tensor_ne_or_neg(tensor, 1),
+        (long long) deepseek4_tensor_ne_or_neg(tensor, 2),
+        (long long) deepseek4_tensor_ne_or_neg(tensor, 3),
+        (long long) deepseek4_tensor_nb_or_neg(tensor, 0),
+        (long long) deepseek4_tensor_nb_or_neg(tensor, 1),
+        (long long) deepseek4_tensor_nb_or_neg(tensor, 2),
+        (long long) deepseek4_tensor_nb_or_neg(tensor, 3),
+        (unsigned long long) deepseek4_tensor_nbytes_or_zero(tensor));
+}
+
+static void deepseek4_retained_gate_interface_probe_write(
+        int il,
+        int64_t moe_tokens,
+        int64_t n_expert_used,
+        const ggml_tensor * cur_ffn,
+        const ggml_tensor * scores,
+        const ggml_tensor * selection,
+        const ggml_tensor * selected_experts,
+        const ggml_tensor * weights) {
+    if (deepseek4_retained_gate_interface_probe_path() == nullptr) {
+        return;
+    }
+
+    auto & state = deepseek4_retained_gate_interface_probe();
+    std::lock_guard<std::mutex> lock(state.mutex);
+    FILE * fp = deepseek4_retained_gate_interface_probe_fp_locked();
+    if (fp == nullptr) {
+        return;
+    }
+
+    const bool selected_src0_is_selection = selected_experts && selected_experts->src[0] == selection;
+    const bool weights_src0_is_scores     = weights && weights->src[0] == scores;
+    const bool weights_src1_is_selected   = weights && weights->src[1] == selected_experts;
+    const bool selected_weights_retained_available = selected_experts != nullptr && weights != nullptr;
+    const uint64_t handoff_payload_nbytes =
+        deepseek4_tensor_nbytes_or_zero(selected_experts) + deepseek4_tensor_nbytes_or_zero(weights);
+
+    std::fprintf(fp,
+        "%llu,%d,%lld,%lld,",
+        (unsigned long long) state.seq++,
+        il,
+        (long long) moe_tokens,
+        (long long) n_expert_used);
+    deepseek4_retained_gate_interface_probe_write_tensor(fp, cur_ffn);
+    std::fprintf(fp, ",");
+    deepseek4_retained_gate_interface_probe_write_tensor(fp, scores);
+    std::fprintf(fp, ",");
+    deepseek4_retained_gate_interface_probe_write_tensor(fp, selection);
+    std::fprintf(fp, ",");
+    deepseek4_retained_gate_interface_probe_write_tensor(fp, selected_experts);
+    std::fprintf(fp, ",");
+    deepseek4_retained_gate_interface_probe_write_tensor(fp, weights);
+    std::fprintf(fp,
+        ",%d,%d,%d,%d,%d,%d,%d,%llu\n",
+        selected_src0_is_selection ? 1 : 0,
+        weights_src0_is_scores ? 1 : 0,
+        weights_src1_is_selected ? 1 : 0,
+        1,
+        0,
+        0,
+        selected_weights_retained_available ? 1 : 0,
+        (unsigned long long) handoff_payload_nbytes);
+    std::fflush(fp);
 }
 
 static FILE * deepseek4_native_retained_down_probe_fp_locked() {
@@ -1466,6 +1597,9 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
         }
         weights = reshape_3d_checked(weights, 1, n_expert_used, moe_tokens, "build_moe_v4.weights", il);
         cb(weights, "ffn_weights", il);
+
+        deepseek4_retained_gate_interface_probe_write(
+            il, moe_tokens, n_expert_used, cur_ffn, scores, selection, selected_experts, weights);
 
         return build_expert_mix(cur_ffn, selected_experts, weights, layer, il);
     };
