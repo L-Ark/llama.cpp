@@ -7,25 +7,25 @@ Usage:
   scripts/demo-vendor-ds4-general-sota.sh [--prompt TEXT | --prompt-file FILE | TEXT...] [options]
 
 Options:
-  --prompt TEXT              Prompt to run. Any user prompt is accepted.
-  --prompt-file FILE         Read prompt from FILE. Use - for stdin.
-  -n, --max-tokens N         Maximum generated tokens. Default: 128.
-  --run-label NAME           Label suffix for the run directory. Default: demo.
-  --warm                     Do not drop page cache before launch. Default: cold.
-  --allow-prompt-env         Diagnostic only: allow prompt/profile/pack env vars.
-  --print-command            Print the exact llama-cli command before running.
-  -h, --help                 Show this help.
+  --prompt TEXT          Prompt to run. Any user prompt is accepted.
+  --prompt-file FILE     Read prompt from FILE. Use "-" for stdin.
+  -n, --max-tokens N     Maximum generated tokens. Default: 128.
+  --run-label LABEL      Label suffix for the run directory. Default: demo.
+  --warm                 Skip drop_caches. Default is strict cold start.
+  --print-command        Print the exact llama-cli command before execution.
+  -h, --help             Show this help.
 
 Purpose:
-  Demonstrate the current prompt-general vendor DeepSeek V4 configuration under
-  a strict 16GB host-RAM cgroup. This is not the France-specialized 4.4 tok/s
-  path. It refuses prompt-specific expert packs, route profiles, and alias TSVs
-  by default so users can enter arbitrary prompts.
+  Demo the current prompt-general vendor DeepSeek V4 path under strict
+  16GB host RAM. This intentionally does not use the France-specialized
+  pack/profile path. It rejects prompt-specific expert packs, route profiles,
+  and alias TSVs so an operator can enter arbitrary prompts.
 
-Output:
+Artifacts:
   /root/lfz/runs/vendor-ds4-16gb/demo-general-sota/<timestamp>-<label>/
-  The run directory contains prompt.txt, stdout.txt, stderr.txt, exact_command.txt,
-  environment.txt, memory.* cgroup files, resource_samples.tsv, and summary.json.
+  contains prompt.txt, stdout.txt, stderr.txt, exact_command.txt,
+  environment.txt, resource_samples.tsv, memory.* cgroup snapshots,
+  config.json, and summary.json.
 USAGE
 }
 
@@ -46,10 +46,10 @@ MODEL="${MODEL:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flas
 RUN_ROOT="${RUN_ROOT:-/root/lfz/runs/vendor-ds4-16gb/demo-general-sota}"
 BASELINE_ARTIFACT="${BASELINE_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json}"
 
+MEMORY_MAX_BYTES=16000000000
 MAX_TOKENS=128
 RUN_LABEL="demo"
 COLD=1
-ALLOW_PROMPT_ENV=0
 PRINT_COMMAND=0
 PROMPT=""
 PROMPT_FILE=""
@@ -81,10 +81,6 @@ while [[ $# -gt 0 ]]; do
       COLD=0
       shift
       ;;
-    --allow-prompt-env)
-      ALLOW_PROMPT_ENV=1
-      shift
-      ;;
     --print-command)
       PRINT_COMMAND=1
       shift
@@ -98,7 +94,7 @@ while [[ $# -gt 0 ]]; do
       positional+=("$@")
       break
       ;;
-    -* )
+    -*)
       fail "unknown option: $1"
       ;;
     *)
@@ -158,19 +154,17 @@ prompt_specific_env=(
   GGML_DS4_GROUPED_RETAINED_ROUTE_DETAIL_OUT
 )
 
-if [[ "$ALLOW_PROMPT_ENV" -eq 0 ]]; then
-  blocked=()
-  for key in "${prompt_specific_env[@]}"; do
-    if [[ -n "${!key:-}" ]]; then
-      blocked+=("$key=${!key}")
-    fi
-  done
-  if [[ "${#blocked[@]}" -gt 0 ]]; then
-    echo "Refusing prompt-specific environment variables:" >&2
-    printf '  %s\n' "${blocked[@]}" >&2
-    echo "Unset them, or use --allow-prompt-env for diagnostics only." >&2
-    exit 2
+blocked=()
+for key in "${prompt_specific_env[@]}"; do
+  if [[ -n "${!key:-}" ]]; then
+    blocked+=("$key=${!key}")
   fi
+done
+if [[ "${#blocked[@]}" -gt 0 ]]; then
+  echo "Refusing prompt-specific environment variables:" >&2
+  printf '  %s\n' "${blocked[@]}" >&2
+  echo "Unset them before running the generalized demo." >&2
+  exit 2
 fi
 
 safe_label="$(printf '%s' "$RUN_LABEL" | tr -cs 'A-Za-z0-9._-' '-' | sed -e 's/^-*//' -e 's/-*$//')"
@@ -178,9 +172,44 @@ safe_label="$(printf '%s' "$RUN_LABEL" | tr -cs 'A-Za-z0-9._-' '-' | sed -e 's/^
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="${RUN_ROOT}/${stamp}-${safe_label}"
 mkdir -p "$RUN_DIR"
-
 printf '%s\n' "$PROMPT" > "$RUN_DIR/prompt.txt"
-: > "$RUN_DIR/stdin.txt"
+
+cat > "$RUN_DIR/config.json" <<EOF_CFG
+{
+  "demo": "vendor-ds4-general-sota",
+  "purpose": "Prompt-general DeepSeek V4 vendor demo for arbitrary user prompts under strict 16GB host RAM.",
+  "current_generalized_status": "baseline_not_product_target",
+  "known_no_prompt_specific_baseline": {
+    "artifact": $(printf '%s' "$BASELINE_ARTIFACT" | json_quote),
+    "min_eval_tok_s": 1.8,
+    "mean_eval_tok_s": 2.18,
+    "max_eval_tok_s": 2.7,
+    "target_gt_5_tok_s_met": false
+  },
+  "not_france_specialized_path": true,
+  "repo_dir": $(printf '%s' "$REPO_DIR" | json_quote),
+  "source_head": "$(git -C "$REPO_DIR" rev-parse HEAD)",
+  "source_branch": "$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)",
+  "binary": $(printf '%s' "$BINARY" | json_quote),
+  "model": $(printf '%s' "$MODEL" | json_quote),
+  "max_tokens": ${MAX_TOKENS},
+  "memory_max_bytes": ${MEMORY_MAX_BYTES},
+  "memory_swap_max_bytes": 0,
+  "cold_drop_caches": ${COLD},
+  "prompt_general": true,
+  "runtime_env_summary": {
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_DONTNEED": "1",
+    "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+    "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+    "GGML_MOE_VRAM_CACHE_GB": "0",
+    "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+    "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+    "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3"
+  }
+}
+EOF_CFG
 
 cat > "$RUN_DIR/runner.sh" <<'RUNNER'
 #!/usr/bin/env bash
@@ -190,7 +219,9 @@ RUN_DIR="__RUN_DIR__"
 BINARY="__BINARY__"
 MODEL="__MODEL__"
 MAX_TOKENS="__MAX_TOKENS__"
+MEMORY_MAX_BYTES="__MEMORY_MAX_BYTES__"
 PRINT_COMMAND="__PRINT_COMMAND__"
+
 cd "$RUN_DIR"
 PROMPT="$(cat prompt.txt)"
 
@@ -277,14 +308,14 @@ cmd_pid=$!
     else
       printf '%s\t%s\t%s\t\t\t\n' "$now" "$mem_cur" "$mem_peak"
     fi
-    if [[ "$mem_cur" =~ ^[0-9]+$ ]] && [[ "$mem_cur" -gt 16000000000 ]]; then
-      printf 'memory.current=%s exceeded 16000000000\n' "$mem_cur" > ram_limit_exceeded.txt
+    if [[ "$mem_cur" =~ ^[0-9]+$ ]] && [[ "$mem_cur" -gt "$MEMORY_MAX_BYTES" ]]; then
+      printf 'memory.current=%s exceeded %s\n' "$mem_cur" "$MEMORY_MAX_BYTES" > ram_limit_exceeded.txt
       kill "$cmd_pid" 2>/dev/null || true
       exit 0
     fi
     stdout_bytes=$(stat -c%s stdout.txt 2>/dev/null || echo 0)
     if [[ "$stdout_bytes" =~ ^[0-9]+$ ]] && [[ "$stdout_bytes" -gt 16777216 ]]; then
-      printf 'stdout_bytes=%s exceeded 16777216; killing probable interactive loop\n' "$stdout_bytes" > stdout_limit_exceeded.txt
+      printf 'stdout_bytes=%s exceeded 16777216; killing probable runaway output\n' "$stdout_bytes" > stdout_limit_exceeded.txt
       kill "$cmd_pid" 2>/dev/null || true
       exit 0
     fi
@@ -326,19 +357,22 @@ cat stdout.txt stderr.txt > combined.txt
 exit "$status"
 RUNNER
 
-python3 - "$RUN_DIR/runner.sh" "$RUN_DIR" "$BINARY" "$MODEL" "$MAX_TOKENS" "$PRINT_COMMAND" <<'PY'
+python3 - "$RUN_DIR/runner.sh" "$RUN_DIR" "$BINARY" "$MODEL" "$MAX_TOKENS" "$MEMORY_MAX_BYTES" "$PRINT_COMMAND" <<'PY'
 import sys
 from pathlib import Path
+
 path = Path(sys.argv[1])
 text = path.read_text()
-for k, v in {
+replacements = {
     "__RUN_DIR__": sys.argv[2],
     "__BINARY__": sys.argv[3],
     "__MODEL__": sys.argv[4],
     "__MAX_TOKENS__": sys.argv[5],
-    "__PRINT_COMMAND__": sys.argv[6],
-}.items():
-    text = text.replace(k, v)
+    "__MEMORY_MAX_BYTES__": sys.argv[6],
+    "__PRINT_COMMAND__": sys.argv[7],
+}
+for key, value in replacements.items():
+    text = text.replace(key, value)
 path.write_text(text)
 PY
 chmod +x "$RUN_DIR/runner.sh"
@@ -351,45 +385,14 @@ else
   printf 'warm run: drop_caches skipped by --warm\n' > "$RUN_DIR/cold_start_procedure.txt"
 fi
 
-cat > "$RUN_DIR/config.json" <<EOF_CFG
-{
-  "demo": "vendor-ds4-general-sota",
-  "purpose": "Prompt-general DeepSeek V4 vendor demo for arbitrary user prompts under strict 16GB host RAM.",
-  "not_the_france_specialized_path": true,
-  "repo_dir": $(printf '%s' "$REPO_DIR" | json_quote),
-  "source_head": "$(git -C "$REPO_DIR" rev-parse HEAD)",
-  "source_branch": "$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)",
-  "binary": $(printf '%s' "$BINARY" | json_quote),
-  "model": $(printf '%s' "$MODEL" | json_quote),
-  "baseline_artifact": $(printf '%s' "$BASELINE_ARTIFACT" | json_quote),
-  "known_general_baseline_note": "20260706 no-prompt-specific prompt set: min 1.8 tok/s, mean 2.18 tok/s, max 2.7 tok/s; >5 tok/s product target not yet met.",
-  "max_tokens": ${MAX_TOKENS},
-  "memory_max_bytes": 16000000000,
-  "memory_swap_max_bytes": 0,
-  "cold_drop_caches": ${COLD},
-  "prompt_general": true,
-  "prompt_specific_env_allowed": ${ALLOW_PROMPT_ENV},
-  "runtime_env_summary": {
-    "GGML_MOE_STREAM": "1",
-    "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
-    "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
-    "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
-    "GGML_MOE_VRAM_CACHE_GB": "0",
-    "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
-    "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
-    "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3"
-  }
-}
-EOF_CFG
-
-unit="vendor-ds4-demo-${stamp}-${safe_label}"
+unit="vendor-ds4-general-demo-${stamp}-${safe_label}"
 unit="${unit:0:63}"
 systemd_cmd=(
   systemd-run
   "--unit=${unit}.service"
   --collect
   --wait
-  --property=MemoryMax=16000000000
+  --property=MemoryMax="${MEMORY_MAX_BYTES}"
   --property=MemorySwapMax=0
   "$RUN_DIR/runner.sh"
 )
@@ -397,11 +400,13 @@ printf '%q ' "${systemd_cmd[@]}" > "$RUN_DIR/systemd_command.txt"
 printf '\n' >> "$RUN_DIR/systemd_command.txt"
 
 cat <<EOF_RUN
-=== Vendor DeepSeek V4 prompt-general demo ===
+=== Vendor DeepSeek V4 generalized SOTA demo ===
 Run dir: $RUN_DIR
 Prompt: $PROMPT
-Mode: $([[ "$COLD" -eq 1 ]] && echo cold || echo warm), MemoryMax=16000000000, MemorySwapMax=0
-Baseline note: current no-prompt-specific prompt-set baseline is 1.8-2.7 tok/s; target >5 tok/s is not yet met.
+Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches)
+Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
+Current generalized baseline: 1.8-2.7 tok/s on dev prompt set; product target >5 tok/s is not yet met.
+France-specialized 4.4 tok/s path is intentionally not used here.
 EOF_RUN
 
 set +e
@@ -412,27 +417,27 @@ printf '%s\n' "$systemd_status" > "$RUN_DIR/systemd_run_status.txt"
 systemctl show "${unit}.service" > "$RUN_DIR/unit.properties" 2>/dev/null || true
 journalctl -u "${unit}.service" --no-pager > "$RUN_DIR/journal.log" 2>/dev/null || true
 
-python3 - "$RUN_DIR" <<'PY'
+python3 - "$RUN_DIR" "$MEMORY_MAX_BYTES" <<'PY'
 import json
 import re
 import sys
 from pathlib import Path
 
 run_dir = Path(sys.argv[1])
+memory_max = int(sys.argv[2])
 
-def text(name):
+def read_text(name: str) -> str:
     p = run_dir / name
     return p.read_text(encoding="utf-8", errors="ignore") if p.exists() else ""
 
-def integer(name):
-    s = text(name).strip()
+def read_int(name: str):
     try:
-        return int(s)
+        return int(read_text(name).strip())
     except Exception:
         return None
 
-def parse_elapsed(stderr):
-    m = re.search(r"Elapsed \(wall clock\) time .*:\s*([0-9:]+(?:\.[0-9]+)?)", stderr)
+def parse_elapsed(stderr: str):
+    m = re.search(r"Elapsed \(wall clock\) time[^\n]*\):\s*([0-9:]+(?:\.[0-9]+)?)", stderr)
     if not m:
         return None
     parts = m.group(1).split(":")
@@ -445,9 +450,32 @@ def parse_elapsed(stderr):
     except Exception:
         return None
 
-stdout = text("stdout.txt").replace("\b", "").replace("\r", "\n")
-stderr = text("stderr.txt")
-prompt = text("prompt.txt").rstrip("\n")
+def parse_memory_stat(text: str):
+    out = {}
+    for line in text.splitlines():
+        cols = line.split()
+        if len(cols) == 2:
+            try:
+                out[cols[0]] = int(cols[1])
+            except ValueError:
+                pass
+    return out
+
+def parse_memory_events(text: str):
+    out = {}
+    for line in text.splitlines():
+        cols = line.split()
+        if len(cols) == 2:
+            try:
+                out[cols[0]] = int(cols[1])
+            except ValueError:
+                pass
+    return out
+
+stdout = read_text("stdout.txt").replace("\b", "").replace("\r", "\n")
+stderr = read_text("stderr.txt")
+prompt = read_text("prompt.txt").rstrip("\n")
+
 answer = stdout
 if prompt and prompt in answer:
     answer = answer.rsplit(prompt, 1)[-1]
@@ -460,26 +488,9 @@ rate = re.search(r"\[\s*Prompt:\s*([0-9.]+)\s*t/s\s*\|\s*Generation:\s*([0-9.]+)
 prompt_tok_s = float(rate.group(1)) if rate else None
 eval_tok_s = float(rate.group(2)) if rate else None
 
-mem_stat = {}
-for line in text("memory.stat").splitlines():
-    cols = line.split()
-    if len(cols) == 2:
-        try:
-            mem_stat[cols[0]] = int(cols[1])
-        except ValueError:
-            pass
-mem_events = {}
-for line in text("memory.events").splitlines():
-    cols = line.split()
-    if len(cols) == 2:
-        try:
-            mem_events[cols[0]] = int(cols[1])
-        except ValueError:
-            pass
-
 first_output_ms = None
 try:
-    first_output_ms = float(text("first_output_ms.txt").strip())
+    first_output_ms = float(read_text("first_output_ms.txt").strip())
 except Exception:
     pass
 
@@ -488,8 +499,11 @@ m = re.search(r"Maximum resident set size \(kbytes\):\s*([0-9]+)", stderr)
 if m:
     max_rss_kb = int(m.group(1))
 
-memory_peak = integer("memory.peak")
+mem_stat = parse_memory_stat(read_text("memory.stat"))
+mem_events = parse_memory_events(read_text("memory.events"))
+memory_peak = read_int("memory.peak")
 answer_present = bool(re.search(r"[A-Za-z0-9]{2,}|[\u3400-\u9fff]", answer))
+
 summary = {
     "run_dir": str(run_dir),
     "prompt": prompt,
@@ -501,21 +515,22 @@ summary = {
     "prompt_tok_s": prompt_tok_s,
     "first_output_ms": first_output_ms,
     "elapsed_seconds": parse_elapsed(stderr),
-    "exit_status": integer("exit_status.txt"),
-    "systemd_status": integer("systemd_run_status.txt"),
+    "exit_status": read_int("exit_status.txt"),
+    "systemd_status": read_int("systemd_run_status.txt"),
+    "memory_max_bytes": memory_max,
     "memory_peak_bytes": memory_peak,
-    "memory_current_bytes": integer("memory.current"),
+    "memory_current_bytes": read_int("memory.current"),
     "memory_file_bytes": mem_stat.get("file"),
     "memory_anon_bytes": mem_stat.get("anon"),
     "memory_events": mem_events,
-    "memory_peak_ok": memory_peak is not None and memory_peak <= 16000000000,
-    "ram_ok": memory_peak is not None and memory_peak <= 16000000000 and mem_events.get("oom_kill", 0) == 0,
+    "memory_peak_ok": memory_peak is not None and memory_peak <= memory_max,
+    "ram_ok": memory_peak is not None and memory_peak <= memory_max and mem_events.get("oom_kill", 0) == 0,
     "ram_limit_exceeded_file": (run_dir / "ram_limit_exceeded.txt").exists(),
     "stdout_limit_exceeded_file": (run_dir / "stdout_limit_exceeded.txt").exists(),
     "max_rss_kb": max_rss_kb,
     "known_general_baseline_tok_s": {"min": 1.8, "mean": 2.18, "max": 2.7},
     "target_gt_5_tok_s_met_by_this_run": eval_tok_s is not None and eval_tok_s > 5.0,
-    "quality_note": "Demo checks that output exists. Human semantic review is still required for accepting a benchmark/SOTA result.",
+    "quality_note": "Demo only checks that output exists. Manual semantic review is required before accepting a benchmark/SOTA result.",
     "exact_command_file": str(run_dir / "exact_command.txt"),
     "environment_file": str(run_dir / "environment.txt"),
     "resource_samples_file": str(run_dir / "resource_samples.tsv"),
