@@ -7388,6 +7388,14 @@ static bool q4_down_route_profile_candidate(const char *name, ggml_type type) {
     return !target || !target[0] || std::strcmp(target, name) == 0;
 }
 
+static bool q4_down_batch_candidate(const char *name, ggml_type type) {
+    const char *env = std::getenv("GGML_MOE_Q4_DOWN_BATCH");
+    if (!env || !env[0] || env[0] == '0') return false;
+    if (type != GGML_TYPE_Q4_0 || !name || !std::strstr(name, "ffn_down_exps")) return false;
+    const char *target = std::getenv("GGML_MOE_Q4_DOWN_BATCH_TENSOR");
+    return !target || !target[0] || std::strcmp(target, name) == 0;
+}
+
 static void q4_down_route_profile_record(
         const char *name,
         int call_id,
@@ -9909,7 +9917,8 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (!src0_name || !std::strstr(src0_name, "ffn_down_exps")) return decline("not_down_tensor");
     const bool q4_parity_candidate = q4_down_parity_candidate(src0_name, src0_type);
     const bool q4_route_profile_candidate = q4_down_route_profile_candidate(src0_name, src0_type);
-    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate) return decline("unsupported_type");
+    const bool q4_batch_candidate = q4_down_batch_candidate(src0_name, src0_type);
+    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate && !q4_batch_candidate) return decline("unsupported_type");
     if (!src1_f32) return decline("missing_src1");
     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
 
@@ -9960,6 +9969,12 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     static std::atomic<int> first_batch{0};
     const int batch_call = first_batch.fetch_add(1);
+    static std::atomic<int> first_q4_down_batch{0};
+    if (q4_batch_candidate && first_q4_down_batch.fetch_add(1) == 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] Q4_0 down batch candidate active tensor=%s active=%d ne01=%ld ne00=%ld\n",
+                src0_name ? src0_name : "", n_active, (long)ne01, (long)ne00);
+    }
     const char *trace_env = std::getenv("GGML_MOE_BATCH_TRACE");
     if (batch_call == 0) {
         std::fprintf(stderr, "[moe_stream] batched decode path active: experts=%d ne01=%ld ne00=%ld\n",

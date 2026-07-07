@@ -265,6 +265,13 @@ static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const 
     }
 
     if (type == GGML_TYPE_Q4_0) {
+        const char * batch = getenv("GGML_MOE_Q4_DOWN_BATCH");
+        if (batch && batch[0] && batch[0] != '0') {
+            const char * target = getenv("GGML_MOE_Q4_DOWN_BATCH_TENSOR");
+            if (!target || !target[0] || strcmp(target, name) == 0) {
+                return true;
+            }
+        }
         const char * route_profile = getenv("GGML_MOE_Q4_DOWN_ROUTE_PROFILE_OUT");
         if (route_profile && route_profile[0]) {
             const char * target = getenv("GGML_MOE_Q4_DOWN_ROUTE_PROFILE_TENSOR");

@@ -4284,6 +4284,80 @@ Continue from Phase 5E:
       - AI infra: `+1.1%`, but auto quality failed due the strict keyword gate;
     - mean n32 lift was only about `0.6%`, so this is not worth held-out n96;
     - keep the default `VRAM_MIB=15000`.
+48. GP110 planned default-off Q4_0 down CUDA batch probe:
+    - motivation:
+      - GP51/GP52 showed the remaining decode CPU fallback is concentrated in
+        seven `Q4_0` down tensors;
+      - this is not a primary `5 tok/s` path, but it is a bounded cleanup that
+        may recover part of the `decode,type=2` fallback without touching
+        prompt-specific expert selection;
+      - `launch_moe_mmvq_compact_batch()` already has a `GGML_TYPE_Q4_0`
+        dispatch, and the current code already contains default-off Q4_0 down
+        parity/profile diagnostics.
+    - theory:
+      - GP51's upper bound is about `75 ms/token` on a France N32 profile before
+        replacement H2D/GPU cost;
+      - GP52's broad dev decode fallback average is about `161.7 ms/token`, but
+        it is only `4.3%` of weighted decode wall;
+      - therefore expected real improvement is small, likely low single digit
+        percentage on current SOTA, and cannot replace structural byte
+        reduction.
+    - implementation:
+      - add an explicit environment gate, e.g. `GGML_MOE_Q4_DOWN_BATCH=1`;
+      - allow `Q4_0` only for `ffn_down_exps` tensors under that gate;
+      - keep default behavior unchanged when the env is unset;
+      - do not broaden up/gate type support.
+    - validation:
+      - first run a cold n8/n32 France parity or smoke under the 16GB cgroup;
+      - then compare `GGML_MOE_Q4_DOWN_BATCH=0` vs `1` on dev France n32;
+      - record token rate, TTFT, RAM peak, answer, fallback profile, down
+        profile, expert pack counters, and Q4_0 accept/decline behavior;
+      - only continue to multi-prompt n32 or n96 if quality passes, Host RAM
+        remains `<16GB`, `direct_reads=0`, TTFT is within `+20%`, and decode
+        fallback decreases without offsetting regressions.
+    - acceptance:
+      - if the env-gated path improves prompt-general dev performance without
+        violating gates, commit and push the default-off implementation plus
+        reproducible results;
+      - do not add it to SOTA env or run held-out unless multi-prompt dev also
+        passes;
+      - if it regresses or shows parity/quality risk, keep it default-off or
+        revert the code change.
+49. GP110 smoke result on 2026-07-08:
+    - report:
+      `.Agent/runs/20260708-gp110-q4-down-batch/report.md`;
+    - implementation:
+      - `GGML_MOE_Q4_DOWN_BATCH=1` gates `Q4_0` `ffn_down_exps` support in both
+        CPU eligibility and CUDA down batch;
+      - default behavior is unchanged when unset;
+      - up/gate type support is not broadened.
+    - build:
+      - remote `cmake --build build-cuda-batch --target llama-completion -j 16`
+        passed.
+    - dev n32 smoke:
+      - France: `1.79 -> 1.83 tok/s`, quality pass, TTFT `81917 -> 83002 ms`;
+      - Moon phases: `1.77 -> 1.82 tok/s`, quality pass, TTFT
+        `82571 -> 95717 ms`;
+      - AI infra: `1.77 -> 1.88 tok/s`, semantic answer looked correct but the
+        strict keyword gate failed because the output used "hardware/software"
+        wording rather than the expected compute/network keyword group;
+      - mean dev smoke lift: about `+3.7%`.
+    - mechanism:
+      - the first CUDA-only attempt did not trigger because CPU-side eligibility
+        rejected `Q4_0` before calling CUDA;
+      - after the CPU gate fix, Q4 down tensors became `batch_eligible=32` and
+        `batch_accept=31` on France n32;
+      - France `decode,type=2` fallback disappeared from the fallback CSV.
+    - cost:
+      - down slot grows from `7.44 MiB` to `7.88 MiB`;
+      - France iouring bytes increase from `131.1 GB` to `157.1 GB`;
+      - France down hit rate drops from `73.4%` to `63.4%`;
+      - France up/gate hit rate drops from `45.2%` to `41.5%`.
+    - decision:
+      - keep the implementation default-off;
+      - do not promote to SOTA env yet;
+      - next step is full dev n96 A/B, then held-out n96 only if dev n96 passes
+        quality, TTFT, RAM, direct-read, and token-rate gates.
 
 Rationale:
 
