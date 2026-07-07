@@ -8478,3 +8478,57 @@ Decision:
 - Do not mark a new SOTA.
 - Treat `ffn_down_exps` Q80 lane8/shared as the current correctness-fixed down reference path. Keep MXFP4 f32 writeback rejected until live CPU-compatible semantics are proven.
 
+## 2026-07-08 X10-BI up fallback debug and gate/up one-cache rejection
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gateup-one-filter-both-reject-and-upfallback-debug-20260708.json`
+- status: `up_fallback_cause_confirmed_filter_both_all_gpu_rejected_not_sota`
+
+Purpose:
+- Continue after down Q80 correctness was strengthened in X10-BH.
+- Confirm the current `ffn_up_exps` CPU fallback reason under the no-prompt-specific path.
+- Test a low-risk, prompt-general config idea: allow the existing one-stream MXFP4 path to handle both `ffn_gate_exps` and `ffn_up_exps`, while keeping `ffn_down_exps` on the correctness-fixed Q80 down batch path.
+
+Method:
+- All runs used strict cold `16GB` cgroup with page cache counted and `MemorySwapMax=0`.
+- Debug baseline: current gate-only one-stream config with `GGML_MOE_STREAM_DECLINE_DEBUG=1` and fallback reason CSV.
+- Debug split: gate8/down4 Q80 alias config with decline debug.
+- Candidate configs: `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps` with down Q80 alias batch, varying one/down VRAM split.
+- These are calibration/dev France runs only; held-out prompts remain unused.
+
+Results:
+- Current gate-only debug:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T231310Z-20260708-upfallback-decline-debug-current-head/france-upfallback-debug-cpu40-vram0gb`
+  - `eval_tok_s=1.6`, `TTFT=37298.10 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - fallback roles: `up` and `down`; both show `batch_env_missing` plus `one_name_filter`.
+- Gate8/down4 Q80 split debug:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T231440Z-20260708-upfallback-decline-debug-gate8-down4/france-upfallback-gate8-down4-debug-cpu40-vram4gb`
+  - `eval_tok_s=1.9`, `TTFT=36670.12 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - log confirms `MXFP4 down Q8_0-compatible batch path active`.
+  - fallback CSV contains only `up`, with `batch_reason=batch_unsupported` and `single_reason=one_name_filter`.
+- Gate/up one filter with one13/down4:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T231652Z-20260708-gateup-one-downq80-filter-both-n64/france-gateup-one-downq80-filter-both-cpu40-vram4gb`
+  - rejected: exit `134`, CUDA OOM. One cache took `13.2 GiB`; down cache 4GB allocation failed and shrank to `0.2 GiB`, then GET_ROWS OOM.
+- Gate/up one filter with one8/down4:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T231749Z-20260708-gateup-one8-downq80-filter-both-n64/france-gateup-one8-downq80-filter-both-cpu40-vram4gb`
+  - `eval_tok_s=1.9`, `TTFT=40273.43 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `correctness_ok=true`
+  - fallback CSV empty, so gate/up/down all reached GPU expert paths.
+  - one-stream hit rate only `66.7%`; down hit rate `70.7%`.
+- Gate/up one filter with one10/down2:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T231943Z-20260708-gateup-one10-downq80-filter-both-n64/france-gateup-one10-downq80-filter-both-cpu40-vram2gb`
+  - `eval_tok_s=1.9`, `TTFT=39111.39 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `correctness_ok=true`
+  - fallback CSV empty; one hit `70.1%`, down hit `59.5%`.
+- Gate/up one filter with one12/down1:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T232130Z-20260708-gateup-one12-downq80-filter-both-n64/france-gateup-one12-downq80-filter-both-cpu40-vram1gb`
+  - `eval_tok_s=1.9`, `TTFT=38939.45 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `correctness_ok=true`
+
+Interpretation:
+- A prompt-general all-GPU expert route is reachable without source edits by allowing one-stream to handle both gate and up while down uses Q80 batch.
+- It is not a performance route: all successful split points are `1.9 tok/s`, slower than gate8/down4 `2.5 tok/s` and the historical no-prompt-specific France high-water mark `2.7 tok/s`.
+- The loss comes from cache competition and staging churn: adding `up` to the one-stream cache lowers gate/up cache hit rate and/or starves down cache. The up one-stream route also does not give the explicit retained dataflow needed to feed down without D2H/reload overhead.
+- Therefore the next implementation should not promote `ffn_gate_exps,ffn_up_exps` one-filter as SOTA. It should design an up-specific cache/source path or an explicit retained up/gate producer that preserves gate/down working sets and proves act/top1 parity before benchmarking.
+
+Decision:
+- Reject filter-both one-stream as SOTA.
+- Keep the result because it proves all-GPU expert execution is possible but currently slower under the 16GB RAM product constraint.
+- Next plan item: implement a default-off up-specific correctness probe or retained explicit up/gate producer. It must not reuse the previously rejected plain fused up/gate path unless act parity against explicit `mul_mat_id + clamp + swiglu_split` is proven first.
+
