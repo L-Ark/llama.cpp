@@ -1,0 +1,14 @@
+repo=/root/lfz/tmp/kimi-stage2m-align
+pwd=/root/lfz/tmp/kimi-stage2m-align
+branch=vendor/kimi-speculative-general-token-rate-16gb
+head=ac17bc4eff5a3266bb99071ff8d147de2b40767e
+short=ac17bc4ef
+status_short:
+ M .Agent/plans/kimi-next-expert-transfer-optimization-plan.md
+ M src/llama-context.cpp
+?? .Agent/run-tools/kimi-next-expert-transfer-optimization-plan.md
+?? .Agent/run-tools/kimi_next_gate_prefetch_policy_bound.py
+diff_stat:
+ .../kimi-next-expert-transfer-optimization-plan.md | 89 +++++++++++++++++++++
+ src/llama-context.cpp                              | 93 +++++++++++++++++++++-
+ 2 files changed, 181 insertions(+), 1 deletion(-)

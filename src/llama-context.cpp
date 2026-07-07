@@ -106,6 +106,30 @@ static const char * moe_next_gate_shadow_out_path() {
     return path && path[0] ? path : nullptr;
 }
 
+struct moe_next_gate_prefetch_probe_state {
+    std::mutex mutex;
+    std::ofstream file;
+    bool initialized = false;
+    bool disabled = false;
+    uint64_t seq = 0;
+};
+
+static moe_next_gate_prefetch_probe_state g_moe_next_gate_prefetch_probe;
+
+static const char * moe_next_gate_prefetch_probe_out_path() {
+    const char * path = std::getenv("GGML_MOE_NEXT_GATE_PREFETCH_PROBE_OUT");
+    return path && path[0] ? path : nullptr;
+}
+
+static bool moe_next_gate_prefetch_probe_wants(const ggml_tensor * t) {
+    const char * path = moe_next_gate_prefetch_probe_out_path();
+    if (!path || !t || !t->name[0] || t->type != GGML_TYPE_I32 || !ggml_is_contiguous(t)) {
+        return false;
+    }
+    return std::strstr(t->name, "ffn_moe_next_shadow_topk") != nullptr ||
+        std::strstr(t->name, "ffn_moe_topk") != nullptr;
+}
+
 static std::string moe_next_gate_shadow_values_csv(const std::vector<int32_t> & values) {
     std::ostringstream oss;
     for (size_t i = 0; i < values.size(); ++i) {
@@ -115,6 +139,69 @@ static std::string moe_next_gate_shadow_values_csv(const std::vector<int32_t> & 
         oss << values[i];
     }
     return oss.str();
+}
+
+static void moe_next_gate_prefetch_probe_record(ggml_tensor * t) {
+    const char * path = moe_next_gate_prefetch_probe_out_path();
+    if (!path || !t || !t->name[0] || t->type != GGML_TYPE_I32 || !ggml_is_contiguous(t)) {
+        return;
+    }
+
+    const int64_t start_us = ggml_time_us();
+    std::vector<int32_t> values((size_t)ggml_nelements(t));
+    if (ggml_backend_buffer_is_host(t->buffer)) {
+        std::memcpy(values.data(), t->data, ggml_nbytes(t));
+    } else {
+        ggml_backend_tensor_get(t, values.data(), 0, ggml_nbytes(t));
+    }
+    const int64_t copy_us = ggml_time_us() - start_us;
+
+    std::lock_guard<std::mutex> lock(g_moe_next_gate_prefetch_probe.mutex);
+    if (g_moe_next_gate_prefetch_probe.disabled) {
+        return;
+    }
+    if (!g_moe_next_gate_prefetch_probe.initialized) {
+        g_moe_next_gate_prefetch_probe.file.open(path, std::ios::out);
+        if (!g_moe_next_gate_prefetch_probe.file) {
+            LLAMA_LOG_ERROR("%s: failed to open GGML_MOE_NEXT_GATE_PREFETCH_PROBE_OUT=%s\n", __func__, path);
+            g_moe_next_gate_prefetch_probe.disabled = true;
+            return;
+        }
+        g_moe_next_gate_prefetch_probe.file
+            << "seq,time_us,name,kind,ne0,ne1,nbytes,copy_us,values\n";
+        g_moe_next_gate_prefetch_probe.initialized = true;
+    }
+
+    const bool predicted = std::strstr(t->name, "ffn_moe_next_shadow_topk") != nullptr;
+    g_moe_next_gate_prefetch_probe.file
+        << g_moe_next_gate_prefetch_probe.seq++ << ','
+        << ggml_time_us() << ','
+        << t->name << ','
+        << (predicted ? "pred" : "actual") << ','
+        << t->ne[0] << ','
+        << t->ne[1] << ','
+        << ggml_nbytes(t) << ','
+        << copy_us << ','
+        << moe_next_gate_shadow_values_csv(values)
+        << '\n';
+}
+
+static bool moe_next_gate_prefetch_probe_cb_eval(struct ggml_tensor * t, bool ask, void * user_data) {
+    llama_context * lctx = (llama_context *) user_data;
+    const bool probe_need = moe_next_gate_prefetch_probe_wants(t);
+    const llama_cparams * cparams = lctx ? &lctx->get_cparams() : nullptr;
+    if (ask) {
+        const bool user_need = cparams && cparams->cb_eval ?
+            cparams->cb_eval(t, true, cparams->cb_eval_user_data) : false;
+        return probe_need || user_need;
+    }
+    if (probe_need) {
+        moe_next_gate_prefetch_probe_record(t);
+    }
+    if (cparams && cparams->cb_eval) {
+        return cparams->cb_eval(t, false, cparams->cb_eval_user_data);
+    }
+    return true;
 }
 
 static void moe_next_gate_shadow_record(
@@ -1426,7 +1513,11 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         res->reset();
 
         ggml_backend_sched_reset(sched.get());
-        ggml_backend_sched_set_eval_callback(sched.get(), cparams.cb_eval, cparams.cb_eval_user_data);
+        if (moe_next_gate_prefetch_probe_out_path()) {
+            ggml_backend_sched_set_eval_callback(sched.get(), moe_next_gate_prefetch_probe_cb_eval, this);
+        } else {
+            ggml_backend_sched_set_eval_callback(sched.get(), cparams.cb_eval, cparams.cb_eval_user_data);
+        }
 
         //const auto t_start_us = ggml_time_us();
 

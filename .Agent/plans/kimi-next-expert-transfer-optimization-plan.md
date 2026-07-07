@@ -408,6 +408,145 @@ Next-gate shadow confirmation:
   - future predictor work must first reduce shadow/predictor overhead or prove
     with a paired baseline that the long TTFT was unrelated to the predictor.
 
+Correction from later GP65 rerun with correct GP4 env:
+
+- The early GP66 rejection used an invalid or unstable command path and is not
+  the current predictor gate.
+- Corrected GP4 env:
+  - `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv`;
+  - `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`.
+- Corrected N96 TopK=8 shadow result from
+  `.Agent/runs/20260707-gp65-correct-gp4env-n96-analysis/report.md`:
+  - shadow CSV: `7/7` prompts;
+  - dev quality pass in both baseline and shadow: `7/7`;
+  - expert/byte recall: `77.25%`;
+  - false/actual bytes: `0.2275`;
+  - max TTFT ratio: `1.085`;
+  - max decode ratio: `1.027`;
+  - mean token-rate ratio shadow/baseline: `0.993`;
+  - all shadow runs kept `direct_reads=0` and
+    `memory.peak=15899996160`.
+- Updated decision:
+  - next-gate shadow has enough signal and overhead margin to justify a
+    bounded runtime prefetch experiment;
+  - the prior generic `GGML_MOE_PLANNED_HOST_PREFETCH=1` path is still rejected
+    because useful hits were near zero and evictions were high;
+  - the next implementation must prove predicted expert IDs become available
+    early enough in the CUDA/MoE path before demand copy creation.
+
+GP71 next-gate bounded policy and execution-order probe:
+
+- Goal:
+  - move from generic TopK=8 shadow toward a bounded policy that might be
+    practical for runtime prefetch.
+- Offline policy bound:
+  - tool:
+    `.Agent/run-tools/kimi_next_gate_prefetch_policy_bound.py`;
+  - input:
+    `.Agent/runs/20260707-gp65-correct-gp4env-n96-shadow-top8/*/next-gate-shadow.csv`;
+  - method:
+    leave-one-dev prompt layer selection, so each prompt is evaluated with
+    layer choices derived from the other dev prompts;
+  - result:
+    `.Agent/runs/20260707-gp71-next-gate-prefetch-policy-bound/report.md`.
+- Policy result:
+  - `cap1_all`:
+    - recall `0.1243`;
+    - precision `0.9942`;
+    - false/actual `0.0007`.
+  - `cap2_all`:
+    - recall `0.2457`;
+    - precision `0.9829`;
+    - false/actual `0.0043`.
+  - `cap4_all`:
+    - recall `0.4714`;
+    - precision `0.9429`;
+    - false/actual `0.0286`.
+  - `cap8_all`:
+    - recall `0.7725`;
+    - precision `0.7725`;
+    - false/actual `0.2275`.
+- Interpretation:
+  - TopK order is highly meaningful;
+  - `cap4` gives a better implementation target than TopK=8 because false
+    prefetch bytes are low while useful byte coverage is still material;
+  - these are optimistic because they do not subtract experts already resident
+    in VRAM, but they justify a runtime timing probe.
+- Execution-order probe:
+  - code:
+    default-off `GGML_MOE_NEXT_GATE_PREFETCH_PROBE_OUT=<csv>` in
+    `src/llama-context.cpp`;
+  - requires next-gate shadow nodes to exist, so run with
+    `GGML_MOE_NEXT_GATE_SHADOW_OUT=<csv>` and
+    `GGML_MOE_NEXT_GATE_SHADOW_TOPK=4`;
+  - uses `ggml_backend_sched_eval_callback` to record graph execution order and
+    selected expert IDs for:
+    - predicted `ffn_moe_next_shadow_topk`;
+    - actual `ffn_moe_topk`.
+- Why this probe is needed:
+  - graph-end CSV recording proves predictor quality but is too late for
+    same-token prefetch;
+  - runtime prefetch is only worth implementing if the predicted target-layer
+    topK node is computed before the actual target layer's demand routing node.
+- Acceptance to proceed to real prefetch:
+  - n4/n8 dev smoke shows predicted target-layer records appear before the
+    corresponding actual target-layer records for most layers;
+  - probe output quality remains correct;
+  - host RAM remains below 16 GB;
+  - probe overhead is recorded and kept default-off;
+  - if predicted records appear only after actual demand, reject this graph
+    callback path and do not implement runtime prefetch here.
+
+GP71 probe smoke result on 2026-07-07:
+
+- Run:
+  - remote:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp71-next-gate-probe-smoke-n8-france`;
+  - local:
+    `.Agent/runs/20260707-gp71-next-gate-probe-smoke-n8-france`.
+- Prompt:
+  - `Please introduce France in a short paragraph.`
+- Env on top of SOTA reproduction env:
+  - `GGML_MOE_NEXT_GATE_SHADOW_OUT=$RUN/next-gate-shadow.csv`;
+  - `GGML_MOE_NEXT_GATE_SHADOW_TOPK=4`;
+  - `GGML_MOE_NEXT_GATE_PREFETCH_PROBE_OUT=$RUN/next-gate-prefetch-probe.csv`.
+- Runtime:
+  - `N=8`;
+  - quality pass;
+  - output: `France is a country in Western Europe known`;
+  - token rate `1.38 tok/s`;
+  - TTFT `76521.97 ms`;
+  - decode `5082.61 ms / 7`;
+  - host RAM peak `15899996160`;
+  - `direct_reads=0`.
+- Probe order report:
+  - `.Agent/runs/20260707-gp71-next-gate-probe-smoke-n8-france/probe-order-summary.md`.
+- Result:
+  - probe rows: `893`;
+  - predicted rows: `413`;
+  - actual rows: `480`;
+  - predicted-to-actual pairs: `413`;
+  - positive seq lead: `413/413`;
+  - positive time lead: `413/413`;
+  - seq lead min/median/max: `2 / 3 / 3`;
+  - time lead min/median/mean/max:
+    `1120 / 8070 / 12090.8 / 163145 us`;
+  - copy overhead mean/max: `13.15 / 68 us`.
+- Interpretation:
+  - during decode, predicted target-layer topK becomes visible before the
+    corresponding actual target-layer routing node;
+  - the graph callback path has a measurable same-token prefetch window;
+  - the first prompt/prefill block records actual routing before decode
+    predictions, so runtime prefetch must be decode-only.
+- Decision:
+  - proceed to plan a default-off `cap4` runtime prefetch hook from the eval
+    callback path;
+  - the hook must submit only top4 predicted experts, use expert pack /
+    io_uring only, keep demand priority, and record useful hits, misses,
+    false/unused entries, extra bytes, and demand delay;
+  - do not run held-out prompts until a dev N32/N96 prefetch run passes quality,
+    TTFT, RAM, direct-read, and net token-rate gates.
+
 ## Phase 5: Structural Byte-Reduction Gate
 
 Purpose:
