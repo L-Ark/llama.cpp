@@ -249,6 +249,7 @@ patterns = [
     (r"expert pack iouring detail: ([^\n]+)", "expert_pack_iouring"),
     (r"pinned staging([^\n]+)", "pinned_staging"),
     (r"current down overlap: ([^\n]+)", "current_down_overlap"),
+    (r"global expert sched shadow: ([^\n]+)", "global_expert_sched_shadow"),
     (r"VRAM cache down: ([^\n]+)", "vram_down"),
     (r"VRAM cache upgate: ([^\n]+)", "vram_upgate"),
 ]

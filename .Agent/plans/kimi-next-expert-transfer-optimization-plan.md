@@ -159,6 +159,60 @@ Phase 2A: no-prediction scheduler
 - Only schedule tasks that are already known from current routing and current down overlap.
 - Goal is to prove the scheduler itself does not add latency and can deduplicate/wait/steal correctly.
 
+Phase 2A.0: shadow task table
+
+- Add a default-off observability mode:
+  - `GGML_MOE_GLOBAL_EXPERT_SCHED_SHADOW=1`
+- This mode must not change read submission, wait order, H2D copies, cache policy, routing, or output.
+- It maintains only an in-process active task table for expert-pack io_uring read jobs.
+- Task key:
+  - `(source_idx, read_offset, read_size)`
+  - This is the exact physical read task after alias alignment, so it matches what the IO path would deduplicate.
+- Counters:
+  - total batches and tasks;
+  - demand vs prefetch tasks;
+  - active duplicate keys;
+  - demand request overlapping an active prefetch task;
+  - prefetch request overlapping an active demand task;
+  - same-priority active duplicates;
+  - max active tasks and max batch size.
+- Theory:
+  - If duplicate/steal candidates are near zero, a no-prediction global scheduler cannot improve much without adding future prediction.
+  - If demand-over-active-prefetch is nonzero, a real scheduler can replace duplicate reads with waiting/stealing the existing task.
+  - If max active task count remains low even with multiple current threads, the bottleneck is lack of known future work, not only local queue depth.
+- Experiment:
+  - n32 cold-start France with correct GP4 alias env;
+  - compare no-shadow vs shadow to ensure overhead is negligible;
+  - record shadow counters in stderr/metrics.
+- Acceptance for keeping the probe:
+  - default behavior unchanged;
+  - n32 quality passes;
+  - host RAM remains under 16 GB;
+  - shadow overhead is small enough for diagnostic use.
+
+Result on 2026-07-07:
+
+- n32 cold-start France A/B run:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260707-global-sched-shadow-n32-ab`
+  - baseline: `1.68 tok/s`, decode `18474.01 ms / 31`, TTFT `87776.30 ms`
+  - shadow: `1.71 tok/s`, decode `18114.25 ms / 31`, TTFT `87553.93 ms`
+  - quality passed in both runs;
+  - host RAM peak stayed at `15899996160` bytes;
+  - `direct_reads=0`, `missing_pack=0`, `entries=69120`.
+- Shadow counters:
+  - `batches=5361`
+  - `tasks=23501`
+  - `demand=19828`
+  - `prefetch=3673`
+  - `active_duplicates=0`
+  - `demand_hit_prefetch=0`
+  - `prefetch_hit_demand=0`
+  - `max_active=16`
+- Decision:
+  - keep the default-off shadow probe as Phase 2 observability;
+  - do not implement a dedup/steal-only scheduler yet, because this trace shows no duplicate active physical read tasks to steal;
+  - next useful scheduler work needs either prediction/known-future enqueue or byte reduction/layout changes.
+
 Phase 2A.1: down prefetch fine-wait probe
 
 - Add a default-off runtime switch:

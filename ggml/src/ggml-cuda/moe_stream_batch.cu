@@ -679,6 +679,185 @@ struct expert_pack_state {
 
 static expert_pack_state g_expert_pack;
 
+static size_t expert_pack_iouring_batch_bucket(size_t jobs);
+
+struct global_sched_shadow_key {
+    int32_t source_idx = 0;
+    uint64_t offset = 0;
+    uint64_t nbytes = 0;
+
+    bool operator==(const global_sched_shadow_key &other) const {
+        return source_idx == other.source_idx && offset == other.offset && nbytes == other.nbytes;
+    }
+};
+
+struct global_sched_shadow_key_hash {
+    size_t operator()(const global_sched_shadow_key &key) const {
+        uint64_t h = (uint64_t)(uint32_t)key.source_idx;
+        h ^= key.offset + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= key.nbytes + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        return (size_t)h;
+    }
+};
+
+struct global_sched_shadow_active {
+    uint32_t demand = 0;
+    uint32_t prefetch = 0;
+};
+
+struct global_sched_shadow_profile {
+    std::atomic<uint64_t> batches{0};
+    std::atomic<uint64_t> tasks{0};
+    std::atomic<uint64_t> demand_tasks{0};
+    std::atomic<uint64_t> prefetch_tasks{0};
+    std::atomic<uint64_t> active_duplicates{0};
+    std::atomic<uint64_t> demand_hits_active_prefetch{0};
+    std::atomic<uint64_t> prefetch_hits_active_demand{0};
+    std::atomic<uint64_t> demand_hits_active_demand{0};
+    std::atomic<uint64_t> prefetch_hits_active_prefetch{0};
+    std::atomic<uint64_t> max_active{0};
+    std::atomic<uint64_t> max_batch{0};
+    std::atomic<uint64_t> batch_hist_1{0};
+    std::atomic<uint64_t> batch_hist_2_4{0};
+    std::atomic<uint64_t> batch_hist_5_8{0};
+    std::atomic<uint64_t> batch_hist_9_16{0};
+    std::atomic<uint64_t> batch_hist_17_32{0};
+    std::atomic<uint64_t> batch_hist_gt32{0};
+};
+
+static global_sched_shadow_profile g_global_sched_shadow;
+static std::mutex g_global_sched_shadow_mu;
+static std::unordered_map<global_sched_shadow_key, global_sched_shadow_active, global_sched_shadow_key_hash> g_global_sched_shadow_active;
+static std::atomic<bool> g_global_sched_shadow_report_registered{false};
+
+static bool global_sched_shadow_enabled() {
+    const char *env = std::getenv("GGML_MOE_GLOBAL_EXPERT_SCHED_SHADOW");
+    return env && env[0] && env[0] != '0';
+}
+
+static bool global_sched_shadow_is_prefetch(const char *trace_op) {
+    return trace_op && (
+        std::strstr(trace_op, "prefetch") ||
+        std::strstr(trace_op, "overlap"));
+}
+
+static void global_sched_shadow_atomic_max(std::atomic<uint64_t> &target, uint64_t value) {
+    uint64_t current = target.load(std::memory_order_relaxed);
+    while (current < value &&
+            !target.compare_exchange_weak(current, value, std::memory_order_relaxed, std::memory_order_relaxed)) {
+    }
+}
+
+static void global_sched_shadow_report_atexit() {
+    const uint64_t batches = g_global_sched_shadow.batches.load();
+    if (batches == 0) return;
+    std::fprintf(stderr,
+            "[moe_stream_batch] global expert sched shadow: batches=%lu tasks=%lu demand=%lu prefetch=%lu "
+            "active_duplicates=%lu demand_hit_prefetch=%lu prefetch_hit_demand=%lu "
+            "demand_hit_demand=%lu prefetch_hit_prefetch=%lu max_active=%lu max_batch=%lu "
+            "batch_hist=1:%lu,2-4:%lu,5-8:%lu,9-16:%lu,17-32:%lu,gt32:%lu\n",
+            (unsigned long)batches,
+            (unsigned long)g_global_sched_shadow.tasks.load(),
+            (unsigned long)g_global_sched_shadow.demand_tasks.load(),
+            (unsigned long)g_global_sched_shadow.prefetch_tasks.load(),
+            (unsigned long)g_global_sched_shadow.active_duplicates.load(),
+            (unsigned long)g_global_sched_shadow.demand_hits_active_prefetch.load(),
+            (unsigned long)g_global_sched_shadow.prefetch_hits_active_demand.load(),
+            (unsigned long)g_global_sched_shadow.demand_hits_active_demand.load(),
+            (unsigned long)g_global_sched_shadow.prefetch_hits_active_prefetch.load(),
+            (unsigned long)g_global_sched_shadow.max_active.load(),
+            (unsigned long)g_global_sched_shadow.max_batch.load(),
+            (unsigned long)g_global_sched_shadow.batch_hist_1.load(),
+            (unsigned long)g_global_sched_shadow.batch_hist_2_4.load(),
+            (unsigned long)g_global_sched_shadow.batch_hist_5_8.load(),
+            (unsigned long)g_global_sched_shadow.batch_hist_9_16.load(),
+            (unsigned long)g_global_sched_shadow.batch_hist_17_32.load(),
+            (unsigned long)g_global_sched_shadow.batch_hist_gt32.load());
+}
+
+struct global_sched_shadow_scope {
+    struct entry {
+        global_sched_shadow_key key;
+        bool prefetch = false;
+    };
+
+    bool enabled = false;
+    std::vector<entry> entries;
+
+    global_sched_shadow_scope() = default;
+
+    global_sched_shadow_scope(const global_sched_shadow_scope &) = delete;
+    global_sched_shadow_scope &operator=(const global_sched_shadow_scope &) = delete;
+
+    ~global_sched_shadow_scope() {
+        if (!enabled || entries.empty()) return;
+        std::lock_guard<std::mutex> lk(g_global_sched_shadow_mu);
+        for (const entry &e : entries) {
+            auto it = g_global_sched_shadow_active.find(e.key);
+            if (it == g_global_sched_shadow_active.end()) {
+                continue;
+            }
+            if (e.prefetch) {
+                if (it->second.prefetch > 0) --it->second.prefetch;
+            } else {
+                if (it->second.demand > 0) --it->second.demand;
+            }
+            if (it->second.demand == 0 && it->second.prefetch == 0) {
+                g_global_sched_shadow_active.erase(it);
+            }
+        }
+    }
+
+    void begin(const std::vector<global_sched_shadow_key> &keys, bool prefetch) {
+        if (keys.empty() || !global_sched_shadow_enabled()) return;
+        enabled = true;
+        if (!g_global_sched_shadow_report_registered.exchange(true)) {
+            std::atexit(global_sched_shadow_report_atexit);
+        }
+        ++g_global_sched_shadow.batches;
+        g_global_sched_shadow.tasks.fetch_add(keys.size());
+        if (prefetch) {
+            g_global_sched_shadow.prefetch_tasks.fetch_add(keys.size());
+        } else {
+            g_global_sched_shadow.demand_tasks.fetch_add(keys.size());
+        }
+        global_sched_shadow_atomic_max(g_global_sched_shadow.max_batch, keys.size());
+        switch (expert_pack_iouring_batch_bucket(keys.size())) {
+            case 0: ++g_global_sched_shadow.batch_hist_1; break;
+            case 1: ++g_global_sched_shadow.batch_hist_2_4; break;
+            case 2: ++g_global_sched_shadow.batch_hist_5_8; break;
+            case 3: ++g_global_sched_shadow.batch_hist_9_16; break;
+            case 4: ++g_global_sched_shadow.batch_hist_17_32; break;
+            default: ++g_global_sched_shadow.batch_hist_gt32; break;
+        }
+
+        std::lock_guard<std::mutex> lk(g_global_sched_shadow_mu);
+        entries.reserve(keys.size());
+        for (const global_sched_shadow_key &key : keys) {
+            global_sched_shadow_active &active = g_global_sched_shadow_active[key];
+            const bool has_demand = active.demand > 0;
+            const bool has_prefetch = active.prefetch > 0;
+            if (has_demand || has_prefetch) {
+                ++g_global_sched_shadow.active_duplicates;
+                if (prefetch) {
+                    if (has_demand) ++g_global_sched_shadow.prefetch_hits_active_demand;
+                    if (has_prefetch) ++g_global_sched_shadow.prefetch_hits_active_prefetch;
+                } else {
+                    if (has_prefetch) ++g_global_sched_shadow.demand_hits_active_prefetch;
+                    if (has_demand) ++g_global_sched_shadow.demand_hits_active_demand;
+                }
+            }
+            if (prefetch) {
+                ++active.prefetch;
+            } else {
+                ++active.demand;
+            }
+            entries.push_back({key, prefetch});
+        }
+        global_sched_shadow_atomic_max(g_global_sched_shadow.max_active, g_global_sched_shadow_active.size());
+    }
+};
+
 struct expert_pack_v2_entry {
     char tensor[128] = {};
     int32_t expert_idx = -1;
@@ -5360,6 +5539,23 @@ static bool expert_pack_iouring_copy_jobs(
                     sort_by_offset);
         }
         return true;
+    }
+    global_sched_shadow_scope sched_shadow_scope;
+    if (global_sched_shadow_enabled()) {
+        std::vector<global_sched_shadow_key> sched_keys;
+        sched_keys.reserve(read_plans.size());
+        for (const iouring_read_plan &plan : read_plans) {
+            const Job &job = jobs[plan.job_idx];
+            if (!job.pack_entry) {
+                continue;
+            }
+            sched_keys.push_back({
+                job.pack_entry->source_idx,
+                plan.offset,
+                (uint64_t)plan.read_sz,
+            });
+        }
+        sched_shadow_scope.begin(sched_keys, global_sched_shadow_is_prefetch(trace_op));
     }
     const bool profile_io_wait = io_wait_trace_enabled();
     const bool trace_io_read = io_read_trace_enabled();
