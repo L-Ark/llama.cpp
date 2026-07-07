@@ -96757,3 +96757,50 @@ Expected deliverables:
   - all `GGML_MOE_*` env vars;
   - prompt file path and SHA256;
   - run output root.
+
+GP65 baseline command correction:
+
+- Timestamp: `2026-07-07T15:17:45+0800`.
+- An initial N32 dev baseline attempt was started at:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260707-gp65-next-gate-prefetch-shadow-confirm-n32-baseline`.
+- This run is rejected as the formal GP65 baseline because it used the default
+  `kimi-general-prompt-repro.sh` env without the GP4 alias/full-source SOTA
+  settings:
+
+```text
+GGML_MOE_EXPERT_GGUF_ALIAS_TSV=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv
+GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1
+```
+
+- Symptom:
+  - rejected N32 run had nonzero `direct_reads`, from `133` on France to
+    `2565` on `dev_linear_equation`;
+  - correct GP4 SOTA profile has `direct_reads=0` on the same dev prompt set.
+- Observed impact in the rejected N32 run:
+  - `dev_linear_equation`: `0.18 tok/s`, `direct_reads=2565`,
+    combined pinned `host_stage=195.6s`, up/gate hit `24.8%`;
+  - `dev_python_reverse`: `0.20 tok/s`, `direct_reads=2542`,
+    combined pinned `host_stage=174.0s`, up/gate hit `32.1%`;
+  - `dev_photosynthesis_factual`: `0.36 tok/s`, `direct_reads=1875`,
+    combined pinned `host_stage=89.0s`, up/gate hit `42.4%`.
+- Correct GP4 dev N96 reference for comparison:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260707-004500Z-gp4-aligned-alias-dev-n96-profile-correct`.
+  The same prompts there show:
+  - `dev_linear_equation`: `1.10 tok/s`, `direct_reads=0`,
+    `host_stage=0`, up/gate hit `26.0%`;
+  - `dev_python_reverse`: `1.29 tok/s`, `direct_reads=0`,
+    `host_stage=0`, up/gate hit `35.8%`;
+  - `dev_photosynthesis_factual`: `1.35 tok/s`, `direct_reads=0`,
+    `host_stage=0`, up/gate hit `40.9%`.
+- Conclusion:
+  - the extreme slowdown in the rejected GP65 N32 attempt is primarily a command
+    regression: missing GP4 alias/aligned-batch env caused direct/GGUF fallback
+    and large host staging time;
+  - after correcting the command, the remaining true SOTA bottleneck is still
+    movement-bound: low up/gate cache hit on some prompts plus exposed
+    io_uring wait around `5.8-6.0 GiB/s`, not semantic quality or GPU compute.
+- Required correction before any GP65 shadow or prefetch run:
+  - always pass the two GP4 env vars above via `EXTRA_RUNTIME_ENV`;
+  - verify every run has `direct_reads=0` before using its metrics;
+  - if `direct_reads>0`, reject the run immediately and do not compare it as
+    current SOTA.
