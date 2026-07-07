@@ -6144,3 +6144,29 @@
   - Next implementation must target a prompt-general separate `gate/up -> clamp -> swiglu -> down` retained or fused activation path, preserving the existing gate cache and using Q8_0 CPU-order down as the correctness reference.
   - Still not SOTA; no token-rate promotion.
 
+## 2026-07-07 X10-J design gate：separate gate/up retained path must first add MXFP4 CPU-compatible fused op
+
+- attempt_id: `20260707-ds4-separate-gate-up-retained-design-gate`
+- why_now:
+  - X10-I proved the actual DeepSeek4 graph is separate `ffn_gate_exps` + `ffn_up_exps`, not combined `ffn_gate_up_exps`.
+  - Existing `ggml_cuda_moe_stream_up_gate_batch` is only reached from `GGML_OP_MOE_UP_GATE`; current DS4 graph emits two independent `GGML_OP_MUL_MAT_ID` nodes plus `ggml_swiglu_split`, so toggling runtime env cannot create a retained producer.
+  - Directly swapping DS4 to the existing generic fused op is not safe: DeepSeek4 applies clamp to raw gate/up before `swiglu`, while existing CPU fused op has no clamp parameter and current CPU caller passes CUDA `limit=0.0f`.
+  - Existing CUDA batch type gate also excludes `GGML_TYPE_MXFP4` in `moe_stream_type_supported`; adding MXFP4 to the generic Q8_1 path would likely repeat the rejected down-Q8_1 correctness failure.
+- source facts to preserve:
+  - `ggml/src/ggml-cpu/ggml-cpu.c::ggml_compute_forward_moe_up_gate` asserts SILU and calls `ggml_cuda_moe_stream_up_gate_batch(..., limit=0.0f, ...)`.
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu::moe_stream_type_supported` excludes `GGML_TYPE_MXFP4`.
+  - The CUDA fuse kernel has a `limit` argument but its current SILU limit semantics clamp `silu(g)` rather than exactly reproducing DS4 clamp semantics: `silu(clamp(g, -inf, limit)) * clamp(up, -limit, limit)`.
+  - Down correctness reference is the Q8_0 CPU-order path, not the older Q8_1 mmvq path.
+- required next implementation order:
+  1. Add a new default-off graph option in `src/models/deepseek4.cpp` only after adding an exact/compatible fused op form that can express DS4 clamp semantics.
+  2. Extend or add a fused up/gate CPU reference path that matches current separate graph at fixed-text top1 and op-level compare before any CUDA writeback.
+  3. Add an MXFP4 Q8_0 CPU-compatible CUDA fused up/gate probe/writeback path; do not use generic Q8_1 MXFP4 mmvq as accepted output.
+  4. Validate in this order: default-off guard -> fused CPU/reference top1 -> targeted CUDA fused up/gate top1 -> full fused up/gate top1 -> only then combine with corrected down handoff/Q8_0 path.
+  5. Only after correctness passes, benchmark calibration/dev generalized prompts under strict 16GB; held-out remains unused until candidate freeze.
+- hard-bound implication:
+  - A retained activation path that fixes only down is already known insufficient and slower. A credible route must remove repeated separate gate/up source movement and avoid D2H/writeback into down.
+  - Therefore the next source edit should be a correctness scaffold for exact DS4 fused gate/up semantics, not a performance benchmark.
+- decision:
+  - Do not implement a one-line DS4 graph switch to `ggml_moe_up_gate`; it is mathematically incomplete for DS4 clamp and lacks MXFP4 CPU-compatible CUDA support.
+  - Next concrete source work should introduce a default-off DS4 fused gate/up correctness scaffold with explicit clamp semantics and MXFP4 Q8_0 parity instrumentation.
+
