@@ -4,6 +4,7 @@ This is a default-off runtime probe. It does not claim a new SOTA.
 
 - Branch: `vendor/kimi-speculative-general-token-rate-16gb`
 - Local base commit: `30f5398da`
+- Implementation commit: `f0d6b1ea9`
 - Remote worktree: `/root/lfz/tmp/kimi-stage2m-align`
 - Remote run root: `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp110-q4-down-batch`
 - Gate: `GGML_MOE_Q4_DOWN_BATCH=1`
