@@ -1,0 +1,115 @@
+{
+  "artifact_id": "20260708-mxfp4-f32-writeback-onecall-rejected",
+  "purpose": "Record the default-off MXFP4 f32 writeback one-call top1 gate failure after the f32 parity probe passed.",
+  "source_head": "fefd84cd884a82fd76e6f36624a2306222a31d6f",
+  "source_status_before_revert": [
+    " M .Agent/plans/20260701-vendor-ds4-16gb-token-rate-plan.md",
+    " M ggml/src/ggml-cuda/moe_stream_batch.cu",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/explicit-swiglu-down-split-profile-20260708.json",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+    "?? prof.nsys-rep"
+  ],
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T222710Z-20260708-mxfp4-f32-writeback-top1-onecall",
+  "env_delta": {
+    "GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH": "1",
+    "GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH_MAX_CALLS": "1"
+  },
+  "comparison": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T222710Z-20260708-mxfp4-f32-writeback-top1-onecall",
+    "n_base": 145,
+    "n_case": 145,
+    "n_compare": 145,
+    "same_top1": 141,
+    "first_mismatch_pos": 9,
+    "mismatches_preview": [
+      {
+        "position": 9,
+        "base": {
+          "id": 260,
+          "piece": " a",
+          "logit": 27.1315
+        },
+        "case": {
+          "id": 270,
+          "piece": " the",
+          "logit": 26.5628
+        }
+      },
+      {
+        "position": 78,
+        "base": {
+          "id": 305,
+          "piece": " and",
+          "logit": 31.7496
+        },
+        "case": {
+          "id": 412,
+          "piece": " as",
+          "logit": 31.795
+        }
+      },
+      {
+        "position": 134,
+        "base": {
+          "id": 3631,
+          "piece": " major",
+          "logit": 31.0991
+        },
+        "case": {
+          "id": 2656,
+          "piece": " top",
+          "logit": 31.2688
+        }
+      },
+      {
+        "position": 135,
+        "base": {
+          "id": 8469,
+          "piece": " player",
+          "logit": 30.8499
+        },
+        "case": {
+          "id": 7267,
+          "piece": " cultural",
+          "logit": 30.4928
+        }
+      }
+    ],
+    "top1_pass": false,
+    "max_abs_top2_logit_diff": 0.888499999999997,
+    "mean_abs_top2_logit_diff": 0.1550896551724137,
+    "default": {
+      "exit_status": 0,
+      "systemd_status": 0,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 14940905472,
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 85491,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "profile_line": "[kimi_cpu_moe_profile] down calls=17400 total=6.615 ms/call convert_t0=0.002 route=0.002 route_barrier=0.002 cuda_batch=0.001 cuda_single=0.000 post_cuda_barrier=0.001 fallback_t0=6.603 batch_accept=0 batch_decline=5800 single_accept=0 single_decline=69600"
+    },
+    "f32_onecall": {
+      "exit_status": 0,
+      "systemd_status": 0,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 14923718656,
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 86488,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "profile_line": "[kimi_cpu_moe_profile] down calls=17400 total=6.643 ms/call convert_t0=0.001 route=0.002 route_barrier=0.002 cuda_batch=0.004 cuda_single=0.000 post_cuda_barrier=0.001 fallback_t0=6.628 batch_accept=1 batch_decline=5799 single_accept=0 single_decline=69600"
+    }
+  },
+  "decision": "reject_and_revert_uncommitted_writeback_source",
+  "analysis": "The dedicated f32 kernel matches the CPU probe reference, but replacing even one live down call changes logits versus current CPU fallback: same_top1=141/145, first mismatch at position 9, max_abs_top2_logit_diff=0.8885. This indicates the live CPU fallback semantics include quantization/accumulation behavior that f32 exact does not reproduce. Q80 lane8/shared remains the correctness-compatible route because it mimics CPU fallback ordering/quantization semantics.",
+  "next_step": "Do not promote f32 exact writeback. Continue from Q80 CPU-compatible semantics, or add a CPU-fallback-compatible f32/quantized reference before any writeback path."
+}

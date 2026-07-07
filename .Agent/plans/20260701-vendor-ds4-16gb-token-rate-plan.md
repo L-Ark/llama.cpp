@@ -8333,3 +8333,61 @@ Decision:
 - Accept as a correctness diagnostic building block and commit/push because it is default-off and validated under strict 16GB cgroup.
 - Do not count as SOTA. The exact f32 kernel uses double accumulation and is expected to be too slow as-is.
 - Next step for down GPU correctness/performance: add a separate default-off writeback/top1/logit gate using this f32 path, or derive a faster production MXFP4+f32 kernel, and only then run token-rate benchmarks.
+
+
+## 2026-07-08 X10-BE planned MXFP4 f32 writeback/top1 gate
+
+Goal:
+- Turn the now-validated MXFP4+f32 exact down diagnostic kernel into a strictly default-off writeback candidate, then prove correctness with `llama-results` before any performance benchmark.
+- This is still a down GPU correctness step, not a SOTA step.
+
+Implementation plan:
+- Add a separate env gate, tentatively `GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH=1`, independent from `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=f32`.
+- Keep the probe behavior unchanged: `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=f32` continues to report CPU/GPU parity and return `false` to CPU fallback.
+- The writeback candidate will use the same exact f32 kernel but skip `mxfp4_down_probe_report` and scatter the GPU rows into `dst`, returning `true`.
+- Add optional debug controls for correctness gating:
+  - `GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH_TENSOR` to target one tensor/layer;
+  - `GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH_MAX_CALLS` to allow partial replacement during top1 bisection;
+  - a one-time stderr marker so default-off smoke can prove the path did not trigger accidentally.
+
+Validation plan:
+- Rebuild `build-ds4-moe-stream`.
+- Default-off smoke: env unset, strict 16GB, confirm no f32 writeback marker and RAM OK.
+- Partial writeback top1 gate: compare default vs one-call or targeted tensor f32 writeback using `llama-results --sequential-logits --top1-report`; require same top1 for all compared positions before widening.
+- If partial gate passes, widen to full down f32 writeback on calibration/dev prompt only. Do not use held-out prompts.
+- Record all results and reject/revert any path with top1 mismatch, semantic corruption, RAM violation, or TTFT regression beyond allowed gates.
+
+Expected performance:
+- The exact f32 writeback path is likely too slow for SOTA because it uses double accumulation and full f32 activation H2D/D2H. Its purpose is correctness and routing proof; a later production kernel must reduce accumulation/staging cost.
+
+
+## 2026-07-08 X10-BF MXFP4 f32 writeback one-call top1 gate rejected
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mxfp4-f32-writeback-onecall-rejected-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T222710Z-20260708-mxfp4-f32-writeback-top1-onecall`
+- status: `reject_revert_uncommitted_f32_writeback_source_not_sota`
+
+Purpose:
+- Test whether the X10-BD f32 exact MXFP4 down kernel can be used as a live writeback path for even one down call.
+
+Method:
+- Added a temporary default-off source edit for `GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH=1` with `GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH_MAX_CALLS=1`.
+- Ran strict cold `16GB` cgroup `llama-results --sequential-logits --top1-report` on the fixed France text.
+- Compared default CPU fallback against one-call f32 writeback.
+
+Result:
+- default: `memory_peak_bytes=16000000000`, `memory_file_bytes=14940905472`, `ram_ok=true`, `batch_accept=0`, `batch_decline=5800`
+- f32 one-call: `memory_peak_bytes=16000000000`, `memory_file_bytes=14923718656`, `ram_ok=true`, `batch_accept=1`, `batch_decline=5799`
+- top1 comparison: `same_top1=141/145`, `first_mismatch_pos=9`, `max_abs_top2_logit_diff=0.8885`
+- first mismatch: default top1 token ` a`, f32 one-call top1 token ` the`.
+
+Analysis:
+- This is not a RAM or routing failure; the path triggered exactly once and returned successfully.
+- The f32 exact kernel matches the CPU probe reference from X10-BD, but it does not match the live CPU fallback logits.
+- Therefore the live CPU fallback semantics are not pure MXFP4 dequantized weight times original f32 activation. They include quantization/accumulation/order behavior that the Q80 lane8/shared compatibility path reproduces and the f32 exact path does not.
+
+Decision:
+- Reject the temporary f32 writeback source and revert it before commit.
+- Keep the committed f32 parity probe as a diagnostic tool only.
+- Do not run token-rate benchmarks with f32 writeback.
+- Next down correctness work should continue from CPU-compatible Q80 semantics or first define a live-CPU-compatible reference for any new writeback route.
