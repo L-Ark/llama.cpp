@@ -1535,10 +1535,14 @@ static int ggml_ds4_grouped_retained_parse_layer(const char * name) {
         return -1;
     }
     const char * p = strstr(name, "blk.");
-    if (!p) {
-        return -1;
+    if (p) {
+        return atoi(p + 4);
     }
-    return atoi(p + 4);
+    const char * dash = strrchr(name, 45);
+    if (dash && dash[1]) {
+        return atoi(dash + 1);
+    }
+    return -1;
 }
 
 static bool ggml_ds4_grouped_retained_role_supported(const char * role) {
@@ -1828,6 +1832,37 @@ static void ggml_ds4_grouped_retained_handoff_mark_up_gate(
             sizeof(ggml_ds4_grouped_retained_last_up_gate.up_name), "%s", up_name ? up_name : "");
     snprintf(ggml_ds4_grouped_retained_last_up_gate.gate_name,
             sizeof(ggml_ds4_grouped_retained_last_up_gate.gate_name), "%s", gate_name ? gate_name : "");
+    ++ggml_ds4_grouped_retained_last_up_gate.serial;
+    pthread_mutex_unlock(&ggml_ds4_grouped_retained_handoff_mu);
+}
+
+static void ggml_ds4_grouped_retained_handoff_mark_glu_act(const struct ggml_tensor * dst) {
+    if (!ggml_ds4_grouped_retained_handoff_profile_enabled() || !dst || !dst->data || !dst->name[0]) {
+        return;
+    }
+    if (!strstr(dst->name, "ffn_moe_swiglu")) {
+        return;
+    }
+    const enum ggml_glu_op op = ggml_get_glu_op(dst);
+    if (op != GGML_GLU_OP_SWIGLU && op != GGML_GLU_OP_SWIGLU_OAI) {
+        return;
+    }
+
+    const struct ggml_tensor * gate = dst->src[0];
+    const struct ggml_tensor * up = dst->src[1];
+    pthread_mutex_lock(&ggml_ds4_grouped_retained_handoff_mu);
+    ggml_ds4_grouped_retained_last_up_gate.dst_data = dst->data;
+    ggml_ds4_grouped_retained_last_up_gate.layer = ggml_ds4_grouped_retained_parse_layer(dst->name);
+    ggml_ds4_grouped_retained_last_up_gate.ne01 = dst->ne[0];
+    ggml_ds4_grouped_retained_last_up_gate.dst_rows = dst->ne[1] * dst->ne[2];
+    ggml_ds4_grouped_retained_last_up_gate.active_experts = dst->ne[1];
+    ggml_ds4_grouped_retained_last_up_gate.rows = dst->ne[1] * dst->ne[2];
+    snprintf(ggml_ds4_grouped_retained_last_up_gate.up_name,
+            sizeof(ggml_ds4_grouped_retained_last_up_gate.up_name), "%s",
+            up && up->name[0] ? up->name : "");
+    snprintf(ggml_ds4_grouped_retained_last_up_gate.gate_name,
+            sizeof(ggml_ds4_grouped_retained_last_up_gate.gate_name), "%s",
+            gate && gate->name[0] ? gate->name : "");
     ++ggml_ds4_grouped_retained_last_up_gate.serial;
     pthread_mutex_unlock(&ggml_ds4_grouped_retained_handoff_mu);
 }
@@ -6039,6 +6074,7 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
         case GGML_OP_GLU:
             {
                 ggml_compute_forward_glu(params, tensor);
+                ggml_ds4_grouped_retained_handoff_mark_glu_act(tensor);
             } break;
         case GGML_OP_GET_REL_POS:
             {
