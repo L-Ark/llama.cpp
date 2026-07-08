@@ -310,6 +310,10 @@ RUN_DIR="${RUN_ROOT}/${stamp}-${safe_label}"
 mkdir -p "$RUN_DIR"
 printf '%s\n' "$PROMPT" > "$RUN_DIR/prompt.txt"
 
+EFFECTIVE_DS4_ALIAS_TSV="$RUN_DIR/ds4-native-full-gguf-alias-source.effective.tsv"
+awk -v model="$MODEL" 'BEGIN{FS=OFS="\t"} NR==1 {print; next} {$1=model; print}' \
+  "$DS4_ALIAS_TSV" > "$EFFECTIVE_DS4_ALIAS_TSV"
+
 source_status="$(git -C "$REPO_DIR" status --short)"
 printf '%s\n' "$source_status" > "$RUN_DIR/source_status.txt"
 source_dirty=false
@@ -363,7 +367,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_STREAM": "1",
     "GGML_MOE_STREAM_DONTNEED": "1",
     "GGML_MOE_STAGE_PINNED_SLOTS": "8",
-    "GGML_MOE_EXPERT_GGUF_ALIAS_TSV": $(printf '%s' "$DS4_ALIAS_TSV" | json_string),
+    "GGML_MOE_EXPERT_GGUF_ALIAS_TSV": $(printf '%s' "$EFFECTIVE_DS4_ALIAS_TSV" | json_string),
+    "GGML_MOE_EXPERT_GGUF_ALIAS_TSV_SOURCE": $(printf '%s' "$DS4_ALIAS_TSV" | json_string),
     "GGML_MOE_IO_BACKEND": "iouring",
     "GGML_MOE_IO_ALIGNED_ALIAS_BATCH": "1",
     "GGML_MOE_IO_REFILL_BATCH": "4",
@@ -408,7 +413,7 @@ done
 
 export CUDA_VISIBLE_DEVICES="\${CUDA_VISIBLE_DEVICES:-0}"
 export GGML_CUDA_DISABLE_GRAPHS=1
-export GGML_MOE_EXPERT_GGUF_ALIAS_TSV=$(printf '%q' "$DS4_ALIAS_TSV")
+export GGML_MOE_EXPERT_GGUF_ALIAS_TSV=$(printf '%q' "$EFFECTIVE_DS4_ALIAS_TSV")
 export GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1
 export GGML_MOE_IO_REFILL_BATCH=4
 export GGML_MOE_DOWN_PARALLEL_STAGE=1

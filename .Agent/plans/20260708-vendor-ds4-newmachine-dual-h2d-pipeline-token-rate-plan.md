@@ -214,3 +214,30 @@ Promotion requirements:
   3. restoring larger effective VRAM cache allocation on the new machine. The
      diagnostic runs requested `9GB` batch VRAM cache but fell back to `6.9GB`,
      so cache pressure is worse than intended.
+- Root-caused one new-machine-specific regression: the committed static GGUF
+  alias TSV contained the old-machine model path
+  `/root/lfz/models/.../DeepSeek-V4-Flash-FP4-FP8-native.gguf`. On the new
+  machine this produced `expert alias source: open failed`, so up/down misses
+  fell back to mmap host staging/page cache instead of batch io_uring.
+- Implemented a run-local alias rewrite in
+  `scripts/demo-vendor-ds4-general-sota.sh`: each artifact now contains
+  `ds4-native-full-gguf-alias-source.effective.tsv`, generated from the static
+  prompt-general alias TSV but with `source_path` set to the current `MODEL`.
+  This is machine-path repair only, not prompt-specific optimization.
+- Validation run `20260708T133916Z-effective-alias-fix` on prompt
+  `How to deploy a large model on small devices?`:
+  - `eval_tok_s=2.5` vs `2.2` before the alias fix on the same prompt;
+  - `prompt_tok_s=3.2`, `TTFT=19050.8 ms`, elapsed `55.57s`;
+  - `memory_peak_bytes=14610792448`, `memory_file_bytes=13723795456`,
+    `ram_ok=true`, display processes stopped;
+  - H2D benchmark `6.73 GB/s`, PCIe under load `16.0 GT/s x4`;
+  - batch expert source restored:
+    `expert alias source: io_uring direct reads enabled`,
+    `iouring_reads=9416`, `iouring_bytes=41961914368`, `misses=0`;
+  - batch VRAM cache improved to `hits=24151`, `misses=9416`,
+    `hit_rate=71.9%`;
+  - model answer was semantically correct and coherent, but truncated by the
+    `n=96` demo cap.
+- This is an accepted reproducibility/performance fix for the new machine but
+  not a product SOTA: generalized random-prompt target remains `>5 tok/s`, and
+  this single-prompt new-machine run is only `2.5 tok/s`.
