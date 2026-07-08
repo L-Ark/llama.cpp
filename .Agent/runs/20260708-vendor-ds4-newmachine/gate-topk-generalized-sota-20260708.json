@@ -1,0 +1,123 @@
+{
+  "artifact": "gate-topk-generalized-sota-20260708",
+  "created_at_local": "2026-07-08",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "base_head": "203ddec89fb3ec10fb7d573b560fe79618153b90",
+  "machine": "wici@192.168.9.198",
+  "status": "accepted_source_change_pending_clean_repeat",
+  "optimization": {
+    "name": "gate follows up/down topk pruning",
+    "env": "GGML_MOE_KEEP_TOPK_GATE=1",
+    "core_default": "off unless env is set",
+    "demo_default": "on after this artifact",
+    "rationale": "The existing safe path prunes up/down matrix_row_counts for high-rank expert ids and writes those output rows to zero. Gate was still computed for the pruned ids even though the later SwiGLU multiply sees the corresponding up rows as zero. Applying the same topk pruning to gate avoids full expert reads/H2D for rows that cannot affect the final MoE output.",
+    "prompt_specific": false,
+    "kimi_behavior_changed": false
+  },
+  "baseline_reference": {
+    "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T153417Z-20260708T-default-france-n96-recheck",
+    "eval_tok_s": 2.6,
+    "ttft_ms": 18519.546449,
+    "gate_one_pack_reads": 6473,
+    "gate_one_pack_bytes": 28846587904,
+    "ram_ok": true,
+    "correctness": "France pass"
+  },
+  "route_smoke": {
+    "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T154621Z-20260708T-gate-topk-france-n32-smoke",
+    "eval_tok_s": 2.7,
+    "ram_ok": true,
+    "correctness": "short France output pass",
+    "route_totals_after_gate_topk": {
+      "gate": {
+        "active_experts": 5201,
+        "cache_contains_count": 3345,
+        "cache_missing_count": 1856,
+        "logical_source_bytes": 23177986048
+      },
+      "up": {
+        "active_experts": 5201,
+        "cache_contains_count": 3077,
+        "cache_missing_count": 2124,
+        "logical_source_bytes": 23177986048
+      },
+      "down": {
+        "active_experts": 5201,
+        "cache_contains_count": 5201,
+        "cache_missing_count": 0,
+        "logical_source_bytes": 23177986048
+      }
+    },
+    "route_delta_vs_default_n32": "gate active experts 9471 -> 5201; gate cache misses 3328 -> 1856; gate logical bytes 42.21GB -> 23.18GB"
+  },
+  "validation_runs": [
+    {
+      "prompt": "Please introduce France in a short paragraph.",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T154722Z-20260708T-gate-topk-france-n96",
+      "eval_tok_s": 3.1,
+      "prompt_tok_s": 3.7,
+      "ttft_ms": 17369.43953,
+      "elapsed_seconds": 46.35,
+      "memory_peak_bytes": 14608982016,
+      "memory_file_bytes": 13779464192,
+      "ram_ok": true,
+      "display_processes_stopped_before_run": true,
+      "h2d_gbps": 6.72212,
+      "pcie_after_h2d": "16.0 GT/s x4",
+      "correctness": "pass: coherent and semantically correct France paragraph",
+      "batch_iouring_reads": 8194,
+      "batch_iouring_bytes": 36516134912,
+      "gate_one_pack_reads": 2875,
+      "gate_one_pack_bytes": 12812288000
+    },
+    {
+      "prompt": "Write a short Python function for Fibonacci.",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T154831Z-20260708T-gate-topk-fibonacci-n96",
+      "eval_tok_s": 2.7,
+      "prompt_tok_s": 3.7,
+      "ttft_ms": 17965.118483,
+      "elapsed_seconds": 50.33,
+      "memory_peak_bytes": 14678474752,
+      "memory_file_bytes": 13717528576,
+      "ram_ok": true,
+      "display_processes_stopped_before_run": true,
+      "h2d_gbps": 6.602178,
+      "correctness": "pass: provides a valid Python Fibonacci generator",
+      "batch_iouring_reads": 9774,
+      "batch_iouring_bytes": 43557322752,
+      "gate_one_pack_reads": 3880,
+      "gate_one_pack_bytes": 17291018240
+    },
+    {
+      "prompt": "How to deploy a large model on a small devices?",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T154943Z-20260708T-gate-topk-deploy-n96",
+      "eval_tok_s": 2.9,
+      "prompt_tok_s": 4.2,
+      "ttft_ms": 17576.671467,
+      "elapsed_seconds": 48.57,
+      "memory_peak_bytes": 14792970240,
+      "memory_file_bytes": 13781159936,
+      "ram_ok": true,
+      "display_processes_stopped_before_run": true,
+      "h2d_gbps": 6.592925,
+      "correctness": "pass: coherent deployment guidance",
+      "batch_iouring_reads": 9102,
+      "batch_iouring_bytes": 40562589696,
+      "gate_one_pack_reads": 3413,
+      "gate_one_pack_bytes": 15209857024
+    }
+  ],
+  "promotion_requirements": {
+    "strict_16gb_ram": "pass on all validation runs",
+    "page_cache_counted": "pass via cgroup memory_file_bytes",
+    "display_processes_stopped": "pass on all validation runs",
+    "ttft_not_more_than_20_percent_above_baseline": "pass; TTFT decreased versus the default France baseline",
+    "correctness": "pass on France, Fibonacci, and deployment prompts",
+    "product_target_gt_5_tok_s": "fail; best observed is 3.1 tok/s, so the overall goal remains active"
+  },
+  "next_steps": [
+    "Commit and push the default-off core change plus demo default after a clean repeat.",
+    "Run a clean-source default demo without manually setting GGML_MOE_KEEP_TOPK_GATE to prove reproducibility.",
+    "Continue with gate/up byte reduction or hardware topology work; gate-topk alone is not enough for >5 tok/s on 6.6GB/s H2D."
+  ]
+}

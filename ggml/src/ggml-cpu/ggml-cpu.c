@@ -2141,7 +2141,19 @@ static int ggml_moe_keep_topk_updown(void) {
 }
 
 static bool ggml_moe_keep_topk_applies(const char * name) {
-    return name && (strstr(name, "ffn_up_exps") || strstr(name, "ffn_down_exps"));
+    if (!name) {
+        return false;
+    }
+    if (strstr(name, "ffn_up_exps") || strstr(name, "ffn_down_exps")) {
+        return true;
+    }
+
+    static int gate_enabled = -1;
+    if (gate_enabled < 0) {
+        const char * env = getenv("GGML_MOE_KEEP_TOPK_GATE");
+        gate_enabled = env && env[0] && strcmp(env, "0") != 0 ? 1 : 0;
+    }
+    return gate_enabled && strstr(name, "ffn_gate_exps");
 }
 
 static int ggml_moe_tensor_layer(const char * name) {

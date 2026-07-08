@@ -598,3 +598,40 @@ Promotion requirements:
     miss bytes or avoiding full-expert movement for those roles.
   - Detailed reproduction data is recorded in
     `.Agent/runs/20260708-vendor-ds4-newmachine/low-h2d-recheck-and-route-bound-20260708.json`.
+- Gate-topk movement reduction:
+  - Route-profile observation: the safe default prunes up/down routed rows via
+    `GGML_MOE_KEEP_TOPK_*`, but `ffn_gate_exps` still computed all selected
+    gate experts. In the n32 route profile, gate had `9471` active experts /
+    `42.21GB` logical source bytes while up/down had only `5201` active experts
+    / `23.18GB` each. Because pruned up rows are explicitly written to zero,
+    computing gate for the same pruned ids cannot affect the later SwiGLU
+    product and is full-expert movement waste.
+  - Implemented default-off core switch `GGML_MOE_KEEP_TOPK_GATE=1`; when set,
+    gate follows the same topk pruning decision as up/down. The demo SOTA path
+    now defaults this env to `1`, while the shared core behavior remains
+    disabled unless the env is set. Kimi behavior is unchanged.
+  - n32 route smoke
+    `20260708T154621Z-20260708T-gate-topk-france-n32-smoke`: `eval_tok_s=2.7`,
+    `TTFT=17408.8 ms`, `ram_ok=true`, correctness pass. Gate active experts
+    dropped `9471 -> 5201`, gate cache misses `3328 -> 1856`, and gate logical
+    source bytes `42.21GB -> 23.18GB`.
+  - n96 France validation
+    `20260708T154722Z-20260708T-gate-topk-france-n96`: `eval_tok_s=3.1`,
+    `prompt_tok_s=3.7`, `TTFT=17369.4 ms`, elapsed `46.35s`,
+    `memory_peak_bytes=14608982016`, `memory_file_bytes=13779464192`,
+    `ram_ok=true`, display processes stopped, H2D `6.72GB/s`, correctness pass.
+    Compared with the default France recheck, gate one-pack bytes dropped from
+    `28.85GB` to `12.81GB`, and token rate improved `2.6 -> 3.1 tok/s`.
+  - n96 Fibonacci validation
+    `20260708T154831Z-20260708T-gate-topk-fibonacci-n96`: `eval_tok_s=2.7`,
+    `TTFT=17965.1 ms`, `memory_peak_bytes=14678474752`, `ram_ok=true`;
+    correctness pass with a valid Python Fibonacci generator.
+  - n96 deployment validation
+    `20260708T154943Z-20260708T-gate-topk-deploy-n96`: `eval_tok_s=2.9`,
+    `prompt_tok_s=4.2`, `TTFT=17576.7 ms`, `memory_peak_bytes=14792970240`,
+    `ram_ok=true`; output was coherent deployment guidance.
+  - Accepted as a prompt-general low-H2D improvement, but it does not complete
+    the product target: best observed new-machine result is `3.1 tok/s`, still
+    below stable `>5 tok/s`.
+  - Detailed reproduction data is recorded in
+    `.Agent/runs/20260708-vendor-ds4-newmachine/gate-topk-generalized-sota-20260708.json`.
