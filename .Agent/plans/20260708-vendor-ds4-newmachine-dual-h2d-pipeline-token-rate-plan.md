@@ -1078,3 +1078,71 @@ Next implementation priority:
    `vendor/deepseek-token-rate-16gb` on `https://github.com/wici-ai/ssd-llama.git`
    with exact reproduction metadata. Commit author/committer must remain
    `L-Ark <fliangae@connect.ust.hk>`.
+
+## 2026-07-09 Follow-Up After `8dc65bf`
+
+Starting point: safe top3-all-layers plus `vram13824/cosubmit` default at
+`8dc65bf41c`. The accepted safe high repeat remains deploy `3.6 tok/s`, while
+one repeat showed `3.1 tok/s` due to higher `iouring_wait_us`.
+
+Rejected low-risk scheduling probes:
+
+- `GGML_MOE_IO_DEPTH=16` and `GGML_MOE_IO_REFILL_BATCH=8`,
+  run `20260708T182120Z-20260709T-depth16-refill8-safe-default-deploy-n96`:
+  `eval_tok_s=3.1`, `TTFT=16479.5 ms`, `ram_ok=true`. It did not raise
+  effective inflight because the hot path was still limited by staging shape;
+  `iouring_wait_us=12177868`.
+- `GGML_MOE_STAGE_PINNED_SLOTS=16`, `GGML_MOE_IO_DEPTH=16`,
+  `GGML_MOE_IO_REFILL_BATCH=8`, run
+  `20260708T182238Z-20260709T-slots16-depth16-refill8-safe-default-deploy-n96`:
+  `eval_tok_s=3.1`, `TTFT=16270.6 ms`, `ram_ok=true`. It raised
+  `inflight_max` to 16 but still left `iouring_wait_us=12558372`, so slot
+  count is not the main limiter.
+- `GGML_MOE_STREAM_DEFER=1`, run
+  `20260708T182419Z-20260709T-stream-defer-safe-default-deploy-n96`, hung/ran
+  far beyond normal runtime and was killed. Rejected.
+- `GGML_MOE_IO_SORT_OFFSET=1`, run
+  `20260708T182644Z-20260709T-sortoffset-safe-default-deploy-n96`:
+  `eval_tok_s=3.1`, `TTFT=16157.0 ms`, `ram_ok=true`; no improvement.
+- `GGML_MOE_BATCH_FULLPACK=1`, run
+  `20260708T182750Z-20260709T-batch-fullpack-safe-default-deploy-n96`:
+  `eval_tok_s=3.1`, `TTFT=16439.3 ms`, `ram_ok=true`. The native expert-pack
+  source produced the same read count/bytes as the GGUF alias path:
+  `iouring_reads=11331`, `iouring_bytes=50.50GB`, so the current pack layout
+  is not sufficient.
+- Added default-off passthrough for planned host prefetch envs in
+  `58c7250d1d`. With `GGML_MOE_PLANNED_HOST_PREFETCH=1`,
+  `GGML_MOE_HOST_PREFETCH_MAX_MIB=512`, and `GGML_MOE_HOST_PREFETCH_SLOTS=64`,
+  run `20260708T183033Z-20260709T-planned-host-prefetch512-deploy-n96`
+  reached only `eval_tok_s=3.2`, `ram_ok=true`. Runtime report showed
+  `planned_enqueued=0`, `hits=0`, and `misses=11331`, so this existing hook
+  does not help the current hot path.
+- `GGML_MOE_GATE_UPDOWN_COSUBMIT=0` with the larger `13824MiB` cache, run
+  `20260708T183158Z-20260709T-vram13824-no-cosubmit-deploy-n96`, reached only
+  `3.1 tok/s`. Therefore cosubmit remains necessary for the current safe
+  default, even though it is not enough to reach `>5 tok/s`.
+
+Updated bottleneck conclusion:
+
+- Safe top3 deploy still moves about `50.5GB` of expert data for n96 on the
+  cosubmit path, with `11331` full-expert reads of `4.25MiB` each.
+- Existing scheduling knobs can shift `iouring_wait_us` but do not reduce the
+  required bytes enough. Reaching stable `>5 tok/s` on the Gen4 x4 H2D path
+  now requires reducing full-expert movement or changing the expert source
+  layout/runtime to avoid moving unused bytes.
+
+Next concrete implementation direction:
+
+1. Build a hard-bound report from route profiles for safe top3: for each
+   tensor role and layer, compute actual active rows/blocks used versus the
+   full `4.25MiB` expert payload currently read.
+2. If the bound shows enough headroom, implement a default-off compact or
+   partial expert source for up/gate/down that can read only required blocks or
+   a smaller packed representation while producing identical math.
+3. If partial reads are too invasive for the current kernels, implement a
+   route-clustered prompt-general pack layout that groups gate/up/down for the
+   same layer/expert and allows the runtime to issue fewer, larger ordered
+   reads without increasing bytes.
+4. Any rank-pruning or approximate math change is disallowed unless it passes
+   Fibonacci/code-generation correctness in addition to France, AI infra, and
+   deploy.
