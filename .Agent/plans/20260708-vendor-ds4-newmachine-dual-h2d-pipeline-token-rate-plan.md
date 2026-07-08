@@ -20,18 +20,21 @@ within the 16GB cgroup including page cache.
 ## Required Pre-Run Procedure
 
 Before every official cold benchmark, profile run, or SOTA validation on the new
-machine:
+machine, display processes must be killed/stopped first. This is a hard
+promotion requirement because graphical processes consume VRAM and can change
+the effective cache/workspace budget.
 
-1. Stop display usage so VRAM is not consumed by graphical processes:
+1. Kill/stop display usage before launching the model:
 
    ```bash
    echo '12345678' | sudo -S systemctl stop display-manager || true
-   pkill -f gnome-shell || true
-   pkill -f '/usr/lib/xorg/Xorg' || true
+   echo '12345678' | sudo -S pkill -f gnome-shell || true
+   echo '12345678' | sudo -S pkill -f Xorg || true
+   echo '12345678' | sudo -S pkill -f '/usr/lib/xorg/Xorg' || true
    ```
 
-2. Confirm `nvidia-smi` shows no running GPU processes and only driver-reserved
-   VRAM remains.
+2. Confirm `nvidia-smi` shows no display/model GPU processes and only
+   driver-reserved VRAM remains before the run starts.
 3. Set CPU policy to performance:
 
    ```bash
@@ -49,8 +52,9 @@ machine:
    `current_link_speed`, `current_link_width`, `max_link_speed`,
    `max_link_width`, plus 4.25MiB pinned H2D throughput.
 
-Runs that skip the display-process cleanup are diagnostic only and must not be
-promoted as SOTA.
+Each official run artifact must record `display_processes_stopped_before_run`
+and the pre-run `nvidia-smi` process list. Runs that skip display-process
+cleanup are diagnostic only and must not be promoted as SOTA.
 
 ## Current Evidence And Bottleneck
 
