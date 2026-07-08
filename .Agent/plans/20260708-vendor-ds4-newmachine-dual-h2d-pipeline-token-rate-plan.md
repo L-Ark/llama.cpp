@@ -536,6 +536,12 @@ Promotion requirements:
     only translated the prompt (`What does AI infrastructure do?`) instead of
     explaining AI infra. Therefore this config is **not promoted** as a
     generalized SOTA despite the English speed signal.
+  - Follow-up baseline comparison
+    `20260708T152919Z-20260708T-default-aiinfra-n96-quality-compare` showed the
+    default safe path produces the same translation-only answer, so the AI
+    infra failure is not an optimization-induced quality regression. However,
+    it still means the current demo prompt set contains a quality issue that
+    must be handled before claiming robust random-prompt product readiness.
   - 13GiB sweep `20260708T152640Z-20260708T-unified-cache13g-gateprefetch-n32`
     is rejected: `eval_tok_s=2.5`, slower than 12GiB.
   - Next step: preserve the 12GiB unified-cache idea as a performance probe,
