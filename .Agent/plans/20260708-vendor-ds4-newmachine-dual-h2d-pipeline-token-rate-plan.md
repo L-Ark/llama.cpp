@@ -1990,3 +1990,35 @@ default clean comparison (`3.5` vs default `3.8`), and `hits<=0` regresses
 Fibonacci. This is a prompt-sensitive cache side effect, not an accepted
 generalized SOTA. The next admission policy must use actual future route
 distance or a per-layer request plan, not past slot hit count alone.
+
+## 2026-07-09 Role-Aware Gate-Slot Eviction Rejection
+
+A more targeted local admission experiment allowed cosubmit preload to evict
+only existing cache slots whose recorded tensor name matched `ffn_gate_exps`.
+The theory was that replacing old gate experts with imminent up/down experts
+might be safer than evicting arbitrary old slots. The implementation required
+recording tensor names for cache slots and was tested only as dirty source; it
+was reverted and not pushed.
+
+Strict cold diagnostics, 16GB cgroup, display cleanup recorded:
+
+- `GGML_MOE_GATE_UPDOWN_COSUBMIT_EVICT_NAME_FILTER=ffn_gate_exps`,
+  Fibonacci n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T210225Z-20260709-cosubmit-evict-gate-fibonacci-n64`
+  reached `eval_tok_s=3.3`, `prompt_tok_s=4.8`,
+  `memory_peak_bytes=13824450560`, RAM OK. Fibonacci quality was OK.
+- Same config, deploy n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T210302Z-20260709-cosubmit-evict-gate-deploy-n64`
+  reached `eval_tok_s=3.3`, `prompt_tok_s=5.3`,
+  `memory_peak_bytes=14124695552`, RAM OK. Deploy quality was OK.
+- Same config, France n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T210339Z-20260709-cosubmit-evict-gate-france-n64`
+  reached `eval_tok_s=3.5`, `prompt_tok_s=4.7`,
+  `memory_peak_bytes=14153060352`, RAM OK. France quality was OK.
+
+Decision: reject role-aware gate-slot eviction. It preserves correctness, but
+it regresses Fibonacci and deploy versus clean default comparisons and does
+not reproduce the France-only speedup seen in the previous low-hit experiment.
+This further supports that cache eviction without a true future-use model is
+not enough. Next work should shift from reactive slot eviction to route-local
+planning or a compact third-expert representation.
