@@ -24,6 +24,9 @@ Options:
   --warm                 Skip drop_caches. Default is cold start with drop_caches.
   --gate-fullpack        Use full native expert-pack as prompt-general gate source. Default: on.
   --no-gate-fullpack     Disable full native gate source and run the previous paired-read path.
+  --calibration-overlay-pack FILE
+                         Use a prompt-general calibration overlay pack with --gate-fullpack.
+                         This remains default-off and must not be built from held-out prompts.
   --route-profile        Write run-local grouped route diagnostic CSVs. Diagnostic only.
   --print-command        Print the exact llama-cli command used by the cgroup run.
   -h, --help             Show this help.
@@ -165,6 +168,7 @@ BASELINE_ARTIFACT="${BASELINE_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-
 SOTA_ARTIFACT="${SOTA_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/gate-fullpack-generalized-sota-20260708.json}"
 DS4_ALIAS_TSV="${DS4_ALIAS_TSV:-${REPO_DIR}/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv}"
 GATE_FULLPACK_PATH="${GATE_FULLPACK_PATH:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack}"
+CALIBRATION_OVERLAY_PACK_PATH="${CALIBRATION_OVERLAY_PACK_PATH:-}"
 
 MEMORY_MAX_BYTES=16000000000
 MAX_TOKENS=96
@@ -211,6 +215,11 @@ while [[ $# -gt 0 ]]; do
     --no-gate-fullpack)
       GATE_FULLPACK=0
       shift
+      ;;
+    --calibration-overlay-pack)
+      [[ $# -ge 2 ]] || fail "missing value for --calibration-overlay-pack"
+      CALIBRATION_OVERLAY_PACK_PATH="$2"
+      shift 2
       ;;
     --multiline)
       MULTILINE=1
@@ -283,6 +292,10 @@ PROMPT="$(printf '%s' "$PROMPT" | trim_trailing_space)"
 [[ -f "$DS4_ALIAS_TSV" ]] || fail "missing static DS4 alias TSV: $DS4_ALIAS_TSV"
 if [[ "$GATE_FULLPACK" -eq 1 ]]; then
   [[ -f "$GATE_FULLPACK_PATH" ]] || fail "missing gate full expert-pack: $GATE_FULLPACK_PATH"
+fi
+if [[ -n "$CALIBRATION_OVERLAY_PACK_PATH" ]]; then
+  [[ "$GATE_FULLPACK" -eq 1 ]] || fail "--calibration-overlay-pack requires --gate-fullpack"
+  [[ -f "$CALIBRATION_OVERLAY_PACK_PATH" ]] || fail "missing calibration overlay pack: $CALIBRATION_OVERLAY_PACK_PATH"
 fi
 
 prompt_specific_env=(
@@ -364,6 +377,10 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   },
   "gate_fullpack_diagnostic": ${GATE_FULLPACK},
   "gate_fullpack_path": $(printf '%s' "$GATE_FULLPACK_PATH" | json_string),
+  "calibration_overlay_pack_path": $([[ -n "$CALIBRATION_OVERLAY_PACK_PATH" ]] && printf '%s' "$CALIBRATION_OVERLAY_PACK_PATH" | json_string || printf 'null'),
+  "calibration_overlay_pack_default_off": true,
+  "calibration_overlay_pack_prompt_general_required": true,
+  "calibration_overlay_pack_held_out_allowed": false,
   "route_profile_diagnostic": ${ROUTE_PROFILE},
   "runtime": {
     "n_cpu_moe": 40,
@@ -425,6 +442,7 @@ MEMORY_MAX_BYTES=$(printf '%q' "$MEMORY_MAX_BYTES")
 PRINT_COMMAND=$(printf '%q' "$PRINT_COMMAND")
 GATE_FULLPACK=$(printf '%q' "$GATE_FULLPACK")
 GATE_FULLPACK_PATH=$(printf '%q' "$GATE_FULLPACK_PATH")
+CALIBRATION_OVERLAY_PACK_PATH=$(printf '%q' "$CALIBRATION_OVERLAY_PACK_PATH")
 ROUTE_PROFILE=$(printf '%q' "$ROUTE_PROFILE")
 cd "\$RUN_DIR"
 PROMPT="\$(cat prompt.txt)"
@@ -437,6 +455,10 @@ export CUDA_VISIBLE_DEVICES="\${CUDA_VISIBLE_DEVICES:-0}"
 export GGML_CUDA_DISABLE_GRAPHS=$(printf '%q' "${GGML_CUDA_DISABLE_GRAPHS:-1}")
 if [[ "$(printf '%s' "${GGML_MOE_BATCH_FULLPACK:-0}")" != "0" ]]; then
   export GGML_MOE_EXPERT_PACK="$GATE_FULLPACK_PATH"
+  if [[ -n "$CALIBRATION_OVERLAY_PACK_PATH" ]]; then
+    export GGML_MOE_EXPERT_PACK_OVERLAY="$CALIBRATION_OVERLAY_PACK_PATH"
+    export GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1
+  fi
   unset GGML_MOE_EXPERT_GGUF_ALIAS_TSV || true
 else
   export GGML_MOE_EXPERT_GGUF_ALIAS_TSV=$(printf '%q' "$EFFECTIVE_DS4_ALIAS_TSV")
@@ -673,6 +695,7 @@ Run dir: $RUN_DIR
 Source: $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)@$(git -C "$REPO_DIR" rev-parse --short HEAD) $([[ "$source_dirty" == true ]] && echo dirty || echo clean)
 Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches)
 Gate fullpack prompt-general source: $([[ "$GATE_FULLPACK" -eq 1 ]] && echo enabled || echo disabled)
+Calibration overlay pack: $([[ -n "$CALIBRATION_OVERLAY_PACK_PATH" ]] && echo "$CALIBRATION_OVERLAY_PACK_PATH" || echo disabled)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
 Known safe quality baseline: top3-all-layers plus vram13824/cosubmit, about 3.1-4.2 tok/s on recent low-H2D dev prompts.
 Product target: stable >5 tok/s for random prompts. Current generalized path is not there yet.
