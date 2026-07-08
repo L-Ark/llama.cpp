@@ -263,3 +263,10 @@ Promotion requirements:
     larger Kimi-style alias read size, lowers measured latency, and does not
     hurt RAM or correctness. It is still far below the `>5 tok/s` product
     target.
+- Clean default reproduction after commit `66940ebce`:
+  `20260708T134945Z-clean-default-66940eb` on
+  `How to deploy a large model on small devices?` produced
+  `eval_tok_s=2.5`, `prompt_tok_s=3.3`, `TTFT=18874.4 ms`,
+  elapsed `54.45s`, `memory_peak_bytes=14763356160`,
+  `memory_file_bytes=13785108480`, `ram_ok=true`, source clean, display
+  processes stopped, H2D `6.70 GB/s`, PCIe under load `16.0 GT/s x4`.
