@@ -9317,3 +9317,23 @@ Interpretation:
 Decision:
 - Do not promote any of these variants. Current generalized SOTA remains unchanged.
 - Next optimization should target scheduler-level aggregation/coalescing of existing up/down read jobs, with the hard gate: total reads/bytes must not increase, average jobs per batch must rise, wait cycles must fall, TTFT must stay within limit, RAM/correctness must pass, and token rate must beat current generalized SOTA.
+
+
+## 2026-07-08 up/down native expert-pack payload alias: rejected
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-pack-payload-alias-reject-20260708.json`.
+- `status`: rejected; no source code change and no SOTA change.
+- Purpose: test a no-copy approximation of an up/down-only native pack by generating an alias TSV whose `source_path` is the native `.expert-pack` and whose offsets point directly to aligned pack payloads.
+- Generated TSV: `.Agent/profiles/vendor-ds4/ds4-native-updown-pack-payload-alias-20260708.tsv`, `22016` entries (`11008` up, `11008` down). Native pack offsets are 4096-byte aligned.
+
+Runs:
+- n32 France: `/root/lfz/runs/vendor-ds4-16gb/20260708-packpayload-alias-probe/20260708T103931Z-france-n32-updown-packpayload-alias`; `eval_tok_s=4.5`, `prompt_tok_s=3.3`, TTFT `24578.86 ms`, `memory_peak_bytes=16000000000`, RAM OK, output coherent, no duplicate keys. Batch source loaded `22016` entries from native expert-pack payload alias, but runtime stayed `4247 reads / 18.93 GB`, `1829` batches, `inflight_avg=2.90`, `iouring_wait_us=4837425`.
+- n96 France: `/root/lfz/runs/vendor-ds4-16gb/20260708-packpayload-alias-probe/20260708T104040Z-france-n96-updown-packpayload-alias`; `eval_tok_s=4.9`, `prompt_tok_s=3.6`, TTFT `23375.83 ms`, `memory_peak_bytes=16000000000`, RAM OK, output coherent, no duplicate keys. Batch runtime stayed `8194 reads / 36.52 GB`, `4431` batches, `inflight_avg=2.23`, `iouring_wait_us=10063230`.
+
+Interpretation:
+- This is the closest no-copy test of an up/down-only pack layout under current disk constraints. It proves the runtime can read up/down directly from native expert-pack payload offsets without duplicate-key failure.
+- It does not reduce read jobs, read bytes, or small-batch count, and n96 is below the current France n96 SOTA (`5.0 tok/s`).
+
+Decision:
+- Reject source-layout-only up/down pack variants as the next optimization path.
+- Continue with scheduler-level read aggregation/overlap work. The hard requirement remains: do not increase total reads/bytes, increase jobs per submitted batch or useful overlap, reduce wait cycles, and beat current generalized SOTA under strict 16GB RAM and correctness gates.
