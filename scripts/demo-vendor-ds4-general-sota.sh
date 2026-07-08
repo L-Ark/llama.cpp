@@ -399,7 +399,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_IO_BACKEND": "iouring",
     "GGML_MOE_IO_BYTES": $(printf '%s' "${GGML_MOE_IO_BYTES:-8388608}" | json_string),
     "GGML_MOE_IO_ALIGNED_ALIAS_BATCH": "1",
-    "GGML_MOE_IO_REFILL_BATCH": $(printf '%s' "${GGML_MOE_IO_REFILL_BATCH:-4}" | json_string),
+    "GGML_MOE_IO_REFILL_BATCH": $(printf '%s' "${GGML_MOE_IO_REFILL_BATCH:-8}" | json_string),
     "GGML_MOE_DOWN_PARALLEL_STAGE": "1",
     "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
     "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
@@ -476,7 +476,7 @@ else
 fi
 export GGML_MOE_IO_BYTES=$(printf '%q' "${GGML_MOE_IO_BYTES:-8388608}")
 export GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1
-export GGML_MOE_IO_REFILL_BATCH=$(printf '%q' "${GGML_MOE_IO_REFILL_BATCH:-4}")
+export GGML_MOE_IO_REFILL_BATCH=$(printf '%q' "${GGML_MOE_IO_REFILL_BATCH:-8}")
 export GGML_MOE_DOWN_PARALLEL_STAGE=1
 export GGML_MOE_IO_BACKEND=iouring
 export GGML_MOE_KEEP_TOPK_LAYER_RANGE=$(printf '%q' "${GGML_MOE_KEEP_TOPK_LAYER_RANGE:-0-39}")

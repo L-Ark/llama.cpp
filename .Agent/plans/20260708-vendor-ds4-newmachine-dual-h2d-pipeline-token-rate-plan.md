@@ -2142,3 +2142,117 @@ TTFT stayed within the `+20%` rule in the A-B comparison:
 `16615.0 ms` vs `16112.8 ms`, about `+3.1%`. The product target remains
 stable `>5 tok/s` for arbitrary user prompts, so the next step is still to
 reduce the remaining tail/transfer cost rather than declare completion.
+
+## 2026-07-09 Refill Batch 8 Runtime Tuning
+
+Current bottleneck profile:
+
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T212406Z-20260709-clean-gpu2-cputail-deploy-n96-profile`
+- Profile directory:
+  `/tmp/20260709-clean-gpu2-cputail-deploy-n96-profile`
+- Source:
+  `vendor/deepseek-token-rate-16gb@f2509e3f9`, clean.
+- Config:
+  `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=2`, default refill batch 4,
+  strict cold, display cleanup recorded, 16GB cgroup.
+- Result:
+  `eval_tok_s=3.9`, `prompt_tok_s=4.1`,
+  `first_output_ms=17014.5 ms`,
+  `memory_peak_bytes=14794346496`, RAM OK.
+
+Profile summary:
+
+- Expert source read traffic:
+  `iouring_reads=9294`, `iouring_bytes=41418227712` (`38.6 GiB`),
+  `iouring_wait_us=5513003`.
+- Timed H2D:
+  `5325` copies, `h2d=3862.2 ms` in stderr. The detailed copy profile
+  counted `6969.1 ms` summed per copy, which includes overlapping transfers
+  and should not be read as additive wall time.
+- VRAM cache:
+  `hits=28663`, `misses=7134`, `hit_rate=80.1%`.
+- Copy profile by op:
+  `gate_batch_preload` read `14.6 GiB`, `runtime_load` read `15.0 GiB`,
+  `gate_updown_cosubmit` read `9.0 GiB`.
+- Down/up batch profile:
+  up path had `1809` cache misses and `3618` staged jobs; down path had no
+  cache misses in this profile. Up/down GPU kernels were only about
+  `1554 ms` summed across profile rows, so the next bottleneck is transfer
+  and cache admission rather than math throughput.
+- Cache evictions:
+  evicted tensors were later used (`victim_used=6042`, `victim_unused=0`).
+  Simple eviction policy is not future-aware enough.
+
+Rejected probes:
+
+- `GGML_MOE_GATE_BATCH_PREFETCH=0`:
+  - Deploy n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T212714Z-20260709-gpu2-cputail-gatepref0-deploy-n64`
+    reached only `eval_tok_s=2.3`, RAM OK, output coherent.
+  - France n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T212802Z-20260709-gpu2-cputail-gatepref0-france-n64`
+    reached only `eval_tok_s=2.7`, RAM OK, output coherent.
+  - Decision: reject. Gate prefetch causes read traffic, but removing it
+    exposes synchronous gate waits and badly regresses decode.
+- `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`:
+  - Deploy n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T212901Z-20260709-gpu2-cputail-lfulru-deploy-n64`
+    reached `eval_tok_s=3.5`, RAM OK.
+  - France n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T212939Z-20260709-gpu2-cputail-lfulru-france-n64`
+    reached `eval_tok_s=3.4`, RAM OK.
+  - Decision: reject. Plain LFU/LRU is not route-future-aware and regresses
+    both tested prompts.
+- `GGML_MOE_STAGE_PINNED_SLOTS=16`:
+  - Deploy n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T213035Z-20260709-gpu2-cputail-pinned16-deploy-n64`
+    reached `eval_tok_s=4.3`, RAM OK.
+  - France n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T213110Z-20260709-gpu2-cputail-pinned16-france-n64`
+    reached `eval_tok_s=4.6`, RAM OK.
+  - Fibonacci n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T213202Z-20260709-gpu2-cputail-pinned16-fibonacci-n64`
+    reached only `eval_tok_s=3.5`, RAM OK.
+  - Decision: reject as default. It helps deploy but regresses Fibonacci,
+    so it is not a generalized SOTA setting.
+
+Accepted runtime tuning:
+
+- Change default `GGML_MOE_IO_REFILL_BATCH` from `4` to `8` in
+  `scripts/demo-vendor-ds4-general-sota.sh`.
+- Theory:
+  with the current transfer-heavy path, small refill batches leave too much
+  submit/wait overhead around the iouring queues. Refill batch 8 increases
+  queued read work without increasing the pinned slot count or changing model
+  math, so it can improve IO overlap while preserving correctness.
+
+Strict cold validation, all with display/model processes killed before run,
+16GB cgroup, `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=2`, source clean:
+
+- Deploy n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T213258Z-20260709-gpu2-cputail-refill8-deploy-n64`
+  reached `eval_tok_s=4.3`, `prompt_tok_s=4.3`,
+  `first_output_ms=16365.0 ms`,
+  `memory_peak_bytes=14815309824`, RAM OK. Output was coherent and covered
+  model compression/quantization.
+- Fibonacci n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T213332Z-20260709-gpu2-cputail-refill8-fibonacci-n64`
+  reached `eval_tok_s=4.0`, `prompt_tok_s=4.0`,
+  `first_output_ms=14758.1 ms`,
+  `memory_peak_bytes=14822469632`, RAM OK. Output began with a valid Python
+  Fibonacci function.
+- France n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T213420Z-20260709-gpu2-cputail-refill8-france-n64`
+  reached `eval_tok_s=4.7`, `prompt_tok_s=4.0`,
+  `first_output_ms=16808.2 ms`,
+  `memory_peak_bytes=14775328768`, RAM OK. France output was semantically
+  correct and coherent.
+
+Decision: accept refill batch 8 as a small source-controlled generalized
+runtime improvement. It does not reach the product target yet, but it improves
+deploy versus the prior clean A-B default while keeping Fibonacci and France
+within the accepted SOTA band and preserving RAM/TTFT/correctness constraints.
+Next optimization should be a future-aware cache/admission path or a real
+split pool for gate/up/down that avoids evicting tensors known to be needed
+later in the same decode sequence.
