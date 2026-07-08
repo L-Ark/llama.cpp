@@ -333,3 +333,15 @@ Promotion requirements:
   - Accepted as the new default pending a clean-repeat and broader calibration
     prompt set. It improves the measured generalized demo prompt from `2.5` to
     `2.9 tok/s` while staying within RAM and lowering TTFT.
+- Clean repeats after commit `15f243009`:
+  - `20260708T141546Z-clean-default-topk2`, prompt
+    `How to deploy a large model on small devices?`: `eval_tok_s=2.8`,
+    `prompt_tok_s=3.5`, `TTFT=18366.3 ms`, elapsed `49.71s`,
+    `memory_peak_bytes=14758408192`, source clean, RAM OK, output coherent.
+  - `20260708T141709Z-clean-france-topk2`: `eval_tok_s=2.8`,
+    `prompt_tok_s=3.2`, `TTFT=17807.6 ms`, elapsed `49.62s`,
+    `memory_peak_bytes=14787674112`, source clean, RAM OK, France output
+    semantically correct and coherent.
+- Current clean generalized new-machine SOTA is therefore `2.8 tok/s` on these
+  n96 cold strict runs. The `2.9 tok/s` probe is retained as observed variance,
+  not the clean promoted number. Product target `>5 tok/s` is not met.
