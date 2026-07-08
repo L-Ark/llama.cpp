@@ -6346,6 +6346,12 @@ static bool moe_stream_type_supported(ggml_type type) {
         type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }
 
+static bool moe_stream_pack_prefetch_type_supported(ggml_type type) {
+    return moe_stream_type_supported(type) ||
+        type == GGML_TYPE_MXFP4 ||
+        type == GGML_TYPE_F8_E4M3_B128;
+}
+
 static std::atomic<int> g_q4_down_parity_calls{0};
 static std::mutex g_q4_down_parity_seen_mu;
 static std::unordered_set<std::string> g_q4_down_parity_seen_tensors;
@@ -7288,7 +7294,7 @@ extern "C" int ggml_cuda_moe_stream_batch_preload_active_from_pack(
         report_once("init_failed", 0);
         return 0;
     }
-    if (!moe_stream_type_supported((ggml_type)src0_type_int) || !src0_name || !src0_name[0] ||
+    if (!moe_stream_pack_prefetch_type_supported((ggml_type)src0_type_int) || !src0_name || !src0_name[0] ||
             n_as <= 0 || expert_bytes == 0 || !matrix_row_counts) {
         report_once("invalid_args", 0);
         return 0;

@@ -4681,7 +4681,7 @@ static void ggml_compute_forward_mul_mat_id(
                 static bool gate_batch_prefetch_logged = false;
                 if (!gate_batch_prefetch_logged) {
                     fprintf(stderr, "[moe_stream_cpu] gate batch prefetch requested: tensor=%s n_as=%" PRId64 " expert_bytes=%zu\n",
-                            src0->name, n_as, (size_t) ne01 * nb01);
+                            src0->name, (int64_t) n_as, (size_t) ne01 * nb01);
                     gate_batch_prefetch_logged = true;
                 }
                 const int gate_prefetch_jobs = ggml_cuda_moe_stream_batch_preload_active_from_pack(
