@@ -9337,3 +9337,31 @@ Interpretation:
 Decision:
 - Reject source-layout-only up/down pack variants as the next optimization path.
 - Continue with scheduler-level read aggregation/overlap work. The hard requirement remains: do not increase total reads/bytes, increase jobs per submitted batch or useful overlap, reduce wait cycles, and beat current generalized SOTA under strict 16GB RAM and correctness gates.
+
+
+## 2026-07-08 scheduler probes: single-ring reduces IO wait but does not improve token rate
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/scheduler-single-ring-probes-20260708.json`.
+- `status`: diagnostic only, no accepted SOTA and no source code change.
+- Purpose: test scheduler knobs that can reduce small up/down io_uring batches without changing source format or increasing reads/bytes.
+
+Rejected knobs:
+- `GGML_MOE_IO_SORT_OFFSET=1`, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T104352Z-france-n32-sort-offset`; `eval_tok_s=4.5`, batch still `4247 reads / 18.93 GB`, `1829` batches, `iouring_wait_us=4909288`. No improvement.
+- `GGML_MOE_IO_SQPOLL=1`, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T104505Z-france-n32-sqpoll`; `eval_tok_s=4.6`, submit dropped to `17504 us`, but wait increased to `5684264 us`. No SOTA.
+- SQPOLL + depth16/refill8, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T104738Z-france-n32-sqpoll-depth16-rerun`; `eval_tok_s=4.6`, `inflight_avg=3.39`, `iouring_wait_us=5823649`. No SOTA.
+
+Important signal:
+- `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T105011Z-france-n32-down-single-ring-rerun`; `eval_tok_s=4.5`, but batch count dropped from `1829` to `915`, `inflight_avg=3.95`, and `iouring_wait_us` dropped to `2177727` with unchanged `4247 reads / 18.93 GB`.
+- Same single-ring, n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T105142Z-france-n96-down-single-ring`; `eval_tok_s=5.0`, batch count dropped from `4431` to `2216`, `iouring_wait_us=4671714`, unchanged `8194 reads / 36.52 GB`.
+- Single-ring + SQPOLL, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T105319Z-france-n32-single-ring-sqpoll`; `eval_tok_s=4.6`, batch count `915`, `inflight_avg=4.03`, `iouring_submit_us=10474`, `iouring_wait_us=3042790`.
+
+Interpretation:
+- Scheduler aggregation can materially reduce io_uring batch count and wait without increasing reads/bytes. This validates the bottleneck diagnosis.
+- The simple single-ring path does not improve token rate because it serializes H2D/copy work and loses the existing dual-stream overlap. The next implementation must separate disk read aggregation from CUDA H2D fanout.
+
+Next implementation target:
+- Default-off read-aggregate/H2D-fanout path for up/down batch jobs:
+  - aggregate read submissions into larger one-ring batches;
+  - preserve or reintroduce two CUDA streams for H2D/copy/compute overlap after reads complete;
+  - keep cache slot pending/ready semantics correct;
+  - require unchanged or lower `iouring_reads/bytes`, lower batch count/wait, TTFT within limit, RAM OK, correctness OK, and token rate above current generalized SOTA before accepting.
