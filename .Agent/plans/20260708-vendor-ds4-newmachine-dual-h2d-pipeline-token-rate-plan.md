@@ -1911,3 +1911,37 @@ decode speed and likely fails to cover the critical wait because H2D remains
 serialized and the worker is not far enough ahead of runtime use. The next
 implementation must build a real per-layer gate/up/down request plan
 immediately after routing, then submit that plan as a larger ordered batch.
+
+## 2026-07-09 Cosubmit Allow-Evict Rejection
+
+The clean copy profile showed `gate/up/down cosubmit no_slot_skips=1403`,
+nearly matching the `runtime_load=1403` copy count. A default-off local
+experiment therefore changed cosubmit admission to allow evicting non-pinned
+VRAM cache slots instead of abandoning preloads when the cache was full. The
+goal was to reduce later `runtime_load` reads while keeping model math
+unchanged.
+
+The implementation was tested locally as dirty source and then reverted; it
+was not pushed.
+
+Strict cold diagnostics, 16GB cgroup, display cleanup recorded:
+
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T204933Z-20260709-cosubmit-evict-fibonacci-n64`
+  reached `eval_tok_s=3.3`, `prompt_tok_s=4.6`,
+  `memory_peak_bytes=13937123328`, RAM OK. Fibonacci quality was OK.
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T205010Z-20260709-cosubmit-evict-deploy-n64`
+  reached `eval_tok_s=3.4`, `prompt_tok_s=5.5`,
+  `memory_peak_bytes=14106189824`, RAM OK. Deploy quality was OK.
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T205047Z-20260709-cosubmit-evict-france-n64`
+  reached `eval_tok_s=3.7`, `prompt_tok_s=4.7`,
+  `memory_peak_bytes=14116089856`, RAM OK. France quality was OK.
+
+Comparison: default clean n64 runs were `3.6` for Fibonacci and `3.8` for the
+deploy prompt in the same session. Allowing cosubmit to evict cache entries
+therefore reduced generalized speed despite preserving correctness.
+
+Decision: reject allow-evict cosubmit admission. The no-slot count is real,
+but blindly evicting existing cache entries hurts future hit rate more than
+it helps preloading imminent up/down experts. Future admission changes need a
+scored victim policy using next-use distance or route-local priority, not
+plain LRU eviction.
