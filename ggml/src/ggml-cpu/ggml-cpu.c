@@ -4678,12 +4678,19 @@ static void ggml_compute_forward_mul_mat_id(
             if (ggml_moe_gate_batch_prefetch_enabled() &&
                     ggml_cuda_moe_stream_batch_preload_active_from_pack &&
                     src0->name && strstr(src0->name, ".ffn_gate_exps.") != NULL) {
-                (void) ggml_cuda_moe_stream_batch_preload_active_from_pack(
+                static bool gate_batch_prefetch_logged = false;
+                if (!gate_batch_prefetch_logged) {
+                    fprintf(stderr, "[moe_stream_cpu] gate batch prefetch requested: tensor=%s n_as=%" PRId64 " expert_bytes=%zu\n",
+                            src0->name, n_as, (size_t) ne01 * nb01);
+                    gate_batch_prefetch_logged = true;
+                }
+                const int gate_prefetch_jobs = ggml_cuda_moe_stream_batch_preload_active_from_pack(
                         src0->type,
                         src0->name,
                         n_as,
                         (size_t) ne01 * nb01,
                         matrix_row_counts);
+                (void) gate_prefetch_jobs;
             }
 
             for (int cur_a = 0; cur_a < n_as; ++cur_a) {

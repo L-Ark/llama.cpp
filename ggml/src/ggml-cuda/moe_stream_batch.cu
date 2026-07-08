@@ -7276,9 +7276,21 @@ extern "C" int ggml_cuda_moe_stream_batch_preload_active_from_pack(
     int64_t n_as,
     size_t expert_bytes,
     const int64_t *matrix_row_counts) {
-    if (!init_batch_once()) return 0;
+    static std::atomic<int> first_report{0};
+    auto report_once = [&](const char *reason, int jobs) {
+        if (first_report.fetch_add(1) == 0) {
+            std::fprintf(stderr,
+                    "[moe_stream_batch] gate active batch preload probe: reason=%s tensor=%s jobs=%d n_as=%ld bytes=%zu\n",
+                    reason, src0_name ? src0_name : "", jobs, (long)n_as, expert_bytes);
+        }
+    };
+    if (!init_batch_once()) {
+        report_once("init_failed", 0);
+        return 0;
+    }
     if (!moe_stream_type_supported((ggml_type)src0_type_int) || !src0_name || !src0_name[0] ||
             n_as <= 0 || expert_bytes == 0 || !matrix_row_counts) {
+        report_once("invalid_args", 0);
         return 0;
     }
 
@@ -7293,7 +7305,10 @@ extern "C" int ggml_cuda_moe_stream_batch_preload_active_from_pack(
 
     std::lock_guard<std::mutex> lk(g_batch_mu);
     batch_vram_cache *cache = batch_cache_get(expert_bytes);
-    if (!cache) return 0;
+    if (!cache) {
+        report_once("cache_unavailable", 0);
+        return 0;
+    }
 
     std::vector<active_preload_job> jobs;
     jobs.reserve(256);
@@ -7325,6 +7340,7 @@ extern "C" int ggml_cuda_moe_stream_batch_preload_active_from_pack(
     }
 
     if (jobs.empty()) {
+        report_once("empty_jobs", 0);
         return 0;
     }
 
@@ -7349,14 +7365,10 @@ extern "C" int ggml_cuda_moe_stream_batch_preload_active_from_pack(
     }
     if (!ok || cudaStreamSynchronize(g_batch.stream) != cudaSuccess) {
         clear_jobs();
+        report_once("copy_failed", (int)jobs.size());
         return 0;
     }
-    static std::atomic<int> first_gate_batch_preload{0};
-    if (first_gate_batch_preload.fetch_add(1) == 0) {
-        std::fprintf(stderr,
-                "[moe_stream_batch] gate active batch preload active: tensor=%s jobs=%zu bytes=%.2f MiB\n",
-                src0_name, jobs.size(), (double)jobs.size() * (double)expert_bytes / (1024.0 * 1024.0));
-    }
+    report_once("active", (int)jobs.size());
     return (int)jobs.size();
 }
 
