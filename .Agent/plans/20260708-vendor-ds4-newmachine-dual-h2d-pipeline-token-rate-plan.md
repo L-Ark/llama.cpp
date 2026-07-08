@@ -114,6 +114,13 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      without hurting the gate fullpack path.
    - Reject any candidate that improves France only or reduces generalized
      correctness.
+   - Add a default-off gate hot-pool experiment using only prompt-general
+     calibration manifests. It must preserve manifest hot-order, bypass
+     per-token gate one-pack reads only on exact tensor/expert hits, and fall
+     back to the current path on any miss. Expected upper bound is modest:
+     every 1GB of effective gate residency saves at most about 1GB of repeated
+     SSD/H2D movement, or roughly 0.15s on the current 6.6-6.8GB/s H2D path, so
+     this is a validation step rather than the whole route to `>5 tok/s`.
 
 6. **Non-expert mmap/page-cache pressure**
    - Profile decode-stage major faults and `memory.stat file/anon` for dense,
@@ -418,3 +425,14 @@ Promotion requirements:
   - These results reinforce that small existing staging toggles are not enough;
     the next implementation should target prompt-general gate hot-pool or true
     route-group gate/up/down scheduling that reduces repeated expert movement.
+- Next concrete default-off implementation:
+  - preserve direct-manifest input order separately from lookup sort order so a
+    calibration hot manifest can actually prefill the hottest entries first;
+  - let the main `moe_stream` gate path lookup the one-direct hot pool before
+    issuing a one-pack read/H2D copy;
+  - generate manifest rows from the full native expert-pack itself, using the
+    expert-pack file as `GGML_MOE_STREAM_ONE_DIRECT_MODEL`, so offsets match the
+    already validated prompt-general gate source;
+  - reject unless RAM/page cache remain inside 16GB, TTFT stays within the
+    allowed 20%, output remains correct, and generalized prompts improve beyond
+    the safe default.

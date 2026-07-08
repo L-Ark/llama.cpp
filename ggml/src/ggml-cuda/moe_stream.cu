@@ -830,6 +830,7 @@ struct one_direct_manifest_state {
     bool inited = false;
     bool enabled = false;
     std::vector<one_expert_pack_entry> entries;
+    std::vector<one_expert_pack_entry> prefill_entries;
     std::mutex mu;
     uint64_t manifest_bytes = 0;
     std::atomic<uint64_t> hits{0};
@@ -1530,6 +1531,8 @@ static void one_direct_manifest_init_once() {
         return;
     }
 
+    g_one_direct_manifest.prefill_entries = entries;
+
     std::sort(entries.begin(), entries.end(), [](const one_expert_pack_entry & a, const one_expert_pack_entry & b) {
         const int name_cmp = std::strcmp(a.tensor, b.tensor);
         if (name_cmp != 0) {
@@ -1691,6 +1694,8 @@ struct one_direct_hot_pool_state {
     double h2d_elapsed_ms = 0.0;
     double transform_elapsed_ms = 0.0;
     bool transposed = false;
+    std::atomic<uint64_t> lookups{0};
+    std::atomic<uint64_t> hits{0};
     std::atomic<bool> async_started{false};
     std::atomic<bool> async_done{false};
     bool lookup_built = false;
@@ -1732,7 +1737,7 @@ static void one_direct_hot_pool_report_atexit() {
         "[moe_stream] one direct hot pool: enabled=%d slots=%d slot_sz=%zu pool_sz=%zu"
         " attempted=%lu inserted=%lu read_failures=%lu copy_failures=%lu transform_failures=%lu bytes=%lu"
         " elapsed_ms=%.3f read_ms=%.3f h2d_ms=%.3f transform_ms=%.3f transposed=%d"
-        " async_started=%d async_done=%d\n",
+        " lookups=%lu hits=%lu async_started=%d async_done=%d\n",
         g_one_direct_hot_pool.enabled ? 1 : 0,
         g_one_direct_hot_pool.n_slots,
         g_one_direct_hot_pool.slot_sz,
@@ -1748,6 +1753,8 @@ static void one_direct_hot_pool_report_atexit() {
         g_one_direct_hot_pool.h2d_elapsed_ms,
         g_one_direct_hot_pool.transform_elapsed_ms,
         g_one_direct_hot_pool.transposed ? 1 : 0,
+        g_one_direct_hot_pool.lookups.load(),
+        g_one_direct_hot_pool.hits.load(),
         g_one_direct_hot_pool.async_started.load(std::memory_order_acquire) ? 1 : 0,
         g_one_direct_hot_pool.async_done.load(std::memory_order_acquire) ? 1 : 0);
 }
@@ -1791,8 +1798,11 @@ static void one_direct_hot_pool_init_once() {
         return;
     }
 
+    const std::vector<one_expert_pack_entry> & prefill_entries =
+        g_one_direct_manifest.prefill_entries.empty() ? g_one_direct_manifest.entries : g_one_direct_manifest.prefill_entries;
+
     size_t slot_sz = 0;
-    for (const one_expert_pack_entry & e : g_one_direct_manifest.entries) {
+    for (const one_expert_pack_entry & e : prefill_entries) {
         slot_sz = std::max(slot_sz, (size_t) e.nbytes);
     }
     if (slot_sz == 0) {
@@ -1800,7 +1810,7 @@ static void one_direct_hot_pool_init_once() {
     }
 
     const size_t budget = (size_t) budget_mib * 1024ULL * 1024ULL;
-    int n_slots = (int) std::min<uint64_t>(g_one_direct_manifest.entries.size(), budget / slot_sz);
+    int n_slots = (int) std::min<uint64_t>(prefill_entries.size(), budget / slot_sz);
     if (n_slots <= 0) {
         std::fprintf(stderr, "[moe_stream] one direct hot pool: budget too small budget_mib=%lu slot_sz=%zu\n",
                 budget_mib, slot_sz);
@@ -1840,6 +1850,7 @@ static const void * one_direct_hot_pool_lookup_dev_ptr(const char * tensor, int6
     if (!ready || !g_one_direct_hot_pool.pool) {
         return nullptr;
     }
+    g_one_direct_hot_pool.lookups.fetch_add(1, std::memory_order_relaxed);
     if (!g_one_direct_hot_pool.lookup_built) {
         g_one_direct_hot_pool.slot_lookup.clear();
         for (int i = 0; i < g_one_direct_hot_pool.n_slots; ++i) {
@@ -1854,7 +1865,20 @@ static const void * one_direct_hot_pool_lookup_dev_ptr(const char * tensor, int6
     if (it == g_one_direct_hot_pool.slot_lookup.end()) {
         return nullptr;
     }
+    g_one_direct_hot_pool.hits.fetch_add(1, std::memory_order_relaxed);
     return (const char *) g_one_direct_hot_pool.pool + (size_t) it->second * g_one_direct_hot_pool.slot_sz;
+}
+
+static const void * one_direct_hot_pool_lookup_stream_one_dev_ptr(const char * tensor, int64_t expert, bool * pool_ready) {
+    const void * ptr = one_direct_hot_pool_lookup_dev_ptr(tensor, expert, pool_ready);
+    if (!ptr) {
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> lk(g_one_direct_hot_pool.mu);
+    if (g_one_direct_hot_pool.transposed) {
+        return nullptr;
+    }
+    return ptr;
 }
 
 static bool one_direct_hot_pool_entry_shape(const one_expert_pack_entry & e, int & ne01, int & nb) {
@@ -1988,8 +2012,10 @@ static void one_direct_hot_pool_prefill_worker(uint64_t limit) {
     if (!h_tmp || (g_one_direct_hot_pool.transposed && !d_stage)) {
         g_one_direct_hot_pool.read_failures += limit;
     } else {
+        const std::vector<one_expert_pack_entry> & prefill_entries =
+            g_one_direct_manifest.prefill_entries.empty() ? g_one_direct_manifest.entries : g_one_direct_manifest.prefill_entries;
         for (uint64_t i = 0; i < limit; ++i) {
-            const one_expert_pack_entry & e = g_one_direct_manifest.entries[(size_t) i];
+            const one_expert_pack_entry & e = prefill_entries[(size_t) i];
             g_one_direct_hot_pool.attempted++;
             if (e.nbytes > g_one_direct_hot_pool.slot_sz) {
                 g_one_direct_hot_pool.read_failures++;
@@ -2062,8 +2088,10 @@ static void one_direct_hot_pool_prefill_maybe(slot_ctx & ctx, cudaStream_t st) {
     if (limit > (uint64_t) g_one_direct_hot_pool.n_slots) {
         limit = (uint64_t) g_one_direct_hot_pool.n_slots;
     }
-    if (limit > (uint64_t) g_one_direct_manifest.entries.size()) {
-        limit = (uint64_t) g_one_direct_manifest.entries.size();
+    const std::vector<one_expert_pack_entry> & prefill_entries =
+        g_one_direct_manifest.prefill_entries.empty() ? g_one_direct_manifest.entries : g_one_direct_manifest.prefill_entries;
+    if (limit > (uint64_t) prefill_entries.size()) {
+        limit = (uint64_t) prefill_entries.size();
     }
 
     if (one_direct_hot_pool_async_prefill_enabled()) {
@@ -2091,7 +2119,7 @@ static void one_direct_hot_pool_prefill_maybe(slot_ctx & ctx, cudaStream_t st) {
 
     const auto t0 = std::chrono::steady_clock::now();
     for (uint64_t i = 0; i < limit; ++i) {
-        const one_expert_pack_entry & e = g_one_direct_manifest.entries[(size_t) i];
+        const one_expert_pack_entry & e = prefill_entries[(size_t) i];
         g_one_direct_hot_pool.attempted++;
         if (e.nbytes > g_one_direct_hot_pool.slot_sz) {
             g_one_direct_hot_pool.read_failures++;
@@ -4925,13 +4953,17 @@ extern "C" bool ggml_cuda_moe_stream_one(
 
     // VRAM cache lookup: if this expert is already in VRAM, skip H2D entirely.
     uintptr_t cache_key = one_cache_key_for(src0_name, expert_index, src0_data);
-    void *cached_vram = vram_cache_lookup(cache_key);
+    const void * hot_pool_vram = one_direct_hot_pool_lookup_stream_one_dev_ptr(src0_name, expert_index, nullptr);
+    void *cached_vram = hot_pool_vram ? nullptr : vram_cache_lookup(cache_key);
     const bool cache_hit = cached_vram != nullptr;
+    const bool hot_pool_hit = hot_pool_vram != nullptr;
     bool cache_inserted = false;
     const void *kernel_src0 = nullptr;
 
     int gate_profile_pack_hit = 0;
-    if (cached_vram) {
+    if (hot_pool_hit) {
+        kernel_src0 = hot_pool_vram;
+    } else if (cached_vram) {
         kernel_src0 = cached_vram;
     } else {
         const void * copy_src = src0_data;
