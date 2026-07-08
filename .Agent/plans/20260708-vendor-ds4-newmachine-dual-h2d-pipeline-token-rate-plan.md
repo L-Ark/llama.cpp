@@ -1015,6 +1015,42 @@ machine. Product target `>5 tok/s` remains unmet. Future SOTA claims must pass
 Fibonacci or an equivalent code-generation correctness prompt, not only France
 and deployment.
 
+Non-math safe default improvement:
+
+- `GGML_MOE_VRAM_CACHE_MIB=13824` plus
+  `GGML_MOE_GATE_UPDOWN_COSUBMIT=1` does not change top-k math and passed
+  Fibonacci, France, AI infra, and deploy checks. It was promoted as the demo
+  default in `05572dd55f`.
+- Validation before promotion, source clean at `c63fc747ae` with manual env:
+  - deploy `20260708T180949Z-20260709T-safe-top3-vram13824-cosubmit-deploy-n96`:
+    `eval_tok_s=3.6`, `TTFT=16267.8 ms`, `ram_ok=true`, coherent answer;
+  - Fibonacci
+    `20260708T181101Z-20260709T-safe-top3-vram13824-cosubmit-fibonacci-n96`:
+    `eval_tok_s=3.1`, `TTFT=14322.0 ms`, `ram_ok=true`, clean code output;
+  - France
+    `20260708T181150Z-20260709T-safe-top3-vram13824-cosubmit-france-n96`:
+    `eval_tok_s=4.2`, `TTFT=16303.2 ms`, `ram_ok=true`, coherent France
+    answer;
+  - AI infra
+    `20260708T181231Z-20260709T-safe-top3-vram13824-cosubmit-aiinfra-n96`:
+    `eval_tok_s=4.2`, `TTFT=16054.8 ms`, `ram_ok=true`, useful Chinese
+    explanation.
+- Clean default confirmation after `05572dd55f`:
+  - deploy
+    `20260708T181626Z-20260709T-clean-default-05572dd-deploy-repeat-n96`:
+    `eval_tok_s=3.6`, `prompt_tok_s=5.6`, `TTFT=15743.4 ms`,
+    `memory_peak_bytes=14316167168`, `ram_ok=true`;
+  - France
+    `20260708T181728Z-20260709T-clean-default-05572dd-france-n96`:
+    `eval_tok_s=3.7`, `prompt_tok_s=4.5`, `TTFT=15763.3 ms`,
+    `memory_peak_bytes=14359330816`, `ram_ok=true`.
+- One clean default deploy run
+  `20260708T181502Z-20260709T-clean-default-05572dd-deploy-n96` reached only
+  `3.1 tok/s` with the same read count because `iouring_wait_us` rose from
+  about `9.1s` to `12.6s`. Treat current safe default as roughly
+  `3.1-4.2 tok/s` depending on SSD/io_uring wait variance, not a stable
+  `>5 tok/s` result.
+
 Lazy pin can reach `5.0 tok/s` on France and AI infra but fails deploy, so it
 is not accepted as generalized SOTA. The next optimization must reduce expert
 movement or improve scheduling without changing model math enough to trigger

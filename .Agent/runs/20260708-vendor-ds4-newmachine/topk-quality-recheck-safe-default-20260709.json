@@ -13,7 +13,8 @@
   "finding": "The split top-k default from 7c2f1f2 is invalidated for generalized SOTA because Fibonacci/code-generation output degrades into meta/reasoning text. The default demo path was restored to top3-all-layers for correctness.",
   "commits": {
     "schedule_diagnostic": "afebe2d196",
-    "safe_top3_default": "c3ed5da8b8"
+    "safe_top3_default": "c3ed5da8b8",
+    "safe_top3_vram13824_cosubmit_default": "05572dd55f"
   },
   "invalidated_configs": [
     {
@@ -128,5 +129,84 @@
     },
     "product_target_gt_5_tok_s_met": false
   },
-  "next_step": "Continue from the safe top3-all-layers baseline. Avoid rank-pruning changes unless they pass Fibonacci/code-generation correctness; prioritize non-math-changing reductions in expert movement or scheduling."
+  "accepted_safe_default_v2": {
+    "commit": "05572dd55f",
+    "config": {
+      "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "0-39",
+      "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+      "GGML_MOE_KEEP_TOPK_UPDOWN": "3",
+      "GGML_MOE_KEEP_TOPK_GATE": "1",
+      "GGML_MOE_VRAM_CACHE_MIB": "13824",
+      "GGML_MOE_GATE_UPDOWN_COSUBMIT": "1",
+      "GGML_MOE_GATE_BATCH_PREFETCH": "1",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "0"
+    },
+    "manual_env_validation_runs": [
+      {
+        "prompt": "How to deploy a large model on a small devices?",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T180949Z-20260709T-safe-top3-vram13824-cosubmit-deploy-n96",
+        "eval_tok_s": 3.6,
+        "ttft_ms": 16267.845555,
+        "ram_ok": true,
+        "correctness": "pass"
+      },
+      {
+        "prompt": "Write a short Python function for Fibonacci.",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181101Z-20260709T-safe-top3-vram13824-cosubmit-fibonacci-n96",
+        "eval_tok_s": 3.1,
+        "ttft_ms": 14321.950861,
+        "ram_ok": true,
+        "correctness": "pass"
+      },
+      {
+        "prompt": "Please introduce France in a short paragraph.",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181150Z-20260709T-safe-top3-vram13824-cosubmit-france-n96",
+        "eval_tok_s": 4.2,
+        "ttft_ms": 16303.24236,
+        "ram_ok": true,
+        "correctness": "pass"
+      },
+      {
+        "prompt": "AI infra 是做什么的",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181231Z-20260709T-safe-top3-vram13824-cosubmit-aiinfra-n96",
+        "eval_tok_s": 4.2,
+        "ttft_ms": 16054.832913,
+        "ram_ok": true,
+        "correctness": "pass"
+      }
+    ],
+    "clean_default_confirmation_runs": [
+      {
+        "prompt": "How to deploy a large model on a small devices?",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181502Z-20260709T-clean-default-05572dd-deploy-n96",
+        "eval_tok_s": 3.1,
+        "ttft_ms": 16499.479114,
+        "ram_ok": true,
+        "correctness": "pass",
+        "note": "Low repeat caused by higher io_uring wait, not by different read count."
+      },
+      {
+        "prompt": "How to deploy a large model on a small devices?",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181626Z-20260709T-clean-default-05572dd-deploy-repeat-n96",
+        "eval_tok_s": 3.6,
+        "ttft_ms": 15743.353416,
+        "ram_ok": true,
+        "correctness": "pass"
+      },
+      {
+        "prompt": "Please introduce France in a short paragraph.",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181728Z-20260709T-clean-default-05572dd-france-n96",
+        "eval_tok_s": 3.7,
+        "ttft_ms": 15763.254014,
+        "ram_ok": true,
+        "correctness": "pass"
+      }
+    ],
+    "observed_dev_eval_tok_s_range": {
+      "min": 3.1,
+      "max": 4.2
+    },
+    "product_target_gt_5_tok_s_met": false
+  },
+  "next_step": "Continue from safe top3-all-layers plus vram13824/cosubmit. Avoid rank-pruning changes unless they pass Fibonacci/code-generation correctness; prioritize non-math-changing reductions in expert movement or scheduling, and investigate io_uring wait variance."
 }
