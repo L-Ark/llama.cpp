@@ -21,6 +21,20 @@
   },
   "clean_validation_runs": [
     {
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T165237Z-20260709T-clean-7c2f1f2-default-france-n96",
+      "prompt": "Please introduce France in a short paragraph.",
+      "eval_tok_s": 4.1,
+      "prompt_tok_s": 5.0,
+      "ttft_ms": 15887.376261,
+      "memory_peak_bytes": 14812753920,
+      "memory_file_bytes": 13841481728,
+      "ram_ok": true,
+      "source_dirty": false,
+      "display_processes_stopped_before_run": true,
+      "correctness_ok": true,
+      "note": "Clean default run at promoted commit 7c2f1f2e2 with no manual top-k env."
+    },
+    {
       "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T164708Z-20260709T-top2-l0-29-top3-rest-france-n96",
       "prompt": "Please introduce France in a short paragraph.",
       "eval_tok_s": 4.0,

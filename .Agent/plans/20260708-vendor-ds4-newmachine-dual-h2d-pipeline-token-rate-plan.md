@@ -854,6 +854,14 @@ Promotion requirements:
     SOTA candidate. It still fails the product requirement of stable
     `>5 tok/s`, so the next implementation must reduce expert movement beyond
     rank pruning or change the effective H2D limit.
+  - Clean default confirmation at promoted commit `7c2f1f2e2`:
+    `20260708T165237Z-20260709T-clean-7c2f1f2-default-france-n96` ran with no
+    manual top-k env and reached `eval_tok_s=4.1`, `prompt_tok_s=5.0`,
+    `TTFT=15887.4 ms`, `memory_peak_bytes=14812753920`,
+    `memory_file_bytes=13841481728`, `ram_ok=true`, `source_dirty=false`,
+    display cleanup recorded, and coherent France output. This is the current
+    default clean generalized SOTA on the new machine, but still below the
+    product target.
 - Hardware/H2D finding:
   - The GPU endpoint supports `32GT/s x16`, but its upstream root port
     `0000:00:06.0` has `LnkCap Speed 16GT/s, Width x4` and target link speed
