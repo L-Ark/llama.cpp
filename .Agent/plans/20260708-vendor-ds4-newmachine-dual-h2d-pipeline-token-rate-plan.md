@@ -270,3 +270,31 @@ Promotion requirements:
   elapsed `54.45s`, `memory_peak_bytes=14763356160`,
   `memory_file_bytes=13785108480`, `ram_ok=true`, source clean, display
   processes stopped, H2D `6.70 GB/s`, PCIe under load `16.0 GT/s x4`.
+- Hardware diagnosis update: GPU endpoint supports Gen5 x16, but the upstream
+  root port `0000:00:06.0` has `LnkCap: Speed 16GT/s, Width x4` and
+  `LnkCtl2 Target Link Speed: 16GT/s`. Therefore the new machine's current
+  H2D ceiling is a real Gen4 x4 topology limit, not just NVIDIA power
+  management. Software cannot make this link x16; optimization must reduce
+  expert movement or improve overlap.
+- Post-`66940ebce` n32 profile
+  `20260708T135215Z-n32-profile-66940eb`:
+  - `eval_tok_s=2.5`, `TTFT=18933.6 ms`, elapsed `29.07s`, RAM OK;
+  - gate one-pack reads: `3505` reads, `15.62GB`, direct-read wall `4520 ms`;
+  - batch up/down alias reads: `4193` jobs, `18.69GB`,
+    io batch wall `8477 ms`, wait `2654 ms`, submit `507 ms`;
+  - measured H2D for batch copies: `3316 ms`;
+  - iouring inflight average only about `2.25` despite depth `32`, with many
+    1-job and 2-4-job batches. This points to route/batch formation and
+    movement volume as the next software bottleneck.
+- Additional probes:
+  - `GGML_MOE_STAGE_PINNED_SLOTS=16`: rejected,
+    `20260708T135359Z-pinned16-probe`, `eval_tok_s=2.4`, elapsed `55.79s`.
+  - `GGML_MOE_IO_SORT_OFFSET=1`: neutral/rejected,
+    `20260708T135544Z-sortoffset-probe`, `eval_tok_s=2.5`, elapsed `54.69s`.
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=7168`: neutral/rejected,
+    `20260708T135716Z-aliasfix-onecache7168`, `eval_tok_s=2.5`,
+    elapsed `54.74s`.
+- Keep current default at `GGML_MOE_STREAM_ONE_CACHE_MIB=6144`,
+  `GGML_MOE_IO_BYTES=8388608`, `GGML_MOE_STAGE_PINNED_SLOTS=8`.
+  The next high-value implementation is not another small env sweep; it should
+  change route-group batching or reduce gate/up/down bytes.
