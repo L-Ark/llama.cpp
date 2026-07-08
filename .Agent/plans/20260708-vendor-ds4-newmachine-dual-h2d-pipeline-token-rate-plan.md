@@ -934,6 +934,17 @@ Promotion requirements:
     only `3.7 tok/s`; larger pin budget and slots12 did not help
     (`20260708T171916Z-20260709T-dev-profile-lazypin1000-deploy-n96`,
     `20260708T172050Z-20260709T-lazypin512-slots12-deploy-n96`).
+  - Adding a deploy n96 calibration profile did not fix deploy:
+    `20260708T172351Z-20260709T-calib-deploy-n96` generated
+    `/home/wici/profile-calib-20260709/deploy-n96.csv`, which was merged into
+    `/home/wici/profile-calib-20260709/combined-dev-plus-deploy-n96-profile.csv`.
+    Running lazy pin against that expanded profile,
+    `20260708T172503Z-20260709T-devplusdeploy96-lazypin512-deploy-n96`, still
+    reached only `3.7 tok/s` with coherent output.
   - Conclusion: lazy pin is useful default-off infrastructure for future
     prompt-general hotset work, but current target remains unmet because one
     dev prompt still stays well below `5 tok/s`.
+  - Next implementation direction: lazy pin can reduce iouring wait for some
+    prompts, but deploy remains dominated by expert movement. The next code
+    work should target lower bytes per route or a true cross-call/cross-layer
+    scheduling change; cache-policy tuning alone is not sufficient.
