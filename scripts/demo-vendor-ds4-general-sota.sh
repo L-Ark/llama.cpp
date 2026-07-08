@@ -35,8 +35,9 @@ What this script demonstrates:
   - User may enter any prompt; this is not a France-specialized demo.
 
 Current known generalized status:
-  - Current safe quality baseline is top3-all-layers; recent dev prompt results
-    are about 3.1-4.2 tok/s on the low-H2D new machine.
+  - Current safe quality baseline is top3-all-layers with larger VRAM cache
+    and gate/up/down cosubmit; recent dev prompt results are about 3.1-4.2
+    tok/s on the low-H2D new machine.
   - Product target remains stable >5 tok/s for random prompts; not yet met.
 
 Artifacts:
@@ -348,7 +349,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "prompt_general": true,
   "prompt_specific_optimization": false,
   "france_specialized_path_used": false,
-  "current_safe_quality_dev_tok_s": {"min": 3.1, "mean": 3.5, "max": 4.2},
+  "current_safe_quality_dev_tok_s": {"min": 3.1, "mean": 3.8, "max": 4.2},
   "current_held_out_v1_tok_s": null,
   "product_target_tok_s": 5.0,
   "product_target_currently_met": false,
@@ -387,12 +388,13 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
     "GGML_MOE_GATE_BATCH_PREFETCH": $(printf '%s' "${GGML_MOE_GATE_BATCH_PREFETCH:-1}" | json_string),
     "GGML_MOE_STREAM_ONE_CACHE_MIB": $(printf '%s' "${GGML_MOE_STREAM_ONE_CACHE_MIB:-0}" | json_string),
-    "GGML_MOE_VRAM_CACHE_MIB": $(printf '%s' "${GGML_MOE_VRAM_CACHE_MIB:-13312}" | json_string),
+    "GGML_MOE_VRAM_CACHE_MIB": $(printf '%s' "${GGML_MOE_VRAM_CACHE_MIB:-13824}" | json_string),
     "GGML_MOE_VRAM_CACHE_GB": $(printf '%s' "${GGML_MOE_VRAM_CACHE_GB:-9}" | json_string),
     "GGML_MOE_STREAM_DOWN_BATCH": "1",
     "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
     "GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH": "1",
     "GGML_MOE_UPDOWN_PAIRED_READ": "1",
+    "GGML_MOE_GATE_UPDOWN_COSUBMIT": $(printf '%s' "${GGML_MOE_GATE_UPDOWN_COSUBMIT:-1}" | json_string),
     "GGML_MOE_STREAM_ONE_EXPERT_PACK": $([[ "$GATE_FULLPACK" -eq 1 ]] && printf '%s' "$GATE_FULLPACK_PATH" | json_string || printf 'null'),
     "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": $([[ "$GATE_FULLPACK" -eq 1 ]] && printf '"direct"' || printf 'null'),
     "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
@@ -460,12 +462,13 @@ export GGML_MOE_UPDOWN_PAIRED_READ=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1
-if [[ -n "$(printf '%s' "${GGML_MOE_VRAM_CACHE_MIB:-13312}")" ]]; then
-  export GGML_MOE_VRAM_CACHE_MIB=$(printf '%q' "${GGML_MOE_VRAM_CACHE_MIB:-13312}")
+if [[ -n "$(printf '%s' "${GGML_MOE_VRAM_CACHE_MIB:-13824}")" ]]; then
+  export GGML_MOE_VRAM_CACHE_MIB=$(printf '%q' "${GGML_MOE_VRAM_CACHE_MIB:-13824}")
   unset GGML_MOE_VRAM_CACHE_GB || true
 else
   export GGML_MOE_VRAM_CACHE_GB=$(printf '%q' "${GGML_MOE_VRAM_CACHE_GB:-9}")
 fi
+export GGML_MOE_GATE_UPDOWN_COSUBMIT=$(printf '%q' "${GGML_MOE_GATE_UPDOWN_COSUBMIT:-1}")
 if [[ "$GATE_FULLPACK" == "1" ]]; then
   export GGML_MOE_STREAM_ONE_EXPERT_PACK="$GATE_FULLPACK_PATH"
   export GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct
@@ -664,7 +667,7 @@ Source: $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)@$(git -C "$REPO_DIR" r
 Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches)
 Gate fullpack prompt-general source: $([[ "$GATE_FULLPACK" -eq 1 ]] && echo enabled || echo disabled)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
-Known safe quality baseline: top3-all-layers, about 3.1-4.2 tok/s on recent low-H2D dev prompts.
+Known safe quality baseline: top3-all-layers plus vram13824/cosubmit, about 3.1-4.2 tok/s on recent low-H2D dev prompts.
 Product target: stable >5 tok/s for random prompts. Current generalized path is not there yet.
 Prompt-specific packs/profiles/aliases: disabled and refused.
 Prompt:
@@ -824,7 +827,7 @@ summary = {
     'hardware_before': hardware_before,
     'hardware_after_h2d': hardware_after_h2d,
     'hardware_after_run': hardware_after_run,
-    'known_safe_quality_dev_range_tok_s': {'min': 3.1, 'mean': 3.5, 'max': 4.2},
+    'known_safe_quality_dev_range_tok_s': {'min': 3.1, 'mean': 3.8, 'max': 4.2},
     'known_held_out_v1_range_tok_s': None,
     'product_target_gt_5_tok_s_met_by_this_run': eval_tok_s is not None and eval_tok_s > 5.0,
     'manual_quality_review_required': True,
