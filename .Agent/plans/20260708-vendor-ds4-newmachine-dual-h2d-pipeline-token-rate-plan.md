@@ -1945,3 +1945,48 @@ but blindly evicting existing cache entries hurts future hit rate more than
 it helps preloading imminent up/down experts. Future admission changes need a
 scored victim policy using next-use distance or route-local priority, not
 plain LRU eviction.
+
+## 2026-07-09 Low-Hit Cosubmit Eviction Rejection
+
+A stricter local variant of the cosubmit eviction experiment was tested. It
+only allowed cosubmit preload to evict non-pinned VRAM cache slots whose
+observed `slot_hits` were less than or equal to a threshold. This was intended
+to avoid the previous plain-LRU failure by only replacing low-reuse slots.
+
+The implementation was tested locally as dirty source and then reverted; it
+was not pushed.
+
+Strict cold diagnostics, 16GB cgroup, display cleanup recorded:
+
+- `GGML_MOE_GATE_UPDOWN_COSUBMIT_EVICT_MAX_HITS=0`,
+  Fibonacci n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T205509Z-20260709-cosubmit-evict-hit0-fibonacci-n64`
+  reached `eval_tok_s=2.8`, `prompt_tok_s=4.8`,
+  `memory_peak_bytes=13852487680`, RAM OK. Fibonacci quality was OK.
+- `GGML_MOE_GATE_UPDOWN_COSUBMIT_EVICT_MAX_HITS=1`,
+  Fibonacci n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T205550Z-20260709-cosubmit-evict-hit1-fibonacci-n64`
+  reached `eval_tok_s=3.7`, `prompt_tok_s=4.7`,
+  `memory_peak_bytes=13969629184`, RAM OK. Fibonacci quality was OK.
+- `GGML_MOE_GATE_UPDOWN_COSUBMIT_EVICT_MAX_HITS=0`,
+  deploy n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T205625Z-20260709-cosubmit-evict-hit0-deploy-n64`
+  reached `eval_tok_s=3.5`, `prompt_tok_s=5.7`,
+  `memory_peak_bytes=14089379840`, RAM OK. Deploy quality was OK.
+- `GGML_MOE_GATE_UPDOWN_COSUBMIT_EVICT_MAX_HITS=1`,
+  deploy n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T205721Z-20260709-cosubmit-evict-hit1-deploy-n64`
+  reached `eval_tok_s=3.5`, `prompt_tok_s=5.3`,
+  `memory_peak_bytes=14165651456`, RAM OK. Deploy quality was OK.
+- `GGML_MOE_GATE_UPDOWN_COSUBMIT_EVICT_MAX_HITS=1`,
+  France n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T205757Z-20260709-cosubmit-evict-hit1-france-n64`
+  reached `eval_tok_s=4.5`, `prompt_tok_s=4.6`,
+  `memory_peak_bytes=14226100224`, RAM OK. France quality was OK.
+
+Decision: reject low-hit cosubmit eviction. The `hits<=1` variant can improve
+France in one run, but it does not generalize: deploy remains below the
+default clean comparison (`3.5` vs default `3.8`), and `hits<=0` regresses
+Fibonacci. This is a prompt-sensitive cache side effect, not an accepted
+generalized SOTA. The next admission policy must use actual future route
+distance or a per-layer request plan, not past slot hit count alone.
