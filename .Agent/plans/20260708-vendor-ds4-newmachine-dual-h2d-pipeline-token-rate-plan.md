@@ -17,6 +17,10 @@ Old-machine `4.9 tok/s` remains an x16 reference, not the new-machine baseline.
 All accepted results must be prompt-general, strict-cold, reproducible, and
 within the 16GB cgroup including page cache.
 
+**Run gate:** before any model execution, including quick probes and dirty
+diagnostics, kill display processes and stale GPU/model processes first. A run
+is invalid for comparison unless this is done and recorded before launch.
+
 ## Required Pre-Run Procedure
 
 Before every model run on the new machine, including diagnostic runs, profile
