@@ -1716,3 +1716,66 @@ dropping the third up/down expert changes code-generation behavior. The local
 warmup implementation was reverted and not pushed. Future route-skip work must
 use a safer criterion than fixed rank count, or preserve the third expert via
 a compact/partial representation instead of deleting it.
+
+## 2026-07-09 PCIe Limit And Role-Split Top-K Rejection
+
+Hardware diagnosis on the new machine showed the GPU is attached below root
+port `0000:00:06.0`, not the Thunderbolt root ports. The endpoint reports
+`LnkCap Speed 32GT/s, Width x16`, but the root port reports only
+`LnkCap Speed 16GT/s, Width x4` and `LnkCtl2 Target Link Speed 16GT/s`.
+Under load the run artifacts consistently show `current_link_speed=16.0 GT/s`
+and `current_link_width=4`, with 4.25MiB pinned H2D around `6.4-6.7 GB/s`.
+
+Consequence: this physical slot/path is a Gen4 x4 bottleneck. The earlier
+Case B assumption of Gen5 x4 / about `11.5 GB/s` is not true for the current
+new-machine wiring. Reaching stable `>5 tok/s` on this machine therefore
+requires real H2D byte reduction or deeper overlap; it cannot rely on PCIe
+retraining alone.
+
+A default-off role-specific top-k diagnostic was added:
+
+- `GGML_MOE_KEEP_TOPK_UP_LAYER_SCHEDULE`
+- `GGML_MOE_KEEP_TOPK_GATE_LAYER_SCHEDULE`
+- `GGML_MOE_KEEP_TOPK_DOWN_LAYER_SCHEDULE`
+
+If these envs are unset, the default SOTA path is unchanged. The goal is to
+separate gate/up/down sensitivity before attempting any compact third-expert
+representation.
+
+Smoke/default diagnostic:
+
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T202747Z-20260709-role-schedule-default-smoke-france-n32`
+- source dirty because the default-off diagnostic code was not yet committed
+  at run time;
+- `eval_tok_s=3.5`, `prompt_tok_s=4.7`,
+  `first_output_ms=16005.9 ms`, `ram_ok=true`,
+  `display_processes_stopped_before_run=true`;
+- France output remained coherent.
+
+Role-split top-k diagnostics, strict cold, 16GB cgroup, display cleanup
+recorded:
+
+- gate-only top2:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T202833Z-20260709-gate-only-top2-fibonacci-n32`
+  reached `eval_tok_s=3.2` but failed the Fibonacci/code gate; the output
+  explained the Fibonacci sequence instead of writing the requested function.
+- gate-only top1:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T202928Z-20260709-gate-only-top1-fibonacci-n32`
+  reached `eval_tok_s=3.3` but produced system-style pollution and failed.
+- down-only top2:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T202955Z-20260709-down-only-top2-fibonacci-n32`
+  reached `eval_tok_s=3.1` and failed the Fibonacci/code gate.
+- up-only top2:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T203023Z-20260709-up-only-top2-fibonacci-n32`
+  reached `eval_tok_s=3.3` and failed the Fibonacci/code gate.
+- gate-only top2 deploy:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T202901Z-20260709-gate-only-top2-deploy-n32`
+  reached `eval_tok_s=3.3` and gave a usable deploy answer, but the Fibonacci
+  failure rejects the candidate.
+
+Decision: reject fixed third-route deletion for each individual role. The
+third selected expert is quality-critical for code-generation even when only
+gate, only up, or only down is pruned. The next valid optimization must
+preserve the third expert contribution, for example by moving the third
+expert through a cheaper representation, improving cache residency for the
+full third expert, or overlapping H2D with compute more aggressively.

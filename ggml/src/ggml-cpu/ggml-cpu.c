@@ -2458,70 +2458,119 @@ static void ggml_ds4_sparse_fused_mmvq_membership_record(
     pthread_mutex_unlock(&ggml_ds4_sparse_fused_mmvq_membership.mutex);
 }
 
+enum { GGML_MOE_KEEP_TOPK_MAX_SCHEDULE = 16 };
+
+struct ggml_moe_keep_topk_schedule_entry {
+    int start;
+    int end;
+    int keep_topk;
+};
+
+struct ggml_moe_keep_topk_schedule_state {
+    int initialized;
+    int count;
+    struct ggml_moe_keep_topk_schedule_entry entries[GGML_MOE_KEEP_TOPK_MAX_SCHEDULE];
+};
+
+static void ggml_moe_keep_topk_schedule_init(
+        struct ggml_moe_keep_topk_schedule_state * state,
+        const char * env_name) {
+    if (state->initialized) {
+        return;
+    }
+    state->initialized = 1;
+    const char * env = getenv(env_name);
+    if (!env || !env[0]) {
+        return;
+    }
+
+    const char * p = env;
+    while (*p && state->count < GGML_MOE_KEEP_TOPK_MAX_SCHEDULE) {
+        while (*p == ' ' || *p == '\t' || *p == ',') {
+            ++p;
+        }
+        int start = -1;
+        int end = -1;
+        int keep = 0;
+        int consumed = 0;
+        if (sscanf(p, "%d-%d:%d%n", &start, &end, &keep, &consumed) == 3 ||
+            sscanf(p, "%d:%d%n", &start, &keep, &consumed) == 2) {
+            if (end < 0) {
+                end = start;
+            }
+            if (start > end) {
+                const int tmp = start;
+                start = end;
+                end = tmp;
+            }
+            if (keep < 0) {
+                keep = 0;
+            }
+            state->entries[state->count++] = (struct ggml_moe_keep_topk_schedule_entry) {
+                start,
+                end,
+                keep,
+            };
+            p += consumed;
+            while (*p && *p != ',') {
+                ++p;
+            }
+            continue;
+        }
+        break;
+    }
+}
+
+static int ggml_moe_keep_topk_schedule_lookup(
+        struct ggml_moe_keep_topk_schedule_state * state,
+        const char * env_name,
+        int layer) {
+    ggml_moe_keep_topk_schedule_init(state, env_name);
+    for (int i = 0; i < state->count; ++i) {
+        if (layer >= state->entries[i].start && layer <= state->entries[i].end) {
+            return state->entries[i].keep_topk;
+        }
+    }
+    return -1;
+}
+
 static int ggml_moe_keep_topk_for_tensor(const char * name) {
     if (!ggml_moe_keep_topk_applies(name)) {
         return 0;
     }
 
     const int fallback_keep_topk = ggml_moe_keep_topk_updown();
+    const int layer = ggml_moe_tensor_layer(name);
 
-    enum { GGML_MOE_KEEP_TOPK_MAX_SCHEDULE = 16 };
-    struct ggml_moe_keep_topk_schedule_entry {
-        int start;
-        int end;
-        int keep_topk;
-    };
-
-    static int schedule_initialized = 0;
-    static int schedule_count = 0;
-    static struct ggml_moe_keep_topk_schedule_entry schedule[GGML_MOE_KEEP_TOPK_MAX_SCHEDULE];
-    if (!schedule_initialized) {
-        schedule_initialized = 1;
-        const char * env = getenv("GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE");
-        if (env && env[0]) {
-            const char * p = env;
-            while (*p && schedule_count < GGML_MOE_KEEP_TOPK_MAX_SCHEDULE) {
-                while (*p == ' ' || *p == '\t' || *p == ',') {
-                    ++p;
-                }
-                int start = -1;
-                int end = -1;
-                int keep = 0;
-                int consumed = 0;
-                if (sscanf(p, "%d-%d:%d%n", &start, &end, &keep, &consumed) == 3 ||
-                    sscanf(p, "%d:%d%n", &start, &keep, &consumed) == 2) {
-                    if (end < 0) {
-                        end = start;
-                    }
-                    if (start > end) {
-                        const int tmp = start;
-                        start = end;
-                        end = tmp;
-                    }
-                    if (keep < 0) {
-                        keep = 0;
-                    }
-                    schedule[schedule_count++] = (struct ggml_moe_keep_topk_schedule_entry) {
-                        start,
-                        end,
-                        keep,
-                    };
-                    p += consumed;
-                    while (*p && *p != ',') {
-                        ++p;
-                    }
-                    continue;
-                }
-                break;
-            }
+    const char * role = ggml_moe_tensor_role(name);
+    static struct ggml_moe_keep_topk_schedule_state up_schedule;
+    static struct ggml_moe_keep_topk_schedule_state gate_schedule;
+    static struct ggml_moe_keep_topk_schedule_state down_schedule;
+    if (strcmp(role, "up") == 0) {
+        const int keep = ggml_moe_keep_topk_schedule_lookup(
+                &up_schedule, "GGML_MOE_KEEP_TOPK_UP_LAYER_SCHEDULE", layer);
+        if (keep >= 0) {
+            return keep;
+        }
+    } else if (strcmp(role, "gate") == 0) {
+        const int keep = ggml_moe_keep_topk_schedule_lookup(
+                &gate_schedule, "GGML_MOE_KEEP_TOPK_GATE_LAYER_SCHEDULE", layer);
+        if (keep >= 0) {
+            return keep;
+        }
+    } else if (strcmp(role, "down") == 0) {
+        const int keep = ggml_moe_keep_topk_schedule_lookup(
+                &down_schedule, "GGML_MOE_KEEP_TOPK_DOWN_LAYER_SCHEDULE", layer);
+        if (keep >= 0) {
+            return keep;
         }
     }
 
-    const int layer = ggml_moe_tensor_layer(name);
-    for (int i = 0; i < schedule_count; ++i) {
-        if (layer >= schedule[i].start && layer <= schedule[i].end) {
-            return schedule[i].keep_topk;
-        }
+    static struct ggml_moe_keep_topk_schedule_state schedule;
+    const int scheduled_keep = ggml_moe_keep_topk_schedule_lookup(
+            &schedule, "GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE", layer);
+    if (scheduled_keep >= 0) {
+        return scheduled_keep;
     }
 
     static int initialized = 0;
