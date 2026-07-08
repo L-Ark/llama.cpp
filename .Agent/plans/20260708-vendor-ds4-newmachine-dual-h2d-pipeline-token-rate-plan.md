@@ -1328,3 +1328,46 @@ Next clean probe before more invasive compact-kernel work:
    exact reproduction info and immediately commit/push source plus plan
    results. If it fails, keep it rejected and proceed to compact/exact expert
    payload work.
+
+Clean top2-all-layers probe result:
+
+- config:
+  `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-39`,
+  `GGML_MOE_KEEP_TOPK_LAYER_VALUE=2`,
+  `GGML_MOE_KEEP_TOPK_UPDOWN=2`,
+  `GGML_MOE_KEEP_TOPK_GATE=1`,
+  `GGML_MOE_VRAM_CACHE_MIB=13824`;
+- source: clean `a2722b1a0`, strict cold, 16GB cgroup, display cleanup
+  recorded for all runs;
+- France run
+  `20260708T190607Z-20260709-clean-top2-alllayers-france-n96`:
+  `eval_tok_s=4.2`, RAM OK, output coherent;
+- AI infra run
+  `20260708T190647Z-20260709-clean-top2-alllayers-aiinfra-n96`:
+  `eval_tok_s=4.9`, RAM OK, but output repeats/rewrites the request instead
+  of directly answering. Quality fail;
+- Fibonacci run
+  `20260708T190723Z-20260709-clean-top2-alllayers-fibonacci-n96`:
+  `eval_tok_s=4.2`, RAM OK, but output explains the Fibonacci sequence and
+  does not provide the requested Python function. Quality fail;
+- deploy run
+  `20260708T190803Z-20260709-clean-top2-alllayers-deploy-n96`:
+  `eval_tok_s=3.9`, RAM OK, coherent, but still below `5 tok/s`.
+
+Decision: reject fixed top2 all-layers. It does not meet generalized
+correctness, and even its deploy speed is below target. Do not promote.
+
+Dynamic top-k assessment:
+
+- A prompt-general dynamic top-k policy could be useful in principle: keep
+  top3 when router confidence is low, skip the third expert only when the
+  third selected weight is negligible.
+- Current `ggml-cpu.c` fixed pruning sees selected expert ids in the matmul
+  route loop, but not the selected weights. The selected weights are present
+  higher in the DeepSeek graph, so implementing dynamic top-k correctly would
+  require passing or preserving that tensor into the CPU/GPU expert route path.
+- Next step before implementing dynamic top-k: add a default-off diagnostic
+  that records selected weights per layer/rank on the dev prompts, then compute
+  how often rank-3 weight is small enough to skip. If the possible skip rate
+  is well below the `35-40%` byte reduction target, do not implement dynamic
+  top-k.
