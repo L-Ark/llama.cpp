@@ -160,3 +160,30 @@ Promotion requirements:
   complete.
 - Kimi functionality must not be removed or weakened when touching shared MoE or
   CUDA streaming code.
+
+## 2026-07-08 Execution Notes
+
+- Added run-artifact hardware metadata collection to
+  `scripts/demo-vendor-ds4-general-sota.sh`: display-process status, GPU state,
+  PCIe link state, and 4.25MiB pinned H2D benchmark are now recorded in each run
+  summary.
+- New-machine run `20260708T131124Z-caseB-metadata-baseline` validated the new
+  metadata path under strict cold cgroup. It was RAM/correctness compliant but
+  only reached `2.8 tok/s`; H2D measured `6.71 GB/s`, so the machine was in the
+  low-H2D Case A-like state despite the post-cable setup.
+- Existing `GGML_MOE_GATE_UPDOWN_COSUBMIT=1` was re-tested as a default-off
+  aggregation probe on the new machine. It was rejected: `2.7 tok/s`, more total
+  expert traffic (`39.5GB` vs baseline `36.5GB`), and no SOTA improvement.
+- Gate one-cache split probes were rejected:
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=5120`: `2.7 tok/s`
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=7168`: `2.6 tok/s`
+- Prompt-general VRAM profile probes using
+  `calib-dev-sparse-pair-top512-updown-20260707` were rejected:
+  - protected preload increased runtime misses to `8811` and produced
+    `2.6 tok/s`;
+  - profile-only `profile_lfu_lru` increased misses to `14491`, produced
+    `2.2 tok/s`, and showed worse output quality.
+- Updated conclusion: old preload/admission paths are not the next route to
+  `>5 tok/s` on the new machine. The next implementation must directly reduce
+  H2D bytes or H2D submissions, or implement a true shared gate/up/down read
+  aggregation layer that does not increase total reads.
