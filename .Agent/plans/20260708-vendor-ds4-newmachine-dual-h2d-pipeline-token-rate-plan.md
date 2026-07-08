@@ -1599,3 +1599,65 @@ the real scheduling problem: the runtime still sees nearly the same active
 expert-source footprint. Future pruning work must either support true safe
 route skipping in the MoE kernels/runtime or use a validated compact expert
 artifact; graph-level id substitution is closed.
+
+## 2026-07-09 VRAM And RAM-Tier Probes
+
+VRAM cache sweep on the new machine:
+
+- Prompt: `Explain quantum computing briefly.`
+- Mode: strict cold n32, display cleanup recorded, source clean.
+- Requested `GGML_MOE_VRAM_CACHE_MIB=15000/16000/17000/18000`.
+- All runs stayed RAM-valid but failed to allocate the requested cache size.
+  `cudaMemGetInfo` reported only about `14165 MiB` free at cache init, so the
+  larger requests fell into retry and produced actual pools of only
+  `12.7-13.7 GiB`.
+- Results were all `eval_tok_s=3.0`, below the clean default envelope.
+- Decision: reject larger raw VRAM requests as a SOTA path. The default
+  `13824 MiB` cache is already close to the practical allocatable limit on the
+  current CUDA/model workspace layout. Future VRAM work must free workspace or
+  reduce cache fragmentation; simply raising `GGML_MOE_VRAM_CACHE_MIB` is not
+  effective.
+
+Default-off RAM-tier passthrough:
+
+- Added `GGML_MOE_RAM_TIER_MIB`, `GGML_MOE_RAM_TIER_PROFILE`,
+  `GGML_MOE_RAM_TIER_SKIP`, `GGML_MOE_RAM_TIER_PIN`, and
+  `GGML_MOE_RAM_TIER_PIN_MIB` to the demo wrapper's config recording and
+  systemd passthrough in commit `fea235f92`.
+- This does not alter the default SOTA path; it only makes RAM-tier probes
+  reproducible under the same 16GB cgroup wrapper.
+
+RAM-tier 512MiB exact-host probe:
+
+- Built a dev-profile CSV at
+  `/home/wici/runs/vendor-ds4-16gb/manual-profiles/20260709-ramtier-dev-profile.csv`
+  from the existing prompt-general dev profile. No held-out prompts were used.
+- Tested `GGML_MOE_RAM_TIER_MIB=512` with skips `0`, `500`, `1500`, `2500`.
+- Clean representative runs:
+  - `20260709-ramtier512-clean-quantum-n32`: `eval_tok_s=3.0`,
+    `memory_peak_bytes=14277423104`, RAM OK, source clean,
+    RAM-tier hits `44/5451 = 0.8%`.
+  - `20260709-ramtier512-skip500-quantum-n32`: `eval_tok_s=3.0`,
+    RAM-tier hits `55/5451 = 1.0%`.
+  - `20260709-ramtier512-skip1500-quantum-n32`: `eval_tok_s=3.0`,
+    RAM-tier hits `64/5451 = 1.2%`.
+  - `20260709-ramtier512-skip2500-quantum-n32`: `eval_tok_s=3.0`,
+    RAM-tier hits `49/5451 = 0.9%`.
+- One dirty-source pass showed `3.4 tok/s`, but clean repeats did not
+  reproduce it, so it is treated as normal run variance, not a candidate.
+- Decision: reject RAM-tier 512MiB as a SOTA path. It is exact and
+  RAM-compliant, but it only replaces dozens of expert-pack reads out of about
+  5.4k reads for n32 and does not move token rate. Larger RAM tiers are risky
+  under the 16GB host-RAM limit because clean runs already peak around
+  `14.3GB`.
+
+Updated next direction:
+
+1. Do not spend more time on raw VRAM-size or small RAM-tier tuning.
+2. Continue with byte reduction or true route scheduling:
+   - safe kernel/runtime support for true expert route skipping, not
+     graph-level id substitution;
+   - compact/partial up/gate/down expert representation with a hard byte
+     bound before implementation;
+   - retained gate interface only if it proves large simultaneous gate-source
+     and up/down movement cuts without recomputing gate.
