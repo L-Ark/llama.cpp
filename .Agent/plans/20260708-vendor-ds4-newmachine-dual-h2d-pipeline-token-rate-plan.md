@@ -360,3 +360,10 @@ Promotion requirements:
   - New default: `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-39`,
     `GGML_MOE_KEEP_TOPK_LAYER_VALUE=2`. This is still below the `>5 tok/s`
     target and needs broader calibration prompt validation.
+- Clean repeat after commit `135113719`:
+  `20260708T142403Z-clean-default-topk2-range0-39`, prompt
+  `How to deploy a large model on small devices?`, `eval_tok_s=2.9`,
+  `prompt_tok_s=3.8`, `TTFT=17908.0 ms`, elapsed `48.54s`,
+  `memory_peak_bytes=14782988288`, `ram_ok=true`, source clean, output
+  coherent. This is the current clean single-prompt top result on the new
+  machine, but still not the product target.
