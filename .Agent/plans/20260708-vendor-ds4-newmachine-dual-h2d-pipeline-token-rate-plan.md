@@ -2260,3 +2260,29 @@ within the accepted SOTA band and preserving RAM/TTFT/correctness constraints.
 Next optimization should be a future-aware cache/admission path or a real
 split pool for gate/up/down that avoids evicting tensors known to be needed
 later in the same decode sequence.
+
+Default-demo reproduction after making both SOTA toggles defaults:
+
+- Commit:
+  `19ee499d984a5c55df8940d9eb11950fc6404da6`
+  (`vendor-ds4: default generalized sota topk split`), pushed to
+  `wici-ai/ssd-llama` branch `vendor/deepseek-token-rate-16gb`.
+- New machine checkout:
+  `/home/wici/ssd-llama`, source clean
+  `vendor/deepseek-token-rate-16gb@19ee499d9`.
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T213740Z-20260709-default-sota-env-deploy-n64`
+- Invocation passed only model/expert pack/run root. It did not manually pass
+  `GGML_MOE_GPU_KEEP_TOPK_UPDOWN` or `GGML_MOE_IO_REFILL_BATCH`.
+- Artifact config confirmed runtime defaults:
+  `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=2`,
+  `GGML_MOE_IO_REFILL_BATCH=8`,
+  `GGML_MOE_STAGE_PINNED_SLOTS=8`,
+  `GGML_MOE_VRAM_CACHE_MIB=13824`.
+- Strict cold result:
+  `eval_tok_s=4.3`, `prompt_tok_s=4.5`,
+  `first_output_ms=16298.6 ms`,
+  `memory_peak_bytes=14797275136`,
+  `memory_file_bytes=13795110912`, `ram_ok=true`,
+  `display_processes_stopped_before_run=true`, source clean. Output was
+  coherent and covered model compression/quantization.
