@@ -241,3 +241,25 @@ Promotion requirements:
 - This is an accepted reproducibility/performance fix for the new machine but
   not a product SOTA: generalized random-prompt target remains `>5 tok/s`, and
   this single-prompt new-machine run is only `2.5 tok/s`.
+- VRAM split probes after alias repair:
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=4096`: rejected. It allowed batch cache to
+    allocate `9.0GiB` and reduced up/down iouring bytes to `36.56GB`, but gate
+    one-pack bytes rose to `43.14GB`; total expert movement increased and
+    token rate dropped to `2.4 tok/s`.
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=5120`: neutral/borderline. Batch cache
+    became `7.9GiB`, up/down iouring bytes `38.78GB`, gate bytes `37.67GB`,
+    `eval_tok_s=2.5`; elapsed improved slightly to `55.21s`, but not enough to
+    promote as a meaningful SOTA.
+- IO size probe:
+  - `GGML_MOE_IO_BYTES=8388608` restored larger alias-source reads. On
+    `How to deploy a large model on small devices?`, it kept
+    `eval_tok_s=2.5` but improved `prompt_tok_s=3.3`, `TTFT=18828.9 ms`, and
+    elapsed `54.73s` versus alias-fix default `55.57s`.
+  - France sentinel with `GGML_MOE_IO_BYTES=8388608`:
+    `eval_tok_s=2.7`, `prompt_tok_s=3.0`, `TTFT=18315.0 ms`,
+    `memory_peak_bytes=14755557376`, `ram_ok=true`, output semantically
+    correct/coherent. The answer was truncated only by `n=96`.
+  - Accepted as the new demo default because it is prompt-general, restores the
+    larger Kimi-style alias read size, lowers measured latency, and does not
+    hurt RAM or correctness. It is still far below the `>5 tok/s` product
+    target.
