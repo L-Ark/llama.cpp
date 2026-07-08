@@ -708,5 +708,17 @@ Promotion requirements:
   - Promoted demo default `GGML_MOE_VRAM_CACHE_MIB=14336`, with the explicit
     note that the effective pool is the retry-sized `12.2GiB`, not a true
     14GiB allocation. Product `>5 tok/s` remains unmet.
+  - Clean default repeat after commit `4b2763f65`, without manually supplying
+    any SOTA envs:
+    `20260708T160949Z-20260708T-clean-default-unified14-gatetopk-france-n96`
+    produced `eval_tok_s=3.3`, `prompt_tok_s=4.0`, `TTFT=16855.6 ms`,
+    elapsed `44.39s`, `memory_peak_bytes=14637469696`,
+    `memory_file_bytes=13664124928`, `ram_ok=true`, source clean, display
+    processes stopped, H2D `6.71GB/s`, France correctness pass. Environment
+    confirms the defaults:
+    `GGML_MOE_KEEP_TOPK_GATE=1`, `GGML_MOE_GATE_BATCH_PREFETCH=1`,
+    `GGML_MOE_STREAM_ONE_CACHE_MIB=0`, `GGML_MOE_VRAM_CACHE_MIB=14336`.
+    This is the current clean reproducible new-machine strict-cold SOTA, but
+    still below the required stable `>5 tok/s`.
   - Detailed reproduction data is recorded in
     `.Agent/runs/20260708-vendor-ds4-newmachine/gate-topk-unified14-sota-20260708.json`.

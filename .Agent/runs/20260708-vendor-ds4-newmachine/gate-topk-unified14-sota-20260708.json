@@ -4,7 +4,7 @@
   "branch": "vendor/deepseek-token-rate-16gb",
   "base_head": "e41c0f91b45db7a009485d756e1f7232f621a8d2",
   "machine": "wici@192.168.9.198",
-  "status": "accepted_sota_pending_clean_default_repeat",
+  "status": "accepted_clean_reproduced_sota_below_product_target",
   "optimization": {
     "name": "gate topk plus larger unified batch-cache request",
     "env_defaults_promoted_in_demo": {
@@ -19,7 +19,7 @@
   },
   "comparison": {
     "gate_topk_unified12_clean_default_repeat_tok_s": 3.1,
-    "gate_topk_unified14_observed_high_tok_s": 3.2,
+    "gate_topk_unified14_observed_high_tok_s": 3.3,
     "product_target_tok_s": 5.0,
     "product_target_met": false
   },
@@ -61,13 +61,38 @@
       "batch_iouring_bytes": 58905329664
     }
   ],
+  "clean_default_repeat_after_commit": {
+    "commit": "4b2763f659be7d384b00771faf056f37b02f02ad",
+    "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T160949Z-20260708T-clean-default-unified14-gatetopk-france-n96",
+    "manual_sota_envs_supplied": false,
+    "observed_default_envs": {
+      "GGML_MOE_KEEP_TOPK_GATE": "1",
+      "GGML_MOE_GATE_BATCH_PREFETCH": "1",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "0",
+      "GGML_MOE_VRAM_CACHE_MIB": "14336"
+    },
+    "eval_tok_s": 3.3,
+    "prompt_tok_s": 4.0,
+    "ttft_ms": 16855.63579,
+    "elapsed_seconds": 44.39,
+    "memory_peak_bytes": 14637469696,
+    "memory_file_bytes": 13664124928,
+    "ram_ok": true,
+    "display_processes_stopped_before_run": true,
+    "source_dirty": false,
+    "h2d_gbps": 6.714261,
+    "correctness": "pass: coherent and semantically correct France paragraph",
+    "actual_batch_cache": "12.2GiB / 2951 slots",
+    "batch_iouring_reads": 11202,
+    "batch_iouring_bytes": 49921130496
+  },
   "promotion_requirements": {
     "strict_16gb_ram": "pass",
     "page_cache_counted": "pass",
     "display_processes_stopped": "pass",
     "ttft_not_more_than_20_percent_above_baseline": "pass",
     "correctness": "pass on France and Fibonacci; cache-size change does not alter math",
-    "new_machine_sota": "pass as observed high 3.2 tok/s pending default clean repeat",
+    "new_machine_sota": "pass: clean default strict cold France result is 3.3 tok/s",
     "product_target_gt_5_tok_s": "fail; goal remains active"
   }
 }
