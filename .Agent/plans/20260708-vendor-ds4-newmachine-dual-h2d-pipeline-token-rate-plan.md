@@ -964,11 +964,61 @@ Promotion requirements:
 
 ## Next Work After 2026-07-09
 
-The current clean generalized SOTA remains the split top-k default:
-`eval_tok_s=4.1` on France n96 at run
-`20260708T165237Z-20260709T-clean-7c2f1f2-default-france-n96`, with deploy
-still at `3.7 tok/s`. Lazy pin can reach `5.0 tok/s` on France and AI infra
-but fails deploy, so it is not accepted as generalized SOTA.
+Important correction: the split top-k default recorded at
+`7c2f1f2e2` is no longer accepted as a generalized SOTA. It reached
+`4.1 tok/s` on France and about `3.7 tok/s` on deploy, but a required dev
+prompt recheck found that Fibonacci output degraded into meta/reasoning text
+instead of directly returning a Python function. Therefore this configuration
+violates the correctness requirement and must not be used as the accepted
+generalized baseline.
+
+Prompt-general top-k schedule diagnostic support was added in
+`afebe2d196` via `GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE`. It is default-off and
+only used to test non-prompt-specific layer schedules. Results:
+
+- `0-9:1` on deploy reached `4.2 tok/s` but exposed reasoning text; rejected.
+- `0-4:1` on deploy reached `4.5 tok/s` but repeated assistant persona text;
+  rejected.
+- `0-19:2` and `0-9:2` failed Fibonacci clean correctness; rejected.
+- `30-39:2` passed Fibonacci but did not improve deploy and produced an
+  awkward deploy opening; rejected.
+- `13824MiB + GGML_MOE_GATE_UPDOWN_COSUBMIT=1` reached `3.9 tok/s` on deploy
+  and passed France/AI, but Fibonacci still failed because the underlying
+  split-topk math was invalid; rejected as a generalized default.
+
+The demo default was restored in `c3ed5da8b8` to the safe top3-all-layers
+quality baseline: `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-39`,
+`GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, `GGML_MOE_KEEP_TOPK_UPDOWN=3`,
+`GGML_MOE_KEEP_TOPK_GATE=1`. Clean strict-cold validation on the new machine:
+
+- Fibonacci:
+  `20260708T180233Z-20260709T-clean-safe-default-fibonacci-n96`,
+  `eval_tok_s=3.0`, `prompt_tok_s=4.2`, `TTFT=14986.9 ms`,
+  `memory_peak_bytes=14241767424`, `ram_ok=true`, clean code output.
+- Deploy:
+  `20260708T180323Z-20260709T-clean-safe-default-deploy-n96`,
+  `eval_tok_s=3.1`, `prompt_tok_s=4.9`, `TTFT=16879.2 ms`,
+  `memory_peak_bytes=14403170304`, `ram_ok=true`, coherent deployment answer.
+- France:
+  `20260708T180431Z-20260709T-clean-safe-default-france-n96`,
+  `eval_tok_s=3.5`, `prompt_tok_s=4.2`, `TTFT=16556.1 ms`,
+  `memory_peak_bytes=14246940672`, `ram_ok=true`, semantically correct and
+  coherent France paragraph.
+- AI infra:
+  `20260708T180533Z-20260709T-clean-safe-default-aiinfra-n96`,
+  `eval_tok_s=3.4`, `prompt_tok_s=4.0`, `TTFT=16105.5 ms`,
+  `memory_peak_bytes=14397513728`, `ram_ok=true`, useful Chinese explanation.
+
+Current accepted generalized baseline is therefore the safe top3-all-layers
+path, with observed dev prompt range `3.0-3.5 tok/s` on this low-H2D new
+machine. Product target `>5 tok/s` remains unmet. Future SOTA claims must pass
+Fibonacci or an equivalent code-generation correctness prompt, not only France
+and deployment.
+
+Lazy pin can reach `5.0 tok/s` on France and AI infra but fails deploy, so it
+is not accepted as generalized SOTA. The next optimization must reduce expert
+movement or improve scheduling without changing model math enough to trigger
+the Fibonacci/meta-reasoning failure.
 
 Next implementation priority:
 
