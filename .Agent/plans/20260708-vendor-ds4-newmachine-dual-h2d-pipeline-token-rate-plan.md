@@ -302,6 +302,15 @@ Promotion requirements:
     `20260708T140219Z-current-down-overlap-probe`, `eval_tok_s=2.5`,
     elapsed `55.50s`, TTFT `19090.4 ms`; no useful current-down-overlap
     counters appeared on the hot path.
+  - `GGML_MOE_VRAM_CACHE_MIB=7680`: neutral/rejected,
+    `20260708T140546Z-vram7680mib-probe`, `eval_tok_s=2.5`,
+    elapsed `54.63s`. It successfully allocated `7.5GiB` batch cache and
+    reduced up/down iouring bytes to `39.78GB`, but did not beat the clean
+    default elapsed `54.45s`.
+  - `GGML_MOE_BATCH_FULLPACK=1`: neutral/rejected,
+    `20260708T140910Z-batch-fullpack-probe`, `eval_tok_s=2.5`,
+    elapsed `54.80s`. Using the prompt-general full `.expert-pack` as the
+    batch source did not improve over the run-local GGUF alias source.
 - Keep current default at `GGML_MOE_STREAM_ONE_CACHE_MIB=6144`,
   `GGML_MOE_IO_BYTES=8388608`, `GGML_MOE_STAGE_PINNED_SLOTS=8`.
   The next high-value implementation is not another small env sweep; it should
