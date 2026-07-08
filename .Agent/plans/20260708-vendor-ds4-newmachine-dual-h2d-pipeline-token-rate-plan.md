@@ -3093,3 +3093,60 @@ Decision:
   the best Quantum-only evidence. Further progress requires request-local
   admission/eviction or reducing per-token gate bytes/copy count, not larger
   static cache capacity.
+
+## 2026-07-09 Request-Local Gate Cache Admission Plan
+
+Hypothesis:
+
+- The ordinary gate one-cache admits every miss into VRAM. This helps at
+  `3-4GB`, but it also admits one-hit or low-reuse entries that can evict hotter
+  request-local entries.
+- Static global top-N admission was rejected because it missed Quantum-local
+  reuse. A request-local policy should adapt to whichever prompt is currently
+  running without being prompt-specific.
+
+Implementation plan:
+
+- Add a default-off runtime knob
+  `GGML_MOE_STREAM_ONE_CACHE_MIN_ACCESSES=N`.
+- When `N > 1`, a gate expert is only inserted into the one-cache after it has
+  been requested at least `N` times in the current process/request. Earlier
+  requests still execute normally through the existing direct expert-pack read
+  path, but they do not consume cache slots.
+- Start with `N=2` and `GGML_MOE_STREAM_ONE_CACHE_MIB=4096` on Quantum. Theory:
+  the extra first-read cost is bounded by one additional direct read for entries
+  that would have been cached on first use, while low-reuse entries no longer
+  evict hot entries. If the hot-set churn is the reason 4GB stalls at displayed
+  `5.0`, this should improve the strict lower bound.
+
+Validation:
+
+- Strict cold, 16GB cgroup, display cleanup before every run.
+- First test Quantum n64 because it is the current weak prompt. If Quantum does
+  not exceed strict `>5 tok/s`, reject or adjust `N` before running the full dev
+  set.
+- If Quantum improves, run the five-prompt dev set and then freeze the
+  candidate for held-out validation.
+
+Execution:
+
+- Implemented dirty-source runtime knob
+  `GGML_MOE_STREAM_ONE_CACHE_MIN_ACCESSES`.
+- Quantum test with `GGML_MOE_STREAM_ONE_CACHE_MIB=4096` and
+  `GGML_MOE_STREAM_ONE_CACHE_MIN_ACCESSES=2`:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T234833Z-20260709-cache4096-min2-quantum-n64`,
+  `eval_tok_s=4.5`, `prompt_tok_s=3.1`,
+  `first_output_ms=16953.7 ms`, `memory_peak_bytes=14856441856`,
+  `ram_ok=true`, display cleanup recorded.
+- Cache counters:
+  `one expert pack reads=4009` / `17.9GB`,
+  VRAM cache `hits=4467`, `misses=4009`, `hit_rate=52.7%`,
+  `admit_delay_skips=2482`.
+
+Decision:
+
+- Reject delayed insert. It skips too many early useful insertions and performs
+  worse than ordinary 4GB LRU (`5.0 tok/s`) and ordinary 3GB LRU (`4.8 tok/s`)
+  on Quantum.
+- Revert the dirty runtime knob. Request-local policy must be more selective
+  than a fixed "cache after N accesses" rule.
