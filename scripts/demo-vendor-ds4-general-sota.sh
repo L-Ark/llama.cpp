@@ -3,8 +3,9 @@ set -euo pipefail
 
 # Demo the current prompt-general vendor DeepSeek V4 configuration.
 # This script is intentionally not allowed to use France/prompt-specific packs,
-# route profiles, admit profiles, or GGUF alias overlays. It is for arbitrary
-# user prompts under the product constraint: 16GB host RAM including page cache.
+# external route profiles, admit profiles, or GGUF alias overlays. It is for
+# arbitrary user prompts under the product constraint: 16GB host RAM including
+# page cache. Optional run-local route profiling is diagnostic output only.
 
 usage() {
   cat <<'USAGE'
@@ -23,6 +24,7 @@ Options:
   --warm                 Skip drop_caches. Default is cold start with drop_caches.
   --gate-fullpack        Use full native expert-pack as prompt-general gate source. Default: on.
   --no-gate-fullpack     Disable full native gate source and run the previous paired-read path.
+  --route-profile        Write run-local grouped route diagnostic CSVs. Diagnostic only.
   --print-command        Print the exact llama-cli command used by the cgroup run.
   -h, --help             Show this help.
 
@@ -170,6 +172,7 @@ COLD=1
 MULTILINE=0
 PRINT_COMMAND=0
 GATE_FULLPACK=1
+ROUTE_PROFILE=0
 PROMPT=""
 PROMPT_FILE=""
 positional=()
@@ -214,6 +217,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --print-command)
       PRINT_COMMAND=1
+      shift
+      ;;
+    --route-profile)
+      ROUTE_PROFILE=1
       shift
       ;;
     --help|-h)
@@ -356,6 +363,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   },
   "gate_fullpack_diagnostic": ${GATE_FULLPACK},
   "gate_fullpack_path": $(printf '%s' "$GATE_FULLPACK_PATH" | json_string),
+  "route_profile_diagnostic": ${ROUTE_PROFILE},
   "runtime": {
     "n_cpu_moe": 40,
     "ngl": "all",
@@ -407,6 +415,7 @@ MEMORY_MAX_BYTES=$(printf '%q' "$MEMORY_MAX_BYTES")
 PRINT_COMMAND=$(printf '%q' "$PRINT_COMMAND")
 GATE_FULLPACK=$(printf '%q' "$GATE_FULLPACK")
 GATE_FULLPACK_PATH=$(printf '%q' "$GATE_FULLPACK_PATH")
+ROUTE_PROFILE=$(printf '%q' "$ROUTE_PROFILE")
 cd "\$RUN_DIR"
 PROMPT="\$(cat prompt.txt)"
 
@@ -452,6 +461,10 @@ fi
 if [[ "$GATE_FULLPACK" == "1" ]]; then
   export GGML_MOE_STREAM_ONE_EXPERT_PACK="$GATE_FULLPACK_PATH"
   export GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct
+fi
+if [[ "$ROUTE_PROFILE" == "1" ]]; then
+  export GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT="\$RUN_DIR/grouped_route_profile.csv"
+  export GGML_DS4_GROUPED_RETAINED_ROUTE_DETAIL_OUT="\$RUN_DIR/grouped_route_detail.csv"
 fi
 
 cmd=(

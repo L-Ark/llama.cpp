@@ -475,3 +475,11 @@ Promotion requirements:
     on this wiring/slot, so reaching stable `>5 tok/s` requires either a
     hardware placement change or much larger expert-movement reduction than the
     gate hot-pool can provide.
+- Next diagnostic for two-stage aggregation:
+  - add demo option `--route-profile` that writes run-local grouped route CSVs
+    only. External route/profile paths remain blocked as prompt-specific input.
+  - Use this to estimate the theoretical benefit of layer-level retained
+    gate/up/down aggregation from actual `matrix_row_counts` and cache state.
+  - Promotion is not possible from this diagnostic alone; it only determines
+    whether a real route-group implementation has enough byte-reduction headroom
+    to pursue.
