@@ -1,0 +1,134 @@
+{
+  "stage": "main GGUF mmap decode residency and dense-drop diagnostic",
+  "date_utc": "2026-07-08",
+  "status": "diagnostic_not_sota_not_accepted",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "dc6019857",
+  "source_dirty_reason": "working tree had pre-existing examples/simple/simple.cpp modification; profile used rebuilt current source, not accepted SOTA evidence",
+  "goal": [
+    "identify whether main GGUF mmap pages are still accessed during decode",
+    "check whether dense/attention weights are effectively GPU resident",
+    "verify LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT availability",
+    "compare memory_file, pgmajfault/refault, token rate, and correctness with dense drop enabled"
+  ],
+  "build_check": {
+    "finding": "current build initially lacked LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT strings despite source support; touching src/llama-model.cpp and rebuilding build-ds4-moe-stream/bin/llama-cli restored the feature in libllama.so.0",
+    "strings_present_after_rebuild": [
+      "LLAMA_DROP_DENSE_MMAP_CACHE",
+      "LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT",
+      "dense mmap dontneed after prompt"
+    ]
+  },
+  "runs": {
+    "baseline_postrebuild": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-main-gguf-mmap-profile/20260708T091652Z-france-n192-postrebuild-baseline-monitor",
+      "eval_tok_s": 4.8,
+      "prompt_tok_s": 3.4,
+      "ttft_ms": 23900.173899,
+      "elapsed_seconds": 52.27,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes_summary": 15123111936,
+      "ram_ok": true,
+      "main_gguf_smaps_before_clear_refs_28s": {
+        "maps": 2,
+        "rss_kb": 2983204,
+        "referenced_kb": 1396356
+      },
+      "main_gguf_smaps_after_clear_refs_decode_plus20s": {
+        "maps": 2,
+        "rss_kb": 2972284,
+        "referenced_kb": 3556
+      },
+      "cgroup_before_clear_refs_28s": {
+        "file_bytes": 15169052672,
+        "pgmajfault": 1295,
+        "workingset_refault_file": 1504
+      },
+      "cgroup_decode_plus20s": {
+        "file_bytes": 15166046208,
+        "pgmajfault": 1340,
+        "workingset_refault_file": 1504
+      },
+      "correctness": "France output complete, coherent, and semantically correct"
+    },
+    "drop_dense_after_prompt_postrebuild": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-main-gguf-mmap-profile/20260708T091830Z-france-n192-postrebuild-dropdense-monitor",
+      "env_confirmed_in_proc": "LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1 was captured from /proc/$pid/environ",
+      "eval_tok_s": 4.9,
+      "prompt_tok_s": 3.4,
+      "ttft_ms": 24186.066174,
+      "elapsed_seconds": 51.88,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes_summary": 15122153472,
+      "ram_ok": true,
+      "main_gguf_smaps_before_clear_refs_28s": {
+        "maps": 2,
+        "rss_kb": 1992,
+        "referenced_kb": 1832
+      },
+      "main_gguf_smaps_after_clear_refs_decode_plus20s": {
+        "maps": 2,
+        "rss_kb": 5472,
+        "referenced_kb": 3620
+      },
+      "cgroup_before_clear_refs_28s": {
+        "file_bytes": 15171858432,
+        "pgmajfault": 1298,
+        "workingset_refault_file": 1517
+      },
+      "cgroup_decode_plus20s": {
+        "file_bytes": 15165181952,
+        "pgmajfault": 1343,
+        "workingset_refault_file": 1517
+      },
+      "correctness": "France output complete, coherent, and semantically correct"
+    },
+    "baseline_pagemap_r2": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-main-gguf-mmap-profile/20260708T092346Z-france-n192-postrebuild-baseline-pagemap-r2",
+      "eval_tok_s": 4.8,
+      "prompt_tok_s": 3.2,
+      "ttft_ms": 24192.831193,
+      "elapsed_seconds": 52.4,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes_summary": 15121170432,
+      "model_mmap_ranges_before_clear_refs": [
+        {
+          "file_offset_hex": "0x00514000",
+          "description": "large main mapped tensor/data region"
+        },
+        {
+          "file_offset_hex": "0x245b284000",
+          "description": "single-page tail/metadata-like mapped region"
+        }
+      ],
+      "pagemap_scan_after_clear_refs_plus10s": {
+        "maps": 2,
+        "total_pages": 35227772,
+        "present_pages": 743955,
+        "referenced_pages_by_kpageflags": 0,
+        "referenced_bytes_by_kpageflags": 0,
+        "short_reads": 0
+      },
+      "interpretation": "pagemap/kpageflags did not identify stable referenced file offsets after clear_refs, while smaps aggregate runs show only about 3.5 MiB referenced during decode; exact hot file offsets are therefore not reliable from this method, but decode access to main GGUF mmap is negligible."
+    }
+  },
+  "comparison": {
+    "main_gguf_rss_reduction_at_28s_kb": 2981212,
+    "main_gguf_rss_reduction_at_28s_gib": 2.843,
+    "summary_memory_file_delta_bytes_drop_minus_baseline": -958464,
+    "ttft_delta_pct_drop_vs_baseline": 1.2,
+    "eval_tok_s_delta_drop_vs_baseline": 0.1,
+    "decode_pgmajfault_delta_baseline": 45,
+    "decode_pgmajfault_delta_drop": 45,
+    "decode_refault_delta_baseline": 0,
+    "decode_refault_delta_drop": 0
+  },
+  "conclusions": [
+    "Dense/attention/non-expert main GGUF pages appear effectively GPU resident for decode: after clear_refs, baseline decode touched only about 3.5 MiB of main GGUF mmap over 20 seconds.",
+    "LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT exists in source and works after rebuilding the current build directory; it reduces the process main GGUF mmap RSS from about 2.84 GiB to about 2 MiB near the sampled decode point.",
+    "The drop does not materially lower cgroup memory_file because the 16GB file cache is dominated by other cold-start file pages and expert source traffic; summary memory_file changed by less than 1 MiB in this paired France run.",
+    "pgmajfault/refault did not improve. Major faults increased similarly during decode in both runs (+45), and workingset_refault_file stayed flat within each decode window.",
+    "Token rate/correctness did not regress in this France n192 diagnostic, but the 0.1 tok/s difference is within single-prompt variance and is not accepted as SOTA."
+  ],
+  "decision": "Do not promote dense mmap drop as a SOTA optimization. It is safe-looking for France after rebuild and may be useful to free process mmap RSS, but it does not solve the current bottleneck because cgroup file cache and expert IO wait remain essentially unchanged. Next work should prioritize up/down pack or two-stage read aggregation."
+}

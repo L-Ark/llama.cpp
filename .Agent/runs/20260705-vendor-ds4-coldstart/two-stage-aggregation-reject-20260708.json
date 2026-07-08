@@ -1,0 +1,103 @@
+{
+  "date": "2026-07-08",
+  "status": "rejected_experiment",
+  "experiment": "gate/up/down two-stage aggregation",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "base_head": "dc6019857",
+  "constraints": {
+    "host_ram_cgroup_bytes": 16000000000,
+    "include_page_cache": true,
+    "prompt_general": true,
+    "france_correctness_required": true,
+    "ttft_max_increase_pct_for_accept": 20
+  },
+  "baseline_reference": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T100455Z-france-n32-twostage-smoke",
+    "note": "same rebuilt binary before outer trigger fix; two-stage did not trigger, equivalent to default path for n32 smoke",
+    "eval_tok_s": 4.4,
+    "prompt_tok_s": 3.1,
+    "ttft_ms": 24503.14716,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15122087936,
+    "ram_ok": true,
+    "correctness": "France output semantically correct/coherent for n32 truncated smoke"
+  },
+  "variants": [
+    {
+      "name": "full up+down two-stage",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T100743Z-france-n32-twostage-smoke-v2",
+      "eval_tok_s": 3.7,
+      "prompt_tok_s": 2.7,
+      "ttft_ms": 25402.201521,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15084789760,
+      "ram_ok": true,
+      "correctness": "France output semantically correct/coherent for n32 truncated smoke",
+      "two_stage_counters": {
+        "calls": 9471,
+        "plans": 8806,
+        "duplicates": 0,
+        "flushes": 1222,
+        "jobs": 8806,
+        "cache_hits": 10136,
+        "missing_pack": 0,
+        "no_slot_skips": 0,
+        "iouring_ok": 1222,
+        "fallback_ok": 0,
+        "failures": 0,
+        "max_flush_jobs": 78
+      },
+      "batch_expert_pack": {
+        "iouring_reads": 8819,
+        "iouring_bytes": 39301414912,
+        "iouring_wait_us": 4140530,
+        "iouring_submit_us": 977440
+      }
+    },
+    {
+      "name": "down-only two-stage",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T101125Z-france-n32-twostage-downonly",
+      "eval_tok_s": 3.7,
+      "prompt_tok_s": 3.0,
+      "ttft_ms": 25125.293546,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15089278976,
+      "ram_ok": true,
+      "correctness": "France output semantically correct/coherent for n32 truncated smoke",
+      "two_stage_counters": {
+        "calls": 9471,
+        "plans": 3930,
+        "duplicates": 0,
+        "flushes": 1184,
+        "jobs": 3930,
+        "cache_hits": 5541,
+        "missing_pack": 0,
+        "no_slot_skips": 0,
+        "iouring_ok": 1184,
+        "fallback_ok": 0,
+        "failures": 0,
+        "max_flush_jobs": 39
+      },
+      "batch_expert_pack": {
+        "iouring_reads": 6232,
+        "iouring_bytes": 27772583936,
+        "iouring_wait_us": 4846575,
+        "iouring_submit_us": 1252474
+      }
+    }
+  ],
+  "decision": "reject_and_revert_code",
+  "reason": "The synchronous two-stage flush increases or front-loads up/down expert IO instead of reducing current small-batch wait cycles. Full mode doubles batch expert IO versus the default n32 path; down-only still increases reads and wait time, and both drop eval token rate from about 4.4 to 3.7 tok/s.",
+  "next_direction": "Integrate aggregation inside existing up/down paired-read copy queues so total iouring_reads does not exceed current SOTA and average jobs per batch increases without serializing prefetch before compute.",
+  "post_revert_validation": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T101552Z-france-n32-post-revert-default",
+    "eval_tok_s": 4.6,
+    "prompt_tok_s": 3.5,
+    "ttft_ms": 25414.893684,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15124025344,
+    "ram_ok": true,
+    "correctness": "France output semantically correct/coherent for n32 truncated smoke",
+    "source_code_reverted": true
+  }
+}

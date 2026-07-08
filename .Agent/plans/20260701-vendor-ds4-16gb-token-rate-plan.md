@@ -9221,3 +9221,49 @@ Next implementation target:
   - no increase in total iouring reads versus current SOTA;
   - TTFT increase <= `20%`;
   - strict 16GB host RAM including page cache and correctness unchanged.
+
+
+## 2026-07-08 diagnostic：main GGUF mmap decode residency / dense drop
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/main-gguf-mmap-drop-profile-20260708.json`.
+- `status`: diagnostic only, not accepted SOTA. This used France n192 after rebuilding the current build directory so `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT` was actually present in `libllama.so.0`.
+- `baseline_postrebuild`: `/root/lfz/runs/vendor-ds4-16gb/20260708-main-gguf-mmap-profile/20260708T091652Z-france-n192-postrebuild-baseline-monitor`; `eval_tok_s=4.8`, `TTFT=23900.174ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15123111936`, output correct. After `clear_refs`, smaps showed only `3556 KiB` of main GGUF mmap referenced during the next 20s of decode.
+- `drop_dense_after_prompt`: `/root/lfz/runs/vendor-ds4-16gb/20260708-main-gguf-mmap-profile/20260708T091830Z-france-n192-postrebuild-dropdense-monitor`; `/proc/$pid/environ` confirmed `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`; `eval_tok_s=4.9`, `TTFT=24186.066ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15122153472`, output correct. Main GGUF mmap RSS at the 28s sample dropped from about `2.84 GiB` to about `2 MiB`.
+- `page_detail`: `/root/lfz/runs/vendor-ds4-16gb/20260708-main-gguf-mmap-profile/20260708T092346Z-france-n192-postrebuild-baseline-pagemap-r2` captured two main GGUF mmap ranges before clear_refs: large data mapping at file offset `0x00514000`, plus a one-page tail mapping at `0x245b284000`. The pagemap/kpageflags referenced-page scan found `0` stable KPF_REFERENCED pages after clear_refs+10s, while smaps aggregate runs reported only about `3.5 MiB` referenced during decode; exact hot offsets are therefore not reliable from this method, but main GGUF mmap decode access is negligible.
+- `comparison`: dense drop reduces process-local main GGUF mmap RSS, but does not materially reduce cgroup `memory_file` (`15123111936 -> 15122153472`, less than `1 MiB` in summary) and does not reduce decode major faults/refaults. Baseline decode window `pgmajfault 1295 -> 1340`; dense-drop decode window `1298 -> 1343`; `workingset_refault_file` was flat within both windows.
+- `conclusion`: dense/attention/non-expert main GGUF pages appear effectively GPU-resident during decode, so direct deletion/dontneed of dense mmap after prompt is safe-looking for this France diagnostic but not a meaningful token-rate or RAM-cgroup optimization. Do not promote as SOTA. The bottleneck remains expert source IO/cache scheduling, especially up/down small-batch reads.
+
+
+## 2026-07-08 two-stage aggregation implementation attempt: rejected
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/two-stage-aggregation-reject-20260708.json`.
+- `status`: rejected; source experiment reverted after measurement. Do not promote to SOTA.
+- `scope`: default-off implementation attempt for gate-stage collection plus later flush of future up/down expert reads. Two variants were tested under the strict 16GB cgroup with page cache included, cold `drop_caches`, prompt-general full native gate expert-pack, and the France correctness smoke.
+
+Baseline/default-path reference for the same n32 smoke:
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T100455Z-france-n32-twostage-smoke`
+- `eval_tok_s=4.4`, `prompt_tok_s=3.1`, TTFT/first output `24503.15 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15122087936`, RAM OK, France output coherent.
+
+Full `{up,down}` two-stage result:
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T100743Z-france-n32-twostage-smoke-v2`
+- `eval_tok_s=3.7`, `prompt_tok_s=2.7`, TTFT/first output `25402.20 ms`, `memory_peak_bytes=16000000000`, RAM OK, France output coherent.
+- counters: `calls=9471`, `plans=8806`, `flushes=1222`, `jobs=8806`, `cache_hits=10136`, `missing_pack=0`, `failures=0`, `max_flush_jobs=78`.
+- batch expert IO increased to `iouring_reads=8819`, `iouring_bytes=39301414912`, versus default-path n32 batch expert IO `iouring_reads=4247`, `iouring_bytes=18926534656`.
+
+Down-only two-stage result:
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T101125Z-france-n32-twostage-downonly`
+- `eval_tok_s=3.7`, `prompt_tok_s=3.0`, TTFT/first output `25125.29 ms`, `memory_peak_bytes=16000000000`, RAM OK, France output coherent.
+- counters: `calls=9471`, `plans=3930`, `flushes=1184`, `jobs=3930`, `cache_hits=5541`, `missing_pack=0`, `failures=0`, `max_flush_jobs=39`.
+- batch expert IO was still high: `iouring_reads=6232`, `iouring_bytes=27772583936`, `iouring_wait_us=4846575`.
+
+Interpretation:
+- The existing `GGML_MOE_UPDOWN_PAIRED_READ=1` path already co-submits down reads from the up/down batch path and copies jobs on parallel streams.
+- The attempted gate-stage two-stage path duplicated or front-loaded expert IO instead of reducing total wait cycles. Full mode doubled batch expert reads; down-only reduced duplication but still serialized extra prefetch before compute and stayed below baseline.
+- This confirms the next useful implementation must be integrated into the existing up/down paired-read copy queues, not triggered by a synchronous flush before upgate/down compute.
+
+Decision:
+- Reject and revert the source changes. No code push as SOTA.
+- Keep current accepted generalized SOTA unchanged (`b3c396c6a` / current branch default gate cache 6144 path; product target >5 tok/s still unmet).
+
+Next implementation constraint:
+- Any future aggregation must prove `total iouring_reads <= current SOTA` while increasing average read jobs per batch/inflight. A candidate that improves cache hit rate by increasing total expert bytes read is not acceptable unless token rate and TTFT both beat the current generalized SOTA under 16GB RAM.
