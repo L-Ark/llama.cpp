@@ -2515,6 +2515,11 @@ Decision:
 - Keep the runtime knob default-off for future diagnostics, but restore the
   demo default path so current SOTA remains the earlier GPU-top1 plus CPU-tail
   configuration.
+- Follow-up script hygiene: the default-off knob must be exported as an empty
+  string by default rather than referenced conditionally inside the generated
+  runner heredoc; otherwise `set -u` can print an unbound-variable warning
+  before launch. Empty string remains disabled because the runtime checks that
+  the env exists and has a non-empty value.
 - Next work should not focus on simple eviction heuristics. The profile points
   to a hard H2D-byte problem: roughly `30 GiB` expert movement for n96 on a
   `6.6-6.7 GB/s` H2D path. To reach stable `>5 tok/s`, the next candidate
