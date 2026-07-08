@@ -456,6 +456,18 @@ fi
 if [[ -n "${GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT:-}" ]]; then
   systemd_cmd+=(--setenv=GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT=${GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT})
 fi
+for passthrough_env in \
+  GGML_MOE_IO_BATCH_PROFILE_OUT \
+  GGML_MOE_IO_WAIT_TRACE_OUT \
+  GGML_MOE_IO_READ_TRACE_OUT \
+  GGML_MOE_IO_LOCALITY_PROFILE_OUT \
+  GGML_MOE_STAGE_GRANULARITY_PROFILE \
+  GGML_MOE_COPY_PROFILE_OUT \
+  GGML_MOE_COPY_PROFILE_H2D; do
+  if [[ -n "${!passthrough_env:-}" ]]; then
+    systemd_cmd+=(--setenv=${passthrough_env}=${!passthrough_env})
+  fi
+done
 systemd_cmd+=("$RUN_DIR/runner.sh")
 printf '%q ' "${systemd_cmd[@]}" > "$RUN_DIR/systemd_command.txt"
 printf '\n' >> "$RUN_DIR/systemd_command.txt"

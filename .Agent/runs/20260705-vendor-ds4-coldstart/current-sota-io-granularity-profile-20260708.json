@@ -1,0 +1,101 @@
+{
+  "stage": "X10-BT current SOTA IO granularity profile for next co-submit design",
+  "date": "2026-07-08",
+  "status": "diagnostic_profile_for_two_stage_read_aggregation",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "35866e20615c24ee0ca6fd23a6ce670f6b552a24",
+  "source_dirty": true,
+  "dirty_reason": "demo script temporarily added default-off IO profile env passthrough",
+  "accepted_sota": {
+    "stage": "X10-BR gate cache 6144 generalized SOTA",
+    "heldout_n192_min_mean_max_tok_s": [4.0, 4.30, 4.6],
+    "postpush_france_n192_eval_tok_s": 4.8
+  },
+  "profile_env": {
+    "GGML_MOE_IO_BATCH_PROFILE_OUT": true,
+    "GGML_MOE_IO_READ_TRACE_OUT": true,
+    "GGML_MOE_IO_LOCALITY_PROFILE_OUT": true,
+    "GGML_MOE_STAGE_GRANULARITY_PROFILE": 1
+  },
+  "runs": [
+    {
+      "prompt_id": "france",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/20260708T064721Z-france-n96-current-sota-io-profile",
+      "eval_tok_s": 5.0,
+      "prompt_tok_s": 3.4,
+      "ttft_ms": 24440.380842,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15126491136,
+      "ram_ok": true,
+      "one_gate_direct_reads": 6473,
+      "one_gate_cache_hits": 18358,
+      "one_gate_cache_misses": 6473,
+      "batch_runtime_read_jobs": 8194,
+      "batch_runtime_batches": 4431,
+      "batch_avg_read_jobs": 1.849,
+      "batch_max_read_jobs": 26,
+      "batch_hist": {"1": 2752, "2-4": 1561, "5-8": 30, "9-16": 72, "17-32": 16, "gt32": 0},
+      "batch_wait_ms_sum": 9732.532,
+      "batch_submit_ms_sum": 2008.507,
+      "batch_enqueue_ms_sum": 167.375,
+      "batch_wall_ms_sum": 12294.048,
+      "avg_inflight_mean": 1.395,
+      "median_span_mib": 4.25,
+      "median_read_bytes_mib": 4.25,
+      "trace_files": {
+        "io_batch": "/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/france-n96-io-batch.csv",
+        "io_read": "/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/france-n96-io-read.csv",
+        "io_locality": "/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/france-n96-io-locality.csv"
+      }
+    },
+    {
+      "prompt_id": "quantum",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/20260708T064958Z-quantum-n96-current-sota-io-profile",
+      "eval_tok_s": 3.9,
+      "prompt_tok_s": 3.2,
+      "ttft_ms": 23238.417148,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15124819968,
+      "ram_ok": true,
+      "batch_runtime_read_jobs": 10382,
+      "batch_runtime_batches": 5583,
+      "batch_avg_read_jobs": 1.860,
+      "batch_max_read_jobs": 15,
+      "batch_hist": {"1": 2925, "2-4": 2514, "5-8": 90, "9-16": 54, "17-32": 0, "gt32": 0},
+      "batch_wait_ms_sum": 12567.490,
+      "batch_submit_ms_sum": 2533.474,
+      "batch_enqueue_ms_sum": 217.286,
+      "batch_wall_ms_sum": 15720.480,
+      "avg_inflight_mean": 1.425,
+      "median_span_mib": 4.25,
+      "median_read_bytes_mib": 4.25,
+      "trace_files": {
+        "io_batch": "/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/quantum-n96-io-batch.csv",
+        "io_read": "/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/quantum-n96-io-read.csv",
+        "io_locality": "/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/quantum-n96-io-locality.csv"
+      }
+    }
+  ],
+  "interpretation": [
+    "Current up/down runtime reads are dominated by tiny batches: France has 2752 single-read batches and Quantum has 2925 single-read batches.",
+    "Mean read jobs per batch is only about 1.85 and mean inflight is about 1.4, far below the configured depth 8.",
+    "The synchronous gate-included batch probe failed because it also produced tiny batches and increased read count; the next implementation must aggregate reads before H2D rather than submitting one group per gate miss.",
+    "The median span equals one expert payload, so blindly merging adjacent file ranges is not the main opportunity; the main opportunity is fewer submit/wait cycles and higher in-flight depth across independent reads."
+  ],
+  "next_design": {
+    "name": "two_stage_read_aggregation",
+    "requirements": [
+      "Read stage submits multiple gate/up/down file reads into pinned host slots without immediately enqueueing H2D to the gate stream.",
+      "Completion stage routes gate payloads to the gate stream only when demanded and routes up/down payloads to the prefetch/cache stream.",
+      "Cache slots are marked pending only after their H2D is enqueued and get a ready event on the stream that owns the H2D.",
+      "Gate one-stream cache must still be populated and reusable.",
+      "Default path remains unchanged; candidate is accepted only if held-out improves under strict 16GB RAM and correctness constraints."
+    ],
+    "target_metrics": {
+      "avg_read_jobs_per_batch": ">=8 initially, >=16 preferred",
+      "avg_inflight": ">=6",
+      "avoid_total_iouring_read_increase": true,
+      "ttft_increase_limit": "20%"
+    }
+  }
+}

@@ -9170,3 +9170,54 @@ Next direction:
   - copy up/down payloads onto the prefetch/cache stream without delaying gate compute,
   - preserve one-stream gate cache and batch up/down cache correctness.
 - This should be designed as a two-stage IO pipeline, not by reusing `expert_pack_iouring_copy_jobs` synchronously on the gate stream.
+
+## 2026-07-08 X10-BT current SOTA IO granularity profile
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-io-granularity-profile-20260708.json`
+- status: `diagnostic_profile_for_two_stage_read_aggregation`
+- source: `35866e206` with a default-off demo-script passthrough for IO profile env vars.
+
+Purpose:
+- Quantify the remaining up/down IO bottleneck under the accepted X10-BR `6144 MiB` gate-cache SOTA.
+- Determine whether the next co-submit implementation should target read batching, range coalescing, stream overlap, or cache admission.
+
+Profile env:
+- `GGML_MOE_IO_BATCH_PROFILE_OUT`
+- `GGML_MOE_IO_READ_TRACE_OUT`
+- `GGML_MOE_IO_LOCALITY_PROFILE_OUT`
+- `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`
+
+France n96 current SOTA profile:
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/20260708T064721Z-france-n96-current-sota-io-profile`
+- `eval_tok_s=5.0`, TTFT `24440.38 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+- Gate one-pack direct reads: `6473`; gate cache `hits=18358`, `misses=6473`.
+- Up/down runtime reads: `8194` read jobs in `4431` batches.
+- Average read jobs per batch: `1.849`; average inflight from CSV: `1.395`.
+- Batch histogram: `1:2752`, `2-4:1561`, `5-8:30`, `9-16:72`, `17-32:16`, `gt32:0`.
+- Batch wait sum: `9732.53 ms`; submit sum `2008.51 ms`; enqueue sum `167.38 ms`; wall sum `12294.05 ms`.
+
+Quantum n96 current SOTA profile:
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/20260708T064958Z-quantum-n96-current-sota-io-profile`
+- `eval_tok_s=3.9`, TTFT `23238.42 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+- Up/down runtime reads: `10382` read jobs in `5583` batches.
+- Average read jobs per batch: `1.860`; average inflight from CSV: `1.425`.
+- Batch histogram: `1:2925`, `2-4:2514`, `5-8:90`, `9-16:54`, `17-32:0`, `gt32:0`.
+- Batch wait sum: `12567.49 ms`; submit sum `2533.47 ms`; enqueue sum `217.29 ms`; wall sum `15720.48 ms`.
+
+Interpretation:
+- The remaining up/down IO path is dominated by tiny batches. Most batches have one to four reads, despite configured depth 8.
+- Median locality span is one expert payload, so adjacent range coalescing is not the main win. The main win is reducing submit/wait cycles and keeping more reads in flight.
+- The rejected X10-BS gate-included batch failed because it also submitted one tiny group per gate miss and increased total iouring reads; it did not solve the granularity problem.
+
+Next implementation target:
+- Build a two-stage read aggregation path, default-off:
+  - Stage 1 reads multiple gate/up/down payloads into pinned host slots without immediately enqueueing H2D.
+  - Stage 2 copies gate payloads to the gate stream only when needed, and copies up/down payloads to the prefetch/cache stream.
+  - Cache slots are marked pending only after H2D is enqueued and get a ready event on the stream that owns the H2D.
+  - Gate one-stream cache must still be populated and reusable.
+- Initial target metrics:
+  - average read jobs per batch at least `8`, preferred `16+`;
+  - average inflight at least `6`;
+  - no increase in total iouring reads versus current SOTA;
+  - TTFT increase <= `20%`;
+  - strict 16GB host RAM including page cache and correctness unchanged.
