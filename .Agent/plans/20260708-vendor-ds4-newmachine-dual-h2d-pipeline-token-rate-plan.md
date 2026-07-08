@@ -2022,3 +2022,61 @@ not reproduce the France-only speedup seen in the previous low-hit experiment.
 This further supports that cache eviction without a true future-use model is
 not enough. Next work should shift from reactive slot eviction to route-local
 planning or a compact third-expert representation.
+
+## 2026-07-09 GPU-Top2 Plus CPU-Tail Candidate
+
+Implemented a default-off exactness-preserving split:
+
+- `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=2`
+- Applies only to `ffn_up_exps` and `ffn_down_exps`.
+- GPU batch receives only route ranks `< 2`.
+- Tail ranks remain in `matrix_row_counts` and fall through to the existing
+  CPU fallback path.
+- This is not top2 deletion: the third expert contribution is still computed,
+  preserving code-generation quality in the tested prompts.
+
+Implementation notes:
+
+- `mul_mat_id` workspace now includes tail row counts and tail row mappings.
+- Before CUDA batch, active rows are partitioned into GPU rows and CPU-tail
+  rows.
+- If CUDA accepts the batch, only CPU-tail rows are restored for fallback.
+- If CUDA declines the batch, all rows are restored for CPU fallback.
+- Default behavior is unchanged unless `GGML_MOE_GPU_KEEP_TOPK_UPDOWN` is set.
+
+Dirty-source candidate diagnostics, strict cold, 16GB cgroup, display cleanup
+recorded:
+
+- Fibonacci n32:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T210845Z-20260709-gpu2-cputail-fibonacci-n32`
+  reached `eval_tok_s=3.2`, `prompt_tok_s=3.9`,
+  `first_output_ms=15635.9 ms`,
+  `memory_peak_bytes=14787715072`, RAM OK. Fibonacci quality was OK.
+- Fibonacci n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T210930Z-20260709-gpu2-cputail-fibonacci-n64`
+  reached `eval_tok_s=4.1`, `prompt_tok_s=4.0`,
+  `first_output_ms=15118.4 ms`,
+  `memory_peak_bytes=14793691136`, RAM OK. Fibonacci quality was OK.
+- Deploy n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T211005Z-20260709-gpu2-cputail-deploy-n64`
+  reached `eval_tok_s=4.3`, `prompt_tok_s=4.3`,
+  `first_output_ms=16649.9 ms`,
+  `memory_peak_bytes=14733709312`, RAM OK. Deploy quality was OK.
+- France n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T211102Z-20260709-gpu2-cputail-france-n64`
+  reached `eval_tok_s=4.8`, `prompt_tok_s=4.0`,
+  `first_output_ms=16504.8 ms`,
+  `memory_peak_bytes=14753718272`, RAM OK. France quality was OK.
+
+Comparison to clean default n64 from the same session:
+
+- Fibonacci: default `3.6`, candidate `4.1`.
+- Deploy: default `3.8`, candidate `4.3`.
+- France: previous clean/default runs were typically `3.4-3.6`, candidate
+  `4.8`.
+
+Decision: promote to source-controlled candidate and clean-reproduce before
+calling it accepted SOTA. It is still below the product target `>5 tok/s`,
+but it is the first prompt-general, correctness-preserving path that moves
+multiple dev prompts toward the target under the 16GB RAM cap. Next validation
+must repeat from a clean commit and then test n96 plus more dev prompts.

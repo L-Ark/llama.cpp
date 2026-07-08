@@ -2140,6 +2140,25 @@ static int ggml_moe_keep_topk_updown(void) {
     return keep_topk;
 }
 
+static int ggml_moe_gpu_keep_topk_updown(void) {
+    static int keep_topk = -1;
+    if (keep_topk < 0) {
+        const char * env = getenv("GGML_MOE_GPU_KEEP_TOPK_UPDOWN");
+        keep_topk = env && env[0] ? atoi(env) : 0;
+        if (keep_topk < 0) {
+            keep_topk = 0;
+        }
+    }
+    return keep_topk;
+}
+
+static bool ggml_moe_gpu_keep_topk_applies(const char * name) {
+    if (!name) {
+        return false;
+    }
+    return strstr(name, "ffn_up_exps") || strstr(name, "ffn_down_exps");
+}
+
 static bool ggml_moe_keep_topk_applies(const char * name) {
     if (!name) {
         return false;
@@ -4591,6 +4610,12 @@ static void ggml_compute_forward_mul_mat_id(
     uint64_t * fallback_touch_us =
         incr_ptr_aligned(&wdata_cur, n_as*sizeof(uint64_t), sizeof(uint64_t));
 
+    int64_t * gpu_tail_row_counts =
+        incr_ptr_aligned(&wdata_cur, n_as*sizeof(int64_t), sizeof(int64_t));
+
+    struct mmid_row_mapping * gpu_tail_matrix_rows =
+        incr_ptr_aligned(&wdata_cur, n_as*ids->ne[0]*ids->ne[1]*sizeof(struct mmid_row_mapping), sizeof(int64_t));
+
     GGML_ASSERT(params->wsize >= (size_t)((char *) wdata_cur - (char *) params->wdata));
 
     const uint64_t kimi_cpu_moe_convert_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
@@ -4723,6 +4748,29 @@ static void ggml_compute_forward_mul_mat_id(
     if (use_gpu_stream_batch) {
         if (ith == 0) {
             const uint64_t kimi_cpu_moe_cuda_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;
+            const int gpu_keep_topk =
+                ggml_moe_gpu_keep_topk_applies(src0->name) ? ggml_moe_gpu_keep_topk_updown() : 0;
+            const bool split_gpu_cpu_tail =
+                gpu_keep_topk > 0 && gpu_keep_topk < ids->ne[0];
+            if (split_gpu_cpu_tail) {
+                memset(gpu_tail_row_counts, 0, n_as*sizeof(int64_t));
+                for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                    const int64_t original_count = matrix_row_counts[cur_a];
+                    int64_t gpu_count = 0;
+                    int64_t tail_count = 0;
+                    for (int64_t k = 0; k < original_count; ++k) {
+                        const struct mmid_row_mapping row =
+                            matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + k];
+                        if (row.i1 < gpu_keep_topk) {
+                            matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + gpu_count++] = row;
+                        } else {
+                            gpu_tail_matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + tail_count++] = row;
+                        }
+                    }
+                    matrix_row_counts[cur_a] = gpu_count;
+                    gpu_tail_row_counts[cur_a] = tail_count;
+                }
+            }
             const void * src1_q8_0_batch = (src1->type == vec_dot_type) ? src1->data : params->wdata;
             const size_t src1_q8_0_row_size_batch = ggml_row_size(vec_dot_type, ne10);
             const bool done = ggml_cuda_moe_stream_batch(
@@ -4768,7 +4816,28 @@ static void ggml_compute_forward_mul_mat_id(
                             src1->type == type_traits_cpu[src0->type].vec_dot_type ? src1->data : params->wdata);
                     }
                 }
-                memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
+                if (split_gpu_cpu_tail) {
+                    for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                        const int64_t tail_count = gpu_tail_row_counts[cur_a];
+                        for (int64_t k = 0; k < tail_count; ++k) {
+                            matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + k] =
+                                gpu_tail_matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + k];
+                        }
+                        matrix_row_counts[cur_a] = tail_count;
+                    }
+                } else {
+                    memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
+                }
+            } else if (split_gpu_cpu_tail) {
+                for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                    const int64_t gpu_count = matrix_row_counts[cur_a];
+                    const int64_t tail_count = gpu_tail_row_counts[cur_a];
+                    for (int64_t k = 0; k < tail_count; ++k) {
+                        matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + gpu_count + k] =
+                            gpu_tail_matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + k];
+                    }
+                    matrix_row_counts[cur_a] = gpu_count + tail_count;
+                }
             }
         }
 
@@ -7083,6 +7152,10 @@ struct ggml_cplan ggml_graph_plan(
                         cur += n_as * sizeof(void *) + sizeof(void *);
                         // CPU fallback source-touch profile timings
                         cur += n_as * sizeof(uint64_t) + sizeof(uint64_t);
+                        // GPU top-k / CPU-tail split counts
+                        cur += n_as * sizeof(int64_t) + sizeof(int64_t);
+                        // GPU top-k / CPU-tail split rows
+                        cur += n_as*ids->ne[0]*ids->ne[1]*sizeof(struct mmid_row_mapping) + sizeof(int64_t);
                     } break;
                 case GGML_OP_MOE_FUSED_UP_GATE:
                     {
