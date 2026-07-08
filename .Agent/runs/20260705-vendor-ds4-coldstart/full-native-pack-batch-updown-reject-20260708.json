@@ -1,0 +1,44 @@
+{
+  "date": "2026-07-08",
+  "status": "rejected_experiment",
+  "experiment": "explicit full native expert-pack as batch up/down source",
+  "source_head": "fd5a20d25",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-fullpack-updown-probe/20260708T102316Z-france-n32-fullpack-batch-updown",
+  "config_delta": {
+    "wrapper": "/tmp/llama-cli-ds4-fullpack-batch.sh",
+    "GGML_MOE_EXPERT_PACK": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+    "GGML_MOE_IO_BACKEND": "iouring",
+    "GGML_MOE_IO_ALIGNED_ALIAS_BATCH": "1",
+    "baseline_demo_defaults_preserved": true
+  },
+  "result": {
+    "eval_tok_s": 1.4,
+    "prompt_tok_s": 0.8,
+    "ttft_ms": 40411.594564,
+    "elapsed_seconds": 60.23,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15072530432,
+    "ram_ok": true,
+    "correctness": "France output semantically correct/coherent for n32 truncated smoke"
+  },
+  "observed_counters": {
+    "batch_expert_pack_load": "io_uring direct reads enabled and loaded 33024 entries from native.expert-pack",
+    "duplicate_key": "blk.0.ffn_down_exps.weight expert=0 bytes=4456448",
+    "batch_vram_cache_hits": 7453,
+    "batch_vram_cache_misses": 6889,
+    "batch_vram_cache_hit_rate_pct": 52.0,
+    "gate_one_pack_reads": 3329,
+    "gate_one_pack_bytes": 14835515392,
+    "gate_cache_hit_rate_pct": 64.9
+  },
+  "baseline_reference": {
+    "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T101552Z-france-n32-post-revert-default",
+    "eval_tok_s": 4.6,
+    "prompt_tok_s": 3.5,
+    "memory_peak_bytes": 16000000000,
+    "ram_ok": true
+  },
+  "decision": "reject",
+  "reason": "Current batch path already has all 33024 expert keys through the prompt-general alias/source path. Adding the full native expert-pack as a second batch source duplicates keys instead of replacing the source, drops batch VRAM cache hit rate to 52%, raises TTFT to 40.4s, and reduces n32 eval token rate to 1.4 tok/s."
+}

@@ -9267,3 +9267,23 @@ Decision:
 
 Next implementation constraint:
 - Any future aggregation must prove `total iouring_reads <= current SOTA` while increasing average read jobs per batch/inflight. A candidate that improves cache hit rate by increasing total expert bytes read is not acceptable unless token rate and TTFT both beat the current generalized SOTA under 16GB RAM.
+
+
+## 2026-07-08 full native expert-pack as batch up/down source: rejected
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/full-native-pack-batch-updown-reject-20260708.json`.
+- `status`: rejected; no source change. This tested the idea of explicitly putting up/down on the native expert-pack source for batch reads.
+- `run`: `/root/lfz/runs/vendor-ds4-16gb/20260708-fullpack-updown-probe/20260708T102316Z-france-n32-fullpack-batch-updown`.
+- `config_delta`: wrapper exported `GGML_MOE_EXPERT_PACK=/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack` while keeping current generalized demo defaults.
+- Result: `eval_tok_s=1.4`, `prompt_tok_s=0.8`, TTFT/first output `40411.59 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15072530432`, RAM OK, France output coherent.
+- Baseline reference after source revert: `/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T101552Z-france-n32-post-revert-default`, `eval_tok_s=4.6`, `prompt_tok_s=3.5`, RAM OK.
+- Observed: batch path loaded `33024` native expert-pack entries, but immediately reported duplicate key across sources: `blk.0.ffn_down_exps.weight expert=0 bytes=4456448`.
+- Batch VRAM cache degraded to `hits=7453`, `misses=6889`, `hit_rate=52.0%`; gate one-pack remained `reads=3329`, `bytes=14835515392`, `hit_rate=64.9%`.
+
+Interpretation:
+- The current generalized path already exposes all `33024` expert keys to the batch reader through the prompt-general alias/source path; up/down are not missing from the expert source.
+- Simply adding the same full native expert-pack as another batch source duplicates keys and worsens cache/source behavior. The useful version would need to replace the alias source with a single canonical pack-backed source, or generate a dedicated up/down-only source with no duplicate keys, then prove total reads/bytes and TTFT improve.
+
+Decision:
+- Reject this wrapper/config experiment. Do not commit any code change as SOTA.
+- Next valid experiment, if pursuing this idea, is source selection rather than source addition: run a controlled A/B with alias disabled and only native pack as batch source, or build a no-duplicate up/down-only pack. Acceptance requires `eval_tok_s > current generalized SOTA`, TTFT within limit, RAM OK, correctness OK, and no duplicate-key diagnostics.
