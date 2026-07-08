@@ -493,3 +493,18 @@ Promotion requirements:
     read submissions and better use of the existing batched direct-IO path.
     Reject if it raises TTFT beyond 20%, reduces correctness, increases total
     movement enough to lower token rate, or breaks Kimi/shared MoE paths.
+- `GGML_MOE_GATE_BATCH_PREFETCH=1` result:
+  - implemented in `7c5780963`, debugged in `92a2cd4a6`, and enabled for
+    DS4 low-bit gate types in `c67bccd3d`;
+  - n8 debug `20260708T151618Z-20260708T-gate-batch-prefetch-n8-debug2`
+    confirmed the probe is active: gate prefetch reason `active`, initial jobs
+    `6`, and gate one-pack reads dropped to `1`;
+  - n32 validation `20260708T151710Z-20260708T-gate-batch-prefetch-n32-active`
+    is rejected: `eval_tok_s=2.4`, `TTFT=18729.9 ms`, elapsed `29.75s`,
+    `memory_peak_bytes=14493487104`, `ram_ok=true`, output coherent;
+  - root cause: batch cache initializes first at `9.0GiB`, causing one-stream
+    `6.0GiB` gate cache allocation to fail. Gate reads move from one-pack into
+    batch io_uring, but total batch iouring rises to `9581` reads /
+    `42.70GB`, worse than the default n32 combined movement of about `37.8GB`.
+  - Keep the code default-off for future cache-partition experiments, but do
+    not promote it as SOTA.
