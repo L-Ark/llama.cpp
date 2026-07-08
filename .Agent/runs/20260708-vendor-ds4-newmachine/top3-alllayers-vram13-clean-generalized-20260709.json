@@ -1,0 +1,114 @@
+{
+  "date": "2026-07-09",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "commit": "ddd2cd249f3b",
+  "status": "accepted_improvement_but_product_target_not_met",
+  "machine": "wici@192.168.9.198",
+  "task_target": "stable >5 tok/s for random prompts on 16GB host RAM plus 32GB RTX 5090",
+  "configuration": {
+    "framework": "vendor",
+    "model": "/home/wici/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "gate_fullpack": "/home/wici/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+    "prompt_specific_optimization": false,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "drop_caches": true,
+    "display_processes_stopped_before_run": true,
+    "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "0-39",
+    "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+    "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+    "GGML_MOE_KEEP_TOPK_GATE": "1",
+    "GGML_MOE_VRAM_CACHE_MIB": "13312",
+    "GGML_MOE_IO_BACKEND": "iouring",
+    "GGML_MOE_IO_REFILL_BATCH": "4"
+  },
+  "clean_validation_runs": [
+    {
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T163915Z-20260709T-clean-ddd2cd2-default-france-n96",
+      "prompt": "Please introduce France in a short paragraph.",
+      "eval_tok_s": 3.6,
+      "prompt_tok_s": 4.2,
+      "ttft_ms": 16664.779988,
+      "elapsed_seconds": 41.5,
+      "memory_peak_bytes": 14526316544,
+      "memory_file_bytes": 13741305856,
+      "ram_ok": true,
+      "source_dirty": false,
+      "display_processes_stopped_before_run": true,
+      "h2d_gbps": 6.666482,
+      "pcie_after_h2d": "16.0 GT/s x4",
+      "correctness_ok": true,
+      "answer_summary": "Coherent paragraph about France, Paris, landmarks, wine regions, and cuisine."
+    },
+    {
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T164112Z-20260709T-clean-ddd2cd2-default-france-repeat-n96",
+      "prompt": "Please introduce France in a short paragraph.",
+      "eval_tok_s": 3.5,
+      "prompt_tok_s": 4.2,
+      "ttft_ms": 16398.751015,
+      "elapsed_seconds": 41.75,
+      "memory_peak_bytes": 14738862080,
+      "memory_file_bytes": 13808717824,
+      "ram_ok": true,
+      "source_dirty": false,
+      "display_processes_stopped_before_run": true,
+      "h2d_gbps": 6.629713,
+      "pcie_after_h2d": "16.0 GT/s x4",
+      "correctness_ok": true,
+      "answer_summary": "Coherent repeat paragraph about France, Paris, landmarks, wine regions, and cuisine."
+    },
+    {
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T164013Z-20260709T-clean-ddd2cd2-default-ai-infra-n96",
+      "prompt": "AI infra 是做什么的",
+      "eval_tok_s": 3.4,
+      "prompt_tok_s": 4.0,
+      "ttft_ms": 16590.604319,
+      "elapsed_seconds": 43.04,
+      "memory_peak_bytes": 14556254208,
+      "memory_file_bytes": 13767069696,
+      "ram_ok": true,
+      "source_dirty": false,
+      "display_processes_stopped_before_run": true,
+      "h2d_gbps": 6.735295,
+      "pcie_after_h2d": "16.0 GT/s x4",
+      "correctness_ok": true,
+      "answer_summary": "Useful Chinese explanation of AI infrastructure covering hardware and software."
+    }
+  ],
+  "rejected_experiments": [
+    {
+      "name": "top2_all_layers",
+      "reason": "France reached 5.1 tok/s, but AI infra prompt degraded into repeated restatement, so correctness/generalization failed.",
+      "runs": [
+        "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T162746Z-20260709T-top2-alllayers-france-n96",
+        "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T162839Z-20260709T-top2-alllayers-ai-infra-n96"
+      ]
+    },
+    {
+      "name": "top2_layers_10_39",
+      "reason": "Only 3.7 tok/s on France n96, below top3-all-layers candidate.",
+      "runs": [
+        "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T162931Z-20260709T-top2-l10-39-france-n96"
+      ]
+    },
+    {
+      "name": "upgate_parallel_any",
+      "reason": "Default-off probe did not enter current DS4 SOTA path; current path is batched decode with down parallel CPU staging.",
+      "runs": [
+        "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T162236Z-20260709T-upgate-parallel-any-france-n32-smoke",
+        "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T162437Z-20260709T-upgate-parallel-any-diag-france-n8"
+      ]
+    }
+  ],
+  "bottleneck_profile": {
+    "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T163208Z-20260709T-top3-alllayers-down-profile2-france-n32",
+    "down_batch_calls": 2720,
+    "wall_ms": 4424.374,
+    "stage_ms": 3720.868,
+    "kernel_ms": 601.536,
+    "d2h_ms": 27.372,
+    "scatter_ms": 13.869,
+    "conclusion": "Expert read plus H2D staging dominates; D2H/scatter is too small to be the main optimization target."
+  },
+  "conclusion": "Current clean generalized SOTA on the new machine is about 3.5-3.6 tok/s with correct output, not the final >5 tok/s target. The next optimization must reduce expert movement bytes/misses or improve effective H2D/PCIe throughput."
+}

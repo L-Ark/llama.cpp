@@ -798,3 +798,29 @@ Promotion requirements:
   - Expert movement remains the bottleneck. D2H/scatter is already small, so
     the next real route to stable `>5 tok/s` is reducing expert bytes/misses or
     making the PCIe/H2D path faster, not optimizing the final D2H scatter.
+- Clean validation after promoting the candidate defaults in commit
+  `ddd2cd249f3b`:
+  - France n96
+    `20260708T163915Z-20260709T-clean-ddd2cd2-default-france-n96`:
+    `eval_tok_s=3.6`, `prompt_tok_s=4.2`, `TTFT=16664.8 ms`,
+    `memory_peak_bytes=14526316544`, `memory_file_bytes=13741305856`,
+    `ram_ok=true`, `source_dirty=false`, display cleanup recorded, output
+    coherent.
+  - France n96 repeat
+    `20260708T164112Z-20260709T-clean-ddd2cd2-default-france-repeat-n96`:
+    `eval_tok_s=3.5`, `prompt_tok_s=4.2`, `TTFT=16398.8 ms`,
+    `memory_peak_bytes=14738862080`, `memory_file_bytes=13808717824`,
+    `ram_ok=true`, `source_dirty=false`, display cleanup recorded, output
+    coherent.
+  - AI infra n96
+    `20260708T164013Z-20260709T-clean-ddd2cd2-default-ai-infra-n96`:
+    `eval_tok_s=3.4`, `prompt_tok_s=4.0`, `TTFT=16590.6 ms`,
+    `memory_peak_bytes=14556254208`, `memory_file_bytes=13767069696`,
+    `ram_ok=true`, `source_dirty=false`, display cleanup recorded, output is a
+    useful Chinese explanation.
+  - This is an accepted prompt-general improvement over the prior clean
+    new-machine France SOTA of about `3.3 tok/s`, but it does not meet the
+    product requirement of stable `>5 tok/s`. Continue optimizing expert
+    movement / H2D throughput.
+  - Detailed record:
+    `.Agent/runs/20260708-vendor-ds4-newmachine/top3-alllayers-vram13-clean-generalized-20260709.json`.
