@@ -892,3 +892,48 @@ Promotion requirements:
     showed `stage_ms=3050.9`, `kernel_ms=569.5`, `d2h_ms=22.9`,
     `scatter_ms=10.6`, `wall_ms=3714.9`, with `active_avg=2.98` and
     `iouring_bytes=17.98GB`. Expert read/H2D staging remains dominant.
+- Cache policy and profile-hotset experiments:
+  - `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru` is rejected:
+    `20260708T170220Z-20260709T-lfu-lru-default-france-n96` dropped to
+    `2.8 tok/s` and output degraded.
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1` with early overlap is rejected:
+    `20260708T170324Z-20260709T-current-down-overlap-france-n96` reached only
+    `4.0 tok/s`.
+  - Disabling gate batch prefetch is rejected:
+    `20260708T170444Z-20260709T-no-gate-batch-prefetch-france-n96` reached
+    only `2.8 tok/s`; gate prefetch is required.
+  - `GGML_MOE_STAGE_PINNED_SLOTS=12` is neutral/slightly positive:
+    `20260708T170553Z-20260709T-slots12-default-france-n96` reached
+    `4.2 tok/s`, not enough to promote.
+  - Added default-off diagnostics/experiments:
+    `GGML_MOE_BATCH_PROFILE_OUT` is now passed through by the demo script, and
+    the CUDA cache supports `GGML_MOE_VRAM_PROFILE_PRELOAD=0` plus
+    `GGML_MOE_VRAM_PROFILE_PIN_ON_INSERT=1` to lazily pin hot profile entries
+    after their first runtime load. Default behavior is unchanged.
+  - A dev calibration profile was generated from France, AI infra, and deploy
+    n32 runs and stored on the new machine at
+    `/home/wici/profile-calib-20260709/combined-dev-profile.csv`.
+  - Full protected preload is rejected:
+    `20260708T171307Z-20260709T-dev-profile-protect-france-n96` preloaded
+    `2410` slots, increased total expert traffic to `34.4GB`, and reached only
+    `3.6 tok/s`.
+  - Limited protected preload is rejected:
+    `20260708T171420Z-20260709T-dev-profile-protect512-france-n96` reached
+    only `4.1 tok/s`.
+  - Lazy hot pinning is partially promising but not yet a generalized SOTA:
+    with `GGML_MOE_VRAM_PROFILE_PRELOAD=0`,
+    `GGML_MOE_VRAM_PROFILE_PROTECT=1`,
+    `GGML_MOE_VRAM_PROFILE_RESERVE_SLOTS=2600`, and
+    `GGML_MOE_VRAM_PROFILE_PIN_ON_INSERT=1`, France n96
+    `20260708T171630Z-20260709T-dev-profile-lazypin512-france-n96` reached
+    `5.0 tok/s`, and AI infra n96
+    `20260708T171722Z-20260709T-dev-profile-lazypin512-ai-infra-n96` reached
+    `5.0 tok/s`, both with coherent output and RAM OK.
+  - The same lazy-pin setting did not generalize to deploy:
+    `20260708T171813Z-20260709T-dev-profile-lazypin512-deploy-n96` reached
+    only `3.7 tok/s`; larger pin budget and slots12 did not help
+    (`20260708T171916Z-20260709T-dev-profile-lazypin1000-deploy-n96`,
+    `20260708T172050Z-20260709T-lazypin512-slots12-deploy-n96`).
+  - Conclusion: lazy pin is useful default-off infrastructure for future
+    prompt-general hotset work, but current target remains unmet because one
+    dev prompt still stays well below `5 tok/s`.

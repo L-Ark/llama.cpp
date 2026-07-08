@@ -1532,6 +1532,23 @@ static bool profile_preload_evict_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static bool profile_preload_enabled() {
+    const char *env = std::getenv("GGML_MOE_VRAM_PROFILE_PRELOAD");
+    return !env || !env[0] || env[0] != '0';
+}
+
+static bool profile_pin_on_insert_enabled() {
+    const char *env = std::getenv("GGML_MOE_VRAM_PROFILE_PIN_ON_INSERT");
+    return env && env[0] && env[0] != '0';
+}
+
+static uint32_t profile_pin_min_count() {
+    const char *env = std::getenv("GGML_MOE_VRAM_PROFILE_PIN_MIN_COUNT");
+    if (!env || !env[0]) return 1;
+    const unsigned long value = std::strtoul(env, nullptr, 10);
+    return value > UINT32_MAX ? UINT32_MAX : (uint32_t)value;
+}
+
 static uint64_t batch_key_hash(const char *name, int expert_idx) {
     uint64_t h = 1469598103934665603ULL;
     if (name) {
@@ -5075,7 +5092,18 @@ static int batch_cache_insert_slot(
         bool prefetch_down = false, bool pin_preload = true, bool async_prefetch = false,
         uint64_t profile_count = 0) {
     if (!c || !c->pool || c->n_slots == 0 || sz > c->slot_sz) return -1;
-    const bool pin_slot = preload && pin_preload && profile_protect_enabled();
+    bool pin_slot = preload && pin_preload && profile_protect_enabled();
+    if (!pin_slot && profile_pin_on_insert_enabled() && profile_protect_enabled()) {
+        load_profile_once();
+        if (g_profile_enabled) {
+            if (profile_count == 0) {
+                profile_count = profile_count_for_key(key);
+            }
+            if (profile_count >= profile_pin_min_count() && c->pinned < profile_preload_slot_budget(c)) {
+                pin_slot = true;
+            }
+        }
+    }
     if (pin_slot && c->pinned >= profile_preload_slot_budget(c)) return -1;
 
     int slot = -1;
@@ -5317,6 +5345,7 @@ static void preload_profile_for_tensor(
         const char *tensor_name, const void *src0_data, int64_t n_as, size_t nb02, size_t src0_bytes, cudaStream_t st) {
     load_profile_once();
     if (!g_profile_enabled) return;
+    if (!profile_preload_enabled()) return;
     std::lock_guard<std::mutex> lk(g_profile_mu);
     preload_profile_entries_for_tensor(
         g_profile, "profile", tensor_name, src0_data, n_as, nb02, src0_bytes, st,
