@@ -2525,3 +2525,44 @@ Decision:
   `6.6-6.7 GB/s` H2D path. To reach stable `>5 tok/s`, the next candidate
   must either reduce bytes per generated token or make up/down/gate admission
   future-use aware without relying on a specific prompt trace.
+
+## 2026-07-09 GPU0 CPU-Tail Boundary Rejection
+
+Hypothesis:
+
+- Since H2D is the measured bottleneck, try the lower-H2D boundary by setting
+  `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=0`.
+- This keeps exactness by leaving all up/down route ranks in the existing CPU
+  tail path. It does not delete experts or rely on a prompt-specific profile.
+- Expected tradeoff: lower H2D pressure, but higher CPU expert compute.
+
+Clean-source test, commit `64e6431e9`, strict cold, 16GB cgroup, required
+display/model cleanup before each run:
+
+- Deploy:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T222129Z-20260709-gpu0-cputail-deploy-n64`
+  reached `eval_tok_s=3.2`, `prompt_tok_s=5.5`,
+  `first_output_ms=16157.6 ms`, `memory_peak_bytes=14260916224`,
+  `ram_ok=true`, source clean. Output was coherent.
+- Fibonacci:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T222207Z-20260709-gpu0-cputail-fibonacci-n64`
+  reached `eval_tok_s=3.0`, `prompt_tok_s=4.6`,
+  `first_output_ms=14536.9 ms`, `memory_peak_bytes=14264561664`,
+  `ram_ok=true`, source clean. Output began with a valid Python Fibonacci
+  function.
+- France:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T222247Z-20260709-gpu0-cputail-france-n64`
+  reached `eval_tok_s=3.4`, `prompt_tok_s=4.7`,
+  `first_output_ms=15758.0 ms`, `memory_peak_bytes=14225068032`,
+  `ram_ok=true`, source clean. France output was semantically correct and
+  coherent.
+
+Decision:
+
+- Reject `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=0`. It saves RAM/H2D pressure but
+  shifts too much work to CPU and drops decode throughput far below the
+  accepted top1 GPU plus CPU-tail SOTA.
+- This rules out "move all up/down to CPU" as a path to `>5 tok/s` on the new
+  machine. The next optimization must keep at least route rank 0 on GPU and
+  reduce H2D bytes inside that path, or improve reuse/admission without pushing
+  the full up/down workload to CPU.
