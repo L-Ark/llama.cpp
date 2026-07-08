@@ -285,6 +285,36 @@
 - `next_after_acceptance`: commit and push source + artifact + plan + demo to `ssd/vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit to prove reproducibility. After that, continue with higher-impact retained/fused producer-consumer work because paired read alone cannot close the remaining gap to `>5 tok/s`.
 - `post_push_repro_052e9699d`: completed after clean rebuild from pushed commit. Run dir `/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260708T040217Z-pushed-052e9699-france-n192-repro`; France n192 `eval_tok_s=3.2`, `prompt_tok_s=1.3`, `TTFT=31374.558ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15087902720`, `ram_ok=true`, output complete and semantically correct.
 
+
+## 2026-07-08 下一步计划：gate/up/down cross-cache co-submit 评估
+
+- `attempt_id`: `20260708-gate-updown-cross-cache-cosubmit`
+- `status`: planned_after_updown_paired_read_sota
+- `basis`: 当前 accepted generalized SOTA `up/down paired read` 已证明同层 down 可以在 up 阶段预测并合批读取：n96 中 actual down cache misses `3358 -> 0`，`iouring_batches 4920 -> 3660`，`inflight_avg 1.66 -> 2.31`，France n96 `2.9 -> 3.2 tok/s`。下一步要评估 gate 是否也能参与更大的读取批次，但不能破坏现有 gate one-stream cache 和 up/down Q80 cache 的分工。
+- `current_behavior`: gate 仍走独立 one-stream gate cache（4GB，`GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`）；up/down 走共享 Q80 VRAM cache（9GB）和 paired-read。gate、up、down 的数学计算顺序不应改变；gate 是 `SwiGLU(up, gate)` 的输入，不能因为合批读取而延迟 gate compute。
+- `hypothesis`: 如果同层 gate miss、up miss、down miss 在时间上接近，且 expert source 都来自同一个 static GGUF alias source，那么可以在不合并 cache 的前提下，把 gate one-stream read jobs 与 up/down Q80 read jobs co-submit 到同一批 io_uring/pinned staging 调度里，提升 read batch 大小和 queue depth，减少小 batch overhead。该方案的安全版本是 `cross-cache co-submit`: gate 仍写入 gate cache，up/down 仍写入 Q80 cache，只合并提交/等待策略，不合并缓存池。
+- `risk`: 直接把 gate 放入 up/down 9GB cache 可能让三类 tensor 竞争 slots，降低 gate hit rate 或破坏 down paired-read 的 cache hit；直接把 up/down 放进 gate one-stream cache 历史上已导致 token rate 下降。因此下一步禁止先做 shared-cache 合并，必须先 profile-only 和 cross-cache co-submit。
+- `theoretical_bound`: gate 剩余收益预计小于 up/down paired-read。当前 up/down paired-read 后 held-out mean 是 `2.76 tok/s`，距 `>5 tok/s` 仍有大差距；gate co-submit 只可能压缩 expert read/submit/wait 和部分 staging 等待，不会减少 dense/attention、kernel compute 或 token sampling。预期若成功，阶段性目标是 held-out mean 小幅提升到约 `2.85-3.05 tok/s`，不是完成产品目标。
+- `phase_0_profile_only`:
+  - 实现 default-off `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT`，只记录、不改变行为；
+  - 在 gate one-stream op 中记录每层 gate active experts、cache hit/miss、pack/source 覆盖、read jobs、wait/submit/H2D；
+  - 在 up Q80 op 中记录同层 gate 是否已经 cache hit、是否仍 pending、up/down paired jobs 数、是否可与 gate job 同批；
+  - 输出按 layer/token 聚合：gate miss 与 up/down miss 的重叠率、可 co-submit jobs、可减少 batch 数、潜在 inflight depth；
+  - 禁止使用 held-out prompts，只用 calibration/dev。
+- `phase_1_cross_cache_cosubmit_probe`:
+  - 只有 phase 0 证明 gate miss 与 up/down miss 有足够重叠，才实现 default-off `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`；
+  - gate cache 和 Q80 cache 保持独立；job 结构需要携带目标 cache/ring/stream/slot 信息，允许同一 io_uring 批次读取不同 tensor，但完成后分别 H2D 到各自 cache；
+  - 不改变 gate/up/down compute order；如果 gate compute 需要某个 slot，必须能等待该 gate slot ready；down op 仍通过 cache hit 等待 paired down slot ready；
+  - 必须保留 Kimi alias/io_uring batch 行为，不删除或退化 Kimi 功能。
+- `phase_2_correctness_and_perf_gate`:
+  - 先跑 France fixed text/top1 or semantic correctness，再跑 calibration/dev set；
+  - 每次 strict cold `drop_caches`，`MemoryMax=16000000000`，`MemorySwapMax=0`，page cache included；
+  - 记录 per prompt output、correctness、TTFT、eval_tok_s、prompt_tok_s、elapsed、memory_peak_bytes、memory_file_bytes、iouring counters、gate/up/down cache counters、batch hist；
+  - 与 current SOTA 对照：dev min/mean/max `2.2/2.78/3.2`，held-out min/mean/max `2.4/2.76/3.0`。
+- `promotion_rule`: 只有 calibration/dev 明显超过 current SOTA，且没有个别 prompt 严重退化、France 输出正确、16GB RAM/page cache 合规、TTFT 不超过 +20%，才冻结 candidate 跑 held-out。held-out 也必须 min/mean 超过 current SOTA 才能 accepted；否则 source 回退，仅保留 rejected artifact。
+- `stop_rule`: 如果 phase 0 显示 gate miss 与 up/down miss 重叠率低，或 gate cache hit rate 已高、剩余 gate read 时间不足以带来明显收益，则停止 gate 合批方向，转回更高收益的 retained/fused producer-consumer 路径，因为产品目标 `>5 tok/s` 需要更大幅度减少 GPU/CPU handoff 与 per-token expert movement。
+- `next_action`: 先实现 phase 0 profile-only，不改性能路径；用 calibration France/quantum/Fibonacci/Japan/climate 跑 n96/n192 诊断后，再决定是否进入 cross-cache co-submit probe。
+
 ## 二次回退状态（2026-07-02）
 
 - 已执行回退：当前源码分支重置到 `5d65239a74c9512967eb557743dc3cb5d1cf6c76`（`vendor-ds4: record odirect pack sota`）。
