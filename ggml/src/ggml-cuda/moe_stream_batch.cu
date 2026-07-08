@@ -1966,6 +1966,24 @@ static bool cache_policy_hybrid_profile_lfu_lru_enabled() {
     return env && std::strcmp(env, "hybrid_profile_lfu_lru") == 0;
 }
 
+static int cache_gate_preload_evict_updown_max_hits() {
+    static int max_hits = []() {
+        const char *env = std::getenv("GGML_MOE_GATE_PRELOAD_EVICT_UPDOWN_MAX_HITS");
+        if (!env || !env[0]) return -1;
+        return std::atoi(env);
+    }();
+    return max_hits;
+}
+
+static bool cache_tensor_is_gate(const char *name) {
+    return name && std::strstr(name, ".ffn_gate_exps.") != nullptr;
+}
+
+static bool cache_tensor_is_updown(const char *name) {
+    return name && (std::strstr(name, ".ffn_up_exps.") != nullptr ||
+            std::strstr(name, ".ffn_down_exps.") != nullptr);
+}
+
 static uint64_t cache_policy_hybrid_after() {
     const char *env = std::getenv("GGML_MOE_VRAM_CACHE_PROFILE_AFTER");
     if (!env || !env[0]) return 12624;
@@ -5116,6 +5134,9 @@ static int batch_cache_insert_slot(
     const bool evict_profile = cache_evict_profile_enabled();
     const bool use_profile_score =
         profile_lfu_lru || (hybrid_profile_lfu_lru && c->clock >= cache_policy_hybrid_after());
+    const int gate_preload_updown_max_hits = cache_gate_preload_evict_updown_max_hits();
+    const bool gate_preload_protect_updown =
+        preload && gate_preload_updown_max_hits >= 0 && cache_tensor_is_gate(tensor_name);
     if ((profile_lfu_lru || hybrid_profile_lfu_lru) && !g_cache_policy_diag_registered.exchange(true)) {
         std::atexit(cache_policy_diag_report_atexit);
     }
@@ -5127,6 +5148,10 @@ static int batch_cache_insert_slot(
         }
         if (!allow_evict) continue;
         if (c->slot_pinned[i]) continue;
+        if (gate_preload_protect_updown && cache_tensor_is_updown(c->slot_tensor[i]) &&
+                (int)c->slot_hits[i] > gate_preload_updown_max_hits) {
+            continue;
+        }
         if (use_profile_score) {
             if (c->slot_profile_count[i] < lowest_profile_count ||
                     (c->slot_profile_count[i] == lowest_profile_count &&
