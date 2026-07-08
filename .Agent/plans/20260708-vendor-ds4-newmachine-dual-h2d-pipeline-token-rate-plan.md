@@ -2080,3 +2080,65 @@ calling it accepted SOTA. It is still below the product target `>5 tok/s`,
 but it is the first prompt-general, correctness-preserving path that moves
 multiple dev prompts toward the target under the 16GB RAM cap. Next validation
 must repeat from a clean commit and then test n96 plus more dev prompts.
+
+Clean source reproduction after commit and push:
+
+- Source-controlled commit:
+  `f2509e3f91f596f983c83d46e360722e54718ac5`
+  (`vendor-ds4: add gpu topk cpu tail split`), pushed to
+  `wici-ai/ssd-llama` branch `vendor/deepseek-token-rate-16gb`.
+- New machine checkout: `/home/wici/ssd-llama`, source clean
+  `vendor/deepseek-token-rate-16gb@f2509e3f9`.
+- Build: `cmake --build build-cuda -j$(nproc)` completed successfully.
+- All runs below were strict cold runs with display/model processes killed
+  before launch, `drop_caches`, 16GB cgroup, swap disabled, and
+  `display_processes_stopped_before_run=true`.
+- Runtime delta:
+  `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=2`.
+
+Clean validation results:
+
+- Fibonacci n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T211818Z-20260709-clean-gpu2-cputail-fibonacci-n64`
+  reached `eval_tok_s=4.1`, `prompt_tok_s=4.0`,
+  `first_output_ms=14752.2 ms`,
+  `memory_peak_bytes=14784131072`,
+  `memory_file_bytes=13902618624`, RAM OK. Output began with a valid Python
+  Fibonacci function, so quality passed.
+- Deploy n64 first clean run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T211853Z-20260709-clean-gpu2-cputail-deploy-n64`
+  reached `eval_tok_s=3.4`, `prompt_tok_s=4.4`,
+  `first_output_ms=16399.3 ms`,
+  `memory_peak_bytes=14793326592`,
+  `memory_file_bytes=13807443968`, RAM OK. Output was coherent and covered
+  quantization, so quality passed. This run shows deploy prompt variance and
+  should not be used alone as the accepted speed point.
+- France n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T211931Z-20260709-clean-gpu2-cputail-france-n64`
+  reached `eval_tok_s=4.8`, `prompt_tok_s=3.9`,
+  `first_output_ms=16242.0 ms`,
+  `memory_peak_bytes=14821982208`,
+  `memory_file_bytes=13851746304`, RAM OK. France output was semantically
+  correct and coherent.
+
+Clean A-B deploy comparison on the same commit:
+
+- Default, without the split:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T212022Z-20260709-clean-default-deploy-n64-ab`
+  reached `eval_tok_s=3.2`, `prompt_tok_s=5.1`,
+  `first_output_ms=16112.8 ms`,
+  `memory_peak_bytes=13917773824`, RAM OK.
+- Candidate, `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=2`:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T212101Z-20260709-clean-gpu2-cputail-deploy-n64-ab`
+  reached `eval_tok_s=4.1`, `prompt_tok_s=4.1`,
+  `first_output_ms=16615.0 ms`,
+  `memory_peak_bytes=14790180864`, RAM OK.
+
+Decision: accept this as a source-controlled prompt-general improvement over
+the immediate clean default comparison, not as final product success. The
+accepted clean generalized speed band is now roughly `4.1-4.8 tok/s` on the
+tested n64 prompts, with one observed deploy low outlier at `3.4 tok/s`.
+TTFT stayed within the `+20%` rule in the A-B comparison:
+`16615.0 ms` vs `16112.8 ms`, about `+3.1%`. The product target remains
+stable `>5 tok/s` for arbitrary user prompts, so the next step is still to
+reduce the remaining tail/transfer cost rather than declare completion.
