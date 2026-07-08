@@ -1154,3 +1154,119 @@ Next concrete implementation direction:
 4. Any rank-pruning or approximate math change is disallowed unless it passes
    Fibonacci/code-generation correctness in addition to France, AI infra, and
    deploy.
+
+## 2026-07-09 Calibration Overlay And H2D-Coalesce Probe
+
+Execution rule followed: every run below was launched after stopping display
+and model/GPU processes, and each artifact records
+`display_processes_stopped_before_run=true` unless explicitly marked as a
+locality simulation.
+
+Prompt-general calibration traces were generated under the current safe
+top3-all-layers default, strict cold n32, 16GB cgroup, and no held-out prompts:
+
+- `france`:
+  `/home/wici/runs/vendor-ds4-16gb/manual-profiles/20260709-calibration-safe-top3/france`,
+  `eval_tok_s=3.4`, RAM OK, coherent France output.
+- `aiinfra`:
+  `/home/wici/runs/vendor-ds4-16gb/manual-profiles/20260709-calibration-safe-top3/aiinfra`,
+  `eval_tok_s=3.4`, RAM OK, Chinese answer explains AI infrastructure rather
+  than only translating the prompt.
+- `fibonacci`:
+  `/home/wici/runs/vendor-ds4-16gb/manual-profiles/20260709-calibration-safe-top3/fibonacci`,
+  `eval_tok_s=3.1`, RAM OK, output begins a Python Fibonacci function.
+- `deploy`:
+  `/home/wici/runs/vendor-ds4-16gb/manual-profiles/20260709-calibration-safe-top3/deploy`,
+  `eval_tok_s=3.3`, RAM OK, coherent deployment answer.
+
+The combined calibration trace is:
+`/home/wici/runs/vendor-ds4-16gb/manual-profiles/20260709-calibration-safe-top3/combined-dev-calibration-io-read-trace.csv`
+with `20168` rows.
+
+Built prompt-general first-use overlay pack from the four calibration traces:
+
+- pack:
+  `/home/wici/runs/vendor-ds4-16gb/assets/ds4-safe-top3-dev4-firstuse-overlay.expert-pack`;
+- build log:
+  `/home/wici/runs/vendor-ds4-16gb/assets/ds4-safe-top3-dev4-firstuse-overlay.build.log`;
+- size: `48G`, `11454` entries, `51044155392` copied bytes.
+
+Locality sim on the combined trace showed layout headroom, but not yet a
+runtime win:
+
+- current trace layout: `read_jobs=20159`, `read_bytes=89.84GB`,
+  `adjacent/read_jobs=0.0261`, `coalesce_rows=0`;
+- simulated first-use layout: `adjacent/read_jobs=0.2012`,
+  `coalesce_rows=203`;
+- simulated greedy-pair layout: `adjacent/read_jobs=0.2346`,
+  `coalesce_rows=166`.
+
+Implemented and pushed a default-off, controlled demo entry point for this
+kind of prompt-general calibration overlay in `0c2cebadc`
+(`vendor-ds4: allow calibration overlay demo runs`). Directly setting
+`GGML_MOE_EXPERT_PACK_OVERLAY` remains blocked by the demo script; the allowed
+path is explicit `--calibration-overlay-pack` and is recorded in `config.json`.
+
+Rejected overlay runtime test:
+
+- run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T184438Z-20260709-dev4-firstuse-overlay-smoke-deploy-n32`;
+- config: `GGML_MOE_BATCH_FULLPACK=1` plus the calibration overlay pack;
+- result: `eval_tok_s=3.3`, RAM OK, coherent deploy output;
+- counters: overlay loaded and replaced `11454` duplicate keys, but
+  `iouring_reads=5202`, `iouring_bytes=23.18GB`, and batch histogram matched
+  the baseline n32 path. This proves pack layout alone does not help because
+  the runtime still issues one read and one H2D copy per expert payload.
+
+Rejected VRAM-cache probes:
+
+- `GGML_MOE_VRAM_CACHE_MIB=14080`, run
+  `20260709-vram14080-smoke-deploy-n32`: process aborted with `status=134`,
+  therefore rejected even though cgroup RAM was below 16GB.
+- `GGML_MOE_VRAM_CACHE_MIB=14200`, run
+  `20260709-vram14200-smoke-deploy-n32`: `eval_tok_s=3.3`, RAM OK, but
+  `VRAM cache hits=15566 misses=3442`, worse than the `13824MiB` path on the
+  same prompt (`misses=3042`). Larger cache near the free-VRAM edge is not a
+  reliable improvement.
+
+Diagnostic H2D-coalesce implementation was tested from unpushed experimental
+head `e1798ff50` and then reverted because it did not improve SOTA:
+
+- First diagnostic with contiguous pinned staging showed the missing mechanism:
+  run `20260708T185217Z-20260709-contig2-overlay-locality-deploy-n32` had
+  `host_contiguous_pairs=2126`, `dst_contiguous_pairs=2715`,
+  `both_contiguous_pairs=1727`, and theoretical `total_saved_copy_count=1727`,
+  but speed stayed `eval_tok_s=3.2` because actual H2D copies were not yet
+  coalesced.
+- Actual H2D-coalesce diagnostic, run
+  `20260708T185700Z-20260709-h2d-coalesce-overlay-deploy-n32`, reduced
+  `iouring_h2d_enqueues` from `5202` to `4659`, but speed was only
+  `eval_tok_s=3.4`.
+- n96 candidate, run
+  `20260708T185751Z-20260709-h2d-coalesce-overlay-deploy-n96`, produced a
+  coherent deploy answer and stayed within RAM (`memory_peak_bytes=14106255360`,
+  `memory_file_bytes=13226201088`), but reached only `eval_tok_s=3.2`,
+  `prompt_tok_s=5.3`, `first_output_ms=16144.8 ms`,
+  `iouring_wait_us=12782809`, `iouring_reads=11331`,
+  `iouring_bytes=50.50GB`, and `iouring_h2d_enqueues=10782`.
+- Conclusion: this implementation does not beat the accepted safe default
+  deploy high repeat (`3.6 tok/s`) and does not approach product `>5 tok/s`.
+  The experimental code was not pushed and the working tree was reset to the
+  last pushed safe head.
+
+Updated implementation direction after the rejected probes:
+
+1. Do not promote first-use overlay layout alone. It is useful evidence, but
+   current runtime does not turn physical adjacency into fewer reads/bytes.
+2. Do not spend more time on small VRAM-cache increments near `14GB`; they are
+   unstable and can increase misses or abort.
+3. A future coalescing attempt must reduce both H2D enqueue count and
+   `iouring_wait_us` on n96, not only n32 profile counters. The current
+   implementation reduced enqueue count too little and increased scheduling
+   wait.
+4. The next high-impact path should target total bytes: compact/full-route
+   expert representations or a true runtime plan that reads one larger ordered
+   span and directly places experts into a layout that the kernels can consume
+   without per-expert staging. Any such path must preserve exact math and pass
+   France, AI infra, Fibonacci/code-generation, and deploy before held-out
+   testing.
