@@ -236,6 +236,38 @@
 - `retained_handoff_marker_scope`: not a token-rate SOTA and not a promoted performance path. It only fixes the evidence/profiler layer so the next retained down consume microbench can use the real explicit `ffn_moe_swiglu` producer instead of relying on fused up_gate.
 - `next_impl_after_marker`: implement default-off retained down consume microbench/path at the MoE helper level. Required gates: CPU-vs-GPU row parity for marked act -> down, fixed-text top1/logit parity, France semantic correctness, then calibration/dev performance under 16GB cgroup. Do not run held-out prompts until a candidate is frozen.
 
+
+## 2026-07-08 下一步实现任务：prompt-general up/down paired read 与 down prefetch
+
+- `attempt_id`: `20260708-updown-paired-read-prefetch`
+- `status`: planned_before_source_edit
+- `motivation`: 当前 accepted generalized SOTA 已经把 `ffn_up_exps` 和 `ffn_down_exps` 的主要 CPU fallback 移到 GPU Q80 batch 路径，但 n96 profile 显示剩余瓶颈从 CPU dot 转成了 expert source IO / pinned staging / H2D / cache scheduling。当前 accepted profile 中 `iouring_wait_us≈7.87s`、`iouring_submit_us≈1.76s`、`iouring_reads=6716`、`iouring_bytes≈29.93GB`，且 read batch 很小：`batch_hist=1:4030,2-4:726,5-8:136,9-16:28`、`inflight_avg≈1.67`。这说明当前 up/down 虽然共享 Q80 batch/cache 机制，但 misses 仍按单个 tensor/op 分批提交，SSD/io_uring 队列深度没有被充分利用。
+- `current_behavior`: up 和 down 不是同一个 read batch。`ffn_up_exps.weight` 进入 Q80 batch 路径时只处理 up tensor 的 cache miss；随后 `ffn_down_exps.weight` 在独立 MoE op 中再处理 down tensor 的 miss。gate 仍走 one-stream gate cache，不与 up/down 合读。up/down 共用 9GB Q80 VRAM cache，但调度粒度仍是 per-op/per-tensor。
+- `hypothesis`: 对 DeepSeek DS4 decode，同一层的 up/down active experts 来自同一 routing/topk 集合。若在 up op 阶段提前识别同层 down tensor 与相同 active experts，并把 down misses 与 up misses 合并提交到 io_uring，或至少异步预取 down misses 到同一个 Q80 VRAM cache，down op 到达时可减少小 batch read、提升 inflight depth、降低 `iouring_wait_us`。该方案不改变数学计算顺序；down compute 仍在原 down op 执行，只改变 expert weight 读取/缓存时机。
+- `expected_bound`: 本优化只作用在 IO/read scheduling，不降低 CUDA kernel 本身或 dense/attention 时间。按当前 n96 profile，理论可压缩上限主要来自 `iouring_wait_us≈7.9s` 与部分 submit/staging 开销；即使把 wait 降低 30%-50%，整体 token rate 预计也只是阶段性提升，可能把 held-out mean 从当前 `2.56 tok/s` 推向约 `2.7-2.9 tok/s`。它不是单独达到 `>5 tok/s` 的方案；后续仍需要 fused/retained producer-consumer 或更强的 GPU-resident path。
+- `generalization_rule`: 该实现必须 prompt-general。只能基于静态 tensor name、layer id、expert id、active routing结果和 cache state 做 paired prefetch；不得使用 France trace、held-out prompt trace、prompt-specific hotset、prompt-specific pack 或手工为某个 prompt 排序。`held_out_test_set_v1_locked` 仍不得用于设计、调参或 profile。
+- `implementation_guard`: 所有源码改动必须 default-off，例如 `GGML_MOE_PREFETCH_PAIRED_DOWN=1` 或 `GGML_MOE_UPDOWN_PAIRED_READ=1`；默认 unset 时现有 accepted SOTA 路径和 Kimi 功能必须不变。Kimi 相关 alias/io_uring batch 逻辑不得删减或退化。
+- `phase_0_static_audit`:
+  - 阅读 `ggml/src/ggml-cuda/moe_stream_batch.cu` 当前 Q80 up/down batch/cache/staging 代码；确认 up 与 down active experts 是否同源、row mapping 是否一致，以及 cache insert/lookup 是否可被提前调用；
+  - 记录当前 accepted n96 profile 的 `iouring_wait_us`, `iouring_submit_us`, `iouring_reads`, `iouring_bytes`, `inflight_avg/max`, `batch_hist`, per-call batch stage/total 作为对照；
+  - 不改源码、不跑 held-out。
+- `phase_1_profile_only_pair_predictor`:
+  - 先实现 default-off 只记录、不改变行为的 predictor：在 up Q80 batch op 中由 tensor name 推导同层 down tensor（`ffn_up_exps` -> `ffn_down_exps`），用当前 active experts 估算 down miss 数、bytes、可合并 job 数；
+  - 在实际 down op 到来时记录 predictor 命中率：predicted down entries 是否等于实际需要的 down entries、提前预取会不会污染/挤出 up/gate cache；
+  - 验收门槛：`prediction_coverage >= 95%`、无错误 layer/tensor mapping、默认关闭时二进制行为不变。若 coverage 不足，停止实现 prefetch，改回 retained/fused 主线。
+- `phase_2_paired_down_prefetch`:
+  - 在 up op 阶段对预测出的 down cache misses 发起异步 io_uring read + pinned staging + H2D cache insert；down op 仍按原路径读取 cache 并计算；
+  - 第一版只允许预取同层、同 active experts、同 Q80 cache source 中确定存在的 down entries；不得跨 prompt、不得跨未来 layer 做 speculation；
+  - 限制预取额度，避免挤占 gate one-stream 4GB cache或导致 Q80 9GB cache thrash；记录 evict/insert/hit/miss 变化；
+  - 若出现 RAM 超限、CUDA OOM、cache insert fail、correctness mismatch 或 TTFT 超 gate 20%，立即 reject 并回退源码。
+- `phase_3_perf_gate_dev_only`:
+  - 只用 `calibration_dev_set_v1` 做 strict cold `drop_caches` + `MemoryMax=16000000000` + `MemorySwapMax=0` 性能评估；
+  - 必须记录每个 prompt 的 exact output、correctness、TTFT、eval_tok_s、prompt_tok_s、elapsed、memory_peak_bytes、memory_file_bytes、oom/swap、iouring counters、cache counters、batch_hist；
+  - 对照当前 accepted SOTA：dev mean `2.54 tok/s`、dev min `2.1 tok/s`，TTFT 约 `31.9-34.2s`，held-out mean `2.56 tok/s`、held-out min `2.3 tok/s`。
+- `promotion_rule`: 只有 dev set 明显超过当前 generalized SOTA，且 France 输出语义正确、所有 dev prompt correctness 通过、16GB cgroup/page cache 合规、TTFT 不超过 accepted gate 20%，才允许冻结 candidate。冻结后才能运行 `held_out_test_set_v1_locked`。若 held-out min/mean 也超过当前 SOTA 且无单项严重退化，立即写完整复现 artifact、commit、push 到 `ssd/vendor/deepseek-token-rate-16gb`，并从 pushed commit clean rebuild/rerun 证明可复现。
+- `rejection_rule`: 若只是 France 或某个 dev prompt 提升，或依赖 prompt-specific trace/hotset，或仅提高 batch_accept 但 token rate/TTFT/correctness 不达标，必须标记 `rejected/not_accepted`，源码回退到上一 accepted SOTA，仅保留 artifact 和文档记录。
+- `next_action`: 先执行 phase 0/1，不直接改性能路径；拿到 predictor coverage 与理论收益后，再决定是否进入 phase 2 paired down prefetch。
+
 ## 二次回退状态（2026-07-02）
 
 - 已执行回退：当前源码分支重置到 `5d65239a74c9512967eb557743dc3cb5d1cf6c76`（`vendor-ds4: record odirect pack sota`）。
