@@ -1558,3 +1558,44 @@ echo '12345678' | sudo -S bash -lc '
   nvidia-smi
 '
 ```
+
+## 2026-07-09 Duplicate-Rank0 Dynamic Top-K Rejection
+
+After rejecting the negative-id dynamic top-k implementation, a safer
+duplicate-rank0 variant was tested. Instead of writing `-1` for pruned tail
+experts, it replaced pruned tail expert ids with the rank0 expert for the same
+token and set the corresponding tail weights to zero. The goal was to avoid
+invalid expert ids while preventing extra expert movement, because rank0 should
+already be active for that token.
+
+Run:
+
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T194955Z-20260709-dyntopk015-duprank0-france-n32`
+- env: `GGML_DS4_DYNAMIC_TOPK_WEIGHT_THRESHOLD=0.15`,
+  `GGML_DS4_DYNAMIC_TOPK_MIN_KEEP=2`
+- strict cold, 16GB cgroup, display cleanup recorded
+- `eval_tok_s=3.2`, `prompt_tok_s=4.3`, `first_output_ms=16023.9 ms`
+- `memory_peak_bytes=13970964480`, `memory_file_bytes=13144674304`,
+  `ram_ok=true`
+- France output was coherent, but source was dirty and performance regressed.
+
+Clean same-head comparison:
+
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T194721Z-20260709-clean-1bbfbfa-default-france-n32`
+- `eval_tok_s=3.5`, `prompt_tok_s=4.6`, `first_output_ms=16138.5 ms`,
+  `ram_ok=true`, source clean.
+
+Counter comparison:
+
+- clean default: `iouring_reads=4959`, `iouring_bytes=22099525632`,
+  `iouring_wait_us=4092211`, VRAM hit rate `84.3%`.
+- duplicate-rank0 top-k: `iouring_reads=4903`, `iouring_bytes=21849964544`,
+  `iouring_wait_us=4288576`, VRAM hit rate `84.4%`.
+
+Decision: reject and revert. The duplicate-rank0 method reduced actual expert
+bytes by only about `1.1%`, far below the theoretical tail-pruning potential,
+and added graph overhead from mask/concat/cast operations. It does not solve
+the real scheduling problem: the runtime still sees nearly the same active
+expert-source footprint. Future pruning work must either support true safe
+route skipping in the MoE kernels/runtime or use a validated compact expert
+artifact; graph-level id substitution is closed.
