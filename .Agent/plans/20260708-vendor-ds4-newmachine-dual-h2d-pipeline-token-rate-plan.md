@@ -20,20 +20,30 @@ within the 16GB cgroup including page cache.
 ## Required Pre-Run Procedure
 
 Before every model run on the new machine, including diagnostic runs, profile
-runs, cold benchmarks, and SOTA validation, display processes must be
-killed/stopped first. This is a hard promotion requirement because graphical
-processes consume VRAM and can change the effective cache/workspace budget.
+runs, cold benchmarks, and SOTA validation, display processes and stale model
+processes must be killed/stopped first. This is a hard promotion requirement
+because graphical processes consume VRAM and can change the effective
+cache/workspace budget.
 
 中文硬性要求：每次运行模型前必须先杀掉显示进程；没有完成并记录该步骤的 run
 不能进入 baseline/SOTA/候选优化比较，只能作为无效诊断参考。
 
-1. Kill/stop display usage before launching the model:
+Run-0 display cleanup is mandatory before **every** execution, not only before
+final SOTA validation. If this cleanup is skipped, the run is invalid for
+baseline, profile, regression, candidate, and SOTA comparison.
+
+1. Kill/stop display and stale model usage before launching the model:
 
    ```bash
-   echo '12345678' | sudo -S systemctl stop display-manager || true
-   echo '12345678' | sudo -S pkill -f gnome-shell || true
-   echo '12345678' | sudo -S pkill -f Xorg || true
-   echo '12345678' | sudo -S pkill -f '/usr/lib/xorg/Xorg' || true
+   echo '12345678' | sudo -S bash -lc '
+     systemctl stop display-manager || true
+     pkill -f "[g]nome-shell" || true
+     pkill -f "[X]org" || true
+     pkill -f "/usr/lib/xorg/[X]org" || true
+     pkill -f "[o]llama" || true
+     pkill -f "[l]lama-cli" || true
+     pkill -f "[m]ain" || true
+   '
    ```
 
 2. Confirm `nvidia-smi` shows no display/model GPU processes and only
