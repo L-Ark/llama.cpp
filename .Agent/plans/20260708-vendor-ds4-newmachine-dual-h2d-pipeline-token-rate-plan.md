@@ -508,3 +508,37 @@ Promotion requirements:
     `42.70GB`, worse than the default n32 combined movement of about `37.8GB`.
   - Keep the code default-off for future cache-partition experiments, but do
     not promote it as SOTA.
+- Cache-partition follow-up:
+  - `GGML_MOE_GATE_BATCH_PREFETCH=1`,
+    `GGML_MOE_STREAM_ONE_CACHE_MIB=0`, `GGML_MOE_VRAM_CACHE_MIB=12288`
+    turns the previous failed split-cache shape into a single 12GiB batch
+    cache with gate/up/down all using the batch io_uring path.
+  - n8 smoke `20260708T152102Z-20260708T-unified-cache12g-gateprefetch-n8`:
+    `eval_tok_s=3.0`, `TTFT=18124.4 ms`, `ram_ok=true`; batch iouring
+    `4778` reads / `21.29GB`, better than the earlier active gate-prefetch n8
+    `23.98GB`.
+  - n32 validation `20260708T152155Z-20260708T-unified-cache12g-gateprefetch-n32`:
+    `eval_tok_s=2.7`, `TTFT=17201.7 ms`, elapsed `27.06s`,
+    `memory_peak_bytes=14694068224`, `ram_ok=true`, coherent English answer.
+  - n96 validation `20260708T152301Z-20260708T-unified-cache12g-gateprefetch-n96`:
+    `eval_tok_s=2.6`, `TTFT=18223.0 ms`, elapsed `52.62s`,
+    `memory_peak_bytes=14696202240`, `ram_ok=true`, coherent English answer.
+  - France sentinel `20260708T152414Z-20260708T-unified-cache12g-france-n96`:
+    `eval_tok_s=2.6`, `TTFT=17277.4 ms`, `ram_ok=true`; France output was
+    semantically correct and coherent.
+  - Fibonacci calibration
+    `20260708T152520Z-20260708T-unified-cache12g-fibonacci-n96`: `eval_tok_s=2.4`,
+    `TTFT=18643.4 ms`, `ram_ok=true`; Python generator output was correct but
+    speed did not beat the safe default.
+  - Chinese general prompt
+    `20260708T152738Z-20260708T-unified-cache12g-aiinfra-n96`: `eval_tok_s=2.6`,
+    `TTFT=17601.9 ms`, `ram_ok=true`, but correctness failed because the answer
+    only translated the prompt (`What does AI infrastructure do?`) instead of
+    explaining AI infra. Therefore this config is **not promoted** as a
+    generalized SOTA despite the English speed signal.
+  - 13GiB sweep `20260708T152640Z-20260708T-unified-cache13g-gateprefetch-n32`
+    is rejected: `eval_tok_s=2.5`, slower than 12GiB.
+  - Next step: preserve the 12GiB unified-cache idea as a performance probe,
+    but do not make it default until generalized prompt quality passes. The
+    main route to `>5 tok/s` still requires reducing full-expert movement or a
+    hardware link/topology change.
