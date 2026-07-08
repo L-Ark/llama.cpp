@@ -2999,3 +2999,69 @@ Decision:
   improve admission/eviction: retain high future-use gate experts and avoid
   caching entries that will not be reused in the current request. This targets
   the Quantum lower bound without blindly consuming more VRAM.
+
+## 2026-07-09 Gate Admission Manifest Plan
+
+Hypothesis:
+
+- The existing one-cache LRU improves from 0GB to 3/4GB, but 5GB regresses even
+  though it reduces direct reads further. This suggests cache pollution and
+  secondary VRAM pressure, not just insufficient capacity.
+- Existing code already supports `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE`, which
+  restricts cache insertion to listed `(tensor, expert)` entries. We can use it
+  before writing new eviction code.
+
+Plan:
+
+1. Generate gate access profiles from calibration/dev prompts only:
+   deploy, Fibonacci, France, Quantum, and Japan. Do not use held-out prompts.
+2. Aggregate `(tensor, expert)` counts from `gate_one` profile rows and create
+   prompt-general admission manifests for top entries sized to the existing
+   cache slots:
+   - top `722` for `3072MiB`;
+   - top `963` for `4096MiB`.
+3. Test Quantum first with:
+   `GGML_MOE_STREAM_ONE_CACHE_MIB=4096` and
+   `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE=<top963 manifest>`.
+4. If Quantum exceeds strict `>5 tok/s` without RAM/TTFT regression, run the
+   full dev set. If it does not, reject manifest admission and move to deeper
+   request-local future-use eviction or output stopping.
+
+Promotion rule:
+
+- This is still a dev/calibration-tuned optimization. It can become a candidate
+  only after clean generalized dev validation, and final SOTA still requires
+  held-out validation after the candidate is frozen.
+
+Execution:
+
+- Generated five dev-prompt gate access profiles with source clean at
+  `8e90384c7`, strict cold, 16GB cgroup, and display cleanup before every run.
+  Profile root: `/tmp/20260709-gate-admit-calib`.
+- Aggregated `43116` gate accesses across `5020` unique `(tensor, expert)`
+  entries, producing:
+  - `/tmp/20260709-gate-admit-calib/top722.tsv`
+  - `/tmp/20260709-gate-admit-calib/top963.tsv`
+- A dirty-source demo plumbing test allowed the calibration manifest to be
+  passed explicitly without raw prompt-specific env injection. The runtime
+  loaded the manifest successfully.
+- Quantum test with `GGML_MOE_STREAM_ONE_CACHE_MIB=4096` and top963 admission:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T233045Z-20260709-gate-admit-top963-cache4096-quantum-n64`,
+  `eval_tok_s=4.4`, `prompt_tok_s=3.3`,
+  `first_output_ms=16576.1 ms`, `memory_peak_bytes=14870351872`,
+  `ram_ok=true`, display cleanup recorded.
+- Cache counters confirm the manifest hurt Quantum locality:
+  `cache admission: loaded 963 entries`,
+  one-pack direct reads `4312` / `19.2GB`,
+  VRAM cache `hits=4164`, `misses=4312`, `hit_rate=49.1%`.
+  This is worse than ordinary 4GB LRU (`hits=5321`, `misses=3155`) and ordinary
+  3GB LRU (`hits=4948`, `misses=3528`).
+
+Decision:
+
+- Reject global top-count admission manifests. The aggregate dev manifest
+  misses request-local Quantum reuse and lowers hit rate.
+- Revert the dirty demo plumbing; do not add a calibration admission option
+  until there is a manifest strategy that improves generalized performance.
+- Next cache work must be request-local/future-use-aware, not a static global
+  top-N allowlist.
