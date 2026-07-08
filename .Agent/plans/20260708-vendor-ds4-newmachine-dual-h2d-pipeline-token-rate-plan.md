@@ -1371,3 +1371,25 @@ Dynamic top-k assessment:
   how often rank-3 weight is small enough to skip. If the possible skip rate
   is well below the `35-40%` byte reduction target, do not implement dynamic
   top-k.
+
+External compact DeepSeek candidate:
+
+- Metadata/browser check found
+  `cloudyu/DeepSeek-V4-Flash-4Expert-GGUF` with `ds4flash-4expert.gguf`.
+  The model card describes a DeepSeek V4 Flash 4Expert Q4_K GGUF, top-k `4`,
+  `256` routed experts, `2048` FFN dim, file size `164 GiB`, and HumanEval
+  Pass@1 matching the original top-k=6 report in that card.
+- This is not the same current native GGUF. Treat it as a candidate model
+  variant for the product goal, not as a replacement SOTA unless it passes the
+  same gates: strict cold, 16GB cgroup including page cache, display cleanup,
+  generalized prompt quality, Fibonacci/code generation, and TTFT.
+- The expected benefit is structural: native current path still selects/prunes
+  from top-k 6 and quality fails when forced to top2, while a trained/exported
+  top-k 4 variant may reduce active expert movement without the same quality
+  failure. This directly attacks the byte-bound gap instead of relying on cache
+  repeats.
+- Next step: if disk/network allow, download or resume
+  `ds4flash-4expert.gguf` into `/home/wici/models`, run metadata/load smoke,
+  then strict-cold n96 on France, AI infra, Fibonacci, and deploy. Do not
+  promote unless quality is clean and token rate is stably above the current
+  safe default; product success still requires stable `>5 tok/s`.
