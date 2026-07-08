@@ -8593,3 +8593,64 @@ Decision:
 - Immediately commit and push source, plan, demo script, and artifact to `ssd/vendor/deepseek-token-rate-16gb` so this result is reproducible.
 - Next bottleneck: Q80 batch accepted all up/down rows but still spends substantial `cuda_batch`/source staging time. Next work should optimize batch cache/source movement and reduce Q80 up/down staging cost without reintroducing CPU fallback or exceeding 16GB host RAM.
 
+## 2026-07-08 X10-BK accepted generalized SOTA: VRAM split gate4 / updown9
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/up-q80-one4-vram9-generalized-sota-20260708.json`
+- status: `accepted_generalized_sota_stage_not_product_target`
+- source change: none. This is a runtime configuration improvement on top of X10-BJ.
+- push target remains `ssd/vendor/deepseek-token-rate-16gb`; accepted SOTA records and demo updates must be committed and pushed immediately.
+
+Purpose:
+- Continue after X10-BJ showed up/down GPU Q80 correctness and removed CPU fallback.
+- Profile the current generalized SOTA to locate the next bottleneck before changing implementation.
+- Optimize for general prompts, not France-specific traces or prompt-specific packs.
+
+Bottleneck profile:
+- Reference current config `gate8 / updown4`, n96 cold France profile:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708T002217Z-20260708-current-upq80-pinned8-n96-profile-absbin/france-profile-cpu40-vram4gb`
+  - `eval_tok_s=2.6`, TTFT `36815.22 ms`, strict RAM OK.
+  - batch path: `calls=7840`, `stage=2.799 ms/call`, `kernel=0.221 ms/call`, `total=3.033 ms/call`.
+  - pinned staging: `copies=11179`, `host_stage=20485.067 ms`, `h2d=1868.220 ms`.
+  - batch cache hit rate `60.6%`; fallback profiles empty.
+- Interpretation: up/down GPU correctness is no longer the blocker. Kernel time is small; source/host staging dominates.
+
+VRAM split probes, n96 cold France:
+- `gate8 / updown6`: actual updown cache `5.2 GiB`, `2.7 tok/s`, host_stage `18256.121 ms`.
+- `gate7 / updown6`: `2.8 tok/s`, host_stage `16644.384 ms`.
+- `gate6 / updown7`: `2.9 tok/s`, host_stage `15256.213 ms`.
+- `gate5 / updown8`: `2.9 tok/s`, host_stage `14538.327 ms`.
+- `gate4 / updown9`: `2.9 tok/s`, host_stage `13147.380 ms`, TTFT `35330.50 ms`.
+- `gate3 / updown10`: `2.9 tok/s`, TTFT worsened to `37335.72 ms`.
+- Decision: freeze `gate4 / updown9` for generalized validation because it is tied for best n96 token rate, has the best TTFT among the top-rate splits, and keeps fallback empty.
+
+Frozen accepted config:
+- `cpu_moe=40`, strict cold `drop_caches`, `-n 192 -c 256 -b 16 -ub 16`.
+- `GGML_MOE_STREAM_ONE_CACHE_MIB=4096` for gate one-stream cache.
+- `GGML_MOE_VRAM_CACHE_GB=9` for up/down Q80 batch cache.
+- `GGML_MOE_STAGE_PINNED_SLOTS=8`.
+- Static prompt-general alias source: `.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv` with `GGML_MOE_EXPERT_GGUF_ALIAS_TSV`, `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`.
+- Gate path: `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`.
+- Up/down path: `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`.
+- Retain top-k env unchanged: `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+
+Calibration/dev set v1 result:
+- France: `3.0 tok/s`, TTFT `36978.29 ms`, RAM/correctness OK.
+- Quantum: `2.1 tok/s`, TTFT `33041.59 ms`, RAM/correctness OK.
+- Fibonacci: `2.0 tok/s`, TTFT `38902.10 ms`, RAM/correctness OK.
+- Japan: `2.8 tok/s`, TTFT `38627.40 ms`, RAM/correctness OK.
+- Climate: `2.6 tok/s`, TTFT `35429.72 ms`, RAM/correctness OK.
+- Aggregate: min `2.0`, mean `2.50`, max `3.0`; previous accepted dev aggregate was min `2.0`, mean `2.40`, max `2.7`.
+
+Held-out test set v1 result after candidate freeze:
+- Photosynthesis: `2.5 tok/s`, TTFT `36595.85 ms`, RAM/correctness OK.
+- Home office: `2.3 tok/s`, TTFT `38020.20 ms`, RAM/correctness OK.
+- JavaScript palindrome: `2.2 tok/s`, TTFT `35847.69 ms`, RAM/correctness OK.
+- Exercise: `2.7 tok/s`, TTFT `37484.98 ms`, RAM/correctness OK.
+- Brazil: `2.8 tok/s`, TTFT `35901.34 ms`, RAM/correctness OK.
+- Aggregate: min `2.2`, mean `2.50`, max `2.8`; previous accepted held-out aggregate was min `2.2`, mean `2.42`, max `2.6`.
+
+Decision:
+- Accept as the current generalized SOTA stage result. It improves held-out mean and max while preserving min, correctness, strict 16GB RAM including page cache, and TTFT gate.
+- Product target remains unmet: held-out mean `2.50 tok/s` is still below stable `>5 tok/s` for random prompts.
+- Next bottleneck remains source staging/read path: at `gate4 / updown9`, n96 still spends `13.1s` in batch host staging while kernel time is about `1.74s`. Further progress requires reducing cold source staging or changing dataflow/layout, not only increasing batch cache.
+
