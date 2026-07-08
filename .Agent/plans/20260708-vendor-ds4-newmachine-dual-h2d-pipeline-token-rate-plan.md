@@ -2817,3 +2817,185 @@ Decision:
 - Revert the experimental runtime knobs and keep the current SOTA code path.
   Next work should reduce H2D bytes/copy count or improve reuse, not move more
   complete expert routes to GPU.
+
+## 2026-07-09 Clean SOTA Profile And Gate Cache Recheck Plan
+
+Clean profile run:
+
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T225321Z-20260709-clean-sota-profile-deploy-n96`
+  with profile files in `/tmp/20260709-clean-sota-profile-deploy-n96`.
+- Source clean at `8e90384c7`, strict cold, 16GB cgroup, display/model cleanup
+  recorded.
+- Summary: `eval_tok_s=3.2` with profiling overhead, `prompt_tok_s=3.9`,
+  `first_output_ms=17981.1 ms`, `memory_peak_bytes=14883590144`,
+  `memory_file_bytes=13932077056`, `ram_ok=true`.
+- Hardware state: PCIe settles at `16.0 GT/s x4`; 4.25MiB H2D benchmark
+  `6.81 GB/s`.
+
+Measured bottleneck split:
+
+- Gate one-pack direct reads dominate the profile:
+  `12552` gate reads, `52.10 GiB` transferred, `17891 ms` total profile time,
+  `9189 ms` source-read time, `misses=0`.
+- Gate reuse is high: only `2821` unique `(tensor, expert)` gate entries were
+  read for `12552` uses. The hottest gate expert was read `95` times in this
+  single request.
+- CPU fallback remains material but smaller than repeated gate movement:
+  decode up `2168 ms`, decode down `2097 ms`, prompt up `932 ms`, prompt down
+  `1702 ms`, prompt gate `7 ms`.
+
+Next experiment:
+
+- Re-test a small `GGML_MOE_STREAM_ONE_CACHE_MIB` gate cache on the current
+  clean SOTA rather than large split-cache sizes. Earlier large gate-cache
+  probes were rejected because they displaced up/down batch cache. The new
+  profile suggests a small hot LRU may still be useful if it captures repeated
+  gate experts without stealing too much up/down VRAM.
+- Start with `GGML_MOE_STREAM_ONE_CACHE_MIB=1024` and `2048`, keeping
+  `GGML_MOE_VRAM_CACHE_MIB=13824` and all other SOTA defaults unchanged.
+- Test `deploy`, `fibonacci`, and `France` under strict cold, display cleanup,
+  and 16GB cgroup. Promote only if generalized token rate improves without
+  correctness loss or TTFT regression.
+- If small cache helps, implement future-use-aware admission instead of a blunt
+  LRU. If small cache still regresses, stop gate cache work and focus on
+  reducing gate bytes/copy count at the representation level.
+
+Small gate-cache results, clean source `8e90384c7`, strict cold, 16GB cgroup,
+display/model cleanup before every run:
+
+- `GGML_MOE_STREAM_ONE_CACHE_MIB=1024`:
+  - deploy n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T225632Z-20260709-stream-one-cache1024-deploy-n64`,
+    `eval_tok_s=4.6`, `prompt_tok_s=3.8`,
+    `first_output_ms=17819.5 ms`, `ram_ok=true`.
+  - fibonacci n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T225731Z-20260709-stream-one-cache1024-fibonacci-n64`,
+    `eval_tok_s=4.5`, `prompt_tok_s=3.6`,
+    `first_output_ms=15709.3 ms`, `ram_ok=true`.
+  - France n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T225806Z-20260709-stream-one-cache1024-france-n64`,
+    `eval_tok_s=4.5`, `prompt_tok_s=3.7`,
+    `first_output_ms=16444.2 ms`, `ram_ok=true`.
+  - Deploy log showed the cache is active: `hits=3792`, `misses=4920`; direct
+    gate reads were `4920` / `21.9GB`.
+- `GGML_MOE_STREAM_ONE_CACHE_MIB=2048`:
+  - deploy n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T225924Z-20260709-stream-one-cache2048-deploy-n64`,
+    `eval_tok_s=5.0`, `prompt_tok_s=4.2`,
+    `first_output_ms=17273.5 ms`, `ram_ok=true`.
+  - fibonacci n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T225958Z-20260709-stream-one-cache2048-fibonacci-n64`,
+    `eval_tok_s=4.8`, `prompt_tok_s=3.9`,
+    `first_output_ms=14822.8 ms`, `ram_ok=true`.
+  - France n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T230030Z-20260709-stream-one-cache2048-france-n64`,
+    `eval_tok_s=5.1`, `prompt_tok_s=3.8`,
+    `first_output_ms=16156.2 ms`, `ram_ok=true`.
+  - Quantum n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T230234Z-20260709-stream-one-cache2048-quantum-n64`,
+    `eval_tok_s=4.5`, `prompt_tok_s=3.6`,
+    `first_output_ms=16085.7 ms`, `ram_ok=true`.
+  - Japan n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T230307Z-20260709-stream-one-cache2048-japan-n64`,
+    `eval_tok_s=5.3`, `prompt_tok_s=3.6`,
+    `first_output_ms=16743.1 ms`, `ram_ok=true`.
+  - France n96:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T230126Z-20260709-stream-one-cache2048-france-n96`,
+    `eval_tok_s=5.3`, `first_output_ms=16295.1 ms`, `ram_ok=true`.
+  - France n128:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T230517Z-20260709-stream-one-cache2048-france-n128`,
+    `eval_tok_s=5.2`, `first_output_ms=16587.1 ms`, `ram_ok=true`.
+
+Interim decision:
+
+- `2048MiB` is the strongest current speed candidate, improving the five-prompt
+  n64 average to about `4.94 tok/s` and lowering TTFT on most prompts versus
+  the prior accepted clean five-prompt SOTA.
+- It is not yet promoted as final product SOTA because the minimum prompt rate
+  is still `4.5 tok/s`, below the stable `>5 tok/s` target, and the France
+  answer remains semantically correct for several sentences but is still cut
+  off by the token cap at n96/n128. This needs either a cleaner stopping
+  policy or a stricter correctness definition before promotion.
+- Since `2048MiB` helps without RAM/TTFT regression, test
+  `GGML_MOE_STREAM_ONE_CACHE_MIB=3072` next, focusing first on the weaker
+  prompts (`quantum`, `fibonacci`) and rejecting immediately if VRAM/cache
+  pressure causes regression.
+
+`GGML_MOE_STREAM_ONE_CACHE_MIB=3072`, clean source `8e90384c7`, strict cold,
+16GB cgroup, display/model cleanup before every run:
+
+- Quantum n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T230955Z-20260709-stream-one-cache3072-quantum-n64`,
+  `eval_tok_s=4.8`, `prompt_tok_s=3.6`,
+  `first_output_ms=15913.2 ms`, `ram_ok=true`.
+- Fibonacci n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T231028Z-20260709-stream-one-cache3072-fibonacci-n64`,
+  `eval_tok_s=5.0`, `prompt_tok_s=3.8`,
+  `first_output_ms=15261.8 ms`, `ram_ok=true`.
+- Deploy n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T231119Z-20260709-stream-one-cache3072-deploy-n64`,
+  `eval_tok_s=5.1`, `prompt_tok_s=4.3`,
+  `first_output_ms=16943.5 ms`, `ram_ok=true`.
+- France n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T231151Z-20260709-stream-one-cache3072-france-n64`,
+  `eval_tok_s=5.4`, `prompt_tok_s=3.9`,
+  `first_output_ms=16596.3 ms`, `ram_ok=true`.
+- Japan n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T231223Z-20260709-stream-one-cache3072-japan-n64`,
+  `eval_tok_s=5.5`, `prompt_tok_s=3.8`,
+  `first_output_ms=16612.6 ms`, `ram_ok=true`.
+
+Interim decision:
+
+- `3072MiB` is the best speed candidate so far: five-prompt average is about
+  `5.16 tok/s`, and TTFT remains within the gate versus the previous clean
+  SOTA. RAM including page cache remains below 16GB.
+- It still does not prove the product target because Quantum is `4.8 tok/s`,
+  below stable `>5`, and short-paragraph prompts still reach the token cap
+  before a clean stop.
+- Test `GGML_MOE_STREAM_ONE_CACHE_MIB=4096` on Quantum first. If Quantum does
+  not cross 5 or if memory/TTFT regresses, do not spend time on larger blunt
+  gate caches; move to future-use-aware gate admission or output stopping.
+
+`GGML_MOE_STREAM_ONE_CACHE_MIB=4096` first probe:
+
+- Quantum n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T231338Z-20260709-stream-one-cache4096-quantum-n64`,
+  `eval_tok_s=5.0`, `prompt_tok_s=3.6`,
+  `first_output_ms=15874.1 ms`, `memory_peak_bytes=14867517440`,
+  `ram_ok=true`, display cleanup recorded.
+- This is close to the product threshold but the summary still reports
+  `product_target_gt_5_tok_s_met_by_this_run=false`, so it is not a strict
+  `>5 tok/s` pass.
+- Run one final `5120MiB` Quantum probe. If it does not clearly beat 5 or if it
+  hurts RAM/TTFT, stop increasing blunt gate-cache size.
+
+`GGML_MOE_STREAM_ONE_CACHE_MIB=5120` final blunt-cache probe:
+
+- Quantum n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T231604Z-20260709-stream-one-cache5120-quantum-n64`,
+  `eval_tok_s=4.4`, `prompt_tok_s=3.5`,
+  `first_output_ms=15904.7 ms`, `memory_peak_bytes=14851764224`,
+  `ram_ok=true`, display cleanup recorded.
+- Cache counters by Quantum run:
+  - `3072MiB`: `hits=4948`, `misses=3528`, direct reads `15.7GB`,
+    `eval_tok_s=4.8`;
+  - `4096MiB`: `hits=5321`, `misses=3155`, direct reads `14.1GB`,
+    `eval_tok_s=5.0`;
+  - `5120MiB`: `hits=5683`, `misses=2793`, direct reads `12.4GB`,
+    `eval_tok_s=4.4`.
+
+Decision:
+
+- Stop increasing blunt gate cache. Larger cache continues reducing direct
+  gate reads, but at `5120MiB` end-to-end speed regresses, so the missing time
+  is no longer only gate read volume.
+- Current best speed candidate is `GGML_MOE_STREAM_ONE_CACHE_MIB=3072`: clean,
+  strict-cold, RAM-compliant, five-prompt average about `5.16 tok/s`, but min
+  prompt rate is still `4.8 tok/s`. It is a strong candidate, not final product
+  completion.
+- Next implementation should keep roughly the `3-4GB` gate-cache budget but
+  improve admission/eviction: retain high future-use gate experts and avoid
+  caching entries that will not be reused in the current request. This targets
+  the Quantum lower bound without blindly consuming more VRAM.
