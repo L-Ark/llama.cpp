@@ -2607,3 +2607,51 @@ Decision:
   immediately after use is too blunt.
 - Next cache work must be selective and future-use aware, not a role-wide gate
   eviction rule.
+
+## 2026-07-09 CUDA Graph Enable Rejection
+
+Hypothesis:
+
+- The demo currently defaults to `GGML_CUDA_DISABLE_GRAPHS=1`.
+- Enabling CUDA graph with `GGML_CUDA_DISABLE_GRAPHS=0` might reduce launch or
+  CPU scheduling overhead without changing model math. It is prompt-general and
+  exactness-preserving.
+
+Clean-source test, commit `4c9fbb20f`, strict cold, 16GB cgroup, required
+display/model cleanup before each run:
+
+- Deploy:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T223016Z-20260709-cudagraph-on-deploy-n64`
+  reached `eval_tok_s=4.6`, `prompt_tok_s=3.7`,
+  `first_output_ms=17469.9 ms`, `memory_peak_bytes=14834925568`,
+  `ram_ok=true`, output coherent.
+- Fibonacci:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T223050Z-20260709-cudagraph-on-fibonacci-n64`
+  reached `eval_tok_s=4.5`, `prompt_tok_s=3.2`,
+  `first_output_ms=15805.1 ms`, `memory_peak_bytes=14863200256`,
+  `ram_ok=true`, valid Python function output.
+- France:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T223124Z-20260709-cudagraph-on-france-n64`
+  reached `eval_tok_s=5.0`, `prompt_tok_s=3.3`,
+  `first_output_ms=16969.0 ms`, `memory_peak_bytes=14848954368`,
+  `ram_ok=true`, coherent France output.
+- Quantum:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T223218Z-20260709-cudagraph-on-quantum-n64`
+  reached only `eval_tok_s=3.8`, `prompt_tok_s=3.1`,
+  `first_output_ms=18095.4 ms`, `memory_peak_bytes=14817832960`,
+  `ram_ok=true`. Output was semantically correct but retained the known minor
+  opening-format quirk.
+- Japan:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T223255Z-20260709-cudagraph-on-japan-n64`
+  reached `eval_tok_s=5.1`, `prompt_tok_s=3.4`,
+  `first_output_ms=16500.9 ms`, `memory_peak_bytes=14836994048`,
+  `ram_ok=true`, coherent output.
+
+Decision:
+
+- Reject enabling CUDA graph as the default SOTA path. It helps or matches some
+  prompts, but Quantum drops below the accepted top1 baseline and TTFT is
+  higher on that prompt.
+- Keep `GGML_CUDA_DISABLE_GRAPHS=1` as the demo default.
+- CUDA graph is not the main route to stable `>5 tok/s`; the H2D-byte profile
+  remains the stronger bottleneck evidence.
