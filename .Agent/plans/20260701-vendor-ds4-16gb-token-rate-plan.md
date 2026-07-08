@@ -8903,3 +8903,35 @@ Next action:
 - Implement `GGML_MOE_GATE_UPDOWN_COSUBMIT=1` as a default-off path.
 - Start with read-plan plumbing and stats only: collect gate/up/down miss jobs into one structure and report co-submit candidate job counts without changing execution.
 - Then switch eligible jobs to one io_uring submission path and validate France n96/n192 before touching held-out prompts.
+
+## 2026-07-08 X10-BO gate-triggered up/down co-submit experiment
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-updown-cosubmit-rejected-20260708.json`
+- status: `rejected_not_sota_default_off`
+- source state: default-off implementation on top of `86f904c50`; current SOTA default path remains X10-BM.
+
+Implementation:
+- Added `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`, default off.
+- Gate one-stream records same-layer/same-expert up/down preload candidates while processing `ffn_gate_exps`.
+- `ggml_cuda_moe_stream_sync()` flushes queued candidates once per gate op, so reads are submitted in larger io_uring batches instead of one small batch per expert.
+- Demo script now passes `GGML_MOE_GATE_UPDOWN_COSUBMIT` and `GGML_MOE_STREAM_DEFER` through `systemd-run` when explicitly set.
+
+Results:
+- Default-off smoke, France n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-defaultoff/20260708T052449Z-france-n32-defaultoff-after-cosubmit`, `eval_tok_s=4.4`, TTFT `23772.65 ms`, RAM OK. Default SOTA path is not broken.
+- Queued co-submit France n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-smoke2/20260708T051537Z-france-n32-cosubmit-queued`, `eval_tok_s=4.3`, TTFT `24936.13 ms`, RAM OK.
+- Queued co-submit France n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-n96/20260708T051640Z-france-n96-cosubmit-queued`, `eval_tok_s=4.6`, TTFT `25628.31 ms`, RAM OK.
+- Queued co-submit Quantum n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-n96/20260708T051742Z-quantum-n96-cosubmit-queued`, `eval_tok_s=3.6`, TTFT `24446.25 ms`, RAM OK.
+- Defer+cosubmit France n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-defer-n96/20260708T051945Z-france-n96-cosubmit-defer`, killed after `145.99s`, no answer, rejected.
+
+Diagnostics:
+- Queued co-submit did create larger batches: France n96 `up_aux` had `jobs=2168`, `batches=76`, `inflight_avg=6.97`, `inflight_max=8`.
+- However, it did not improve wall-clock token rate beyond current SOTA. It mostly moved up/down IO earlier, between gate and up, rather than overlapping it with gate direct reads/compute.
+- The no-evict slot policy limited planned jobs to available cache slots, which avoids cache thrash but caps coverage.
+
+Decision:
+- Reject as a new SOTA. Do not enable by default.
+- Keep the implementation default-off for further profiling because it is useful evidence: batching works, but real speedup requires overlapping gate source reads themselves with up/down reads, not only preloading after gate has already paid its source cost.
+
+Next direction:
+- Move gate source reads onto the shared batch expert source/io_uring path, or add a true background read worker so gate direct reads and up/down preloads can be in flight at the same time.
+- A pure gate-triggered preload is insufficient unless it overlaps with gate compute/read or uses a predictive window that does not add exposed TTFT.

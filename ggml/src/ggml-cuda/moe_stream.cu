@@ -67,6 +67,9 @@ typedef struct {
 
 void ggml_cuda_moe_stream_link_anchor(void) {}
 
+int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_name, int expert_idx, size_t expert_bytes);
+int ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit(void);
+
 // src1_f32: F32 activations (will be Q8_1 quantized on GPU)
 //           Layout: cne1 rows × ne00 cols, with stride row_size_f32 bytes per row.
 //           If src1_f32 is NULL, falls back to caller-provided src1_q8_1.
@@ -2315,6 +2318,11 @@ static double trace_elapsed_ms(std::chrono::steady_clock::time_point t) {
 static bool gate_updown_cosubmit_profile_enabled() {
     const char *path = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT");
     return path && path[0];
+}
+
+static bool gate_updown_cosubmit_enabled() {
+    const char *env = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT");
+    return env && env[0] && env[0] != '0';
 }
 
 static uint64_t gate_updown_profile_now_us() {
@@ -4963,6 +4971,10 @@ extern "C" bool ggml_cuda_moe_stream_one(
 
     if (cudaMemcpyAsync(ctx.h_scratch, ctx.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) { release_slot(s); return false; }
     const auto t_d2h = std::chrono::steady_clock::now();
+    if (gate_updown_cosubmit_enabled()) {
+        ggml_cuda_moe_stream_batch_preload_gate_updown(src0_name, (int)expert_index, src0_bytes);
+    }
+
     sparse_graph_probe_write(src0_name, expert_index, cne1, src0_bytes, src1_f32_bytes, dst_bytes,
             cache_hit, cache_inserted, s, g_defer_sync, kernel_src0,
             ctx.d_src1_f32, ctx.d_dst, ctx.h_scratch, dst);
@@ -5014,6 +5026,9 @@ extern "C" bool ggml_cuda_moe_stream_one(
 }
 
 extern "C" void ggml_cuda_moe_stream_sync(void) {
+    if (gate_updown_cosubmit_enabled()) {
+        ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit();
+    }
     if (tls_pending.empty()) return;
     // Sync each used slot and scatter
     for (auto &ds : tls_pending) {

@@ -447,6 +447,12 @@ systemd_cmd=(
   --property=MemoryMax="${MEMORY_MAX_BYTES}"
   --property=MemorySwapMax=0
 )
+if [[ -n "${GGML_MOE_GATE_UPDOWN_COSUBMIT:-}" ]]; then
+  systemd_cmd+=(--setenv=GGML_MOE_GATE_UPDOWN_COSUBMIT=${GGML_MOE_GATE_UPDOWN_COSUBMIT})
+fi
+if [[ -n "${GGML_MOE_STREAM_DEFER:-}" ]]; then
+  systemd_cmd+=(--setenv=GGML_MOE_STREAM_DEFER=${GGML_MOE_STREAM_DEFER})
+fi
 if [[ -n "${GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT:-}" ]]; then
   systemd_cmd+=(--setenv=GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT=${GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT})
 fi

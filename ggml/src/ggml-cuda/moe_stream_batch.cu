@@ -10,6 +10,8 @@ void ggml_cuda_moe_ttft_trace_mark(const char *) {}
 bool ggml_cuda_moe_iq2_prompt_replay(int, const void *, const void *, int64_t, int64_t, size_t, const float *, int64_t, int, float, ggml_moe_iq2_replay_result *) { return false; }
 bool ggml_cuda_moe_stream_batch(int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, const float *, size_t, size_t, const void *, size_t, int64_t, float *, size_t, size_t, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
 bool ggml_cuda_moe_stream_handoff_upload(const float *, int64_t, int64_t) { return false; }
+int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *, int, size_t) { return 0; }
+int ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit(void) { return 0; }
 bool ggml_cuda_moe_stream_preload_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_preload_tensor_prompt(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
@@ -131,6 +133,9 @@ bool ggml_cuda_moe_stream_batch(
     const int64_t *matrix_row_counts,
     const ggml_moe_row_mapping *matrix_rows,
     int64_t rows_stride);
+
+int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_name, int expert_idx, size_t expert_bytes);
+int ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit(void);
 
 bool ggml_cuda_moe_stream_preload_tensor(
     int src0_type_int,
@@ -7248,6 +7253,195 @@ static bool down_name_for_up_gate(const char *src_name, char *out, size_t out_sz
     return true;
 }
 
+
+static bool gate_updown_cosubmit_make_name(const char *gate_name, const char *target, char *out, size_t out_sz) {
+    if (!gate_name || !target || !out || out_sz == 0) return false;
+    const char *needle = std::strstr(gate_name, ".ffn_gate_exps.");
+    if (!needle) return false;
+    const size_t prefix = (size_t)(needle - gate_name);
+    const char *suffix = needle + std::strlen(".ffn_gate_exps.");
+    const int n = std::snprintf(out, out_sz, "%.*s.%s.%s", (int)prefix, gate_name, target, suffix);
+    return n > 0 && (size_t)n < out_sz;
+}
+
+struct gate_updown_cosubmit_job {
+    batch_vram_cache *cache = nullptr;
+    int slot = -1;
+    void *dst = nullptr;
+    const void *host_data = nullptr;
+    const expert_pack_entry *pack_entry = nullptr;
+    size_t expert_bytes = 0;
+    int expert_idx = -1;
+    char tensor[128] = {};
+};
+
+static std::mutex g_gate_updown_cosubmit_pending_mu;
+static std::vector<gate_updown_cosubmit_job> g_gate_updown_cosubmit_pending;
+
+static std::atomic<uint64_t> g_gate_updown_cosubmit_calls{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_jobs{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_cache_hits{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_missing_pack{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_iouring_ok{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_fallback_ok{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_no_slot_skips{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_failures{0};
+static std::atomic<bool> g_gate_updown_cosubmit_report_registered{false};
+
+static void gate_updown_cosubmit_report_atexit() {
+    const uint64_t calls = g_gate_updown_cosubmit_calls.load(std::memory_order_relaxed);
+    if (calls == 0) return;
+    std::fprintf(stderr,
+            "[moe_stream_batch] gate/up/down cosubmit: calls=%lu jobs=%lu cache_hits=%lu missing_pack=%lu "
+            "iouring_ok=%lu fallback_ok=%lu no_slot_skips=%lu failures=%lu\n",
+            (unsigned long)calls,
+            (unsigned long)g_gate_updown_cosubmit_jobs.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_cache_hits.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_missing_pack.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_iouring_ok.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_fallback_ok.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_no_slot_skips.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_failures.load(std::memory_order_relaxed));
+}
+
+static bool gate_updown_cosubmit_env_enabled() {
+    const char *env = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT");
+    return env && env[0] && env[0] != '0';
+}
+
+extern "C" int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_name, int expert_idx, size_t expert_bytes) {
+    if (!gate_updown_cosubmit_env_enabled()) return 0;
+    if (!gate_name || !std::strstr(gate_name, ".ffn_gate_exps.")) return 0;
+    if (expert_idx < 0 || expert_bytes == 0) return 0;
+
+    if (!g_gate_updown_cosubmit_report_registered.exchange(true)) {
+        std::atexit(gate_updown_cosubmit_report_atexit);
+    }
+    ++g_gate_updown_cosubmit_calls;
+
+    batch_vram_cache *cache = batch_cache_get(expert_bytes);
+    if (!cache) return 0;
+
+    char names[2][128] = {};
+    if (!gate_updown_cosubmit_make_name(gate_name, "ffn_up_exps", names[0], sizeof(names[0])) ||
+            !gate_updown_cosubmit_make_name(gate_name, "ffn_down_exps", names[1], sizeof(names[1]))) {
+        return 0;
+    }
+
+    std::vector<gate_updown_cosubmit_job> planned;
+    planned.reserve(2);
+    for (int i = 0; i < 2; ++i) {
+        const char *tensor = names[i];
+        const uintptr_t key = batch_key_hash(tensor, expert_idx);
+        if (batch_cache_find_slot(cache, key) >= 0) {
+            ++g_gate_updown_cosubmit_cache_hits;
+            continue;
+        }
+        const expert_pack_entry *pack_entry = expert_pack_lookup(tensor, expert_idx, expert_bytes);
+        if (!pack_entry) {
+            ++g_gate_updown_cosubmit_missing_pack;
+            continue;
+        }
+        const bool is_down = std::strstr(tensor, ".ffn_down_exps.") != nullptr;
+        const int slot = batch_cache_insert_slot(cache, key, nullptr, expert_bytes, g_batch.prefetch_stream,
+                false, true, nullptr, 0, false, tensor, expert_idx,
+                is_down, false, false);
+        if (slot < 0) {
+            ++g_gate_updown_cosubmit_no_slot_skips;
+            continue;
+        }
+        gate_updown_cosubmit_job job;
+        job.cache = cache;
+        job.slot = slot;
+        job.dst = (char *)cache->pool + (size_t)slot * cache->slot_sz;
+        job.host_data = nullptr;
+        job.pack_entry = pack_entry;
+        job.expert_bytes = expert_bytes;
+        job.expert_idx = expert_idx;
+        std::snprintf(job.tensor, sizeof(job.tensor), "%s", tensor);
+        planned.push_back(job);
+    }
+
+    if (planned.empty()) return 0;
+    std::lock_guard<std::mutex> lk(g_gate_updown_cosubmit_pending_mu);
+    g_gate_updown_cosubmit_pending.insert(g_gate_updown_cosubmit_pending.end(), planned.begin(), planned.end());
+    return (int)planned.size();
+}
+
+extern "C" int ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit(void) {
+    if (!gate_updown_cosubmit_env_enabled()) return 0;
+    std::vector<gate_updown_cosubmit_job> jobs;
+    {
+        std::lock_guard<std::mutex> lk(g_gate_updown_cosubmit_pending_mu);
+        if (g_gate_updown_cosubmit_pending.empty()) return 0;
+        jobs.swap(g_gate_updown_cosubmit_pending);
+    }
+
+    size_t pos = 0;
+    int ready_jobs = 0;
+    while (pos < jobs.size()) {
+        const size_t expert_bytes = jobs[pos].expert_bytes;
+        size_t end = pos + 1;
+        while (end < jobs.size() && jobs[end].expert_bytes == expert_bytes) {
+            ++end;
+        }
+        std::vector<gate_updown_cosubmit_job> group(jobs.begin() + (ptrdiff_t)pos, jobs.begin() + (ptrdiff_t)end);
+        const bool copied_iouring = expert_pack_iouring_copy_jobs(group, expert_bytes, g_batch.prefetch_stream,
+                g_batch.stage_ring_up_aux, "gate_updown_cosubmit");
+        bool copied = copied_iouring;
+        if (!copied) {
+            copied = true;
+            for (const gate_updown_cosubmit_job &job : group) {
+                batch_copy_trace copy_trace;
+                if (!batch_cache_copy_h2d(g_batch.stage_ring_up_aux, job.dst, job.host_data, expert_bytes,
+                            g_batch.prefetch_stream, job.pack_entry, &copy_trace,
+                            "gate_updown_cosubmit", job.tensor, job.expert_idx)) {
+                    copied = false;
+                    break;
+                }
+            }
+        }
+
+        if (!copied || cudaGetLastError() != cudaSuccess) {
+            for (const gate_updown_cosubmit_job &job : group) {
+                batch_cache_clear_slot(job.cache, job.slot);
+            }
+            ++g_gate_updown_cosubmit_failures;
+            pos = end;
+            continue;
+        }
+
+        for (const gate_updown_cosubmit_job &job : group) {
+            batch_vram_cache *cache = job.cache;
+            if (!cache || job.slot < 0 || job.slot >= cache->n_slots) {
+                ++g_gate_updown_cosubmit_failures;
+                continue;
+            }
+            if (!cache->slot_ready[job.slot] &&
+                    cudaEventCreateWithFlags(&cache->slot_ready[job.slot], cudaEventDisableTiming) != cudaSuccess) {
+                batch_cache_clear_slot(cache, job.slot);
+                ++g_gate_updown_cosubmit_failures;
+                continue;
+            }
+            if (cudaEventRecord(cache->slot_ready[job.slot], g_batch.prefetch_stream) != cudaSuccess) {
+                batch_cache_clear_slot(cache, job.slot);
+                ++g_gate_updown_cosubmit_failures;
+                continue;
+            }
+            cache->slot_pending[job.slot] = true;
+            ++g_gate_updown_cosubmit_jobs;
+            ++cache->preloads;
+            ++ready_jobs;
+        }
+        if (copied_iouring) {
+            ++g_gate_updown_cosubmit_iouring_ok;
+        } else {
+            ++g_gate_updown_cosubmit_fallback_ok;
+        }
+        pos = end;
+    }
+    return ready_jobs;
+}
 
 static bool updown_pair_profile_enabled() {
     const char *path = std::getenv("GGML_MOE_UPDOWN_PAIR_PROFILE_OUT");
