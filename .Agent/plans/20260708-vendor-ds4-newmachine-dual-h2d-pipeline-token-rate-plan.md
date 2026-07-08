@@ -2655,3 +2655,65 @@ Decision:
 - Keep `GGML_CUDA_DISABLE_GRAPHS=1` as the demo default.
 - CUDA graph is not the main route to stable `>5 tok/s`; the H2D-byte profile
   remains the stronger bottleneck evidence.
+
+## 2026-07-09 CPU Tail Source Profile And Pack-Mmap Rejection
+
+Current top1 profile:
+
+- Added demo passthrough for CPU fallback diagnostic envs:
+  `GGML_KIMI_CPU_MOE_PROFILE`, `GGML_KIMI_CPU_MOE_NAME_PROFILE`,
+  `GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP`,
+  `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`,
+  `GGML_MOE_FALLBACK_REASON_PROFILE_OUT`,
+  `GGML_MOE_FALLBACK_SOURCE_PROBE_OUT`.
+- Diagnostic run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T223557Z-20260709-cpu-tail-profile-deploy-n64`
+  with files in `/tmp/20260709-cpu-tail-profile-deploy-n64`.
+- Because CSV fallback profiling is heavy, the run reached only
+  `eval_tok_s=3.7`; do not use this token rate as a SOTA comparison.
+- CPU fallback profile showed:
+  - total fallback time `4644.9 ms`;
+  - up fallback `2428.5 ms`, down fallback `2208.7 ms`, gate fallback
+    `7.7 ms`;
+  - decode up `1653.8 ms`, decode down `1118.8 ms`;
+  - prompt up/down also consumed about `1707 ms` combined;
+  - all CPU fallback source rows were `CPU_Mapped` GGUF with
+    `pack_mmap_calls=0` and `gguf_calls=11880`.
+- Copy profile from the same diagnostic still showed substantial H2D:
+  `gate_batch_preload=10.35 GiB`, `gate_updown_cosubmit=8.96 GiB`,
+  `runtime_load=5.20 GiB`.
+
+Hypothesis:
+
+- Try existing `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1`, which should make decode
+  CPU fallback read expert weights from the expert pack mmap path instead of
+  the main GGUF mmap source. This is exactness-preserving and prompt-general.
+- Added demo passthrough and config recording for
+  `GGML_MOE_CPU_FALLBACK_PACK_MMAP`.
+
+Dirty-source config probe, strict cold, 16GB cgroup, display/model cleanup
+recorded before each run:
+
+- Deploy:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T223759Z-20260709-cpu-fallback-pack-mmap-deploy-n64`
+  reached `eval_tok_s=4.7`, `prompt_tok_s=3.7`,
+  `first_output_ms=17673.4 ms`, `ram_ok=true`, coherent output.
+- Fibonacci:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T223834Z-20260709-cpu-fallback-pack-mmap-fibonacci-n64`
+  reached only `eval_tok_s=3.9`, `prompt_tok_s=2.9`,
+  `first_output_ms=15891.7 ms`, `ram_ok=true`, valid Python function output.
+- France:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T223910Z-20260709-cpu-fallback-pack-mmap-france-n64`
+  reached `eval_tok_s=5.1`, `prompt_tok_s=3.3`,
+  `first_output_ms=16999.1 ms`, `ram_ok=true`, coherent France output.
+- The pack-mmap path did activate: all three runs reported
+  `[kimi_cpu_fallback_pack_mmap] enabled=1 hits=10080 misses=0 ... fallback_gguf=0`.
+
+Decision:
+
+- Reject `GGML_MOE_CPU_FALLBACK_PACK_MMAP=1` as a default SOTA path. It helps
+  France and slightly helps deploy, but Fibonacci drops badly.
+- Keep the demo passthrough for future diagnostics, but do not set this env by
+  default.
+- CPU tail remains material, but simply switching decode fallback source to
+  expert-pack mmap is not a stable route to `>5 tok/s`.
