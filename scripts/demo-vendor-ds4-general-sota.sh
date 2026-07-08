@@ -434,7 +434,9 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_RAM_TIER_PROFILE": $(printf '%s' "${GGML_MOE_RAM_TIER_PROFILE:-}" | json_string),
     "GGML_MOE_RAM_TIER_SKIP": $(printf '%s' "${GGML_MOE_RAM_TIER_SKIP:-}" | json_string),
     "GGML_MOE_RAM_TIER_PIN": $(printf '%s' "${GGML_MOE_RAM_TIER_PIN:-}" | json_string),
-    "GGML_MOE_RAM_TIER_PIN_MIB": $(printf '%s' "${GGML_MOE_RAM_TIER_PIN_MIB:-}" | json_string)
+    "GGML_MOE_RAM_TIER_PIN_MIB": $(printf '%s' "${GGML_MOE_RAM_TIER_PIN_MIB:-}" | json_string),
+    "GGML_MOE_PREFETCH_DOWN": $(printf '%s' "${GGML_MOE_PREFETCH_DOWN:-}" | json_string),
+    "GGML_MOE_PREFETCH_DOWN_DEPTH": $(printf '%s' "${GGML_MOE_PREFETCH_DOWN_DEPTH:-}" | json_string)
   }
 }
 EOF_CFG
@@ -659,6 +661,8 @@ for passthrough_env in \
   GGML_MOE_CURRENT_DOWN_OVERLAP \
   GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY \
   GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT \
+  GGML_MOE_PREFETCH_DOWN \
+  GGML_MOE_PREFETCH_DOWN_DEPTH \
   GGML_MOE_BATCH_FULLPACK \
   GGML_MOE_GATE_BATCH_PREFETCH \
   GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE \

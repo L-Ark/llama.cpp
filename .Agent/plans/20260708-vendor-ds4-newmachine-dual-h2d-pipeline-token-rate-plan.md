@@ -1779,3 +1779,35 @@ gate, only up, or only down is pruned. The next valid optimization must
 preserve the third expert contribution, for example by moving the third
 expert through a cheaper representation, improving cache residency for the
 full third expert, or overlapping H2D with compute more aggressively.
+
+## 2026-07-09 Down-Prefetch Overlap Rejection
+
+The demo wrapper now records and passes through:
+
+- `GGML_MOE_PREFETCH_DOWN`
+- `GGML_MOE_PREFETCH_DOWN_DEPTH`
+
+This makes down-prefetch overlap experiments reproducible under the same
+strict 16GB cgroup launcher.
+
+Strict cold diagnostics, display cleanup recorded, 16GB cgroup:
+
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T203301Z-20260709-overlap-prefetch-d2-fibonacci-n64`
+  with `GGML_MOE_CURRENT_DOWN_OVERLAP=1`,
+  `GGML_MOE_PREFETCH_DOWN=1`, `GGML_MOE_PREFETCH_DOWN_DEPTH=2`:
+  `eval_tok_s=3.0`, `prompt_tok_s=4.8`,
+  `first_output_ms=14169.9 ms`, RAM OK. Fibonacci output correctly began with
+  a Python function.
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T203340Z-20260709-overlap-prefetch-d2-deploy-n64`
+  with the same depth-2 config:
+  `eval_tok_s=3.2`, `prompt_tok_s=5.2`, RAM OK. Deploy output was coherent.
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T203418Z-20260709-overlap-prefetch-d8-fibonacci-n64`
+  with depth `8`:
+  `eval_tok_s=3.0`, `prompt_tok_s=4.8`,
+  `first_output_ms=14172.9 ms`, RAM OK. Fibonacci output remained correct.
+
+Decision: reject current down-overlap/prefetch knobs as a SOTA path. They can
+preserve correctness and lower TTFT in some runs, but do not increase decode
+token rate on the Gen4 x4 new-machine path. Future overlap work must profile
+and reduce actual H2D wait/copy serialization, not only enable existing
+prefetch depth knobs.
