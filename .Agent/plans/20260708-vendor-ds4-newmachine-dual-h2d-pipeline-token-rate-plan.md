@@ -3065,3 +3065,31 @@ Decision:
   until there is a manifest strategy that improves generalized performance.
 - Next cache work must be request-local/future-use-aware, not a static global
   top-N allowlist.
+
+Follow-up:
+
+- Because ordinary `4096MiB` Quantum reached displayed `5.0 tok/s` but did not
+  satisfy the strict `>5` flag, run one cold repeat before abandoning the blunt
+  cache size sweep. If the repeat is still not strictly above 5, stop this
+  direction and treat `3072/4096MiB` as speed candidates rather than product
+  completion.
+
+Repeat result:
+
+- Ordinary `GGML_MOE_STREAM_ONE_CACHE_MIB=4096` Quantum n64 repeat:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T233850Z-20260709-stream-one-cache4096-quantum-repeat-n64`,
+  source clean `490ab7f530`, strict cold, display cleanup recorded,
+  `eval_tok_s=5.0`, `prompt_tok_s=3.6`, `first_output_ms=16225.7 ms`,
+  `memory_peak_bytes=14881697792`, `ram_ok=true`,
+  `product_target_gt_5_tok_s_met_by_this_run=false`.
+
+Decision:
+
+- Do not mark 4GB blunt gate cache as meeting the stable `>5 tok/s` target.
+  It repeatedly lands at displayed `5.0` on Quantum but does not strictly cross
+  the product threshold.
+- Current best generalized speed candidate remains the 3GB/4GB gate-cache
+  family, with 3GB having the best five-prompt average evidence and 4GB having
+  the best Quantum-only evidence. Further progress requires request-local
+  admission/eviction or reducing per-token gate bytes/copy count, not larger
+  static cache capacity.
