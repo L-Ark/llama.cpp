@@ -633,5 +633,14 @@ Promotion requirements:
   - Accepted as a prompt-general low-H2D improvement, but it does not complete
     the product target: best observed new-machine result is `3.1 tok/s`, still
     below stable `>5 tok/s`.
+  - Clean repeat after commit `79e7754a4`, without manually supplying
+    `GGML_MOE_KEEP_TOPK_GATE`, run
+    `20260708T155306Z-20260708T-clean-default-gatetopk-france-n96`:
+    `eval_tok_s=3.1`, `prompt_tok_s=3.7`, `TTFT=17181.4 ms`,
+    elapsed `45.96s`, `memory_peak_bytes=14357655552`,
+    `memory_file_bytes=13527908352`, `ram_ok=true`, source clean, display
+    processes stopped, H2D `6.65GB/s`, France correctness pass. The run
+    environment confirms the demo default set `GGML_MOE_KEEP_TOPK_GATE=1`.
+    Gate one-pack reads/bytes remained `2875` / `12.81GB`.
   - Detailed reproduction data is recorded in
     `.Agent/runs/20260708-vendor-ds4-newmachine/gate-topk-generalized-sota-20260708.json`.

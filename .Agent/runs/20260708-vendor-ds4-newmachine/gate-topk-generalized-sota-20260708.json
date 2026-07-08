@@ -4,7 +4,7 @@
   "branch": "vendor/deepseek-token-rate-16gb",
   "base_head": "203ddec89fb3ec10fb7d573b560fe79618153b90",
   "machine": "wici@192.168.9.198",
-  "status": "accepted_source_change_pending_clean_repeat",
+  "status": "accepted_clean_reproduced_sota_below_product_target",
   "optimization": {
     "name": "gate follows up/down topk pruning",
     "env": "GGML_MOE_KEEP_TOPK_GATE=1",
@@ -107,8 +107,30 @@
       "gate_one_pack_bytes": 15209857024
     }
   ],
+  "clean_repeat_after_commit": {
+    "commit": "79e7754a47c40c7923024b3016739b8525a355c9",
+    "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T155306Z-20260708T-clean-default-gatetopk-france-n96",
+    "manual_gate_topk_env_supplied": false,
+    "demo_default_env_observed": "GGML_MOE_KEEP_TOPK_GATE=1",
+    "eval_tok_s": 3.1,
+    "prompt_tok_s": 3.7,
+    "ttft_ms": 17181.380308,
+    "elapsed_seconds": 45.96,
+    "memory_peak_bytes": 14357655552,
+    "memory_file_bytes": 13527908352,
+    "ram_ok": true,
+    "display_processes_stopped_before_run": true,
+    "source_dirty": false,
+    "h2d_gbps": 6.650095,
+    "pcie_after_h2d": "16.0 GT/s x4",
+    "correctness": "pass: coherent and semantically correct France paragraph",
+    "batch_iouring_reads": 8194,
+    "batch_iouring_bytes": 36516134912,
+    "gate_one_pack_reads": 2875,
+    "gate_one_pack_bytes": 12812288000
+  },
   "promotion_requirements": {
-    "strict_16gb_ram": "pass on all validation runs",
+    "strict_16gb_ram": "pass on all validation runs and clean repeat",
     "page_cache_counted": "pass via cgroup memory_file_bytes",
     "display_processes_stopped": "pass on all validation runs",
     "ttft_not_more_than_20_percent_above_baseline": "pass; TTFT decreased versus the default France baseline",
@@ -116,8 +138,6 @@
     "product_target_gt_5_tok_s": "fail; best observed is 3.1 tok/s, so the overall goal remains active"
   },
   "next_steps": [
-    "Commit and push the default-off core change plus demo default after a clean repeat.",
-    "Run a clean-source default demo without manually setting GGML_MOE_KEEP_TOPK_GATE to prove reproducibility.",
     "Continue with gate/up byte reduction or hardware topology work; gate-topk alone is not enough for >5 tok/s on 6.6GB/s H2D."
   ]
 }
