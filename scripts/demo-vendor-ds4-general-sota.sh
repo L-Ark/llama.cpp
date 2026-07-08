@@ -35,8 +35,8 @@ What this script demonstrates:
   - User may enter any prompt; this is not a France-specialized demo.
 
 Current known generalized status:
-  - Calibration/dev prompt range recorded in the repo: 3.8-4.8 tok/s, mean 4.36 tok/s.
-  - Held-out v1 prompt range recorded in the repo: 4.0-4.6 tok/s, mean 4.30 tok/s.
+  - Current safe quality baseline is top3-all-layers; recent dev prompt results
+    are about 3.1-4.2 tok/s on the low-H2D new machine.
   - Product target remains stable >5 tok/s for random prompts; not yet met.
 
 Artifacts:
@@ -348,8 +348,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "prompt_general": true,
   "prompt_specific_optimization": false,
   "france_specialized_path_used": false,
-  "current_generalized_dev_tok_s": {"min": 3.8, "mean": 4.36, "max": 4.8},
-  "current_held_out_v1_tok_s": {"min": 4.0, "mean": 4.30, "max": 4.6},
+  "current_safe_quality_dev_tok_s": {"min": 3.1, "mean": 3.5, "max": 4.2},
+  "current_held_out_v1_tok_s": null,
   "product_target_tok_s": 5.0,
   "product_target_currently_met": false,
   "max_tokens": ${MAX_TOKENS},
@@ -402,8 +402,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT": $(printf '%s' "${GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT:-}" | json_string),
     "GGML_MOE_KEEP_TOPK_UPDOWN": $(printf '%s' "${GGML_MOE_KEEP_TOPK_UPDOWN:-3}" | json_string),
     "GGML_MOE_KEEP_TOPK_GATE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_GATE:-1}" | json_string),
-    "GGML_MOE_KEEP_TOPK_LAYER_RANGE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_LAYER_RANGE:-0-29}" | json_string),
-    "GGML_MOE_KEEP_TOPK_LAYER_VALUE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_LAYER_VALUE:-2}" | json_string),
+    "GGML_MOE_KEEP_TOPK_LAYER_RANGE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_LAYER_RANGE:-0-39}" | json_string),
+    "GGML_MOE_KEEP_TOPK_LAYER_VALUE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_LAYER_VALUE:-3}" | json_string),
     "GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE:-}" | json_string)
   }
 }
@@ -441,8 +441,8 @@ export GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1
 export GGML_MOE_IO_REFILL_BATCH=$(printf '%q' "${GGML_MOE_IO_REFILL_BATCH:-4}")
 export GGML_MOE_DOWN_PARALLEL_STAGE=1
 export GGML_MOE_IO_BACKEND=iouring
-export GGML_MOE_KEEP_TOPK_LAYER_RANGE=$(printf '%q' "${GGML_MOE_KEEP_TOPK_LAYER_RANGE:-0-29}")
-export GGML_MOE_KEEP_TOPK_LAYER_VALUE=$(printf '%q' "${GGML_MOE_KEEP_TOPK_LAYER_VALUE:-2}")
+export GGML_MOE_KEEP_TOPK_LAYER_RANGE=$(printf '%q' "${GGML_MOE_KEEP_TOPK_LAYER_RANGE:-0-39}")
+export GGML_MOE_KEEP_TOPK_LAYER_VALUE=$(printf '%q' "${GGML_MOE_KEEP_TOPK_LAYER_VALUE:-3}")
 export GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE=$(printf '%q' "${GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE:-}")
 export GGML_MOE_KEEP_TOPK_UPDOWN=$(printf '%q' "${GGML_MOE_KEEP_TOPK_UPDOWN:-3}")
 export GGML_MOE_KEEP_TOPK_GATE=$(printf '%q' "${GGML_MOE_KEEP_TOPK_GATE:-1}")
@@ -664,7 +664,7 @@ Source: $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)@$(git -C "$REPO_DIR" r
 Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches)
 Gate fullpack prompt-general source: $([[ "$GATE_FULLPACK" -eq 1 ]] && echo enabled || echo disabled)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
-Known generalized dev range: 3.8-4.8 tok/s, mean 4.36 tok/s. Held-out v1: 4.0-4.6 tok/s, mean 4.30 tok/s.
+Known safe quality baseline: top3-all-layers, about 3.1-4.2 tok/s on recent low-H2D dev prompts.
 Product target: stable >5 tok/s for random prompts. Current generalized path is not there yet.
 Prompt-specific packs/profiles/aliases: disabled and refused.
 Prompt:
@@ -824,8 +824,8 @@ summary = {
     'hardware_before': hardware_before,
     'hardware_after_h2d': hardware_after_h2d,
     'hardware_after_run': hardware_after_run,
-    'known_generalized_dev_range_tok_s': {'min': 3.8, 'mean': 4.36, 'max': 4.8},
-    'known_held_out_v1_range_tok_s': {'min': 4.0, 'mean': 4.30, 'max': 4.6},
+    'known_safe_quality_dev_range_tok_s': {'min': 3.1, 'mean': 3.5, 'max': 4.2},
+    'known_held_out_v1_range_tok_s': None,
     'product_target_gt_5_tok_s_met_by_this_run': eval_tok_s is not None and eval_tok_s > 5.0,
     'manual_quality_review_required': True,
     'exact_command_file': str(run_dir / 'exact_command.txt'),
