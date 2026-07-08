@@ -398,3 +398,23 @@ Promotion requirements:
     failure is sufficient to reject topk2 for generalized use.
   - Conclusion: the issue is not only extending the range to `0-39`; reducing
     those MoE layers to top-2 can materially change behavior. Keep topk3.
+- Current safe generalized baseline after topk2 rejection:
+  - `20260708T143119Z-clean-revert-fibonacci`: `2.4 tok/s`, RAM OK, source
+    clean, Fibonacci answer correct.
+  - `20260708T143802Z-safe-default-n96-profile`: `2.4 tok/s` with profiling
+    overhead, prompt `How to deploy a large model on small devices?`, RAM OK.
+  - The safe default remains topk3 over range `10-39`; product target `>5
+    tok/s` is still unmet.
+- Default-off overlap/staging probes were added to the demo passthrough list so
+  they can be tested without changing default behavior:
+  - `GGML_MOE_MIXED_UP_GATE_PARALLEL_STAGE=1`,
+    `20260708T144118Z-mixed-upgate-parallel-probe`: `eval_tok_s=2.5`, elapsed
+    `54.99s`; no hot-path activation log appeared, so it is rejected as a
+    meaningful improvement.
+  - `GGML_MOE_STREAM_SERIAL_STAGE_BATCH=1`,
+    `20260708T144314Z-serial-stage-batch-probe`: `eval_tok_s=2.4`, elapsed
+    `55.6s`; no serial same-type batched staging hot-path log appeared, so it
+    is rejected.
+  - These results reinforce that small existing staging toggles are not enough;
+    the next implementation should target prompt-general gate hot-pool or true
+    route-group gate/up/down scheduling that reduces repeated expert movement.
