@@ -2566,3 +2566,44 @@ Decision:
   machine. The next optimization must keep at least route rank 0 on GPU and
   reduce H2D bytes inside that path, or improve reuse/admission without pushing
   the full up/down workload to CPU.
+
+## 2026-07-09 Drop Gate Cache After Use Rejection
+
+Hypothesis:
+
+- Profile showed gate preload as the largest H2D category and showed gate
+  slots competing with up/down slots.
+- A default-off experiment was implemented locally: after a gate one-stream
+  expert finished and synchronized, clear that gate expert's batch-cache slot
+  metadata so up/down entries can reuse the slot sooner.
+- This was exactness-preserving and prompt-general, but dirty-source only.
+
+Dirty-source run, strict cold, 16GB cgroup, required display/model cleanup
+before each run, `GGML_MOE_DROP_GATE_BATCH_CACHE_AFTER_USE=1`:
+
+- Deploy:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T222633Z-20260709-drop-gate-cache-deploy-n64`
+  reached `eval_tok_s=3.7`, `prompt_tok_s=3.7`,
+  `first_output_ms=17484.1 ms`, `memory_peak_bytes=14821130240`,
+  `ram_ok=true`, output coherent.
+- Fibonacci:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T222711Z-20260709-drop-gate-cache-fibonacci-n64`
+  reached `eval_tok_s=4.5`, `prompt_tok_s=3.3`,
+  `first_output_ms=15454.6 ms`, `memory_peak_bytes=14868500480`,
+  `ram_ok=true`, valid Python function output.
+- France:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T222744Z-20260709-drop-gate-cache-france-n64`
+  reached `eval_tok_s=5.1`, `prompt_tok_s=3.3`,
+  `first_output_ms=16712.1 ms`, `memory_peak_bytes=14845317120`,
+  `ram_ok=true`, coherent France paragraph.
+
+Decision:
+
+- Reject. The run is not generalized: France improves, Fibonacci is roughly
+  neutral, but deploy drops from the accepted `4.6 tok/s` default to
+  `3.7 tok/s`.
+- Revert the local code experiment and do not keep the runtime knob. Gate
+  cache residency has real reuse value for deploy-like prompts; freeing gate
+  immediately after use is too blunt.
+- Next cache work must be selective and future-use aware, not a role-wide gate
+  eviction rule.
