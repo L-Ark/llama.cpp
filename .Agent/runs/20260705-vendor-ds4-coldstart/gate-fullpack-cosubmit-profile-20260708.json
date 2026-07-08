@@ -1,0 +1,69 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/gate-fullpack-cosubmit-profile-20260708.json",
+  "date_utc": "2026-07-08",
+  "status": "diagnostic_profile_for_next_implementation",
+  "base_source_commit": "4b1a3fa2c",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "profile_env": "GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT",
+  "runs": {
+    "france_n96": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-cosubmit-profile2/20260708T045723Z-france-n96-profile",
+      "profile_csv": "/tmp/ds4-x10bm-cosubmit-france-n96.csv",
+      "eval_tok_s": 4.5,
+      "prompt_tok_s": 3.1,
+      "ttft_ms": 23928.023585,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15124938752,
+      "ram_ok": true,
+      "gate_one": {
+        "cache_hits": 16161,
+        "cache_misses": 8670,
+        "pack_hits": 8670,
+        "pack_misses": 0,
+        "src0_ms_sum": 11578.233,
+        "total_ms_sum": 13713.49
+      },
+      "updown": {
+        "iouring_reads": 6716,
+        "iouring_bytes": 29929504768,
+        "iouring_submit_us": 1537821,
+        "iouring_wait_us": 8053500,
+        "inflight_avg": 2.33,
+        "inflight_max": 8
+      }
+    },
+    "quantum_n96": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-cosubmit-profile2/20260708T045811Z-quantum-n96-profile",
+      "profile_csv": "/tmp/ds4-x10bm-cosubmit-quantum-n96.csv",
+      "eval_tok_s": 3.5,
+      "prompt_tok_s": 3.1,
+      "ttft_ms": 24225.735608,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15124525056,
+      "ram_ok": true,
+      "gate_one": {
+        "cache_hits": 14478,
+        "cache_misses": 10127,
+        "pack_hits": 10127,
+        "pack_misses": 0,
+        "src0_ms_sum": 13526.554,
+        "total_ms_sum": 15916.525
+      },
+      "updown": {
+        "iouring_reads": 9492,
+        "iouring_bytes": 42300604416,
+        "iouring_submit_us": 2331646,
+        "iouring_wait_us": 11632059,
+        "inflight_avg": 1.92,
+        "inflight_max": 8
+      }
+    }
+  },
+  "interpretation": [
+    "Gate source coverage is now complete for these prompts: gate pack_misses=0.",
+    "Remaining bottleneck is exposed source/read wait split between gate direct reads and up/down io_uring reads.",
+    "Current up/down io_uring depth is low; batch histograms are dominated by single-job and 2-4 job batches.",
+    "True co-submit should target common read planning, de-duplication, and one queue submission for eligible gate/up/down miss jobs."
+  ],
+  "next_action": "Implement default-off GGML_MOE_GATE_UPDOWN_COSUBMIT=1 with a stats-only read plan first, then switch eligible reads to one io_uring path after correctness is proven."
+}

@@ -446,8 +446,11 @@ systemd_cmd=(
   --wait
   --property=MemoryMax="${MEMORY_MAX_BYTES}"
   --property=MemorySwapMax=0
-  "$RUN_DIR/runner.sh"
 )
+if [[ -n "${GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT:-}" ]]; then
+  systemd_cmd+=(--setenv=GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT=${GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT})
+fi
+systemd_cmd+=("$RUN_DIR/runner.sh")
 printf '%q ' "${systemd_cmd[@]}" > "$RUN_DIR/systemd_command.txt"
 printf '\n' >> "$RUN_DIR/systemd_command.txt"
 

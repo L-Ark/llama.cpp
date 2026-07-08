@@ -8875,3 +8875,31 @@ Post-push reproducibility:
 - clean worktree repro run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-postpush-repro/20260708T045123Z-pushed-8b4fce2-france-n192-repro`.
 - France n192 cold result: `eval_tok_s=4.6`, `prompt_tok_s=3.3`, TTFT `24268.87 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15117881344`, `ram_ok=true`, `source_dirty=false`.
 - Output was semantically correct and coherent.
+
+## 2026-07-08 X10-BN co-submit profile after full native gate source
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-fullpack-cosubmit-profile-20260708.json`
+- status: `diagnostic_profile_for_next_implementation`
+- source: `4b1a3fa2c` plus a demo-only profile env passthrough for `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT`.
+
+Runs:
+- France n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-cosubmit-profile2/20260708T045723Z-france-n96-profile`, `eval_tok_s=4.5`, TTFT `23928.02 ms`, RAM OK.
+- Quantum n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-cosubmit-profile2/20260708T045811Z-quantum-n96-profile`, `eval_tok_s=3.5`, TTFT `24225.74 ms`, RAM OK.
+
+Breakdown:
+- France gate_one: `cache_hits=16161`, `cache_misses=8670`, `pack_hits=8670`, `pack_misses=0`, exposed `src0_ms=11578.23 ms`.
+- France up/down batch: `iouring_reads=6716`, `iouring_bytes=29929504768`, `iouring_submit_us=1537821`, `iouring_wait_us=8053500`, `inflight_avg=2.33`, `inflight_max=8`, many single-job batches.
+- Quantum gate_one: `cache_hits=14478`, `cache_misses=10127`, `pack_hits=10127`, `pack_misses=0`, exposed `src0_ms=13526.55 ms`.
+- Quantum up/down batch: `iouring_reads=9492`, `iouring_bytes=42300604416`, `iouring_submit_us=2331646`, `iouring_wait_us=11632059`, `inflight_avg=1.92`, `inflight_max=8`, many single-job batches.
+
+Interpretation:
+- Full native gate source fixed gate source coverage: gate pack misses are zero.
+- The remaining bottleneck is not CPU fallback. It is exposed source/read wait split across gate direct reads and up/down io_uring reads.
+- Current up/down batch depth is poor for general prompts: inflight average is about `1.9-2.3`, and the batch histogram is dominated by single-job and 2-4 job batches.
+- True gate/up/down cross-cache co-submit should first target common read planning and queue depth: combine gate misses with up/down miss jobs in one read plan, de-duplicate by source/offset/size, and submit through one io_uring queue where possible.
+- The rough n96 upper bound from perfect exposed IO overlap is large but not fully realizable: France has about `11.6s gate src + 8.1s up/down wait`, Quantum has about `13.5s gate src + 11.6s up/down wait`. If co-submit only hides half of the smaller component, expected gain is approximately `1.1-1.4x`, which is enough to test against the `5 tok/s` target but not guaranteed.
+
+Next action:
+- Implement `GGML_MOE_GATE_UPDOWN_COSUBMIT=1` as a default-off path.
+- Start with read-plan plumbing and stats only: collect gate/up/down miss jobs into one structure and report co-submit candidate job counts without changing execution.
+- Then switch eligible jobs to one io_uring submission path and validate France n96/n192 before touching held-out prompts.
