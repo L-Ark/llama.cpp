@@ -19,11 +19,24 @@ Improve prompt-general Kimi decode token rate under the real deployment target:
 Current prompt-general SOTA reference:
 
 - Branch: `vendor/kimi-speculative-general-token-rate-16gb`
-- Accepted GP4 held-out profile root: `.Agent/runs/20260707-gp4-postcommit-test-n96-profile`
+- Accepted GP112 held-out paired profile root:
+  `.Agent/runs/20260708-gp112-q4-ttft-source`
+- SOTA reproduction env includes `GGML_MOE_Q4_DOWN_BATCH=1`.
 - Held-out quality: 6/6
-- n96 token rate: min/median/mean `1.14 / 1.385 / 1.367 tok/s`
+- n96 token rate: min/median/mean `1.60 / 1.855 / 1.820 tok/s`
 - Host RAM peak: `15899996160` bytes
 - `direct_reads=0`
+- TTFT gate: max paired ratio `1.131`, within the `+20%` limit.
+
+Historical baseline kept for audits:
+
+- Accepted GP4 held-out profile root:
+  `.Agent/runs/20260707-gp4-postcommit-test-n96-profile`
+- Historical GP4 n96 token rate: min/median/mean
+  `1.14 / 1.385 / 1.367 tok/s`
+- Later storage-state checks showed historical GP4 TTFT/wait can be difficult
+  to reproduce exactly, so accepted future runtime changes must use paired
+  cold-start validation plus the cold-start SOTA audit.
 
 ## Current Bottleneck Hypothesis
 
@@ -4413,6 +4426,117 @@ Continue from Phase 5E:
       - do not promote it to SOTA env;
       - next work must profile TTFT before decode and locate the actual Q4-on
         prompt overhead.
+53. GP112 planned Q4 TTFT-source differential profile:
+    - goal:
+      - explain why `GGML_MOE_Q4_DOWN_BATCH=1` improves decode token rate but
+        fails the `TTFT <= baseline * 1.20` gate;
+      - decide whether there is a bounded fix that can keep the Q4 decode gain
+        without raising prompt latency.
+    - scope:
+      - use GP4 accepted held-out n96 as the baseline;
+      - compare GP110 full Q4 held-out n96 and GP111 decode-only Q4 smoke;
+      - do not promote Q4 unless a later full held-out cold-start run passes all
+        gates;
+      - do not tune on held-out prompts beyond diagnosing the rejected Q4 path.
+    - method:
+      - add an offline report tool that parses `metrics.txt`, `stderr.txt`,
+        `fallback-profile.csv`, `up-gate-profile.csv`,
+        `down-batch-profile.csv`, and `ttft-trace.csv` when present;
+      - compare, per prompt:
+        - TTFT and prompt eval time;
+        - decode time and token rate;
+        - iouring bytes and wait time;
+        - upgate/down hit rates and slot sizes;
+        - prompt/decode fallback totals by tensor type;
+        - Q4 down batch eligibility/accept counts;
+        - TTFT trace phase totals if the trace has usable phase labels.
+    - acceptance for any follow-up code change:
+      - the report must identify a concrete TTFT source, not just repeat that
+        TTFT is higher;
+      - a fix must be default-off or behavior-preserving by default;
+      - validation must include cold-start n96 with 16 GB host RAM, quality
+        pass, `direct_reads=0`, and TTFT within the `+20%` gate before Q4 can
+        be considered for SOTA.
+    - rejection:
+      - if the TTFT increase is storage/runtime-state variance or tied to the
+        larger Q4 slot size with no bounded mitigation, keep Q4 disabled and
+        return to byte-reduction/full-lower-quant paths.
+54. GP112 result on 2026-07-08:
+    - report:
+      `.Agent/runs/20260708-gp112-q4-ttft-source/summary.md`;
+    - differential tool:
+      `.Agent/run-tools/kimi_q4_ttft_diff.py`;
+    - historical GP4 comparison:
+      - GP110 full Q4 still fails TTFT versus historical GP4 on `5/6`
+        prompts;
+      - GP111 decode-only Q4 still fails TTFT versus historical GP4 on `2/2`
+        worst prompts;
+      - however, io_uring wait is lower in the Q4 runs while TTFT is higher,
+        and the extra time appears in prompt CPU fallback across up/gate/down
+        and several tensor types, not only Q4 down.
+    - paired current-HEAD worst-prompt check:
+      - remote roots:
+        - `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp112-q4-paired-brazil-n96`;
+        - `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp112-q4-paired-coding-n96`;
+      - prompts:
+        - `test_english_factual_01`;
+        - `test_coding_01`;
+      - quality passed for all four runs;
+      - Host RAM peak stayed at `15899996160`;
+      - `direct_reads=0` for all runs;
+      - mean token rate improved `1.680 -> 1.780 tok/s`;
+      - mean TTFT changed `81057.6 -> 85306.4 ms`;
+      - max paired TTFT ratio was `1.131`, within the `+20%` gate;
+      - decode fallback dropped from `5356.2 ms` mean to `0.0 ms`.
+    - decision:
+      - Q4 decode-only is not rejected as a mechanism;
+      - run full held-out paired current-HEAD n96 sweep, followed by the
+        cold-start SOTA audit, before enabling `GGML_MOE_Q4_DOWN_BATCH=1` in
+        the SOTA env.
+55. GP112 full held-out paired validation and SOTA acceptance on 2026-07-08:
+    - report:
+      `.Agent/runs/20260708-gp112-q4-ttft-source/summary.md`;
+    - full held-out paired remote root:
+      `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp112-q4-paired-heldout-n96`;
+    - France regression remote root:
+      `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp112-q4-paired-france-n96`;
+    - full held-out paired result:
+      - quality passed for all q4-off and q4-on runs;
+      - Host RAM peak stayed at `15899996160`;
+      - `direct_reads=0`;
+      - mean token rate improved `1.713 -> 1.820 tok/s`;
+      - min token rate improved `1.520 -> 1.600 tok/s`;
+      - mean TTFT changed `108041.2 -> 105251.7 ms`;
+      - max TTFT ratio was `1.131`, within the `+20%` gate;
+      - mean decode time improved `51468.0 -> 47041.3 ms`;
+      - decode fallback dropped from `4991.6 ms` mean to `0.0 ms`.
+    - cold-start SOTA audit:
+      - report:
+        `.Agent/runs/20260708-gp112-q4-ttft-source/audit/report.md`;
+      - common quality/RAM/direct-read gate: `True`;
+      - TTFT gate: `True`;
+      - token-rate gate: `True`;
+      - wait-only suspicion: `False`;
+      - acceptance safe: `True`.
+    - France regression:
+      - prompt:
+        `Please introduce France in a short paragraph.`;
+      - q4-on quality passed;
+      - Host RAM peak `15899996160`;
+      - `direct_reads=0`;
+      - token rate improved `1.82 -> 1.91 tok/s`;
+      - TTFT ratio `1.076`, within the gate.
+    - implementation:
+      - add `GGML_MOE_Q4_DOWN_BATCH=1` to
+        `.Agent/run-tools/kimi-general-prompt-repro.sh`;
+      - keep the underlying CUDA runtime default-off outside this SOTA
+        reproduction env.
+    - decision:
+      - accept GP112 as the current prompt-general SOTA env;
+      - this is a moderate `~6.2%` held-out paired gain, not a standalone path
+        to `5 tok/s`;
+      - continue the next optimization phase toward structural byte reduction
+        or a compatible lower-byte model path.
 
 Rationale:
 

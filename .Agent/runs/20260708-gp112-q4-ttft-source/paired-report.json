@@ -1,0 +1,114 @@
+{
+  "detail": {
+    "baseline": ".Agent/runs/20260708-gp112-q4-ttft-source/paired-q4-off-root",
+    "candidates": {
+      "paired_q4_on": ".Agent/runs/20260708-gp112-q4-ttft-source/paired-q4-on-root"
+    }
+  },
+  "rows": {
+    "paired_q4_on": [
+      {
+        "base_decode_fallback_ms": 5770.864000000013,
+        "base_decode_ms": 62522.84,
+        "base_down_hit": 66.7,
+        "base_down_slot_mib": 7.44,
+        "base_down_wall_ms": 11904.573839999997,
+        "base_iouring_gib": 505.7403869628906,
+        "base_iouring_wait_ms": 46499.463,
+        "base_prompt_eval_ms": 94810.87,
+        "base_prompt_fallback_ms": 88431.21899999704,
+        "base_token_rate": 1.52,
+        "base_ttft_ms": 94810.87,
+        "base_upgate_hit": 26.3,
+        "base_upgate_wall_ms": 16589.37735499996,
+        "cand_decode_fallback_ms": 0.0,
+        "cand_decode_ms": 59354.03,
+        "cand_down_hit": 60.6,
+        "cand_down_slot_mib": 7.88,
+        "cand_down_wall_ms": 15974.223558000016,
+        "cand_iouring_gib": 544.1552581787109,
+        "cand_iouring_wait_ms": 49522.886,
+        "cand_prompt_eval_ms": 94523.86,
+        "cand_prompt_fallback_ms": 90365.33600000109,
+        "cand_token_rate": 1.6,
+        "cand_ttft_ms": 94523.86,
+        "cand_upgate_hit": 26.4,
+        "cand_upgate_wall_ms": 16669.092338000028,
+        "decode_delta_ms": -3168.8099999999977,
+        "decode_fallback_delta_ms": -5770.864000000013,
+        "down_wall_delta_ms": 4069.6497180000188,
+        "iouring_gib_delta": 38.41487121582031,
+        "iouring_wait_delta_ms": 3023.422999999995,
+        "prompt_fallback_delta_ms": 1934.1170000040438,
+        "prompt_fallback_role_delta": {
+          "prompt,down": -97.52499999990687,
+          "prompt,gate": 1136.32500000023,
+          "prompt,up": 895.3169999990023
+        },
+        "prompt_fallback_type_delta": {
+          "prompt,type=11": 836.3720000002468,
+          "prompt,type=18": 2516.3529999995917,
+          "prompt,type=2": -525.6960000000172,
+          "prompt,type=22": -484.71100000090155,
+          "prompt,type=23": -408.2009999998809
+        },
+        "prompt_id": "test_coding_01",
+        "token_rate_delta": 0.08000000000000007,
+        "ttft_delta_ms": -287.00999999999476,
+        "ttft_ratio": 0.9969728154588182,
+        "upgate_wall_delta_ms": 79.71498300006715
+      },
+      {
+        "base_decode_fallback_ms": 4941.511999999999,
+        "base_decode_ms": 51754.29,
+        "base_down_hit": 73.4,
+        "base_down_slot_mib": 7.44,
+        "base_down_wall_ms": 10256.157416999977,
+        "base_iouring_gib": 372.8454895019531,
+        "base_iouring_wait_ms": 37475.572,
+        "base_prompt_eval_ms": 67304.3,
+        "base_prompt_fallback_ms": 59039.90199999802,
+        "base_token_rate": 1.84,
+        "base_ttft_ms": 67304.3,
+        "base_upgate_hit": 45.3,
+        "base_upgate_wall_ms": 14121.046599999981,
+        "cand_decode_fallback_ms": 0.0,
+        "cand_decode_ms": 48538.98,
+        "cand_down_hit": 66.1,
+        "cand_down_slot_mib": 7.88,
+        "cand_down_wall_ms": 13967.79135200002,
+        "cand_iouring_gib": 411.99554443359375,
+        "cand_iouring_wait_ms": 39909.206,
+        "cand_prompt_eval_ms": 76088.9,
+        "cand_prompt_fallback_ms": 72979.87699999996,
+        "cand_token_rate": 1.96,
+        "cand_ttft_ms": 76088.9,
+        "cand_upgate_hit": 46.2,
+        "cand_upgate_wall_ms": 13651.664238999976,
+        "decode_delta_ms": -3215.3099999999977,
+        "decode_fallback_delta_ms": -4941.511999999999,
+        "down_wall_delta_ms": 3711.6339350000435,
+        "iouring_gib_delta": 39.150054931640625,
+        "iouring_wait_delta_ms": 2433.633999999998,
+        "prompt_fallback_delta_ms": 13939.975000001941,
+        "prompt_fallback_role_delta": {
+          "prompt,down": 6185.6789999994835,
+          "prompt,gate": 3928.2269999996606,
+          "prompt,up": 3826.0690000003833
+        },
+        "prompt_fallback_type_delta": {
+          "prompt,type=11": 3779.138999999839,
+          "prompt,type=18": 3898.6730000001317,
+          "prompt,type=2": 1318.3060000000128,
+          "prompt,type=22": 3855.6230000003197,
+          "prompt,type=23": 1088.2339999999922
+        },
+        "prompt_id": "test_english_factual_01",
+        "token_rate_delta": 0.11999999999999988,
+        "ttft_delta_ms": 8784.599999999991,
+        "ttft_ratio": 1.1305206353828803,
+        "upgate_wall_delta_ms": -469.3823610000054
+      }
+    ]
+  }
+}
