@@ -4,7 +4,7 @@
   "branch": "vendor/deepseek-token-rate-16gb",
   "base_head": "7f195aa702a128f36f0d2a0a95c77f4cbdfe6000",
   "machine": "wici@192.168.9.198",
-  "status": "accepted_sota_pending_clean_default_repeat",
+  "status": "accepted_clean_default_reproduced_below_product_target",
   "optimization": {
     "name": "gate topk plus unified 12GiB batch cache",
     "env_defaults_promoted_in_demo": {
@@ -20,7 +20,8 @@
   "comparison": {
     "safe_default_before_gate_topk_france_tok_s": 2.6,
     "gate_topk_split_cache_clean_france_tok_s": 3.1,
-    "gate_topk_unified12_france_tok_s": 3.2,
+    "gate_topk_unified12_france_observed_high_tok_s": 3.2,
+    "gate_topk_unified12_clean_default_repeat_tok_s": 3.1,
     "product_target_tok_s": 5.0,
     "product_target_met": false
   },
@@ -80,18 +81,41 @@
       "gate_batch_prefetch_jobs_first_layer": 4
     }
   ],
+  "clean_default_repeat_after_commit": {
+    "commit": "471df3481e528015acb0142716b50efe17df6ba2",
+    "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T160217Z-20260708T-clean-default-unified12-gatetopk-france-n96",
+    "manual_sota_envs_supplied": false,
+    "observed_default_envs": {
+      "GGML_MOE_KEEP_TOPK_GATE": "1",
+      "GGML_MOE_GATE_BATCH_PREFETCH": "1",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "0",
+      "GGML_MOE_VRAM_CACHE_MIB": "12288"
+    },
+    "eval_tok_s": 3.1,
+    "prompt_tok_s": 4.0,
+    "ttft_ms": 16721.465165,
+    "elapsed_seconds": 45.64,
+    "memory_peak_bytes": 14643257344,
+    "memory_file_bytes": 13673680896,
+    "ram_ok": true,
+    "display_processes_stopped_before_run": true,
+    "source_dirty": false,
+    "h2d_gbps": 6.696628,
+    "correctness": "pass: coherent and semantically correct France paragraph",
+    "batch_iouring_reads": 11379,
+    "batch_iouring_bytes": 50709921792,
+    "decision": "3.2 tok/s is retained as observed high; clean default reproducible value is 3.1 tok/s"
+  },
   "promotion_requirements": {
     "strict_16gb_ram": "pass",
     "page_cache_counted": "pass",
     "display_processes_stopped": "pass",
     "ttft_not_more_than_20_percent_above_baseline": "pass; TTFT decreased versus default France baseline",
     "correctness": "pass on France, Fibonacci, and deployment prompts",
-    "new_machine_sota": "pass: best observed strict cold prompt-general result increased to 3.2 tok/s",
+    "new_machine_sota": "pass: best observed strict cold prompt-general result is 3.2 tok/s, clean default repeat is 3.1 tok/s",
     "product_target_gt_5_tok_s": "fail; goal remains active"
   },
   "next_steps": [
-    "Commit and push demo default promotion.",
-    "Run a clean-source default repeat without manually setting the unified-cache envs.",
     "Continue with deeper gate/up byte reduction; hardware still reports only about 6.6GB/s H2D on Gen4 x4."
   ]
 }

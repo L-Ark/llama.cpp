@@ -672,5 +672,17 @@ Promotion requirements:
     output was coherent deployment guidance.
   - Accepted as the new low-H2D new-machine SOTA candidate pending a clean
     default repeat after commit. Product target `>5 tok/s` remains unmet.
+  - Clean default repeat after commit `471df3481`, without manually supplying
+    the unified-cache envs:
+    `20260708T160217Z-20260708T-clean-default-unified12-gatetopk-france-n96`
+    produced `eval_tok_s=3.1`, `prompt_tok_s=4.0`, `TTFT=16721.5 ms`,
+    elapsed `45.64s`, `memory_peak_bytes=14643257344`,
+    `memory_file_bytes=13673680896`, `ram_ok=true`, source clean, display
+    processes stopped, H2D `6.70GB/s`, France correctness pass. The run env
+    confirms the new defaults:
+    `GGML_MOE_KEEP_TOPK_GATE=1`, `GGML_MOE_GATE_BATCH_PREFETCH=1`,
+    `GGML_MOE_STREAM_ONE_CACHE_MIB=0`, `GGML_MOE_VRAM_CACHE_MIB=12288`.
+    Therefore `3.2 tok/s` is recorded as the observed high, while the clean
+    default reproducible value is `3.1 tok/s`.
   - Detailed reproduction data is recorded in
     `.Agent/runs/20260708-vendor-ds4-newmachine/gate-topk-unified12-sota-20260708.json`.
