@@ -119,6 +119,11 @@ static bool deepseek4_fused_up_gate_ref_debug_explicit_enabled() {
     return enabled;
 }
 
+static bool deepseek4_weight_profile_enabled() {
+    const char * path = std::getenv("GGML_DS4_WEIGHT_PROFILE_OUT");
+    return path != nullptr && path[0] != '\0' && std::strcmp(path, "0") != 0;
+}
+
 struct deepseek4_sparse_retained_graph_probe_state {
     std::mutex mutex;
     FILE * fp = nullptr;
@@ -1596,6 +1601,9 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
             weights = ggml_scale(ctx0, weights, hparams.expert_weights_scale);
         }
         weights = reshape_3d_checked(weights, 1, n_expert_used, moe_tokens, "build_moe_v4.weights", il);
+        if (deepseek4_weight_profile_enabled()) {
+            weights = ggml_cont(ctx0, weights);
+        }
         cb(weights, "ffn_weights", il);
 
         deepseek4_retained_gate_interface_probe_write(

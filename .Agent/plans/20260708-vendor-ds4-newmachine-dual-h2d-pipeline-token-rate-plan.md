@@ -1458,3 +1458,59 @@ Dynamic top-k negative-id skip experiment:
   absolute per-pick weight threshold, likely layer-aware and calibrated from
   actual selected-weight distributions, or a trained/exported compact expert
   artifact. Blind thresholding is closed for now.
+
+Router-weight profile diagnostic:
+
+- Added a default-off diagnostic path, `GGML_DS4_WEIGHT_PROFILE_OUT`, to dump
+  actual DeepSeek4 `ffn_weights-*` tensors after graph execution. The callback
+  marks those tensors as graph outputs only when the env is set, and
+  `build_moe_v4` makes the weights contiguous only in that diagnostic mode.
+  Normal SOTA runs without this env keep the original graph path.
+- The first attempt to read intermediate tensors after graph compute produced
+  invalid negative/stale values because non-output intermediate buffers were
+  reused by the allocator. The final diagnostic fixes this by marking
+  `ffn_weights` as output and reading a contiguous tensor.
+- Dev profile runs under strict cold cgroup and display cleanup:
+  - `20260709-weight-profile-france-n16`
+  - `20260709-weight-profile-aiinfra-n16`
+  - `20260709-weight-profile-fibonacci-n16`
+  - `20260709-weight-profile-deploy-n16`
+  CSVs are under
+  `/home/wici/runs/vendor-ds4-16gb/manual-profiles/20260709-weight-profile-dev/`.
+- Combined distribution across 30,186 recorded picks:
+  - rank0 mean `0.566`, p50 `0.483`;
+  - rank1 mean `0.292`, p50 `0.300`;
+  - rank2 mean `0.212`, p50 `0.227`;
+  - rank3 mean `0.167`, p50 `0.179`;
+  - rank4 mean `0.141`, p50 `0.147`;
+  - rank5 mean `0.122`, p50 `0.126`.
+- Combined threshold skip fractions for tail ranks `>=2`:
+  - `0.05`: tail skip `8.0%`, all-pick skip `5.4%`;
+  - `0.10`: tail skip `18.3%`, all-pick skip `12.2%`;
+  - `0.15`: tail skip `42.2%`, all-pick skip `28.1%`;
+  - `0.18`: tail skip `59.4%`, all-pick skip `39.6%`;
+  - `0.20`: tail skip `70.1%`, all-pick skip `46.7%`.
+- Interpretation: enough byte reduction to approach `>5 tok/s` requires an
+  aggressive threshold around `0.15-0.18`, not the low thresholds. This matches
+  the failed dynamic-threshold experiment: small safe thresholds do not move
+  n96 speed, while aggressive skipping is likely to break quality unless the
+  policy is layer-aware and correctness-gated.
+
+Late-layer top2 schedule probe:
+
+- Based on the weight profile, later layers have more low-weight tail picks, so
+  a default-off fixed schedule `GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE=24-42:2` was
+  tested as a no-code smoke.
+- Runs:
+  - `20260709-late24top2-fibonacci-n32`: `eval_tok_s=3.5`, RAM OK, but output
+    started with `that## ...`; quality suspicious/fail.
+  - `20260709-late24top2-deploy-n32`: `eval_tok_s=3.3`, RAM OK, output started
+    awkwardly with `like deploying...`; no speed gain.
+  - `20260709-late24top2-france-n32`: `eval_tok_s=3.6`, RAM OK, coherent
+    France output but no speed gain.
+- Decision: reject `24-42:2`. The profile says late layers are more prunable,
+  but fixed top2 is still not a viable generalized route.
+- Next implementation direction: if continuing native-model pruning, use the
+  recorded weight profile to build a layer-aware dynamic policy and validate
+  it first on dev prompts. A candidate must pass Fibonacci/deploy quality and
+  show n96 speedup before any source promotion.

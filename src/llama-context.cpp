@@ -17,8 +17,11 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
 #include <limits>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 //
 // llama_context
@@ -42,6 +45,51 @@ struct kimi_graph_profile_state {
 };
 
 static kimi_graph_profile_state g_kimi_graph_profile;
+
+static const char * ds4_weight_profile_path() {
+    const char * path = std::getenv("GGML_DS4_WEIGHT_PROFILE_OUT");
+    if (path == nullptr || path[0] == '\0' || std::strcmp(path, "0") == 0) {
+        return nullptr;
+    }
+    return path;
+}
+
+static FILE * ds4_weight_profile_fp() {
+    static FILE * fp = nullptr;
+    static bool attempted = false;
+    if (fp != nullptr || attempted) {
+        return fp;
+    }
+    attempted = true;
+    const char * path = ds4_weight_profile_path();
+    if (path == nullptr) {
+        return nullptr;
+    }
+    fp = std::fopen(path, "w");
+    if (fp == nullptr) {
+        LLAMA_LOG_WARN("ds4 weight profile: failed to open %s\n", path);
+        return nullptr;
+    }
+    std::fprintf(fp, "graph_seq,batched,node,il,ne0,ne1,ne2,nb0,nb1,nb2,token,rank,value\n");
+    std::fflush(fp);
+    return fp;
+}
+
+static int ds4_weight_profile_layer_from_name(const char * name) {
+    if (name == nullptr) {
+        return -1;
+    }
+    const char * dash = std::strrchr(name, '-');
+    if (dash == nullptr || dash[1] == '\0') {
+        return -1;
+    }
+    char * end = nullptr;
+    const long value = std::strtol(dash + 1, &end, 10);
+    if (end == dash + 1) {
+        return -1;
+    }
+    return (int) value;
+}
 
 static void kimi_graph_profile_report() {
     const uint64_t submit_calls = g_kimi_graph_profile.submit_calls.load();
@@ -2314,6 +2362,52 @@ ggml_status llama_context::graph_compute(
     }
     if (status != GGML_STATUS_SUCCESS) {
         LLAMA_LOG_ERROR("%s: ggml_backend_sched_graph_compute_async failed with error %d\n", __func__, status);
+    } else if (ds4_weight_profile_path() != nullptr) {
+        ggml_backend_sched_synchronize(sched.get());
+        FILE * fp = ds4_weight_profile_fp();
+        static uint64_t graph_seq = 0;
+        const uint64_t seq = graph_seq++;
+        if (fp != nullptr) {
+            for (int i = 0; i < ggml_graph_n_nodes(gf); ++i) {
+                ggml_tensor * node = ggml_graph_node(gf, i);
+                if (node == nullptr || std::strstr(node->name, "ffn_weights") == nullptr) {
+                    continue;
+                }
+                if (node->type != GGML_TYPE_F32 || ggml_nelements(node) <= 0 || ggml_nelements(node) > 4096) {
+                    continue;
+                }
+                ggml_backend_t backend = ggml_backend_sched_get_tensor_backend(sched.get(), node);
+                if (backend == nullptr) {
+                    continue;
+                }
+                const int il = ds4_weight_profile_layer_from_name(node->name);
+                const int64_t ne0 = node->ne[0] > 0 ? node->ne[0] : 1;
+                const int64_t ne1 = node->ne[1] > 0 ? node->ne[1] : 1;
+                const int64_t ne2 = node->ne[2] > 0 ? node->ne[2] : 1;
+                for (int64_t token = 0; token < ne2; ++token) {
+                    for (int64_t rank = 0; rank < ne1; ++rank) {
+                        float value = 0.0f;
+                        const size_t offs = (size_t) (token * node->nb[2] + rank * node->nb[1]);
+                        ggml_backend_tensor_get(node, &value, offs, sizeof(float));
+                        std::fprintf(fp, "%llu,%d,%s,%d,%lld,%lld,%lld,%zu,%zu,%zu,%lld,%lld,%.9g\n",
+                                (unsigned long long) seq,
+                                batched ? 1 : 0,
+                                node->name,
+                                il,
+                                (long long) ne0,
+                                (long long) ne1,
+                                (long long) ne2,
+                                (size_t) node->nb[0],
+                                (size_t) node->nb[1],
+                                (size_t) node->nb[2],
+                                (long long) token,
+                                (long long) rank,
+                                value);
+                    }
+                }
+            }
+            std::fflush(fp);
+        }
     }
 
     // fprintf(stderr, "splits: %d\n", ggml_backend_sched_get_n_splits(sched));
@@ -2327,6 +2421,9 @@ llm_graph_cb llama_context::graph_get_cb() const {
             ggml_format_name(cur, "%s-%d", name, il);
         } else {
             ggml_set_name(cur, name);
+        }
+        if (ds4_weight_profile_path() != nullptr && std::strcmp(name, "ffn_weights") == 0) {
+            ggml_set_output(cur);
         }
 
         // norm may be automatically assigned to the backend of the previous layer, increasing data transfer between backends

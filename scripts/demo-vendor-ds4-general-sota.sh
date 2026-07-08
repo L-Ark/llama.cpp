@@ -680,7 +680,8 @@ for passthrough_env in \
   GGML_MOE_VRAM_CACHE_PROFILE_AFTER \
   GGML_MOE_CACHE_EVICT_PROFILE_OUT \
   GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE \
-  GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT; do
+  GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT \
+  GGML_DS4_WEIGHT_PROFILE_OUT; do
   if [[ -n "${!passthrough_env:-}" ]]; then
     systemd_cmd+=(--setenv=${passthrough_env}=${!passthrough_env})
   fi
