@@ -345,3 +345,18 @@ Promotion requirements:
 - Current clean generalized new-machine SOTA is therefore `2.8 tok/s` on these
   n96 cold strict runs. The `2.9 tok/s` probe is retained as observed variance,
   not the clean promoted number. Product target `>5 tok/s` is not met.
+- Route-pruning follow-up:
+  - `GGML_MOE_KEEP_TOPK_LAYER_VALUE=1` rejected:
+    `20260708T141910Z-topk-layer1-probe`, `eval_tok_s=2.9`, but the answer
+    started awkwardly (`like to deploy...`) and was less coherent. Speed gain
+    was not enough to justify the quality regression.
+  - Expanding topk2 range to `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-39` accepted:
+    `20260708T142026Z-topk2-range0-39-probe` produced `eval_tok_s=2.9`,
+    `prompt_tok_s=3.7`, `TTFT=17866.7 ms`, elapsed `49.33s`, RAM OK, coherent
+    answer on the deployment prompt.
+  - France sentinel `20260708T142142Z-france-topk2-range0-39` produced
+    `eval_tok_s=2.9`, `prompt_tok_s=3.4`, `TTFT=18069.1 ms`, elapsed `48.72s`,
+    RAM OK, and a semantically correct/coherent France paragraph.
+  - New default: `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-39`,
+    `GGML_MOE_KEEP_TOPK_LAYER_VALUE=2`. This is still below the `>5 tok/s`
+    target and needs broader calibration prompt validation.
