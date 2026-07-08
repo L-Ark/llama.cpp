@@ -268,6 +268,22 @@
 - `rejection_rule`: 若只是 France 或某个 dev prompt 提升，或依赖 prompt-specific trace/hotset，或仅提高 batch_accept 但 token rate/TTFT/correctness 不达标，必须标记 `rejected/not_accepted`，源码回退到上一 accepted SOTA，仅保留 artifact 和文档记录。
 - `next_action`: 先执行 phase 0/1，不直接改性能路径；拿到 predictor coverage 与理论收益后，再决定是否进入 phase 2 paired down prefetch。
 
+
+## 2026-07-08 accepted generalized SOTA：up/down paired read
+
+- `record_rule`: this section is committed and pushed together with the source, artifact, and demo updates for reproducibility.
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-paired-read-generalized-sota-20260708.json`.
+- `implementation`: default-off `GGML_MOE_UPDOWN_PAIRED_READ=1`. In the Q80 single-tensor `ffn_up_exps` op, same-layer `ffn_down_exps` active experts are predicted from static tensor name plus current routing. Their cache misses are inserted into the shared 9GB Q80 VRAM cache and appended to the same staging/io_uring job vectors. The later down op computes unchanged and observes cache hits. No prompt-specific trace, hotset, route profile, or held-out-derived artifact is used.
+- `diagnostic_n96_control`: same dirty binary strict cold France n96, no paired read: `eval_tok_s=2.9`, `TTFT=34350.465ms`, `actual_down_misses=3358`, `iouring_batches=4920`, `submit_calls=4995`, `inflight_avg=1.66`, `batch_hist=1:4030,2-4:726,5-8:136,9-16:28`.
+- `diagnostic_n96_paired`: same dirty binary strict cold France n96 with paired read: `eval_tok_s=3.2`, `TTFT=31861.113ms`, `actual_down_misses=0`, `paired_down_plan_jobs=3358`, `iouring_batches=3660`, `submit_calls=4129`, `inflight_avg=2.31`, `batch_hist=1:2400,2-4:1142,5-8:30,9-16:72,17-32:16`.
+- `mechanism_result`: predictor coverage was exact on smoke/profile (`up_predict_down` matched actual down by tensor/hash/n_active), expert source pack coverage was 100%, and paired read removed actual down cache misses in the measured n96 path.
+- `dev_set_result_n192`: strict cold, 16GB cgroup, page cache included, `MemorySwapMax=0`. Results: France `3.2`, quantum `2.5`, Fibonacci `2.2`, Japan `3.1`, climate `2.9` tok/s. Aggregate: min `2.2`, mean `2.78`, max `3.2`. Previous accepted dev aggregate was min `2.1`, mean `2.54`, max `3.0`.
+- `held_out_v1_result_n192`: candidate was frozen before held-out. Results: photosynthesis `2.8`, office `2.6`, palindrome_js `2.4`, exercise `3.0`, Brazil `3.0` tok/s. Aggregate: min `2.4`, mean `2.76`, max `3.0`. Previous accepted held-out aggregate was min `2.3`, mean `2.56`, max `2.8`.
+- `correctness`: all dev and held-out outputs were manually reviewed as semantically correct/coherent for the task. France n192 output is complete and correct. Fibonacci includes a valid generator function before later optional/truncated text; office has minor markdown/truncation but satisfies the three-tip task.
+- `ram_ttft`: all accepted candidate runs exited 0, had `memory_peak_bytes=16000000000`, `ram_ok=true`, and page cache in `memory_file_bytes` inside the same cgroup. Held-out max TTFT `35776.237ms` remains within the +20% gate; dev max TTFT `35446.659ms` also passes.
+- `decision`: accepted as new generalized SOTA, but product target is still not met. Current held-out min/mean `2.4/2.76 tok/s` remains far below the required stable `>5 tok/s` for random prompts on `16GB host RAM + 32GB RTX 5090`.
+- `next_after_acceptance`: commit and push source + artifact + plan + demo to `ssd/vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit to prove reproducibility. After that, continue with higher-impact retained/fused producer-consumer work because paired read alone cannot close the remaining gap to `>5 tok/s`.
+
 ## 二次回退状态（2026-07-02）
 
 - 已执行回退：当前源码分支重置到 `5d65239a74c9512967eb557743dc3cb5d1cf6c76`（`vendor-ds4: record odirect pack sota`）。

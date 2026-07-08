@@ -7248,6 +7248,113 @@ static bool down_name_for_up_gate(const char *src_name, char *out, size_t out_sz
     return true;
 }
 
+
+static bool updown_pair_profile_enabled() {
+    const char *path = std::getenv("GGML_MOE_UPDOWN_PAIR_PROFILE_OUT");
+    return path && path[0];
+}
+
+static uint64_t updown_pair_active_hash(const int *active_experts, int n_active) {
+    uint64_t h = 1469598103934665603ULL;
+    for (int i = 0; i < n_active; ++i) {
+        h ^= (uint64_t)(uint32_t)active_experts[i] + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h *= 1099511628211ULL;
+    }
+    return h ? h : 1;
+}
+
+static void updown_pair_profile_write(
+        const char *phase,
+        const char *src_name,
+        const char *pair_name,
+        size_t expert_bytes,
+        int n_active,
+        uint64_t active_hash,
+        int cache_hits,
+        int cache_misses,
+        int pack_hits,
+        int pack_misses) {
+    const char *path = std::getenv("GGML_MOE_UPDOWN_PAIR_PROFILE_OUT");
+    if (!path || !path[0]) return;
+    static std::mutex mu;
+    static bool header = false;
+    std::lock_guard<std::mutex> lk(mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header) {
+        std::fprintf(f, "phase,src_name,pair_name,expert_bytes,n_active,active_hash,cache_hits,cache_misses,pack_hits,pack_misses\n");
+        header = true;
+    }
+    std::fprintf(f, "%s,%s,%s,%lu,%d,%lu,%d,%d,%d,%d\n",
+            phase ? phase : "",
+            src_name ? src_name : "",
+            pair_name ? pair_name : "",
+            (unsigned long)expert_bytes,
+            n_active,
+            (unsigned long)active_hash,
+            cache_hits,
+            cache_misses,
+            pack_hits,
+            pack_misses);
+    std::fclose(f);
+}
+
+static void updown_pair_profile_predict_down(
+        const char *src_name,
+        size_t expert_bytes,
+        batch_vram_cache *cache,
+        const int *active_experts,
+        int n_active) {
+    if (!updown_pair_profile_enabled() || !src_name || !std::strstr(src_name, ".ffn_up_exps.")) return;
+    char down_name[128] = {};
+    if (!down_name_for_up_gate(src_name, down_name, sizeof(down_name))) return;
+    int cache_hits = 0;
+    int cache_misses = 0;
+    int pack_hits = 0;
+    int pack_misses = 0;
+    for (int j = 0; j < n_active; ++j) {
+        const int expert = active_experts[j];
+        const uintptr_t key = batch_key_hash(down_name, expert);
+        if (cache && batch_cache_find_slot(cache, key) >= 0) {
+            ++cache_hits;
+        } else {
+            ++cache_misses;
+        }
+        if (expert_pack_lookup_impl(down_name, expert, expert_bytes, false)) {
+            ++pack_hits;
+        } else {
+            ++pack_misses;
+        }
+    }
+    updown_pair_profile_write("up_predict_down", src_name, down_name, expert_bytes, n_active,
+            updown_pair_active_hash(active_experts, n_active), cache_hits, cache_misses, pack_hits, pack_misses);
+}
+
+static void updown_pair_profile_actual(
+        const char *src_name,
+        size_t expert_bytes,
+        const int *active_experts,
+        int n_active,
+        int cache_hits,
+        int cache_misses) {
+    if (!updown_pair_profile_enabled() || !src_name) return;
+    const bool is_up = std::strstr(src_name, ".ffn_up_exps.") || std::strstr(src_name, "ffn_up_exps");
+    const bool is_down = std::strstr(src_name, ".ffn_down_exps.") || std::strstr(src_name, "ffn_down_exps");
+    if (!is_up && !is_down) return;
+    int pack_hits = 0;
+    int pack_misses = 0;
+    for (int j = 0; j < n_active; ++j) {
+        const int expert = active_experts[j];
+        if (expert_pack_lookup_impl(src_name, expert, expert_bytes, false)) {
+            ++pack_hits;
+        } else {
+            ++pack_misses;
+        }
+    }
+    updown_pair_profile_write(is_down ? "actual_down" : "actual_up", src_name, "", expert_bytes, n_active,
+            updown_pair_active_hash(active_experts, n_active), cache_hits, cache_misses, pack_hits, pack_misses);
+}
+
 static void preload_registered_down_for_active(const char *src_name, const int *active_experts, int n_active) {
     if (!down_prefetch_enabled() || !g_batch.prefetch_stream || !src_name || !active_experts || n_active <= 0) return;
 
@@ -9479,6 +9586,12 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         return decline("cache_get");
     }
     mxfp4_stage_trace("cache_get_ok");
+    updown_pair_profile_predict_down(src0_name, src0_bytes, cache, active_experts, n_active);
+    const bool updown_paired_read = expert_pack_env_bool("GGML_MOE_UPDOWN_PAIRED_READ", false) &&
+        src0_name && std::strstr(src0_name, ".ffn_up_exps.");
+    char updown_paired_down_name[128] = {};
+    const bool updown_paired_down_name_ok =
+        updown_paired_read && down_name_for_up_gate(src0_name, updown_paired_down_name, sizeof(updown_paired_down_name));
     preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, src0_bytes, st);
 
     if (profile) cudaEventRecord(bc.ev_start, st);
@@ -9586,7 +9699,59 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         bc.h_ids_dst[j] = dst_ids[j];
         bc.h_bounds[j] = j;
     }
+    if (updown_paired_down_name_ok) {
+        int paired_jobs = 0;
+        int paired_cache_hits = 0;
+        int paired_missing_pack = 0;
+        for (int j = 0; j < n_active; ++j) {
+            const int expert = active_experts[j];
+            const uintptr_t down_key = batch_key_hash(updown_paired_down_name, expert);
+            if (batch_cache_find_slot(cache, down_key) >= 0) {
+                ++paired_cache_hits;
+                continue;
+            }
+            const int down_slot = batch_cache_insert_slot(cache, down_key, nullptr, src0_bytes, st,
+                    true, false, bc.h_x_ids, n_active, false, updown_paired_down_name, expert, true);
+            if (down_slot < 0) {
+                continue;
+            }
+            const expert_pack_entry *pack_entry = expert_pack_lookup(updown_paired_down_name, expert, src0_bytes);
+            if (!pack_entry) {
+                ++paired_missing_pack;
+                batch_cache_clear_slot(cache, down_slot);
+                continue;
+            }
+            down_stage_copy_job job;
+            job.slot = down_slot;
+            job.dst = (char *)cache->pool + (size_t)down_slot * cache->slot_sz;
+            job.host_data = nullptr;
+            job.pack_entry = pack_entry;
+            job.expert_idx = expert;
+            std::snprintf(job.tensor, sizeof(job.tensor), "%s", updown_paired_down_name);
+            if (down_stage_single_ring) {
+                down_jobs_a.push_back(job);
+            } else if ((int)(down_jobs_a.size() + down_jobs_b.size()) & 1) {
+                down_jobs_b.push_back(job);
+            } else {
+                down_jobs_a.push_back(job);
+            }
+            ++paired_jobs;
+        }
+        static std::atomic<int> first_updown_paired_read{0};
+        if (paired_jobs > 0 && first_updown_paired_read.fetch_add(1) == 0) {
+            std::fprintf(stderr,
+                    "[moe_stream_batch] up/down paired read active: up=%s down=%s jobs=%d cache_hits=%d missing_pack=%d\n",
+                    src0_name ? src0_name : "", updown_paired_down_name, paired_jobs, paired_cache_hits, paired_missing_pack);
+        }
+        if (updown_pair_profile_enabled()) {
+            updown_pair_profile_write("paired_down_plan", src0_name, updown_paired_down_name, src0_bytes, n_active,
+                    updown_pair_active_hash(active_experts, n_active), paired_cache_hits, paired_jobs,
+                    paired_jobs, paired_missing_pack);
+        }
+    }
     bc.h_bounds[n_active] = n_active;
+    updown_pair_profile_actual(src0_name, src0_bytes, active_experts, n_active,
+            down_profile_cache_hits, down_profile_cache_misses);
     mxfp4_stage_trace("stage_jobs_done");
 
     if (down_parallel_stage && (!down_jobs_a.empty() || !down_jobs_b.empty())) {

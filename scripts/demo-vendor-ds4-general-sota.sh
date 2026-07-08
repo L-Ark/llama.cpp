@@ -31,8 +31,8 @@ What this script demonstrates:
   - User may enter any prompt; this is not a France-specialized demo.
 
 Current known generalized status:
-  - Calibration/dev prompt range recorded in the repo: 2.1-3.0 tok/s, mean 2.54 tok/s.
-  - Held-out v1 prompt range recorded in the repo: 2.3-2.8 tok/s, mean 2.56 tok/s.
+  - Calibration/dev prompt range recorded in the repo: 2.2-3.2 tok/s, mean 2.78 tok/s.
+  - Held-out v1 prompt range recorded in the repo: 2.4-3.0 tok/s, mean 2.76 tok/s.
   - Product target remains stable >5 tok/s for random prompts; not yet met.
 
 Artifacts:
@@ -59,7 +59,7 @@ BINARY="${BINARY:-${REPO_DIR}/build-ds4-moe-stream/bin/llama-cli}"
 MODEL="${MODEL:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf}"
 RUN_ROOT="${RUN_ROOT:-/root/lfz/runs/vendor-ds4-16gb/demo-general-sota}"
 BASELINE_ARTIFACT="${BASELINE_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json}"
-SOTA_ARTIFACT="${SOTA_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/up-q80-one4-vram9-downparallel-iouring-sota-20260708.json}"
+SOTA_ARTIFACT="${SOTA_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/updown-paired-read-generalized-sota-20260708.json}"
 DS4_ALIAS_TSV="${DS4_ALIAS_TSV:-${REPO_DIR}/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv}"
 
 MEMORY_MAX_BYTES=16000000000
@@ -220,8 +220,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "prompt_general": true,
   "prompt_specific_optimization": false,
   "france_specialized_path_used": false,
-  "current_generalized_dev_tok_s": {"min": 2.1, "mean": 2.54, "max": 3.0},
-  "current_held_out_v1_tok_s": {"min": 2.3, "mean": 2.56, "max": 2.8},
+  "current_generalized_dev_tok_s": {"min": 2.2, "mean": 2.78, "max": 3.2},
+  "current_held_out_v1_tok_s": {"min": 2.4, "mean": 2.76, "max": 3.0},
   "product_target_tok_s": 5.0,
   "product_target_currently_met": false,
   "max_tokens": ${MAX_TOKENS},
@@ -251,6 +251,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_STREAM_DOWN_BATCH": "1",
     "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
     "GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH": "1",
+    "GGML_MOE_UPDOWN_PAIRED_READ": "1",
     "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
     "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8": "1",
     "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED": "1",
@@ -296,6 +297,7 @@ export GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps
 export GGML_MOE_STREAM_DOWN_BATCH=1
 export GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1
 export GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1
+export GGML_MOE_UPDOWN_PAIRED_READ=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1
@@ -430,7 +432,7 @@ Run dir: $RUN_DIR
 Source: $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)@$(git -C "$REPO_DIR" rev-parse --short HEAD) $([[ "$source_dirty" == true ]] && echo dirty || echo clean)
 Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
-Known generalized dev range: 2.1-3.0 tok/s, mean 2.54 tok/s. Held-out v1: 2.3-2.8 tok/s, mean 2.56 tok/s.
+Known generalized dev range: 2.2-3.2 tok/s, mean 2.78 tok/s. Held-out v1: 2.4-3.0 tok/s, mean 2.76 tok/s.
 Product target: stable >5 tok/s for random prompts. Current generalized path is not there yet.
 Prompt-specific packs/profiles/aliases: disabled and refused.
 Prompt:
