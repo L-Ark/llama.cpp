@@ -1880,3 +1880,34 @@ Decision: do not change default pinned slots or IO depth based on this sweep.
 The best difference was a small deploy-only `3.8 -> 3.9 tok/s`, while
 Fibonacci matched default and France did not improve. This is useful as a
 diagnostic but not an accepted SOTA.
+
+## 2026-07-09 Planned Host Prefetch Rejection
+
+`GGML_MOE_PLANNED_HOST_PREFETCH=1` was tested because the clean copy profile
+showed many small `runtime_load` and `gate_batch_preload` batches. This path
+keeps model math unchanged and tries to move expert reads into a background
+host-pinned prefetch worker before the H2D copy.
+
+Strict cold, source clean, display cleanup recorded:
+
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T204441Z-20260709-planned-host512-fibonacci-n64`
+  with `GGML_MOE_HOST_PREFETCH_MAX_MIB=512`,
+  `GGML_MOE_HOST_PREFETCH_SLOTS=64`:
+  `eval_tok_s=3.0`, `prompt_tok_s=4.7`,
+  `memory_peak_bytes=14280712192`, RAM OK, Fibonacci quality OK.
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T204520Z-20260709-planned-host1024-fibonacci-n64`
+  with `GGML_MOE_HOST_PREFETCH_MAX_MIB=1024`,
+  `GGML_MOE_HOST_PREFETCH_SLOTS=128`:
+  `eval_tok_s=3.0`, `prompt_tok_s=4.7`,
+  `memory_peak_bytes=14297808896`, RAM OK, Fibonacci quality OK.
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T204559Z-20260709-planned-host1024-deploy-n64`
+  with the same 1024MiB config:
+  `eval_tok_s=3.2`, `prompt_tok_s=5.3`,
+  `memory_peak_bytes=14356013056`, RAM OK, deploy quality OK.
+
+Decision: reject planned host prefetch as currently implemented. It preserves
+correctness and remains under the 16GB cgroup, but it does not increase
+decode speed and likely fails to cover the critical wait because H2D remains
+serialized and the worker is not far enough ahead of runtime use. The next
+implementation must build a real per-layer gate/up/down request plan
+immediately after routing, then submit that plan as a larger ordered batch.
