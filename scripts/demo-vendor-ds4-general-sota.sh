@@ -387,7 +387,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
     "GGML_MOE_GATE_BATCH_PREFETCH": $(printf '%s' "${GGML_MOE_GATE_BATCH_PREFETCH:-1}" | json_string),
     "GGML_MOE_STREAM_ONE_CACHE_MIB": $(printf '%s' "${GGML_MOE_STREAM_ONE_CACHE_MIB:-0}" | json_string),
-    "GGML_MOE_VRAM_CACHE_MIB": $(printf '%s' "${GGML_MOE_VRAM_CACHE_MIB:-12288}" | json_string),
+    "GGML_MOE_VRAM_CACHE_MIB": $(printf '%s' "${GGML_MOE_VRAM_CACHE_MIB:-14336}" | json_string),
     "GGML_MOE_VRAM_CACHE_GB": $(printf '%s' "${GGML_MOE_VRAM_CACHE_GB:-9}" | json_string),
     "GGML_MOE_STREAM_DOWN_BATCH": "1",
     "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
@@ -458,8 +458,8 @@ export GGML_MOE_UPDOWN_PAIRED_READ=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1
-if [[ -n "$(printf '%s' "${GGML_MOE_VRAM_CACHE_MIB:-12288}")" ]]; then
-  export GGML_MOE_VRAM_CACHE_MIB=$(printf '%q' "${GGML_MOE_VRAM_CACHE_MIB:-12288}")
+if [[ -n "$(printf '%s' "${GGML_MOE_VRAM_CACHE_MIB:-14336}")" ]]; then
+  export GGML_MOE_VRAM_CACHE_MIB=$(printf '%q' "${GGML_MOE_VRAM_CACHE_MIB:-14336}")
   unset GGML_MOE_VRAM_CACHE_GB || true
 else
   export GGML_MOE_VRAM_CACHE_GB=$(printf '%q' "${GGML_MOE_VRAM_CACHE_GB:-9}")

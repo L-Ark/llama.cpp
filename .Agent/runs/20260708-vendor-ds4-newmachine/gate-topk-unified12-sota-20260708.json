@@ -116,6 +116,7 @@
     "product_target_gt_5_tok_s": "fail; goal remains active"
   },
   "next_steps": [
+    "Superseded by the 14GiB-request/12.2GiB-actual cache sweep recorded in gate-topk-unified14-sota-20260708.json.",
     "Continue with deeper gate/up byte reduction; hardware still reports only about 6.6GB/s H2D on Gen4 x4."
   ]
 }

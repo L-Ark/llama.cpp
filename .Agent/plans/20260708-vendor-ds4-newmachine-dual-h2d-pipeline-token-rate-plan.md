@@ -686,3 +686,27 @@ Promotion requirements:
     default reproducible value is `3.1 tok/s`.
   - Detailed reproduction data is recorded in
     `.Agent/runs/20260708-vendor-ds4-newmachine/gate-topk-unified12-sota-20260708.json`.
+- Gate-topk unified cache size sweep:
+  - With gate-topk active, `GGML_MOE_VRAM_CACHE_MIB=14336` was retested. The
+    allocation still cannot fit a full 14GiB pool, but the retry lands at
+    `12.2GiB / 2951` slots instead of the `12.0GiB / 2891` slots from the
+    12GiB request.
+  - n32 smoke
+    `20260708T160501Z-20260708T-gatetopk-unified14-france-n32-smoke`:
+    `eval_tok_s=3.0`, `TTFT=16589.8 ms`, `ram_ok=true`, correctness pass.
+  - n96 France validation
+    `20260708T160554Z-20260708T-gatetopk-unified14-france-n96`:
+    `eval_tok_s=3.2`, `prompt_tok_s=4.0`, `TTFT=16853.5 ms`,
+    elapsed `45.27s`, `memory_peak_bytes=14712995840`,
+    `memory_file_bytes=13850742784`, `ram_ok=true`, source clean, display
+    processes stopped, H2D `6.62GB/s`, correctness pass. Batch io_uring bytes
+    were `49.92GB`.
+  - n96 Fibonacci validation
+    `20260708T160703Z-20260708T-gatetopk-unified14-fibonacci-n96`:
+    `eval_tok_s=2.9`, `TTFT=17408.7 ms`, `memory_peak_bytes=14729986048`,
+    `ram_ok=true`, correctness pass.
+  - Promoted demo default `GGML_MOE_VRAM_CACHE_MIB=14336`, with the explicit
+    note that the effective pool is the retry-sized `12.2GiB`, not a true
+    14GiB allocation. Product `>5 tok/s` remains unmet.
+  - Detailed reproduction data is recorded in
+    `.Agent/runs/20260708-vendor-ds4-newmachine/gate-topk-unified14-sota-20260708.json`.
