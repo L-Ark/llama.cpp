@@ -862,9 +862,33 @@ Promotion requirements:
     display cleanup recorded, and coherent France output. This is the current
     default clean generalized SOTA on the new machine, but still below the
     product target.
-- Hardware/H2D finding:
+  - Hardware/H2D finding:
   - The GPU endpoint supports `32GT/s x16`, but its upstream root port
     `0000:00:06.0` has `LnkCap Speed 16GT/s, Width x4` and target link speed
     `16GT/s`. Therefore the new machine cannot reach Gen5 x4 for this GPU
     through software alone. The measured `6.6-6.7 GB/s` 4.25MiB H2D is
     consistent with the root-port Gen4 x4 limit.
+- CUDA graph diagnostic after split-topk SOTA:
+  - The demo script now allows `GGML_CUDA_DISABLE_GRAPHS` to be overridden,
+    while keeping the default disabled unless explicitly changed.
+  - Dirty diagnostic with `GGML_CUDA_DISABLE_GRAPHS=0`:
+    France n96 `20260708T165722Z-20260709T-cuda-graphs-enabled-france-n96`
+    reached `eval_tok_s=5.0`, `TTFT=15794.9 ms`, `ram_ok=true`, coherent
+    output.
+  - The gain did not generalize: AI infra n96
+    `20260708T165814Z-20260709T-cuda-graphs-enabled-ai-infra-n96` reached
+    `4.1 tok/s`, and deployment n96
+    `20260708T165908Z-20260709T-cuda-graphs-enabled-deploy-n96` reached
+    `3.7 tok/s`, both similar to current default behavior.
+  - Conclusion: CUDA graph enablement is not promoted as default and does not
+    satisfy stable `>5 tok/s` for random prompts. Keep as diagnostic only.
+- Long-output check:
+  - Clean default n192 France run
+    `20260708T165446Z-20260709T-clean-61969d4-default-france-n192` reached
+    only `eval_tok_s=4.2`, confirming that the remaining gap is not just TTFT
+    amortization.
+  - Clean default down profile
+    `20260708T165605Z-20260709T-clean-61969d4-default-down-profile-france-n32`
+    showed `stage_ms=3050.9`, `kernel_ms=569.5`, `d2h_ms=22.9`,
+    `scatter_ms=10.6`, `wall_ms=3714.9`, with `active_avg=2.98` and
+    `iouring_bytes=17.98GB`. Expert read/H2D staging remains dominant.

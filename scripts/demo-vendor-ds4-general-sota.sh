@@ -371,7 +371,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "batch": 16,
     "ubatch": 16,
     "threads": 20,
-    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_CUDA_DISABLE_GRAPHS": $(printf '%s' "${GGML_CUDA_DISABLE_GRAPHS:-1}" | json_string),
     "GGML_MOE_STREAM": "1",
     "GGML_MOE_STREAM_DONTNEED": "1",
     "GGML_MOE_STAGE_PINNED_SLOTS": $(printf '%s' "${GGML_MOE_STAGE_PINNED_SLOTS:-8}" | json_string),
@@ -428,7 +428,7 @@ for key in ${prompt_specific_env[*]}; do
 done
 
 export CUDA_VISIBLE_DEVICES="\${CUDA_VISIBLE_DEVICES:-0}"
-export GGML_CUDA_DISABLE_GRAPHS=1
+export GGML_CUDA_DISABLE_GRAPHS=$(printf '%q' "${GGML_CUDA_DISABLE_GRAPHS:-1}")
 if [[ "$(printf '%s' "${GGML_MOE_BATCH_FULLPACK:-0}")" != "0" ]]; then
   export GGML_MOE_EXPERT_PACK="$GATE_FULLPACK_PATH"
   unset GGML_MOE_EXPERT_GGUF_ALIAS_TSV || true
