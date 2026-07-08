@@ -644,3 +644,33 @@ Promotion requirements:
     Gate one-pack reads/bytes remained `2875` / `12.81GB`.
   - Detailed reproduction data is recorded in
     `.Agent/runs/20260708-vendor-ds4-newmachine/gate-topk-generalized-sota-20260708.json`.
+- Gate-topk plus unified 12GiB cache:
+  - After gate-topk reduced the gate working set, the previously diagnostic
+    unified-cache path became useful. Promoted demo defaults:
+    `GGML_MOE_GATE_BATCH_PREFETCH=1`,
+    `GGML_MOE_STREAM_ONE_CACHE_MIB=0`,
+    `GGML_MOE_VRAM_CACHE_MIB=12288`, while keeping
+    `GGML_MOE_KEEP_TOPK_GATE=1`.
+  - n32 smoke
+    `20260708T155539Z-20260708T-gatetopk-unified12-france-n32-smoke`:
+    `eval_tok_s=2.9`, `TTFT=16755.6 ms`, `ram_ok=true`, correctness pass.
+  - n96 France validation
+    `20260708T155637Z-20260708T-gatetopk-unified12-france-n96`:
+    `eval_tok_s=3.2`, `prompt_tok_s=4.0`, `TTFT=16895.3 ms`,
+    elapsed `45.05s`, `memory_peak_bytes=14633455616`,
+    `memory_file_bytes=13644005376`, `ram_ok=true`, source clean, display
+    processes stopped, H2D `6.57GB/s`, correctness pass. This is the current
+    highest strict cold prompt-general new-machine result, but still below the
+    product target.
+  - n96 Fibonacci validation
+    `20260708T155749Z-20260708T-gatetopk-unified12-fibonacci-n96`:
+    `eval_tok_s=2.9`, `TTFT=17448.7 ms`, `ram_ok=true`; correctness pass with
+    a valid Python Fibonacci generator.
+  - n96 deployment validation
+    `20260708T155859Z-20260708T-gatetopk-unified12-deploy-n96`:
+    `eval_tok_s=3.0`, `prompt_tok_s=4.6`, `TTFT=17199.5 ms`, `ram_ok=true`;
+    output was coherent deployment guidance.
+  - Accepted as the new low-H2D new-machine SOTA candidate pending a clean
+    default repeat after commit. Product target `>5 tok/s` remains unmet.
+  - Detailed reproduction data is recorded in
+    `.Agent/runs/20260708-vendor-ds4-newmachine/gate-topk-unified12-sota-20260708.json`.
