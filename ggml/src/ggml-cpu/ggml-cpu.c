@@ -2465,6 +2465,65 @@ static int ggml_moe_keep_topk_for_tensor(const char * name) {
 
     const int fallback_keep_topk = ggml_moe_keep_topk_updown();
 
+    enum { GGML_MOE_KEEP_TOPK_MAX_SCHEDULE = 16 };
+    struct ggml_moe_keep_topk_schedule_entry {
+        int start;
+        int end;
+        int keep_topk;
+    };
+
+    static int schedule_initialized = 0;
+    static int schedule_count = 0;
+    static struct ggml_moe_keep_topk_schedule_entry schedule[GGML_MOE_KEEP_TOPK_MAX_SCHEDULE];
+    if (!schedule_initialized) {
+        schedule_initialized = 1;
+        const char * env = getenv("GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE");
+        if (env && env[0]) {
+            const char * p = env;
+            while (*p && schedule_count < GGML_MOE_KEEP_TOPK_MAX_SCHEDULE) {
+                while (*p == ' ' || *p == '\t' || *p == ',') {
+                    ++p;
+                }
+                int start = -1;
+                int end = -1;
+                int keep = 0;
+                int consumed = 0;
+                if (sscanf(p, "%d-%d:%d%n", &start, &end, &keep, &consumed) == 3 ||
+                    sscanf(p, "%d:%d%n", &start, &keep, &consumed) == 2) {
+                    if (end < 0) {
+                        end = start;
+                    }
+                    if (start > end) {
+                        const int tmp = start;
+                        start = end;
+                        end = tmp;
+                    }
+                    if (keep < 0) {
+                        keep = 0;
+                    }
+                    schedule[schedule_count++] = (struct ggml_moe_keep_topk_schedule_entry) {
+                        start,
+                        end,
+                        keep,
+                    };
+                    p += consumed;
+                    while (*p && *p != ',') {
+                        ++p;
+                    }
+                    continue;
+                }
+                break;
+            }
+        }
+    }
+
+    const int layer = ggml_moe_tensor_layer(name);
+    for (int i = 0; i < schedule_count; ++i) {
+        if (layer >= schedule[i].start && layer <= schedule[i].end) {
+            return schedule[i].keep_topk;
+        }
+    }
+
     static int initialized = 0;
     static int layer_start = -1;
     static int layer_end = -1;
@@ -2492,7 +2551,6 @@ static int ggml_moe_keep_topk_for_tensor(const char * name) {
         }
     }
 
-    const int layer = ggml_moe_tensor_layer(name);
     if (layer_keep_topk > 0 && layer >= layer_start && layer <= layer_end) {
         return layer_keep_topk;
     }
