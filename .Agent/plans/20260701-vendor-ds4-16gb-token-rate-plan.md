@@ -8654,3 +8654,64 @@ Decision:
 - Product target remains unmet: held-out mean `2.50 tok/s` is still below stable `>5 tok/s` for random prompts.
 - Next bottleneck remains source staging/read path: at `gate4 / updown9`, n96 still spends `13.1s` in batch host staging while kernel time is about `1.74s`. Further progress requires reducing cold source staging or changing dataflow/layout, not only increasing batch cache.
 
+## 2026-07-08 X10-BL accepted generalized SOTA: down parallel io_uring staging
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/up-q80-one4-vram9-downparallel-iouring-sota-20260708.json`
+- status: `accepted_generalized_sota_stage_not_product_target`
+- source change: none. This uses existing default-off runtime support.
+- push target remains `ssd/vendor/deepseek-token-rate-16gb`; accepted SOTA records and demo updates must be committed and pushed immediately.
+
+Purpose:
+- Continue after X10-BK showed the remaining bottleneck is source/host staging, not up/down GPU correctness or kernel time.
+- Test a prompt-general source staging optimization: enable the existing Q80 down/up batch path's parallel CPU staging so the existing `expert_pack_iouring_copy_jobs()` path is actually used.
+- This is not prompt-specific: it uses no route trace, prompt trace, expert hotset, or prompt-derived pack.
+
+Theory and upper bound:
+- X10-BK `gate4 / updown9` n96 profile still spent `13.147 s` in synchronous host staging, while kernel time was about `1.74 s`.
+- If io_uring batch staging removed all exposed host-stage cost, the n96 profile upper bound would be roughly `elapsed 66.6s - 13.1s = 53.5s`, or about `3.6 tok/s` for the same generated token count.
+- The realistic target is smaller because reads, H2D, CUDA enqueue, and gate one-stream misses still remain. A `3.0 tok/s` n96 result is consistent with reducing the batch exposed stage from `1.815 ms/call` to about `1.09 ms/call`.
+
+Diagnostic results:
+- Baseline X10-BK n96 `gate4 / updown9`:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708T003232Z-20260708-upq80-pinned8-one4-vram9-n96-profile/france-profile-cpu40-vram9gb`
+  - `eval_tok_s=2.9`, TTFT `35330.50 ms`, strict RAM OK.
+  - `direct_reads=6716`, `iouring_reads=0`, batch `stage=1.815 ms/call`, `total=2.049 ms/call`.
+- Planned host prefetch probe rejected:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708T010651Z-20260708-one4-vram9-planned-hostprefetch256-n96-profile/france-profile-cpu40-vram9gb`
+  - `eval_tok_s=2.9`, TTFT `36846.41 ms`; `planned_enqueued=0`, `hits=0`; no improvement.
+  - Interpretation: planned host prefetch is not wired into the Q80 down/up batch path, so it does not attack the current bottleneck.
+- Down parallel io_uring, refill default:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708T011123Z-20260708-one4-vram9-downparallel-iouring-n96-profile/france-profile-cpu40-vram9gb`
+  - `eval_tok_s=3.0`, TTFT `34802.86 ms`, strict RAM OK.
+  - `direct_reads=0`, `iouring_reads=6716`, batch `stage=1.107 ms/call`, `total=1.342 ms/call`.
+- Down parallel io_uring, `GGML_MOE_IO_REFILL_BATCH=4`:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708T011327Z-20260708-one4-vram9-downparallel-iouring-refill4-n96-profile/france-profile-cpu40-vram9gb`
+  - `eval_tok_s=3.0`, TTFT `31852.51 ms`, strict RAM OK.
+  - `direct_reads=0`, `iouring_reads=6716`, batch `stage=1.091 ms/call`, `total=1.326 ms/call`.
+
+Frozen accepted config delta from X10-BK:
+- Add `GGML_MOE_DOWN_PARALLEL_STAGE=1`.
+- Add `GGML_MOE_IO_REFILL_BATCH=4`.
+- Keep `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=4096`, `GGML_MOE_VRAM_CACHE_GB=9`, and all Q80 correctness flags unchanged.
+
+Calibration/dev set v1 result:
+- France: `3.0 tok/s`, TTFT `34240.04 ms`, RAM/correctness OK.
+- Quantum: `2.2 tok/s`, TTFT `31878.79 ms`, RAM/correctness OK.
+- Fibonacci: `2.1 tok/s`, TTFT `33848.94 ms`, RAM/correctness OK.
+- Japan: `2.8 tok/s`, TTFT `32885.10 ms`, RAM/correctness OK.
+- Climate: `2.6 tok/s`, TTFT `33003.87 ms`, RAM/correctness OK.
+- Aggregate: min `2.1`, mean `2.54`, max `3.0`; previous accepted dev aggregate was min `2.0`, mean `2.50`, max `3.0`.
+
+Held-out test set v1 result after candidate freeze:
+- Photosynthesis: `2.5 tok/s`, TTFT `33470.12 ms`, RAM/correctness OK.
+- Home office: `2.4 tok/s`, TTFT `35257.44 ms`, RAM/correctness OK.
+- JavaScript palindrome: `2.3 tok/s`, TTFT `35242.53 ms`, RAM/correctness OK.
+- Exercise: `2.8 tok/s`, TTFT `35217.08 ms`, RAM/correctness OK.
+- Brazil: `2.8 tok/s`, TTFT `34369.69 ms`, RAM/correctness OK.
+- Aggregate: min `2.3`, mean `2.56`, max `2.8`; previous accepted held-out aggregate was min `2.2`, mean `2.50`, max `2.8`.
+
+Decision:
+- Accept as the current generalized SOTA stage result. It improves held-out min and mean, preserves correctness, keeps strict 16GB RAM including page cache, and improves TTFT.
+- Product target remains unmet: held-out mean `2.56 tok/s` is still below stable `>5 tok/s` for random prompts.
+- Next bottleneck: even with io_uring, n96 still has `iouring_wait_us=7.87 s`, H2D about `1.17 s`, and gate one-stream misses. Further progress should target IO locality/batch size and real overlap, not CPU fallback correctness.
+

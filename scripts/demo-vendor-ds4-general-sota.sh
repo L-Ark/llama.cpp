@@ -31,8 +31,8 @@ What this script demonstrates:
   - User may enter any prompt; this is not a France-specialized demo.
 
 Current known generalized status:
-  - Calibration/dev prompt range recorded in the repo: 2.0-3.0 tok/s, mean 2.50 tok/s.
-  - Held-out v1 prompt range recorded in the repo: 2.2-2.8 tok/s, mean 2.50 tok/s.
+  - Calibration/dev prompt range recorded in the repo: 2.1-3.0 tok/s, mean 2.54 tok/s.
+  - Held-out v1 prompt range recorded in the repo: 2.3-2.8 tok/s, mean 2.56 tok/s.
   - Product target remains stable >5 tok/s for random prompts; not yet met.
 
 Artifacts:
@@ -59,7 +59,7 @@ BINARY="${BINARY:-${REPO_DIR}/build-ds4-moe-stream/bin/llama-cli}"
 MODEL="${MODEL:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf}"
 RUN_ROOT="${RUN_ROOT:-/root/lfz/runs/vendor-ds4-16gb/demo-general-sota}"
 BASELINE_ARTIFACT="${BASELINE_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json}"
-SOTA_ARTIFACT="${SOTA_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/up-q80-one4-vram9-generalized-sota-20260708.json}"
+SOTA_ARTIFACT="${SOTA_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/up-q80-one4-vram9-downparallel-iouring-sota-20260708.json}"
 DS4_ALIAS_TSV="${DS4_ALIAS_TSV:-${REPO_DIR}/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv}"
 
 MEMORY_MAX_BYTES=16000000000
@@ -220,8 +220,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "prompt_general": true,
   "prompt_specific_optimization": false,
   "france_specialized_path_used": false,
-  "current_generalized_dev_tok_s": {"min": 2.0, "mean": 2.50, "max": 3.0},
-  "current_held_out_v1_tok_s": {"min": 2.2, "mean": 2.50, "max": 2.8},
+  "current_generalized_dev_tok_s": {"min": 2.1, "mean": 2.54, "max": 3.0},
+  "current_held_out_v1_tok_s": {"min": 2.3, "mean": 2.56, "max": 2.8},
   "product_target_tok_s": 5.0,
   "product_target_currently_met": false,
   "max_tokens": ${MAX_TOKENS},
@@ -242,6 +242,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_EXPERT_GGUF_ALIAS_TSV": $(printf '%s' "$DS4_ALIAS_TSV" | json_string),
     "GGML_MOE_IO_BACKEND": "iouring",
     "GGML_MOE_IO_ALIGNED_ALIAS_BATCH": "1",
+    "GGML_MOE_IO_REFILL_BATCH": "4",
+    "GGML_MOE_DOWN_PARALLEL_STAGE": "1",
     "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
     "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
     "GGML_MOE_STREAM_ONE_CACHE_MIB": "4096",
@@ -279,6 +281,8 @@ export CUDA_VISIBLE_DEVICES="\${CUDA_VISIBLE_DEVICES:-0}"
 export GGML_CUDA_DISABLE_GRAPHS=1
 export GGML_MOE_EXPERT_GGUF_ALIAS_TSV=$(printf '%q' "$DS4_ALIAS_TSV")
 export GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1
+export GGML_MOE_IO_REFILL_BATCH=4
+export GGML_MOE_DOWN_PARALLEL_STAGE=1
 export GGML_MOE_IO_BACKEND=iouring
 export GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39
 export GGML_MOE_KEEP_TOPK_LAYER_VALUE=3
@@ -426,7 +430,7 @@ Run dir: $RUN_DIR
 Source: $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)@$(git -C "$REPO_DIR" rev-parse --short HEAD) $([[ "$source_dirty" == true ]] && echo dirty || echo clean)
 Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
-Known generalized dev range: 2.0-3.0 tok/s, mean 2.50 tok/s. Held-out v1: 2.2-2.8 tok/s, mean 2.50 tok/s.
+Known generalized dev range: 2.1-3.0 tok/s, mean 2.54 tok/s. Held-out v1: 2.3-2.8 tok/s, mean 2.56 tok/s.
 Product target: stable >5 tok/s for random prompts. Current generalized path is not there yet.
 Prompt-specific packs/profiles/aliases: disabled and refused.
 Prompt:
@@ -540,8 +544,8 @@ summary = {
     'memory_anon_bytes': mem_stat.get('anon'),
     'memory_events': mem_events,
     'ram_ok': ram_ok,
-    'known_generalized_dev_range_tok_s': {'min': 2.0, 'mean': 2.50, 'max': 3.0},
-    'known_held_out_v1_range_tok_s': {'min': 2.2, 'mean': 2.50, 'max': 2.8},
+    'known_generalized_dev_range_tok_s': {'min': 2.1, 'mean': 2.54, 'max': 3.0},
+    'known_held_out_v1_range_tok_s': {'min': 2.3, 'mean': 2.56, 'max': 2.8},
     'product_target_gt_5_tok_s_met_by_this_run': eval_tok_s is not None and eval_tok_s > 5.0,
     'manual_quality_review_required': True,
     'exact_command_file': str(run_dir / 'exact_command.txt'),
