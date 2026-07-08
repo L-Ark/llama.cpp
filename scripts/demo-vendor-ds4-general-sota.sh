@@ -55,6 +55,104 @@ trim_trailing_space() {
   sed -e 's/[[:space:]]*$//'
 }
 
+collect_gpu_metadata() {
+  local out_dir="$1"
+  mkdir -p "$out_dir"
+
+  if ! command -v nvidia-smi >/dev/null 2>&1; then
+    printf 'nvidia-smi not found\n' > "$out_dir/gpu_metadata_error.txt"
+    return 0
+  fi
+
+  nvidia-smi --query-gpu=pci.bus_id,name,driver_version,memory.used,memory.total,pstate,clocks.sm,clocks.mem,power.draw \
+    --format=csv,noheader,nounits > "$out_dir/gpu_state.csv" 2>"$out_dir/gpu_state.err" || true
+  nvidia-smi --query-compute-apps=pid,process_name,used_memory \
+    --format=csv,noheader,nounits > "$out_dir/gpu_compute_processes.csv" 2>"$out_dir/gpu_compute_processes.err" || true
+  nvidia-smi > "$out_dir/nvidia-smi.txt" 2>&1 || true
+  ps -eo pid=,comm=,args= | grep -E '(^|/)(Xorg|Xwayland|gnome-shell|kwin|plasmashell)( |$)' \
+    > "$out_dir/display_processes.txt" 2>/dev/null || true
+
+  local bus dev
+  bus="$(nvidia-smi --query-gpu=pci.bus_id --format=csv,noheader 2>/dev/null | head -n 1 | tr 'A-F' 'a-f' | tr -d '[:space:]')"
+  if [[ -n "$bus" ]]; then
+    dev="0000:${bus#00000000:}"
+    {
+      printf 'pci_bus_id=%s\n' "$bus"
+      printf 'sysfs_device=%s\n' "$dev"
+      for f in current_link_speed current_link_width max_link_speed max_link_width numa_node local_cpulist; do
+        if [[ -f "/sys/bus/pci/devices/${dev}/${f}" ]]; then
+          printf '%s=%s\n' "$f" "$(cat "/sys/bus/pci/devices/${dev}/${f}")"
+        fi
+      done
+    } > "$out_dir/pci_link.txt"
+  fi
+}
+
+run_h2d_benchmark() {
+  local out_dir="$1"
+  mkdir -p "$out_dir"
+
+  local nvcc=""
+  for candidate in "${CUDACXX:-}" /usr/local/cuda/bin/nvcc /usr/local/cuda-13.0/bin/nvcc nvcc; do
+    if [[ -n "$candidate" ]] && command -v "$candidate" >/dev/null 2>&1; then
+      nvcc="$(command -v "$candidate")"
+      break
+    fi
+  done
+  if [[ -z "$nvcc" ]]; then
+    printf 'nvcc not found\n' > "$out_dir/h2d_benchmark.txt"
+    return 0
+  fi
+
+  cat > "$out_dir/h2d_bench.cu" <<'CU'
+#include <cuda_runtime.h>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+static void ck(cudaError_t e) {
+    if (e != cudaSuccess) {
+        std::fprintf(stderr, "cuda error: %s\n", cudaGetErrorString(e));
+        std::exit(1);
+    }
+}
+int main() {
+    const size_t sz = 4456448;
+    const int iters = 1024;
+    void *h = nullptr;
+    void *d = nullptr;
+    ck(cudaSetDevice(0));
+    ck(cudaMallocHost(&h, sz));
+    ck(cudaMalloc(&d, sz));
+    unsigned char *p = static_cast<unsigned char *>(h);
+    for (size_t i = 0; i < sz; i += 4096) p[i] = static_cast<unsigned char>(i);
+    cudaStream_t stream;
+    ck(cudaStreamCreate(&stream));
+    ck(cudaMemcpyAsync(d, h, sz, cudaMemcpyHostToDevice, stream));
+    ck(cudaStreamSynchronize(stream));
+    auto t0 = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < iters; ++i) {
+        ck(cudaMemcpyAsync(d, h, sz, cudaMemcpyHostToDevice, stream));
+        ck(cudaStreamSynchronize(stream));
+    }
+    auto t1 = std::chrono::high_resolution_clock::now();
+    const double sec = std::chrono::duration<double>(t1 - t0).count();
+    const double gb = static_cast<double>(sz) * static_cast<double>(iters) / 1e9;
+    std::printf("mode=sync_each size_bytes=%zu iters=%d seconds=%.9f gbps=%.6f per_copy_ms=%.6f\n",
+            sz, iters, sec, gb / sec, sec * 1000.0 / iters);
+    ck(cudaStreamDestroy(stream));
+    ck(cudaFree(d));
+    ck(cudaFreeHost(h));
+    return 0;
+}
+CU
+
+  if "$nvcc" -O3 "$out_dir/h2d_bench.cu" -o "$out_dir/h2d_bench" > "$out_dir/h2d_build.log" 2>&1; then
+    "$out_dir/h2d_bench" > "$out_dir/h2d_benchmark.txt" 2>"$out_dir/h2d_benchmark.err" || true
+  else
+    printf 'h2d benchmark build failed\n' > "$out_dir/h2d_benchmark.txt"
+  fi
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BINARY="${BINARY:-${REPO_DIR}/build-ds4-moe-stream/bin/llama-cli}"
@@ -219,6 +317,10 @@ if [[ -n "$source_status" ]]; then
   source_dirty=true
 fi
 
+collect_gpu_metadata "$RUN_DIR/hardware_before"
+run_h2d_benchmark "$RUN_DIR/hardware_before"
+collect_gpu_metadata "$RUN_DIR/hardware_after_h2d"
+
 cat > "$RUN_DIR/config.json" <<EOF_CFG
 {
   "demo": "vendor-ds4-generalized-sota-current",
@@ -243,6 +345,11 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "cold_drop_caches": ${COLD},
   "memory_max_bytes": ${MEMORY_MAX_BYTES},
   "memory_swap_max_bytes": 0,
+  "hardware_case_tracking": {
+    "hardware_before_dir": $(printf '%s' "$RUN_DIR/hardware_before" | json_string),
+    "hardware_after_h2d_dir": $(printf '%s' "$RUN_DIR/hardware_after_h2d" | json_string),
+    "requires_display_processes_stopped_for_sota": true
+  },
   "gate_fullpack_diagnostic": ${GATE_FULLPACK},
   "gate_fullpack_path": $(printf '%s' "$GATE_FULLPACK_PATH" | json_string),
   "runtime": {
@@ -493,6 +600,7 @@ set -e
 printf '%s\n' "$systemd_status" > "$RUN_DIR/systemd_run_status.txt"
 systemctl show "${unit}.service" > "$RUN_DIR/unit.properties" 2>/dev/null || true
 journalctl -u "${unit}.service" --no-pager > "$RUN_DIR/journal.log" 2>/dev/null || true
+collect_gpu_metadata "$RUN_DIR/hardware_after_run"
 
 python3 - "$RUN_DIR" "$MEMORY_MAX_BYTES" <<'PY'
 import json
@@ -538,6 +646,43 @@ def parse_kv_ints(text):
                 pass
     return out
 
+def parse_key_values(text):
+    out = {}
+    for line in text.splitlines():
+        if '=' not in line:
+            continue
+        key, val = line.split('=', 1)
+        out[key.strip()] = val.strip()
+    return out
+
+def parse_h2d(text):
+    out = {}
+    for item in text.split():
+        if '=' not in item:
+            continue
+        key, val = item.split('=', 1)
+        try:
+            out[key] = float(val) if any(c in val for c in '.eE') else int(val)
+        except ValueError:
+            out[key] = val
+    return out
+
+def hardware_summary(name):
+    base = run_dir / name
+    display_text = (base / 'display_processes.txt').read_text(encoding='utf-8', errors='ignore') if (base / 'display_processes.txt').exists() else ''
+    compute_text = (base / 'gpu_compute_processes.csv').read_text(encoding='utf-8', errors='ignore') if (base / 'gpu_compute_processes.csv').exists() else ''
+    pci = parse_key_values((base / 'pci_link.txt').read_text(encoding='utf-8', errors='ignore')) if (base / 'pci_link.txt').exists() else {}
+    h2d = parse_h2d((base / 'h2d_benchmark.txt').read_text(encoding='utf-8', errors='ignore')) if (base / 'h2d_benchmark.txt').exists() else {}
+    return {
+        'dir': str(base),
+        'display_processes_present': bool(display_text.strip()),
+        'display_processes': display_text.strip(),
+        'compute_processes_present': bool(compute_text.strip()),
+        'compute_processes': compute_text.strip(),
+        'pci': pci,
+        'h2d_benchmark': h2d,
+    }
+
 stdout = read_text('stdout.txt').replace('\b', '').replace('\r', '\n')
 stderr = read_text('stderr.txt')
 prompt = read_text('prompt.txt').rstrip('\n')
@@ -570,6 +715,10 @@ ram_ok = memory_peak is not None and memory_peak <= memory_max and mem_events.ge
 exit_status = read_int('exit_status.txt')
 systemd_status = read_int('systemd_run_status.txt')
 run_ok = exit_status == 0 and systemd_status == 0 and ram_ok and answer_present
+hardware_before = hardware_summary('hardware_before')
+hardware_after_h2d = hardware_summary('hardware_after_h2d')
+hardware_after_run = hardware_summary('hardware_after_run')
+display_processes_stopped_before_run = not hardware_before.get('display_processes_present', False)
 
 summary = {
     'run_dir': str(run_dir),
@@ -593,6 +742,10 @@ summary = {
     'memory_anon_bytes': mem_stat.get('anon'),
     'memory_events': mem_events,
     'ram_ok': ram_ok,
+    'display_processes_stopped_before_run': display_processes_stopped_before_run,
+    'hardware_before': hardware_before,
+    'hardware_after_h2d': hardware_after_h2d,
+    'hardware_after_run': hardware_after_run,
     'known_generalized_dev_range_tok_s': {'min': 3.8, 'mean': 4.36, 'max': 4.8},
     'known_held_out_v1_range_tok_s': {'min': 4.0, 'mean': 4.30, 'max': 4.6},
     'product_target_gt_5_tok_s_met_by_this_run': eval_tok_s is not None and eval_tok_s > 5.0,
@@ -608,8 +761,11 @@ summary = {
 (run_dir / 'answer.txt').write_text(answer + ('\n' if answer else ''), encoding='utf-8')
 
 print('\n=== Demo summary ===')
-for key in ['run_ok', 'eval_tok_s', 'prompt_tok_s', 'first_output_ms', 'elapsed_seconds', 'memory_peak_bytes', 'memory_file_bytes', 'ram_ok', 'answer_present', 'product_target_gt_5_tok_s_met_by_this_run', 'source_dirty']:
+for key in ['run_ok', 'eval_tok_s', 'prompt_tok_s', 'first_output_ms', 'elapsed_seconds', 'memory_peak_bytes', 'memory_file_bytes', 'ram_ok', 'display_processes_stopped_before_run', 'answer_present', 'product_target_gt_5_tok_s_met_by_this_run', 'source_dirty']:
     print(f'{key}: {summary.get(key)}')
+print(f"hardware_before_pci: {hardware_before.get('pci')}")
+print(f"hardware_after_h2d_pci: {hardware_after_h2d.get('pci')}")
+print(f"hardware_h2d_benchmark: {hardware_before.get('h2d_benchmark')}")
 print(f'run_dir: {run_dir}')
 print('\n=== Model answer ===')
 print(answer)
