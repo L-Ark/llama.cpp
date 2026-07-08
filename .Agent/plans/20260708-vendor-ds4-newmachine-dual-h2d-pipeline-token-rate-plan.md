@@ -187,3 +187,30 @@ Promotion requirements:
   `>5 tok/s` on the new machine. The next implementation must directly reduce
   H2D bytes or H2D submissions, or implement a true shared gate/up/down read
   aggregation layer that does not increase total reads.
+- Added default-off profiling hooks for the real current hot paths:
+  - `GGML_MOE_H2D_COALESCE_PROFILE_OUT` records whether batch io_uring H2D
+    copies are physically coalescible.
+  - `GGML_MOE_ONE_PACK_READ_PROFILE_OUT` records `moe_stream` one-pack direct
+    reads: tensor, expert, offset, bytes, O_DIRECT status, and read latency.
+- Diagnostic run `20260708T132817Z-h2d-coalesce-profile` proved the current
+  generalized new-machine path does **not** enter the batch
+  `expert_pack_iouring_copy_jobs` H2D path for the dominant gate reads; no H2D
+  coalesce CSV was produced. The hot gate source is `moe_stream` one expert
+  pack, while up/down still shows `down parallel CPU staging active`.
+- Diagnostic run `20260708T133227Z-one-pack-read-profile` produced:
+  - `eval_tok_s=2.1`, diagnostic only because per-read CSV adds overhead;
+  - `memory_peak_bytes=14901284864`, `ram_ok=true`,
+    `display_processes_stopped_before_run=true`;
+  - H2D benchmark `6.68 GB/s`, PCIe under load `16.0 GT/s x4`;
+  - one-pack gate reads: `7701` reads, `34.32GB`, total direct-read wall
+    `7445 ms`, avg `0.967 ms`, p50 `0.778 ms`, p95 `1.200 ms`;
+  - consecutive physical-offset continuity only `162/7700 = 2.1%`.
+- Consequence: simple adjacent-read or adjacent-H2D coalescing in the current
+  execution order is not enough. The next implementation should prioritize:
+  1. locating the up/down miss source that bypasses batch io_uring and moving it
+     onto an expert-pack/batch path;
+  2. changing gate/up/down scheduling to submit a known per-layer route group
+     together, rather than trying to merge the already-issued read order;
+  3. restoring larger effective VRAM cache allocation on the new machine. The
+     diagnostic runs requested `9GB` batch VRAM cache but fell back to `6.9GB`,
+     so cache pressure is worse than intended.

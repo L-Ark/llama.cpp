@@ -3994,6 +3994,56 @@ static bool io_read_trace_enabled() {
     return env && env[0];
 }
 
+static bool h2d_coalesce_profile_enabled() {
+    const char *env = std::getenv("GGML_MOE_H2D_COALESCE_PROFILE_OUT");
+    return env && env[0];
+}
+
+static void h2d_coalesce_profile_record(
+        const char *op,
+        size_t jobs,
+        size_t read_jobs,
+        size_t copy_count,
+        size_t coalesced_copy_count,
+        size_t host_contiguous_pairs,
+        size_t dst_contiguous_pairs,
+        size_t both_contiguous_pairs,
+        size_t expert_bytes) {
+    const char *path = std::getenv("GGML_MOE_H2D_COALESCE_PROFILE_OUT");
+    if (!path || !path[0] || copy_count == 0) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,op,jobs,read_jobs,copy_count,coalesced_copy_count,"
+                "host_contiguous_pairs,dst_contiguous_pairs,both_contiguous_pairs,"
+                "expert_bytes,bytes,total_saved_copy_count\n");
+        header_written = true;
+    }
+    const size_t saved = copy_count > coalesced_copy_count ? copy_count - coalesced_copy_count : 0;
+    std::fprintf(f,
+            "%lu,%s,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu\n",
+            (unsigned long)++seq,
+            op ? op : "",
+            jobs,
+            read_jobs,
+            copy_count,
+            coalesced_copy_count,
+            host_contiguous_pairs,
+            dst_contiguous_pairs,
+            both_contiguous_pairs,
+            expert_bytes,
+            copy_count * expert_bytes,
+            saved);
+    std::fclose(f);
+}
+
 static void io_locality_profile_record(
         const char *op,
         size_t jobs,
@@ -4653,6 +4703,7 @@ static bool expert_pack_iouring_copy_jobs(
     const bool profile_stage = pinned_stage_profile_enabled();
     const bool profile_copy = copy_profile_enabled();
     const bool profile_copy_h2d = copy_profile_h2d_enabled() && profile_copy;
+    const bool profile_h2d_coalesce = h2d_coalesce_profile_enabled();
     double io_batch_slot_wait_ms = 0.0;
     double io_batch_submit_ms = 0.0;
     double io_batch_wait_ms = 0.0;
@@ -4664,6 +4715,14 @@ static bool expert_pack_iouring_copy_jobs(
     uint64_t io_batch_inflight_sum = 0;
     uint64_t io_batch_inflight_samples = 0;
     uint64_t io_batch_inflight_max = 0;
+    size_t h2d_profile_copy_count = 0;
+    size_t h2d_profile_coalesced_copy_count = 0;
+    size_t h2d_profile_host_contiguous_pairs = 0;
+    size_t h2d_profile_dst_contiguous_pairs = 0;
+    size_t h2d_profile_both_contiguous_pairs = 0;
+    uintptr_t h2d_profile_prev_host_end = 0;
+    uintptr_t h2d_profile_prev_dst_end = 0;
+    bool h2d_profile_have_prev = false;
     auto submit_one = [&](size_t job_idx, size_t slot_idx, size_t pending_idx) -> bool {
         const Job &job = jobs[job_idx];
         pinned_stage_slot &slot = ring.slots[slot_idx];
@@ -4783,6 +4842,27 @@ static bool expert_pack_iouring_copy_jobs(
                 }
             }
             const char *payload_ptr = (const char *)slot.host + done.payload_shift;
+            if (profile_h2d_coalesce) {
+                const uintptr_t host_ptr = (uintptr_t)payload_ptr;
+                const uintptr_t dst_ptr = (uintptr_t)job.dst;
+                ++h2d_profile_copy_count;
+                if (!h2d_profile_have_prev) {
+                    h2d_profile_coalesced_copy_count = 1;
+                    h2d_profile_have_prev = true;
+                } else {
+                    const bool host_contiguous = h2d_profile_prev_host_end == host_ptr;
+                    const bool dst_contiguous = h2d_profile_prev_dst_end == dst_ptr;
+                    if (host_contiguous) ++h2d_profile_host_contiguous_pairs;
+                    if (dst_contiguous) ++h2d_profile_dst_contiguous_pairs;
+                    if (host_contiguous && dst_contiguous) {
+                        ++h2d_profile_both_contiguous_pairs;
+                    } else {
+                        ++h2d_profile_coalesced_copy_count;
+                    }
+                }
+                h2d_profile_prev_host_end = host_ptr + expert_bytes;
+                h2d_profile_prev_dst_end = dst_ptr + expert_bytes;
+            }
             if (cudaMemcpyAsync(job.dst, payload_ptr, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
                 return false;
             }
@@ -4955,6 +5035,18 @@ static bool expert_pack_iouring_copy_jobs(
                 io_batch_slot_wait_ms, io_batch_submit_ms, io_batch_wait_ms, io_batch_enqueue_ms,
                 std::chrono::duration<double, std::milli>(io_batch_end - io_batch_start).count(),
                 sort_by_offset);
+    }
+    if (profile_h2d_coalesce) {
+        h2d_coalesce_profile_record(
+                trace_op,
+                jobs.size(),
+                read_jobs.size(),
+                h2d_profile_copy_count,
+                h2d_profile_coalesced_copy_count,
+                h2d_profile_host_contiguous_pairs,
+                h2d_profile_dst_contiguous_pairs,
+                h2d_profile_both_contiguous_pairs,
+                expert_bytes);
     }
     return true;
 #else

@@ -595,6 +595,46 @@ static bool one_pack_read_exact_fd(int fd, void * dst, size_t sz, uint64_t off) 
     return true;
 }
 
+static bool one_pack_read_profile_enabled() {
+    const char *env = std::getenv("GGML_MOE_ONE_PACK_READ_PROFILE_OUT");
+    return env && env[0];
+}
+
+static void one_pack_read_profile_record(
+        const one_expert_pack_entry *entry,
+        bool direct,
+        bool direct_failed,
+        bool ok,
+        double elapsed_ms) {
+    const char *path = std::getenv("GGML_MOE_ONE_PACK_READ_PROFILE_OUT");
+    if (!path || !path[0] || !entry) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,tensor,expert_idx,offset,nbytes,direct,direct_failed,ok,elapsed_ms\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%s,%d,%lu,%lu,%d,%d,%d,%.6f\n",
+            (unsigned long)++seq,
+            entry->tensor,
+            entry->expert_idx,
+            (unsigned long)entry->offset,
+            (unsigned long)entry->nbytes,
+            direct ? 1 : 0,
+            direct_failed ? 1 : 0,
+            ok ? 1 : 0,
+            elapsed_ms);
+    std::fclose(f);
+}
+
 static void one_pack_report_atexit() {
     if (!g_one_pack.enabled) {
         return;
@@ -747,8 +787,17 @@ static bool one_pack_read_entry(const one_expert_pack_entry * entry, void * dst,
     if (!entry || g_one_pack.fd < 0 || entry->nbytes != sz) {
         return false;
     }
+    const bool profile = one_pack_read_profile_enabled();
     if (g_one_pack.fd_direct >= 0) {
-        if (one_pack_read_exact_fd(g_one_pack.fd_direct, dst, sz, entry->offset)) {
+        const auto t0 = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        const bool direct_ok = one_pack_read_exact_fd(g_one_pack.fd_direct, dst, sz, entry->offset);
+        if (profile) {
+            const auto t1 = std::chrono::steady_clock::now();
+            one_pack_read_profile_record(
+                    entry, true, !direct_ok, direct_ok,
+                    std::chrono::duration<double, std::milli>(t1 - t0).count());
+        }
+        if (direct_ok) {
             ++g_one_pack.reads;
             ++g_one_pack.direct_reads;
             g_one_pack.bytes.fetch_add(sz);
@@ -757,7 +806,15 @@ static bool one_pack_read_entry(const one_expert_pack_entry * entry, void * dst,
         ++g_one_pack.direct_failures;
         ++g_one_pack.direct_fallbacks;
     }
-    if (!one_pack_read_exact_fd(g_one_pack.fd, dst, sz, entry->offset)) {
+    const auto t0 = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    const bool buffered_ok = one_pack_read_exact_fd(g_one_pack.fd, dst, sz, entry->offset);
+    if (profile) {
+        const auto t1 = std::chrono::steady_clock::now();
+        one_pack_read_profile_record(
+                entry, false, g_one_pack.fd_direct >= 0, buffered_ok,
+                std::chrono::duration<double, std::milli>(t1 - t0).count());
+    }
+    if (!buffered_ok) {
         ++g_one_pack.failures;
         return false;
     }
