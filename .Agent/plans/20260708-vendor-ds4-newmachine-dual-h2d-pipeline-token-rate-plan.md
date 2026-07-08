@@ -2426,3 +2426,97 @@ prompt comparisons. This is still below the product requirement of stable
 `>5 tok/s` for random user prompts; only the Japan prompt crossed `5 tok/s`.
 The next optimization should focus on reducing prompt-dependent variance,
 especially France/quantum, while preserving the lower-bound gain from top1.
+
+## 2026-07-09 Gate-Preload Up/Down Protection Probe
+
+Starting point:
+
+- Clean default reproduction after required display/model cleanup, source
+  `4367a37e9`, prompt `How to deploy a large model on a small devices?`:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T220340Z-20260709-default-top1-sota-deploy-n64`
+  reached `eval_tok_s=4.6`, `prompt_tok_s=3.8`,
+  `first_output_ms=17584.4 ms`, `memory_peak_bytes=14861144064`,
+  `memory_file_bytes=13810601984`, `ram_ok=true`,
+  `display_processes_stopped_before_run=true`, source clean. Output was
+  coherent. The run did not meet the product target.
+
+Profile:
+
+- Diagnostic n96 profile:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T220525Z-20260709-default-top1-profile-deploy-n96`
+  with profile files in `/tmp/20260709-default-top1-profile-deploy-n96`.
+- Result: `eval_tok_s=4.5`, `prompt_tok_s=3.6`,
+  `first_output_ms=17936.9 ms`, `memory_peak_bytes=14857277440`,
+  `ram_ok=true`, display cleanup recorded.
+- Expert pack counters: `hits=15530`, `misses=0`, `iouring_reads=7282`,
+  `iouring_bytes=32451854336`, `iouring_wait_us=3781957`.
+- VRAM cache: `hits=20540`, `misses=5122`, `preloads=4320`,
+  `hit_rate=80.0%`.
+- Copy profile by operation:
+  - `gate_batch_preload`: `3178` copies, `13.19 GiB`, `h2d_ms=2329.3`,
+    `wall_ms=8108.6`.
+  - `gate_updown_cosubmit`: `2160` copies, `8.96 GiB`,
+    `h2d_ms=1749.2`, `wall_ms=9095.5`.
+  - `runtime_load`: `1944` copies, `8.07 GiB`, `h2d_ms=1386.2`,
+    `wall_ms=4162.1`.
+- Gate/up/down cosubmit had `no_slot_skips=8248`, so many planned up/down
+  cosubmits could not enter the VRAM cache because slots were unavailable.
+- Cache eviction profile showed gate preload evicting up/down slots as well
+  as gate slots. This suggested a possible prompt-general cache admission
+  rule: gate preload should not evict already-used up/down slots.
+
+Implemented default-off experiment:
+
+- Added `GGML_MOE_GATE_PRELOAD_EVICT_UPDOWN_MAX_HITS`.
+- When set to `0`, a gate preload insertion may not evict an up/down cache
+  slot whose hit count is greater than `0`.
+- This is not prompt-specific; it only changes cache admission by tensor role
+  and observed cache hits.
+
+Dirty-source probe with `GGML_MOE_GATE_PRELOAD_EVICT_UPDOWN_MAX_HITS=0`,
+strict cold, 16GB cgroup, display cleanup recorded:
+
+- Deploy:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T220919Z-20260709-gate-protect-updown-hit0-deploy-n64`
+  reached `eval_tok_s=4.7`, RAM OK, coherent output.
+- Fibonacci:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T221007Z-20260709-gate-protect-updown-hit0-fibonacci-n64`
+  reached `eval_tok_s=4.6`, RAM OK, valid Python function output.
+- France:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T221041Z-20260709-gate-protect-updown-hit0-france-n64`
+  reached `eval_tok_s=5.0`, RAM OK, coherent France paragraph.
+- Quantum:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T221137Z-20260709-gate-protect-updown-hit0-quantum-n64`
+  reached `eval_tok_s=4.3`, RAM OK, semantically correct output with the
+  existing minor opening-format quirk.
+- Japan:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T221211Z-20260709-gate-protect-updown-hit0-japan-n64`
+  reached `eval_tok_s=5.1`, RAM OK, coherent output.
+
+Clean-source validation after commit `0fbe22e19` initially made this guard the
+demo default. It did not reproduce as a generalized SOTA:
+
+- Deploy:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T221405Z-20260709-clean-gate-protect-default-deploy-n64`
+  reached `eval_tok_s=4.6`, RAM OK, source clean.
+- Fibonacci:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T221439Z-20260709-clean-gate-protect-default-fibonacci-n64`
+  reached `eval_tok_s=4.4`, RAM OK, source clean, valid Python function.
+- France:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T221513Z-20260709-clean-gate-protect-default-france-n64`
+  reached `eval_tok_s=4.9`, RAM OK, source clean, coherent France paragraph.
+
+Decision:
+
+- Reject gate-preload up/down hit protection as the default generalized SOTA.
+  It improves France but does not clearly improve deploy, and Fibonacci
+  dropped below the previous clean `4.5 tok/s` point. This is not stable
+  prompt-general progress toward `>5 tok/s`.
+- Keep the runtime knob default-off for future diagnostics, but restore the
+  demo default path so current SOTA remains the earlier GPU-top1 plus CPU-tail
+  configuration.
+- Next work should not focus on simple eviction heuristics. The profile points
+  to a hard H2D-byte problem: roughly `30 GiB` expert movement for n96 on a
+  `6.6-6.7 GB/s` H2D path. To reach stable `>5 tok/s`, the next candidate
+  must either reduce bytes per generated token or make up/down/gate admission
+  future-use aware without relying on a specific prompt trace.
