@@ -12,10 +12,12 @@ bool ggml_cuda_moe_stream_batch(int, const char *, const void *, int64_t, int64_
 bool ggml_cuda_moe_stream_handoff_upload(const float *, int64_t, int64_t) { return false; }
 int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *, int, size_t) { return 0; }
 int ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit(void) { return 0; }
+int ggml_cuda_moe_stream_batch_preload_active_from_pack(int, const char *, int64_t, size_t, const int64_t *) { return 0; }
 bool ggml_cuda_moe_stream_preload_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_preload_tensor_prompt(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_cache_contains(const char *, size_t, int) { return false; }
+const void * ggml_cuda_moe_stream_cache_dev_ptr(const char *, size_t, int) { return nullptr; }
 bool ggml_cuda_moe_iq2_xxs_q8k_selftest(void) { return false; }
 bool ggml_cuda_moe_stream_up_gate_batch(int, int, const char *, const void *, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, int, float, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *, int, size_t) { return nullptr; }
@@ -136,6 +138,13 @@ bool ggml_cuda_moe_stream_batch(
 
 int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_name, int expert_idx, size_t expert_bytes);
 int ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit(void);
+int ggml_cuda_moe_stream_batch_preload_active_from_pack(
+    int src0_type_int,
+    const char *src0_name,
+    int64_t n_as,
+    size_t expert_bytes,
+    const int64_t *matrix_row_counts);
+const void * ggml_cuda_moe_stream_cache_dev_ptr(const char *src0_name, size_t expert_bytes, int expert_idx);
 
 bool ggml_cuda_moe_stream_preload_tensor(
     int src0_type_int,
@@ -7261,6 +7270,96 @@ extern "C" bool ggml_cuda_moe_stream_preload_expert_from_pack_async(
             nullptr, 0, true, src0_name, expert_idx) >= 0;
 }
 
+extern "C" int ggml_cuda_moe_stream_batch_preload_active_from_pack(
+    int src0_type_int,
+    const char *src0_name,
+    int64_t n_as,
+    size_t expert_bytes,
+    const int64_t *matrix_row_counts) {
+    if (!init_batch_once()) return 0;
+    if (!moe_stream_type_supported((ggml_type)src0_type_int) || !src0_name || !src0_name[0] ||
+            n_as <= 0 || expert_bytes == 0 || !matrix_row_counts) {
+        return 0;
+    }
+
+    struct active_preload_job {
+        int slot = -1;
+        void *dst = nullptr;
+        const void *host_data = nullptr;
+        const expert_pack_entry *pack_entry = nullptr;
+        int expert_idx = -1;
+        char tensor[128] = {};
+    };
+
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    batch_vram_cache *cache = batch_cache_get(expert_bytes);
+    if (!cache) return 0;
+
+    std::vector<active_preload_job> jobs;
+    jobs.reserve(256);
+    for (int64_t expert = 0; expert < n_as; ++expert) {
+        if (matrix_row_counts[expert] <= 0) {
+            continue;
+        }
+        const uintptr_t key = batch_key_hash(src0_name, (int)expert);
+        if (batch_cache_find_slot(cache, key) >= 0) {
+            continue;
+        }
+        const expert_pack_entry *pack_entry = expert_pack_lookup(src0_name, (int)expert, expert_bytes);
+        if (!pack_entry) {
+            continue;
+        }
+        const int slot = batch_cache_insert_slot(cache, key, nullptr, expert_bytes, g_batch.stream,
+                true, false, nullptr, 0, false, src0_name, (int)expert);
+        if (slot < 0) {
+            continue;
+        }
+        active_preload_job job;
+        job.slot = slot;
+        job.dst = (char *)cache->pool + (size_t)slot * cache->slot_sz;
+        job.host_data = nullptr;
+        job.pack_entry = pack_entry;
+        job.expert_idx = (int)expert;
+        std::snprintf(job.tensor, sizeof(job.tensor), "%s", src0_name);
+        jobs.push_back(job);
+    }
+
+    if (jobs.empty()) {
+        return 0;
+    }
+
+    auto clear_jobs = [&]() {
+        for (const active_preload_job &job : jobs) {
+            batch_cache_clear_slot(cache, job.slot);
+        }
+    };
+
+    bool ok = expert_pack_iouring_copy_jobs(jobs, expert_bytes, g_batch.stream, g_batch.stage_ring, "gate_batch_preload");
+    if (!ok) {
+        for (const active_preload_job &job : jobs) {
+            batch_copy_trace copy_trace;
+            if (!batch_cache_copy_h2d(g_batch.stage_ring, job.dst, job.host_data, expert_bytes,
+                        g_batch.stream, job.pack_entry, &copy_trace,
+                        "gate_batch_preload", job.tensor, job.expert_idx)) {
+                ok = false;
+                break;
+            }
+            ok = true;
+        }
+    }
+    if (!ok || cudaStreamSynchronize(g_batch.stream) != cudaSuccess) {
+        clear_jobs();
+        return 0;
+    }
+    static std::atomic<int> first_gate_batch_preload{0};
+    if (first_gate_batch_preload.fetch_add(1) == 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] gate active batch preload active: tensor=%s jobs=%zu bytes=%.2f MiB\n",
+                src0_name, jobs.size(), (double)jobs.size() * (double)expert_bytes / (1024.0 * 1024.0));
+    }
+    return (int)jobs.size();
+}
+
 extern "C" bool ggml_cuda_moe_stream_preload_synchronize(void) {
     if (!init_batch_once()) return false;
     std::lock_guard<std::mutex> lk(g_batch_mu);
@@ -7278,6 +7377,20 @@ extern "C" bool ggml_cuda_moe_stream_cache_contains(
     std::lock_guard<std::mutex> lk(g_batch_mu);
     const batch_vram_cache *cache = &g_bcaches[cid];
     return batch_cache_contains_slot(cache, batch_key_hash(src0_name, expert_idx));
+}
+
+extern "C" const void * ggml_cuda_moe_stream_cache_dev_ptr(
+    const char *src0_name,
+    size_t expert_bytes,
+    int expert_idx) {
+    if (!src0_name || !src0_name[0] || expert_bytes == 0 || expert_idx < 0) return nullptr;
+    const int cid = batch_cache_id_for_size(expert_bytes);
+    if (!g_bcache_inited[cid]) return nullptr;
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    batch_vram_cache *cache = &g_bcaches[cid];
+    const int slot = batch_cache_lookup_slot(cache, batch_key_hash(src0_name, expert_idx));
+    if (slot < 0) return nullptr;
+    return (const char *)cache->pool + (size_t)slot * cache->slot_sz;
 }
 
 extern "C" bool ggml_cuda_moe_stream_register_tensor(

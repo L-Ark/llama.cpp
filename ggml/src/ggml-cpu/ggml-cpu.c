@@ -189,6 +189,12 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     const int64_t * matrix_row_counts,
     const ggml_moe_stream_row_mapping * rows,
     int64_t rows_stride);
+__attribute__((weak)) extern int ggml_cuda_moe_stream_batch_preload_active_from_pack(
+    int src0_type_int,
+    const char * src0_name,
+    int64_t n_as,
+    size_t expert_bytes,
+    const int64_t * matrix_row_counts);
 __attribute__((weak)) extern const void * ggml_cuda_moe_expert_pack_mmap_ptr(
     const char * tensor_name,
     int expert_idx,
@@ -247,6 +253,8 @@ static bool (*ggml_cuda_moe_stream_batch)(
     int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t,
     const float *, size_t, size_t, const void *, size_t, int64_t, float *, size_t, size_t,
     const int64_t *, const ggml_moe_stream_row_mapping *, int64_t) = NULL;
+static int (*ggml_cuda_moe_stream_batch_preload_active_from_pack)(
+    int, const char *, int64_t, size_t, const int64_t *) = NULL;
 static bool (*ggml_cuda_moe_stream_handoff_upload)(const float *, int64_t, int64_t) = NULL;
 static bool (*ggml_cuda_moe_stream_up_gate_batch)(
     int, int, const char *, const void *, const char *, const void *, int64_t,
@@ -261,6 +269,15 @@ static bool ggml_cuda_moe_stream_supports_type(enum ggml_type type) {
     return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ3_S ||
            type == GGML_TYPE_IQ2_S ||
            type == GGML_TYPE_MXFP4 || type == GGML_TYPE_F8_E4M3_B128;
+}
+
+static bool ggml_moe_gate_batch_prefetch_enabled(void) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char * env = getenv("GGML_MOE_GATE_BATCH_PREFETCH");
+        enabled = (env && env[0] && env[0] != '0') ? 1 : 0;
+    }
+    return enabled != 0;
 }
 
 static bool ggml_cuda_moe_stream_one_q4k_enabled(void) {
@@ -4658,6 +4675,16 @@ static void ggml_compute_forward_mul_mat_id(
         if (ith == 0) {
             const void * wdata_stream = (src1->type == vec_dot_type) ? src1->data : params->wdata;
             const size_t row_size_stream = ggml_row_size(vec_dot_type, ne10);
+            if (ggml_moe_gate_batch_prefetch_enabled() &&
+                    ggml_cuda_moe_stream_batch_preload_active_from_pack &&
+                    src0->name && strstr(src0->name, ".ffn_gate_exps.") != NULL) {
+                (void) ggml_cuda_moe_stream_batch_preload_active_from_pack(
+                        src0->type,
+                        src0->name,
+                        n_as,
+                        (size_t) ne01 * nb01,
+                        matrix_row_counts);
+            }
 
             for (int cur_a = 0; cur_a < n_as; ++cur_a) {
                 const int64_t cne1 = matrix_row_counts[cur_a];

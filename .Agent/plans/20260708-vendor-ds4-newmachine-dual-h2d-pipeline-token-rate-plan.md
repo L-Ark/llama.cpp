@@ -483,3 +483,13 @@ Promotion requirements:
   - Promotion is not possible from this diagnostic alone; it only determines
     whether a real route-group implementation has enough byte-reduction headroom
     to pursue.
+- Default-off implementation target after route profile:
+  - `GGML_MOE_GATE_BATCH_PREFETCH=1` should preload current-layer active gate
+    experts from the prompt-general expert-pack through the existing batch
+    io_uring path before the per-expert `moe_stream_one` loop;
+  - `moe_stream_one` may then consume a device pointer from the batch VRAM cache
+    instead of issuing its own synchronous one-pack read/H2D copy;
+  - theoretical benefit is not fewer gate bytes, but fewer synchronous gate
+    read submissions and better use of the existing batched direct-IO path.
+    Reject if it raises TTFT beyond 20%, reduces correctness, increases total
+    movement enough to lower token rate, or breaks Kimi/shared MoE paths.

@@ -14,6 +14,7 @@ void ggml_cuda_moe_stream_q80_write(int, const char *, int64_t, const void *, in
 bool ggml_cuda_moe_stream_q80_skip(int, const char *, int64_t, const void *, int64_t, int64_t, size_t, const void *, size_t, int64_t, int64_t, float *, size_t, size_t, const ggml_moe_row_mapping *) { return false; }
 void ggml_cuda_moe_stream_q80_hot_batch_probe(int, const char *, int64_t, int64_t, int64_t, size_t, const void *, size_t, int64_t, const float *, size_t, size_t, const int64_t *, const ggml_moe_row_mapping *, int64_t, const float *, size_t, size_t) {}
 bool ggml_cuda_moe_stream_one_cache_contains(const char *, const void *, size_t, int64_t) { return false; }
+const void * ggml_cuda_moe_stream_cache_dev_ptr(const char *, size_t, int) { return nullptr; }
 bool ggml_cuda_moe_stream_mmvq_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_rows_dev(int, const void *, int64_t, int64_t, size_t, const float *, void *, const int32_t *, int64_t, float *, cudaStream_t) { return false; }
 bool ggml_cuda_moe_stream_mmvq_batch_dev(int, const void *, int64_t, int64_t, const float *, void *, float *, const int32_t *, int64_t, int64_t, cudaStream_t) { return false; }
@@ -69,6 +70,7 @@ void ggml_cuda_moe_stream_link_anchor(void) {}
 
 int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_name, int expert_idx, size_t expert_bytes);
 int ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit(void);
+const void * ggml_cuda_moe_stream_cache_dev_ptr(const char *src0_name, size_t expert_bytes, int expert_idx);
 
 // src1_f32: F32 activations (will be Q8_1 quantized on GPU)
 //           Layout: cne1 rows × ne00 cols, with stride row_size_f32 bytes per row.
@@ -1765,6 +1767,14 @@ static uint64_t one_direct_hot_pool_env_u64(const char * name, uint64_t fallback
         return fallback;
     }
     return (uint64_t) std::strtoull(env, nullptr, 10);
+}
+
+static bool gate_batch_prefetch_enabled() {
+    static int enabled = [] {
+        const char * env = std::getenv("GGML_MOE_GATE_BATCH_PREFETCH");
+        return env && env[0] && env[0] != '0' ? 1 : 0;
+    }();
+    return enabled != 0;
 }
 
 static std::string one_direct_hot_pool_key(const char * tensor, int64_t expert) {
@@ -4968,15 +4978,20 @@ extern "C" bool ggml_cuda_moe_stream_one(
     // VRAM cache lookup: if this expert is already in VRAM, skip H2D entirely.
     uintptr_t cache_key = one_cache_key_for(src0_name, expert_index, src0_data);
     const void * hot_pool_vram = one_direct_hot_pool_lookup_stream_one_dev_ptr(src0_name, expert_index, nullptr);
-    void *cached_vram = hot_pool_vram ? nullptr : vram_cache_lookup(cache_key);
+    const void * batch_cache_vram = (hot_pool_vram || !gate_batch_prefetch_enabled()) ? nullptr :
+        ggml_cuda_moe_stream_cache_dev_ptr(src0_name, src0_bytes, (int)expert_index);
+    void *cached_vram = (hot_pool_vram || batch_cache_vram) ? nullptr : vram_cache_lookup(cache_key);
     const bool cache_hit = cached_vram != nullptr;
     const bool hot_pool_hit = hot_pool_vram != nullptr;
+    const bool batch_cache_hit = batch_cache_vram != nullptr;
     bool cache_inserted = false;
     const void *kernel_src0 = nullptr;
 
     int gate_profile_pack_hit = 0;
     if (hot_pool_hit) {
         kernel_src0 = hot_pool_vram;
+    } else if (batch_cache_hit) {
+        kernel_src0 = batch_cache_vram;
     } else if (cached_vram) {
         kernel_src0 = cached_vram;
     } else {
