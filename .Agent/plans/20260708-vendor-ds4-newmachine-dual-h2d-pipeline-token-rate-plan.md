@@ -315,3 +315,21 @@ Promotion requirements:
   `GGML_MOE_IO_BYTES=8388608`, `GGML_MOE_STAGE_PINNED_SLOTS=8`.
   The next high-value implementation is not another small env sweep; it should
   change route-group batching or reduce gate/up/down bytes.
+- Accepted route-pruning improvement:
+  - `GGML_MOE_KEEP_TOPK_LAYER_VALUE=2` for the existing layer range `10-39`
+    reduces routed up/down work versus the previous default `3`. This changes
+    model math, so it requires stricter correctness checks than IO-only
+    changes.
+  - Prompt `How to deploy a large model on small devices?`,
+    run `20260708T141213Z-topk-layer2-probe`: `eval_tok_s=2.9`,
+    `prompt_tok_s=3.5`, `TTFT=18372.5 ms`, elapsed `49.05s`,
+    `memory_peak_bytes=14764113920`, `ram_ok=true`,
+    `display_processes_stopped_before_run=true`. Output was coherent and
+    semantically correct.
+  - France sentinel, run `20260708T141326Z-france-topk-layer2`:
+    `eval_tok_s=2.9`, `prompt_tok_s=3.3`, `TTFT=17462.7 ms`,
+    elapsed `48.99s`, `memory_peak_bytes=14743666688`, `ram_ok=true`.
+    France output was semantically correct and coherent.
+  - Accepted as the new default pending a clean-repeat and broader calibration
+    prompt set. It improves the measured generalized demo prompt from `2.5` to
+    `2.9 tok/s` while staying within RAM and lowering TTFT.
