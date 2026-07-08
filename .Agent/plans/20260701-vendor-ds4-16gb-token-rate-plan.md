@@ -8869,3 +8869,9 @@ Execution step 2, validation:
 - After candidate freeze, run held-out v1 exactly once for SOTA decision.
 - If held-out improves and all constraints pass, commit and push immediately to `ssd/vendor/deepseek-token-rate-16gb`, then rebuild/rerun from the pushed commit and record reproducibility.
 - If token rate regresses, correctness fails, TTFT rises over 20%, or RAM exceeds 16GB including page cache, reject and revert or leave the code default-off with the rejected artifact clearly recorded.
+
+Post-push reproducibility:
+- source commit: `8b4fce2bb5109983bf621939bf48f190c14194b0`, pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- clean worktree repro run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-postpush-repro/20260708T045123Z-pushed-8b4fce2-france-n192-repro`.
+- France n192 cold result: `eval_tok_s=4.6`, `prompt_tok_s=3.3`, TTFT `24268.87 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15117881344`, `ram_ok=true`, `source_dirty=false`.
+- Output was semantically correct and coherent.
