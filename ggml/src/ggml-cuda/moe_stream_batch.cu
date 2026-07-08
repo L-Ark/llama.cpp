@@ -6266,15 +6266,26 @@ static bool mxfp4_down_probe_candidate(const char *name, ggml_type type) {
 }
 
 static bool mxfp4_down_q80_compat_candidate(const char *name, ggml_type type) {
-    if (!expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH", false)) return false;
-    if (type != GGML_TYPE_MXFP4 || !name || !std::strstr(name, "ffn_down_exps")) return false;
-    const char *target = std::getenv("GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR");
+    if (type != GGML_TYPE_MXFP4 || !name) return false;
+    const bool is_down = std::strstr(name, "ffn_down_exps") != nullptr;
+    const bool is_up = std::strstr(name, "ffn_up_exps") != nullptr;
+    const char *env_name = is_down ? "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH" :
+        (is_up ? "GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH" : nullptr);
+    if (!env_name || !expert_pack_env_bool(env_name, false)) return false;
+    const char *target = std::getenv(is_down ?
+            "GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR" : "GGML_MOE_STREAM_UP_Q80_COMPAT_TENSOR");
     return !target || !target[0] || std::strcmp(target, name) == 0;
 }
 
 static bool mxfp4_down_q80_compat_forces_mxfp4(const char *name, ggml_type type) {
-    return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH", false) &&
-        type == GGML_TYPE_MXFP4 && name && std::strstr(name, "ffn_down_exps");
+    if (type != GGML_TYPE_MXFP4 || !name) return false;
+    if (std::strstr(name, "ffn_down_exps")) {
+        return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH", false);
+    }
+    if (std::strstr(name, "ffn_up_exps")) {
+        return expert_pack_env_bool("GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH", false);
+    }
+    return false;
 }
 
 static bool mxfp4_down_q80_debug_enabled() {
@@ -9253,12 +9264,12 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         return false;
     };
     if (!init_batch_once()) return decline("init_batch_once");
-    if (!src0_name || !std::strstr(src0_name, "ffn_down_exps")) return decline("not_down_tensor");
     const bool q4_parity_candidate = q4_down_parity_candidate(src0_name, src0_type);
     const bool q4_route_profile_candidate = q4_down_route_profile_candidate(src0_name, src0_type);
     const bool mxfp4_probe_candidate = mxfp4_down_probe_candidate(src0_name, src0_type);
     const bool mxfp4_q80_compat_candidate = mxfp4_down_q80_compat_candidate(src0_name, src0_type);
     const bool lowbit_probe_candidate = lowbit_down_probe_candidate(src0_name, src0_type);
+    if (!src0_name || (!std::strstr(src0_name, "ffn_down_exps") && !mxfp4_q80_compat_candidate)) return decline("not_down_tensor");
     if (src0_type == GGML_TYPE_MXFP4 && mxfp4_down_q80_debug_enabled()) {
         static std::atomic<int> q80_candidate_debug_count{0};
         const int dbg = q80_candidate_debug_count.fetch_add(1);
@@ -9630,7 +9641,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (mxfp4_q80_compat_candidate) {
         static std::atomic<int> first_mxfp4_q80_compat{0};
         if (first_mxfp4_q80_compat.fetch_add(1) == 0) {
-            std::fprintf(stderr, "[moe_stream_batch] MXFP4 down Q8_0-compatible batch path active\n");
+            std::fprintf(stderr, "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active\n");
         }
         if (!launch_mxfp4_down_q80_compat_batch(
                 (const char *)cache->pool, bc.d_x_ids, cache->slot_sz,

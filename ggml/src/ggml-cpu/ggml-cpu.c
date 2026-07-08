@@ -279,6 +279,15 @@ static bool ggml_kimi_moe_mixed_iq2_iq3_pair(enum ggml_type up_type, enum ggml_t
 }
 
 static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const char * name) {
+    if (name && strstr(name, "ffn_up_exps") && type == GGML_TYPE_MXFP4) {
+        const char * env = getenv("GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH");
+        if (!env || !env[0] || env[0] == '0') {
+            return false;
+        }
+        const char * target = getenv("GGML_MOE_STREAM_UP_Q80_COMPAT_TENSOR");
+        return !target || !target[0] || strcmp(target, name) == 0;
+    }
+
     if (!name || !strstr(name, "ffn_down_exps")) {
         return false;
     }

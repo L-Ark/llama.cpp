@@ -31,7 +31,8 @@ What this script demonstrates:
   - User may enter any prompt; this is not a France-specialized demo.
 
 Current known generalized status:
-  - Dev prompt range recorded in the repo: 1.8-2.7 tok/s, mean 2.18 tok/s.
+  - Calibration/dev prompt range recorded in the repo: 2.0-2.7 tok/s, mean 2.40 tok/s.
+  - Held-out v1 prompt range recorded in the repo: 2.2-2.6 tok/s, mean 2.42 tok/s.
   - Product target remains stable >5 tok/s for random prompts; not yet met.
 
 Artifacts:
@@ -58,6 +59,8 @@ BINARY="${BINARY:-${REPO_DIR}/build-ds4-moe-stream/bin/llama-cli}"
 MODEL="${MODEL:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf}"
 RUN_ROOT="${RUN_ROOT:-/root/lfz/runs/vendor-ds4-16gb/demo-general-sota}"
 BASELINE_ARTIFACT="${BASELINE_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json}"
+SOTA_ARTIFACT="${SOTA_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/up-q80-pinned8-generalized-sota-20260708.json}"
+DS4_ALIAS_TSV="${DS4_ALIAS_TSV:-${REPO_DIR}/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv}"
 
 MEMORY_MAX_BYTES=16000000000
 MAX_TOKENS=96
@@ -159,6 +162,7 @@ PROMPT="$(printf '%s' "$PROMPT" | trim_trailing_space)"
 [[ -n "$PROMPT" ]] || fail "prompt is empty"
 [[ -x "$BINARY" ]] || fail "missing executable: $BINARY"
 [[ -f "$MODEL" ]] || fail "missing model: $MODEL"
+[[ -f "$DS4_ALIAS_TSV" ]] || fail "missing static DS4 alias TSV: $DS4_ALIAS_TSV"
 
 prompt_specific_env=(
   GGML_MOE_STREAM_ONE_EXPERT_PACK
@@ -212,10 +216,12 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "binary": $(printf '%s' "$BINARY" | json_string),
   "model": $(printf '%s' "$MODEL" | json_string),
   "baseline_artifact": $(printf '%s' "$BASELINE_ARTIFACT" | json_string),
+  "sota_artifact": $(printf '%s' "$SOTA_ARTIFACT" | json_string),
   "prompt_general": true,
   "prompt_specific_optimization": false,
   "france_specialized_path_used": false,
-  "current_generalized_dev_tok_s": {"min": 1.8, "mean": 2.18, "max": 2.7},
+  "current_generalized_dev_tok_s": {"min": 2.0, "mean": 2.40, "max": 2.7},
+  "current_held_out_v1_tok_s": {"min": 2.2, "mean": 2.42, "max": 2.6},
   "product_target_tok_s": 5.0,
   "product_target_currently_met": false,
   "max_tokens": ${MAX_TOKENS},
@@ -232,10 +238,20 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_CUDA_DISABLE_GRAPHS": "1",
     "GGML_MOE_STREAM": "1",
     "GGML_MOE_STREAM_DONTNEED": "1",
+    "GGML_MOE_STAGE_PINNED_SLOTS": "8",
+    "GGML_MOE_EXPERT_GGUF_ALIAS_TSV": $(printf '%s' "$DS4_ALIAS_TSV" | json_string),
+    "GGML_MOE_IO_BACKEND": "iouring",
+    "GGML_MOE_IO_ALIGNED_ALIAS_BATCH": "1",
     "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
     "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
-    "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
-    "GGML_MOE_VRAM_CACHE_GB": "0",
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": "8192",
+    "GGML_MOE_VRAM_CACHE_GB": "4",
+    "GGML_MOE_STREAM_DOWN_BATCH": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
+    "GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED": "1",
     "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
     "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
     "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3"
@@ -261,15 +277,25 @@ done
 
 export CUDA_VISIBLE_DEVICES="\${CUDA_VISIBLE_DEVICES:-0}"
 export GGML_CUDA_DISABLE_GRAPHS=1
+export GGML_MOE_EXPERT_GGUF_ALIAS_TSV=$(printf '%q' "$DS4_ALIAS_TSV")
+export GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1
+export GGML_MOE_IO_BACKEND=iouring
 export GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39
 export GGML_MOE_KEEP_TOPK_LAYER_VALUE=3
 export GGML_MOE_KEEP_TOPK_UPDOWN=4
 export GGML_MOE_STREAM=1
+export GGML_MOE_STAGE_PINNED_SLOTS=8
 export GGML_MOE_STREAM_DONTNEED=1
-export GGML_MOE_STREAM_ONE_CACHE_MIB=13568
+export GGML_MOE_STREAM_ONE_CACHE_MIB=8192
 export GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1
 export GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps
-export GGML_MOE_VRAM_CACHE_GB=0
+export GGML_MOE_STREAM_DOWN_BATCH=1
+export GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1
+export GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1
+export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1
+export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1
+export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1
+export GGML_MOE_VRAM_CACHE_GB=4
 
 cmd=(
   "\$BINARY"
@@ -400,7 +426,7 @@ Run dir: $RUN_DIR
 Source: $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)@$(git -C "$REPO_DIR" rev-parse --short HEAD) $([[ "$source_dirty" == true ]] && echo dirty || echo clean)
 Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
-Known generalized dev range: 1.8-2.7 tok/s, mean 2.18 tok/s.
+Known generalized dev range: 2.0-2.7 tok/s, mean 2.40 tok/s. Held-out v1: 2.2-2.6 tok/s, mean 2.42 tok/s.
 Product target: stable >5 tok/s for random prompts. Current generalized path is not there yet.
 Prompt-specific packs/profiles/aliases: disabled and refused.
 Prompt:
@@ -514,7 +540,8 @@ summary = {
     'memory_anon_bytes': mem_stat.get('anon'),
     'memory_events': mem_events,
     'ram_ok': ram_ok,
-    'known_generalized_dev_range_tok_s': {'min': 1.8, 'mean': 2.18, 'max': 2.7},
+    'known_generalized_dev_range_tok_s': {'min': 2.0, 'mean': 2.40, 'max': 2.7},
+    'known_held_out_v1_range_tok_s': {'min': 2.2, 'mean': 2.42, 'max': 2.6},
     'product_target_gt_5_tok_s_met_by_this_run': eval_tok_s is not None and eval_tok_s > 5.0,
     'manual_quality_review_required': True,
     'exact_command_file': str(run_dir / 'exact_command.txt'),

@@ -8532,3 +8532,64 @@ Decision:
 - Keep the result because it proves all-GPU expert execution is possible but currently slower under the 16GB RAM product constraint.
 - Next plan item: implement a default-off up-specific correctness probe or retained explicit up/gate producer. It must not reuse the previously rejected plain fused up/gate path unless act parity against explicit `mul_mat_id + clamp + swiglu_split` is proven first.
 
+## 2026-07-08 X10-BJ accepted generalized SOTA: up Q80 + down Q80 + pinned8
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/up-q80-pinned8-generalized-sota-20260708.json`
+- status: `accepted_generalized_sota_stage_not_product_target`
+- source change: add default-off `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1` support for MXFP4 `ffn_up_exps` in the existing Q8_0-compatible batch path.
+
+Purpose:
+- Continue after X10-BH fixed/verified `ffn_down_exps` Q80 GPU correctness and X10-BI showed that simply putting `up` into the gate one-stream cache is correctness-reachable but too slow.
+- Reduce prompt-general `ffn_up_exps` CPU fallback without evicting the gate one-stream cache.
+
+Implementation:
+- CPU eligibility: `ggml_cuda_moe_stream_supports_down_batch()` now allows `ffn_up_exps` only when tensor type is MXFP4 and `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1` is explicitly set. Default behavior is unchanged.
+- CUDA candidate gate: the existing MXFP4 Q8_0-compatible batch path now accepts `ffn_up_exps` only under `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1`; `ffn_down_exps` still uses `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`.
+- This is not the previously rejected fused up/gate route. It keeps the explicit graph and only accelerates the separate `ffn_up_exps` `mul_mat_id` using the same CPU-compatible Q80 semantics that fixed down.
+
+Correctness gates:
+- Build passed: `cmake --build build-ds4-moe-stream -j 8 --target llama-cli llama-results`.
+- Default-off smoke:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T232957Z-20260708-upq80-defaultoff-smoke/france-upq80-defaultoff-smoke-cpu40-vram4gb`
+  - new up env unset; fallback CSV still contains only `up`; strict RAM OK.
+- Enabled n16 smoke:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T233119Z-20260708-upq80-enabled-smoke-n16/france-upq80-enabled-smoke-cpu40-vram4gb`
+  - fallback CSV empty; strict RAM OK.
+- Non-France top1 reverify:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T233330Z-20260708-upq80-top1-reverify`
+  - default-off path vs `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1`: `same_top1=29/29`, `first_mismatch_pos=-1`, strict RAM OK.
+- France n192 quality:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T233711Z-20260708-upq80-gate8-down4-france-n192/france-upq80-gate8-down4-n192-cpu40-vram4gb`
+  - `eval_tok_s=2.7`, `TTFT=36102.95 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15031353344`, `ram_ok=true`, `correctness_ok=true`.
+
+Frozen accepted config:
+- `cpu_moe=40`, `--vram-cache-gb 4`, `-n 192 -c 256 -b 16 -ub 16`, strict cold `drop_caches`.
+- `GGML_MOE_STAGE_PINNED_SLOTS=8` to keep host RAM under the hard threshold.
+- Static prompt-general alias source: `.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv` with `GGML_MOE_EXPERT_GGUF_ALIAS_TSV`, `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`.
+- Gate cache: `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_CACHE_MIB=8192`.
+- Up/down batch: `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`.
+- Retain top-k env: `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+
+Calibration/dev set v1 result:
+- France: `2.7 tok/s`, TTFT `35765.12 ms`, RAM/correctness OK.
+- Quantum: `2.2 tok/s`, TTFT `35807.15 ms`, RAM/correctness OK.
+- Fibonacci: `2.0 tok/s`, TTFT `37872.54 ms`, RAM/correctness OK.
+- Japan: `2.6 tok/s`, TTFT `38824.41 ms`, RAM/correctness OK.
+- Climate: `2.5 tok/s`, TTFT `37063.18 ms`, RAM/correctness OK.
+- Aggregate: min `2.0`, mean `2.40`, max `2.7`; improves dev baseline min `1.8` and mean `2.18`.
+- TTFT gate: pass versus corresponding dev baseline; all five TTFTs are lower than the 20260706 baseline values.
+
+Held-out test set v1 result after candidate freeze:
+- Photosynthesis: `2.4 tok/s`, TTFT `37269.41 ms`, RAM/correctness OK.
+- Home office: `2.3 tok/s`, TTFT `37576.32 ms`, RAM/correctness OK.
+- JavaScript palindrome: `2.2 tok/s`, TTFT `38341.60 ms`, RAM/correctness OK.
+- Exercise: `2.6 tok/s`, TTFT `40980.94 ms`, RAM/correctness OK.
+- Brazil: `2.6 tok/s`, TTFT `40201.03 ms`, RAM/correctness OK.
+- Aggregate: min `2.2`, mean `2.42`, max `2.6`.
+
+Decision:
+- Accept as the current generalized SOTA stage result because dev min/mean improve, held-out v1 passes RAM/correctness, TTFT gate passes on dev baseline, and no prompt-specific pack/profile/hotset is used.
+- Product target is still not met: held-out min/mean are far below stable `>5 tok/s`.
+- Immediately commit and push source, plan, demo script, and artifact to `ssd/vendor/deepseek-token-rate-16gb` so this result is reproducible.
+- Next bottleneck: Q80 batch accepted all up/down rows but still spends substantial `cuda_batch`/source staging time. Next work should optimize batch cache/source movement and reduce Q80 up/down staging cost without reintroducing CPU fallback or exceeding 16GB host RAM.
+
