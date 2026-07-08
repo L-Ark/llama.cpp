@@ -24,6 +24,9 @@ machine, display processes must be killed/stopped first. This is a hard
 promotion requirement because graphical processes consume VRAM and can change
 the effective cache/workspace budget.
 
+中文硬性要求：每次正式运行模型前必须先杀掉显示进程；没有完成并记录该步骤的
+run 只能算 diagnostic，不能作为 baseline、SOTA 或可接受优化结果。
+
 1. Kill/stop display usage before launching the model:
 
    ```bash
@@ -722,3 +725,36 @@ Promotion requirements:
     still below the required stable `>5 tok/s`.
   - Detailed reproduction data is recorded in
     `.Agent/runs/20260708-vendor-ds4-newmachine/gate-topk-unified14-sota-20260708.json`.
+- Current-SOTA route profile after unified14:
+  - n32 route profile
+    `20260708T161322Z-20260709T-current-sota-route-profile-france-n32`:
+    `eval_tok_s=3.0`, `TTFT=16606.0 ms`, `ram_ok=true`, source clean, display
+    processes stopped, H2D `6.62GB/s`.
+  - Role totals after gate-topk: gate `5201` active experts with `1994` cache
+    misses; up `5201` active experts with `1993` cache misses; down `5201`
+    active experts with `0` misses at down execution time because up/down
+    paired prefetch makes down resident first.
+  - Batch counters: `iouring_reads=5979`, `iouring_bytes=26.65GB`, pinned
+    staging copies `3987`, gate staging copies `1992`, and inflight average
+    only `2.48` despite `8` slots. This means the next low-risk software
+    experiment should test larger staging/refill concurrency before attempting
+    a more invasive compact source.
+  - Added demo passthrough/default support for `GGML_MOE_IO_REFILL_BATCH` so
+    experiments can test `GGML_MOE_STAGE_PINNED_SLOTS=16` and
+    `GGML_MOE_IO_REFILL_BATCH=8` without changing the baseline default
+    (`4`).
+  - `GGML_MOE_STAGE_PINNED_SLOTS=16` plus `GGML_MOE_IO_REFILL_BATCH=8`,
+    run `20260708T161540Z-20260709T-slots16-refill8-france-n32-smoke`,
+    was rejected: `eval_tok_s=2.9`, `ram_ok=true`, source dirty diagnostic.
+    It increased inflight average from about `2.48` to `3.25` but also
+    increased io_uring wait time to `7.08s`, so more slots/refill do not solve
+    the current bottleneck.
+  - `GGML_MOE_IO_REFILL_BATCH=8` alone,
+    run `20260708T161639Z-20260709T-refill8-france-n32-smoke`, was also
+    rejected: `eval_tok_s=2.9`, wait time `6.57s`, no gain over default.
+  - Next implementation probe: the existing up/gate parallel branch only
+    enables for `IQ2_S`, while current DeepSeek up/gate type is `39`. Added
+    default-off env `GGML_MOE_STREAM_UP_GATE_PARALLEL_ANY=1` to allow the
+    existing non-mixed up/gate parallel staging/compute path for DS4 types
+    when explicitly requested. This must be correctness-tested before any
+    promotion.
