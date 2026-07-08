@@ -19,13 +19,13 @@ within the 16GB cgroup including page cache.
 
 ## Required Pre-Run Procedure
 
-Before every official cold benchmark, profile run, or SOTA validation on the new
-machine, display processes must be killed/stopped first. This is a hard
-promotion requirement because graphical processes consume VRAM and can change
-the effective cache/workspace budget.
+Before every model run on the new machine, including diagnostic runs, profile
+runs, cold benchmarks, and SOTA validation, display processes must be
+killed/stopped first. This is a hard promotion requirement because graphical
+processes consume VRAM and can change the effective cache/workspace budget.
 
-中文硬性要求：每次正式运行模型前必须先杀掉显示进程；没有完成并记录该步骤的
-run 只能算 diagnostic，不能作为 baseline、SOTA 或可接受优化结果。
+中文硬性要求：每次运行模型前必须先杀掉显示进程；没有完成并记录该步骤的 run
+不能进入 baseline/SOTA/候选优化比较，只能作为无效诊断参考。
 
 1. Kill/stop display usage before launching the model:
 
@@ -948,3 +948,47 @@ Promotion requirements:
     prompts, but deploy remains dominated by expert movement. The next code
     work should target lower bytes per route or a true cross-call/cross-layer
     scheduling change; cache-policy tuning alone is not sufficient.
+- Down staging single-ring probe:
+  - `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`,
+    `20260708T172906Z-20260709T-down-stage-single-ring-deploy-n96`, prompt
+    `How to deploy a large model on a small devices?`, source clean at
+    `6d2135e5c6`, strict cold cgroup, display cleanup recorded.
+  - Result: `eval_tok_s=3.7`, `prompt_tok_s=6.0`, `TTFT=15590.4 ms`,
+    `memory_peak_bytes=14734995456`, `memory_file_bytes=13854978048`,
+    `ram_ok=true`, output coherent.
+  - Counters remained effectively unchanged for the deploy bottleneck:
+    `iouring_reads=7811`, `iouring_bytes=34.81GB`,
+    `iouring_wait_us=10821038`, `inflight_avg=1.80`.
+  - Rejected: single-ring down staging does not reduce deploy wait time or
+    improve token rate, so it is not a route to generalized `>5 tok/s`.
+
+## Next Work After 2026-07-09
+
+The current clean generalized SOTA remains the split top-k default:
+`eval_tok_s=4.1` on France n96 at run
+`20260708T165237Z-20260709T-clean-7c2f1f2-default-france-n96`, with deploy
+still at `3.7 tok/s`. Lazy pin can reach `5.0 tok/s` on France and AI infra
+but fails deploy, so it is not accepted as generalized SOTA.
+
+Next implementation priority:
+
+1. Re-profile deploy under current SOTA with fine-grained batch/locality
+   metrics, after killing display processes, to identify why `iouring_wait_us`
+   is about `10s` while France/AI are lower.
+2. Measure per-layer/per-role misses and physical source locality for deploy,
+   with `GGML_MOE_BATCH_PROFILE_OUT` and any available read/locality trace
+   hooks. The goal is to distinguish unavoidable extra expert movement from
+   scheduler-induced small batches.
+3. If locality shows many one- and two-job batches from the same layer, design
+   a true route-group scheduler that collects gate/up/down requests after the
+   router decision and submits the layer's required sources in one ordered
+   plan. This must be default-off and must not increase total bytes like the
+   rejected `GGML_MOE_GATE_UPDOWN_COSUBMIT=1` path.
+4. If locality shows genuinely broad random misses, prioritize reducing bytes
+   per route: compact up/gate/down pack variants or partial expert reads, but
+   only after computing a hard upper bound from actual rows/blocks used. The
+   candidate must be prompt-general and cannot use held-out prompts for tuning.
+5. Any accepted improvement must be committed and pushed immediately to
+   `vendor/deepseek-token-rate-16gb` on `https://github.com/wici-ai/ssd-llama.git`
+   with exact reproduction metadata. Commit author/committer must remain
+   `L-Ark <fliangae@connect.ust.hk>`.
