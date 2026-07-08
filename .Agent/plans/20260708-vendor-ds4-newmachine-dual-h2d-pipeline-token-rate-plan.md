@@ -824,3 +824,39 @@ Promotion requirements:
     movement / H2D throughput.
   - Detailed record:
     `.Agent/runs/20260708-vendor-ds4-newmachine/top3-alllayers-vram13-clean-generalized-20260709.json`.
+- Additional top-k sweep after the clean top3-all-layers validation:
+  - `GGML_MOE_KEEP_TOPK_UPDOWN=3`,
+    `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-29`,
+    `GGML_MOE_KEEP_TOPK_LAYER_VALUE=2` keeps layers `30-39` at top3 while
+    reducing layers `0-29` to top2. It remains prompt-general.
+  - Clean France n96
+    `20260708T164708Z-20260709T-top2-l0-29-top3-rest-france-n96`:
+    `eval_tok_s=4.0`, `prompt_tok_s=5.1`, `TTFT=16257.6 ms`,
+    `memory_peak_bytes=14727180288`, `memory_file_bytes=13833728000`,
+    `ram_ok=true`, `source_dirty=false`, display cleanup recorded, output
+    coherent.
+  - Clean AI infra n96
+    `20260708T164804Z-20260709T-top2-l0-29-top3-rest-ai-infra-n96`:
+    `eval_tok_s=4.1`, `prompt_tok_s=5.2`, `TTFT=15268.9 ms`,
+    `memory_peak_bytes=14690164736`, `memory_file_bytes=13752385536`,
+    `ram_ok=true`, `source_dirty=false`, display cleanup recorded, output
+    useful and coherent.
+  - Clean deployment n96
+    `20260708T164957Z-20260709T-top2-l0-29-top3-rest-deploy-n96`:
+    `eval_tok_s=3.7`, `prompt_tok_s=6.0`, `TTFT=15677.2 ms`,
+    `memory_peak_bytes=14773948416`, `memory_file_bytes=13872824320`,
+    `ram_ok=true`, `source_dirty=false`, display cleanup recorded, output
+    coherent.
+  - `0-34` top2 is not better: France n96
+    `20260708T164902Z-20260709T-top2-l0-34-top3-rest-france-n96` reached
+    only `3.9 tok/s`.
+  - Promote `0-29` top2 plus `30-39` top3 as the next default generalized
+    SOTA candidate. It still fails the product requirement of stable
+    `>5 tok/s`, so the next implementation must reduce expert movement beyond
+    rank pruning or change the effective H2D limit.
+- Hardware/H2D finding:
+  - The GPU endpoint supports `32GT/s x16`, but its upstream root port
+    `0000:00:06.0` has `LnkCap Speed 16GT/s, Width x4` and target link speed
+    `16GT/s`. Therefore the new machine cannot reach Gen5 x4 for this GPU
+    through software alone. The measured `6.6-6.7 GB/s` 4.25MiB H2D is
+    consistent with the root-port Gen4 x4 limit.

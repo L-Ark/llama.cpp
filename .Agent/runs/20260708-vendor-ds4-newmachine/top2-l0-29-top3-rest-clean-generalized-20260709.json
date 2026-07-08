@@ -1,0 +1,79 @@
+{
+  "date": "2026-07-09",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "base_commit": "9a3fdf97a598",
+  "status": "accepted_default_candidate_but_product_target_not_met",
+  "machine": "wici@192.168.9.198",
+  "configuration": {
+    "framework": "vendor",
+    "model": "/home/wici/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "gate_fullpack": "/home/wici/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+    "prompt_specific_optimization": false,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "drop_caches": true,
+    "display_processes_stopped_before_run": true,
+    "GGML_MOE_KEEP_TOPK_UPDOWN": "3",
+    "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "0-29",
+    "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "2",
+    "GGML_MOE_KEEP_TOPK_GATE": "1",
+    "GGML_MOE_VRAM_CACHE_MIB": "13312"
+  },
+  "clean_validation_runs": [
+    {
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T164708Z-20260709T-top2-l0-29-top3-rest-france-n96",
+      "prompt": "Please introduce France in a short paragraph.",
+      "eval_tok_s": 4.0,
+      "prompt_tok_s": 5.1,
+      "ttft_ms": 16257.624115,
+      "memory_peak_bytes": 14727180288,
+      "memory_file_bytes": 13833728000,
+      "ram_ok": true,
+      "source_dirty": false,
+      "display_processes_stopped_before_run": true,
+      "correctness_ok": true
+    },
+    {
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T164804Z-20260709T-top2-l0-29-top3-rest-ai-infra-n96",
+      "prompt": "AI infra 是做什么的",
+      "eval_tok_s": 4.1,
+      "prompt_tok_s": 5.2,
+      "ttft_ms": 15268.905451,
+      "memory_peak_bytes": 14690164736,
+      "memory_file_bytes": 13752385536,
+      "ram_ok": true,
+      "source_dirty": false,
+      "display_processes_stopped_before_run": true,
+      "correctness_ok": true
+    },
+    {
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T164957Z-20260709T-top2-l0-29-top3-rest-deploy-n96",
+      "prompt": "How to deploy a large model on a small devices?",
+      "eval_tok_s": 3.7,
+      "prompt_tok_s": 6.0,
+      "ttft_ms": 15677.239115,
+      "memory_peak_bytes": 14773948416,
+      "memory_file_bytes": 13872824320,
+      "ram_ok": true,
+      "source_dirty": false,
+      "display_processes_stopped_before_run": true,
+      "correctness_ok": true
+    }
+  ],
+  "rejected_neighbors": [
+    {
+      "configuration": "GGML_MOE_KEEP_TOPK_UPDOWN=3 GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-9 GGML_MOE_KEEP_TOPK_LAYER_VALUE=2",
+      "reason": "France n96 only reached 3.5 tok/s."
+    },
+    {
+      "configuration": "GGML_MOE_KEEP_TOPK_UPDOWN=3 GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-19 GGML_MOE_KEEP_TOPK_LAYER_VALUE=2",
+      "reason": "France n96 only reached 3.7 tok/s."
+    },
+    {
+      "configuration": "GGML_MOE_KEEP_TOPK_UPDOWN=3 GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-34 GGML_MOE_KEEP_TOPK_LAYER_VALUE=2",
+      "reason": "France n96 reached only 3.9 tok/s, below the 0-29 candidate on France and AI infra."
+    }
+  ],
+  "hardware_note": "GPU root port 0000:00:06.0 is limited to 16GT/s x4, so the observed 6.6-6.7 GB/s 4.25MiB H2D is a hardware path limit on this machine.",
+  "conclusion": "Promote 0-29 top2 plus 30-39 top3 as the next prompt-general default candidate. It improves the generalized range but still does not meet stable >5 tok/s."
+}
