@@ -1811,3 +1811,72 @@ preserve correctness and lower TTFT in some runs, but do not increase decode
 token rate on the Gen4 x4 new-machine path. Future overlap work must profile
 and reduce actual H2D wait/copy serialization, not only enable existing
 prefetch depth knobs.
+
+## 2026-07-09 Clean Copy Profile And Queue-Depth Sweep
+
+Clean profiling run:
+
+- `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T203629Z-20260709-clean-copy-profile-fibonacci-n32`
+- source clean at `eeb42534b`, strict cold, 16GB cgroup, display cleanup
+  recorded.
+- `eval_tok_s=3.0`, `prompt_tok_s=4.4`,
+  `first_output_ms=14775.9 ms`, `ram_ok=true`.
+- Fibonacci output correctly began with a Python function. The run is
+  diagnostic only because copy/io CSV profiling adds overhead.
+
+Profile summary:
+
+- `iouring_reads=5357`, `iouring_bytes=23.87GB`, `iouring_wait_us=3813386`.
+- Copy-profile rows: `5357`, each copy `4.456MB`.
+- Per-op copy totals:
+  - `gate_batch_preload`: `1787` copies, `7.964GB`.
+  - `gate_updown_cosubmit`: `2167` copies, `9.657GB`.
+  - `runtime_load`: `1403` copies, `6.252GB`.
+- Batch profile:
+  - `gate_batch_preload`: `827` batches, average `2.16` jobs.
+  - `gate_updown_cosubmit`: `304` batches, average `7.13` jobs.
+  - `runtime_load`: `1046` batches, average `1.34` jobs.
+- Coalescing profile: `total_saved_copy_count=0`, `host_contiguous_pairs=0`;
+  destination slots are often contiguous, but host source offsets are not.
+
+Interpretation:
+
+- Simple adjacent-copy coalescing cannot help the current full native path,
+  because expert source offsets are not physically contiguous in execution
+  order.
+- The weakest areas are small `runtime_load` and `gate_batch_preload` batches,
+  not `gate_updown_cosubmit`, whose average batch size is already higher.
+- A useful software change must either change scheduling so more active
+  experts are known before runtime load, or reduce bytes for the third expert
+  without deleting its contribution.
+
+Queue-depth / pinned-slot sweep, source clean, strict cold, display cleanup
+recorded:
+
+- `GGML_MOE_STAGE_PINNED_SLOTS=12`,
+  `GGML_MOE_IO_DEPTH=16`, `GGML_MOE_IO_REFILL_BATCH=8`,
+  Fibonacci n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T203813Z-20260709-slots12-depth16-refill8-fibonacci-n64`
+  reached `eval_tok_s=3.4`, quality OK.
+- `GGML_MOE_STAGE_PINNED_SLOTS=16`,
+  `GGML_MOE_IO_DEPTH=16`, `GGML_MOE_IO_REFILL_BATCH=8`,
+  Fibonacci n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T203849Z-20260709-slots16-depth16-refill8-fibonacci-n64`
+  reached `eval_tok_s=3.6`, quality OK.
+- default Fibonacci n64 comparison:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T204021Z-20260709-default-fibonacci-n64-compare`
+  also reached `eval_tok_s=3.6`, quality OK.
+- default deploy n64 comparison:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T204057Z-20260709-default-deploy-n64-compare`
+  reached `eval_tok_s=3.8`, quality OK.
+- slots16/depth16/refill8 deploy n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T204132Z-20260709-slots16-depth16-refill8-deploy-n64`
+  reached `eval_tok_s=3.9`, quality OK.
+- slots16/depth16/refill8 France n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T204205Z-20260709-slots16-depth16-refill8-france-n64`
+  reached `eval_tok_s=3.4`, quality OK.
+
+Decision: do not change default pinned slots or IO depth based on this sweep.
+The best difference was a small deploy-only `3.8 -> 3.9 tok/s`, while
+Fibonacci matched default and France did not improve. This is useful as a
+diagnostic but not an accepted SOTA.
