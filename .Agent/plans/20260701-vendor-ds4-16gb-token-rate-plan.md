@@ -8935,3 +8935,140 @@ Decision:
 Next direction:
 - Move gate source reads onto the shared batch expert source/io_uring path, or add a true background read worker so gate direct reads and up/down preloads can be in flight at the same time.
 - A pure gate-triggered preload is insufficient unless it overlaps with gate compute/read or uses a predictive window that does not add exposed TTFT.
+
+## 2026-07-08 X10-BP next plan: gate/up/down shared-source batch with cache preservation
+
+Task background and target:
+- The real product target is arbitrary user prompts on a 16GB host-RAM machine, including page cache, plus a 32GB RTX 5090, with stable decode above `5 tok/s`.
+- All optimization must be prompt-general. No France-specific trace, prompt route hotset, prompt-derived expert pack, or prompt-specific admission policy is acceptable as SOTA.
+- Held-out prompts remain reserved for final candidate validation only. Development/debug runs may use the dev prompts and ad hoc probes, but a new accepted SOTA must report held-out metrics after the candidate config is frozen.
+- Push target remains `ssd/vendor/deepseek-token-rate-16gb`. When a new compliant SOTA appears, record exact repro info, commit source plus artifacts immediately, push to this branch, then rerun from the pushed commit to prove reproducibility.
+
+Current accepted baseline:
+- Accepted generalized SOTA remains X10-BM / post-push repro, not the later default-off or rejected experiments.
+- Clean France n192 repro from pushed source: `eval_tok_s=4.6`, TTFT `24268.87 ms`, strict cgroup `memory_peak_bytes=16000000000`, `source_dirty=false`.
+- Held-out n192 accepted aggregate: min/mean/max `3.9/4.12/4.4 tok/s`.
+- Product target is still not met because held-out mean is below `5 tok/s`.
+
+Answer to the design question: should gate join the same batch as up/down?
+- Yes, it is worth testing, but only if gate misses still populate and reuse the one-stream gate VRAM cache.
+- The rejected X10-BO experiment batched up/down preloads but left gate source reads exposed, so it mostly moved IO earlier instead of overlapping/removing it.
+- A first shared-source probe sent gate through the batch expert source, but bypassed gate VRAM cache insertion. That produced `VRAM cache hits=0` and collapsed to about `1.8 tok/s`; this is not evidence against shared-source batching, only evidence that cache preservation is mandatory.
+- Gate+up+down in one source/batch path can help only if it reduces exposed source wait or increases effective queue depth without increasing TTFT, RAM, or cache thrash.
+
+Immediate design step, before more implementation:
+- Re-run X10-BM profile only if needed to confirm the current split:
+  - gate direct/fullpack source time,
+  - up/down io_uring wait time,
+  - pinned staging and H2D time,
+  - up/gate compute and down compute time,
+  - sync/residual time.
+- Use n96 cold start for France plus one non-France dev prompt.
+- Strict requirements for profile runs: `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`, page cache counted inside cgroup, correctness pass.
+
+Implementation step 1: repair shared-source gate path without changing default behavior.
+- Keep `GGML_MOE_GATE_SHARED_SOURCE=0` by default.
+- When `GGML_MOE_GATE_SHARED_SOURCE=1`, load gate source through the existing batch expert source/io_uring helper where eligible.
+- After loading a gate expert to a temporary device buffer, insert it into the normal one-stream gate VRAM cache with a device-to-device copy.
+- Preserve the current cache key, cache admission rule, cache stats, eviction behavior, and correctness path.
+- Success criterion for this step is not token rate yet; first prove that gate shared-source has nonzero one-stream gate VRAM hits and does not break correctness.
+
+Implementation step 2: evaluate shared-source gate with cache preservation.
+- Run smoke first:
+  - France n32 with `GGML_MOE_GATE_SHARED_SOURCE=1`.
+  - Check output correctness, TTFT, RAM, and logs.
+  - Required log condition: one-stream gate VRAM cache hits must recover; `hits=0` is an automatic reject.
+- If smoke passes, run France n96 and one non-France dev prompt n96.
+- Compare against accepted X10-BM, not against rejected shared-source runs.
+- Reject if n96 token rate is below current default path, if TTFT rises over 20%, or if RAM exceeds 16GB including page cache.
+
+Implementation step 3: true gate/up/down co-submit after shared-source cache is correct.
+- Build one per-layer/per-token source plan containing eligible gate, up, and down miss jobs.
+- De-duplicate by source identity, file offset, size, tensor role, expert id, and destination cache slot.
+- Submit eligible entries through one io_uring/aligned-alias batch path where possible.
+- Keep compute order unchanged:
+  - gate/up mathematical order must match accepted path,
+  - down correctness must match accepted path,
+  - Kimi features and Kimi flags must remain functional.
+- Add counters before enabling any SOTA decision:
+  - gate jobs, up jobs, down jobs,
+  - merged jobs,
+  - de-duplicated jobs,
+  - batch size histogram,
+  - inflight average/max,
+  - direct reads vs io_uring reads,
+  - gate cache hit/miss after co-submit.
+
+Expected upper bound:
+- X10-BN showed France n96 had about `11.6s` exposed gate source time plus about `8.1s` up/down io_uring wait; Quantum n96 had about `13.5s` gate source plus about `11.6s` up/down wait.
+- Perfectly overlapping the smaller exposed component is unrealistic, but a partial overlap/reduction of `30-50%` of exposed source wait could plausibly move mean decode from roughly `4.1 tok/s` toward `5 tok/s`.
+- If the shared path only adds extra copies or destroys cache locality, the expected result is a slowdown; such runs must be recorded as rejected and left default-off or reverted.
+
+Validation sequence:
+- Stage A: default-off smoke after code changes; France n32 must match current behavior and pass correctness/RAM.
+- Stage B: shared-source gate with cache preservation; France n32, France n96, one non-France n96.
+- Stage C: co-submit counters only; no execution change, verify job accounting.
+- Stage D: co-submit enabled on dev prompts only; freeze config after dev results.
+- Stage E: held-out v1 final test exactly after candidate freeze.
+- Stage F: if and only if held-out improves accepted min/mean without violating constraints, commit and push immediately to `ssd/vendor/deepseek-token-rate-16gb`; then reproduce from pushed commit and record run path, command, commit, source dirty state, prompt outputs, TTFT, token rates, memory peak, and page-cache memory.
+
+Acceptance and rejection rules:
+- Accept only if all are true:
+  - strict host RAM <= 16GB including page cache,
+  - correctness passes for France and generalized prompt set,
+  - TTFT increase <= 20% versus accepted baseline,
+  - held-out min/mean improves over X10-BM or moves materially toward stable `>5 tok/s`,
+  - source and artifact are pushed and reproducible from the pushed commit.
+- Reject if any are true:
+  - prompt-specific behavior is introduced,
+  - one-stream gate cache is bypassed or hit rate collapses,
+  - correctness degrades,
+  - TTFT rises over 20% for an accepted candidate,
+  - memory exceeds 16GB including page cache,
+  - Kimi functionality is removed or regressed,
+  - token rate regression is not clearly offset by diagnostic value.
+
+## 2026-07-08 X10-BQ gate shared-source cache preservation diagnostic
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-shared-source-cache-rejected-20260708.json`
+- status: `rejected_not_sota_default_off_diagnostic`
+- source state: dirty experimental code on top of `d2f1f710c`; accepted SOTA remains X10-BM.
+
+Purpose:
+- Fix the first shared-source probe failure mode where `GGML_MOE_GATE_SHARED_SOURCE=1` bypassed the one-stream gate VRAM cache and produced `hits=0`, collapsing to about `1.8 tok/s`.
+- Test whether moving gate source through the batch expert source can be a useful base for gate/up/down cross-cache co-submit.
+
+Implementation:
+- Added a device-to-device one-stream cache insert path for gate experts loaded through the batch expert source.
+- When `GGML_MOE_GATE_SHARED_SOURCE=1`, a gate miss can load to `ctx.d_src0`, then insert into the normal one-stream gate cache with `cudaMemcpyDeviceToDevice`.
+- The path remains default-off and is not an accepted SOTA.
+
+Results:
+- Default-off France n32 after the code change:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-shared-source-cache-smoke/20260708T054339Z-france-n32-defaultoff-after-shared-cache`
+  - `eval_tok_s=4.3`, TTFT `24532.12 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+  - This shows the default accepted path was not broken.
+- Shared-source cache-preserving France n32:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-shared-source-cache-smoke/20260708T054427Z-france-n32-gate-shared-source-cache`
+  - `eval_tok_s=3.9`, TTFT `25784.44 ms`, RAM OK.
+  - Gate one-stream cache recovered: `hits=5466`, `misses=4005`, `hit_rate=57.7%`.
+  - Batch expert source stats: `direct_reads=4005`, `iouring_reads=3879`, `gate_aux copies=4005`.
+- Shared-source cache-preserving France n96:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-shared-source-cache-n96/20260708T054607Z-france-n96-gate-shared-source-cache`
+  - `eval_tok_s=4.1`, `prompt_tok_s=2.0`, TTFT `27518.13 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14855278592`, RAM OK.
+  - Output was semantically correct but truncated by the n96 limit.
+  - Gate one-stream cache recovered: `hits=16161`, `misses=8670`, `hit_rate=65.1%`.
+  - Batch expert source stats: `direct_reads=8670`, `iouring_reads=6716`, `iouring_wait_us=7886297`, `gate_aux copies=8670`.
+
+Decision:
+- Reject as a new SOTA. It is below the accepted France n96/n192 range of about `4.5-4.6 tok/s`.
+- The cache fix solved the previous `hits=0` collapse, but shared-source gate alone still performs one direct read and pinned staging copy per gate miss.
+- This does not reduce read count, and it does not hide gate source wait behind up/down IO.
+
+Design conclusion for the next gate/up/down attempt:
+- Simply putting gate through the existing batch helper is not enough.
+- A naive `{gate, up, down}` group using the current `expert_pack_iouring_copy_jobs` helper is risky because that helper ties read completion and H2D enqueue to one CUDA stream. If gate, up, and down all use the gate stream, gate compute waits behind up/down preloads; if they all use the prefetch stream, gate compute must wait for prefetch stream completion.
+- The next viable implementation needs either:
+  - a true read-only io_uring stage that can co-submit gate/up/down reads, then copy gate on the gate stream and up/down on the prefetch/cache stream, or
+  - a background prefetch worker that submits up/down reads early without blocking the gate call while preserving the current direct gate fast path.
+- Until that exists, accepted SOTA remains X10-BM and the product target `>5 tok/s` remains unmet.
