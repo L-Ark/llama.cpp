@@ -2721,3 +2721,99 @@ Decision:
   default.
 - CPU tail remains material, but simply switching decode fallback source to
   expert-pack mmap is not a stable route to `>5 tok/s`.
+
+## 2026-07-09 Role-Specific GPU Top-K Plan
+
+Current bottleneck evidence:
+
+- The accepted generalized path uses `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=1`, so GPU
+  handles the top route for both `ffn_up_exps` and `ffn_down_exps`, while the
+  remaining selected routes are handled by CPU fallback.
+- CPU fallback profiling showed about `4.6s` total fallback time on a profiled
+  deploy run, with up fallback and down fallback both material.
+- The previous blunt `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=2` candidate moved both up
+  and down second routes to GPU and was not generalized. It likely added too
+  much H2D pressure in exchange for reducing CPU tail.
+
+Next experiment:
+
+- Add default-off role-specific controls:
+  `GGML_MOE_GPU_KEEP_TOPK_UP` and `GGML_MOE_GPU_KEEP_TOPK_DOWN`.
+- If unset, behavior must remain exactly the current accepted default through
+  `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=1`.
+- Test asymmetric candidates:
+  - `UP=1, DOWN=2`: reduce down CPU fallback while keeping up H2D at the SOTA
+    level.
+  - `UP=2, DOWN=1`: reduce up CPU fallback while keeping down H2D at the SOTA
+    level.
+- Theory: if one role has a better CPU-time-saved / H2D-byte-added ratio, the
+  asymmetric variant can reduce the measured CPU tail without paying the full
+  cost of top2 for both roles. The hard upper bound is the profiled CPU tail
+  saved minus additional H2D time at the current new-machine bandwidth. Since
+  H2D remains the largest hardware-linked gap, only asymmetric configurations
+  that reduce end-to-end time on multiple prompts can be promoted.
+
+Validation:
+
+- Strict cold, 16GB cgroup including page cache, display/model cleanup before
+  every run.
+- Start with dev prompts `deploy`, `fibonacci`, and `France`; expand to
+  `quantum` and `Japan` only if the first three show generalized improvement.
+- Record config, answer, RAM stats, TTFT, token rate, and profile counters in
+  the run artifact.
+- Promote only if the clean generalized result beats the current accepted
+  average/min without correctness loss or TTFT >20%. If accepted, commit and
+  push immediately to `vendor/deepseek-token-rate-16gb` with reproduction
+  details.
+
+Dirty-source diagnostic results, strict cold, 16GB cgroup, display/model
+cleanup before every run:
+
+- `GGML_MOE_GPU_KEEP_TOPK_UP=1`, `GGML_MOE_GPU_KEEP_TOPK_DOWN=2`:
+  - deploy:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T224641Z-20260709-role-up1-down2-deploy-n64`,
+    `eval_tok_s=3.1`, `prompt_tok_s=3.8`,
+    `first_output_ms=18164.8 ms`, `memory_peak_bytes=14856286208`,
+    `ram_ok=true`, cleanup recorded.
+  - fibonacci:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T224722Z-20260709-role-up1-down2-fibonacci-n64`,
+    `eval_tok_s=2.9`, `prompt_tok_s=2.4`,
+    `first_output_ms=17066.3 ms`, `memory_peak_bytes=14892400640`,
+    `ram_ok=true`, cleanup recorded. The n64 answer was truncated before the
+    function body completed, so quality is not acceptable.
+  - France:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T224806Z-20260709-role-up1-down2-france-n64`,
+    `eval_tok_s=3.2`, `prompt_tok_s=3.4`,
+    `first_output_ms=17725.0 ms`, `memory_peak_bytes=14786007040`,
+    `ram_ok=true`, cleanup recorded. The output started correctly but was
+    truncated at the token cap.
+- `GGML_MOE_GPU_KEEP_TOPK_UP=2`, `GGML_MOE_GPU_KEEP_TOPK_DOWN=1`:
+  - deploy:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T224907Z-20260709-role-up2-down1-deploy-n64`,
+    `eval_tok_s=3.0`, `prompt_tok_s=3.5`,
+    `first_output_ms=19046.0 ms`, `memory_peak_bytes=14496821248`,
+    `ram_ok=true`, cleanup recorded.
+  - fibonacci:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T224949Z-20260709-role-up2-down1-fibonacci-n64`,
+    `eval_tok_s=3.0`, `prompt_tok_s=3.3`,
+    `first_output_ms=16259.0 ms`, `memory_peak_bytes=14570172416`,
+    `ram_ok=true`, cleanup recorded. The n64 answer was truncated before the
+    function body completed, so quality is not acceptable.
+  - France:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T225031Z-20260709-role-up2-down1-france-n64`,
+    `eval_tok_s=3.0`, `prompt_tok_s=3.5`,
+    `first_output_ms=17005.3 ms`, `memory_peak_bytes=14501822464`,
+    `ram_ok=true`, cleanup recorded. The output started correctly but was
+    truncated at the token cap.
+
+Decision:
+
+- Reject role-specific top2 GPU routing. Both asymmetric variants are far below
+  the accepted top1 GPU / CPU-tail SOTA (`deploy≈4.6`, `fibonacci≈4.5`,
+  `France≈4.1` on the clean five-prompt validation).
+- The observed gap matches the bottleneck model: adding a second GPU route for
+  either role increases expert H2D traffic and cache pressure more than it
+  saves CPU fallback time on the new x4 machine.
+- Revert the experimental runtime knobs and keep the current SOTA code path.
+  Next work should reduce H2D bytes/copy count or improve reuse, not move more
+  complete expert routes to GPU.
