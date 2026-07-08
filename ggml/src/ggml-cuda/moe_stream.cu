@@ -1774,6 +1774,14 @@ static std::string one_direct_hot_pool_key(const char * tensor, int64_t expert) 
     return key;
 }
 
+static bool one_direct_hot_pool_requested() {
+    static int requested = [] {
+        const char * pool_mib = std::getenv("GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB");
+        return pool_mib && pool_mib[0] && std::strcmp(pool_mib, "0") != 0 ? 1 : 0;
+    }();
+    return requested != 0;
+}
+
 static void one_direct_hot_pool_reset_lookup_locked() {
     g_one_direct_hot_pool.slot_lookup.clear();
     g_one_direct_hot_pool.lookup_built = false;
@@ -1838,6 +1846,12 @@ static void one_direct_hot_pool_init_once() {
 }
 
 static const void * one_direct_hot_pool_lookup_dev_ptr(const char * tensor, int64_t expert, bool * pool_ready) {
+    if (!one_direct_hot_pool_requested()) {
+        if (pool_ready) {
+            *pool_ready = false;
+        }
+        return nullptr;
+    }
     one_direct_hot_pool_init_once();
     std::lock_guard<std::mutex> lk(g_one_direct_hot_pool.mu);
     const bool ready = g_one_direct_hot_pool.enabled &&
