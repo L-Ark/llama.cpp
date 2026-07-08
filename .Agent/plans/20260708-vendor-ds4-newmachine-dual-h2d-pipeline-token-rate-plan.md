@@ -294,6 +294,14 @@ Promotion requirements:
   - `GGML_MOE_STREAM_ONE_CACHE_MIB=7168`: neutral/rejected,
     `20260708T135716Z-aliasfix-onecache7168`, `eval_tok_s=2.5`,
     elapsed `54.74s`.
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT=1` after alias repair: rejected,
+    `20260708T135935Z-aliasfix-cosubmit-retest`, `eval_tok_s=2.5`,
+    elapsed `55.60s`, TTFT `19587.0 ms`. It increased batch iouring traffic to
+    `45.28GB` while gate still read `34.32GB`, so total expert movement rose.
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP=1`: rejected,
+    `20260708T140219Z-current-down-overlap-probe`, `eval_tok_s=2.5`,
+    elapsed `55.50s`, TTFT `19090.4 ms`; no useful current-down-overlap
+    counters appeared on the hot path.
 - Keep current default at `GGML_MOE_STREAM_ONE_CACHE_MIB=6144`,
   `GGML_MOE_IO_BYTES=8388608`, `GGML_MOE_STAGE_PINNED_SLOTS=8`.
   The next high-value implementation is not another small env sweep; it should
