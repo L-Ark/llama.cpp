@@ -758,3 +758,43 @@ Promotion requirements:
     existing non-mixed up/gate parallel staging/compute path for DS4 types
     when explicitly requested. This must be correctness-tested before any
     promotion.
+- Follow-up results for the above probe:
+  - `GGML_MOE_STREAM_UP_GATE_PARALLEL_ANY=1` did not enter the current SOTA
+    path. The active path logged `[moe_stream] batched decode path active` and
+    `down parallel CPU staging active`, while the fused up/gate batch function
+    was not called. The probe is rejected and the code change is not promoted.
+  - Increasing `GGML_MOE_STAGE_PINNED_SLOTS` / `GGML_MOE_IO_REFILL_BATCH`
+    increased inflight depth but reduced or failed to improve token rate, so it
+    remains diagnostic only.
+- Top-k byte-reduction experiments:
+  - `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-39`,
+    `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`, and `GGML_MOE_VRAM_CACHE_MIB=13312`
+    are the next prompt-general candidate defaults. They are not prompt
+    specific and do not use any held-out prompt.
+  - France n96 dirty-candidate run
+    `20260708T162650Z-20260709T-top3-alllayers-france-n96` reached
+    `eval_tok_s=4.1`, `TTFT=15928.8 ms`, `ram_ok=true`, and coherent output.
+  - AI-infra n96 dirty-candidate run
+    `20260708T163451Z-20260709T-top3-alllayers-vram13-ai-infra-n96` reached
+    `eval_tok_s=3.5`, `TTFT=16293.2 ms`, `ram_ok=true`, and produced a
+    semantically useful Chinese explanation. The current default contrast run
+    `20260708T163555Z-20260709T-current-default-ai-infra-n96` only translated
+    the prompt, so top3-all-layers is better quality for this dev prompt.
+  - `GGML_MOE_KEEP_TOPK_LAYER_VALUE=2` over all layers is rejected despite
+    France n96 `eval_tok_s=5.1`: run
+    `20260708T162746Z-20260709T-top2-alllayers-france-n96` had coherent
+    France output, but run
+    `20260708T162839Z-20260709T-top2-alllayers-ai-infra-n96` degraded into
+    repeated restatement of the prompt. It is not a valid generalized SOTA.
+  - `GGML_MOE_KEEP_TOPK_LAYER_VALUE=2` only for layers `10-39` is rejected:
+    France n96 run `20260708T162931Z-20260709T-top2-l10-39-france-n96`
+    reached only `3.7 tok/s`, below the top3-all-layers candidate.
+- Down-batch profile for top3-all-layers:
+  - Profile run
+    `20260708T163208Z-20260709T-top3-alllayers-down-profile2-france-n32`
+    produced `2720` down-batch calls. Total `wall_ms=4424.4`, dominated by
+    `stage_ms=3720.9`; `kernel_ms=601.5`, `d2h_ms=27.4`, and
+    `scatter_ms=13.9`.
+  - Expert movement remains the bottleneck. D2H/scatter is already small, so
+    the next real route to stable `>5 tok/s` is reducing expert bytes/misses or
+    making the PCIe/H2D path faster, not optimizing the final D2H scatter.
