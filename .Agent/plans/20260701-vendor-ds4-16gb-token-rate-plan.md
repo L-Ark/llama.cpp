@@ -9125,3 +9125,48 @@ Decision:
   - `eval_tok_s=4.8`, `prompt_tok_s=3.3`, TTFT `24617.12 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15120154624`, RAM OK.
   - Gate cache: `hits=26174`, `misses=8977`, `hit_rate=74.5%`; batch cache requested `9GB` and clamped to actual `6.9 GiB`.
   - France output was complete, coherent, and semantically correct.
+
+## 2026-07-08 X10-BS rejected: gate-included up/down batch probe
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-updown-gatebatch-rejected-20260708.json`
+- status: `rejected_not_sota_reverted`
+- source basis: dirty experimental code on top of `12a85c69a`; reverted after rejection.
+
+Purpose:
+- Test the literal gate/up/down co-submit idea: on a gate one-stream cache miss, submit one io_uring job group containing the gate expert plus eligible same-expert up/down cache misses.
+- Preserve correctness by inserting the loaded gate expert back into the normal one-stream gate VRAM cache.
+- Keep the feature default-off behind `GGML_MOE_GATE_UPDOWN_COSUBMIT_GATE_BATCH=1`.
+
+Results:
+- Default-off smoke:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T062818Z-france-n32-defaultoff-after-gatebatch`
+  - `eval_tok_s=4.4`, TTFT `23642.35 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+  - Default SOTA path was not broken.
+- Gate-included batch n32:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T062906Z-france-n32-gate-updown-gatebatch`
+  - `eval_tok_s=4.5`, TTFT `23309.83 ms`, RAM OK.
+  - True gate-included path triggered: `gate_batch_calls=3329`, `gate_jobs=3329`, `updown_jobs=1659`.
+  - However, batch quality was poor: `gate_aux inflight_avg=1.50`, histogram `1:2499,2-4:830,5-8:0,9-16:0,17-32:0,gt32:0`.
+- Gate-included batch n96, default `vram_cache=9GB` request:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T063019Z-france-n96-gate-updown-gatebatch`
+  - rejected: CUDA OOM in `ggml_cuda_compute_forward GET_ROWS`, exit code `134`.
+  - Host RAM still respected: `memory_peak_bytes=16000000000`, RAM OK.
+- Gate-included batch n96 with reduced `GGML_MOE_VRAM_CACHE_GB=6`:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T063126Z-france-n96-gate-updown-gatebatch-vram6`
+  - `eval_tok_s=4.8`, TTFT `25766.09 ms`, `memory_peak_bytes=15941677056`, RAM OK.
+  - Below the X10-BR France n96 probe of `5.0 tok/s`.
+  - It doubled source IO pressure: `iouring_reads=16133`, `iouring_wait_us=17623390`, while batching remained tiny: `gate_aux inflight_avg=1.27`.
+
+Decision:
+- Reject and revert the source experiment. Do not push this implementation as code.
+- The literal synchronous `{gate, up, down}` group is not the right implementation: it submits one tiny group per gate miss, often one read at a time, and it ties up/down H2D to the gate stream.
+- With full VRAM request it OOMs; with reduced batch cache it runs but loses token rate and raises TTFT.
+
+Next direction:
+- A useful gate/up/down co-submit needs a read-only aggregation layer or background worker:
+  - collect multiple gate/up/down file-read requests before H2D,
+  - submit larger io_uring batches,
+  - copy gate payloads onto the gate stream only when needed,
+  - copy up/down payloads onto the prefetch/cache stream without delaying gate compute,
+  - preserve one-stream gate cache and batch up/down cache correctness.
+- This should be designed as a two-stage IO pipeline, not by reusing `expert_pack_iouring_copy_jobs` synchronously on the gate stream.
