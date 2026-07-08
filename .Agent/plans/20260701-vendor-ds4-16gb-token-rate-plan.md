@@ -9287,3 +9287,33 @@ Interpretation:
 Decision:
 - Reject this wrapper/config experiment. Do not commit any code change as SOTA.
 - Next valid experiment, if pursuing this idea, is source selection rather than source addition: run a controlled A/B with alias disabled and only native pack as batch source, or build a no-duplicate up/down-only pack. Acceptance requires `eval_tok_s > current generalized SOTA`, TTFT within limit, RAM OK, correctness OK, and no duplicate-key diagnostics.
+
+
+## 2026-07-08 up/down source replacement and no-duplicate source filtering: rejected
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-source-replacement-reject-20260708.json`.
+- `status`: rejected as no new generalized SOTA. No source code change.
+- Purpose: test the proposed route of using native expert-pack / no-duplicate up/down source for batch up/down reads instead of stacking duplicate sources.
+
+Feasibility:
+- Full native expert-pack: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`, about `138 GiB`.
+- Alias-derived payload split: `up=45.688 GiB`, `down=45.688 GiB`, `gate=45.688 GiB`; physical up/down-only pack would be about `91.4 GiB` payload plus index/padding.
+- Current filesystem free space observed: about `25 GiB`; physical full up/down-only pack is not currently feasible without cleanup.
+- Lightweight no-copy alternative created: `.Agent/profiles/vendor-ds4/ds4-native-updown-gguf-alias-source-20260708.tsv`, `22016` entries, `3.5M`, only up/down rows.
+
+Runs:
+- Native pack only, no GGUF alias, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-packonly-updown-probe/20260708T102708Z-france-n32-packonly-noalias`; `eval_tok_s=4.5`, `prompt_tok_s=3.6`, TTFT `24149.96 ms`, RAM OK, output coherent, no duplicate keys, batch `4247 reads / 18.93 GB`. Rejected: below default n32 `4.6`.
+- Native pack only, no GGUF alias, n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-packonly-updown-probe/20260708T102827Z-france-n96-packonly-noalias`; `eval_tok_s=5.0`, `prompt_tok_s=3.4`, TTFT `23628.99 ms`, RAM OK, output coherent, no duplicate keys, batch `8194 reads / 36.52 GB`, `4431` batches, `inflight_avg=2.23`, `iouring_wait_us=9964436`. Rejected: ties France n96 but does not exceed generalized SOTA.
+- Filtered up/down-only alias, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-updown-source-filter-probe/20260708T103059Z-france-n32-updown-alias-only`; `eval_tok_s=4.5`, TTFT `25307.12 ms`, RAM OK, output coherent. It loaded only `22016` batch entries, but runtime reads stayed `4247 reads / 18.93 GB`; token rate did not improve.
+- `GGML_MOE_IO_BYTES=8388608`, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-io-buffer-probe/20260708T103219Z-france-n32-io8m-default-source`; `eval_tok_s=4.4`, rejected slower.
+- `GGML_MOE_STAGE_PINNED_SLOTS=16`, `GGML_MOE_IO_DEPTH=16`, `GGML_MOE_IO_REFILL_BATCH=8`, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-io-depth-probe/20260708T103318Z-france-n32-depth16-refill8`; `eval_tok_s=4.6`, RAM OK, output coherent, `inflight_avg=3.22`, `inflight_max=16`, but `iouring_wait_us=4814786` did not improve. Rejected: ties default n32 only.
+- Same depth/refill, n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-io-depth-probe/20260708T103423Z-france-n96-depth16-refill8`; `eval_tok_s=5.0`, RAM OK, output coherent, batch `8194 reads / 36.52 GB`, `4431` batches, `inflight_avg=2.35`, `iouring_wait_us=9929904`. Rejected: ties France n96 only.
+
+Interpretation:
+- The current generalized path already has complete up/down expert source coverage. Source replacement can avoid duplicate keys and can tie the France n96 SOTA, but it does not reduce `iouring_reads`, `iouring_bytes`, or the small-batch histogram.
+- Reducing source entries from `33024` to `22016` changes index load only; decode read jobs and bytes are identical.
+- Increasing depth/pinned slots raises `inflight_max`, but actual `inflight_avg` remains low because jobs are still submitted as many tiny batches.
+
+Decision:
+- Do not promote any of these variants. Current generalized SOTA remains unchanged.
+- Next optimization should target scheduler-level aggregation/coalescing of existing up/down read jobs, with the hard gate: total reads/bytes must not increase, average jobs per batch must rise, wait cycles must fall, TTFT must stay within limit, RAM/correctness must pass, and token rate must beat current generalized SOTA.
