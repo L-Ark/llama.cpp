@@ -2347,3 +2347,72 @@ Rejected default-off role split implementation:
   remains valid, but the next cache work must be future-use aware at the
   request/key level rather than statically partitioning the same 13.5 GiB
   budget by tensor role.
+
+## 2026-07-09 GPU-Top1 Plus CPU-Tail Generalized SOTA
+
+Tested exact split variant:
+
+- `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=1`
+- Only route rank 0 for up/down is sent through the GPU batch path.
+- Remaining up/down route ranks stay in the existing CPU fallback path, so
+  this is an exactness-preserving split rather than expert deletion.
+- Theory:
+  on the Gen4 x4 new machine, H2D and iouring wait dominate. Moving fewer
+  up/down routes through the GPU path can reduce expert transfer pressure.
+  The risk is that CPU tail compute becomes too expensive. The clean results
+  below show the tradeoff is favorable on most dev prompts.
+
+Clean source validation, commit `01914d5b5`, strict cold, 16GB cgroup,
+display/model process cleanup recorded before every run:
+
+- Deploy n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T215454Z-20260709-clean-gpu1-cputail-deploy-n64`
+  reached `eval_tok_s=4.6`, `prompt_tok_s=3.8`,
+  `first_output_ms=17192.1 ms`,
+  `memory_peak_bytes=14865059840`, RAM OK. Output was coherent and covered
+  quantization/model optimization.
+- Fibonacci n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T215528Z-20260709-clean-gpu1-cputail-fibonacci-n64`
+  reached `eval_tok_s=4.5`, `prompt_tok_s=3.5`,
+  `first_output_ms=15295.1 ms`,
+  `memory_peak_bytes=14880780288`, RAM OK. Output began with a valid Python
+  Fibonacci function.
+- France n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T215602Z-20260709-clean-gpu1-cputail-france-n64`
+  reached `eval_tok_s=4.1`, `prompt_tok_s=3.3`,
+  `first_output_ms=16942.4 ms`,
+  `memory_peak_bytes=14833598464`, RAM OK. France output remained
+  semantically correct and coherent, but this is slower than the top2 France
+  run.
+- Quantum n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T215705Z-20260709-clean-gpu1-cputail-quantum-n64`
+  reached `eval_tok_s=4.2`, `prompt_tok_s=3.2`,
+  `first_output_ms=16721.0 ms`,
+  `memory_peak_bytes=14842560512`, RAM OK. Output was semantically correct;
+  it has the same minor opening-format quirk as the top2 output.
+- Japan n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T215739Z-20260709-clean-gpu1-cputail-japan-n64`
+  reached `eval_tok_s=5.2`, `prompt_tok_s=3.3`,
+  `first_output_ms=17226.1 ms`,
+  `memory_peak_bytes=14838919168`, RAM OK. Output was coherent.
+
+Top2/default comparison for the newly added dev prompts:
+
+- Quantum top2/default:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T215839Z-20260709-clean-top2-default-quantum-n64`
+  reached `eval_tok_s=3.3`, `prompt_tok_s=3.8`,
+  `first_output_ms=15675.5 ms`, RAM OK.
+- Japan top2/default:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T215917Z-20260709-clean-top2-default-japan-n64`
+  reached `eval_tok_s=4.8`, `prompt_tok_s=4.1`,
+  `first_output_ms=15682.1 ms`, RAM OK.
+
+Decision: accept GPU top1 plus CPU tail as the new generalized SOTA default
+for the demo script. Across the five dev prompts tested here, top1 reached
+approximately `4.52 tok/s` average with `4.1 tok/s` minimum, versus the
+available top2/default comparison at approximately `4.22 tok/s` average with
+`3.3 tok/s` minimum. TTFT remains within the `+20%` rule for the corresponding
+prompt comparisons. This is still below the product requirement of stable
+`>5 tok/s` for random user prompts; only the Japan prompt crossed `5 tok/s`.
+The next optimization should focus on reducing prompt-dependent variance,
+especially France/quantum, while preserving the lower-bound gain from top1.
