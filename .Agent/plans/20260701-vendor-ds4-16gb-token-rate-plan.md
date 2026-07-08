@@ -9118,4 +9118,10 @@ Decision:
 - It satisfies strict host RAM <= 16GB including page cache, preserves prompt-general behavior, improves held-out min/mean/max, and keeps TTFT within the allowed range.
 - It still does not meet the product target of stable `>5 tok/s` for arbitrary prompts; held-out mean is `4.30 tok/s`.
 - Demo script default should move to `GGML_MOE_STREAM_ONE_CACHE_MIB=6144`, while retaining environment override support for regression testing.
-- Required follow-up: commit and push immediately, then reproduce from the pushed commit and record post-push `source_dirty=false` evidence.
+- Post-push source commit: `b3c396c6a7cec3cdc4c113ddd1fface08e53b359`, pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- Post-push clean repro:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-postpush-repro/20260708T061235Z-france-n192-pushed-b3c396c-default6144-repro`
+  - `source_dirty=false`, default config `GGML_MOE_STREAM_ONE_CACHE_MIB=6144`, `GGML_MOE_VRAM_CACHE_GB=9`.
+  - `eval_tok_s=4.8`, `prompt_tok_s=3.3`, TTFT `24617.12 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15120154624`, RAM OK.
+  - Gate cache: `hits=26174`, `misses=8977`, `hit_rate=74.5%`; batch cache requested `9GB` and clamped to actual `6.9 GiB`.
+  - France output was complete, coherent, and semantically correct.

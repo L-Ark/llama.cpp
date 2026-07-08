@@ -69,5 +69,29 @@
     ]
   },
   "decision": "Accept as the current generalized SOTA stage result. Held-out min/mean/max improves from 3.9/4.12/4.4 to 4.0/4.30/4.6 under strict 16GB host RAM including page cache. Product target stable >5 tok/s is still not met.",
-  "post_push_repro": null
+  "post_push_repro": {
+    "commit": "b3c396c6a7cec3cdc4c113ddd1fface08e53b359",
+    "pushed_to": "ssd/vendor/deepseek-token-rate-16gb",
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-postpush-repro/20260708T061235Z-france-n192-pushed-b3c396c-default6144-repro",
+    "prompt": "Please introduce France in a short paragraph.",
+    "eval_tok_s": 4.8,
+    "prompt_tok_s": 3.3,
+    "ttft_ms": 24617.123377,
+    "elapsed_seconds": 53.11,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15120154624,
+    "memory_anon_bytes": 1159168,
+    "ram_ok": true,
+    "source_dirty": false,
+    "config": {
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": 6144,
+      "GGML_MOE_VRAM_CACHE_GB": 9,
+      "batch_cache_actual_gib": 6.9
+    },
+    "gate_vram_cache_hits": 26174,
+    "gate_vram_cache_misses": 8977,
+    "gate_vram_cache_hit_rate_pct": 74.5,
+    "one_expert_pack_direct_reads": 8977,
+    "quality": "France output complete, coherent, and semantically correct."
+  }
 }
