@@ -1661,3 +1661,58 @@ Updated next direction:
      bound before implementation;
    - retained gate interface only if it proves large simultaneous gate-source
      and up/down movement cuts without recomputing gate.
+
+## 2026-07-09 Top2 Route-Skip And Decode-Warmup Rejection
+
+The existing `GGML_MOE_KEEP_TOPK_*` path is a true route-skip path: it zeros
+low-rank pick outputs and skips those picks before building
+`matrix_row_counts`, so it reduces actual expert movement. A schedule sweep
+was run to measure the real speed/quality boundary.
+
+Quantum n32 schedule sweep, strict cold, display cleanup recorded, source
+clean:
+
+- `GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE=0-42:2`:
+  `eval_tok_s=4.6`, `prompt_tok_s=5.8`, `first_output_ms=13521.3 ms`,
+  `iouring_bytes=16.31GB`, RAM OK. Output was broadly coherent.
+- `16-42:2`: `eval_tok_s=3.9`, `iouring_bytes=21.40GB`; output started with
+  minor wording damage.
+- `8-42:2`: `eval_tok_s=4.3`, `iouring_bytes=18.77GB`; output coherent.
+- `0-23:2,24-42:3`: `eval_tok_s=3.9`, `iouring_bytes=19.10GB`; output had
+  minor wording damage.
+
+All-layer top2 n96 validation:
+
+- France:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T200921Z-20260709-top2all-france-n96`
+  reached `eval_tok_s=4.2`, `prompt_tok_s=5.8`, RAM OK, source clean, and
+  produced a coherent France paragraph.
+- Fibonacci:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T201001Z-20260709-top2all-fibonacci-n96`
+  reached `eval_tok_s=4.1`, RAM OK, source clean, but failed the code-quality
+  gate. The answer started with `thatThe Fibonacci sequence...` and explained
+  Fibonacci instead of writing the requested Python function.
+- Deploy:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T201041Z-20260709-top2all-deploy-n96`
+  reached `eval_tok_s=3.7`, RAM OK, source clean, and gave a usable deployment
+  answer, but remained below 5.
+- Default top3 Fibonacci control:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T201143Z-20260709-default-fibonacci-n96-recheck`
+  reached `eval_tok_s=3.0`, RAM OK, source clean, and correctly began a
+  Python `def fibonacci(n):` function. Therefore the top2 failure is a real
+  quality regression, not a prompt issue.
+
+A default-off decode-warmup experiment was then implemented locally but not
+pushed. It kept top3 during prompt and the first N decode tokens, then applied
+`0-42:2` afterward. Tested Fibonacci n96:
+
+- warmup `16`: `eval_tok_s=3.9`, RAM OK, dirty source, same quality failure.
+- warmup `32`: `eval_tok_s=4.4`, RAM OK, dirty source, same quality failure.
+- warmup `48`: `eval_tok_s=4.5`, RAM OK, dirty source, same quality failure.
+
+Decision: reject top2 all-layer and decode-warmup top2 as generalized SOTA
+paths. True route skipping can reduce bytes enough to approach the target, but
+dropping the third up/down expert changes code-generation behavior. The local
+warmup implementation was reverted and not pushed. Future route-skip work must
+use a safer criterion than fixed rank count, or preserve the third expert via
+a compact/partial representation instead of deleting it.
