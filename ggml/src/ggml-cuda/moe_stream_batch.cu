@@ -7251,7 +7251,9 @@ static bool down_name_for_up_gate(const char *src_name, char *out, size_t out_sz
 
 static bool updown_pair_profile_enabled() {
     const char *path = std::getenv("GGML_MOE_UPDOWN_PAIR_PROFILE_OUT");
-    return path && path[0];
+    if (path && path[0]) return true;
+    const char *cosubmit_path = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT");
+    return cosubmit_path && cosubmit_path[0];
 }
 
 static uint64_t updown_pair_active_hash(const int *active_experts, int n_active) {
@@ -7261,6 +7263,57 @@ static uint64_t updown_pair_active_hash(const int *active_experts, int n_active)
         h *= 1099511628211ULL;
     }
     return h ? h : 1;
+}
+
+static uint64_t gate_updown_batch_profile_now_us() {
+    return (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+static void gate_updown_batch_profile_write(
+        const char *phase,
+        const char *src_name,
+        const char *pair_name,
+        size_t expert_bytes,
+        int n_active,
+        uint64_t active_hash,
+        int cache_hits,
+        int cache_misses,
+        int pack_hits,
+        int pack_misses) {
+    const char *path = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT");
+    if (!path || !path[0]) return;
+    static std::mutex mu;
+    static bool header = false;
+    std::lock_guard<std::mutex> lk(mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header) {
+        std::fprintf(f,
+                "phase,time_us,tensor,pair_tensor,expert,expert_bytes,n_active,active_hash,"
+                "cache_hit,cache_inserted,cache_hits,cache_misses,pack_hit,pack_hits,pack_misses,src0_ms,total_ms\n");
+        header = true;
+    }
+    std::fprintf(f,
+            "%s,%lu,%s,%s,%d,%lu,%d,%lu,%d,%d,%d,%d,%d,%d,%d,%.6f,%.6f\n",
+            phase ? phase : "",
+            (unsigned long)gate_updown_batch_profile_now_us(),
+            src_name ? src_name : "",
+            pair_name ? pair_name : "",
+            -1,
+            (unsigned long)expert_bytes,
+            n_active,
+            (unsigned long)active_hash,
+            -1,
+            -1,
+            cache_hits,
+            cache_misses,
+            -1,
+            pack_hits,
+            pack_misses,
+            0.0,
+            0.0);
+    std::fclose(f);
 }
 
 static void updown_pair_profile_write(
@@ -7274,6 +7327,8 @@ static void updown_pair_profile_write(
         int cache_misses,
         int pack_hits,
         int pack_misses) {
+    gate_updown_batch_profile_write(phase, src_name, pair_name, expert_bytes, n_active, active_hash,
+            cache_hits, cache_misses, pack_hits, pack_misses);
     const char *path = std::getenv("GGML_MOE_UPDOWN_PAIR_PROFILE_OUT");
     if (!path || !path[0]) return;
     static std::mutex mu;

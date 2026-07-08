@@ -8794,3 +8794,78 @@ Decision:
 - Product target remains unmet: held-out mean `2.56 tok/s` is still below stable `>5 tok/s` for random prompts.
 - Next bottleneck: even with io_uring, n96 still has `iouring_wait_us=7.87 s`, H2D about `1.17 s`, and gate one-stream misses. Further progress should target IO locality/batch size and real overlap, not CPU fallback correctness.
 
+
+## 2026-07-08 X10-BM accepted generalized SOTA: prompt-general full native gate source
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-fullpack-generalized-sota-20260708.json`
+- status: `accepted_generalized_sota_stage_not_product_target`
+- push target: `ssd/vendor/deepseek-token-rate-16gb`; accepted SOTA records and source/demo updates must be committed and pushed immediately, then reproduced from the pushed commit.
+- task background: the product target is arbitrary user prompts on a 16GB host-RAM machine, including page cache, plus a 32GB RTX 5090, with stable output above `5 tok/s`. The current result improves SOTA but still does not meet the product target.
+
+Purpose:
+- Continue after X10-BL showed up/down batch staging was improved but gate one-stream misses remained a large exposed cold-start cost.
+- Test a prompt-general gate source, not a France trace, hotset, route profile, or prompt-specific pack.
+- Prepare for true gate/up/down cross-cache co-submit by making gate misses sourceable from the same full native expert corpus used by generalized expert loading.
+
+Accepted config delta from X10-BL:
+- Add `GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`.
+- Add `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`.
+- Keep `GGML_MOE_UPDOWN_PAIRED_READ=1`, `GGML_MOE_DOWN_PARALLEL_STAGE=1`, `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`, `GGML_MOE_IO_REFILL_BATCH=4`, `GGML_MOE_STAGE_PINNED_SLOTS=8`, `GGML_MOE_STREAM_ONE_CACHE_MIB=4096`, and `GGML_MOE_VRAM_CACHE_GB=9`.
+- The full native expert-pack size is `147174760448` bytes. It is prompt-general: all native experts are available and the file is not derived from any prompt set.
+
+Profile basis:
+- Gate/up/down profile before this change showed n96 gate miss source time was still large: `gate_one cache_misses=8670`, gate miss `src0_ms` sum about `27.1s`, while up/down already used paired batch reads.
+- With the full native gate source enabled, manual France probes showed gate one-stream expert-pack hits and no one-stream pack misses:
+  - n32: `eval_tok_s=4.2`, `memory_peak_bytes=16000000000`, one expert pack `hits=4005`, `misses=0`, `direct_reads=4005`.
+  - n96: `eval_tok_s=4.6`, `memory_peak_bytes=16000000000`, one expert pack `hits=8670`, `misses=0`, `direct_reads=8670`.
+
+Calibration/dev set v1 result, n192 cold after candidate freeze:
+- France: `4.5 tok/s`, TTFT `23606.13 ms`, RAM/correctness OK.
+- Quantum: `3.7 tok/s`, TTFT `23052.59 ms`, RAM/correctness OK.
+- Fibonacci: `3.9 tok/s`, TTFT `25161.11 ms`, RAM/correctness OK.
+- Japan: `4.2 tok/s`, TTFT `24129.62 ms`, RAM/correctness OK.
+- Climate: `4.2 tok/s`, TTFT `23832.48 ms`, RAM/correctness OK.
+- Aggregate: min `3.7`, mean `4.10`, max `4.5`; previous accepted dev aggregate was min `2.2`, mean `2.78`, max `3.2`.
+
+Held-out test set v1 result after candidate freeze, n192 cold:
+- Photosynthesis: `4.1 tok/s`, TTFT `23265.95 ms`, RAM/correctness OK.
+- Home office: `3.9 tok/s`, TTFT `24730.54 ms`, RAM/correctness OK with formatting/truncation note.
+- JavaScript palindrome: `4.0 tok/s`, TTFT `25068.73 ms`, RAM/correctness OK.
+- Exercise: `4.2 tok/s`, TTFT `25759.91 ms`, RAM/correctness OK.
+- Brazil: `4.4 tok/s`, TTFT `25353.98 ms`, RAM/correctness OK with minor wording-typo note.
+- Aggregate: min `3.9`, mean `4.12`, max `4.4`; previous accepted held-out aggregate was min `2.4`, mean `2.76`, max `3.0`.
+
+Decision:
+- Accept as the current generalized SOTA stage result. It improves both dev and held-out min/mean/max, preserves strict 16GB cgroup RAM including page cache, and improves TTFT versus prior SOTA.
+- This is not the final requested gate/up/down cross-cache co-submit. It is a necessary gate-source improvement: gate misses now have a prompt-general direct expert source instead of falling back to slow raw tensor source reads.
+- Product target remains unmet: held-out mean `4.12 tok/s` is still below stable `>5 tok/s` for arbitrary random prompts.
+- Demo script now defaults to this current SOTA path. Use `--no-gate-fullpack` only to reproduce the previous paired-read path.
+
+## Next implementation plan: true gate/up/down cross-cache co-submit
+
+Goal:
+- Complete actual gate/up/down cross-cache co-submit and measure whether it moves held-out SOTA above the X10-BM `3.9/4.12/4.4 tok/s` range.
+- The implementation must remain prompt-general, default-off until validated, and must preserve Kimi functionality.
+
+Design step 1, bottleneck measurement:
+- Run X10-BM with `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT` on France n96 and one non-France prompt.
+- Break down per-token exposed time into gate direct reads, up/down io_uring reads, pinned staging, H2D, up/gate compute, down compute, and residual synchronization.
+- Acceptance for the measurement: strict cold `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`, and correctness pass.
+
+Design step 2, expected upper bound:
+- From the profile, compute the co-submit upper bound as the removable wait time from separately submitted gate and up/down read batches.
+- If gate direct-read wait remains exposed and overlaps poorly with up/down reads, the theoretical gain is bounded by that exposed wait. If the fullpack direct reads are already hidden, co-submit should be rejected unless it reduces wall time on held-out prompts.
+
+Execution step 1, implementation shape:
+- Add `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`, default `0`.
+- Build a per-layer/per-token read plan that includes gate, up, and down source entries before submission.
+- De-duplicate entries by source identity, file offset, size, and destination cache slot.
+- Submit the combined plan through the existing io_uring/aligned-alias batch path where possible; preserve the existing direct fullpack fallback when an entry cannot use alias batch.
+- Keep compute dependencies unchanged: gate/up computation order and down computation correctness must match the accepted path.
+
+Execution step 2, validation:
+- First run France n96/n192 for correctness and TTFT.
+- Then run the frozen dev set. Do not use held-out until the candidate config is frozen.
+- After candidate freeze, run held-out v1 exactly once for SOTA decision.
+- If held-out improves and all constraints pass, commit and push immediately to `ssd/vendor/deepseek-token-rate-16gb`, then rebuild/rerun from the pushed commit and record reproducibility.
+- If token rate regresses, correctness fails, TTFT rises over 20%, or RAM exceeds 16GB including page cache, reject and revert or leave the code default-off with the rejected artifact clearly recorded.

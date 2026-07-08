@@ -21,6 +21,8 @@ Options:
   -n, --max-tokens N     Maximum generated tokens. Default: 96.
   --run-label LABEL      Label suffix for the artifact directory. Default: interactive.
   --warm                 Skip drop_caches. Default is cold start with drop_caches.
+  --gate-fullpack        Use full native expert-pack as prompt-general gate source. Default: on.
+  --no-gate-fullpack     Disable full native gate source and run the previous paired-read path.
   --print-command        Print the exact llama-cli command used by the cgroup run.
   -h, --help             Show this help.
 
@@ -31,8 +33,8 @@ What this script demonstrates:
   - User may enter any prompt; this is not a France-specialized demo.
 
 Current known generalized status:
-  - Calibration/dev prompt range recorded in the repo: 2.2-3.2 tok/s, mean 2.78 tok/s.
-  - Held-out v1 prompt range recorded in the repo: 2.4-3.0 tok/s, mean 2.76 tok/s.
+  - Calibration/dev prompt range recorded in the repo: 3.7-4.5 tok/s, mean 4.10 tok/s.
+  - Held-out v1 prompt range recorded in the repo: 3.9-4.4 tok/s, mean 4.12 tok/s.
   - Product target remains stable >5 tok/s for random prompts; not yet met.
 
 Artifacts:
@@ -59,8 +61,9 @@ BINARY="${BINARY:-${REPO_DIR}/build-ds4-moe-stream/bin/llama-cli}"
 MODEL="${MODEL:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf}"
 RUN_ROOT="${RUN_ROOT:-/root/lfz/runs/vendor-ds4-16gb/demo-general-sota}"
 BASELINE_ARTIFACT="${BASELINE_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json}"
-SOTA_ARTIFACT="${SOTA_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/updown-paired-read-generalized-sota-20260708.json}"
+SOTA_ARTIFACT="${SOTA_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/gate-fullpack-generalized-sota-20260708.json}"
 DS4_ALIAS_TSV="${DS4_ALIAS_TSV:-${REPO_DIR}/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv}"
+GATE_FULLPACK_PATH="${GATE_FULLPACK_PATH:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack}"
 
 MEMORY_MAX_BYTES=16000000000
 MAX_TOKENS=96
@@ -68,6 +71,7 @@ RUN_LABEL="interactive"
 COLD=1
 MULTILINE=0
 PRINT_COMMAND=0
+GATE_FULLPACK=1
 PROMPT=""
 PROMPT_FILE=""
 positional=()
@@ -96,6 +100,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --warm)
       COLD=0
+      shift
+      ;;
+    --gate-fullpack)
+      GATE_FULLPACK=1
+      shift
+      ;;
+    --no-gate-fullpack)
+      GATE_FULLPACK=0
       shift
       ;;
     --multiline)
@@ -163,6 +175,9 @@ PROMPT="$(printf '%s' "$PROMPT" | trim_trailing_space)"
 [[ -x "$BINARY" ]] || fail "missing executable: $BINARY"
 [[ -f "$MODEL" ]] || fail "missing model: $MODEL"
 [[ -f "$DS4_ALIAS_TSV" ]] || fail "missing static DS4 alias TSV: $DS4_ALIAS_TSV"
+if [[ "$GATE_FULLPACK" -eq 1 ]]; then
+  [[ -f "$GATE_FULLPACK_PATH" ]] || fail "missing gate full expert-pack: $GATE_FULLPACK_PATH"
+fi
 
 prompt_specific_env=(
   GGML_MOE_STREAM_ONE_EXPERT_PACK
@@ -220,14 +235,16 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "prompt_general": true,
   "prompt_specific_optimization": false,
   "france_specialized_path_used": false,
-  "current_generalized_dev_tok_s": {"min": 2.2, "mean": 2.78, "max": 3.2},
-  "current_held_out_v1_tok_s": {"min": 2.4, "mean": 2.76, "max": 3.0},
+  "current_generalized_dev_tok_s": {"min": 3.7, "mean": 4.10, "max": 4.5},
+  "current_held_out_v1_tok_s": {"min": 3.9, "mean": 4.12, "max": 4.4},
   "product_target_tok_s": 5.0,
   "product_target_currently_met": false,
   "max_tokens": ${MAX_TOKENS},
   "cold_drop_caches": ${COLD},
   "memory_max_bytes": ${MEMORY_MAX_BYTES},
   "memory_swap_max_bytes": 0,
+  "gate_fullpack_diagnostic": ${GATE_FULLPACK},
+  "gate_fullpack_path": $(printf '%s' "$GATE_FULLPACK_PATH" | json_string),
   "runtime": {
     "n_cpu_moe": 40,
     "ngl": "all",
@@ -252,6 +269,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
     "GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH": "1",
     "GGML_MOE_UPDOWN_PAIRED_READ": "1",
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK": $([[ "$GATE_FULLPACK" -eq 1 ]] && printf '%s' "$GATE_FULLPACK_PATH" | json_string || printf 'null'),
+    "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": $([[ "$GATE_FULLPACK" -eq 1 ]] && printf '"direct"' || printf 'null'),
     "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
     "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8": "1",
     "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED": "1",
@@ -271,6 +290,8 @@ MODEL=$(printf '%q' "$MODEL")
 MAX_TOKENS=$(printf '%q' "$MAX_TOKENS")
 MEMORY_MAX_BYTES=$(printf '%q' "$MEMORY_MAX_BYTES")
 PRINT_COMMAND=$(printf '%q' "$PRINT_COMMAND")
+GATE_FULLPACK=$(printf '%q' "$GATE_FULLPACK")
+GATE_FULLPACK_PATH=$(printf '%q' "$GATE_FULLPACK_PATH")
 cd "\$RUN_DIR"
 PROMPT="\$(cat prompt.txt)"
 
@@ -302,6 +323,10 @@ export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1
 export GGML_MOE_VRAM_CACHE_GB=9
+if [[ "$GATE_FULLPACK" == "1" ]]; then
+  export GGML_MOE_STREAM_ONE_EXPERT_PACK="$GATE_FULLPACK_PATH"
+  export GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct
+fi
 
 cmd=(
   "\$BINARY"
@@ -431,8 +456,9 @@ cat <<EOF_START
 Run dir: $RUN_DIR
 Source: $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)@$(git -C "$REPO_DIR" rev-parse --short HEAD) $([[ "$source_dirty" == true ]] && echo dirty || echo clean)
 Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches)
+Gate fullpack prompt-general source: $([[ "$GATE_FULLPACK" -eq 1 ]] && echo enabled || echo disabled)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
-Known generalized dev range: 2.2-3.2 tok/s, mean 2.78 tok/s. Held-out v1: 2.4-3.0 tok/s, mean 2.76 tok/s.
+Known generalized dev range: 3.7-4.5 tok/s, mean 4.10 tok/s. Held-out v1: 3.9-4.4 tok/s, mean 4.12 tok/s.
 Product target: stable >5 tok/s for random prompts. Current generalized path is not there yet.
 Prompt-specific packs/profiles/aliases: disabled and refused.
 Prompt:

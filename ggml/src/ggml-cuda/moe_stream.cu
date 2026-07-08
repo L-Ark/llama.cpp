@@ -2311,6 +2311,69 @@ static double trace_elapsed_ms(std::chrono::steady_clock::time_point t) {
     return std::chrono::duration<double, std::milli>(t - g_one_trace.start).count();
 }
 
+
+static bool gate_updown_cosubmit_profile_enabled() {
+    const char *path = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT");
+    return path && path[0];
+}
+
+static uint64_t gate_updown_profile_now_us() {
+    return (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+static void gate_updown_cosubmit_profile_write(
+        const char *phase,
+        const char *tensor,
+        const char *pair_tensor,
+        int64_t expert,
+        size_t expert_bytes,
+        int64_t n_active,
+        uint64_t active_hash,
+        int cache_hit,
+        int cache_inserted,
+        int cache_hits,
+        int cache_misses,
+        int pack_hit,
+        int pack_hits,
+        int pack_misses,
+        double src0_ms,
+        double total_ms) {
+    const char *path = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT");
+    if (!path || !path[0]) return;
+    static std::mutex mu;
+    static bool header = false;
+    std::lock_guard<std::mutex> lk(mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header) {
+        std::fprintf(f,
+                "phase,time_us,tensor,pair_tensor,expert,expert_bytes,n_active,active_hash,"
+                "cache_hit,cache_inserted,cache_hits,cache_misses,pack_hit,pack_hits,pack_misses,src0_ms,total_ms\n");
+        header = true;
+    }
+    std::fprintf(f,
+            "%s,%lu,%s,%s,%ld,%lu,%ld,%lu,%d,%d,%d,%d,%d,%d,%d,%.6f,%.6f\n",
+            phase ? phase : "",
+            (unsigned long)gate_updown_profile_now_us(),
+            tensor ? tensor : "",
+            pair_tensor ? pair_tensor : "",
+            (long)expert,
+            (unsigned long)expert_bytes,
+            (long)n_active,
+            (unsigned long)active_hash,
+            cache_hit,
+            cache_inserted,
+            cache_hits,
+            cache_misses,
+            pack_hit,
+            pack_hits,
+            pack_misses,
+            src0_ms,
+            total_ms);
+    std::fclose(f);
+}
+
 static FILE * one_trace_fp_locked(std::chrono::steady_clock::time_point start_time) {
     if (!g_one_trace.initialized) {
         g_one_trace.initialized = true;
@@ -4802,11 +4865,13 @@ extern "C" bool ggml_cuda_moe_stream_one(
     bool cache_inserted = false;
     const void *kernel_src0 = nullptr;
 
+    int gate_profile_pack_hit = 0;
     if (cached_vram) {
         kernel_src0 = cached_vram;
     } else {
         const void * copy_src = src0_data;
         if (const one_expert_pack_entry * pack_entry = one_pack_lookup(src0_name, expert_index, src0_bytes)) {
+            gate_profile_pack_hit = 1;
             std::lock_guard<std::mutex> rk(g_resize_mu);
             if (!ensure_host_pinned(ctx.h_src0_pack, ctx.h_src0_pack_sz, src0_bytes)) {
                 release_slot(s);
@@ -4918,6 +4983,13 @@ extern "C" bool ggml_cuda_moe_stream_one(
         const auto t_dontneed = std::chrono::steady_clock::now();
         one_trace_write(src0_name, expert_index, src0_data, src0_bytes, cne1, cache_hit, cache_inserted, s,
                         ts0, t_src0, t_src1, t_kernel, t_d2h, t_sync, t_scatter, t_dontneed);
+        if (gate_updown_cosubmit_profile_enabled()) {
+            gate_updown_cosubmit_profile_write("gate_one", src0_name, "", expert_index, src0_bytes, cne1, 0,
+                    cache_hit ? 1 : 0, cache_inserted ? 1 : 0, cache_hit ? 1 : 0, cache_hit ? 0 : 1,
+                    gate_profile_pack_hit, gate_profile_pack_hit, cache_hit ? 0 : (gate_profile_pack_hit ? 0 : 1),
+                    std::chrono::duration<double, std::milli>(t_src0 - ts0).count(),
+                    std::chrono::duration<double, std::milli>(t_dontneed - ts0).count());
+        }
         release_slot(s);
         return true;
     }
