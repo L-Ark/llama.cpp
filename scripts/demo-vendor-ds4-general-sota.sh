@@ -430,7 +430,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_KEEP_TOPK_UP_LAYER_SCHEDULE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_UP_LAYER_SCHEDULE:-}" | json_string),
     "GGML_MOE_KEEP_TOPK_GATE_LAYER_SCHEDULE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_GATE_LAYER_SCHEDULE:-}" | json_string),
     "GGML_MOE_KEEP_TOPK_DOWN_LAYER_SCHEDULE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_DOWN_LAYER_SCHEDULE:-}" | json_string),
-    "GGML_MOE_GPU_KEEP_TOPK_UPDOWN": $(printf '%s' "${GGML_MOE_GPU_KEEP_TOPK_UPDOWN:-}" | json_string),
+    "GGML_MOE_GPU_KEEP_TOPK_UPDOWN": $(printf '%s' "${GGML_MOE_GPU_KEEP_TOPK_UPDOWN:-2}" | json_string),
     "GGML_MOE_RAM_TIER_MIB": $(printf '%s' "${GGML_MOE_RAM_TIER_MIB:-}" | json_string),
     "GGML_MOE_RAM_TIER_PROFILE": $(printf '%s' "${GGML_MOE_RAM_TIER_PROFILE:-}" | json_string),
     "GGML_MOE_RAM_TIER_SKIP": $(printf '%s' "${GGML_MOE_RAM_TIER_SKIP:-}" | json_string),
@@ -487,6 +487,7 @@ export GGML_MOE_KEEP_TOPK_GATE_LAYER_SCHEDULE=$(printf '%q' "${GGML_MOE_KEEP_TOP
 export GGML_MOE_KEEP_TOPK_DOWN_LAYER_SCHEDULE=$(printf '%q' "${GGML_MOE_KEEP_TOPK_DOWN_LAYER_SCHEDULE:-}")
 export GGML_MOE_KEEP_TOPK_UPDOWN=$(printf '%q' "${GGML_MOE_KEEP_TOPK_UPDOWN:-3}")
 export GGML_MOE_KEEP_TOPK_GATE=$(printf '%q' "${GGML_MOE_KEEP_TOPK_GATE:-1}")
+export GGML_MOE_GPU_KEEP_TOPK_UPDOWN=$(printf '%q' "${GGML_MOE_GPU_KEEP_TOPK_UPDOWN:-2}")
 export GGML_MOE_STREAM=1
 export GGML_MOE_STAGE_PINNED_SLOTS=$(printf '%q' "${GGML_MOE_STAGE_PINNED_SLOTS:-8}")
 export GGML_MOE_STREAM_DONTNEED=1

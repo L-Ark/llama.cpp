@@ -2221,6 +2221,10 @@ Accepted runtime tuning:
 
 - Change default `GGML_MOE_IO_REFILL_BATCH` from `4` to `8` in
   `scripts/demo-vendor-ds4-general-sota.sh`.
+- Also make `GGML_MOE_GPU_KEEP_TOPK_UPDOWN=2` the demo default. The kernel
+  implementation remains overrideable, but the generalized SOTA demo should
+  not require an undocumented manual environment variable to reproduce the
+  accepted path.
 - Theory:
   with the current transfer-heavy path, small refill batches leave too much
   submit/wait overhead around the iouring queues. Refill batch 8 increases
