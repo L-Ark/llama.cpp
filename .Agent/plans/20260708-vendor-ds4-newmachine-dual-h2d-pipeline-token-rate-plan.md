@@ -367,3 +367,15 @@ Promotion requirements:
   `memory_peak_bytes=14782988288`, `ram_ok=true`, source clean, output
   coherent. This is the current clean single-prompt top result on the new
   machine, but still not the product target.
+- Invalidation: broader calibration after `135113719` showed topk2 is not
+  acceptable as a generalized default.
+  - `20260708T142705Z-calib-topk2-range0-39-fibonacci`: `eval_tok_s=2.9`, but
+    the answer did not provide the requested Python function and started with
+    malformed text (`thatThe...`).
+  - `20260708T142848Z-calib-topk2-range0-39-climate`: `eval_tok_s=2.6`, but
+    the answer exposed internal-style reasoning text (`using="thinking" ...`)
+    instead of a clean paragraph.
+  - Therefore all topk2 accepted/promoted notes above are invalidated for
+    generalized SOTA. The default is reverted to
+    `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`,
+    `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`. Topk2 may remain diagnostic only.
