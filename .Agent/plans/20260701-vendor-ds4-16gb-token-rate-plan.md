@@ -283,6 +283,7 @@
 - `ram_ttft`: all accepted candidate runs exited 0, had `memory_peak_bytes=16000000000`, `ram_ok=true`, and page cache in `memory_file_bytes` inside the same cgroup. Held-out max TTFT `35776.237ms` remains within the +20% gate; dev max TTFT `35446.659ms` also passes.
 - `decision`: accepted as new generalized SOTA, but product target is still not met. Current held-out min/mean `2.4/2.76 tok/s` remains far below the required stable `>5 tok/s` for random prompts on `16GB host RAM + 32GB RTX 5090`.
 - `next_after_acceptance`: commit and push source + artifact + plan + demo to `ssd/vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit to prove reproducibility. After that, continue with higher-impact retained/fused producer-consumer work because paired read alone cannot close the remaining gap to `>5 tok/s`.
+- `post_push_repro_052e9699d`: completed after clean rebuild from pushed commit. Run dir `/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260708T040217Z-pushed-052e9699-france-n192-repro`; France n192 `eval_tok_s=3.2`, `prompt_tok_s=1.3`, `TTFT=31374.558ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15087902720`, `ram_ok=true`, output complete and semantically correct.
 
 ## 二次回退状态（2026-07-02）
 
