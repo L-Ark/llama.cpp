@@ -1058,9 +1058,14 @@ the Fibonacci/meta-reasoning failure.
 
 Next implementation priority:
 
+0. Before every run, kill display processes and other GPU/model processes,
+   then record the pre-run GPU process list. This is required for all
+   diagnostics, profiles, candidate runs, and SOTA validation. A run that does
+   not execute this cleanup is invalid for baseline/SOTA comparison, even if
+   token rate is higher.
 1. Re-profile deploy under current SOTA with fine-grained batch/locality
-   metrics, after killing display processes, to identify why `iouring_wait_us`
-   is about `10s` while France/AI are lower.
+   metrics, after the required display-process cleanup, to identify why
+   `iouring_wait_us` is about `10s` while France/AI are lower.
 2. Measure per-layer/per-role misses and physical source locality for deploy,
    with `GGML_MOE_BATCH_PROFILE_OUT` and any available read/locality trace
    hooks. The goal is to distinguish unavoidable extra expert movement from
@@ -1133,6 +1138,9 @@ Updated bottleneck conclusion:
 
 Next concrete implementation direction:
 
+0. Run the required pre-run cleanup first: stop/kill display processes,
+   kill other GPU/model processes, verify `nvidia-smi` is clear, and record
+   this in the run artifact before launching the model.
 1. Build a hard-bound report from route profiles for safe top3: for each
    tensor role and layer, compute actual active rows/blocks used versus the
    full `4.25MiB` expert payload currently read.
