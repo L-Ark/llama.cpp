@@ -9072,3 +9072,50 @@ Design conclusion for the next gate/up/down attempt:
   - a true read-only io_uring stage that can co-submit gate/up/down reads, then copy gate on the gate stream and up/down on the prefetch/cache stream, or
   - a background prefetch worker that submits up/down reads early without blocking the gate call while preserving the current direct gate fast path.
 - Until that exists, accepted SOTA remains X10-BM and the product target `>5 tok/s` remains unmet.
+
+## 2026-07-08 X10-BR accepted generalized SOTA: gate cache 6144 MiB
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-cache6144-generalized-sota-20260708.json`
+- status: `accepted_generalized_sota_stage_not_product_target`
+- prompt-specific optimization: none. The change is a prompt-general VRAM allocation shift.
+- push target: `ssd/vendor/deepseek-token-rate-16gb`.
+
+Purpose:
+- X10-BN/X10-BQ showed exposed gate source reads remained a major cost.
+- Instead of using a prompt route hotset, increase the one-stream gate VRAM cache from `4096 MiB` to `6144 MiB`.
+- Keep up/down batch cache requested at `9GB`; it may clamp downward after the larger gate cache, but the expected gain is fewer gate direct reads.
+
+Diagnostic probes:
+- France n96 with `GGML_MOE_STREAM_ONE_CACHE_MIB=6144`:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache-sweep/20260708T055222Z-france-n96-onecache6144-vram9`
+  - `eval_tok_s=5.0`, TTFT `24020.75 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+  - Gate cache improved to `hits=18358`, `misses=6473`, `hit_rate=73.9%`.
+  - Previous accepted/profiled gate cache was about `hits=16161`, `misses=8670`, `hit_rate=65.1%`.
+  - Batch up/down cache clamped from requested `9.0 GiB` to actual `6.9 GiB`, so this is a deliberate gate-vs-updown VRAM tradeoff.
+- Quantum n96 with the same config:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache-sweep/20260708T055401Z-quantum-n96-onecache6144-vram9`
+  - `eval_tok_s=3.9`, TTFT `23823.11 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+  - Output was semantically correct with a minor extra leading `and`.
+
+Calibration/dev set v1, n192, before candidate freeze:
+- France: `4.8 tok/s`, TTFT `24199.44 ms`, RAM/correctness OK.
+- Quantum: `3.8 tok/s`, TTFT `24354.95 ms`, RAM/correctness OK with minor leading-word note.
+- Fibonacci: `4.0 tok/s`, TTFT `26456.33 ms`, RAM/correctness OK; first generator function correct, later optional compact variant noisy/truncated.
+- Japan: `4.7 tok/s`, TTFT `24977.21 ms`, RAM/correctness OK.
+- Climate: `4.5 tok/s`, TTFT `23812.49 ms`, RAM/correctness OK.
+- Aggregate: min `3.8`, mean `4.36`, max `4.8`; previous accepted dev aggregate was min `3.7`, mean `4.10`, max `4.5`.
+
+Held-out v1, n192, after candidate freeze:
+- Photosynthesis: `4.3 tok/s`, TTFT `22558.75 ms`, RAM/correctness OK.
+- Office: `4.0 tok/s`, TTFT `25031.91 ms`, RAM/correctness OK with the same known leading `space` and n192 truncation style as previous SOTA.
+- Palindrome JS: `4.0 tok/s`, TTFT `25181.79 ms`, RAM/correctness OK.
+- Exercise: `4.6 tok/s`, TTFT `25628.56 ms`, RAM/correctness OK.
+- Brazil: `4.6 tok/s`, TTFT `25439.91 ms`, RAM/correctness OK.
+- Aggregate: min `4.0`, mean `4.30`, max `4.6`; previous accepted held-out aggregate was min `3.9`, mean `4.12`, max `4.4`.
+
+Decision:
+- Accept as the current generalized SOTA stage result.
+- It satisfies strict host RAM <= 16GB including page cache, preserves prompt-general behavior, improves held-out min/mean/max, and keeps TTFT within the allowed range.
+- It still does not meet the product target of stable `>5 tok/s` for arbitrary prompts; held-out mean is `4.30 tok/s`.
+- Demo script default should move to `GGML_MOE_STREAM_ONE_CACHE_MIB=6144`, while retaining environment override support for regression testing.
+- Required follow-up: commit and push immediately, then reproduce from the pushed commit and record post-push `source_dirty=false` evidence.

@@ -33,8 +33,8 @@ What this script demonstrates:
   - User may enter any prompt; this is not a France-specialized demo.
 
 Current known generalized status:
-  - Calibration/dev prompt range recorded in the repo: 3.7-4.5 tok/s, mean 4.10 tok/s.
-  - Held-out v1 prompt range recorded in the repo: 3.9-4.4 tok/s, mean 4.12 tok/s.
+  - Calibration/dev prompt range recorded in the repo: 3.8-4.8 tok/s, mean 4.36 tok/s.
+  - Held-out v1 prompt range recorded in the repo: 4.0-4.6 tok/s, mean 4.30 tok/s.
   - Product target remains stable >5 tok/s for random prompts; not yet met.
 
 Artifacts:
@@ -235,8 +235,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "prompt_general": true,
   "prompt_specific_optimization": false,
   "france_specialized_path_used": false,
-  "current_generalized_dev_tok_s": {"min": 3.7, "mean": 4.10, "max": 4.5},
-  "current_held_out_v1_tok_s": {"min": 3.9, "mean": 4.12, "max": 4.4},
+  "current_generalized_dev_tok_s": {"min": 3.8, "mean": 4.36, "max": 4.8},
+  "current_held_out_v1_tok_s": {"min": 4.0, "mean": 4.30, "max": 4.6},
   "product_target_tok_s": 5.0,
   "product_target_currently_met": false,
   "max_tokens": ${MAX_TOKENS},
@@ -263,8 +263,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_DOWN_PARALLEL_STAGE": "1",
     "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
     "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
-    "GGML_MOE_STREAM_ONE_CACHE_MIB": "4096",
-    "GGML_MOE_VRAM_CACHE_GB": "9",
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": $(printf '%s' "${GGML_MOE_STREAM_ONE_CACHE_MIB:-6144}" | json_string),
+    "GGML_MOE_VRAM_CACHE_GB": $(printf '%s' "${GGML_MOE_VRAM_CACHE_GB:-9}" | json_string),
     "GGML_MOE_STREAM_DOWN_BATCH": "1",
     "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
     "GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH": "1",
@@ -312,7 +312,7 @@ export GGML_MOE_KEEP_TOPK_UPDOWN=4
 export GGML_MOE_STREAM=1
 export GGML_MOE_STAGE_PINNED_SLOTS=8
 export GGML_MOE_STREAM_DONTNEED=1
-export GGML_MOE_STREAM_ONE_CACHE_MIB=4096
+export GGML_MOE_STREAM_ONE_CACHE_MIB=$(printf '%q' "${GGML_MOE_STREAM_ONE_CACHE_MIB:-6144}")
 export GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1
 export GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps
 export GGML_MOE_STREAM_DOWN_BATCH=1
@@ -322,7 +322,7 @@ export GGML_MOE_UPDOWN_PAIRED_READ=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1
 export GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1
-export GGML_MOE_VRAM_CACHE_GB=9
+export GGML_MOE_VRAM_CACHE_GB=$(printf '%q' "${GGML_MOE_VRAM_CACHE_GB:-9}")
 if [[ "$GATE_FULLPACK" == "1" ]]; then
   export GGML_MOE_STREAM_ONE_EXPERT_PACK="$GATE_FULLPACK_PATH"
   export GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct
@@ -467,7 +467,7 @@ Source: $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)@$(git -C "$REPO_DIR" r
 Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches)
 Gate fullpack prompt-general source: $([[ "$GATE_FULLPACK" -eq 1 ]] && echo enabled || echo disabled)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
-Known generalized dev range: 3.7-4.5 tok/s, mean 4.10 tok/s. Held-out v1: 3.9-4.4 tok/s, mean 4.12 tok/s.
+Known generalized dev range: 3.8-4.8 tok/s, mean 4.36 tok/s. Held-out v1: 4.0-4.6 tok/s, mean 4.30 tok/s.
 Product target: stable >5 tok/s for random prompts. Current generalized path is not there yet.
 Prompt-specific packs/profiles/aliases: disabled and refused.
 Prompt:
