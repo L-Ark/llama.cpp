@@ -385,3 +385,12 @@ Promotion requirements:
   `ram_ok=true`, source clean. The answer correctly provided a short Python
   Fibonacci generator. This confirms the unsafe topk2 default was the quality
   regression source, and the topk3/range10-39 default is restored.
+- Additional topk2 isolation:
+  - `20260708T143356Z-topk2-range10-39-fibonacci` with only
+    `KEEP_TOPK_LAYER_VALUE=2` over the original `10-39` range reached
+    `eval_tok_s=3.2`, but correctness failed: the answer became an odd
+    instruction-style repetition and did not provide the requested function.
+  - `20260708T143444Z-topk2-range10-39-climate` was coherent, but the Fibonacci
+    failure is sufficient to reject topk2 for generalized use.
+  - Conclusion: the issue is not only extending the range to `0-39`; reducing
+    those MoE layers to top-2 can materially change behavior. Keep topk3.
