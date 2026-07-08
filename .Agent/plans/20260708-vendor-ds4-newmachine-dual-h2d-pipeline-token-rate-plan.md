@@ -1270,3 +1270,61 @@ Updated implementation direction after the rejected probes:
    without per-expert staging. Any such path must preserve exact math and pass
    France, AI infra, Fibonacci/code-generation, and deploy before held-out
    testing.
+
+## 2026-07-09 Byte-Bound And Next Clean Top-K Probe
+
+New strict-cold n96 deploy byte-bound profile under current safe HEAD
+`ca0027a45`:
+
+- run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T190140Z-20260709-safe-default-deploy-bytebound-n96`;
+- profile:
+  `/home/wici/runs/vendor-ds4-16gb/manual-profiles/20260709-safe-default-deploy-n96-bytebound`;
+- result: `eval_tok_s=3.1`, `prompt_tok_s=5.3`,
+  `first_output_ms=16055.2 ms`, `memory_peak_bytes=14146871296`,
+  `memory_file_bytes=13267075072`, `ram_ok=true`, display cleanup recorded;
+- runtime counters: `iouring_reads=11331`, `iouring_bytes=50.50GB`,
+  `iouring_wait_us=12761453`, `VRAM cache hits=36735 misses=9171`.
+
+Trace analysis:
+
+- reads are exactly balanced by role:
+  `gate=3777`, `up=3777`, `down=3777`; each role moves `16.83GB`;
+- unique entries are `8463` total, `37.72GB`; perfect run-level expert cache
+  would save only `12.78GB` and still move about `37.7GB`;
+- current repeat factor is only `1.34x`, so cache/de-dup alone is insufficient
+  for the product target;
+- rough linear byte target from the measured `3.1 tok/s`: reaching `5.0 tok/s`
+  would require around `31.3GB` effective expert movement, not merely the
+  `37.7GB` perfect-cache bound;
+- current physical layout remains poor for span reads:
+  `span/read=79.33`, `gap/read=78.33`, `adjacent/read_jobs=0.0101`.
+
+Implication:
+
+- To reach stable `>5 tok/s`, the next accepted method must either reduce
+  active expert payloads by roughly `35-40%`, or implement a deeper compact
+  exact representation/runtime that avoids moving full `4.25MiB` payloads per
+  selected expert. Simple cache, overlay layout, and small scheduling knobs are
+  below the required bound.
+
+Next clean probe before more invasive compact-kernel work:
+
+1. Re-test `top2 all layers` on the current clean HEAD, strict cold, 16GB
+   cgroup, after required display-process cleanup.
+2. Use only dev/calibration prompts first: France, AI infra, Fibonacci/code,
+   and deploy. This is not held-out final testing.
+3. Candidate config:
+   `GGML_MOE_KEEP_TOPK_LAYER_RANGE=0-39`,
+   `GGML_MOE_KEEP_TOPK_LAYER_VALUE=2`,
+   `GGML_MOE_KEEP_TOPK_UPDOWN=2`,
+   `GGML_MOE_KEEP_TOPK_GATE=1`, and start with `GGML_MOE_VRAM_CACHE_MIB=13824`
+   unless a smoke run proves `14336` is stable on clean HEAD.
+4. Acceptance condition: generalized quality must pass, especially Fibonacci
+   must produce a direct Python function rather than meta/reasoning text, and
+   deploy must stay coherent. If any dev quality fails, reject and do not
+   promote even if France/AI infra reach `>5 tok/s`.
+5. If clean top2 passes quality and improves generalized token rate, record
+   exact reproduction info and immediately commit/push source plus plan
+   results. If it fails, keep it rejected and proceed to compact/exact expert
+   payload work.
