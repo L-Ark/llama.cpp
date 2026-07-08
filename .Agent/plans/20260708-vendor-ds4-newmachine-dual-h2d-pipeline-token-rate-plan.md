@@ -2286,3 +2286,64 @@ Default-demo reproduction after making both SOTA toggles defaults:
   `memory_file_bytes=13795110912`, `ram_ok=true`,
   `display_processes_stopped_before_run=true`, source clean. Output was
   coherent and covered model compression/quantization.
+
+## 2026-07-09 Post-Refill8 Queue And Role-Split Rejections
+
+All runs below used strict cold startup, 16GB cgroup, display/model process
+cleanup before launch, prompt-general inputs, and correctness review.
+
+Rejected queue knobs:
+
+- `GGML_MOE_IO_REFILL_BATCH=16`:
+  - Deploy n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T213922Z-20260709-default-top2-refill16-deploy-n64`
+    reached `eval_tok_s=4.2`, `prompt_tok_s=4.4`,
+    `first_output_ms=16448.4 ms`,
+    `memory_peak_bytes=14800322560`, RAM OK.
+  - Fibonacci n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T213957Z-20260709-default-top2-refill16-fibonacci-n64`
+    reached `eval_tok_s=3.9`, `prompt_tok_s=4.0`,
+    `first_output_ms=14768.7 ms`,
+    `memory_peak_bytes=14835859456`, RAM OK.
+  - Decision: reject. Refill 16 is slightly worse than accepted refill 8
+    and does not move the lower bound toward `>5 tok/s`.
+- `GGML_MOE_IO_SORT_OFFSET=1`:
+  - Deploy n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T214053Z-20260709-default-top2-refill8-sortoffset-deploy-n64`
+    reached only `eval_tok_s=3.4`, RAM OK.
+  - Fibonacci n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T214130Z-20260709-default-top2-refill8-sortoffset-fibonacci-n64`
+    reached `eval_tok_s=4.0`, RAM OK.
+  - Decision: reject. Sorting by file offset may improve apparent SSD
+    locality, but it disrupts the current overlap/timing enough to regress
+    deploy sharply.
+
+Rejected default-off role split implementation:
+
+- Implemented dirty-source experiment:
+  `GGML_MOE_VRAM_CACHE_ROLE_SPLIT=1`, using cache id 1 for `ffn_up_exps` and
+  `ffn_gate_exps`, cache id 0 for `ffn_down_exps`, with budget controlled by
+  `GGML_MOE_VRAM_CACHE_UPGATE_PCT`.
+- The code compiled, and default-off regression was acceptable:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T214741Z-20260709-rolesplit-off-regress-deploy-n64`
+  reached `eval_tok_s=4.2`, RAM OK, source dirty.
+- `GGML_MOE_VRAM_CACHE_ROLE_SPLIT=1` with default upgate pct 63:
+  - Deploy n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T214833Z-20260709-rolesplit63-deploy-n64`
+    reached `eval_tok_s=4.3`, RAM OK.
+  - Fibonacci n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T214908Z-20260709-rolesplit63-fibonacci-n64`
+    reached `eval_tok_s=4.0`, RAM OK.
+- `GGML_MOE_VRAM_CACHE_ROLE_SPLIT=1`,
+  `GGML_MOE_VRAM_CACHE_UPGATE_PCT=80`:
+  - Deploy n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T215001Z-20260709-rolesplit80-deploy-n64`
+    reached `eval_tok_s=4.2`, RAM OK.
+  - Fibonacci n64:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T215036Z-20260709-rolesplit80-fibonacci-n64`
+    reached `eval_tok_s=4.0`, RAM OK.
+- Decision: reject and revert the uncommitted implementation. Simple static
+  role split does not improve over the accepted default. The profile signal
+  remains valid, but the next cache work must be future-use aware at the
+  request/key level rather than statically partitioning the same 13.5 GiB
+  budget by tensor role.
