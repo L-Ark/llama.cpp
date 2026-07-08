@@ -379,3 +379,9 @@ Promotion requirements:
     generalized SOTA. The default is reverted to
     `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`,
     `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`. Topk2 may remain diagnostic only.
+- Revert validation after commit `e63565d60`:
+  `20260708T143119Z-clean-revert-fibonacci` produced `eval_tok_s=2.4`,
+  `prompt_tok_s=2.9`, `TTFT=18882.0 ms`, `memory_peak_bytes=14771392512`,
+  `ram_ok=true`, source clean. The answer correctly provided a short Python
+  Fibonacci generator. This confirms the unsafe topk2 default was the quality
+  regression source, and the topk3/range10-39 default is restored.
