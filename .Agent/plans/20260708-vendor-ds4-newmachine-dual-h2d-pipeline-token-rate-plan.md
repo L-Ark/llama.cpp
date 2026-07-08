@@ -548,3 +548,53 @@ Promotion requirements:
     but do not make it default until generalized prompt quality passes. The
     main route to `>5 tok/s` still requires reducing full-expert movement or a
     hardware link/topology change.
+- New-machine recheck after syncing `882bd544a`:
+  - Strict cold France default
+    `20260708T153417Z-20260708T-default-france-n96-recheck`:
+    `eval_tok_s=2.6`, `prompt_tok_s=3.0`, `TTFT=18519.5 ms`,
+    elapsed `52.60s`, `memory_peak_bytes=14757728256`,
+    `memory_file_bytes=13691789312`, `ram_ok=true`,
+    `display_processes_stopped_before_run=true`. France output was coherent
+    and semantically correct. H2D remained `6.62GB/s`, PCIe under load
+    `16.0 GT/s x4`, so the machine is still in the low-H2D Case A-like state.
+  - Movement counters for that run: batch up/down path `8194` io_uring reads /
+    `36.52GB`; gate one-pack path `6473` reads / `28.85GB`. Total expert
+    movement is still about `65GB`, which explains why small source/cache
+    toggles cannot reach `>5 tok/s` on a `6.6GB/s` H2D path.
+  - `GGML_MOE_BATCH_FULLPACK=1` recheck
+    `20260708T153604Z-20260708T-batch-fullpack-n32-smoke` was neutral/rejected:
+    `eval_tok_s=2.5`, `ram_ok=true`; using the native expert pack as the batch
+    source does not improve over run-local GGUF alias.
+  - Unified 12GiB cache recheck
+    `20260708T153651Z-20260708T-unified12-france-n96-recheck`:
+    `GGML_MOE_GATE_BATCH_PREFETCH=1`,
+    `GGML_MOE_STREAM_ONE_CACHE_MIB=0`, `GGML_MOE_VRAM_CACHE_MIB=12288`;
+    `eval_tok_s=2.7`, `TTFT=17709.9 ms`, elapsed `50.61s`,
+    `memory_peak_bytes=14718070784`, `ram_ok=true`, France correctness pass.
+    It is a small positive signal but still not promoted as generalized SOTA:
+    it is not uniformly faster on calibration prompts and product `>5 tok/s`
+    remains unmet.
+  - Unified 14GiB request
+    `20260708T153759Z-20260708T-unified14-france-n32-smoke` was rejected:
+    requested `14336MiB` fell back to an actual `12.2GiB` cache and produced
+    only `2.5 tok/s`, slower than the 12GiB probe.
+  - Added default-off diagnostic env passthrough to
+    `scripts/demo-vendor-ds4-general-sota.sh` for
+    `GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE` and
+    `GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT`; this only records/profiles
+    when explicitly enabled and does not change default/Kimi behavior.
+  - Sparse membership diagnostic
+    `20260708T154045Z-20260708T-sparse-membership-france-n32` produced
+    `records=0` because the current hot path no longer uses the CPU fallback
+    recording point. Therefore that old hook is not sufficient for the current
+    SOTA H2D hard-bound.
+  - Current valid hard-bound input is the route profile
+    `20260708T154200Z-20260708T-route-profile-france-n32-recheck`, `n32`,
+    safe default, `ram_ok=true`, H2D `6.68GB/s`: gate logical bytes `42.21GB`
+    with `3328` cache misses; up logical bytes `23.18GB` with `2124` cache
+    misses; down logical bytes `23.18GB` with `0` cache misses because down is
+    already covered by the paired prefetch/cache path. This shifts the next
+    implementation priority away from down and toward reducing gate/up
+    miss bytes or avoiding full-expert movement for those roles.
+  - Detailed reproduction data is recorded in
+    `.Agent/runs/20260708-vendor-ds4-newmachine/low-h2d-recheck-and-route-bound-20260708.json`.

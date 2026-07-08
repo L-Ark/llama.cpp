@@ -1,0 +1,136 @@
+{
+  "artifact": "low-h2d-recheck-and-route-bound-20260708",
+  "created_at_local": "2026-07-08",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "base_head": "882bd544a3a2821c55901bd14d351d0e24201c96",
+  "machine": "wici@192.168.9.198",
+  "pre_run_display_cleanup_required": true,
+  "status": "diagnostic_recorded_not_sota",
+  "summary": {
+    "product_target_tok_s": 5.0,
+    "target_met": false,
+    "hardware_case_observed": "low-H2D Case A-like",
+    "h2d_gbps_observed": "6.62-6.68",
+    "pcie_under_load": "16.0 GT/s x4",
+    "main_bottleneck": "full-expert gate/up H2D movement under Gen4 x4 effective bandwidth",
+    "next_required_work": "reduce gate/up bytes or implement a correctness-proven compact/partial source; small cache/source toggles are insufficient"
+  },
+  "runs": [
+    {
+      "name": "default_france_n96_recheck",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T153417Z-20260708T-default-france-n96-recheck",
+      "config": "safe default: gate fullpack, GGUF alias up/down, one-cache 6144MiB, batch cache request 9GiB, topk3 range10-39",
+      "eval_tok_s": 2.6,
+      "prompt_tok_s": 3.0,
+      "ttft_ms": 18519.546449,
+      "elapsed_seconds": 52.6,
+      "memory_peak_bytes": 14757728256,
+      "memory_file_bytes": 13691789312,
+      "ram_ok": true,
+      "display_processes_stopped_before_run": true,
+      "h2d_gbps": 6.620455,
+      "pcie_after_h2d": "16.0 GT/s x4",
+      "correctness": "pass: France answer is coherent and semantically correct",
+      "movement": {
+        "batch_iouring_reads": 8194,
+        "batch_iouring_bytes": 36516134912,
+        "gate_one_pack_reads": 6473,
+        "gate_one_pack_bytes": 28846587904
+      },
+      "decision": "baseline recheck only; product target not met"
+    },
+    {
+      "name": "batch_fullpack_n32_smoke",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T153604Z-20260708T-batch-fullpack-n32-smoke",
+      "config": "GGML_MOE_BATCH_FULLPACK=1",
+      "eval_tok_s": 2.5,
+      "ttft_ms": 18300.758602,
+      "memory_peak_bytes": 14699487232,
+      "ram_ok": true,
+      "display_processes_stopped_before_run": true,
+      "h2d_gbps": 6.686845,
+      "decision": "rejected/neutral; using the native expert pack as batch source does not improve over run-local GGUF alias"
+    },
+    {
+      "name": "unified12_france_n96_recheck",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T153651Z-20260708T-unified12-france-n96-recheck",
+      "config": "GGML_MOE_GATE_BATCH_PREFETCH=1, GGML_MOE_STREAM_ONE_CACHE_MIB=0, GGML_MOE_VRAM_CACHE_MIB=12288",
+      "eval_tok_s": 2.7,
+      "prompt_tok_s": 3.4,
+      "ttft_ms": 17709.902111,
+      "elapsed_seconds": 50.61,
+      "memory_peak_bytes": 14718070784,
+      "memory_file_bytes": 13830348800,
+      "ram_ok": true,
+      "display_processes_stopped_before_run": true,
+      "h2d_gbps": 6.662594,
+      "pcie_after_h2d": "16.0 GT/s x4",
+      "correctness": "pass: France answer is coherent and semantically correct",
+      "movement": {
+        "batch_iouring_reads": 15639,
+        "batch_iouring_bytes": 69694390272,
+        "gate_one_pack_reads": 2,
+        "gate_one_pack_bytes": 8912896
+      },
+      "decision": "positive diagnostic signal but not promoted: improvement is small, not uniformly faster on the calibration set, and product target remains unmet"
+    },
+    {
+      "name": "unified14_france_n32_smoke",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T153759Z-20260708T-unified14-france-n32-smoke",
+      "config": "GGML_MOE_GATE_BATCH_PREFETCH=1, GGML_MOE_STREAM_ONE_CACHE_MIB=0, GGML_MOE_VRAM_CACHE_MIB=14336",
+      "eval_tok_s": 2.5,
+      "ttft_ms": 17665.752331,
+      "memory_peak_bytes": 14757457920,
+      "ram_ok": true,
+      "h2d_gbps": 6.621271,
+      "actual_batch_cache": "12.2GiB after 14GiB cudaMalloc retry",
+      "decision": "rejected; larger requested unified cache is slower than 12GiB"
+    },
+    {
+      "name": "sparse_membership_france_n32",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T154045Z-20260708T-sparse-membership-france-n32",
+      "config": "GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE plus GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT",
+      "eval_tok_s": 2.5,
+      "ram_ok": true,
+      "result": "profile hook produced records=0 because current hot path no longer uses the CPU fallback recording point",
+      "decision": "diagnostic hook is valid but not sufficient for current SOTA hard-bound; use route profile instead"
+    },
+    {
+      "name": "route_profile_france_n32_recheck",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T154200Z-20260708T-route-profile-france-n32-recheck",
+      "config": "--route-profile on safe default",
+      "eval_tok_s": 2.5,
+      "ram_ok": true,
+      "h2d_gbps": 6.680667,
+      "route_profile_rows": 4080,
+      "route_totals": {
+        "gate": {
+          "active_experts": 9471,
+          "cache_contains_count": 6143,
+          "cache_missing_count": 3328,
+          "logical_source_bytes": 42207019008
+        },
+        "up": {
+          "active_experts": 5201,
+          "cache_contains_count": 3077,
+          "cache_missing_count": 2124,
+          "logical_source_bytes": 23177986048
+        },
+        "down": {
+          "active_experts": 5201,
+          "cache_contains_count": 5201,
+          "cache_missing_count": 0,
+          "logical_source_bytes": 23177986048
+        }
+      },
+      "decision": "hard-bound input: down is not the next bottleneck on this path; gate and up misses dominate remaining movement"
+    }
+  ],
+  "accepted_sota_changed": false,
+  "code_change": {
+    "file": "scripts/demo-vendor-ds4-general-sota.sh",
+    "description": "Allow default-off DS4 sparse fused MMVQ diagnostic profile envs to pass through systemd-run and record them in config.json.",
+    "default_behavior_changed": false,
+    "kimi_behavior_changed": false
+  }
+}

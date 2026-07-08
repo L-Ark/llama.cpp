@@ -397,6 +397,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
     "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8": "1",
     "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED": "1",
+    "GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE": $(printf '%s' "${GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE:-}" | json_string),
+    "GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT": $(printf '%s' "${GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT:-}" | json_string),
     "GGML_MOE_KEEP_TOPK_UPDOWN": $(printf '%s' "${GGML_MOE_KEEP_TOPK_UPDOWN:-4}" | json_string),
     "GGML_MOE_KEEP_TOPK_LAYER_RANGE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_LAYER_RANGE:-10-39}" | json_string),
     "GGML_MOE_KEEP_TOPK_LAYER_VALUE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_LAYER_VALUE:-3}" | json_string)
@@ -631,7 +633,9 @@ for passthrough_env in \
   GGML_MOE_VRAM_PROFILE_SKIP_FIRST_PRELOADS \
   GGML_MOE_VRAM_CACHE_POLICY \
   GGML_MOE_VRAM_CACHE_PROFILE_AFTER \
-  GGML_MOE_CACHE_EVICT_PROFILE_OUT; do
+  GGML_MOE_CACHE_EVICT_PROFILE_OUT \
+  GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE \
+  GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT; do
   if [[ -n "${!passthrough_env:-}" ]]; then
     systemd_cmd+=(--setenv=${passthrough_env}=${!passthrough_env})
   fi
