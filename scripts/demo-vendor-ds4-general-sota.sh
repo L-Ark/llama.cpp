@@ -426,7 +426,12 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_KEEP_TOPK_GATE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_GATE:-1}" | json_string),
     "GGML_MOE_KEEP_TOPK_LAYER_RANGE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_LAYER_RANGE:-0-39}" | json_string),
     "GGML_MOE_KEEP_TOPK_LAYER_VALUE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_LAYER_VALUE:-3}" | json_string),
-    "GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE:-}" | json_string)
+    "GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE": $(printf '%s' "${GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE:-}" | json_string),
+    "GGML_MOE_RAM_TIER_MIB": $(printf '%s' "${GGML_MOE_RAM_TIER_MIB:-}" | json_string),
+    "GGML_MOE_RAM_TIER_PROFILE": $(printf '%s' "${GGML_MOE_RAM_TIER_PROFILE:-}" | json_string),
+    "GGML_MOE_RAM_TIER_SKIP": $(printf '%s' "${GGML_MOE_RAM_TIER_SKIP:-}" | json_string),
+    "GGML_MOE_RAM_TIER_PIN": $(printf '%s' "${GGML_MOE_RAM_TIER_PIN:-}" | json_string),
+    "GGML_MOE_RAM_TIER_PIN_MIB": $(printf '%s' "${GGML_MOE_RAM_TIER_PIN_MIB:-}" | json_string)
   }
 }
 EOF_CFG
@@ -676,6 +681,11 @@ for passthrough_env in \
   GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS \
   GGML_MOE_VRAM_PROFILE_PRELOAD_EVICT \
   GGML_MOE_VRAM_PROFILE_SKIP_FIRST_PRELOADS \
+  GGML_MOE_RAM_TIER_MIB \
+  GGML_MOE_RAM_TIER_PROFILE \
+  GGML_MOE_RAM_TIER_SKIP \
+  GGML_MOE_RAM_TIER_PIN \
+  GGML_MOE_RAM_TIER_PIN_MIB \
   GGML_MOE_VRAM_CACHE_POLICY \
   GGML_MOE_VRAM_CACHE_PROFILE_AFTER \
   GGML_MOE_CACHE_EVICT_PROFILE_OUT \
