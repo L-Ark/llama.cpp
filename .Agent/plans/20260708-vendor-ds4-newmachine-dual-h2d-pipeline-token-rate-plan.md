@@ -1393,3 +1393,68 @@ External compact DeepSeek candidate:
   then strict-cold n96 on France, AI infra, Fibonacci, and deploy. Do not
   promote unless quality is clean and token rate is stably above the current
   safe default; product success still requires stable `>5 tok/s`.
+
+## 2026-07-09 Execution Notes
+
+Current clean-head revalidation:
+
+- Synced new machine `/home/wici/ssd-llama` to `fad6a67f980f` via bundle
+  because the machine cannot fetch from GitHub without credentials.
+- Strict-cold default run after required display cleanup:
+  `20260708T191708Z-20260709-current-default-france-n96`.
+- Result: `eval_tok_s=3.6`, `prompt_tok_s=4.6`,
+  `first_output_ms=16178.119012`, `memory_peak_bytes=14091792384`,
+  `memory_file_bytes=13268803584`, `ram_ok=true`,
+  `display_processes_stopped_before_run=true`, source clean, France output
+  coherent.
+- Hardware state: H2D benchmark `6.688 GB/s`; PCIe was idle `2.5 GT/s x4`
+  before the run and `16.0 GT/s x4` under load. `nvidia-smi -q` reports
+  `Host Max=4`, so the new machine is still effectively Gen4 x4 for this GPU
+  path, not the hoped-for Gen5 x4 software case.
+- Counters: `iouring_reads=8913`, `iouring_bytes=39.720GB`,
+  `iouring_wait_us=10402055`, `iouring_h2d_enqueues=8913`,
+  VRAM cache `hits=36752`, `misses=6745`, `hit_rate=84.5%`.
+
+External compact 4Expert candidate status:
+
+- Disk is sufficient on the new machine (`/` has about `513GB` available), but
+  Hugging Face and hf-mirror resolve to `198.18.x.x` on this network and HTTPS
+  fails with `SSL_ERROR_SYSCALL` / `UNEXPECTED_EOF_WHILE_READING`.
+- No full 4Expert GGUF is present under `/home/wici`, `/mnt`, `/data`, or
+  `/root`; only the current native GGUF and native expert pack are available.
+- Decision: 4Expert remains a promising payload-reduction candidate, but is
+  blocked on artifact acquisition on this machine. Do not treat this as a
+  source-level blocker for native optimization.
+
+Dynamic top-k negative-id skip experiment:
+
+- Implemented a local, default-off experiment, not pushed:
+  `GGML_DS4_DYNAMIC_TOPK_WEIGHT_THRESHOLD` plus
+  `GGML_DS4_DYNAMIC_TOPK_MIN_KEEP`. The graph kept the first two selected
+  experts, masked low-weight tail picks, converted pruned tail ids to `-1`,
+  and patched the CPU route loops to skip negative ids and zero the output.
+- `threshold=0.08`, France n32
+  `20260709-dyntopk008-negskip-france-n32`: payload dropped to
+  `iouring_bytes=10.736GB` and apparent `eval_tok_s=10.5`, but answer was
+  empty. Quality fail and not promotable.
+- `threshold=0.02`, France n32
+  `20260709-dyntopk002-negskip-france-n32`: also empty answer. Quality fail.
+- `threshold=0.005`, France n32
+  `20260709-dyntopk0005-negskip-france-n32`: output coherent,
+  `eval_tok_s=4.1`, `iouring_bytes=22.033GB`, RAM OK, but still below target.
+- `threshold=0.005`, France n96
+  `20260709-dyntopk0005-negskip-france-n96`: output coherent,
+  `eval_tok_s=3.5`, `prompt_tok_s=4.3`, `first_output_ms=16061.454965`,
+  RAM OK, but below the clean default France repeat and far below `>5`.
+- `threshold=0.01`, France n32
+  `20260709-dyntopk001-negskip-france-n32`: output coherent but only
+  `eval_tok_s=3.2`.
+- Decision: reject this dynamic threshold implementation. It proves that
+  skipping low-weight experts can reduce bytes enough to exceed `5 tok/s`, but
+  the threshold needed for large byte savings breaks generation quality; the
+  low safe threshold does not improve n96. Revert the local source changes and
+  do not push code.
+- Next native direction: dynamic pruning needs a better criterion than an
+  absolute per-pick weight threshold, likely layer-aware and calibrated from
+  actual selected-weight distributions, or a trained/exported compact expert
+  artifact. Blind thresholding is closed for now.
