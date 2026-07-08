@@ -436,3 +436,42 @@ Promotion requirements:
   - reject unless RAM/page cache remain inside 16GB, TTFT stays within the
     allowed 20%, output remains correct, and generalized prompts improve beyond
     the safe default.
+- Implemented default-off gate hot-pool support:
+  - `673e6ff2a` adds direct-manifest order preservation, exact gate hot-pool
+    lookup in the main one-stream gate path, and
+    `scripts/ds4-expert-pack-direct-manifest.py`;
+  - `13d86fe61` adds a fast env guard so disabled hot-pool does not enter the
+    lookup/mutex path by default.
+- Gate hot-pool 512MiB smoke is rejected:
+  - manifest:
+    `/home/wici/runs/ds4-repro-assets/ds4-gate-hot-direct-manifest-20260708.csv`,
+    generated from the full native expert-pack and ranked by
+    `safe-one-pack-read-20260708T143802Z.csv`;
+  - run `20260708T145532Z-20260708T-hotpool512-n32-smoke`, prompt
+    `How to deploy a large model on a small devices?`, `n=32`;
+  - `eval_tok_s=2.4`, `TTFT=19040.9 ms`, elapsed `29.85s`,
+    `memory_peak_bytes=14335258624`, `ram_ok=true`,
+    `display_processes_stopped_before_run=true`;
+  - hot-pool inserted `120` entries / `534.8MB` in `237.97 ms`, but only hit
+    `303/9614` lookups. Gate one-pack still read `3600` experts / `16.04GB`.
+    It does not improve over the safe path.
+- Offline coverage analysis explains the rejection: the gate working set is
+  very broad. In the safe n96 profile, top `120/240/480/960/1440/2048` entries
+  cover only about `6.5%/11.7%/21.1%/37.6%/50.0%/65.8%` of gate reads. Larger
+  pools would consume multiple GiB of VRAM and prefill seconds while reducing
+  batch-cache budget, so gate-only hot-pool is not the main path to `>5 tok/s`.
+- Default-off safety smoke after `13d86fe61`:
+  - run `20260708T145715Z-20260708T-default-n32-post-hotpool-code`, no hot-pool
+    env, source clean, `ram_ok=true`, display processes stopped;
+  - `eval_tok_s=2.3`, `TTFT=18690.5 ms`, H2D `6.64GB/s`, and no one-direct
+    hot-pool/manifest log lines. This is a low-H2D diagnostic result, not a
+    promoted SOTA.
+- Hardware state update:
+  - current GPU endpoint can advertise `32.0 GT/s x16`, but it is attached via
+    root port `0000:00:06.0`;
+  - root port `0000:00:06.0` reports max `16.0 GT/s x4`, so the software-visible
+    GPU link is capped at Gen4 x4 on this topology;
+  - measured H2D remains about `6.6-6.7GB/s`. Case B `32 GT/s x4` is not active
+    on this wiring/slot, so reaching stable `>5 tok/s` requires either a
+    hardware placement change or much larger expert-movement reduction than the
+    gate hot-pool can provide.
