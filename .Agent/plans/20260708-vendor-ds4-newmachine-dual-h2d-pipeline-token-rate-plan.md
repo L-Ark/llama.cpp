@@ -78,6 +78,20 @@ cleanup are diagnostic only and must not be promoted as SOTA.
 
 ## Implementation Plan
 
+0. **Mandatory Run-0 cleanup before any benchmark**
+   - Before launching `llama-cli` or any profiling/demo wrapper on the new
+     machine, stop the display stack and kill remaining GPU/model processes.
+     This includes `display-manager`, `gnome-shell`, `Xorg`, `ollama`, and any
+     stale `llama-cli`.
+   - Capture `nvidia-smi` immediately after cleanup and before model launch.
+     The run is valid only if no display/model GPU process remains.
+   - Store both fields in the run artifact:
+     `display_processes_stopped_before_run=true` and
+     `pre_run_nvidia_smi_processes=<captured list>`.
+   - Any run missing this cleanup or metadata is invalid for baseline,
+     candidate, SOTA, and regression comparison. It may only be referenced as
+     a diagnostic note.
+
 1. **Baseline and metadata recording**
    - Record separate baselines for Case A and Case B. Never compare or promote
      results without stating the hardware case.
@@ -1514,3 +1528,33 @@ Late-layer top2 schedule probe:
   recorded weight profile to build a layer-aware dynamic policy and validate
   it first on dev prompts. A candidate must pass Fibonacci/deploy quality and
   show n96 speedup before any source promotion.
+
+## 2026-07-09 Run-0 Cleanup Clarification
+
+The run procedure is now explicitly treated as part of the optimization plan,
+not just an operational reminder:
+
+1. Every future DeepSeek run on the new machine must start by killing display
+   processes and stale GPU/model processes.
+2. The launcher/demo script or manual run note must record that cleanup was
+   executed before the model process starts.
+3. `nvidia-smi` must be captured after cleanup and stored with the run
+   artifact so later reviewers can verify that display VRAM did not affect the
+   result.
+4. A result cannot be promoted, compared as a clean regression, or called SOTA
+   unless `display_processes_stopped_before_run=true` is present and the
+   pre-run GPU process list is recorded.
+
+Required cleanup command for manual runs:
+
+```bash
+echo '12345678' | sudo -S bash -lc '
+  systemctl stop display-manager || true
+  pkill -f "[g]nome-shell" || true
+  pkill -f "[X]org" || true
+  pkill -f "/usr/lib/xorg/[X]org" || true
+  pkill -f "[o]llama" || true
+  pkill -f "[l]lama-cli" || true
+  nvidia-smi
+'
+```
