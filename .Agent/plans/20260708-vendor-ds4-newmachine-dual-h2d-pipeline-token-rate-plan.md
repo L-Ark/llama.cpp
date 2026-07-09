@@ -5439,3 +5439,96 @@ Remaining caveat:
   gate read counts. The new one-pack read summary should remain available for
   diagnosing SSD/direct-read long tails, but it is not enabled in the accepted
   SOTA runs.
+
+### 2026-07-09 Probe: Gate12288 + Fallback-Value Down GPU Hotset
+
+Purpose:
+
+- Continue the original up/down GPU-path objective after the gate12288 SOTA.
+- The previous call-count down hotsets were not selective enough. This probe
+  builds down admission profiles from fallback wall-time value instead:
+  `current_sota_updown_decode_top4096_fallback_us.tsv`, down tensors only.
+- Runtime remains prompt-general in execution, but the fallback-value profile is
+  still an admission artifact and must be validated on multiple prompts before
+  promotion.
+
+Theory:
+
+- Gate12288 already reduces gate direct reads to about `2913` reads /
+  `12.98GB` on Quantum n96.
+- A small down batch cache can fit beside gate12288 if constrained:
+  - `GGML_MOE_VRAM_CACHE_MIB=2048` requests 2GiB and actually allocates about
+    `1.7GiB`, `420` down slots;
+  - `GGML_MOE_VRAM_CACHE_MIB=1024` leaves more CUDA workspace for other prompts.
+- The useful target is not "all down experts"; it is high fallback-value down
+  experts, because profile showed many down GPU hits are `n_active=1` and save
+  only tens of microseconds over CPU fallback.
+
+Quantum n96 results, gate12288 + bcache2048:
+
+| down admission | run | eval tok/s | TTFT ms | RAM peak | decision |
+| --- | --- | ---: | ---: | ---: | --- |
+| call-count top48 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T063411Z-20260709-gate12288-bcache2048-downhot-top48-quantum-n96` | 5.3 | 16186.32 | 14864633856 | rejected |
+| call-count top128 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T063449Z-20260709-gate12288-bcache2048-downhot-top128-quantum-n96` | 5.3 | 15742.45 | 14879125504 | rejected |
+| fallback top32 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T063819Z-20260709-gate12288-bcache2048-fallbackdown-top32-quantum-n96` | 5.5 | 16097.68 | 14862381056 | equal to SOTA |
+| fallback top64 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T063856Z-20260709-gate12288-bcache2048-fallbackdown-top64-quantum-n96` | 5.5 | 16079.59 | 14858711040 | equal to SOTA |
+| fallback top128 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T064003Z-20260709-gate12288-bcache2048-fallbackdown-top128-quantum-n96` | 5.6 | 16293.96 | 14867554304 | candidate only |
+| fallback top128 repro1 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T064059Z-20260709-gate12288-bcache2048-fallbackdown-top128-quantum-n96-repro1` | 5.5 | 16304.43 | 14869839872 | not above SOTA |
+| fallback top192 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T064207Z-20260709-gate12288-bcache2048-fallbackdown-top192-quantum-n96` | 4.9 | 16152.53 | 14863855616 | rejected |
+| fallback top256 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T064246Z-20260709-gate12288-bcache2048-fallbackdown-top256-quantum-n96` | 5.7 | 15488.11 | 14852931584 | candidate only |
+| fallback top256 repro1 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T064343Z-20260709-gate12288-bcache2048-fallbackdown-top256-quantum-n96-repro1` | 5.5 | 16248.07 | 14866653184 | not above SOTA |
+| fallback top320 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T064535Z-20260709-gate12288-bcache2048-fallbackdown-top320-quantum-n96` | 5.5 | 16120.46 | 14859427840 | equal to SOTA |
+| fallback top384 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T064612Z-20260709-gate12288-bcache2048-fallbackdown-top384-quantum-n96` | 5.5 | 16098.39 | 14872334336 | equal to SOTA |
+
+Representative counters:
+
+- fallback top128:
+  - gate one-stream reads stay fixed at `2913`, `12981633024` bytes;
+  - down cosubmit jobs: `69`;
+  - down iouring bytes: `307494912`;
+  - down cache hits: `370`;
+  - no gate regression, but replay falls back to `5.5`.
+- fallback top256:
+  - gate one-stream reads stay fixed at `2913`, `12981633024` bytes;
+  - down cosubmit jobs: `146`;
+  - down iouring bytes: `650641408`;
+  - down cache hits: `495`;
+  - first run reaches `5.7`, replay falls back to `5.5`.
+
+Generalization / safety check:
+
+- `bcache2048 + fallback top256` on Deploy fails with CUDA OOM:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T064708Z-20260709-gate12288-bcache2048-fallbackdown-top256-deploy-n96`.
+  - `run_ok=false`, exit `134`;
+  - stderr shows `CUDA error: out of memory`;
+  - reject regardless of Quantum speed.
+- Reducing to `bcache1024` avoids the OOM:
+  - Deploy run
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T064817Z-20260709-gate12288-bcache1024-fallbackdown-top256-deploy-n96`
+    reaches `5.7 tok/s`, RAM OK, coherent answer;
+  - Quantum run
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T064853Z-20260709-gate12288-bcache1024-fallbackdown-top256-quantum-n96`
+    reaches `5.5 tok/s`, RAM OK, coherent answer.
+  - This is safe but not faster than clean gate12288 (`Deploy 6.0`, Quantum
+    accepted `5.5`).
+
+Decision:
+
+- Do not promote fallback-value down hotset as SOTA.
+- The up/down GPU path is now functionally open and can produce down cache hits
+  without gate regression, but the only observed Quantum improvements
+  (`5.6-5.7`) are not replay-stable and fail/underperform generalized prompt
+  checks.
+- Current accepted SOTA remains clean gate12288.
+
+Next implementation direction:
+
+- The remaining gap is not source coverage; it is GPU down granularity and
+  workspace safety:
+  1. Avoid sending tiny `n_active=1` down calls through a separate GPU launch
+     unless they are batched across layers/tokens.
+  2. Add a hard free-VRAM/workspace reserve for batch cache allocation so Deploy
+     cannot OOM when gate12288 is active.
+  3. Consider a true fused multi-layer down work queue rather than per-call
+     down GPU hits. The profile shows per-call GPU down wall median is close to
+     CPU fallback, so launch/sync amortization is the next real bottleneck.
