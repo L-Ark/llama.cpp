@@ -3484,3 +3484,38 @@ Decision:
   example a wrapper-level sentence-boundary/repetition guard or a llama-cli
   generation-loop change that stops after a coherent completed answer without
   using held-out or prompt-specific text.
+
+## 2026-07-09 Wrapper-Level Sentence Guard Candidate
+
+Implementation:
+
+- Add default-off `LLAMA_DEMO_OUTPUT_GUARD=sentence` to the demo script.
+- The guard is prompt-general and does not inspect the prompt. It keeps
+  `answer.raw.txt` and `raw_answer` in `summary.json`, then trims the displayed
+  `answer.txt`/summary answer to the last complete sentence only when the raw
+  output ends mid-sentence. It does not trim unterminated code fences.
+- This is not a compute-speed optimization because the underlying generation
+  still runs to the configured token cap. It is a correctness/display guard for
+  cap-truncated answers while a true llama-cli generation-loop stop is still
+  pending.
+
+First diagnostic:
+
+- Default 4352MiB greedy config plus `LLAMA_DEMO_OUTPUT_GUARD=sentence`,
+  France n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T004447Z-20260709-dev-outputguard-france-n192`,
+  source `ecbc1c165a` dirty, strict cold, display cleanup recorded,
+  `eval_tok_s=6.2`, `prompt_tok_s=3.9`, `first_output_ms=16326.8 ms`,
+  `memory_peak_bytes=14909624320`, `memory_file_bytes=13996359680`,
+  `ram_ok=true`, `output_guard_applied=true`.
+- Displayed France answer is semantically correct, coherent, and ends on a
+  complete sentence. This satisfies the France correctness gate for this dev
+  run while preserving raw output for audit.
+
+Next validation:
+
+- Commit the default-off guard for reproducibility, sync the new machine to a
+  clean source commit, and rerun a dev prompt set with
+  `LLAMA_DEMO_OUTPUT_GUARD=sentence`.
+- If the dev set passes speed/RAM/TTFT/correctness, freeze a candidate before
+  any held-out validation. Do not use held-out v1 to tune the guard.

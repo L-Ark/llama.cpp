@@ -54,6 +54,8 @@ and are default-off:
   LLAMA_DEMO_DRY_MULTIPLIER, LLAMA_DEMO_DRY_BASE,
   LLAMA_DEMO_DRY_ALLOWED_LENGTH, LLAMA_DEMO_DRY_PENALTY_LAST_N,
   LLAMA_DEMO_SYSTEM_PROMPT, LLAMA_DEMO_FORCE_CONVERSATION.
+Optional generic output guard:
+  LLAMA_DEMO_OUTPUT_GUARD=sentence
 These controls must stay prompt-general and must not be tuned on held-out
 prompts.
 USAGE
@@ -190,6 +192,7 @@ LLAMA_DEMO_DRY_ALLOWED_LENGTH="${LLAMA_DEMO_DRY_ALLOWED_LENGTH:-}"
 LLAMA_DEMO_DRY_PENALTY_LAST_N="${LLAMA_DEMO_DRY_PENALTY_LAST_N:-}"
 LLAMA_DEMO_SYSTEM_PROMPT="${LLAMA_DEMO_SYSTEM_PROMPT:-}"
 LLAMA_DEMO_FORCE_CONVERSATION="${LLAMA_DEMO_FORCE_CONVERSATION:-0}"
+LLAMA_DEMO_OUTPUT_GUARD="${LLAMA_DEMO_OUTPUT_GUARD:-}"
 
 MEMORY_MAX_BYTES=16000000000
 MAX_TOKENS=96
@@ -420,7 +423,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
       "dry_allowed_length": $(printf '%s' "$LLAMA_DEMO_DRY_ALLOWED_LENGTH" | json_string),
       "dry_penalty_last_n": $(printf '%s' "$LLAMA_DEMO_DRY_PENALTY_LAST_N" | json_string),
       "system_prompt": $(printf '%s' "$LLAMA_DEMO_SYSTEM_PROMPT" | json_string),
-      "force_conversation": $(printf '%s' "$LLAMA_DEMO_FORCE_CONVERSATION" | json_string)
+      "force_conversation": $(printf '%s' "$LLAMA_DEMO_FORCE_CONVERSATION" | json_string),
+      "output_guard": $(printf '%s' "$LLAMA_DEMO_OUTPUT_GUARD" | json_string)
     },
     "GGML_CUDA_DISABLE_GRAPHS": $(printf '%s' "${GGML_CUDA_DISABLE_GRAPHS:-1}" | json_string),
     "GGML_MOE_STREAM": "1",
@@ -929,6 +933,27 @@ answer = re.split(r'\n\[\s*Prompt:\s*[0-9.]+\s*t/s', answer, maxsplit=1)[0]
 answer = re.sub(r'\[[^\n]*Prompt:\s*[0-9.]+\s*t/s[^\n]*\]', '', answer)
 answer = re.sub(r'(?s)^.*?available commands:.*?\n\n', '', answer)
 answer = re.sub(r'^[>\s|/\\\-\u2580-\u259f]+', '', answer).strip()
+raw_answer = answer
+
+def apply_output_guard(text, mode):
+    if mode != 'sentence' or not text:
+        return text, False
+    stripped = text.strip()
+    if not stripped or stripped[-1] in '.!?。！？':
+        return stripped, False
+    if stripped.count('```') % 2 == 1:
+        return stripped, False
+    matches = list(re.finditer(r'[.!?。！？](?=(?:["\'”’)\]]|\s|$))', stripped))
+    if not matches:
+        return stripped, False
+    cut = matches[-1].end()
+    guarded = stripped[:cut].strip()
+    if len(guarded) < max(40, len(stripped) * 0.35):
+        return stripped, False
+    return guarded, guarded != stripped
+
+output_guard = (config.get('runtime') or {}).get('sampler_controls', {}).get('output_guard', '')
+answer, output_guard_applied = apply_output_guard(answer, output_guard)
 
 rate = re.search(r'\[\s*Prompt:\s*([0-9.]+)\s*t/s\s*\|\s*Generation:\s*([0-9.]+)\s*t/s\s*\]', stdout)
 prompt_tok_s = float(rate.group(1)) if rate else None
@@ -955,6 +980,9 @@ summary = {
     'run_dir': str(run_dir),
     'prompt': prompt,
     'answer': answer,
+    'raw_answer': raw_answer,
+    'output_guard': output_guard,
+    'output_guard_applied': output_guard_applied,
     'answer_present': answer_present,
     'run_ok': run_ok,
     'prompt_general': True,
@@ -990,9 +1018,10 @@ summary = {
 }
 (run_dir / 'summary.json').write_text(json.dumps(summary, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
 (run_dir / 'answer.txt').write_text(answer + ('\n' if answer else ''), encoding='utf-8')
+(run_dir / 'answer.raw.txt').write_text(raw_answer + ('\n' if raw_answer else ''), encoding='utf-8')
 
 print('\n=== Demo summary ===')
-for key in ['run_ok', 'eval_tok_s', 'prompt_tok_s', 'first_output_ms', 'elapsed_seconds', 'memory_peak_bytes', 'memory_file_bytes', 'ram_ok', 'display_processes_stopped_before_run', 'answer_present', 'product_target_gt_5_tok_s_met_by_this_run', 'source_dirty']:
+for key in ['run_ok', 'eval_tok_s', 'prompt_tok_s', 'first_output_ms', 'elapsed_seconds', 'memory_peak_bytes', 'memory_file_bytes', 'ram_ok', 'display_processes_stopped_before_run', 'answer_present', 'output_guard', 'output_guard_applied', 'product_target_gt_5_tok_s_met_by_this_run', 'source_dirty']:
     print(f'{key}: {summary.get(key)}')
 print(f"hardware_before_pci: {hardware_before.get('pci')}")
 print(f"hardware_after_h2d_pci: {hardware_after_h2d.get('pci')}")
