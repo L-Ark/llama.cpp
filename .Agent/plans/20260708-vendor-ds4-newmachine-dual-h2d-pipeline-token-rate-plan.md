@@ -5257,3 +5257,67 @@ Implementation note:
   Without this, a run labeled "nopreload" still preloads the profile inside the
   cgroup because the variable is lost at `systemd-run` boundary. Any nopreload
   measurement before this passthrough fix must be treated as a preload run.
+
+Result:
+
+- Code commits:
+  - `12843ef vendor-ds4: gate cosubmit by profile hotset`;
+  - `bfbb4fe vendor-ds4: pass through vram profile preload flag`.
+- Remote validation head: `bfbb4fe08`.
+- Build: `/home/wici/ssd-llama/build-cuda/bin/llama-cli`, CUDA build passed.
+
+Preload-mode probes before the passthrough fix:
+
+| config | run | eval tok/s | TTFT ms | RAM peak | decision |
+| --- | --- | ---: | ---: | ---: | --- |
+| down top48, profile preload | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T055906Z-20260709-profilehot-top48-preload-cosubmitdownonly-gate7168-bcache8192-quantum-n96` | 5.4 | 16046.57 | 14834192384 | equal to SOTA, not promoted |
+| down top64, profile preload | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T060010Z-20260709-profilehot-top64-preload-cosubmitdownonly-gate7168-bcache8192-quantum-n96` | 5.2 | 16307.59 | 14862815232 | rejected |
+| down top128, profile preload | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T060047Z-20260709-profilehot-top128-preload-cosubmitdownonly-gate7168-bcache8192-quantum-n96` | 5.3 | 16155.75 | 14864621568 | rejected |
+
+These runs are valid RAM/correctness probes but not true nopreload probes,
+because `GGML_MOE_VRAM_PROFILE_PRELOAD=0` was not passed through yet.
+
+True nopreload probes after `bfbb4fe`:
+
+| config | run | eval tok/s | TTFT ms | RAM peak | source | decision |
+| --- | --- | ---: | ---: | ---: | --- | --- |
+| down top48, n32 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T060701Z-20260709-true-nopreload-downhot-top48-cosubmitdownonly-gate7168-bcache8192-quantum-n32` | 5.1 | 16271.10 | 14817521664 | clean | diagnostic rejected |
+| down top48, n96 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T060752Z-20260709-true-nopreload-downhot-top48-cosubmitdownonly-gate7168-bcache8192-quantum-n96` | 5.2 | 16205.96 | 14841495552 | clean | rejected |
+| down top128, n96 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T060843Z-20260709-true-nopreload-downhot-top128-cosubmitdownonly-gate7168-bcache8192-quantum-n96` | 5.3 | 16209.74 | 14880526336 | clean | rejected |
+
+Important counters:
+
+- top48 true nopreload n96:
+  - profile entries loaded for admission: `48`;
+  - cosubmit jobs: `42`;
+  - batch iouring bytes: `187170816`;
+  - down cache hits: `648`;
+  - profile skips: `10907`;
+  - gate one-stream direct reads remain `3369`, `15013773312` bytes.
+- top128 true nopreload n96:
+  - profile entries loaded for admission: `128`;
+  - cosubmit jobs: `93`;
+  - batch iouring bytes: `414449664`;
+  - down cache hits: `1133`;
+  - profile skips: `9634`;
+  - gate one-stream direct reads remain `3369`, `15013773312` bytes.
+
+Conclusion:
+
+- The profile-guided down GPU path is correct and can convert selected down
+  fallback events into batch-cache hits under the 16GB host RAM cap.
+- It does not improve token rate over the accepted clean gate7168 generalized
+  SOTA (`5.4 tok/s` on Quantum n96). The remaining dominant bytes are still the
+  one-stream gate path (`~15.0GB` direct reads in this prompt), and the small
+  down hotset does not change that bottleneck.
+- Do not promote these runs as SOTA.
+
+Next direction:
+
+- Stop simply enlarging down hotsets; top48->top128 increases down hits but not
+  enough to win.
+- The next useful implementation should address shared VRAM/cache layout across
+  gate and down, or reduce gate direct-read volume/latency. A promising next
+  probe is a unified admission policy that reserves a small down cache budget
+  without stealing effective capacity from the gate one-stream cache, then tests
+  whether gate misses stay flat while down hits increase.
