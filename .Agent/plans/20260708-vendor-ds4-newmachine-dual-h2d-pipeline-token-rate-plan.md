@@ -5603,3 +5603,40 @@ Planned tests:
   - `GGML_MOE_DOWN_BATCH_MIN_ACTIVE=4`.
 - Accept only if Quantum and at least one non-Quantum dev prompt both improve
   or remain non-regressed versus clean gate12288 without OOM.
+
+Results:
+
+| config | run | eval tok/s | TTFT ms | RAM peak | decision |
+| --- | --- | ---: | ---: | ---: | --- |
+| bcache1024 fallback top256 min_active=2 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T070312Z-20260709-gate12288-bcache1024-fallbackdown-top256-minactive2-quantum-n96` | 5.6 | 16161.01 | 14857887744 | candidate only |
+| bcache1024 fallback top256 min_active=4 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T070348Z-20260709-gate12288-bcache1024-fallbackdown-top256-minactive4-quantum-n96` | 5.8 | 17068.94 | 14863319040 | candidate only |
+| bcache1024 fallback top256 min_active=4 replay | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T070504Z-20260709-gate12288-bcache1024-fallbackdown-top256-minactive4-quantum-n96-repro1` | 5.5 | 16154.93 | 14857895936 | rejected |
+
+Counter observation:
+
+- min_active changed down execution admission but did not change gate-side
+  cosubmit payload:
+  - cosubmit jobs still `146`;
+  - down iouring bytes still `650641408`;
+  - down cache preloads still `292`;
+  - actual down GPU hits under min_active only `21`.
+- Therefore min_active alone can avoid some tiny GPU down calls, but it still
+  pays most of the preload/read cost. The `5.8` first run is not replay-stable.
+
+Decision:
+
+- Keep `GGML_MOE_DOWN_BATCH_MIN_ACTIVE` as a default-off diagnostic/safety
+  knob. It is useful for proving the launch-granularity issue.
+- Do not promote it as SOTA.
+
+Next implementation direction:
+
+- Gate-side cosubmit is now the wrong abstraction for down acceleration: it
+  preloads many entries that min_active later refuses to execute.
+- Move toward a demand-driven or queued down path:
+  1. collect down requests after routing;
+  2. group requests across adjacent calls/layers where possible;
+  3. only preload entries that will actually satisfy the grouped down work;
+  4. launch fewer, larger GPU down batches.
+- Until this is implemented, clean gate12288 remains the accepted generalized
+  SOTA.
