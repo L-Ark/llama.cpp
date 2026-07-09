@@ -4753,3 +4753,71 @@ Step D: Acceptance and push rule.
 - If all layout/cache sweeps regress or fail constraints, record the rejection
   table and then move to the up/down full-chain implementation with the measured
   safe VRAM reserve as a hard budget.
+
+### 2026-07-09 Execution: Gate Cache 7168MiB Layout SOTA
+
+Implementation:
+
+- Added default-off `GGML_MOE_VRAM_ACCOUNTING_OUT` trace in one-stream and
+  batch-cache CUDA code.
+- Promoted default `GGML_MOE_STREAM_ONE_CACHE_MIB` from `5120` to `7168` in
+  `scripts/demo-vendor-ds4-general-sota.sh` after clean validation.
+- This changes cache/layout only; model math, prompt-general expert pack, and
+  output guard behavior are unchanged.
+
+VRAM accounting evidence:
+
+- Baseline accounting run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T044402Z-20260709-vram-accounting-quantum-n32`.
+- At first one-stream MoE call, before gate cache allocation:
+  `used=17941.312 MiB`, `free=14167.812 MiB`.
+- One-stream workspace allocation added only about `6 MiB`.
+- `5120MiB` gate cache actually allocated `5117.000 MiB`,
+  `1204` slots of `4.250 MiB`, leaving `9043.812 MiB` free.
+- Sweep results:
+  - `6144MiB`: allocated `6141.250 MiB`, `1445` slots,
+    `5.1 tok/s`, TTFT `19336.95 ms`, RAM OK; no clear speed gain.
+  - `7168MiB`: allocated `7165.500 MiB`, `1686` slots,
+    `5.3 tok/s` on n32 Quantum, TTFT `16006.02 ms`, RAM OK.
+  - `8192MiB`: allocated `8189.750 MiB`, `1927` slots,
+    `5.2 tok/s` on n32 Quantum, TTFT `15762.29 ms`, RAM OK.
+- Interpretation: `7168MiB` is the best current gate-cache layout point.
+  It leaves about `6995.812 MiB` CUDA free after cache allocation, which is the
+  current measured budget for future up/down GPU workspace/cache experiments.
+
+Clean n96 comparison:
+
+| config | run | eval tok/s | prompt tok/s | TTFT ms | RAM peak | source |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| gate5120 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T044825Z-20260709-clean-gate5120-quantum-n96` | 5.1 | 3.5 | 15913.05 | 14883000320 | clean |
+| gate7168 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T044902Z-20260709-clean-gate7168-quantum-n96` | 5.4 | 3.5 | 15802.83 | 14885810176 | clean |
+
+Dev prompt validation for gate7168:
+
+| prompt | run | eval tok/s | TTFT ms | RAM peak | correctness |
+| --- | --- | ---: | ---: | ---: | --- |
+| France | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T045007Z-20260709-clean-gate7168-dev-france-n96` | 5.9 | 16141.47 | 14852157440 | pass: coherent English France paragraph |
+| Quantum | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T044902Z-20260709-clean-gate7168-quantum-n96` | 5.4 | 15802.83 | 14885810176 | pass: coherent short explanation |
+| Deploy | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T045121Z-20260709-clean-gate7168-dev-deploy-n96` | 5.8 | 16535.28 | 14913478656 | pass: coherent deployment guidance opening |
+| Shenzhen Chinese | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T045158Z-20260709-clean-gate7168-dev-shenzhen-n96` | 6.2 | 16591.60 | 14893309952 | pass: coherent Chinese itinerary opening |
+| Fibonacci n96 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T045044Z-20260709-clean-gate7168-dev-fibonacci-n96` | 5.7 | 14841.38 | 14901903360 | speed/RAM pass, code truncated before return; not a clean correctness pass at n96 |
+| Fibonacci n192 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T045302Z-20260709-clean-gate7168-fibonacci-n192` | 5.3 | 16159.72 | 14893985792 | pass: complete executable iterative Fibonacci function |
+
+Acceptance status:
+
+- `gate7168` is accepted as the current clean generalized speed/layout SOTA for
+  non-code n96 dev prompts and for Fibonacci when allowed `n192`.
+- Host RAM remains below 16GB including page cache in all listed runs.
+- TTFT does not increase beyond the 20% limit relative to clean `gate5120`.
+- The remaining product-quality issue is output length/guard behavior for code
+  prompts at `n96`, not cache correctness.
+
+Next step after this layout SOTA:
+
+- Use the measured post-cache free VRAM budget (`~6996 MiB`) as a hard budget
+  for up/down GPU-path work.
+- Start with up/down hot-cache or batch-cache prototypes that reserve at least
+  `~4 GiB` free VRAM for CUDA workspace/fragmentation until a tighter allocator
+  bound is measured.
+- Do not let up/down cache/workspace regress the accepted gate7168 hit rate or
+  TTFT.
