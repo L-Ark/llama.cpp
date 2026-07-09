@@ -5543,3 +5543,35 @@ Implementation follow-up:
 - Add demo passthrough and config recording so future up/down GPU probes can
   reserve workspace explicitly instead of relying on failed `cudaMalloc`
   retries. This is default-off and does not change clean gate12288 behavior.
+
+Reserve validation:
+
+- The previously failing Deploy config was rerun with:
+  - `GGML_MOE_VRAM_CACHE_MIB=2048`;
+  - `GGML_MOE_VRAM_CACHE_GRAPH_RESERVE_MIB=512`;
+  - `GGML_MOE_VRAM_CACHE_SAFETY_MIB=128`;
+  - fallback down top256 admission.
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T065301Z-20260709-gate12288-bcache2048-reserve512-fallbackdown-top256-deploy-n96`.
+- Result:
+  - `run_ok=true`;
+  - `eval_tok_s=5.8`;
+  - `TTFT=16828.11 ms`;
+  - `memory_peak_bytes=14863167488`;
+  - output coherent.
+- Allocator evidence:
+  - requested batch cache `2048MiB`;
+  - free before allocation `1873MiB`;
+  - actual clamped cache `1233MiB`;
+  - down cache `290` slots;
+  - no CUDA OOM.
+- Quantum with the same reserve config:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T065356Z-20260709-gate12288-bcache2048-reserve512-fallbackdown-top256-quantum-n96`
+  reached only `5.4 tok/s`.
+
+Decision:
+
+- Reserve passthrough is accepted as a safety/diagnostic improvement.
+- The reserve-enabled up/down candidate is rejected as a speed SOTA: it is safe
+  but slower than clean gate12288 on both checked prompts (`Deploy 5.8` vs clean
+  `6.0`; Quantum `5.4` vs accepted `5.5`).
