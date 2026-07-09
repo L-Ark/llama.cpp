@@ -38,9 +38,9 @@ What this script demonstrates:
   - User may enter any prompt; this is not a France-specialized demo.
 
 Current known generalized status:
-  - Current dev-prompt speed SOTA uses a 4352MiB gate one-cache with
-    vram13824/cosubmit; recent dev prompt results are about 5.1-5.8 tok/s on
-    the new machine.
+  - Current dev-prompt speed candidate uses a 4352MiB gate one-cache with
+    vram13824/cosubmit; recent dev prompt results range around 5.0-5.8 tok/s
+    on the new machine, with Quantum still near the threshold.
   - Product target remains stable >5 tok/s for random prompts; held-out
     validation and output-stop cleanup are still pending.
 
@@ -363,7 +363,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "prompt_general": true,
   "prompt_specific_optimization": false,
   "france_specialized_path_used": false,
-  "current_safe_quality_dev_tok_s": {"min": 5.1, "mean": 5.54, "max": 5.8},
+  "current_safe_quality_dev_tok_s": {"min": 5.0, "mean": 5.54, "max": 5.8},
   "current_held_out_v1_tok_s": null,
   "product_target_tok_s": 5.0,
   "product_target_currently_met": false,
@@ -742,7 +742,7 @@ Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches
 Gate fullpack prompt-general source: $([[ "$GATE_FULLPACK" -eq 1 ]] && echo enabled || echo disabled)
 Calibration overlay pack: $([[ -n "$CALIBRATION_OVERLAY_PACK_PATH" ]] && echo "$CALIBRATION_OVERLAY_PACK_PATH" || echo disabled)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
-Known dev speed SOTA: gate one-cache 4352MiB plus vram13824/cosubmit, about 5.1-5.8 tok/s on recent dev prompts.
+Known dev speed candidate: gate one-cache 4352MiB plus vram13824/cosubmit, about 5.0-5.8 tok/s on recent dev prompts.
 Product target: stable >5 tok/s for random prompts. Held-out validation and output-stop cleanup are still pending.
 Prompt-specific packs/profiles/aliases: disabled and refused.
 Prompt:

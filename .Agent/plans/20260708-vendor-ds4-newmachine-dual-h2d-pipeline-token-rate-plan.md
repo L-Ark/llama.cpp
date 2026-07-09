@@ -3177,6 +3177,40 @@ Decision:
   validation is still pending and the France answer should be made to stop more
   cleanly.
 
+Clean default reproduction after promotion:
+
+- Default 4352MiB Quantum n64, source clean `256e55303c`, no explicit
+  `GGML_MOE_STREAM_ONE_CACHE_MIB` env:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T000552Z-20260709-default4352-quantum-repro-n64`,
+  `eval_tok_s=5.0`, `prompt_tok_s=3.6`,
+  `first_output_ms=15711.8 ms`, `memory_peak_bytes=14871277568`,
+  `ram_ok=true`, but strict `>5` flag false.
+
+Revised decision:
+
+- 4352MiB is a strong dev-speed candidate but not stable enough on Quantum to
+  prove the product target. Continue the narrow sweep with `4608MiB`; if that
+  does not strictly and repeatably cross `>5`, the demo default should be
+  treated as a candidate default rather than final SOTA completion.
+
+4608MiB probe:
+
+- Quantum n64 with explicit `GGML_MOE_STREAM_ONE_CACHE_MIB=4608`, source clean
+  `256e55303c`:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T000807Z-20260709-stream-one-cache4608-quantum-n64`,
+  `eval_tok_s=4.6`, `prompt_tok_s=3.6`,
+  `first_output_ms=16218.6 ms`, `memory_peak_bytes=14825299968`,
+  `ram_ok=true`, strict `>5` flag false.
+
+Decision:
+
+- Reject `4608MiB`. The narrow capacity sweep confirms a sharp local optimum:
+  4096/4352 are near the Quantum threshold, while 4608 and 5120 regress.
+- Keep 4352 as a useful dev-speed candidate/default for reproducibility, but
+  do not claim stable product completion. The next real optimization must
+  target variance and request-local cache quality, or reduce gate copy cost,
+  rather than increasing cache size.
+
 ## 2026-07-09 Request-Local Gate Cache Admission Plan
 
 Hypothesis:
