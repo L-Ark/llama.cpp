@@ -4632,3 +4632,124 @@ Next profiling task:
 - After router timing is isolated, rerun n32/n96 lifecycle profile and replace
   the residual bucket with explicit `router`, `attention/dense`, and
   `scheduler/other` buckets.
+
+## 2026-07-09 Nearest Step: VRAM Layout Before Up/Down Full Path
+
+Priority:
+
+- This is now the immediate next optimization step.
+- Do this before implementing the up/down full expert-pack GPU chain and before
+  the CPU/GPU hybrid tail-expert work.
+- Reason: current SOTA still has about `8.8-9.0 GiB` nominal free VRAM, but
+  previous larger-cache attempts were unstable or regressed. We need a precise
+  allocator/cache layout map before adding more fast-path expert payloads.
+
+Current SOTA VRAM layout from measured memory breakdown:
+
+```text
+RTX 5090 total:       32109 MiB
+
+free:                  8987 MiB
+
+ggml/self total:      17361 MiB
+  model weights:      17339 MiB
+  context/KV:            18 MiB
+  compute buffer:         2 MiB
+
+unaccounted:           5760 MiB
+  gate VRAM cache:    ~5120 MiB
+  CUDA/runtime/
+  stream workspace/
+  fragmentation:       ~640 MiB
+```
+
+Operational interpretation:
+
+- The accepted generalized SOTA mostly uses VRAM for:
+  1. dense/attention/non-MoE model weights (`~17.3 GiB`);
+  2. one-stream gate expert VRAM cache (`~5.0 GiB`);
+  3. CUDA/runtime/stream workspace/fragmentation (`~0.6 GiB`);
+  4. remaining free VRAM (`~8.8-9.0 GiB`).
+- The gate cache stores `blk.*.ffn_gate_exps.weight` entries. It does not hold a
+  comparable persistent up/down cache.
+- Therefore current VRAM is not full, but the free region cannot be blindly
+  assigned to cache because allocator fragmentation, workspace needs, batch
+  path buffers, and H2D/cache synchronization can make larger nominal caches
+  slower or invalid.
+
+Nearest-step objective:
+
+- Convert the vague "`~9 GiB free`" into a safe, measured VRAM budget that can
+  be used for the next expert-cache increment without breaking cold-start
+  correctness, TTFT, or 16GB host RAM.
+- Decide whether the next cache payload should be:
+  - larger gate cache;
+  - hot up cache;
+  - hot down cache;
+  - split gate/up/down cache;
+  - workspace reservation for a future up/down GPU batch path.
+
+Step A: Build an exact VRAM accounting profile.
+
+- Run current generalized SOTA with default-off VRAM profile enabled and record:
+  - `cudaMemGetInfo` before model load, after model load, after one-stream
+    cache allocation, after first prompt MoE call, at first decode token, and
+    at process exit;
+  - one-stream cache requested/allocated MiB and slot count;
+  - any batch-cache allocation requested/allocated MiB;
+  - pinned host slots and sizes;
+  - CUDA context/runtime overhead;
+  - peak temporary workspace per token if visible.
+- Required run hygiene:
+  - stop display processes and stale model/GPU processes before the run;
+  - strict `MemoryMax=16000000000`, `MemorySwapMax=0`;
+  - cold `drop_caches`;
+  - no prompt-specific profile/pack/alias;
+  - source clean for accepted comparisons.
+
+Step B: Sweep safe VRAM allocations without changing model math.
+
+- Keep current prompt-general SOTA behavior and vary only cache/layout budgets:
+  - gate one-cache: `5120`, `6144`, `7168`, `8192` MiB;
+  - reserve free-VRAM floor: `2048`, `4096`, `6144` MiB;
+  - if allocator supports it, fixed workspace reservation before expert cache.
+- For each candidate, record:
+  - `eval_tok_s`, `prompt_tok_s`, `TTFT`;
+  - `memory_peak_bytes`, `memory_file_bytes`, `ram_ok`;
+  - `cuda free/used` checkpoints;
+  - gate hit/miss, read/H2D/sync/kernel split;
+  - answer text and correctness.
+- Reject immediately if:
+  - host RAM exceeds 16GB including page cache;
+  - CUDA OOM or cache insertion failure appears;
+  - TTFT increases by more than 20%;
+  - correctness regresses on France, Quantum, Fibonacci, Deploy, or Chinese
+    dev prompts;
+  - speed gain is prompt-specific rather than generalized.
+
+Step C: Test whether free VRAM is better spent on up/down hot cache.
+
+- Before building a full up/down GPU path, run a diagnostic-only cache-source
+  analysis using `grouped_route_profile.csv` and fallback profiles:
+  - rank/layer frequency of up/down selected experts across the dev prompts;
+  - bytes needed for top-K hot up/down experts by layer;
+  - expected CPU fallback wall time covered if those entries were resident;
+  - expected H2D/read time if they used a pack/cache path.
+- Build only the smallest prompt-general hot up/down pack/cache prototype that
+  can test this bound. Do not tune on held-out prompts.
+- If the bound shows the free VRAM can remove a meaningful fraction of the
+  `~57.5 ms/token` up/down CPU fallback without causing gate regression, then
+  proceed to the up/down full expert-pack GPU chain.
+
+Step D: Acceptance and push rule.
+
+- If a VRAM layout-only change improves generalized cold-start token rate while
+  meeting all constraints, immediately:
+  - record exact run dir, commit hash, env, command, memory, correctness output,
+    TTFT, token rates, and source cleanliness;
+  - commit and push to
+    `origin/vendor/deepseek-token-rate-16gb` with author/committer
+    `L-Ark <fliangae@connect.ust.hk>`.
+- If all layout/cache sweeps regress or fail constraints, record the rejection
+  table and then move to the up/down full-chain implementation with the measured
+  safe VRAM reserve as a hard budget.
