@@ -240,6 +240,57 @@ struct vram_cache {
 static vram_cache g_vcache;
 static bool       g_vcache_inited = false;
 
+static FILE * vram_accounting_fp() {
+    static FILE * fp = nullptr;
+    static bool initialized = false;
+    static std::mutex mu;
+    std::lock_guard<std::mutex> lk(mu);
+    if (!initialized) {
+        initialized = true;
+        const char * path = std::getenv("GGML_MOE_VRAM_ACCOUNTING_OUT");
+        if (path && path[0]) {
+            fp = std::fopen(path, "w");
+            if (fp) {
+                std::setvbuf(fp, nullptr, _IOLBF, 0);
+                std::fprintf(fp,
+                    "t_us,component,event,free_mib,total_mib,used_mib,cache_pool_mib,cache_slots,slot_mib,detail\n");
+            } else {
+                std::fprintf(stderr, "[moe_stream] VRAM accounting: failed to open %s\n", path);
+            }
+        }
+    }
+    return fp;
+}
+
+static uint64_t vram_accounting_now_us() {
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    return (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(now).count();
+}
+
+static void vram_accounting_record(const char * event, const char * detail = "") {
+    FILE * fp = vram_accounting_fp();
+    if (!fp) return;
+    size_t free_bytes = 0;
+    size_t total_bytes = 0;
+    const cudaError_t err = cudaMemGetInfo(&free_bytes, &total_bytes);
+    if (err != cudaSuccess) {
+        cudaGetLastError();
+        return;
+    }
+    const double mib = 1024.0 * 1024.0;
+    std::fprintf(fp,
+        "%llu,one_stream,%s,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%s\n",
+        (unsigned long long) vram_accounting_now_us(),
+        event ? event : "",
+        free_bytes / mib,
+        total_bytes / mib,
+        (total_bytes - free_bytes) / mib,
+        g_vcache.pool_sz / mib,
+        g_vcache.n_slots,
+        g_vcache.slot_sz / mib,
+        detail ? detail : "");
+}
+
 static void vram_cache_report_atexit() {
     uint64_t h = g_vcache.hits.load();
     uint64_t m = g_vcache.misses.load();
@@ -393,6 +444,7 @@ static bool moe_stream_cache_admit_allows(const char * tensor, int64_t expert) {
 
 static void vram_cache_init(size_t expert_sz) {
     if (g_vcache_inited) return;
+    vram_accounting_record("one_cache_init_before");
     const char *env_one_mib = std::getenv("GGML_MOE_STREAM_ONE_CACHE_MIB");
     const char *env_one_gb = std::getenv("GGML_MOE_STREAM_ONE_CACHE_GB");
     const char *env_shared_mib = std::getenv("GGML_MOE_VRAM_CACHE_MIB");
@@ -420,12 +472,14 @@ static void vram_cache_init(size_t expert_sz) {
         cudaGetLastError();
         g_vcache.n_slots = 0;
         g_vcache_inited = true;
+        vram_accounting_record("one_cache_alloc_failed");
         return;
     }
     g_vcache.pool_sz = alloc;
     std::fprintf(stderr, "[moe_stream] VRAM cache: %.1f GiB, %d slots (%.2f MiB each)\n",
                  alloc / (1024.0*1024.0*1024.0), g_vcache.n_slots,
                  expert_sz / (1024.0*1024.0));
+    vram_accounting_record("one_cache_alloc_after");
     std::atexit(vram_cache_report_atexit);
     g_vcache_inited = true;
 }
@@ -4928,6 +4982,10 @@ extern "C" bool ggml_cuda_moe_stream_one(
 {
     init_once();
     if (!g_avail.load(std::memory_order_acquire)) return false;
+    static std::atomic<int> first_accounting{0};
+    if (first_accounting.fetch_add(1, std::memory_order_relaxed) == 0) {
+        vram_accounting_record("first_one_call_entry", src0_name ? src0_name : "");
+    }
 
     const ggml_type t0 = (ggml_type)src0_type_int;
     if (!moe_stream_one_type_allowed(t0, src0_name)) return false;
@@ -4964,6 +5022,10 @@ extern "C" bool ggml_cuda_moe_stream_one(
           && ensure_host_pinned(ctx.h_scratch, ctx.h_scratch_sz, dst_bytes);
     }
     if (!ok) { release_slot(s); return false; }
+    static std::atomic<int> first_workspace_accounting{0};
+    if (first_workspace_accounting.fetch_add(1, std::memory_order_relaxed) == 0) {
+        vram_accounting_record("first_one_workspace_after", src0_name ? src0_name : "");
+    }
 
     cudaStream_t st = ctx.stream;
     one_direct_hot_pool_prefill_maybe(ctx, st);
@@ -4972,6 +5034,10 @@ extern "C" bool ggml_cuda_moe_stream_one(
     if (!g_vcache_inited) {
         std::lock_guard<std::mutex> lk(g_init_mu);
         if (!g_vcache_inited) vram_cache_init(src0_bytes);
+    }
+    static std::atomic<int> first_cache_ready_accounting{0};
+    if (first_cache_ready_accounting.fetch_add(1, std::memory_order_relaxed) == 0) {
+        vram_accounting_record("first_one_cache_ready", src0_name ? src0_name : "");
     }
     one_prefill_maybe(ctx, st, src0_bytes);
 

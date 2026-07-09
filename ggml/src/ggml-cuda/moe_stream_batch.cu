@@ -953,6 +953,57 @@ struct batch_vram_cache {
 static batch_vram_cache g_bcaches[2];
 static bool g_bcache_inited[2] = {};
 
+static FILE * batch_vram_accounting_fp() {
+    static FILE * fp = nullptr;
+    static bool initialized = false;
+    static std::mutex mu;
+    std::lock_guard<std::mutex> lk(mu);
+    if (!initialized) {
+        initialized = true;
+        const char * path = std::getenv("GGML_MOE_VRAM_ACCOUNTING_OUT");
+        if (path && path[0]) {
+            fp = std::fopen(path, "a");
+            if (fp) {
+                std::setvbuf(fp, nullptr, _IOLBF, 0);
+            } else {
+                std::fprintf(stderr, "[moe_stream_batch] VRAM accounting: failed to open %s\n", path);
+            }
+        }
+    }
+    return fp;
+}
+
+static uint64_t batch_vram_accounting_now_us() {
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    return (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(now).count();
+}
+
+static void batch_vram_accounting_record(const char * event, int cid, const batch_vram_cache * c, const char * detail = "") {
+    FILE * fp = batch_vram_accounting_fp();
+    if (!fp) return;
+    size_t free_bytes = 0;
+    size_t total_bytes = 0;
+    const cudaError_t err = cudaMemGetInfo(&free_bytes, &total_bytes);
+    if (err != cudaSuccess) {
+        cudaGetLastError();
+        return;
+    }
+    const double mib = 1024.0 * 1024.0;
+    const double pool_mib = c && c->pool ? ((double)c->n_slots * (double)c->slot_sz) / mib : 0.0;
+    std::fprintf(fp,
+        "%llu,batch_%s,%s,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%s\n",
+        (unsigned long long) batch_vram_accounting_now_us(),
+        cid == 1 ? "upgate" : "down",
+        event ? event : "",
+        free_bytes / mib,
+        total_bytes / mib,
+        (total_bytes - free_bytes) / mib,
+        pool_mib,
+        c ? c->n_slots : 0,
+        c ? c->slot_sz / mib : 0.0,
+        detail ? detail : "");
+}
+
 struct cache_policy_diag {
     std::atomic<uint64_t> profile_count_lookups{0};
     std::atomic<uint64_t> profile_count_hits{0};
@@ -1824,6 +1875,7 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         g_bcache_inited[cid] = true;
         return nullptr;
     }
+    batch_vram_accounting_record("batch_cache_alloc_before", cid, c);
     int alloc_slots = c->n_slots;
     size_t alloc = (size_t)alloc_slots * expert_sz;
     cudaError_t alloc_err = cudaMalloc(&c->pool, alloc);
@@ -1847,10 +1899,12 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
                          cid == 1 ? "upgate" : "down");
             c->n_slots = 0;
             g_bcache_inited[cid] = true;
+            batch_vram_accounting_record("batch_cache_alloc_failed", cid, c);
             return nullptr;
         }
         c->n_slots = alloc_slots;
     }
+    batch_vram_accounting_record("batch_cache_alloc_after", cid, c);
     for (char (&name)[128] : c->slot_tensor) {
         name[0] = '\0';
     }
