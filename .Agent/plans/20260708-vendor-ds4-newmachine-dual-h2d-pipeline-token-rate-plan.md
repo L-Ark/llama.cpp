@@ -5250,3 +5250,10 @@ Acceptance rule:
   `origin/vendor/deepseek-token-rate-16gb`.
 - If it does not beat SOTA, keep the code default-off and record the rejection
   with `profile_skips`, jobs, bytes, cache hit/miss, RAM, TTFT, and answer text.
+
+Implementation note:
+
+- The demo wrapper must pass through and record `GGML_MOE_VRAM_PROFILE_PRELOAD`.
+  Without this, a run labeled "nopreload" still preloads the profile inside the
+  cgroup because the variable is lost at `systemd-run` boundary. Any nopreload
+  measurement before this passthrough fix must be treated as a preload run.

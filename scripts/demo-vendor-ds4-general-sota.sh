@@ -485,6 +485,8 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_RAM_TIER_PIN": $(printf '%s' "${GGML_MOE_RAM_TIER_PIN:-}" | json_string),
     "GGML_MOE_RAM_TIER_PIN_MIB": $(printf '%s' "${GGML_MOE_RAM_TIER_PIN_MIB:-}" | json_string),
     "GGML_MOE_CPU_FALLBACK_PACK_MMAP": $(printf '%s' "${GGML_MOE_CPU_FALLBACK_PACK_MMAP:-}" | json_string),
+    "GGML_MOE_VRAM_PROFILE": $(printf '%s' "${GGML_MOE_VRAM_PROFILE:-}" | json_string),
+    "GGML_MOE_VRAM_PROFILE_PRELOAD": $(printf '%s' "${GGML_MOE_VRAM_PROFILE_PRELOAD:-}" | json_string),
     "GGML_MOE_PREFETCH_DOWN": $(printf '%s' "${GGML_MOE_PREFETCH_DOWN:-}" | json_string),
     "GGML_MOE_PREFETCH_DOWN_DEPTH": $(printf '%s' "${GGML_MOE_PREFETCH_DOWN_DEPTH:-}" | json_string),
     "GGML_KIMI_CPU_MOE_PROFILE": $(printf '%s' "${GGML_KIMI_CPU_MOE_PROFILE:-}" | json_string),
@@ -818,6 +820,7 @@ for passthrough_env in \
   GGML_MOE_VRAM_PROFILE_PROTECT \
   GGML_MOE_VRAM_PROFILE_RESERVE_SLOTS \
   GGML_MOE_VRAM_PROFILE_RESERVE_PCT \
+  GGML_MOE_VRAM_PROFILE_PRELOAD \
   GGML_MOE_VRAM_PROFILE_PRELOAD_MAX_TENSORS \
   GGML_MOE_VRAM_PROFILE_PRELOAD_EVICT \
   GGML_MOE_VRAM_PROFILE_SKIP_FIRST_PRELOADS \
