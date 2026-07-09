@@ -3956,3 +3956,97 @@ Decision:
   improved by the guard.
 - This must be committed and pushed immediately, then re-run from clean source
   for final candidate reproduction before any held-out validation.
+
+Clean-source reproduction after push:
+
+- Pushed candidate commit: `196fb9de61`
+  (`vendor-ds4: promote one5120 vram12000 candidate`).
+- Remote was reset to the pushed commit via bundle and verified source clean.
+- Quantum n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T015745Z-20260709-clean-196fb9d-default-quantum-n192`,
+  `eval_tok_s=5.1`, `prompt_tok_s=3.5`,
+  `first_output_ms=16075.0 ms`, `memory_peak_bytes=14916681728`,
+  `memory_file_bytes=13856636928`, `ram_ok=true`, source clean.
+- Deploy n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T015841Z-20260709-clean-196fb9d-default-deploy-n192`,
+  `eval_tok_s=5.6`, `prompt_tok_s=4.3`,
+  `first_output_ms=16554.4 ms`, `memory_peak_bytes=14882635776`,
+  `memory_file_bytes=13864308736`, `ram_ok=true`, source clean. The dangling
+  markdown heading is removed.
+- AI infra n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T015937Z-20260709-clean-196fb9d-default-aiinfra-n192`,
+  `eval_tok_s=6.0`, `prompt_tok_s=3.7`,
+  `first_output_ms=16073.8 ms`, `memory_peak_bytes=14891610112`,
+  `memory_file_bytes=13909987328`, `ram_ok=true`, source clean. The malformed
+  leading Chinese fragment is removed.
+- Fibonacci n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T020029Z-20260709-clean-196fb9d-default-fibonacci-n192`,
+  `eval_tok_s=5.5`, `prompt_tok_s=3.8`,
+  `first_output_ms=15476.0 ms`, `memory_peak_bytes=14903009280`,
+  `memory_file_bytes=13751476224`, `ram_ok=true`, source clean. Function is
+  syntactically valid.
+
+Held-out v2 freeze:
+
+- Because the candidate is now pushed and reproduced from clean source, freeze
+  a new held-out v2 set for one-shot validation. These prompts were not used
+  for tuning this candidate:
+  1. `Explain why the sky is blue in one paragraph.`
+  2. `What are the benefits and risks of remote work?`
+  3. `Write a short SQL query to count users by country.`
+  4. `Explain how to back up important files safely.`
+  5. `用一段话介绍杭州。`
+- Run once under strict cold, 16GB cgroup, display/model cleanup before every
+  prompt, source clean `196fb9de61`, default one5120/vram12000, and
+  `LLAMA_DEMO_OUTPUT_GUARD=sentence`. Do not tune on this set.
+
+Held-out v2 result:
+
+- Sky blue:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T020229Z-20260709-clean-196fb9d-heldoutv2-sky-n192`,
+  `eval_tok_s=5.8`, `prompt_tok_s=3.7`,
+  `first_output_ms=16918.4 ms`, `memory_peak_bytes=14897381376`,
+  `memory_file_bytes=13732032512`, `ram_ok=true`, source clean. Main
+  explanation is semantically correct, but the answer ends with an irrelevant
+  extra sentence (`Given: The function is at the point.`). Mark correctness
+  partial, not a clean pass.
+- Remote work:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T020323Z-20260709-clean-196fb9d-heldoutv2-remote_work-n192`,
+  `eval_tok_s=5.6`, `prompt_tok_s=4.0`,
+  `first_output_ms=17048.3 ms`, `memory_peak_bytes=14898937856`,
+  `memory_file_bytes=13908873216`, `ram_ok=true`, source clean. Output has a
+  small leading fragment (`for remote work`) and mostly covers benefits before
+  the cap, with limited risk coverage. Mark correctness partial.
+- SQL country count:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T020418Z-20260709-clean-196fb9d-heldoutv2-sql_country-n192`,
+  `eval_tok_s=5.3`, `prompt_tok_s=4.1`,
+  `first_output_ms=17057.0 ms`, `memory_peak_bytes=14910443520`,
+  `memory_file_bytes=13820563456`, `ram_ok=true`, source clean. SQL query is
+  correct and answer is coherent. Mark correctness pass.
+- Backup files:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T020514Z-20260709-clean-196fb9d-heldoutv2-backup_files-n192`,
+  `eval_tok_s=5.2`, `prompt_tok_s=3.7`,
+  `first_output_ms=16917.1 ms`, `memory_peak_bytes=14908542976`,
+  `memory_file_bytes=13848903680`, `ram_ok=true`, source clean. Main backup
+  explanation is useful but truncates at `Full Backup vs.`. Mark correctness
+  partial.
+- Hangzhou Chinese:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T020612Z-20260709-clean-196fb9d-heldoutv2-hangzhou_cn-n192`,
+  `eval_tok_s=6.4`, `prompt_tok_s=3.6`,
+  `first_output_ms=15589.8 ms`, `memory_peak_bytes=14925869056`,
+  `memory_file_bytes=13994553344`, `ram_ok=true`, source clean. The answer is
+  broadly on-topic but starts with a stray comma and truncates after `如龙井`.
+  Mark correctness partial.
+
+Held-out v2 decision:
+
+- Speed side passes strongly: held-out v2 min/mean/max token rate is
+  `5.2 / 5.66 / 6.4 tok/s`, all under strict cold 16GB cgroup with page cache
+  included and display cleanup recorded.
+- Product correctness is not fully solved. Several held-out answers have
+  residual leading fragments, irrelevant tail text, or cap truncation. Do not
+  mark the overall random-prompt product goal complete yet.
+- Current accepted speed SOTA remains pushed commit `196fb9de61` with
+  default `one5120/vram12000`; the next work should be prompt-general output
+  quality/stopping, not more token-rate tuning, unless a future change
+  preserves the held-out speed floor while improving completeness.
