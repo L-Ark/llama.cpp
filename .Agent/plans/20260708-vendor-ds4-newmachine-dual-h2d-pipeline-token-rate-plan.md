@@ -5811,3 +5811,94 @@ Next implementation requirement:
   must drop from hundreds of synchronous waits to either background work or a
   small number of grouped waits, while Quantum and one other dev prompt both
   exceed the clean `5.5 tok/s` class under the 16GB cgroup.
+
+## 2026-07-09 route-group correction: gate/up/down are all known after router
+
+Correction:
+
+- The previous explanation that expert gate has a fundamentally earlier
+  scheduling point than up/down was wrong.
+- The 12GB "gate cache" refers to `ffn_gate_exps`, not the router gate.
+- `ffn_gate_exps`, `ffn_up_exps`, and `ffn_down_exps` expert ids are all known
+  after the router selects the active experts for the layer.
+- Therefore the target architecture is not "gate first, up/down later"; it is
+  "router-selected route group first, then plan gate/up/down together."
+
+Implementation direction:
+
+- Keep the accepted gate12288 path as the clean SOTA baseline.
+- Reuse the mature gate mechanisms where possible:
+  - prompt-general expert pack source;
+  - O_DIRECT / aligned alias / io_uring batch reads;
+  - VRAM cache slot lookup by `(tensor, expert_id)`;
+  - hit/miss/read-byte counters and run metadata.
+- Replace the old gate-derived cosubmit framing with a route-group plan:
+  1. collect active expert ids after router for the current layer;
+  2. generate the three tensor names for each selected expert:
+     `ffn_gate_exps`, `ffn_up_exps`, `ffn_down_exps`;
+  3. check cache residency for all three;
+  4. submit misses through the same fast packed source where possible;
+  5. allow current-token CPU fallback only when the requested tensor is not
+     ready, while background fill prepares future hits.
+
+Current code work in progress:
+
+- Added a default-off background down-fill queue:
+  - `GGML_MOE_DOWN_BATCH_DEMAND_QUEUE=1`;
+  - `GGML_MOE_DOWN_BATCH_DEMAND_QUEUE_MAX`;
+  - per-slot `slot_filling` state so a reserved-but-not-yet-copied slot is not
+    exposed as a valid GPU cache hit;
+  - queue worker uses a non-blocking CUDA stream and its own pinned staging
+    ring, batching same-size jobs up to 32 at a time;
+  - current token still falls back to CPU if the down tensor is not ready.
+- This is infrastructure for the route-group design, not accepted SOTA.
+- The next test is intentionally conservative:
+  - build the default-off prototype;
+  - run it with `GGML_MOE_DOWN_BATCH_HIT_ONLY=1`,
+    `GGML_MOE_DOWN_BATCH_DEMAND_PREFILL=1`,
+    `GGML_MOE_DOWN_BATCH_DEMAND_QUEUE=1`, and `min_seen=2/3`;
+  - verify queue counters show background completion rather than synchronous
+    `pinned staging waits` in the decode call.
+
+Acceptance:
+
+- Do not accept this queue by itself unless it beats clean gate12288 on a dev
+  prompt replay and one different dev prompt under the 16GB cgroup.
+- If it only matches or regresses, record rejection and continue to the full
+  route-group scheduler that plans gate/up/down together immediately after
+  router selection.
+
+Queue prototype results:
+
+| config | run | eval tok/s | prompt tok/s | TTFT ms | peak RAM | file RAM | submitted | completed | batches | io reads | io wait us | decision |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `min_seen=2`, queue, no delay | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T080854Z-20260709-gate12288-bcache1024-demandqueue-minseen2-quantum-n96` | 5.4 | 3.5 | 15915.14 | 14885720064 | 13914394624 | 990 | 990 | 983 | 990 | 811189 | reject: below 5.5 |
+| `min_seen=3`, queue, no delay | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T081054Z-20260709-gate12288-bcache1024-demandqueue-minseen3-quantum-n96` | 5.4 | 3.5 | 16020.84 | 14904147968 | 13882884096 | 467 | 467 | 460 | 467 | 371034 | reject: below 5.5 |
+| `min_seen=2`, queue, `delay_us=200` | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T081318Z-20260709-gate12288-bcache1024-demandqueue-minseen2-delay200-quantum-n96` | 5.3 | 3.5 | 16192.35 | 14879543296 | 13931597824 | 990 | 990 | 977 | 990 | 907483 | reject: below 5.5 |
+
+Queue diagnosis:
+
+- The queue fixed one problem from synchronous demand prefill:
+  - reads moved from direct per-call reads to the batch/io_uring path;
+  - failures were `0`;
+  - RAM stayed under the 16GB cgroup.
+- But it did not fix the route-group problem:
+  - `990` jobs became `983` batches;
+  - `467` jobs became `460` batches;
+  - adding a `200us` worker delay barely improved batching and worsened token
+    rate, likely because useful down fills arrived too late for reuse.
+- Therefore this queue is useful infrastructure but not a mature up/down path.
+
+Next step:
+
+- Stop trying to infer batches from a background worker queue.
+- Implement a real per-layer route-group planner:
+  - from the selected experts in the current layer, construct gate/up/down
+    tensor requests as one group;
+  - insert/cache misses for all three roles in a deliberate order;
+  - submit same-size misses in one io_uring batch before/while up+gate compute
+    runs;
+  - reserve separate budgets or admission rules so up/down fills do not evict
+    high-value gate entries.
+- The route-group implementation should directly target reducing "batches
+  ~= jobs" to a small number of grouped submits per layer.

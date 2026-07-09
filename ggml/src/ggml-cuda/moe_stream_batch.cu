@@ -938,6 +938,7 @@ struct batch_vram_cache {
     bool slot_pinned[16384] = {};
     bool slot_prefetch_down[16384] = {};
     bool slot_pending[16384] = {};
+    bool slot_filling[16384] = {};
     cudaEvent_t slot_ready[16384] = {};
     uint64_t clock = 1;
     uint64_t hits = 0;
@@ -1838,6 +1839,7 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         std::fill_n(c->slot_expert, 16384, -1);
         std::fill_n(c->slot_pinned, 16384, false);
         std::fill_n(c->slot_prefetch_down, 16384, false);
+        std::fill_n(c->slot_filling, 16384, false);
         for (cudaEvent_t &ev : c->slot_ready) {
             if (ev) {
                 cudaEventDestroy(ev);
@@ -1933,6 +1935,7 @@ static int batch_cache_lookup_slot(batch_vram_cache *c, uintptr_t key) {
     if (!c || !c->pool || c->n_slots == 0) return -1;
     for (int slot = 0; slot < c->n_slots; ++slot) {
         if (c->slot_key[slot] == key) {
+            if (c->slot_filling[slot]) return -1;
             if (!batch_cache_wait_slot_ready(c, slot)) return -1;
             c->slot_used[slot] = c->clock++;
             if (c->slot_hits[slot] != UINT32_MAX) {
@@ -1971,6 +1974,7 @@ static void batch_cache_clear_slot(batch_vram_cache *c, int slot) {
     }
     c->slot_pinned[slot] = false;
     c->slot_prefetch_down[slot] = false;
+    c->slot_filling[slot] = false;
     c->slot_pending[slot] = false;
 }
 
@@ -5201,6 +5205,7 @@ static int batch_cache_insert_slot(
             break;
         }
         if (!allow_evict) continue;
+        if (c->slot_filling[i]) continue;
         if (c->slot_pinned[i]) continue;
         if (gate_preload_protect_updown && cache_tensor_is_updown(c->slot_tensor[i]) &&
                 (int)c->slot_hits[i] > gate_preload_updown_max_hits) {
@@ -5285,6 +5290,7 @@ static int batch_cache_insert_slot(
         profile_pinned_key_record((uint64_t)key);
     }
     c->slot_prefetch_down[slot] = prefetch_down;
+    c->slot_filling[slot] = false;
     c->slot_pending[slot] = false;
     void *dst = (char *)c->pool + (size_t)slot * c->slot_sz;
     auto clear_slot = [&]() {
@@ -5299,6 +5305,7 @@ static int batch_cache_insert_slot(
         }
         c->slot_pinned[slot] = false;
         c->slot_prefetch_down[slot] = false;
+        c->slot_filling[slot] = false;
         c->slot_pending[slot] = false;
     };
     if (do_copy) {
@@ -5356,6 +5363,248 @@ static int batch_cache_insert_slot(
         ++c->down_prefetch_loads;
     }
     return slot;
+}
+
+static bool down_batch_demand_queue_enabled();
+static int down_batch_demand_queue_max();
+static int down_batch_demand_queue_delay_us();
+
+struct down_demand_prefill_job {
+    batch_vram_cache *cache = nullptr;
+    int slot = -1;
+    uintptr_t key = 0;
+    void *dst = nullptr;
+    const void *host_data = nullptr;
+    const expert_pack_entry *pack_entry = nullptr;
+    size_t expert_bytes = 0;
+    int expert_idx = -1;
+    char tensor[128] = {};
+};
+
+struct down_demand_prefill_queue_state {
+    bool inited = false;
+    bool enabled = false;
+    bool stop = false;
+    bool failed = false;
+    cudaStream_t stream = nullptr;
+    pinned_stage_ring ring;
+    std::deque<down_demand_prefill_job> jobs;
+    size_t max_jobs = 256;
+    std::mutex mu;
+    std::condition_variable cv;
+    std::thread worker;
+    std::atomic<uint64_t> submitted{0};
+    std::atomic<uint64_t> completed{0};
+    std::atomic<uint64_t> batches{0};
+    std::atomic<uint64_t> failures{0};
+    std::atomic<uint64_t> queue_full{0};
+    std::atomic<uint64_t> no_slot{0};
+    std::atomic<uint64_t> duplicate{0};
+    std::atomic<uint64_t> evicted{0};
+};
+
+static down_demand_prefill_queue_state g_down_demand_queue;
+
+static void down_demand_prefill_report_atexit() {
+    if (!g_down_demand_queue.inited || !g_down_demand_queue.enabled) return;
+    std::fprintf(stderr,
+            "[moe_stream_batch] down demand queue: submitted=%lu completed=%lu batches=%lu failures=%lu "
+            "queue_full=%lu no_slot=%lu duplicate=%lu evicted=%lu pending=%zu\n",
+            (unsigned long)g_down_demand_queue.submitted.load(),
+            (unsigned long)g_down_demand_queue.completed.load(),
+            (unsigned long)g_down_demand_queue.batches.load(),
+            (unsigned long)g_down_demand_queue.failures.load(),
+            (unsigned long)g_down_demand_queue.queue_full.load(),
+            (unsigned long)g_down_demand_queue.no_slot.load(),
+            (unsigned long)g_down_demand_queue.duplicate.load(),
+            (unsigned long)g_down_demand_queue.evicted.load(),
+            g_down_demand_queue.jobs.size());
+}
+
+static void down_demand_prefill_worker() {
+    if (cudaSetDevice(0) != cudaSuccess) {
+        g_down_demand_queue.failed = true;
+        return;
+    }
+    for (;;) {
+        std::vector<down_demand_prefill_job> batch;
+        {
+            std::unique_lock<std::mutex> lk(g_down_demand_queue.mu);
+            g_down_demand_queue.cv.wait(lk, [] {
+                return g_down_demand_queue.stop || !g_down_demand_queue.jobs.empty();
+            });
+            if (g_down_demand_queue.stop && g_down_demand_queue.jobs.empty()) {
+                break;
+            }
+            if (g_down_demand_queue.jobs.empty()) {
+                continue;
+            }
+            const int delay_us = down_batch_demand_queue_delay_us();
+            if (delay_us > 0 && !g_down_demand_queue.stop) {
+                g_down_demand_queue.cv.wait_for(lk, std::chrono::microseconds(delay_us), [] {
+                    return g_down_demand_queue.stop;
+                });
+                if (g_down_demand_queue.stop && g_down_demand_queue.jobs.empty()) {
+                    break;
+                }
+            }
+            const size_t expert_bytes = g_down_demand_queue.jobs.front().expert_bytes;
+            while (!g_down_demand_queue.jobs.empty() &&
+                    g_down_demand_queue.jobs.front().expert_bytes == expert_bytes &&
+                    batch.size() < 32) {
+                batch.push_back(g_down_demand_queue.jobs.front());
+                g_down_demand_queue.jobs.pop_front();
+            }
+        }
+        if (batch.empty()) {
+            continue;
+        }
+
+        const size_t expert_bytes = batch[0].expert_bytes;
+        bool copied = expert_pack_iouring_copy_jobs(batch, expert_bytes, g_down_demand_queue.stream,
+                g_down_demand_queue.ring, "down_demand_queue");
+        if (!copied) {
+            copied = true;
+            for (const down_demand_prefill_job &job : batch) {
+                batch_copy_trace copy_trace;
+                if (!batch_cache_copy_h2d(g_down_demand_queue.ring, job.dst, job.host_data, expert_bytes,
+                            g_down_demand_queue.stream, job.pack_entry, &copy_trace,
+                            "down_demand_queue", job.tensor, job.expert_idx)) {
+                    copied = false;
+                    break;
+                }
+            }
+        }
+
+        std::lock_guard<std::mutex> lk(g_batch_mu);
+        if (!copied || cudaGetLastError() != cudaSuccess) {
+            for (const down_demand_prefill_job &job : batch) {
+                if (job.cache && job.slot >= 0 && job.slot < job.cache->n_slots &&
+                        job.cache->slot_key[job.slot] == job.key && job.cache->slot_filling[job.slot]) {
+                    batch_cache_clear_slot(job.cache, job.slot);
+                }
+            }
+            ++g_down_demand_queue.failures;
+            continue;
+        }
+
+        ++g_down_demand_queue.batches;
+        for (const down_demand_prefill_job &job : batch) {
+            if (!job.cache || job.slot < 0 || job.slot >= job.cache->n_slots ||
+                    job.cache->slot_key[job.slot] != job.key || !job.cache->slot_filling[job.slot]) {
+                ++g_down_demand_queue.evicted;
+                continue;
+            }
+            cudaEvent_t ready = nullptr;
+            if (cudaEventCreateWithFlags(&ready, cudaEventDisableTiming) != cudaSuccess ||
+                    cudaEventRecord(ready, g_down_demand_queue.stream) != cudaSuccess) {
+                if (ready) {
+                    cudaEventDestroy(ready);
+                }
+                batch_cache_clear_slot(job.cache, job.slot);
+                ++g_down_demand_queue.failures;
+                continue;
+            }
+            if (job.cache->slot_ready[job.slot]) {
+                cudaEventDestroy(job.cache->slot_ready[job.slot]);
+            }
+            job.cache->slot_ready[job.slot] = ready;
+            job.cache->slot_pending[job.slot] = true;
+            job.cache->slot_filling[job.slot] = false;
+            ++g_down_demand_queue.completed;
+        }
+    }
+}
+
+static void down_demand_prefill_shutdown() {
+    {
+        std::lock_guard<std::mutex> lk(g_down_demand_queue.mu);
+        g_down_demand_queue.stop = true;
+        g_down_demand_queue.cv.notify_all();
+    }
+    if (g_down_demand_queue.worker.joinable()) {
+        g_down_demand_queue.worker.join();
+    }
+    if (g_down_demand_queue.stream) {
+        cudaStreamSynchronize(g_down_demand_queue.stream);
+    }
+    pinned_stage_release(g_down_demand_queue.ring);
+    if (g_down_demand_queue.stream) {
+        cudaStreamDestroy(g_down_demand_queue.stream);
+        g_down_demand_queue.stream = nullptr;
+    }
+}
+
+static void down_demand_prefill_init_once() {
+    if (g_down_demand_queue.inited) return;
+    std::lock_guard<std::mutex> lk(g_down_demand_queue.mu);
+    if (g_down_demand_queue.inited) return;
+    g_down_demand_queue.enabled = down_batch_demand_queue_enabled();
+    g_down_demand_queue.max_jobs = (size_t)down_batch_demand_queue_max();
+    g_down_demand_queue.inited = true;
+    if (!g_down_demand_queue.enabled) {
+        return;
+    }
+    if (cudaStreamCreateWithFlags(&g_down_demand_queue.stream, cudaStreamNonBlocking) != cudaSuccess) {
+        g_down_demand_queue.enabled = false;
+        g_down_demand_queue.failed = true;
+        return;
+    }
+    std::atexit(down_demand_prefill_report_atexit);
+    std::atexit(down_demand_prefill_shutdown);
+    g_down_demand_queue.worker = std::thread(down_demand_prefill_worker);
+    std::fprintf(stderr,
+            "[moe_stream_batch] down demand queue active: max_jobs=%zu\n",
+            g_down_demand_queue.max_jobs);
+}
+
+static bool down_demand_prefill_enqueue(
+        batch_vram_cache *cache,
+        uintptr_t key,
+        const void *host_data,
+        size_t expert_bytes,
+        const char *tensor_name,
+        int expert_idx,
+        cudaStream_t st) {
+    down_demand_prefill_init_once();
+    if (!g_down_demand_queue.enabled || !cache || !cache->pool) return false;
+    if (batch_cache_find_slot(cache, key) >= 0) {
+        ++g_down_demand_queue.duplicate;
+        return false;
+    }
+    const expert_pack_entry *pack_entry = expert_pack_lookup(tensor_name, expert_idx, expert_bytes);
+    const int slot = batch_cache_insert_slot(cache, key, host_data, expert_bytes, st,
+            true, true, nullptr, 0, false, tensor_name, expert_idx,
+            true, false, false);
+    if (slot < 0) {
+        ++g_down_demand_queue.no_slot;
+        return false;
+    }
+    cache->slot_filling[slot] = true;
+
+    down_demand_prefill_job job;
+    job.cache = cache;
+    job.slot = slot;
+    job.key = key;
+    job.dst = (char *)cache->pool + (size_t)slot * cache->slot_sz;
+    job.host_data = host_data;
+    job.pack_entry = pack_entry;
+    job.expert_bytes = expert_bytes;
+    job.expert_idx = expert_idx;
+    std::snprintf(job.tensor, sizeof(job.tensor), "%s", tensor_name ? tensor_name : "");
+
+    {
+        std::lock_guard<std::mutex> lk(g_down_demand_queue.mu);
+        if (g_down_demand_queue.jobs.size() >= g_down_demand_queue.max_jobs) {
+            batch_cache_clear_slot(cache, slot);
+            ++g_down_demand_queue.queue_full;
+            return false;
+        }
+        g_down_demand_queue.jobs.push_back(job);
+        ++g_down_demand_queue.submitted;
+    }
+    g_down_demand_queue.cv.notify_one();
+    return true;
 }
 
 static void preload_profile_entries_for_tensor(
@@ -7579,11 +7828,32 @@ static bool down_batch_demand_prefill_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static bool down_batch_demand_queue_enabled() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_DEMAND_QUEUE");
+    return env && env[0] && env[0] != '0';
+}
+
 static int down_batch_demand_min_seen() {
     const char *env = std::getenv("GGML_MOE_DOWN_BATCH_DEMAND_MIN_SEEN");
     long value = (env && env[0]) ? std::atol(env) : 1;
     if (value < 1) value = 1;
     if (value > 1024) value = 1024;
+    return (int)value;
+}
+
+static int down_batch_demand_queue_max() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_DEMAND_QUEUE_MAX");
+    long value = (env && env[0]) ? std::atol(env) : 256;
+    if (value < 1) value = 1;
+    if (value > 8192) value = 8192;
+    return (int)value;
+}
+
+static int down_batch_demand_queue_delay_us() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_DEMAND_QUEUE_DELAY_US");
+    long value = (env && env[0]) ? std::atol(env) : 0;
+    if (value < 0) value = 0;
+    if (value > 10000) value = 10000;
     return (int)value;
 }
 
@@ -10263,6 +10533,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (down_demand_prefill) {
         static std::unordered_map<uintptr_t, uint32_t> down_demand_seen;
         const int demand_min_seen = down_batch_demand_min_seen();
+        const bool demand_queue = down_batch_demand_queue_enabled();
         int demand_prefills = 0;
         int demand_seen_skips = 0;
         cudaStream_t prefill_stream = bc.prefetch_stream ? bc.prefetch_stream : st;
@@ -10280,21 +10551,29 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                 continue;
             }
             const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
-            const int slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, prefill_stream,
-                    true, true, nullptr, 0, true, src0_name, active_experts[j],
-                    true, true, true);
-            if (slot >= 0) {
-                ++demand_prefills;
+            if (demand_queue) {
+                if (down_demand_prefill_enqueue(cache, cache_key, expert_host, src0_bytes,
+                            src0_name, active_experts[j], prefill_stream)) {
+                    ++demand_prefills;
+                }
+            } else {
+                const int slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, prefill_stream,
+                        true, true, nullptr, 0, true, src0_name, active_experts[j],
+                        true, true, true);
+                if (slot >= 0) {
+                    ++demand_prefills;
+                }
             }
         }
         if (demand_prefills > 0) {
             static std::atomic<int> first_demand_prefill{0};
             if (first_demand_prefill.fetch_add(1) == 0) {
                 std::fprintf(stderr,
-                        "[moe_stream_batch] down demand prefill active: tensor=%s prefills=%d active=%d min_seen=%d seen_skips=%d\n",
-                        src0_name ? src0_name : "", demand_prefills, n_active, demand_min_seen, demand_seen_skips);
+                        "[moe_stream_batch] down demand prefill active: tensor=%s prefills=%d active=%d min_seen=%d seen_skips=%d queue=%d\n",
+                        src0_name ? src0_name : "", demand_prefills, n_active, demand_min_seen, demand_seen_skips,
+                        demand_queue ? 1 : 0);
             }
-            return decline("down_demand_prefill");
+            return decline(demand_queue ? "down_demand_prefill_queue" : "down_demand_prefill");
         }
     }
 
