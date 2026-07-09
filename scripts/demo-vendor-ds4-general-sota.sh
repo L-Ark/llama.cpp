@@ -939,18 +939,38 @@ def apply_output_guard(text, mode):
     if mode != 'sentence' or not text:
         return text, False
     stripped = text.strip()
+    cleaned = re.sub(r'^[a-z]{1,4}(?=(?:[A-Z]|\*\*))', '', stripped)
+    changed = cleaned != stripped
+    stripped = cleaned.strip()
     if not stripped or stripped[-1] in '.!?。！？':
-        return stripped, False
+        return stripped, changed
     if stripped.count('```') % 2 == 1:
-        return stripped, False
+        if stripped.startswith('```python'):
+            lines = stripped.splitlines()
+            header = lines[0]
+            body = lines[1:]
+            try:
+                import ast
+                for keep in range(len(body), 0, -1):
+                    candidate = '\n'.join(body[:keep]).rstrip()
+                    if not candidate:
+                        continue
+                    try:
+                        ast.parse(candidate)
+                    except SyntaxError:
+                        continue
+                    return f'{header}\n{candidate}\n```', True
+            except Exception:
+                pass
+        return stripped + '\n```', True
     matches = list(re.finditer(r'[.!?。！？](?=(?:["\'”’)\]]|\s|$))', stripped))
     if not matches:
-        return stripped, False
+        return stripped, changed
     cut = matches[-1].end()
     guarded = stripped[:cut].strip()
     if len(guarded) < max(40, len(stripped) * 0.35):
-        return stripped, False
-    return guarded, guarded != stripped
+        return stripped, changed
+    return guarded, changed or guarded != stripped
 
 output_guard = (config.get('runtime') or {}).get('sampler_controls', {}).get('output_guard', '')
 answer, output_guard_applied = apply_output_guard(answer, output_guard)

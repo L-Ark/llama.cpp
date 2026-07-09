@@ -3519,3 +3519,59 @@ Next validation:
   `LLAMA_DEMO_OUTPUT_GUARD=sentence`.
 - If the dev set passes speed/RAM/TTFT/correctness, freeze a candidate before
   any held-out validation. Do not use held-out v1 to tune the guard.
+
+Clean-source dev validation after initial guard commit:
+
+- Source `1b1def0112`, strict cold, 16GB cgroup, display cleanup before every
+  run, `LLAMA_DEMO_OUTPUT_GUARD=sentence`.
+- France n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T004656Z-20260709-clean-outputguard-france-n192`,
+  `eval_tok_s=5.8`, `first_output_ms=16288.0 ms`,
+  `memory_peak_bytes=14864781312`, `ram_ok=true`,
+  `output_guard_applied=true`, correctness pass.
+- Quantum n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T004749Z-20260709-clean-outputguard-quantum-n192`,
+  `eval_tok_s=5.1`, `first_output_ms=16331.5 ms`,
+  `memory_peak_bytes=14912679936`, `ram_ok=true`,
+  `output_guard_applied=true`. Semantics pass, but output begins with a
+  malformed `in**simple terms**` fragment.
+- Fibonacci n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T004847Z-20260709-clean-outputguard-fibonacci-n192`,
+  `eval_tok_s=5.4`, `first_output_ms=15246.7 ms`,
+  `memory_peak_bytes=14906122240`, `ram_ok=true`,
+  `output_guard_applied=false`. Function body is present, but the markdown code
+  fence remains open at the token cap.
+- Chinese food prompt n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T004943Z-20260709-clean-outputguard-food-cn-n192`,
+  `eval_tok_s=5.9`, `first_output_ms=14916.9 ms`,
+  `memory_peak_bytes=14896271360`, `ram_ok=true`,
+  `output_guard_applied=true`, answer is coherent.
+
+Guard refinement:
+
+- Extend the generic guard to remove short no-space prefix fragments such as
+  `inHere` / `in**...`.
+- For an unmatched Python markdown code fence, retain the longest Python prefix
+  that passes `ast.parse` and then close the fence; otherwise close the
+  unmatched fence conservatively.
+
+Dirty-source refinement diagnostics:
+
+- Quantum n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T005136Z-20260709-dirty-outputguard2-quantum-n192`,
+  `eval_tok_s=5.0`, `first_output_ms=15976.3 ms`,
+  `memory_peak_bytes=14904586240`, `ram_ok=true`,
+  `output_guard_applied=true`. Prefix fragment is fixed and semantics pass, but
+  strict `>5` flag is false due displayed `5.0`.
+- Fibonacci n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T005234Z-20260709-dirty-outputguard2-fibonacci-n192`,
+  `eval_tok_s=5.6`, `first_output_ms=15668.3 ms`,
+  `memory_peak_bytes=14891937792`, `ram_ok=true`,
+  `output_guard_applied=true`. Code block is closed and the function is
+  syntactically valid.
+
+Decision:
+
+- Commit the guard refinement for reproducibility, but do not freeze SOTA yet.
+  Correctness is improved, but the weak Quantum prompt still has insufficient
+  strict speed margin at n192 on this machine.
