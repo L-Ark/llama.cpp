@@ -4519,3 +4519,116 @@ Fallback if hybrid CPU tail is not viable:
   compact/partial expert payloads, role-aware cache storage, or a runtime plan
   that reads and stages fewer bytes while preserving the third expert
   contribution.
+
+## 2026-07-09 Full Token Lifecycle Profile
+
+Context:
+
+- User requested a full token lifecycle profile, not only the gate path.
+- Previous one-trace SVG was incomplete because current DeepSeek SOTA only sends
+  `ffn_gate_exps` through the one-stream expert-pack/VRAM-cache path. The
+  `ffn_up_exps` and `ffn_down_exps` work is not emitted by CUDA batch profile
+  because the accepted SOTA still executes those roles through CPU fallback.
+- Added default-off demo passthrough for
+  `GGML_MOE_CPU_CHUNK_TRACE_OUT` and `GGML_MOE_CPU_CHUNK_TRACE_LIMIT` so future
+  lifecycle profiles can capture CPU fallback chunk timings under the same
+  strict run harness.
+
+Strict profile run:
+
+- Machine: `wici@192.168.9.198`.
+- Repo: `/home/wici/ssd-llama`, source
+  `vendor/deepseek-token-rate-16gb@ee1f42d30`.
+- Run dir:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T042355Z-20260709-lifecycle-cpu-chunk-quantum-n32`.
+- Prompt: `Explain quantum computing briefly.`
+- Config: current generalized SOTA gate fullpack, `GGML_MOE_STREAM_ONE_CACHE_MIB=5120`,
+  `GGML_MOE_VRAM_CACHE_MIB=12000`, strict cold `drop_caches`,
+  `MemoryMax=16000000000`, display/model processes killed before run.
+- Diagnostic envs:
+  `GGML_MOE_STREAM_ONE_TRACE_OUT`,
+  `GGML_MOE_ONE_PACK_READ_PROFILE_OUT`,
+  `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT`,
+  `GGML_KIMI_CPU_MOE_PROFILE=1`,
+  `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`,
+  `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`,
+  `GGML_MOE_FALLBACK_REASON_PROFILE_OUT`,
+  `GGML_MOE_CPU_CHUNK_TRACE_OUT`,
+  `GGML_MOE_CPU_CHUNK_TRACE_LIMIT=2000000`.
+- Output files:
+  `grouped_route_profile.csv`, `grouped_route_detail.csv`,
+  `one-trace.csv`, `one-pack-read-profile.csv`,
+  `gate-updown-cosubmit-profile.csv`,
+  `cpu-fallback-profile.csv`, `fallback-reason-profile.csv`,
+  `cpu-chunk-trace.csv`.
+- Run validity: `ram_ok=true`, `memory_peak_bytes=14855942144`,
+  `memory_file_bytes=14017069056`, display cleanup OK. Source was dirty only
+  because of the new diagnostic passthrough in the demo script, so this run is a
+  profiling diagnostic, not an SOTA acceptance run.
+- Observed speed with profiling: `eval_tok_s=4.8`, `prompt_tok_s=3.6`,
+  `TTFT=15789.1 ms`.
+
+Measured lifecycle decomposition:
+
+- Prompt phase:
+  - route-selected logical expert bytes: `11.41 GiB`;
+  - route cache hit/miss counts: `243 / 2505`;
+  - gate one-stream total: `444.2 ms`
+    (`read/cache/H2D=253.2 ms`, `sync/wait=176.8 ms`,
+    `kernel=3.6 ms`);
+  - up/down CPU fallback wall total: `1918.5 ms`;
+  - CPU chunk work sum: `22944.2 ms` across worker chunks.
+- Decode phase:
+  - route-selected logical expert bytes: `46.32 GiB`;
+  - route cache hit/miss counts: `2594 / 8566`;
+  - gate one-stream total: `2437.6 ms`
+    (`read/cache/H2D=1271.1 ms`, `sync/wait=1079.4 ms`,
+    `kernel=43.7 ms`);
+  - up/down CPU fallback wall total: `1841.2 ms`;
+  - CPU chunk work sum: `50201.9 ms` across worker chunks.
+- Approximate decode per-token lifecycle at `n32`:
+  - total: `208.3 ms/token`;
+  - gate expert-pack read/cache/H2D: `39.7 ms/token`;
+  - gate stream sync/wait: `33.7 ms/token`;
+  - gate GPU kernel plus D2H/scatter: `2.7 ms/token`;
+  - up/down CPU fallback wall: `57.5 ms/token`;
+  - dense, attention, router matmul/top-k, graph scheduling, and residual
+    unprofiled time: `74.6 ms/token`.
+
+Top decode layers by measured gate plus CPU fallback total:
+
+| layer | total ms | gate ms | gate read ms | gate sync ms | gate kernel ms | up CPU ms | down CPU ms | gate hit/miss | up/down miss |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 218.9 | 131.4 | 68.2 | 60.8 | 1.3 | 44.6 | 42.9 | 26/67 | 93/93 |
+| 0 | 206.7 | 124.4 | 65.8 | 56.1 | 1.3 | 41.4 | 40.9 | 31/62 | 93/93 |
+| 2 | 203.0 | 122.0 | 63.9 | 55.8 | 1.2 | 40.3 | 40.8 | 30/63 | 93/93 |
+| 4 | 143.1 | 83.7 | 43.2 | 37.9 | 1.4 | 29.6 | 29.8 | 54/39 | 93/93 |
+| 3 | 134.9 | 82.2 | 44.6 | 35.3 | 1.2 | 26.0 | 26.6 | 59/34 | 93/93 |
+| 19 | 134.7 | 80.1 | 41.4 | 36.6 | 1.1 | 26.6 | 28.0 | 55/38 | 93/93 |
+
+Interpretation:
+
+- The full lifecycle bottleneck is split between:
+  1. gate miss movement from expert pack through host/cache/H2D plus stream
+     synchronization (`~73 ms/token`); and
+  2. up/down CPU fallback (`~58 ms/token`).
+- Gate GPU kernel time is not the bottleneck (`~1.4 ms/token` inside decode
+  gate trace). The costly part is feeding the kernel and waiting for staged
+  data.
+- Up/down are selected every MoE layer after router/top-k, but current accepted
+  SOTA does not have them on the fast one-stream gate path. Their CPU fallback
+  is now visible in `fallback-reason-profile.csv` and `cpu-chunk-trace.csv`.
+- The remaining `~75 ms/token` residual includes dense/attention, router
+  matmul/top-k, graph scheduling, and any non-MoE CUDA/CPU work. This profile
+  still does not isolate router matmul/top-k as a standalone op; a graph/op
+  timer is needed if router itself must be separated from dense/attention.
+
+Next profiling task:
+
+- Add a default-off graph/op timer for DeepSeek router construction:
+  `ffn_gate_inp` matmul/lora, softplus/hash/bias, `top_k`, and weight
+  normalization. The timer must produce per-layer prompt/decode rows that can
+  be joined with `grouped_route_profile.csv`.
+- After router timing is isolated, rerun n32/n96 lifecycle profile and replace
+  the residual bucket with explicit `router`, `attention/dense`, and
+  `scheduler/other` buckets.
