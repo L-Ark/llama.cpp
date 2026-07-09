@@ -4869,7 +4869,11 @@ static void ggml_compute_forward_mul_mat_id(
         if (ith == 0) {
             const void * wdata_stream = (src1->type == vec_dot_type) ? src1->data : params->wdata;
             const size_t row_size_stream = ggml_row_size(vec_dot_type, ne10);
+            const char * route_group_native_parity_env = getenv("GGML_MOE_ROUTE_GROUP_NATIVE_PARITY");
+            const bool route_group_native_parity =
+                route_group_native_parity_env && route_group_native_parity_env[0] && route_group_native_parity_env[0] != '0';
             if (ggml_moe_gate_batch_prefetch_enabled() &&
+                    !route_group_native_parity &&
                     ggml_cuda_moe_stream_batch_preload_active_from_pack &&
                     src0->name && strstr(src0->name, ".ffn_gate_exps.") != NULL) {
                 static bool gate_batch_prefetch_logged = false;

@@ -6163,3 +6163,75 @@ Acceptance criteria:
     optimized expert movement.
 - When a conforming new SOTA appears, immediately record full reproduction
   metadata, commit, and push to `vendor/deepseek-token-rate-16gb`.
+
+Implementation progress, native parity probe:
+
+- Added default-off native parity infrastructure:
+  - `GGML_MOE_ROUTE_GROUP_NATIVE_PARITY=1`;
+  - `GGML_MOE_BATCH_FULLPACK=1` makes the batch expert-pack path use the full
+    native expert pack instead of the up/down GGUF-alias-only source;
+  - `GGML_MOE_GATE_BATCH_PREFETCH=1` lets gate one-stream consume the shared
+    batch cache via `ggml_cuda_moe_stream_cache_dev_ptr()`;
+  - CPU gate-only active preload is skipped when native parity is enabled, so
+    Stage A is owned by the route-group planner instead of the old gate-only
+    preload.
+- Route-group planner now builds:
+  - Stage A: selected `ffn_gate_exps` + `ffn_up_exps`;
+  - Stage B: selected `ffn_down_exps`;
+  - both stages use the same native expert-pack lookup, io_uring copy helper,
+    pinned staging ring, H2D enqueue path, and batch cache slot accounting.
+- Added role-aware counters:
+  `gate_hits/misses`, `up_hits/misses`, `down_hits/misses`,
+  Stage A/B jobs, batches, bytes, `missing_pack`, `no_slot`, `copy_fail`.
+
+Dirty probe results:
+
+| config | run | eval tok/s | prompt tok/s | TTFT ms | RAM peak | batch pack entries | Stage A | Stage B | expert reads/bytes | decision |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |
+| native parity, alias batch source, 1GB cache, n16 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T084535Z-20260709-native-parity-short-france-n16` | 2.2 | 2.4 | 20701.19 | 14811230208 | 22016 | up only; gate missing | down | 4668 / 20.8GB | reject: not native full parity |
+| native fullpack parity, sync ready, 1GB cache, n16 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T084631Z-20260709-native-fullpack-parity-short-france-n16` | 1.7 | 2.2 | 21662.33 | 14828732416 | 33024 | gate+up | down | 8637 / 38.5GB | reject: duplicate gate path and sync waits |
+| native fullpack parity, async ready, 1GB cache, n16 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T084913Z-20260709-native-fullpack-parity-async-france-n16` | 1.9 | 2.2 | 21160.24 | 14824009728 | 33024 | gate+up | down | 8637 / 38.5GB | reject: too many waits |
+| native fullpack, old gate preload bridge, 1GB cache, n16 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T085051Z-20260709-native-fullpack-parity-gatebatch-france-n16` | 2.1 | 2.6 | 19877.45 | 14824595456 | 33024 | old gate preload + up | down | 8637 / 38.5GB | reject: gate not loaded by route-group Stage A |
+| native fullpack route-group Stage A, 1GB cache, n16 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T085240Z-20260709-native-parity-upgate-stagea-france-n16` | 2.1 | 2.5 | 19710.47 | 14811947008 | 33024 | gate+up | down | 8637 / 38.5GB | reject: cache too small |
+| native fullpack route-group Stage A, 4GB cache, n16 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T085345Z-20260709-native-parity-upgate-vram4096-france-n16` | 3.2 | 2.6 | 19126.87 | 14815993856 | 33024 | gate+up | down | 5450 / 24.3GB | reject: still below SOTA |
+| native fullpack unified cache, 12GB cache, no one-cache, n16 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T085441Z-20260709-native-parity-unified-vram12000-france-n16` | 4.3 | 3.0 | 17627.32 | 14826369024 | 33024 | gate+up | down | 4130 / 18.4GB | diagnostic: direction improves but not SOTA |
+| native fullpack unified cache, 14GB cache, no one-cache, n16 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T085532Z-20260709-native-parity-unified-vram14000-france-n16` | 4.4 | 3.0 | 17927.48 | 14784262144 | 33024 | gate+up | down | not promoted | diagnostic: small gain over 12GB |
+| native fullpack unified cache, 14GB cache, no one-cache, Quantum n96 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T085612Z-20260709-native-parity-unified-vram14000-quantum-n96` | 4.1 | 3.0 | 16852.48 | 14838063104 | 33024 | gate+up | down | 12580 / 56.1GB | reject: below clean 5.5 SOTA and n96 output truncated |
+
+Key diagnosis:
+
+- The native expert-pack parity requirement is now implemented as a default-off
+  probe: batch path sees `33024` entries and no missing gate/up/down pack
+  entries.
+- With the gate bridge and CPU skip of old gate-only preload, route-group Stage
+  A owns `gate+up` loading and Stage B owns `down` loading.
+- Moving the 12GB one-cache budget to unified route-group cache is directionally
+  useful:
+  - 1GB unified cache n16: `2.1 tok/s`, `38.5GB` reads;
+  - 12GB unified cache n16: `4.3 tok/s`, `18.4GB` reads;
+  - 14GB unified cache n16: `4.4 tok/s`.
+- The implementation is not accepted because n96 is only `4.1 tok/s`, below
+  the clean generalized SOTA `5.5 tok/s`, and output is still truncated at n96.
+- Remaining bottleneck:
+  - route-group still submits too many misses;
+  - n96 full native parity still reads `56.1GB`;
+  - `async prefetch waits=11008`;
+  - batch grouping is better than one job per batch but still too fragmented:
+    `5236` batches for `12580` reads.
+
+Next step under this architecture:
+
+1. Keep native parity infrastructure default-off.
+2. Add route-group admission instead of loading every selected expert:
+   - keep Stage A `gate+up` as the required first stage;
+   - keep Stage B `down` as the required second stage;
+   - but admit only entries likely to be reused enough, based on prompt-general
+     counters or online reuse thresholds.
+3. Improve grouping before H2D:
+   - collect more than one layer's route-group requests where correctness
+     allows;
+   - sort by source offset and size before issuing io_uring;
+   - target significantly fewer than `5236` batches for n96.
+4. Connect up+gate compute more tightly to Stage A readiness so loaded up
+   entries are consumed by the fused path rather than only serving as future
+   cache candidates.

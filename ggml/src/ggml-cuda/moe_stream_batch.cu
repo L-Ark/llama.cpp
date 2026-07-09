@@ -7895,6 +7895,11 @@ static bool route_group_updown_queue_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static bool route_group_native_parity_enabled() {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_NATIVE_PARITY");
+    return env && env[0] && env[0] != '0';
+}
+
 static int route_group_min_seen() {
     const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_MIN_SEEN");
     long value = (env && env[0]) ? std::atol(env) : 1;
@@ -7925,19 +7930,64 @@ static std::atomic<bool> g_route_group_report_registered{false};
 static std::mutex g_route_group_seen_mu;
 static std::unordered_map<uintptr_t, uint32_t> g_route_group_seen;
 
+static std::atomic<uint64_t> g_route_group_native_calls{0};
+static std::atomic<uint64_t> g_route_group_native_selected{0};
+static std::atomic<uint64_t> g_route_group_native_gate_hits{0};
+static std::atomic<uint64_t> g_route_group_native_gate_misses{0};
+static std::atomic<uint64_t> g_route_group_native_up_hits{0};
+static std::atomic<uint64_t> g_route_group_native_up_misses{0};
+static std::atomic<uint64_t> g_route_group_native_down_hits{0};
+static std::atomic<uint64_t> g_route_group_native_down_misses{0};
+static std::atomic<uint64_t> g_route_group_native_stage_a_jobs{0};
+static std::atomic<uint64_t> g_route_group_native_stage_a_batches{0};
+static std::atomic<uint64_t> g_route_group_native_stage_a_bytes{0};
+static std::atomic<uint64_t> g_route_group_native_stage_b_jobs{0};
+static std::atomic<uint64_t> g_route_group_native_stage_b_batches{0};
+static std::atomic<uint64_t> g_route_group_native_stage_b_bytes{0};
+static std::atomic<uint64_t> g_route_group_native_missing_pack{0};
+static std::atomic<uint64_t> g_route_group_native_no_slot{0};
+static std::atomic<uint64_t> g_route_group_native_copy_fail{0};
+
 static void route_group_report_atexit() {
     const uint64_t calls = g_route_group_calls.load(std::memory_order_relaxed);
-    if (calls == 0) return;
-    std::fprintf(stderr,
-            "[moe_stream_batch] route group down queue: calls=%lu submitted=%lu cache_hits=%lu "
-            "missing_pack=%lu repeat_skips=%lu invalid_gate=%lu inactive_expert_skips=%lu\n",
-            (unsigned long)calls,
-            (unsigned long)g_route_group_submitted.load(std::memory_order_relaxed),
-            (unsigned long)g_route_group_cache_hits.load(std::memory_order_relaxed),
-            (unsigned long)g_route_group_missing_pack.load(std::memory_order_relaxed),
-            (unsigned long)g_route_group_repeat_skips.load(std::memory_order_relaxed),
-            (unsigned long)g_route_group_invalid_gate.load(std::memory_order_relaxed),
-            (unsigned long)g_route_group_inactive_expert_skips.load(std::memory_order_relaxed));
+    if (calls != 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] route group down queue: calls=%lu submitted=%lu cache_hits=%lu "
+                "missing_pack=%lu repeat_skips=%lu invalid_gate=%lu inactive_expert_skips=%lu\n",
+                (unsigned long)calls,
+                (unsigned long)g_route_group_submitted.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_cache_hits.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_missing_pack.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_repeat_skips.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_invalid_gate.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_inactive_expert_skips.load(std::memory_order_relaxed));
+    }
+    const uint64_t native_calls = g_route_group_native_calls.load(std::memory_order_relaxed);
+    if (native_calls != 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] route group native parity: calls=%lu selected=%lu "
+                "gate_hits=%lu gate_misses=%lu up_hits=%lu up_misses=%lu down_hits=%lu down_misses=%lu "
+                "stage_a_jobs=%lu stage_a_batches=%lu stage_a_bytes=%lu "
+                "stage_b_jobs=%lu stage_b_batches=%lu stage_b_bytes=%lu "
+                "missing_pack=%lu no_slot=%lu copy_fail=%lu\n",
+                (unsigned long)native_calls,
+                (unsigned long)g_route_group_native_selected.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_gate_hits.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_gate_misses.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_up_hits.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_up_misses.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_down_hits.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_down_misses.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_a_jobs.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_a_batches.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_a_bytes.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_b_jobs.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_b_batches.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_b_bytes.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_missing_pack.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_no_slot.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_copy_fail.load(std::memory_order_relaxed));
+    }
 }
 
 static bool name_from_gate(const char *gate_name, const char *target, char *out, size_t out_sz) {
@@ -7993,10 +8043,229 @@ static int route_group_enqueue_tensor(
     return 0;
 }
 
+struct route_group_native_job {
+    batch_vram_cache *cache = nullptr;
+    int slot = -1;
+    uintptr_t key = 0;
+    void *dst = nullptr;
+    const void *host_data = nullptr;
+    const expert_pack_entry *pack_entry = nullptr;
+    size_t expert_bytes = 0;
+    int expert_idx = -1;
+    char tensor[128] = {};
+    char role = '?';
+};
+
+static void route_group_native_count_hit(char role) {
+    if (role == 'g') {
+        ++g_route_group_native_gate_hits;
+    } else if (role == 'u') {
+        ++g_route_group_native_up_hits;
+    } else if (role == 'd') {
+        ++g_route_group_native_down_hits;
+    }
+}
+
+static void route_group_native_count_miss(char role) {
+    if (role == 'g') {
+        ++g_route_group_native_gate_misses;
+    } else if (role == 'u') {
+        ++g_route_group_native_up_misses;
+    } else if (role == 'd') {
+        ++g_route_group_native_down_misses;
+    }
+}
+
+static bool route_group_native_plan_one(
+        std::vector<route_group_native_job> &jobs,
+        const char *tensor_name,
+        int expert,
+        char role,
+        cudaStream_t st) {
+    const expert_pack_entry *entry = expert_pack_lookup_any_size(tensor_name, expert);
+    if (!entry || entry->nbytes == 0) {
+        ++g_route_group_native_missing_pack;
+        return false;
+    }
+    batch_vram_cache *cache = batch_cache_get((size_t)entry->nbytes);
+    if (!cache) {
+        ++g_route_group_native_no_slot;
+        return false;
+    }
+    const uintptr_t key = batch_key_hash(tensor_name, expert);
+    if (batch_cache_find_slot(cache, key) >= 0) {
+        route_group_native_count_hit(role);
+        return true;
+    }
+    route_group_native_count_miss(role);
+    const int slot = batch_cache_insert_slot(cache, key, nullptr, (size_t)entry->nbytes, st,
+            true, true, nullptr, 0, false, tensor_name, expert,
+            role == 'd', false, false);
+    if (slot < 0) {
+        ++g_route_group_native_no_slot;
+        return false;
+    }
+
+    route_group_native_job job;
+    job.cache = cache;
+    job.slot = slot;
+    job.key = key;
+    job.dst = (char *)cache->pool + (size_t)slot * cache->slot_sz;
+    job.host_data = nullptr;
+    job.pack_entry = entry;
+    job.expert_bytes = (size_t)entry->nbytes;
+    job.expert_idx = expert;
+    job.role = role;
+    std::snprintf(job.tensor, sizeof(job.tensor), "%s", tensor_name);
+    jobs.push_back(job);
+    return true;
+}
+
+static bool route_group_native_copy_stage(
+        std::vector<route_group_native_job> &jobs,
+        const char *trace_op,
+        bool stage_a) {
+    if (jobs.empty()) {
+        return true;
+    }
+    std::stable_sort(jobs.begin(), jobs.end(), [](const route_group_native_job &a, const route_group_native_job &b) {
+        if (a.expert_bytes != b.expert_bytes) return a.expert_bytes < b.expert_bytes;
+        if (a.pack_entry && b.pack_entry && a.pack_entry->source_idx != b.pack_entry->source_idx) {
+            return a.pack_entry->source_idx < b.pack_entry->source_idx;
+        }
+        if (a.pack_entry && b.pack_entry && a.pack_entry->offset != b.pack_entry->offset) {
+            return a.pack_entry->offset < b.pack_entry->offset;
+        }
+        return a.expert_idx < b.expert_idx;
+    });
+
+    cudaStream_t copy_stream = g_batch.prefetch_stream ? g_batch.prefetch_stream : g_batch.stream;
+    size_t pos = 0;
+    while (pos < jobs.size()) {
+        const size_t bytes = jobs[pos].expert_bytes;
+        size_t end = pos + 1;
+        while (end < jobs.size() && jobs[end].expert_bytes == bytes) {
+            ++end;
+        }
+        std::vector<route_group_native_job> group(jobs.begin() + (ptrdiff_t)pos, jobs.begin() + (ptrdiff_t)end);
+        const bool copied = expert_pack_iouring_copy_jobs(group, bytes, copy_stream, g_batch.stage_ring, trace_op);
+        if (!copied || cudaGetLastError() != cudaSuccess) {
+            for (const route_group_native_job &job : group) {
+                if (job.cache && job.slot >= 0) {
+                    batch_cache_clear_slot(job.cache, job.slot);
+                }
+            }
+            ++g_route_group_native_copy_fail;
+            return false;
+        }
+        bool mark_ok = true;
+        for (const route_group_native_job &job : group) {
+            if (!job.cache || job.slot < 0 || job.slot >= job.cache->n_slots) {
+                mark_ok = false;
+                break;
+            }
+            if (!job.cache->slot_ready[job.slot] &&
+                    cudaEventCreateWithFlags(&job.cache->slot_ready[job.slot], cudaEventDisableTiming) != cudaSuccess) {
+                mark_ok = false;
+                break;
+            }
+            if (cudaEventRecord(job.cache->slot_ready[job.slot], copy_stream) != cudaSuccess) {
+                mark_ok = false;
+                break;
+            }
+            job.cache->slot_pending[job.slot] = true;
+            ++job.cache->preloads;
+        }
+        if (!mark_ok) {
+            for (const route_group_native_job &job : group) {
+                if (job.cache && job.slot >= 0) {
+                    batch_cache_clear_slot(job.cache, job.slot);
+                }
+            }
+            ++g_route_group_native_copy_fail;
+            return false;
+        }
+        if (stage_a) {
+            ++g_route_group_native_stage_a_batches;
+            g_route_group_native_stage_a_jobs.fetch_add(group.size(), std::memory_order_relaxed);
+            g_route_group_native_stage_a_bytes.fetch_add((uint64_t)group.size() * (uint64_t)bytes, std::memory_order_relaxed);
+        } else {
+            ++g_route_group_native_stage_b_batches;
+            g_route_group_native_stage_b_jobs.fetch_add(group.size(), std::memory_order_relaxed);
+            g_route_group_native_stage_b_bytes.fetch_add((uint64_t)group.size() * (uint64_t)bytes, std::memory_order_relaxed);
+        }
+        pos = end;
+    }
+    return true;
+}
+
+static int route_group_native_parity_from_gate(
+        const char *src0_gate_name,
+        int64_t n_as,
+        const int64_t *matrix_row_counts) {
+    if (!route_group_native_parity_enabled()) {
+        return -1;
+    }
+    if (!init_batch_once()) {
+        ++g_route_group_native_copy_fail;
+        return 0;
+    }
+    char gate_name[128] = {};
+    char up_name[128] = {};
+    char down_name[128] = {};
+    std::snprintf(gate_name, sizeof(gate_name), "%s", src0_gate_name ? src0_gate_name : "");
+    if (!name_from_gate(src0_gate_name, "ffn_up_exps", up_name, sizeof(up_name)) ||
+            !name_from_gate(src0_gate_name, "ffn_down_exps", down_name, sizeof(down_name))) {
+        ++g_route_group_invalid_gate;
+        return 0;
+    }
+
+    ++g_route_group_native_calls;
+    std::vector<route_group_native_job> stage_a_jobs;
+    std::vector<route_group_native_job> stage_b_jobs;
+    stage_a_jobs.reserve(64);
+    stage_b_jobs.reserve(32);
+
+    int active = 0;
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    for (int64_t expert = 0; expert < n_as; ++expert) {
+        if (matrix_row_counts[expert] <= 0) {
+            continue;
+        }
+        ++active;
+        route_group_native_plan_one(stage_a_jobs, gate_name, (int)expert, 'g', g_batch.stream);
+        route_group_native_plan_one(stage_a_jobs, up_name, (int)expert, 'u', g_batch.stream);
+        route_group_native_plan_one(stage_b_jobs, down_name, (int)expert, 'd', g_batch.stream);
+    }
+    g_route_group_native_selected.fetch_add((uint64_t)active, std::memory_order_relaxed);
+
+    static std::atomic<int> first_native{0};
+    if (first_native.fetch_add(1, std::memory_order_relaxed) == 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] route group native parity active: gate=%s up=%s down=%s active=%d stage_a_jobs=%zu stage_b_jobs=%zu\n",
+                gate_name, up_name, down_name, active, stage_a_jobs.size(), stage_b_jobs.size());
+    }
+
+    if (!route_group_native_copy_stage(stage_a_jobs, "route_group_up_gate", true)) {
+        return 0;
+    }
+    if (!route_group_native_copy_stage(stage_b_jobs, "route_group_down", false)) {
+        return 0;
+    }
+    return (int)(stage_a_jobs.size() + stage_b_jobs.size());
+}
+
 extern "C" int ggml_cuda_moe_stream_route_group_preload_updown_from_gate(
         const char *src0_gate_name,
         int64_t n_as,
         const int64_t *matrix_row_counts) {
+    const int native_result = route_group_native_parity_from_gate(src0_gate_name, n_as, matrix_row_counts);
+    if (native_result >= 0) {
+        if (!g_route_group_report_registered.exchange(true)) {
+            std::atexit(route_group_report_atexit);
+        }
+        return native_result;
+    }
     if (!route_group_updown_queue_enabled()) {
         return 0;
     }
