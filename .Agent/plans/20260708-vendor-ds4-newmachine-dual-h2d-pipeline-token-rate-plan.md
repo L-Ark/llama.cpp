@@ -130,24 +130,75 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      pack path, alias TSV, answer text, cgroup memory stats, PCIe link, H2D
      benchmark, MoE counters, and whether display processes were stopped.
 
-2. **Two-stage gate/up/down aggregation**
-   - After router selection, collect all current-layer gate/up/down expert read
-     requests before submitting IO.
-   - Sort requests by source offset and submit them as one aggregated plan.
-   - Keep default behavior unchanged; gate with env such as
-     `GGML_MOE_GATE_UPDOWN_AGGREGATE=1`.
-   - Fallback to the current path on any unsupported dtype, pack miss, alias
-     miss, short read, or correctness risk.
+2. **Native expert-pack parity is the next implementation target**
+   - The next optimization must start from the full native DeepSeek expert pack,
+     not a prompt-specific pack, gate-only pack, or up/down alias-only source.
+   - Gate, up, and down must resolve through the same source abstraction:
+     native expert pack lookup, exact tensor/expert key, offset/bytes metadata,
+     same batch cache, same pinned staging, same O_DIRECT/io_uring path, same
+     H2D scheduling, and same ready-event ownership.
+   - `GGML_MOE_BATCH_FULLPACK=1` and
+     `GGML_MOE_ROUTE_GROUP_NATIVE_PARITY=1` are the required experimental
+     baseline for this work. Any result using mixed gate one-pack direct reads
+     plus a separate up/down path is diagnostic only and cannot be promoted.
+   - This work must preserve Kimi and existing DeepSeek behavior by remaining
+     default-off until it beats the generalized SOTA and passes correctness.
 
-3. **Larger H2D batching / copy coalescing**
-   - Combine adjacent or same-batch staging buffers into fewer H2D submissions
-     where tensor layout and kernel inputs remain unchanged.
+3. **Required load order: Stage A gate+up, Stage B down**
+   - After router metadata for a layer is available, build a single Stage A
+     request list containing both `ffn_gate_exps` and `ffn_up_exps` for all
+     selected experts in that layer.
+   - Submit Stage A as one sorted batch against the native expert pack. Sorting
+     should use source identity, file offset, and size so nearby tensors can be
+     issued together and copied through the same pinned/H2D machinery.
+   - Stage A must not use a separate gate fast path. Gate may consume the shared
+     batch-cache entry, but the producer must be the same native batch loader
+     that serves up.
+   - Only after Stage A is queued should Stage B collect
+     `ffn_down_exps` for the same routed experts and submit it through the same
+     native batch loader. Stage B can overlap with current compute when data
+     dependencies allow, but its data source and movement path must be identical
+     to Stage A.
+   - If any gate/up/down tensor is missing from the native pack, has an
+     unsupported dtype/layout, gets a short read, or fails H2D/correctness
+     validation, the run is rejected for SOTA. Fallback is allowed for safety
+     while debugging but must be reported as `fallback_present=true`.
+
+4. **Make the full lifecycle observable before claiming speedup**
+   - Add per-layer/per-token counters for Stage A and Stage B:
+     request count, cache hit/miss count, io_uring read count, SSD bytes,
+     pinned staging ms, H2D bytes, H2D ms, ready-event wait ms, kernel compute
+     ms, CPU fallback ms, and total layer latency.
+   - Print a timeline summary that makes one token's path visible from router
+     output to gate/up load, gate/up compute, down load, down compute, and final
+     layer completion.
+   - Acceptance requires proving that up/down are no longer on an incompatible
+     slow path. If CPU fallback remains, quantify which tensor/layout caused it
+     and why it is still present.
+
+5. **Cache policy after native parity, not before it**
+   - Do not split VRAM evenly between gate/up/down until the native parity path
+     is correct and measured. Equal split is not an objective by itself.
+   - First run with one unified native batch cache so all three tensor roles
+     compete under the same mechanism. Record role-specific hit/miss and bytes.
+   - Then test prompt-general admission rules only if they reduce total bytes
+     or waits without breaking Stage A/Stage B parity. Examples include
+     role-aware `min_seen`, LFU/LRU, and small protected regions, but every
+     rule must be prompt-general and must be validated on calibration prompts
+     before held-out prompts.
+   - Promotion requires a candidate to beat the clean generalized SOTA, not only
+     improve a single prompt or a short `-n 16` diagnostic.
+
+6. **Larger H2D batching / copy coalescing**
+   - Once Stage A/Stage B parity is correct, combine adjacent or same-batch
+     staging buffers into fewer H2D submissions where tensor layout and kernel
+     inputs remain unchanged.
    - Add profile fields for H2D copy count, total H2D bytes, H2D ms, average
      copy size, and per-token H2D wait.
    - This is expected to help Case A most, but should also reduce wait overhead
      in Case B.
 
-4. **Reduce H2D bytes with compact or partial up/down source**
+7. **Reduce H2D bytes with compact or partial up/down source**
    - First produce a hard-bound profile: actual rows/blocks used per
      token/layer, full-expert bytes copied, partial-copy bytes needed, and
      projected token-rate upper bound for Case A and Case B.
@@ -155,22 +206,7 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      gain. It must not replace the native full expert pack or rely on a
      prompt-specific profile.
 
-5. **Prompt-general VRAM cache admission**
-   - Use only calibration/dev prompts for tuning. Held-out prompts are final
-     test only.
-   - Improve gate/up/down split-pool and admission behavior to reduce misses
-     without hurting the gate fullpack path.
-   - Reject any candidate that improves France only or reduces generalized
-     correctness.
-   - Add a default-off gate hot-pool experiment using only prompt-general
-     calibration manifests. It must preserve manifest hot-order, bypass
-     per-token gate one-pack reads only on exact tensor/expert hits, and fall
-     back to the current path on any miss. Expected upper bound is modest:
-     every 1GB of effective gate residency saves at most about 1GB of repeated
-     SSD/H2D movement, or roughly 0.15s on the current 6.6-6.8GB/s H2D path, so
-     this is a validation step rather than the whole route to `>5 tok/s`.
-
-6. **Non-expert mmap/page-cache pressure**
+8. **Non-expert mmap/page-cache pressure**
    - Profile decode-stage major faults and `memory.stat file/anon` for dense,
      attention, norm, and other non-expert tensors.
    - Try default-off page retention or pre-touch only if it remains inside the
