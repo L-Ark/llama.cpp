@@ -5321,3 +5321,49 @@ Next direction:
   probe is a unified admission policy that reserves a small down cache budget
   without stealing effective capacity from the gate one-stream cache, then tests
   whether gate misses stay flat while down hits increase.
+
+### 2026-07-09 Clean Gate Cache VRAM Sweep
+
+Purpose:
+
+- Test whether unused VRAM is better spent on the prompt-general gate one-stream
+  cache before adding more up/down GPU path complexity.
+- No prompt-specific profile, no cosubmit, no down batch; only
+  `GGML_MOE_STREAM_ONE_CACHE_MIB` changes.
+
+Results:
+
+| config | run | eval tok/s | TTFT ms | RAM peak | gate reads | gate bytes | decision |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| gate8192 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T061106Z-20260709-clean-gate8192-quantum-n96` | 5.4 | 16123.69 | 14863228928 | not recorded | not recorded | equal to SOTA, not promoted |
+| gate9216 first | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T061144Z-20260709-clean-gate9216-quantum-n96` | 5.5 | 15938.00 | 14854176768 | 3000 | 13369344000 | candidate only |
+| gate9216 repro1 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T061247Z-20260709-clean-gate9216-quantum-n96-repro1` | 5.0 | 16117.88 | 14878085120 | 3000 | 13369344000 | not reproducible, rejected |
+
+Observation:
+
+- gate9216 reduced gate direct reads versus gate7168/top48 profiles
+  (`3000` reads and `13.37GB` versus `3369` reads and `15.01GB` on Quantum
+  n96), so the cache layout is directionally useful.
+- The same gate9216 hit/miss pattern produced `5.5 tok/s` once and `5.0 tok/s`
+  on immediate replay. The variance is therefore not due to expert routing or
+  cache hit rate; it is likely SSD/direct-read latency, PCIe link behavior, or
+  scheduler noise.
+
+Decision:
+
+- Do not promote gate9216 as SOTA. It is not reproducible enough under the
+  current acceptance rule.
+- Current accepted generalized cold SOTA remains clean gate7168 Quantum n96
+  `5.4 tok/s`.
+
+Next profiling needed:
+
+- Add/enable low-overhead direct-read latency accounting for the one-stream gate
+  path so repeated runs can separate:
+  - gate direct read time;
+  - gate H2D/cache insert time;
+  - CUDA kernel time;
+  - scheduler/SSD variance.
+- Then rerun gate7168/gate9216 repeated A/B with identical source and cold
+  procedure. Promote only if the median and at least one immediate replay exceed
+  the accepted SOTA while RAM/TTFT/correctness remain valid.
