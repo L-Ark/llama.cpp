@@ -96929,3 +96929,89 @@ GGML_MOE_HOST_PREFETCH_MAX_MIB=512
     current-demand delay. If this timing cannot be achieved without a graph
     break whose cost exceeds projected IO hiding, reject runtime prefetch and
     move to another movement-reduction direction.
+
+## GP112 Prompt 0 Fallback Rollback Branch
+
+Status: implemented and validated on `2026-07-10T03:25+0000` on branch
+`vendor/kimi-gp112-prompt0-fallback`.
+
+Base:
+
+```text
+rollback base branch=vendor/kimi-gp112-rollback
+base commit=e970acb290cd2c7b2f5ff7f045e635d077575703
+base meaning=GP112 accepted Q4 decode-batch SOTA
+```
+
+Implementation:
+
+- Ported the default-off GP167 prompt fallback elimination path onto GP112:
+  - `GGML_MOE_CPU_FALLBACK_PACK_MMAP_PROMPT=1`
+  - `GGML_MOE_PROMPT_DOWN_BATCH=1`
+  - `GGML_MOE_PROMPT_DOWN_BATCH_TYPES=all`
+  - `GGML_MOE_Q4_PROMPT_DOWN_BATCH=1`
+  - `GGML_MOE_PROMPT_MATMUL_ID_BATCH=1`
+- Kept the GP112 decode Q4 down batch path and expert-pack/io_uring SOTA env.
+- Resolved only RAM/page-cache counter conflicts in CUDA; no RAM-tier policy from
+  GP169/GP170 is enabled by this branch.
+
+Validation 1: prompt 0 fallback evidence, N16 France:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-n16-france-032154
+quality=pass
+TTFT=8686.30 ms
+decode=9033.80 ms / 15
+token_rate=1.66 tok/s
+host_memory_peak=12747341824
+fallback-profile.csv lines=1  # header only
+fallback-source-profile.csv lines=1  # header only
+direct_reads=0
+```
+
+Validation 2: prompt 0 fallback evidence, N96 France with PROFILE=1:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-n96-france-profile-032304
+quality=pass
+TTFT=8866.84 ms
+decode=51012.02 ms / 85
+token_rate=1.67 tok/s
+host_memory_peak=12798459904
+fallback-profile.csv lines=1  # header only
+fallback-source-profile.csv lines=1  # header only
+direct_reads=0
+```
+
+Validation 3: low-overhead N96 France reproduction:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-n96-france-lowoverhead-032441
+quality=pass
+TTFT=7753.38 ms
+decode=46592.22 ms / 85
+token_rate=1.82 tok/s
+host_memory_peak=12726206464
+direct_reads=0
+kimi_cpu_fallback_pack_mmap hits=0 misses=0 fallback_gguf=0
+expert_pack read_failures=0 direct_fallbacks=0 iouring_fallbacks=0
+```
+
+Reproduction command shape:
+
+```bash
+systemd-run --wait --collect --same-dir   -p MemoryMax=15900000000 -p MemorySwapMax=0   env REPO=/root/lfz/llama.cpp-vendor-kimi       RUN=<run-dir>       PROMPT_ID=gp112_prompt0_n96_france_lowoverhead       PROMPT_USER_TEXT="Please introduce France in a short paragraph."       QUALITY_KEYWORDS="france,paris|europe|western europe"       N=96 PROFILE=0 COPY_PROFILE=0       EXTRA_RUNTIME_ENV="GGML_MOE_CPU_FALLBACK_PACK_MMAP_PROMPT=1
+GGML_MOE_PROMPT_DOWN_BATCH=1
+GGML_MOE_PROMPT_DOWN_BATCH_TYPES=all
+GGML_MOE_Q4_PROMPT_DOWN_BATCH=1
+GGML_MOE_PROMPT_MATMUL_ID_BATCH=1"       .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+Decision:
+
+- Accept this as the GP112-based prompt-0-fallback branch for France N96.
+- It preserves the GP112 token-rate target (`1.82 tok/s`) while eliminating
+  measured prompt/decode fallback rows under profiling.
+- Broader held-out validation is still required before replacing a global SOTA
+  branch beyond this rollback/prompt0 branch.
+

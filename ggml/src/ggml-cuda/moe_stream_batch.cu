@@ -8,7 +8,7 @@ typedef struct { float direct_up; float direct_gate; float direct_fused; float r
 void ggml_cuda_moe_stream_batch_link_anchor(void) {}
 void ggml_cuda_moe_ttft_trace_mark(const char *) {}
 bool ggml_cuda_moe_iq2_prompt_replay(int, const void *, const void *, int64_t, int64_t, size_t, const float *, int64_t, int, float, ggml_moe_iq2_replay_result *) { return false; }
-bool ggml_cuda_moe_stream_batch(int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
+bool ggml_cuda_moe_stream_batch(int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, const float *, int64_t, size_t, size_t, float *, size_t, size_t, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
 bool ggml_cuda_moe_stream_preload_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_preload_tensor_prompt(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
@@ -17,6 +17,7 @@ bool ggml_cuda_moe_iq2_xxs_q8k_selftest(void) { return false; }
 bool ggml_cuda_moe_stream_up_gate_batch(int, int, const char *, const void *, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, int, float, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *, int, size_t) { return nullptr; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(const char *, int, size_t, const char **, size_t *, uint64_t *) { return nullptr; }
+const void * ggml_cuda_moe_expert_pack_mmap_ptr_source_debug(const char *, int, size_t, const char **, size_t *, uint64_t *, int *, const char **, int *) { return nullptr; }
 bool ggml_cuda_moe_expert_pack_v2_lookup_debug(const char *, int, int *, int64_t *, int64_t *, size_t *, size_t *) { return false; }
 bool ggml_cuda_moe_expert_pack_v2_read_debug(const char *, int, void *, size_t, size_t *) { return false; }
 }
@@ -121,6 +122,7 @@ bool ggml_cuda_moe_stream_batch(
     size_t nb01,
     size_t nb02,
     const float *src1_f32,
+    int64_t src1_ne1,
     size_t src1_nb1, size_t src1_nb2,
     float *dst,
     size_t dst_nb1, size_t dst_nb2,
@@ -625,6 +627,7 @@ struct expert_pack_source {
     size_t mmap_size = 0;
     bool mmap_attempted = false;
     bool mmap_enabled = false;
+    bool page_cache = false;
     char path[512] = {};
 };
 
@@ -675,6 +678,22 @@ struct expert_pack_state {
     size_t ram_tier_pinned_bytes = 0;
     std::atomic<uint64_t> ram_tier_hits{0};
     std::atomic<uint64_t> ram_tier_total{0};
+    std::atomic<uint64_t> ram_tier_fadvise_bytes{0};
+    std::atomic<uint64_t> ram_tier_fadvise_failures{0};
+    std::atomic<uint64_t> ram_tier_direct_bytes{0};
+    std::atomic<uint64_t> ram_tier_direct_failures{0};
+    std::atomic<uint64_t> ram_tier_direct_fallbacks{0};
+    std::atomic<uint64_t> ram_tier_h2d_enqueues{0};
+    std::atomic<uint64_t> ram_tier_h2d_bytes{0};
+    std::atomic<uint64_t> ram_tier_batch_calls{0};
+    std::atomic<uint64_t> ram_tier_batch_jobs{0};
+    std::atomic<uint64_t> ram_tier_batch_hits{0};
+    std::atomic<uint64_t> ram_tier_batch_bytes{0};
+    std::atomic<uint64_t> page_cache_reads{0};
+    std::atomic<uint64_t> page_cache_bytes{0};
+    std::atomic<uint64_t> page_cache_preload_bytes{0};
+    std::atomic<uint64_t> page_cache_preload_failures{0};
+    std::atomic<uint64_t> page_cache_sources{0};
 };
 
 static expert_pack_state g_expert_pack;
@@ -3259,11 +3278,37 @@ static void expert_pack_report_atexit() {
     }
     if (g_expert_pack.ram_tier_base) {
         std::fprintf(stderr,
-                     "[moe_stream_batch] RAM tier: hits=%lu total=%lu hit_rate=%.1f%% resident=%.2f MiB\n",
+                     "[moe_stream_batch] RAM tier: hits=%lu total=%lu hit_rate=%.1f%% resident=%.2f MiB "
+                     "pinned=%.2f MiB h2d_enqueues=%lu h2d_bytes=%lu "
+                     "batch_calls=%lu batch_jobs=%lu batch_hits=%lu batch_bytes=%lu "
+                     "fadvise_bytes=%lu fadvise_failures=%lu direct_bytes=%lu direct_failures=%lu direct_fallbacks=%lu\n",
                      g_expert_pack.ram_tier_hits.load(), g_expert_pack.ram_tier_total.load(),
                      g_expert_pack.ram_tier_total.load() > 0 ?
                          100.0 * g_expert_pack.ram_tier_hits.load() / g_expert_pack.ram_tier_total.load() : 0.0,
-                     g_expert_pack.ram_tier_bytes / (1024.0 * 1024.0));
+                     g_expert_pack.ram_tier_bytes / (1024.0 * 1024.0),
+                     g_expert_pack.ram_tier_pinned_bytes / (1024.0 * 1024.0),
+                     g_expert_pack.ram_tier_h2d_enqueues.load(),
+                     g_expert_pack.ram_tier_h2d_bytes.load(),
+                     g_expert_pack.ram_tier_batch_calls.load(),
+                     g_expert_pack.ram_tier_batch_jobs.load(),
+                     g_expert_pack.ram_tier_batch_hits.load(),
+                     g_expert_pack.ram_tier_batch_bytes.load(),
+                     g_expert_pack.ram_tier_fadvise_bytes.load(),
+                     g_expert_pack.ram_tier_fadvise_failures.load(),
+                     g_expert_pack.ram_tier_direct_bytes.load(),
+                     g_expert_pack.ram_tier_direct_failures.load(),
+                     g_expert_pack.ram_tier_direct_fallbacks.load());
+    }
+    if (g_expert_pack.page_cache_sources.load() > 0 ||
+            g_expert_pack.page_cache_reads.load() > 0 ||
+            g_expert_pack.page_cache_preload_bytes.load() > 0) {
+        std::fprintf(stderr,
+                     "[moe_stream_batch] page-cache pack: sources=%lu reads=%lu bytes=%lu preload_bytes=%lu preload_failures=%lu\n",
+                     g_expert_pack.page_cache_sources.load(),
+                     g_expert_pack.page_cache_reads.load(),
+                     g_expert_pack.page_cache_bytes.load(),
+                     g_expert_pack.page_cache_preload_bytes.load(),
+                     g_expert_pack.page_cache_preload_failures.load());
     }
 }
 
@@ -3302,7 +3347,7 @@ static expert_pack_source * expert_pack_source_for_entry(const expert_pack_entry
     return &g_expert_pack.sources[(size_t)entry->source_idx];
 }
 
-static bool expert_pack_open_data_source(const char *path, const char *label) {
+static bool expert_pack_open_data_source(const char *path, const char *label, bool page_cache_source = false) {
     if (!path || !path[0]) return false;
 
     FILE *file = std::fopen(path, "rb");
@@ -3313,10 +3358,11 @@ static bool expert_pack_open_data_source(const char *path, const char *label) {
 
     expert_pack_source source;
     source.file = file;
+    source.page_cache = page_cache_source;
     std::snprintf(source.path, sizeof(source.path), "%s", path);
 #if !defined(_WIN32)
     source.fd_direct = -1;
-    if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
+    if (!page_cache_source && (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2)) {
 #if defined(O_DIRECT)
         source.fd_direct = ::open(path, O_RDONLY | O_DIRECT);
 #endif
@@ -3336,6 +3382,9 @@ static bool expert_pack_open_data_source(const char *path, const char *label) {
         } else if (g_expert_pack.io_backend == 1) {
             std::fprintf(stderr, "[moe_stream_batch] %s: direct reads enabled: %s\n", label, path);
         }
+    } else if (page_cache_source) {
+        ++g_expert_pack.page_cache_sources;
+        std::fprintf(stderr, "[moe_stream_batch] %s: page-cache buffered source enabled: %s\n", label, path);
     }
 #else
     if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
@@ -3348,7 +3397,7 @@ static bool expert_pack_open_data_source(const char *path, const char *label) {
     return true;
 }
 
-static bool expert_pack_load_source(const char *path, int32_t source_idx, std::vector<expert_pack_entry> &entries) {
+static bool expert_pack_load_source(const char *path, int32_t source_idx, std::vector<expert_pack_entry> &entries, bool page_cache_source = false) {
     if (!path || !path[0]) return false;
 
     FILE *probe = std::fopen(path, "rb");
@@ -3379,7 +3428,7 @@ static bool expert_pack_load_source(const char *path, int32_t source_idx, std::v
         std::fprintf(stderr, "[moe_stream_batch] expert pack: internal source index mismatch for %s\n", path);
         return false;
     }
-    if (!expert_pack_open_data_source(path, "expert pack")) {
+    if (!expert_pack_open_data_source(path, page_cache_source ? "page-cache expert pack" : "expert pack", page_cache_source)) {
         return false;
     }
     expert_pack_source &source = g_expert_pack.sources.back();
@@ -3796,6 +3845,91 @@ static void expert_pack_v2_shadow_profile_record(
     std::fclose(f);
 }
 
+static bool expert_pack_page_cache_preload_source(expert_pack_source &source, const char *mode) {
+    if (!source.page_cache || !source.file || !mode || !mode[0] || mode[0] == '0') {
+        return true;
+    }
+#if !defined(_WIN32)
+    const int fd = ::fileno(source.file);
+    if (fd < 0) {
+        ++g_expert_pack.page_cache_preload_failures;
+        return false;
+    }
+    struct stat st = {};
+    if (::fstat(fd, &st) != 0 || st.st_size <= 0) {
+        ++g_expert_pack.page_cache_preload_failures;
+        return false;
+    }
+    const size_t file_size = (size_t)st.st_size;
+    if (std::strcmp(mode, "fadvise") == 0 || std::strcmp(mode, "willneed") == 0) {
+        if (::posix_fadvise(fd, 0, (off_t)file_size, POSIX_FADV_WILLNEED) != 0) {
+            ++g_expert_pack.page_cache_preload_failures;
+            return false;
+        }
+        g_expert_pack.page_cache_preload_bytes += (uint64_t)file_size;
+        std::fprintf(stderr, "[moe_stream_batch] page-cache preload: fadvise %.2f MiB path=%s\n",
+                     file_size / (1024.0 * 1024.0), source.path);
+        return true;
+    }
+    if (std::strcmp(mode, "mmap") == 0 || std::strcmp(mode, "touch") == 0) {
+        void *base = ::mmap(nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
+        if (base == MAP_FAILED) {
+            ++g_expert_pack.page_cache_preload_failures;
+            return false;
+        }
+        volatile uint8_t sink = 0;
+        const uint8_t *ptr = (const uint8_t *)base;
+        const size_t page = 4096;
+        for (size_t off = 0; off < file_size; off += page) {
+            sink ^= ptr[off];
+        }
+        if (file_size > 0) {
+            sink ^= ptr[file_size - 1];
+        }
+        (void)sink;
+        ::munmap(base, file_size);
+        g_expert_pack.page_cache_preload_bytes += (uint64_t)file_size;
+        std::fprintf(stderr, "[moe_stream_batch] page-cache preload: mmap-touch %.2f MiB path=%s\n",
+                     file_size / (1024.0 * 1024.0), source.path);
+        return true;
+    }
+#endif
+    const size_t buf_sz = 8ULL * 1024ULL * 1024ULL;
+    std::vector<char> buf(buf_sz);
+    if (::fseeko(source.file, 0, SEEK_SET) != 0) {
+        ++g_expert_pack.page_cache_preload_failures;
+        return false;
+    }
+    uint64_t total = 0;
+    while (true) {
+        const size_t got = std::fread(buf.data(), 1, buf.size(), source.file);
+        if (got > 0) {
+            total += (uint64_t)got;
+        }
+        if (got < buf.size()) {
+            if (std::ferror(source.file)) {
+                ++g_expert_pack.page_cache_preload_failures;
+                std::clearerr(source.file);
+                return false;
+            }
+            break;
+        }
+    }
+    g_expert_pack.page_cache_preload_bytes += total;
+    std::fprintf(stderr, "[moe_stream_batch] page-cache preload: read %.2f MiB path=%s\n",
+                 total / (1024.0 * 1024.0), source.path);
+    return true;
+}
+
+static void expert_pack_page_cache_preload_sources() {
+    const char *mode = std::getenv("GGML_MOE_PAGECACHE_PRELOAD");
+    if (!mode || !mode[0] || mode[0] == '0') return;
+    for (expert_pack_source &source : g_expert_pack.sources) {
+        if (!source.page_cache) continue;
+        (void)expert_pack_page_cache_preload_source(source, mode);
+    }
+}
+
 static void expert_pack_init_once() {
     std::lock_guard<std::mutex> lk(g_expert_pack.mu);
     if (g_expert_pack.inited) return;
@@ -3831,17 +3965,23 @@ static void expert_pack_init_once() {
         }
     }
     expert_pack_append_env_list(source_paths, "GGML_MOE_EXPERT_PACK_LIST");
+    std::vector<std::string> page_cache_paths;
+    const char *page_cache_path = std::getenv("GGML_MOE_PAGECACHE_PACK");
+    if (page_cache_path && page_cache_path[0]) {
+        page_cache_paths.emplace_back(page_cache_path);
+    }
+    expert_pack_append_env_list(page_cache_paths, "GGML_MOE_PAGECACHE_PACK_LIST");
     const char *gguf_alias_tsv = std::getenv("GGML_MOE_EXPERT_GGUF_ALIAS_TSV");
     const bool has_gguf_alias = gguf_alias_tsv && gguf_alias_tsv[0];
 
-    if (source_paths.empty() && !has_gguf_alias) {
+    if (source_paths.empty() && page_cache_paths.empty() && !has_gguf_alias) {
         g_expert_pack.inited = true;
         return;
     }
 
     std::vector<expert_pack_entry> entries;
     for (const std::string &source_path : source_paths) {
-        if (!expert_pack_load_source(source_path.c_str(), (int32_t)g_expert_pack.sources.size(), entries)) {
+        if (!expert_pack_load_source(source_path.c_str(), (int32_t)g_expert_pack.sources.size(), entries, false)) {
             g_expert_pack.inited = true;
             return;
         }
@@ -3849,6 +3989,12 @@ static void expert_pack_init_once() {
     if (has_gguf_alias && !expert_pack_load_gguf_alias_tsv(gguf_alias_tsv, entries)) {
         g_expert_pack.inited = true;
         return;
+    }
+    for (const std::string &source_path : page_cache_paths) {
+        if (!expert_pack_load_source(source_path.c_str(), (int32_t)g_expert_pack.sources.size(), entries, true)) {
+            g_expert_pack.inited = true;
+            return;
+        }
     }
 
     std::sort(entries.begin(), entries.end(),
@@ -3859,7 +4005,9 @@ static void expert_pack_init_once() {
             if (a.nbytes != b.nbytes) return a.nbytes < b.nbytes;
             return a.source_idx < b.source_idx;
         });
-    const bool replace_duplicates = expert_pack_env_bool("GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES", false);
+    const bool replace_duplicates =
+        expert_pack_env_bool("GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES", false) ||
+        !page_cache_paths.empty();
     uint64_t replaced_duplicates = 0;
     if (replace_duplicates && !entries.empty()) {
         std::vector<expert_pack_entry> deduped;
@@ -3898,6 +4046,7 @@ static void expert_pack_init_once() {
     g_expert_pack.entries = std::move(entries);
     g_expert_pack.enabled = true;
     g_expert_pack.inited = true;
+    expert_pack_page_cache_preload_sources();
     std::atexit(expert_pack_report_atexit);
     std::fprintf(stderr, "[moe_stream_batch] expert pack: total entries=%zu sources=%zu\n",
                  g_expert_pack.entries.size(), g_expert_pack.sources.size());
@@ -4062,7 +4211,7 @@ static expert_pack_source * expert_pack_mmap_ensure(const expert_pack_entry * en
     source->mmap_attempted = true;
 #if !defined(_WIN32)
     const char *env = std::getenv("GGML_MOE_CPU_FALLBACK_PACK_MMAP");
-    if (!env || !env[0] || env[0] == '0') {
+    if (!source->page_cache && (!env || !env[0] || env[0] == '0')) {
         return nullptr;
     }
     if (!source->file) {
@@ -4177,6 +4326,101 @@ extern "C" const void * ggml_cuda_moe_expert_pack_mmap_ptr_debug(
     }
     if (entry_offset) {
         *entry_offset = entry->offset;
+    }
+    if (entry->offset > source->mmap_size || entry->nbytes != nbytes || entry->offset + entry->nbytes > source->mmap_size) {
+        ++g_expert_pack.mmap_misses;
+        if (reason) {
+            *reason = "range_invalid";
+        }
+        return nullptr;
+    }
+    ++g_expert_pack.mmap_hits;
+    g_expert_pack.mmap_bytes.fetch_add(nbytes);
+    return (const char *) source->mmap_base + entry->offset;
+}
+
+extern "C" const void * ggml_cuda_moe_expert_pack_mmap_ptr_source_debug(
+        const char * tensor_name,
+        int expert_idx,
+        size_t nbytes,
+        const char ** reason,
+        size_t * entry_nbytes,
+        uint64_t * entry_offset,
+        int * source_idx,
+        const char ** source_path,
+        int * source_is_gguf) {
+    if (source_idx) {
+        *source_idx = -1;
+    }
+    if (source_path) {
+        *source_path = nullptr;
+    }
+    if (source_is_gguf) {
+        *source_is_gguf = 0;
+    }
+    if (reason) {
+        *reason = "ok";
+    }
+    if (entry_nbytes) {
+        *entry_nbytes = 0;
+    }
+    if (entry_offset) {
+        *entry_offset = 0;
+    }
+    if (!tensor_name || !tensor_name[0] || nbytes == 0) {
+        if (reason) {
+            *reason = "invalid_args";
+        }
+        return nullptr;
+    }
+    expert_pack_init_once();
+    if (!g_expert_pack.enabled) {
+        if (reason) {
+            *reason = "mmap_unavailable";
+        }
+        return nullptr;
+    }
+
+    const expert_pack_entry * entry = expert_pack_lookup_impl(tensor_name, expert_idx, nbytes, false);
+    if (!entry) {
+        ++g_expert_pack.mmap_misses;
+        const expert_pack_entry * any_size = expert_pack_lookup_any_size(tensor_name, expert_idx);
+        if (any_size) {
+            if (reason) {
+                *reason = "nbytes_mismatch";
+            }
+            if (entry_nbytes) {
+                *entry_nbytes = (size_t) any_size->nbytes;
+            }
+            if (entry_offset) {
+                *entry_offset = any_size->offset;
+            }
+        } else if (reason) {
+            *reason = "entry_missing";
+        }
+        return nullptr;
+    }
+    expert_pack_source * source = expert_pack_mmap_ensure(entry);
+    if (!source) {
+        if (reason) {
+            *reason = "mmap_unavailable";
+        }
+        return nullptr;
+    }
+    if (entry_nbytes) {
+        *entry_nbytes = (size_t) entry->nbytes;
+    }
+    if (entry_offset) {
+        *entry_offset = entry->offset;
+    }
+    if (source_idx) {
+        *source_idx = entry->source_idx;
+    }
+    if (source_path) {
+        *source_path = source->path;
+    }
+    if (source_is_gguf) {
+        *source_is_gguf = std::strstr(source->path, ".gguf") != nullptr ? 1 : 0;
     }
     if (entry->offset > source->mmap_size || entry->nbytes != nbytes || entry->offset + entry->nbytes > source->mmap_size) {
         ++g_expert_pack.mmap_misses;
@@ -4848,6 +5092,33 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
 
     std::call_once(g_ram_tier_once, ram_tier_init);
 
+    if (source->page_cache) {
+        expert_pack_source *mmap_source = expert_pack_mmap_ensure(entry);
+        if (mmap_source && entry->offset <= mmap_source->mmap_size &&
+                entry->offset + entry->nbytes <= mmap_source->mmap_size) {
+            std::memcpy(dst, (const char *)mmap_source->mmap_base + entry->offset, sz);
+            ++g_expert_pack.page_cache_reads;
+            g_expert_pack.page_cache_bytes.fetch_add((uint64_t)sz);
+            return true;
+        }
+        std::lock_guard<std::mutex> lk(g_expert_pack.mu);
+#if defined(_WIN32)
+        if (_fseeki64(source->file, (int64_t)entry->offset, SEEK_SET) != 0) {
+#else
+        if (::fseeko(source->file, (off_t)entry->offset, SEEK_SET) != 0) {
+#endif
+            ++g_expert_pack.read_failures;
+            return false;
+        }
+        if (!expert_pack_read_exact(source->file, dst, sz)) {
+            ++g_expert_pack.read_failures;
+            return false;
+        }
+        ++g_expert_pack.page_cache_reads;
+        g_expert_pack.page_cache_bytes.fetch_add((uint64_t)sz);
+        return true;
+    }
+
 #if !defined(_WIN32)
     if (g_expert_pack.io_backend == 2 && source->fd_direct >= 0 &&
             expert_pack_env_bool("GGML_MOE_IO_URING_SINGLE", false)) {
@@ -4971,6 +5242,49 @@ static void copy_profile_record(
     std::fclose(f);
 }
 
+static bool ram_batch_profile_enabled() {
+    const char *env = std::getenv("GGML_MOE_RAM_BATCH_PROFILE_OUT");
+    return env && env[0];
+}
+
+static void ram_batch_profile_record(
+        const char *op,
+        const char *first_tensor,
+        const char *last_tensor,
+        size_t jobs,
+        size_t ram_hit_jobs,
+        size_t ram_hit_bytes,
+        double enqueue_ms,
+        double wall_ms) {
+    const char *path = std::getenv("GGML_MOE_RAM_BATCH_PROFILE_OUT");
+    if (!path || !path[0]) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,op,first_tensor,last_tensor,jobs,ram_hit_jobs,ram_hit_bytes,enqueue_ms,wall_ms\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%s,%s,%s,%zu,%zu,%zu,%.6f,%.6f\n",
+            (unsigned long)++seq,
+            op ? op : "",
+            first_tensor ? first_tensor : "",
+            last_tensor ? last_tensor : "",
+            jobs,
+            ram_hit_jobs,
+            ram_hit_bytes,
+            enqueue_ms,
+            wall_ms);
+    std::fclose(f);
+}
+
 static bool io_batch_profile_enabled() {
     const char *env = std::getenv("GGML_MOE_IO_BATCH_PROFILE_OUT");
     return env && env[0];
@@ -5040,6 +5354,8 @@ static void io_batch_profile_record(
         const char *last_tensor,
         size_t jobs,
         size_t read_jobs,
+        size_t ram_or_prefetch_jobs,
+        size_t ram_or_prefetch_bytes,
         size_t depth,
         size_t slots,
         size_t refill_batch,
@@ -5068,7 +5384,7 @@ static void io_batch_profile_record(
     if (!f) return;
     if (!header_written) {
         std::fprintf(f,
-                "seq,op,first_tensor,last_tensor,jobs,read_jobs,ram_or_prefetch_jobs,depth,slots,refill_batch,"
+                "seq,op,first_tensor,last_tensor,jobs,read_jobs,ram_or_prefetch_jobs,ram_or_prefetch_bytes,depth,slots,refill_batch,"
                 "initial_submit_jobs,submit_calls,wait_calls,cqes,inflight_avg,inflight_max,"
                 "slot_wait_ms,submit_ms,wait_ms,enqueue_ms,wall_ms,sort_by_offset\n");
         header_written = true;
@@ -5077,7 +5393,7 @@ static void io_batch_profile_record(
     const double inflight_avg = inflight_samples > 0 ?
         (double)inflight_sum / (double)inflight_samples : 0.0;
     std::fprintf(f,
-            "%lu,%s,%s,%s,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%lu,%lu,%lu,%.6f,%lu,"
+            "%lu,%s,%s,%s,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%lu,%lu,%lu,%.6f,%lu,"
             "%.6f,%.6f,%.6f,%.6f,%.6f,%d\n",
             (unsigned long)++seq,
             op ? op : "",
@@ -5085,7 +5401,8 @@ static void io_batch_profile_record(
             last_tensor ? last_tensor : "",
             jobs,
             read_jobs,
-            jobs >= read_jobs ? jobs - read_jobs : 0,
+            ram_or_prefetch_jobs,
+            ram_or_prefetch_bytes,
             depth,
             slots,
             refill_batch,
@@ -5245,6 +5562,8 @@ static bool expert_pack_ram_tier_copy_h2d(
             if (cudaMemcpyAsync(dst, src, sz, cudaMemcpyHostToDevice, st) == cudaSuccess) {
                 ++g_expert_pack.ram_tier_hits;
                 ++g_expert_pack.ram_tier_total;
+                ++g_expert_pack.ram_tier_h2d_enqueues;
+                g_expert_pack.ram_tier_h2d_bytes.fetch_add(sz);
                 if (copy_trace) copy_trace->ram_hit = true;
                 return true;
             }
@@ -5557,7 +5876,7 @@ static bool expert_pack_iouring_job_eligible(const Job &job, size_t expert_bytes
         return false;
     }
     const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
-    return source && source->fd_direct >= 0;
+    return source && !source->page_cache && source->fd_direct >= 0;
 #else
     (void)job;
     (void)expert_bytes;
@@ -5593,6 +5912,13 @@ static bool expert_pack_iouring_copy_jobs(
     std::vector<iouring_read_plan> read_plans;
     read_plans.reserve(jobs.size());
     size_t max_read_sz = default_read_sz;
+    size_t ram_or_prefetch_jobs = 0;
+    size_t ram_or_prefetch_bytes = 0;
+    size_t ram_hit_jobs = 0;
+    size_t ram_hit_bytes = 0;
+    double ram_hit_enqueue_ms = 0.0;
+    const bool profile_ram_batch = ram_batch_profile_enabled();
+    const auto ram_batch_start = profile_ram_batch ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     for (size_t i = 0; i < jobs.size(); ++i) {
         const Job &job = jobs[i];
         if (!job.pack_entry ||
@@ -5606,7 +5932,16 @@ static bool expert_pack_iouring_copy_jobs(
         batch_copy_trace copy_trace;
         copy_trace.pack_hit = true;
         const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        const auto ram_enqueue_start = profile_ram_batch ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         if (expert_pack_ram_tier_copy_h2d(job.pack_entry, job.dst, expert_bytes, st, &copy_trace)) {
+            ++ram_or_prefetch_jobs;
+            ram_or_prefetch_bytes += expert_bytes;
+            ++ram_hit_jobs;
+            ram_hit_bytes += expert_bytes;
+            if (profile_ram_batch) {
+                const auto ram_enqueue_end = std::chrono::steady_clock::now();
+                ram_hit_enqueue_ms += std::chrono::duration<double, std::milli>(ram_enqueue_end - ram_enqueue_start).count();
+            }
             if (copy_start != std::chrono::steady_clock::time_point{}) {
                 const auto copy_end = std::chrono::steady_clock::now();
                 batch_ttft_trace_record(
@@ -5622,6 +5957,8 @@ static bool expert_pack_iouring_copy_jobs(
             continue;
         }
         if (host_prefetch_copy_h2d(job.pack_entry, job.tensor, job.expert_idx, job.dst, expert_bytes, st)) {
+            ++ram_or_prefetch_jobs;
+            ram_or_prefetch_bytes += expert_bytes;
             copy_trace.pack_hit = true;
             copy_trace.ram_hit = false;
             if (copy_start != std::chrono::steady_clock::time_point{}) {
@@ -5681,10 +6018,26 @@ static bool expert_pack_iouring_copy_jobs(
                     trace_op,
                     jobs.empty() ? "" : jobs.front().tensor,
                     jobs.empty() ? "" : jobs.back().tensor,
-                    jobs.size(), read_plans.size(), depth, ring.slots.size(), 0, 0,
+                    jobs.size(), read_plans.size(), ram_or_prefetch_jobs, ram_or_prefetch_bytes,
+                    depth, ring.slots.size(), 0, 0,
                     0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0,
                     std::chrono::duration<double, std::milli>(io_batch_end - io_batch_start).count(),
                     sort_by_offset);
+        }
+        if (ram_hit_jobs > 0) {
+            ++g_expert_pack.ram_tier_batch_calls;
+            g_expert_pack.ram_tier_batch_jobs.fetch_add(jobs.size());
+            g_expert_pack.ram_tier_batch_hits.fetch_add(ram_hit_jobs);
+            g_expert_pack.ram_tier_batch_bytes.fetch_add(ram_hit_bytes);
+            if (profile_ram_batch) {
+                const auto ram_batch_end = std::chrono::steady_clock::now();
+                ram_batch_profile_record(
+                        trace_op,
+                        jobs.empty() ? "" : jobs.front().tensor,
+                        jobs.empty() ? "" : jobs.back().tensor,
+                        jobs.size(), ram_hit_jobs, ram_hit_bytes, ram_hit_enqueue_ms,
+                        std::chrono::duration<double, std::milli>(ram_batch_end - ram_batch_start).count());
+            }
         }
         return true;
     }
@@ -6114,12 +6467,28 @@ static bool expert_pack_iouring_copy_jobs(
                 trace_op,
                 jobs.empty() ? "" : jobs.front().tensor,
                 jobs.empty() ? "" : jobs.back().tensor,
-                jobs.size(), read_plans.size(), depth, ring.slots.size(), refill_batch, initial_submit_jobs,
+                jobs.size(), read_plans.size(), ram_or_prefetch_jobs, ram_or_prefetch_bytes,
+                depth, ring.slots.size(), refill_batch, initial_submit_jobs,
                 io_batch_submit_calls, io_batch_wait_calls, io_batch_cqes,
                 io_batch_inflight_sum, io_batch_inflight_samples, io_batch_inflight_max,
                 io_batch_slot_wait_ms, io_batch_submit_ms, io_batch_wait_ms, io_batch_enqueue_ms,
                 std::chrono::duration<double, std::milli>(io_batch_end - io_batch_start).count(),
                 sort_by_offset);
+    }
+    if (ram_hit_jobs > 0) {
+        ++g_expert_pack.ram_tier_batch_calls;
+        g_expert_pack.ram_tier_batch_jobs.fetch_add(jobs.size());
+        g_expert_pack.ram_tier_batch_hits.fetch_add(ram_hit_jobs);
+        g_expert_pack.ram_tier_batch_bytes.fetch_add(ram_hit_bytes);
+        if (profile_ram_batch) {
+            const auto ram_batch_end = std::chrono::steady_clock::now();
+            ram_batch_profile_record(
+                    trace_op,
+                    jobs.empty() ? "" : jobs.front().tensor,
+                    jobs.empty() ? "" : jobs.back().tensor,
+                    jobs.size(), ram_hit_jobs, ram_hit_bytes, ram_hit_enqueue_ms,
+                    std::chrono::duration<double, std::milli>(ram_batch_end - ram_batch_start).count());
+        }
     }
     return true;
 #else
@@ -7394,6 +7763,20 @@ static bool q4_down_batch_candidate(const char *name, ggml_type type) {
     if (type != GGML_TYPE_Q4_0 || !name || !std::strstr(name, "ffn_down_exps")) return false;
     const char *target = std::getenv("GGML_MOE_Q4_DOWN_BATCH_TENSOR");
     return !target || !target[0] || std::strcmp(target, name) == 0;
+}
+
+static bool prompt_down_batch_enabled() {
+    const char *env = std::getenv("GGML_MOE_PROMPT_DOWN_BATCH");
+    return env && env[0] && env[0] != '0';
+}
+
+static bool prompt_down_batch_type_allowed(ggml_type type) {
+    const char *env = std::getenv("GGML_MOE_PROMPT_DOWN_BATCH_TYPES");
+    if (!env || !env[0] || std::strcmp(env, "all") == 0) return true;
+    if (type == GGML_TYPE_Q3_K && std::strstr(env, "q3")) return true;
+    if (type == GGML_TYPE_IQ4_XS && std::strstr(env, "iq4")) return true;
+    if (type == GGML_TYPE_Q4_0 && std::strstr(env, "q4")) return true;
+    return false;
 }
 
 static void q4_down_route_profile_record(
@@ -9888,6 +10271,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     size_t nb01,
     size_t nb02,
     const float *src1_f32,
+    int64_t src1_ne1,
     size_t src1_nb1, size_t src1_nb2,
     float *dst,
     size_t dst_nb1, size_t dst_nb2,
@@ -9899,9 +10283,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         const char *env = std::getenv("GGML_MOE_STREAM_DECLINE_DEBUG");
         return env && env[0] && env[0] != '0';
     }();
-    int active_experts[128];
-    int32_t dst_ids[128];
-    int32_t token_ids[128];
+    int active_experts[MOE_STREAM_MAX_ACTIVE];
+    int32_t dst_ids[MOE_STREAM_MAX_ACTIVE];
+    int32_t token_ids[MOE_STREAM_MAX_ACTIVE];
     int n_active = 0;
     int max_dst_id = -1;
     auto decline = [&](const char *reason) -> bool {
@@ -9914,7 +10298,24 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         return false;
     };
     if (!init_batch_once()) return decline("init_batch_once");
-    if (!src0_name || !std::strstr(src0_name, "ffn_down_exps")) return decline("not_down_tensor");
+    const bool prompt_multirow = rows_stride > 8;
+    const char *prompt_matmul_env = std::getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH");
+    const char *prompt_matmul_roles = std::getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH_ROLES");
+    const bool is_prompt_up = src0_name && std::strstr(src0_name, "ffn_up_exps");
+    const bool is_prompt_gate = src0_name && std::strstr(src0_name, "ffn_gate_exps");
+    const bool prompt_matmul_role_allowed =
+        !prompt_matmul_roles || !prompt_matmul_roles[0] ||
+        std::strcmp(prompt_matmul_roles, "all") == 0 ||
+        (is_prompt_up && std::strstr(prompt_matmul_roles, "up")) ||
+        (is_prompt_gate && std::strstr(prompt_matmul_roles, "gate"));
+    const bool prompt_matmul_id =
+        prompt_multirow &&
+        prompt_matmul_env && prompt_matmul_env[0] && prompt_matmul_env[0] != '0' &&
+        prompt_matmul_role_allowed &&
+        (is_prompt_up || is_prompt_gate);
+    if (!src0_name || (!std::strstr(src0_name, "ffn_down_exps") && !prompt_matmul_id)) {
+        return decline("not_down_tensor");
+    }
     const bool q4_parity_candidate = q4_down_parity_candidate(src0_name, src0_type);
     const bool q4_route_profile_candidate = q4_down_route_profile_candidate(src0_name, src0_type);
     const bool q4_batch_candidate = q4_down_batch_candidate(src0_name, src0_type);
@@ -9922,18 +10323,26 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     if (!src1_f32) return decline("missing_src1");
     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
 
+    if (prompt_multirow && !prompt_matmul_id && !prompt_down_batch_enabled()) {
+        return decline("prompt_multirow_disabled");
+    }
+    if (prompt_multirow && !prompt_matmul_id && !prompt_down_batch_type_allowed(src0_type)) {
+        return decline("prompt_type_disabled");
+    }
+
     for (int64_t e = 0; e < n_as; ++e) {
-        if (matrix_row_counts[e] != 1) {
-            if (matrix_row_counts[e] > 1) return decline("multirow_not_supported");
+        if (matrix_row_counts[e] <= 0) {
             continue;
         }
-        if (n_active >= 128) return decline("too_many_active_routes");
         const ggml_moe_row_mapping * r = matrix_rows + e*rows_stride;
-        active_experts[n_active] = (int)e;
-        dst_ids[n_active] = r[0].i1;
-        token_ids[n_active] = r[0].i2;
-        if (dst_ids[n_active] > max_dst_id) max_dst_id = dst_ids[n_active];
-        ++n_active;
+        for (int64_t row = 0; row < matrix_row_counts[e]; ++row) {
+            if (n_active >= MOE_STREAM_MAX_ACTIVE) return decline("too_many_active_routes");
+            active_experts[n_active] = (int)e;
+            dst_ids[n_active] = r[row].i1;
+            token_ids[n_active] = r[row].i2;
+            if (dst_ids[n_active] > max_dst_id) max_dst_id = dst_ids[n_active];
+            ++n_active;
+        }
     }
     if (n_active <= 0 || max_dst_id < 0) return decline("no_active_routes");
     static std::atomic<int> q4_route_profile_calls{0};
@@ -9985,7 +10394,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                      batch_call, src0_name ? src0_name : "(null)", n_active, (long)ne01, (long)ne00);
     }
     batch_route_detail_record(
-        "decode",
+        rows_stride > 8 ? "prompt" : "decode",
         (uint64_t)batch_call,
         src0_name,
         src0_type_int,
@@ -10023,7 +10432,6 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     const size_t src0_bytes = (size_t)ne01 * nb01;
     batch_ttft_call_scope ttft_scope("call_down", src0_name, n_active, src0_bytes);
-    const size_t src0_all_bytes = (size_t)n_active * src0_bytes;
     const size_t src1_f32_bytes = (size_t)n_active * ne00 * sizeof(float);
     const size_t src1_q8_bytes = (size_t)n_active * moe_stream_q8_1_row_bytes(ne00);
     const char *down_q8k_env = std::getenv("GGML_MOE_STREAM_DOWN_Q8K");
@@ -10050,12 +10458,12 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const bool shadow_error = down_act_shadow_error_enabled();
     const bool down_q8k_requested = down_q8k_candidate && !use_handoff;
     const size_t src1_q8k_bytes = down_q8k_requested ? (size_t)n_active * (ne00 / QK_K) * sizeof(block_q8_K) : 0;
-    const size_t dst_bytes = (size_t)dst_cols * ne01 * sizeof(float);
+    const int64_t dst_rows = down_q8k_requested ? dst_cols : n_active;
+    const size_t dst_bytes = (size_t)dst_rows * ne01 * sizeof(float);
     const size_t ids_bytes = (size_t)n_active * sizeof(int32_t);
     const size_t bounds_bytes = (size_t)(n_active + 1) * sizeof(int32_t);
 
-    bool ok = ensure_dev(bc.d_src0, bc.d_src0_sz, src0_all_bytes)
-        && ((use_handoff && !shadow_error) || ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes))
+    bool ok = ((use_handoff && !shadow_error) || ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes))
         && ensure_dev(bc.d_src1_q8, bc.d_src1_q8_sz, src1_q8_bytes)
         && (!down_q8k_requested || ensure_dev(bc.d_src1_q8k, bc.d_src1_q8k_sz, src1_q8k_bytes))
         && ensure_dev(bc.d_dst, bc.d_dst_sz, dst_bytes)
@@ -10191,8 +10599,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         if (cache_slot < 0) return decline("cache_insert");
         bc.h_x_ids[j] = cache_slot;
 
+        const int32_t src1_id = src1_ne1 > 0 ? (int32_t)(dst_ids[j] % src1_ne1) : dst_ids[j];
         const char *src1_base = (const char *)src1_f32;
-        const char *src_row = src1_base + (size_t)dst_ids[j] * src1_nb1 + (size_t)token_ids[j] * src1_nb2;
+        const char *src_row = src1_base + (size_t)src1_id * src1_nb1 + (size_t)token_ids[j] * src1_nb2;
         if (down_act_sparsity_profile_enabled()) {
             down_act_sparsity_profile_record(
                     (uint64_t)batch_call,

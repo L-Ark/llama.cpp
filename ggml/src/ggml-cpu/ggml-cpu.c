@@ -174,6 +174,7 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     size_t nb01,
     size_t nb02,
     const float * src1_f32,
+    int64_t src1_ne1,
     size_t src1_nb1,
     size_t src1_nb2,
     float * dst,
@@ -193,6 +194,16 @@ __attribute__((weak)) extern const void * ggml_cuda_moe_expert_pack_mmap_ptr_deb
     const char ** reason,
     size_t * entry_nbytes,
     uint64_t * entry_offset);
+__attribute__((weak)) extern const void * ggml_cuda_moe_expert_pack_mmap_ptr_source_debug(
+    const char * tensor_name,
+    int expert_idx,
+    size_t nbytes,
+    const char ** reason,
+    size_t * entry_nbytes,
+    uint64_t * entry_offset,
+    int * source_idx,
+    const char ** source_path,
+    int * source_is_gguf);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_up_gate_batch(
     int src0_up_type_int,
     int src0_gate_type_int,
@@ -260,11 +271,26 @@ static bool ggml_kimi_moe_mixed_iq2_iq3_pair(enum ggml_type up_type, enum ggml_t
 }
 
 static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const char * name) {
-    if (!name || !strstr(name, "ffn_down_exps")) {
+    const bool is_down = name && strstr(name, "ffn_down_exps");
+    const bool is_up = name && strstr(name, "ffn_up_exps");
+    const bool is_gate = name && strstr(name, "ffn_gate_exps");
+    const char * prompt_matmul_roles = getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH_ROLES");
+    const bool prompt_matmul_role_allowed =
+        !prompt_matmul_roles || !prompt_matmul_roles[0] ||
+        strcmp(prompt_matmul_roles, "all") == 0 ||
+        (is_up && strstr(prompt_matmul_roles, "up")) ||
+        (is_gate && strstr(prompt_matmul_roles, "gate"));
+    const bool prompt_matmul_id =
+        (is_up || is_gate) &&
+        prompt_matmul_role_allowed &&
+        getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH") != NULL &&
+        getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH")[0] != '0';
+
+    if (!is_down && !prompt_matmul_id) {
         return false;
     }
 
-    if (type == GGML_TYPE_Q4_0) {
+    if (is_down && type == GGML_TYPE_Q4_0) {
         const char * batch = getenv("GGML_MOE_Q4_DOWN_BATCH");
         if (batch && batch[0] && batch[0] != '0') {
             const char * target = getenv("GGML_MOE_Q4_DOWN_BATCH_TENSOR");
@@ -394,6 +420,160 @@ struct ggml_kimi_cpu_fallback_pack_mmap_state {
 
 static struct ggml_kimi_cpu_fallback_pack_mmap_state ggml_kimi_cpu_fallback_pack_mmap;
 
+#define GGML_KIMI_CPU_FALLBACK_SOURCE_PROFILE_MAX 128
+#define GGML_KIMI_CPU_FALLBACK_SOURCE_PATH_MAX 256
+
+struct ggml_kimi_cpu_fallback_source_profile_entry {
+    char source_path[GGML_KIMI_CPU_FALLBACK_SOURCE_PATH_MAX];
+    int source_idx;
+    int source_is_gguf;
+    int src0_type;
+    bool prompt_phase;
+    char role[8];
+    uint64_t calls;
+    uint64_t rows;
+    uint64_t bytes;
+};
+
+struct ggml_kimi_cpu_fallback_source_profile_state {
+    bool initialized;
+    bool registered;
+    bool enabled;
+    const char * out;
+    struct ggml_kimi_cpu_fallback_source_profile_entry entries[GGML_KIMI_CPU_FALLBACK_SOURCE_PROFILE_MAX];
+    int n_entries;
+    uint64_t dropped;
+};
+
+static struct ggml_kimi_cpu_fallback_source_profile_state ggml_kimi_cpu_fallback_source_profile;
+
+static void ggml_kimi_cpu_fallback_source_profile_report(void) {
+    if (!ggml_kimi_cpu_fallback_source_profile.enabled ||
+            !ggml_kimi_cpu_fallback_source_profile.out ||
+            !ggml_kimi_cpu_fallback_source_profile.out[0]) {
+        return;
+    }
+
+    FILE * f = fopen(ggml_kimi_cpu_fallback_source_profile.out, "w");
+    if (!f) {
+        fprintf(stderr,
+                "[kimi_cpu_fallback_source_profile] open failed: %s\n",
+                ggml_kimi_cpu_fallback_source_profile.out);
+        return;
+    }
+
+    fprintf(f, "rank,phase,src0_type,role,source_idx,source_is_gguf,calls,rows,bytes,source_path\n");
+    for (int i = 0; i < ggml_kimi_cpu_fallback_source_profile.n_entries; ++i) {
+        const struct ggml_kimi_cpu_fallback_source_profile_entry * e =
+            &ggml_kimi_cpu_fallback_source_profile.entries[i];
+        fprintf(f, "%d,%s,%d,%s,%d,%d,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%s\n",
+                i + 1,
+                e->prompt_phase ? "prompt" : "decode",
+                e->src0_type,
+                e->role,
+                e->source_idx,
+                e->source_is_gguf,
+                e->calls,
+                e->rows,
+                e->bytes,
+                e->source_path);
+    }
+    fclose(f);
+
+    fprintf(stderr,
+            "[kimi_cpu_fallback_source_profile] written: %s entries=%d dropped=%" PRIu64 "\n",
+            ggml_kimi_cpu_fallback_source_profile.out,
+            ggml_kimi_cpu_fallback_source_profile.n_entries,
+            ggml_kimi_cpu_fallback_source_profile.dropped);
+}
+
+static bool ggml_kimi_cpu_fallback_source_profile_enabled(void) {
+    if (!ggml_kimi_cpu_fallback_source_profile.initialized) {
+        ggml_kimi_cpu_fallback_source_profile.initialized = true;
+        ggml_kimi_cpu_fallback_source_profile.out = getenv("GGML_MOE_CPU_FALLBACK_SOURCE_PROFILE_OUT");
+        ggml_kimi_cpu_fallback_source_profile.enabled =
+            ggml_kimi_cpu_fallback_source_profile.out &&
+            ggml_kimi_cpu_fallback_source_profile.out[0];
+        if (ggml_kimi_cpu_fallback_source_profile.enabled &&
+                !ggml_kimi_cpu_fallback_source_profile.registered) {
+            ggml_kimi_cpu_fallback_source_profile.registered = true;
+            atexit(ggml_kimi_cpu_fallback_source_profile_report);
+        }
+    }
+
+    return ggml_kimi_cpu_fallback_source_profile.enabled;
+}
+
+static const char * ggml_kimi_cpu_moe_tensor_role(const char * tensor_name) {
+    if (!tensor_name) {
+        return "other";
+    }
+    if (strstr(tensor_name, "ffn_down_exps")) {
+        return "down";
+    }
+    if (strstr(tensor_name, "ffn_up_exps")) {
+        return "up";
+    }
+    if (strstr(tensor_name, "ffn_gate_exps")) {
+        return "gate";
+    }
+    return "other";
+}
+
+static void ggml_kimi_cpu_fallback_source_profile_record(
+        const char * tensor_name,
+        int src0_type,
+        bool prompt_phase,
+        int source_idx,
+        const char * source_path,
+        int source_is_gguf,
+        int64_t rows,
+        size_t expert_bytes) {
+    if (!ggml_kimi_cpu_fallback_source_profile_enabled() || rows <= 0) {
+        return;
+    }
+
+    const char * role = ggml_kimi_cpu_moe_tensor_role(tensor_name);
+    const char * safe_path = source_path ? source_path : "<unknown>";
+    int idx = -1;
+
+    for (int i = 0; i < ggml_kimi_cpu_fallback_source_profile.n_entries; ++i) {
+        struct ggml_kimi_cpu_fallback_source_profile_entry * e =
+            &ggml_kimi_cpu_fallback_source_profile.entries[i];
+        if (e->source_idx == source_idx &&
+                e->source_is_gguf == source_is_gguf &&
+                e->src0_type == src0_type &&
+                e->prompt_phase == prompt_phase &&
+                strncmp(e->role, role, sizeof(e->role)) == 0 &&
+                strncmp(e->source_path, safe_path, GGML_KIMI_CPU_FALLBACK_SOURCE_PATH_MAX) == 0) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx < 0) {
+        if (ggml_kimi_cpu_fallback_source_profile.n_entries >= GGML_KIMI_CPU_FALLBACK_SOURCE_PROFILE_MAX) {
+            ggml_kimi_cpu_fallback_source_profile.dropped++;
+            return;
+        }
+        idx = ggml_kimi_cpu_fallback_source_profile.n_entries++;
+        struct ggml_kimi_cpu_fallback_source_profile_entry * e =
+            &ggml_kimi_cpu_fallback_source_profile.entries[idx];
+        snprintf(e->source_path, sizeof(e->source_path), "%s", safe_path);
+        snprintf(e->role, sizeof(e->role), "%s", role);
+        e->source_idx = source_idx;
+        e->source_is_gguf = source_is_gguf;
+        e->src0_type = src0_type;
+        e->prompt_phase = prompt_phase;
+    }
+
+    struct ggml_kimi_cpu_fallback_source_profile_entry * e =
+        &ggml_kimi_cpu_fallback_source_profile.entries[idx];
+    e->calls++;
+    e->rows += (uint64_t) rows;
+    e->bytes += (uint64_t) rows * (uint64_t) expert_bytes;
+}
+
 static void ggml_kimi_cpu_fallback_pack_mmap_report(void) {
     if (!ggml_kimi_cpu_fallback_pack_mmap.enabled &&
             ggml_kimi_cpu_fallback_pack_mmap.hits == 0 &&
@@ -423,6 +603,17 @@ static bool ggml_kimi_cpu_fallback_pack_mmap_enabled(void) {
     return ggml_kimi_cpu_fallback_pack_mmap.enabled && ggml_cuda_moe_expert_pack_mmap_ptr != NULL;
 }
 
+static bool ggml_kimi_cpu_fallback_pack_mmap_prompt_enabled(void) {
+    static int initialized = 0;
+    static bool enabled = false;
+    if (!initialized) {
+        initialized = 1;
+        const char * env = getenv("GGML_MOE_CPU_FALLBACK_PACK_MMAP_PROMPT");
+        enabled = env && env[0] && env[0] != '0';
+    }
+    return enabled;
+}
+
 static bool ggml_kimi_cpu_fallback_miss_trace_enabled(void) {
     static int initialized = 0;
     static bool enabled = false;
@@ -445,11 +636,14 @@ static void ggml_kimi_cpu_fallback_pack_mmap_prepare(
     for (int64_t cur_a = 0; cur_a < n_as; ++cur_a) {
         mmap_ptrs[cur_a] = NULL;
     }
-    if (prompt_phase || !ggml_kimi_cpu_fallback_pack_mmap_enabled() ||
+    if ((prompt_phase && !ggml_kimi_cpu_fallback_pack_mmap_prompt_enabled()) ||
+            !ggml_kimi_cpu_fallback_pack_mmap_enabled() ||
             !tensor_name || !tensor_name[0] || expert_bytes == 0) {
         return;
     }
     const bool trace_misses = ggml_kimi_cpu_fallback_miss_trace_enabled();
+    const bool source_profile = ggml_kimi_cpu_fallback_source_profile_enabled() &&
+        ggml_cuda_moe_expert_pack_mmap_ptr_source_debug != NULL;
     for (int64_t cur_a = 0; cur_a < n_as; ++cur_a) {
         if (matrix_row_counts[cur_a] == 0) {
             continue;
@@ -457,8 +651,22 @@ static void ggml_kimi_cpu_fallback_pack_mmap_prepare(
         const char * reason = "entry_missing";
         size_t entry_nbytes = 0;
         uint64_t entry_offset = 0;
+        int source_idx = -1;
+        int source_is_gguf = 0;
+        const char * source_path = NULL;
         const void * ptr = NULL;
-        if (trace_misses && ggml_cuda_moe_expert_pack_mmap_ptr_debug != NULL) {
+        if (source_profile) {
+            ptr = ggml_cuda_moe_expert_pack_mmap_ptr_source_debug(
+                    tensor_name,
+                    (int) cur_a,
+                    expert_bytes,
+                    &reason,
+                    &entry_nbytes,
+                    &entry_offset,
+                    &source_idx,
+                    &source_path,
+                    &source_is_gguf);
+        } else if (trace_misses && ggml_cuda_moe_expert_pack_mmap_ptr_debug != NULL) {
             ptr = ggml_cuda_moe_expert_pack_mmap_ptr_debug(
                     tensor_name,
                     (int) cur_a,
@@ -473,6 +681,17 @@ static void ggml_kimi_cpu_fallback_pack_mmap_prepare(
             mmap_ptrs[cur_a] = ptr;
             ggml_kimi_cpu_fallback_pack_mmap.hits++;
             ggml_kimi_cpu_fallback_pack_mmap.bytes += expert_bytes;
+            if (source_profile) {
+                ggml_kimi_cpu_fallback_source_profile_record(
+                        tensor_name,
+                        src0_type,
+                        prompt_phase,
+                        source_idx,
+                        source_path,
+                        source_is_gguf,
+                        matrix_row_counts[cur_a],
+                        expert_bytes);
+            }
         } else {
             ggml_kimi_cpu_fallback_pack_mmap.misses++;
             ggml_kimi_cpu_fallback_pack_mmap.fallback_gguf++;
@@ -3596,7 +3815,9 @@ static void ggml_compute_forward_mul_mat_id(
         kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FN;
     } else if (!ggml_cuda_moe_stream_available()) {
         kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FALSE;
-    } else if (src0->type == GGML_TYPE_Q4_0 && ids->ne[1] > 1) {
+    } else if (src0->type == GGML_TYPE_Q4_0 && ids->ne[1] > 1 &&
+            !(getenv("GGML_MOE_Q4_PROMPT_DOWN_BATCH") != NULL &&
+              getenv("GGML_MOE_Q4_PROMPT_DOWN_BATCH")[0] != '0')) {
         kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED;
     } else if (!ggml_cuda_moe_stream_supports_down_batch(src0->type, src0->name)) {
         kimi_cpu_moe_batch_reason = GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED;
@@ -3627,6 +3848,7 @@ static void ggml_compute_forward_mul_mat_id(
                 n_as,
                 ne01, ne00, nb01, nb02,
                 (const float *) src1->data,
+                ne11,
                 nb11, nb12,
                 (float *) dst->data,
                 nb1, nb2,
