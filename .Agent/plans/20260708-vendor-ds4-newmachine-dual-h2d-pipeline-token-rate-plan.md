@@ -4992,3 +4992,88 @@ Revised next implementation direction:
 4. Acceptance target: beat clean gate7168 SOTA on Quantum n96 and at least one
    additional dev prompt, with `ram_ok=true`, coherent output, and TTFT within
    the 20% gate.
+
+### 2026-07-09 Gate-Triggered Down Cosubmit Probe
+
+Existing `GGML_MOE_CURRENT_DOWN_OVERLAP=1` was tested first with the corrected
+up/down pack alias:
+
+- `early=0`:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T052906Z-20260709-batchon-downonly-packalias-currentoverlap-early0-quantum-n32`,
+  `eval_tok_s=4.2`, `stage_ms=1276.0`, `hits=893`, `misses=787`.
+- `early=1`:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T052932Z-20260709-batchon-downonly-packalias-currentoverlap-early1-quantum-n32`,
+  `eval_tok_s=4.2`, `stage_ms=1283.1`, `hits=893`, `misses=787`.
+
+Interpretation: this hook is inside the batch up/gate path, while the accepted
+DeepSeek SOTA uses one-stream gate. It therefore did not trigger useful current
+down overlap for the accepted path.
+
+Full gate/up/down cosubmit was then tested through the one-stream gate hook:
+
+- gate7168/bcache8192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T053100Z-20260709-batchon-downonly-packalias-cosubmit-gate7168-bcache8192-quantum-n32`,
+  `eval_tok_s=4.3`, `stage_ms=815.3`, `hits=1229`, `misses=451`,
+  `iouring_reads=1926`, `iouring_bytes=8583118848`.
+- gate6144/bcache8192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T053127Z-20260709-batchon-downonly-packalias-cosubmit-gate6144-bcache8192-quantum-n32`,
+  `eval_tok_s=4.3`, `stage_ms=710.9`, `hits=1281`, `misses=399`,
+  `iouring_reads=2085`, `iouring_bytes=9291694080`.
+
+This proved gate-triggered cosubmit can reduce critical down misses, but full
+cosubmit also moved up tensors that were not used by the down-only GPU path.
+
+Code update:
+
+- Added default-off `GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY=1`.
+- When unset, full gate/up/down cosubmit behavior is unchanged.
+- When set, gate cosubmit skips `ffn_up_exps` and preloads only
+  `ffn_down_exps` into the batch VRAM cache.
+- The demo script now records and passes this env into the 16GB cgroup.
+- Commit: `d02b54d vendor-ds4: add down-only gate cosubmit mode`.
+
+Down-only cosubmit results:
+
+| config | run | eval tok/s | stage_ms | hits/misses | RAM peak | result |
+| --- | --- | ---: | ---: | --- | ---: | --- |
+| gate7168/bcache8192/down-only cosubmit | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T053503Z-20260709-batchon-downonly-packalias-cosubmitdownonly-gate7168-bcache8192-quantum-n32` | 4.5 | 241.2 | 1570 / 110 | 14773305344 | rejected: below gate7168 SOTA |
+| gate6144/bcache8192/down-only cosubmit | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T053529Z-20260709-batchon-downonly-packalias-cosubmitdownonly-gate6144-bcache8192-quantum-n32` | 4.6 | 105.8 | 1654 / 26 | 14731517952 | rejected: below gate7168 SOTA |
+
+The down-only cosubmit patch is a real stage improvement:
+
+- compared with corrected pack-alias down-only, misses dropped from `787` to
+  `26` in the best gate6144 split;
+- critical-path stage dropped from about `1260-1530 ms` to `105.8 ms`;
+- kernel stayed about `177 ms`, confirming the kernel was not the bottleneck.
+
+However, end-to-end token rate is still below the clean gate7168 path because
+the gate-triggered preloads still add large off-critical-path IO/H2D work:
+
+- best down-only cosubmit `iouring_reads=1712`,
+  `iouring_bytes=7629438976`, `async prefetch waits=787`;
+- clean default sanity on pushed `d02b54d`:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T053647Z-20260709-d02-default-gate7168-sanity-quantum-n32`,
+  `eval_tok_s=5.0`, `run_ok=true`, `ram_ok=true`, answer coherent, and stderr
+  only shows the one-stream gate VRAM cache.
+
+Conclusion:
+
+- Up/down GPU path is now technically open and can be fed by one-stream gate
+  prefetch, but it is not yet an accepted token-rate improvement.
+- The remaining problem is prefetch selectivity: loading every gate-selected
+  down expert almost eliminates down misses but moves too many bytes.
+
+Next implementation target:
+
+1. Add a selective down-cosubmit policy instead of preloading every gate event.
+   Candidate filters:
+   - only preload if the same `(layer, expert)` appears at least twice inside a
+     short decode window;
+   - only preload top recurring experts per layer from a prompt-general dev
+     route histogram;
+   - skip first-use low-reuse experts and let CPU fallback handle them.
+2. The policy must remain prompt-general and default-off.
+3. It must record planned/skipped/preloaded/down-hit counters and compare saved
+   down-stage time against extra cosubmit IO/H2D bytes.
+4. Acceptance remains unchanged: beat clean gate7168 SOTA with RAM under 16GB,
+   coherent output, and TTFT within the 20% gate.
