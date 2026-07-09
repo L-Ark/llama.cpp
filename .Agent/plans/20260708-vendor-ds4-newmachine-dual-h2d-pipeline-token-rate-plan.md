@@ -5575,3 +5575,31 @@ Decision:
 - The reserve-enabled up/down candidate is rejected as a speed SOTA: it is safe
   but slower than clean gate12288 on both checked prompts (`Deploy 5.8` vs clean
   `6.0`; Quantum `5.4` vs accepted `5.5`).
+
+### 2026-07-09 Implementation: Down GPU Min-Active Gate
+
+Reason:
+
+- Down batch profiling showed most accepted GPU down calls are tiny:
+  - `n_active` mean about `1.01`;
+  - median GPU down wall around `0.20 ms`;
+  - decode CPU fallback down average around `0.227 ms/call`.
+- For these calls, GPU launch/sync/cache bookkeeping can erase the compute
+  advantage. The next probe should only send down calls to GPU when there is
+  enough active work to amortize the overhead.
+
+Implementation:
+
+- Add default-off `GGML_MOE_DOWN_BATCH_MIN_ACTIVE`.
+- If set to `N > 1`, down batch declines with `down_min_active` when
+  `n_active < N`; the existing CPU fallback then handles the call.
+- Demo config records and passes the env through the 16GB cgroup.
+- Default remains off, so clean gate12288 SOTA behavior is unchanged.
+
+Planned tests:
+
+- Gate12288 + fallback down top256 + bcache1024/2048 with:
+  - `GGML_MOE_DOWN_BATCH_MIN_ACTIVE=2`;
+  - `GGML_MOE_DOWN_BATCH_MIN_ACTIVE=4`.
+- Accept only if Quantum and at least one non-Quantum dev prompt both improve
+  or remain non-regressed versus clean gate12288 without OOM.

@@ -7566,6 +7566,14 @@ static bool down_batch_hit_only_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static int down_batch_min_active() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_MIN_ACTIVE");
+    const long value = (env && env[0]) ? std::atol(env) : 0;
+    if (value <= 1) return 0;
+    if (value > MOE_STREAM_MAX_ACTIVE) return MOE_STREAM_MAX_ACTIVE;
+    return (int)value;
+}
+
 static int down_prefetch_depth() {
     const char *env = std::getenv("GGML_MOE_PREFETCH_DOWN_DEPTH");
     long depth = (env && env[0]) ? std::atol(env) : 8;
@@ -10050,6 +10058,8 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         }
     }
     if (n_active <= 0 || max_dst_id < 0) return decline("no_active_routes");
+    const int min_active = down_batch_min_active();
+    if (min_active > 0 && n_active < min_active) return decline("down_min_active");
     static std::atomic<int> q4_route_profile_calls{0};
     if (q4_route_profile_candidate) {
         const int q4_route_call = q4_route_profile_calls.fetch_add(1, std::memory_order_relaxed);
