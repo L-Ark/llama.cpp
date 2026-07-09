@@ -456,6 +456,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH": $(printf '%s' "${GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH:-0}" | json_string),
     "GGML_MOE_UPDOWN_PAIRED_READ": "1",
     "GGML_MOE_GATE_UPDOWN_COSUBMIT": $(printf '%s' "${GGML_MOE_GATE_UPDOWN_COSUBMIT:-0}" | json_string),
+    "GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY": $(printf '%s' "${GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY:-0}" | json_string),
     "GGML_MOE_PLANNED_HOST_PREFETCH": $(printf '%s' "${GGML_MOE_PLANNED_HOST_PREFETCH:-0}" | json_string),
     "GGML_MOE_HOST_PREFETCH_MAX_MIB": $(printf '%s' "${GGML_MOE_HOST_PREFETCH_MAX_MIB:-512}" | json_string),
     "GGML_MOE_HOST_PREFETCH_SLOTS": $(printf '%s' "${GGML_MOE_HOST_PREFETCH_SLOTS:-64}" | json_string),
@@ -575,6 +576,7 @@ else
   export GGML_MOE_VRAM_CACHE_GB=$(printf '%q' "${GGML_MOE_VRAM_CACHE_GB:-9}")
 fi
 export GGML_MOE_GATE_UPDOWN_COSUBMIT=$(printf '%q' "${GGML_MOE_GATE_UPDOWN_COSUBMIT:-0}")
+export GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY=$(printf '%q' "${GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY:-0}")
 if [[ "$GATE_FULLPACK" == "1" ]]; then
   export GGML_MOE_STREAM_ONE_EXPERT_PACK="$GATE_FULLPACK_PATH"
   export GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct
@@ -738,6 +740,9 @@ systemd_cmd=(
 )
 if [[ -n "${GGML_MOE_GATE_UPDOWN_COSUBMIT:-}" ]]; then
   systemd_cmd+=(--setenv=GGML_MOE_GATE_UPDOWN_COSUBMIT=${GGML_MOE_GATE_UPDOWN_COSUBMIT})
+fi
+if [[ -n "${GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY:-}" ]]; then
+  systemd_cmd+=(--setenv=GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY=${GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY})
 fi
 if [[ -n "${GGML_MOE_STREAM_DEFER:-}" ]]; then
   systemd_cmd+=(--setenv=GGML_MOE_STREAM_DEFER=${GGML_MOE_STREAM_DEFER})

@@ -7640,6 +7640,11 @@ static bool gate_updown_cosubmit_env_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static bool gate_updown_cosubmit_down_only_enabled() {
+    const char *env = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY");
+    return env && env[0] && env[0] != '0';
+}
+
 extern "C" int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_name, int expert_idx, size_t expert_bytes) {
     if (!gate_updown_cosubmit_env_enabled()) return 0;
     if (!gate_name || !std::strstr(gate_name, ".ffn_gate_exps.")) return 0;
@@ -7661,8 +7666,13 @@ extern "C" int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_n
 
     std::vector<gate_updown_cosubmit_job> planned;
     planned.reserve(2);
+    const bool down_only = gate_updown_cosubmit_down_only_enabled();
     for (int i = 0; i < 2; ++i) {
         const char *tensor = names[i];
+        const bool is_down = std::strstr(tensor, ".ffn_down_exps.") != nullptr;
+        if (down_only && !is_down) {
+            continue;
+        }
         const uintptr_t key = batch_key_hash(tensor, expert_idx);
         if (batch_cache_find_slot(cache, key) >= 0) {
             ++g_gate_updown_cosubmit_cache_hits;
@@ -7673,7 +7683,6 @@ extern "C" int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_n
             ++g_gate_updown_cosubmit_missing_pack;
             continue;
         }
-        const bool is_down = std::strstr(tensor, ".ffn_down_exps.") != nullptr;
         const int slot = batch_cache_insert_slot(cache, key, nullptr, expert_bytes, g_batch.prefetch_stream,
                 false, true, nullptr, 0, false, tensor, expert_idx,
                 is_down, false, false);
