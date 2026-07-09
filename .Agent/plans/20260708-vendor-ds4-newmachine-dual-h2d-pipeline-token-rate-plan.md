@@ -4138,3 +4138,30 @@ Decision:
   model execution path.
 - Commit and push, then re-run at least deploy and Fibonacci from clean source
   to verify the committed script state.
+
+Clean-source verification after guard v3 push:
+
+- Pushed commit: `a87d2975a`
+  (`vendor-ds4: improve generalized output guard`).
+- Deploy n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T022218Z-20260709-clean-a87d297-outputguardv3-deploy-n192`,
+  source clean, `eval_tok_s=5.2`, `prompt_tok_s=4.2`,
+  `first_output_ms=16493.6 ms`, `memory_peak_bytes=14861320192`,
+  `memory_file_bytes=13851484160`, `ram_ok=true`,
+  `display_processes_stopped_before_run=true`. Output remains coherent and
+  ends cleanly after the quantization section.
+- Fibonacci n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T022315Z-20260709-clean-a87d297-outputguardv3-fibonacci-n192`,
+  source clean, `eval_tok_s=5.5`, `prompt_tok_s=3.8`,
+  `first_output_ms=15608.5 ms`, `memory_peak_bytes=14912532480`,
+  `memory_file_bytes=13952819200`, `ram_ok=true`,
+  `display_processes_stopped_before_run=true`. Python function remains
+  syntactically valid.
+
+Status:
+
+- Current pushed default remains speed-compliant and reproducible under
+  strict cold 16GB host RAM including page cache.
+- Output guard v3 improves wrapper-level quality without changing raw
+  generation or token-rate path, but product completion still requires a fresh
+  frozen held-out check to prove random-prompt output quality.
