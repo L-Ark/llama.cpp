@@ -5212,3 +5212,41 @@ Updated next direction:
      without filling it with low-value entries.
   3. Keep held-out prompts unused until a candidate is frozen.
   4. Compare against clean gate7168 and against no-repeat hit-only.
+
+### 2026-07-09 Profile-Guided Down Cosubmit Admission
+
+Implementation target:
+
+- Add a default-off admission gate for gate-triggered up/down cosubmit:
+  `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_MIN_COUNT`.
+- It reuses the existing `GGML_MOE_VRAM_PROFILE` parser and
+  `(tensor, expert)` hash index.
+- When the env value is positive, a candidate up/down expert is cosubmitted only
+  if its profile count is at least that value.
+- Intended first use is down-only:
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`;
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY=1`;
+  - `GGML_MOE_DOWN_BATCH_HIT_ONLY=1`;
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_MIN_COUNT=1`;
+  - `GGML_MOE_VRAM_PROFILE=<allowed-dev down hotset csv>`.
+
+Why this is the right next probe:
+
+- Previous down-only cosubmit proved that moving down experts to GPU can reduce
+  synchronous down stage from roughly `~1276 ms` to `~50-240 ms` on n32 probes.
+- It still lost to clean gate SOTA because it moved too many low-value down
+  experts, filling cache slots and adding `~6.57GB` iouring/H2D work.
+- A dev-profile hotset should reduce total cosubmit jobs/bytes while preserving
+  repeated down hits on prompt-general routes.
+
+Acceptance rule:
+
+- This is not a prompt-specific optimization. The profile must be built from
+  allowed dev prompts only; held-out prompts remain unused until a candidate is
+  frozen.
+- If a candidate beats the accepted clean gate7168 generalized SOTA
+  (`Quantum n96 5.4 tok/s`) under 16GB RAM, with correct output and TTFT within
+  limits, immediately record the exact run and push source + docs to
+  `origin/vendor/deepseek-token-rate-16gb`.
+- If it does not beat SOTA, keep the code default-off and record the rejection
+  with `profile_skips`, jobs, bytes, cache hit/miss, RAM, TTFT, and answer text.

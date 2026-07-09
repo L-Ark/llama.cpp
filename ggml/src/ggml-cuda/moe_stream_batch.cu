@@ -7622,6 +7622,7 @@ static std::atomic<uint64_t> g_gate_updown_cosubmit_iouring_ok{0};
 static std::atomic<uint64_t> g_gate_updown_cosubmit_fallback_ok{0};
 static std::atomic<uint64_t> g_gate_updown_cosubmit_no_slot_skips{0};
 static std::atomic<uint64_t> g_gate_updown_cosubmit_repeat_skips{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_profile_skips{0};
 static std::atomic<uint64_t> g_gate_updown_cosubmit_failures{0};
 static std::atomic<bool> g_gate_updown_cosubmit_report_registered{false};
 static std::mutex g_gate_updown_cosubmit_seen_mu;
@@ -7632,7 +7633,7 @@ static void gate_updown_cosubmit_report_atexit() {
     if (calls == 0) return;
     std::fprintf(stderr,
             "[moe_stream_batch] gate/up/down cosubmit: calls=%lu jobs=%lu cache_hits=%lu missing_pack=%lu "
-            "iouring_ok=%lu fallback_ok=%lu no_slot_skips=%lu repeat_skips=%lu failures=%lu\n",
+            "iouring_ok=%lu fallback_ok=%lu no_slot_skips=%lu repeat_skips=%lu profile_skips=%lu failures=%lu\n",
             (unsigned long)calls,
             (unsigned long)g_gate_updown_cosubmit_jobs.load(std::memory_order_relaxed),
             (unsigned long)g_gate_updown_cosubmit_cache_hits.load(std::memory_order_relaxed),
@@ -7641,6 +7642,7 @@ static void gate_updown_cosubmit_report_atexit() {
             (unsigned long)g_gate_updown_cosubmit_fallback_ok.load(std::memory_order_relaxed),
             (unsigned long)g_gate_updown_cosubmit_no_slot_skips.load(std::memory_order_relaxed),
             (unsigned long)g_gate_updown_cosubmit_repeat_skips.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_profile_skips.load(std::memory_order_relaxed),
             (unsigned long)g_gate_updown_cosubmit_failures.load(std::memory_order_relaxed));
 }
 
@@ -7660,6 +7662,13 @@ static uint32_t gate_updown_cosubmit_min_seen() {
     if (value <= 0) return 0;
     if (value > 1024) return 1024;
     return (uint32_t)value;
+}
+
+static uint32_t gate_updown_cosubmit_profile_min_count() {
+    const char *env = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_MIN_COUNT");
+    const unsigned long value = (env && env[0]) ? std::strtoul(env, nullptr, 10) : 0;
+    if (value == 0) return 0;
+    return value > UINT32_MAX ? UINT32_MAX : (uint32_t)value;
 }
 
 extern "C" int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_name, int expert_idx, size_t expert_bytes) {
@@ -7685,6 +7694,10 @@ extern "C" int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_n
     planned.reserve(2);
     const bool down_only = gate_updown_cosubmit_down_only_enabled();
     const uint32_t min_seen = gate_updown_cosubmit_min_seen();
+    const uint32_t profile_min_count = gate_updown_cosubmit_profile_min_count();
+    if (profile_min_count > 0) {
+        load_profile_once();
+    }
     for (int i = 0; i < 2; ++i) {
         const char *tensor = names[i];
         const bool is_down = std::strstr(tensor, ".ffn_down_exps.") != nullptr;
@@ -7706,6 +7719,10 @@ extern "C" int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_n
                 ++g_gate_updown_cosubmit_repeat_skips;
                 continue;
             }
+        }
+        if (profile_min_count > 0 && profile_count_for_key(key) < profile_min_count) {
+            ++g_gate_updown_cosubmit_profile_skips;
+            continue;
         }
         if (batch_cache_find_slot(cache, key) >= 0) {
             ++g_gate_updown_cosubmit_cache_hits;
