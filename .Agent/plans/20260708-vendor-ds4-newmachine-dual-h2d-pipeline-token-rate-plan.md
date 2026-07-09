@@ -4182,3 +4182,340 @@ Held-out v3 freeze:
 - Completion requires all prompts to stay strict `>5 tok/s`, RAM OK, TTFT
   within bound, and outputs semantically correct/coherent with no serious
   truncation or unrelated tail.
+
+## 2026-07-09 Next Plan: RAM/VRAM Layout And Cache Utilization
+
+Priority update:
+
+- This RAM/VRAM layout plan now takes priority over the rank-tail CPU/GPU
+  hybrid plan below.
+- The hybrid plan remains useful, but it is paused until the cache-layout work
+  proves whether the remaining free RAM/VRAM can be converted into higher
+  effective expert-cache capacity without hurting correctness or TTFT.
+
+Working hypothesis:
+
+- Current pushed generalized SOTA is `one5120/vram12000`: about `5.1-6.1
+  tok/s` on recent strict-cold generalized prompts, under the 16GB host-RAM
+  cgroup including page cache.
+- Host RAM is close to the limit, with recent peaks around `14.9GB`; the
+  remaining `~1.1GB` is not safe for a large RAM cache because pinned staging,
+  anonymous memory, and page-cache variation also count against the cgroup.
+- VRAM appears to have several GiB free in memory-breakdown logs, but previous
+  larger cache requests either fell back, regressed, or destabilized hit/miss
+  balance. Therefore the problem is not only raw free bytes; it is allocation
+  order, fragmentation, workspace reservation, per-cache quota, and
+  saved-ms-per-MiB.
+- The next optimization should improve RAM/VRAM space layout and cache
+  utilization before trying approximate math, route deletion, or CPU/GPU
+  hybrid execution.
+
+Hard constraints:
+
+1. All runs stay under strict `MemoryMax=16000000000`,
+   `MemorySwapMax=0`; page cache, pinned host memory, and process memory are
+   included.
+2. Before every run, stop display processes and stale GPU/model processes,
+   then record the pre-run GPU process list. Any run that skips this is invalid
+   for baseline/SOTA/candidate comparison.
+3. The optimization must be prompt-general. Do not use prompt-specific packs,
+   prompt-specific profiles, or held-out prompts for tuning.
+4. Correctness gates remain mandatory: France, Fibonacci/code generation,
+   deployment guidance, one Chinese general prompt, and later a frozen held-out
+   set after the candidate is fixed.
+5. TTFT must not rise by more than 20% for accepted SOTA. A higher-TTFT result
+   may be recorded only as a rejected diagnostic.
+6. Any accepted improvement must record exact reproduction metadata and be
+   committed/pushed immediately to `vendor/deepseek-token-rate-16gb` on
+   `https://github.com/wici-ai/ssd-llama.git` with author/committer
+   `L-Ark <fliangae@connect.ust.hk>`.
+
+Step 1: Build a current SOTA RAM/VRAM layout profile.
+
+- Run current clean default `one5120/vram12000` with default-off diagnostics on
+  dev prompts. Capture:
+  - CUDA memory breakdown before/after cache init;
+  - actual gate one-cache allocation, slots, hit/miss count, bytes, and
+    hit-rate;
+  - up/down batch cache actual allocation, slots, hit/miss count, bytes, and
+    hit-rate;
+  - model buffer, compute buffer, context buffer, unaccounted/free VRAM;
+  - pinned host staging size and count;
+  - host RAM current/peak/file/anonymous/pinned if available from cgroup
+    counters;
+  - per-role expert movement bytes and wait time from existing route/read/copy
+    profiles.
+- Add a small report script if needed that combines `summary.json`,
+  `memory.stat`, `stderr.txt`, `GGML_MOE_COPY_PROFILE_OUT`,
+  `GGML_MOE_IO_BATCH_PROFILE_OUT`, `GGML_MOE_ONE_PACK_READ_PROFILE_OUT`, and
+  grouped route profiles into one cache-layout table.
+- Deliverable: a hard layout report that answers how much VRAM is truly usable
+  for expert cache, how much is lost to fragmentation/workspace/unaccounted
+  buffers, and which cache role gives the best saved-ms-per-MiB.
+
+Step 2: Determine whether larger effective cache is blocked by fragmentation
+or by quota tradeoff.
+
+- Run a bounded, evidence-driven cache allocation sweep rather than a blind
+  sweep:
+  - gate one-cache around the current point: `5120`, `5632`, `6144` MiB;
+  - up/down batch cache around the current point: `11000`, `11500`, `12000`,
+    `12500` MiB;
+  - only test combinations predicted by the Step 1 saved-ms-per-MiB report.
+- For each run record:
+  - actual allocated slots, not only requested MiB;
+  - cache allocation fallback/retry logs;
+  - CUDA memory free/unaccounted after allocation;
+  - gate/up/down misses and movement bytes;
+  - `eval_tok_s`, TTFT, RAM peak, correctness output.
+- Reject a combination if it raises RAM over 16GB, causes cache allocation
+  fallback, raises TTFT beyond the gate, improves only one prompt, or hurts
+  Fibonacci/code correctness.
+
+Step 3: Unified VRAM expert-cache arena design.
+
+- If Step 2 shows free VRAM exists but independent cache allocators cannot use
+  it reliably, design a default-off unified expert-cache arena:
+  - one large CUDA allocation made early;
+  - internal sub-allocators for gate one-cache, up cache, down cache, and
+    staging/reuse slots;
+  - stable alignment and size-class handling to reduce fragmentation;
+  - no behavior change when the env flag is unset.
+- Initial acceptance for the arena is allocator-only:
+  - same cache policy and same requested budget as current SOTA;
+  - no token-rate regression;
+  - no correctness change;
+  - logs prove the arena can allocate reliably and leaves a clearer free-space
+    map.
+- Only after allocator-only validation should quota changes be tested on top of
+  the arena.
+
+Step 4: Role-aware quota and admission policy.
+
+- Use saved-ms-per-MiB instead of raw hit-rate:
+  `saved_ms_per_MiB = avoided_read_H2D_wait_ms / cache_bytes_MiB`.
+- Gate cache gets priority only when its marginal saved-ms/MiB exceeds the
+  marginal saved-ms/MiB of up/down cache.
+- Up/down cache admission should consider near-future reuse and route locality,
+  not only LRU. Avoid preserving low-reuse experts that displace imminent
+  misses.
+- Candidate policies must be prompt-general and default-off until they pass
+  dev correctness and clean-source reproduction.
+
+Step 5: RAM layout cleanup before adding any RAM cache.
+
+- Do not add a large RAM expert cache by default. The 16GB cgroup has too
+  little headroom.
+- Instead profile and reduce RAM pressure:
+  - reuse pinned staging buffers;
+  - bound pinned staging growth;
+  - drop no-longer-needed dense/expert mmap pages after prompt when safe;
+  - keep page-cache behavior explicit in artifacts;
+  - avoid host prefetch/RAM-tier experiments that cannot show meaningful
+    saved-ms-per-MiB under the 16GB limit.
+- Only consider small RAM-tier caches if the layout report proves they replace
+  high-latency misses without pushing `memory_peak_bytes` close to the cgroup
+  limit.
+
+Promotion criteria:
+
+- A new RAM/VRAM layout candidate is accepted only if it is source-clean,
+  prompt-general, strict-cold, and improves the current pushed default on the
+  weak dev prompts while preserving correctness.
+- Required records: exact env/config, commit hash, run directory, full prompt
+  output, `eval_tok_s`, `prompt_tok_s`, TTFT, elapsed time,
+  `memory_peak_bytes`, `memory_file_bytes`, actual cache allocations, hit/miss
+  counts, expert movement bytes, and display-cleanup proof.
+- If accepted, commit and push immediately before held-out validation.
+
+Step 1 diagnostic result: one-stream gate tensor lifecycle profile.
+
+- Time: `2026-07-09T03:59:09Z`.
+- Source: clean `ee1f42d30897b7ea8941416ad8320615701a64f8` on
+  `vendor/deepseek-token-rate-16gb`.
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T035649Z-20260709-lifecycle-onetrace-quantum-n96`.
+- Prompt: `Explain quantum computing briefly.`, `n=96`, strict cold,
+  display/model cleanup recorded before launch, 16GB cgroup including page
+  cache.
+- Result summary:
+  - `eval_tok_s=5.1`, `prompt_tok_s=3.5`,
+    `first_output_ms=16126.531791`;
+  - `memory_peak_bytes=14890270720`,
+    `memory_file_bytes=13958356992`, `ram_ok=true`;
+  - PCIe under load remained `16.0 GT/s x4`, H2D microbench
+    `6.594869 GB/s`.
+- Profiles captured:
+  - `one-trace.csv`: one-stream gate lifecycle per expert;
+  - `one-pack-read-profile.csv`: O_DIRECT expert-pack payload read timings;
+  - `gate-updown-cosubmit-profile.csv`;
+  - `grouped_route_profile.csv` and `grouped_route_detail.csv`;
+  - aggregate:
+    `lifecycle-profile-summary.json`.
+
+Decode-stage gate lifecycle split:
+
+- Total decode one-stream gate rows: `11400` expert invocations,
+  `47.314 GiB` logical source bytes.
+- Cache hits: `8263` invocations, `34.295 GiB` logical bytes. Their measured
+  total lifecycle time was only `320.2 ms` total, about `0.0387 ms` each.
+- Cache misses/insertions: `3137` invocations, `13.020 GiB` moved from the
+  expert pack path. Their total lifecycle time was `4932.5 ms`, about
+  `1.5723 ms` each.
+- Miss breakdown:
+  - O_DIRECT read from expert pack:
+    `2712.846803 ms` total, `13.020 GiB`,
+    average `0.8648 ms/read`, p50 `0.7607 ms`, p95 `1.0009 ms`;
+  - one-trace `src0_ms`:
+    `2766.2 ms` total, average `0.8818 ms`. This closely matches the
+    O_DIRECT read profile, so for the current one-stream gate path `src0_ms`
+    is dominated by SSD/direct read plus cache-insert/H2D setup;
+  - `src1_ms`: `12.3 ms` total;
+  - GPU kernel launch/compute window: `35.5 ms` total;
+  - D2H: `8.8 ms` total;
+  - stream sync/wait: `2102.5 ms` total;
+  - scatter: `3.1 ms` total.
+
+Prompt-stage comparison:
+
+- Prompt one-stream gate rows: `916`, `3.802 GiB` logical source bytes.
+- Prompt misses: `673`, `2.793 GiB`.
+- Prompt miss O_DIRECT read total: `542.578388 ms`, average
+  `0.8062 ms/read`; one-trace miss total lifecycle: `1063.2 ms`.
+
+Interpretation:
+
+- For the current SOTA, the decode-stage one-stream gate miss lifecycle is
+  dominated by expert-pack read/cache-insert source time and stream sync/wait.
+  Kernel, D2H, and scatter are small by comparison.
+- Gate cache hits are cheap; misses are the expensive lifecycle. Therefore a
+  RAM/VRAM layout improvement should focus on turning more decode gate misses
+  into hits or reducing miss source/wait time, not on optimizing the gate
+  kernel itself.
+- Existing batch copy/io profiles did not emit for this one-stream gate path;
+  this diagnostic is complete for gate one-stream lifecycle, but not yet a
+  full up/down batch-cache lifecycle report. A follow-up profile must capture
+  up/down batch cache stages explicitly before changing unified arena or
+  role-aware quota behavior.
+
+## 2026-07-09 Next Plan: Rank-Tail Hybrid CPU/GPU Expert Execution
+
+Priority status:
+
+- Paused. Do not start hybrid CPU/GPU implementation until the RAM/VRAM layout
+  and cache-utilization plan above has been executed or rejected by evidence.
+
+Working hypothesis:
+
+- The current pushed generalized SOTA uses the prompt-general
+  `one5120/vram12000` cache budget and reaches clean cold `5.x tok/s` on the
+  dev set while staying under the strict 16GB host-RAM cgroup including page
+  cache.
+- Further blunt cache growth is no longer the best next step. Host RAM peaks
+  around `14.9GB`, and larger VRAM requests/cache partitions have already shown
+  regressions, fallback allocations, or unstable hit/miss tradeoffs.
+- Fixed route deletion such as top2/top1 can reduce expert movement enough to
+  raise speed, but it fails generalized correctness, especially
+  Fibonacci/code-generation prompts. Therefore the third/tail expert
+  contribution cannot simply be dropped.
+- The remaining useful question is whether some low-rank/cache-miss expert
+  work is cheaper to compute on CPU than to read/stage/H2D-copy to GPU. This
+  can potentially use currently idle CPU capacity without changing model math.
+
+Hard constraints:
+
+1. Every experiment must run under strict `MemoryMax=16000000000` and
+   `MemorySwapMax=0`; page cache and pinned host memory count against the
+   limit.
+2. Before every run, stop display processes and stale GPU/model processes,
+   then record the pre-run GPU process list. Runs without this cleanup are
+   invalid for baseline, candidate, SOTA, or regression comparison.
+3. The optimization must remain prompt-general. No prompt-specific packs,
+   prompt-specific profiles, or held-out-set tuning are allowed.
+4. Correctness gates must include at least France, Fibonacci/code generation,
+   deployment guidance, one Chinese general prompt, and then a frozen held-out
+   set only after the candidate is fixed.
+5. TTFT must not increase by more than 20% for accepted SOTA. Runs that exceed
+   this can be committed only as rejected diagnostics with a clear label.
+6. Any accepted improvement must be recorded with exact reproduction metadata
+   and immediately committed/pushed to
+   `vendor/deepseek-token-rate-16gb` on
+   `https://github.com/wici-ai/ssd-llama.git` with author/committer
+   `L-Ark <fliangae@connect.ust.hk>`.
+
+Step 1: Measure the real CPU-vs-GPU tail-expert bound before changing the hot
+path.
+
+- Add or reuse default-off profiling that records per role/layer/rank:
+  `rank`, selected expert id, router weight, VRAM cache hit/miss, direct read
+  time, pinned staging time, H2D time, GPU compute time, and any CPU fallback
+  compute time.
+- Run strict-cold n96/n192 profiles on the dev prompts with current SOTA
+  defaults:
+  - `Please introduce France in a short paragraph.`
+  - `Explain quantum computing briefly.`
+  - `Write a short Python function for Fibonacci.`
+  - `How to deploy a large model on a small devices?`
+  - one Chinese general prompt.
+- Compute hard bounds:
+  - average and p95 GPU miss path time for rank0/rank1/rank2/rank3 by role;
+  - average and p95 GPU cache-hit path time by role;
+  - total bytes and count attributable to rank3/tail cache misses;
+  - theoretical best token-rate improvement if rank3 misses avoided H2D.
+- Decision gate: do not implement hybrid execution unless the bound shows that
+  rank3/tail GPU-miss movement is large enough to matter and CPU execution has
+  plausible slack to complete before the GPU main path needs the merged result.
+
+Step 2: Microbenchmark CPU tail expert execution in isolation.
+
+- Build a default-off microbenchmark for the current DeepSeek expert formats,
+  using the exact same expert tensors and quantization/dequantization path as
+  the runtime CPU implementation.
+- Measure per-role CPU compute time for representative rank3/tail experts:
+  gate, up, and down. Compare against:
+  `SSD/direct read + pinned staging + H2D + GPU kernel + synchronization`.
+- Test both cold-read and warm-in-RAM cases, but only cold-read strict-cgroup
+  results can justify SOTA work.
+- Decision gate:
+  - If CPU compute for rank3/tail experts is slower than the GPU miss path,
+    close this direction and move to compact/partial expert payload work.
+  - If CPU can finish within the GPU main-path slack for a meaningful fraction
+    of rank3 misses, proceed to a default-off hybrid prototype.
+
+Step 3: Default-off hybrid prototype only if Step 1/2 justify it.
+
+- Initial policy:
+  - rank0/rank1/rank2 stay on GPU;
+  - rank3 or low-weight tail experts use CPU only when the GPU expert would be
+    a VRAM cache miss;
+  - GPU cache hits always stay on GPU;
+  - CPU tail compute runs in parallel with GPU expert compute/staging;
+  - final result merge must preserve exact model math for the selected experts.
+- The feature must be disabled by default with a clear env flag, e.g.
+  `GGML_DS4_HYBRID_CPU_TAIL=1`, and must not affect Kimi or existing shared MoE
+  paths when unset.
+- Add diagnostics for tail-offload decisions, CPU completion time, GPU wait
+  time added by merge, saved H2D bytes, and correctness comparison.
+
+Step 4: Validation and acceptance.
+
+- First validate on short diagnostic runs (`n32`/`n64`) only to confirm no
+  crashes, no RAM breach, and no obvious output corruption.
+- Then run strict-cold n96/n192 dev validation:
+  France, Quantum, Fibonacci, Deploy, and Chinese general prompt.
+- Candidate acceptance requires:
+  - all dev prompts semantically correct/coherent;
+  - Fibonacci/code prompt returns a direct valid function;
+  - `eval_tok_s` improves over current `one5120/vram12000` clean default on
+    the weak prompts, not just France;
+  - RAM peak remains below 16GB including page cache;
+  - TTFT stays within the 20% limit;
+  - source is clean for the final reproduction run.
+- Only after the candidate is frozen and pushed should the held-out set be run.
+
+Fallback if hybrid CPU tail is not viable:
+
+- Return to exact byte-reduction work rather than approximate route deletion:
+  compact/partial expert payloads, role-aware cache storage, or a runtime plan
+  that reads and stages fewer bytes while preserving the third expert
+  contribution.
