@@ -3230,6 +3230,71 @@ Result:
   for n96, but n64 remains borderline. Held-out should use the locked n192
   protocol used by previous SOTA artifacts after candidate freeze.
 
+## 2026-07-09 4352MiB Held-Out V1 Frozen-Candidate Result
+
+Candidate freeze:
+
+- Candidate: default 4352MiB gate one-cache in pushed source `26e0469ff0`.
+- Held-out v1 was only run after the candidate was frozen. These prompts must
+  not be used for further tuning.
+- Strict cold, 16GB cgroup including page cache, display/model cleanup before
+  every run.
+
+Held-out speed results:
+
+- Photosynthesis n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T001445Z-20260709-heldout4352-photosynthesis-n192`,
+  `eval_tok_s=5.6`, `prompt_tok_s=3.8`,
+  `first_output_ms=15984.4 ms`, `memory_peak_bytes=14855651328`,
+  `memory_file_bytes=13891424256`, `ram_ok=true`.
+- Office n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T001528Z-20260709-heldout4352-office-n192`,
+  `eval_tok_s=7.3`, `prompt_tok_s=3.8`,
+  `first_output_ms=18799.2 ms`, `memory_peak_bytes=14863302656`,
+  `memory_file_bytes=13882265600`, `ram_ok=true`.
+- Palindrome JS n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T001614Z-20260709-heldout4352-palindrome-js-n192`,
+  `eval_tok_s=5.5`, `prompt_tok_s=4.5`,
+  `first_output_ms=16588.9 ms`, `memory_peak_bytes=14927384576`,
+  `memory_file_bytes=13882314752`, `ram_ok=true`.
+- Exercise n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T001709Z-20260709-heldout4352-exercise-n192`,
+  `eval_tok_s=5.7`, `prompt_tok_s=3.7`,
+  `first_output_ms=16295.5 ms`, `memory_peak_bytes=14884085760`,
+  `memory_file_bytes=13877923840`, `ram_ok=true`.
+- Brazil n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T001752Z-20260709-heldout4352-brazil-n192`,
+  `eval_tok_s=5.8`, `prompt_tok_s=3.7`,
+  `first_output_ms=16493.6 ms`, `memory_peak_bytes=14900174848`,
+  `memory_file_bytes=13872996352`, `ram_ok=true`.
+
+Aggregate:
+
+- Held-out speed min/mean/max: `5.5 / 5.98 / 7.3 tok/s`.
+- All five held-out runs satisfy strict `>5 tok/s`.
+- All five runs satisfy the 16GB RAM/page-cache cgroup limit and display
+  cleanup requirement.
+
+Correctness:
+
+- Photosynthesis: pass. Output is complete and semantically correct.
+- Office: fail. Output degenerates into repeated `<ds>` tokens and does not
+  answer the three-tip request.
+- Palindrome JS: partial pass. The JavaScript function is correct, but the
+  answer continues into optional explanation and is truncated at the cap.
+- Exercise: pass with minor typo (`endendorphins`), otherwise coherent.
+- Brazil: partial pass. Output is semantically correct for many sentences but
+  continues too long and is truncated at the cap.
+
+Decision:
+
+- Do not mark the product goal complete. The frozen candidate proves the speed
+  side of the held-out target (`min >5 tok/s`) but fails correctness on the
+  office held-out prompt.
+- Do not tune against held-out v1. Next work must use calibration/dev prompts
+  to implement a prompt-general output stopping/repetition guard or generation
+  control, then freeze a new candidate before any further held-out validation.
+
 ## 2026-07-09 Request-Local Gate Cache Admission Plan
 
 Hypothesis:
