@@ -5776,3 +5776,38 @@ Next refinement:
   admission knobs; it is a queued/background prefill worker or a true grouped
   route scheduler that can submit multiple down fills without blocking the
   current token.
+
+Min-seen experiment results:
+
+| config | run | eval tok/s | prompt tok/s | TTFT ms | peak RAM | file RAM | down copies | down waits | down GPU hits | decision |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| demand prefill `min_seen=2` | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T072311Z-20260709-gate12288-bcache1024-demandprefill-minseen2-quantum-n96` | 5.3 | 3.7 | 16161.48 | 14865575936 | 13889429504 | 990 | 982 | 1765 | reject: below clean 5.5 |
+| demand prefill `min_seen=3` | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T072416Z-20260709-gate12288-bcache1024-demandprefill-minseen3-quantum-n96` | 5.3 | 3.4 | 16562.20 | 14887661568 | 13936877568 | 467 | 459 | 1608 | reject: below clean 5.5 |
+
+Observations:
+
+- Increasing the reuse threshold works mechanically:
+  - `min_seen=1`: `2212` down copies, `2204` waits, `4.7 tok/s`;
+  - `min_seen=2`: `990` down copies, `982` waits, `5.3 tok/s`;
+  - `min_seen=3`: `467` down copies, `459` waits, `5.3 tok/s`.
+- Gate behavior stayed stable: `2913` one-stream gate reads and `12.98GB`
+  gate read bytes in all three demand-prefill probes.
+- The remaining loss is not gate regression. It is the down-fill mechanism
+  itself: even filtered down fills are direct reads with pinned staging waits
+  inside the decode path.
+- The current demand-prefill code remains default-off and is not promoted.
+
+Next implementation requirement:
+
+- Stop doing down fill work synchronously inside `ggml_cuda_moe_stream_batch`.
+- Build one of:
+  1. a background down-fill queue that reserves cache slots quickly, returns to
+     CPU fallback immediately, and lets a worker thread perform expert-pack
+     read plus H2D on the prefetch stream; or
+  2. a true route-group scheduler that submits grouped up/down fills with the
+     existing batch/io_uring job path before the corresponding layer needs
+     them.
+- The first acceptance test for either design is simple: down copy/wait counts
+  must drop from hundreds of synchronous waits to either background work or a
+  small number of grouped waits, while Quantum and one other dev prompt both
+  exceed the clean `5.5 tok/s` class under the 16GB cgroup.
