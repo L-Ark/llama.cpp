@@ -3094,6 +3094,89 @@ Decision:
   admission/eviction or reducing per-token gate bytes/copy count, not larger
   static cache capacity.
 
+Follow-up capacity sweep:
+
+- The runtime only prints one decimal place for generation token rate, and the
+  summary parses displayed `5.0` as not strictly greater than 5. Before writing
+  deeper cache code, run a narrow Quantum-only sweep between the repeatable
+  `4096MiB` edge and the rejected `5120MiB` point.
+- Test `4352MiB` first, then `4608MiB` only if needed. If either strictly
+  crosses `>5 tok/s` without TTFT/RAM regression, validate the full dev set.
+  If both fail or regress, stop blunt-capacity tuning.
+
+## 2026-07-09 4352MiB Gate Cache Dev-Speed SOTA
+
+Configuration:
+
+- vendor DeepSeek, source clean `c0549942aa` for validation runs;
+- strict cold, 16GB cgroup including page cache, display/model cleanup before
+  every run;
+- `GGML_MOE_STREAM_ONE_CACHE_MIB=4352`;
+- `GGML_MOE_VRAM_CACHE_MIB=13824`;
+- `GGML_MOE_IO_REFILL_BATCH=8`;
+- `GGML_MOE_STAGE_PINNED_SLOTS=8`;
+- `GGML_CUDA_DISABLE_GRAPHS=1`;
+- gate full native expert pack enabled, no prompt-specific packs/profiles.
+
+Dev prompt speed validation:
+
+- Quantum n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T235633Z-20260709-stream-one-cache4352-quantum-n64`,
+  `eval_tok_s=5.1`, `prompt_tok_s=3.6`,
+  `first_output_ms=16013.4 ms`, `memory_peak_bytes=14860742656`,
+  `ram_ok=true`, strict `>5` flag true.
+- Deploy n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T235846Z-20260709-stream-one-cache4352-deploy-n64`,
+  `eval_tok_s=5.7`, `prompt_tok_s=4.3`,
+  `first_output_ms=16789.6 ms`, `memory_peak_bytes=14865670144`,
+  `ram_ok=true`, strict `>5` flag true.
+- Fibonacci n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T235917Z-20260709-stream-one-cache4352-fibonacci-n64`,
+  `eval_tok_s=5.4`, `prompt_tok_s=3.8`,
+  `first_output_ms=15113.9 ms`, `memory_peak_bytes=14875869184`,
+  `ram_ok=true`, strict `>5` flag true.
+- France n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T235949Z-20260709-stream-one-cache4352-france-n64`,
+  `eval_tok_s=5.7`, `prompt_tok_s=3.9`,
+  `first_output_ms=16483.9 ms`, `memory_peak_bytes=14864424960`,
+  `ram_ok=true`, strict `>5` flag true.
+- Japan n64:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T000020Z-20260709-stream-one-cache4352-japan-n64`,
+  `eval_tok_s=5.8`, `prompt_tok_s=3.8`,
+  `first_output_ms=16385.9 ms`, `memory_peak_bytes=14848446464`,
+  `ram_ok=true`, strict `>5` flag true.
+
+Summary:
+
+- Five-prompt dev minimum `5.1 tok/s`, mean about `5.54 tok/s`, max `5.8
+  tok/s`.
+- This is the first strict-cold 16GB-cgroup dev set where every measured prompt
+  is strictly above `5 tok/s`.
+- TTFT remains within the previous gate and is generally lower than the older
+  accepted top1 baseline.
+- RAM including page cache remains below 16GB in all runs.
+
+Correctness:
+
+- France n160 correctness run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T000117Z-20260709-stream-one-cache4352-france-n160-correctness`,
+  `eval_tok_s=6.0`, `prompt_tok_s=3.8`,
+  `first_output_ms=16180.4 ms`, `memory_peak_bytes=14905323520`,
+  `ram_ok=true`.
+- Output is semantically correct and coherent for multiple sentences:
+  it describes France as a Western European country, Paris as capital, and
+  mentions Eiffel Tower, Louvre, Versailles, wine regions, cuisine, economy,
+  and government. It still ends at the token cap after "art," so output-stop
+  cleanup remains a follow-up item, but the model quality path is not degraded.
+
+Decision:
+
+- Promote `GGML_MOE_STREAM_ONE_CACHE_MIB=4352` as the current dev-prompt
+  speed SOTA configuration and make it the demo default for reproducibility.
+- This does not complete the overall product goal yet because held-out prompt
+  validation is still pending and the France answer should be made to stop more
+  cleanly.
+
 ## 2026-07-09 Request-Local Gate Cache Admission Plan
 
 Hypothesis:
