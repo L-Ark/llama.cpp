@@ -38,9 +38,9 @@ What this script demonstrates:
   - User may enter any prompt; this is not a France-specialized demo.
 
 Current known generalized status:
-  - Current dev-prompt speed candidate uses a 7168MiB gate one-cache with
-    vram12000/cosubmit; recent dev prompt results range above 5 tok/s
-    on the new machine, with Quantum still near the threshold.
+  - Current dev-prompt speed candidate uses a 12288MiB gate one-cache; recent
+    dev prompt results range above 5 tok/s on the new machine, with Quantum
+    still near the threshold.
   - Product target remains stable >5 tok/s for random prompts; held-out
     validation and output-stop cleanup are still pending.
 
@@ -391,7 +391,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
   "prompt_general": true,
   "prompt_specific_optimization": false,
   "france_specialized_path_used": false,
-  "current_safe_quality_dev_tok_s": {"min": 5.0, "mean": 5.54, "max": 5.8},
+  "current_safe_quality_dev_tok_s": {"min": 5.4, "mean": 5.75, "max": 6.0},
   "current_held_out_v1_tok_s": null,
   "product_target_tok_s": 5.0,
   "product_target_currently_met": false,
@@ -448,7 +448,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
     "GGML_MOE_GATE_BATCH_PREFETCH": $(printf '%s' "${GGML_MOE_GATE_BATCH_PREFETCH:-0}" | json_string),
     "GGML_MOE_GATE_PRELOAD_EVICT_UPDOWN_MAX_HITS": $(printf '%s' "${GGML_MOE_GATE_PRELOAD_EVICT_UPDOWN_MAX_HITS:-}" | json_string),
-    "GGML_MOE_STREAM_ONE_CACHE_MIB": $(printf '%s' "${GGML_MOE_STREAM_ONE_CACHE_MIB:-7168}" | json_string),
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": $(printf '%s' "${GGML_MOE_STREAM_ONE_CACHE_MIB:-12288}" | json_string),
     "GGML_MOE_VRAM_CACHE_MIB": $(printf '%s' "${GGML_MOE_VRAM_CACHE_MIB:-12000}" | json_string),
     "GGML_MOE_VRAM_CACHE_GB": $(printf '%s' "${GGML_MOE_VRAM_CACHE_GB:-9}" | json_string),
     "GGML_MOE_STREAM_DOWN_BATCH": $(printf '%s' "${GGML_MOE_STREAM_DOWN_BATCH:-0}" | json_string),
@@ -561,7 +561,7 @@ export GGML_MOE_STAGE_PINNED_SLOTS=$(printf '%q' "${GGML_MOE_STAGE_PINNED_SLOTS:
 export GGML_MOE_STREAM_DONTNEED=1
 export GGML_MOE_GATE_BATCH_PREFETCH=$(printf '%q' "${GGML_MOE_GATE_BATCH_PREFETCH:-0}")
 export GGML_MOE_GATE_PRELOAD_EVICT_UPDOWN_MAX_HITS=$(printf '%q' "${GGML_MOE_GATE_PRELOAD_EVICT_UPDOWN_MAX_HITS:-}")
-export GGML_MOE_STREAM_ONE_CACHE_MIB=$(printf '%q' "${GGML_MOE_STREAM_ONE_CACHE_MIB:-7168}")
+export GGML_MOE_STREAM_ONE_CACHE_MIB=$(printf '%q' "${GGML_MOE_STREAM_ONE_CACHE_MIB:-12288}")
 export GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1
 export GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps
 if [[ -n "${GGML_MOE_STREAM_DOWN_BATCH:-}" && "${GGML_MOE_STREAM_DOWN_BATCH:-}" != "0" ]]; then
@@ -855,7 +855,7 @@ Mode: $([[ "$COLD" -eq 1 ]] && echo cold/drop_caches || echo warm/no-drop_caches
 Gate fullpack prompt-general source: $([[ "$GATE_FULLPACK" -eq 1 ]] && echo enabled || echo disabled)
 Calibration overlay pack: $([[ -n "$CALIBRATION_OVERLAY_PACK_PATH" ]] && echo "$CALIBRATION_OVERLAY_PACK_PATH" || echo disabled)
 Host RAM cgroup: MemoryMax=${MEMORY_MAX_BYTES}, MemorySwapMax=0
-Known dev speed candidate: gate one-cache 7168MiB plus vram12000/cosubmit, above 5 tok/s on recent dev prompts.
+Known dev speed candidate: gate one-cache 12288MiB, above 5 tok/s on recent dev prompts.
 Product target: stable >5 tok/s for random prompts. Held-out validation and output-stop cleanup are still pending.
 Prompt-specific packs/profiles/aliases: disabled and refused.
 Prompt:

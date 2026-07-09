@@ -5380,3 +5380,62 @@ Implementation:
   - equivalent buffered counters if O_DIRECT falls back.
 - Demo wrapper records and passes the env through the 16GB cgroup.
 - This is profiling-only and must not change default SOTA behavior.
+
+### 2026-07-09 Execution: Gate Cache 12288MiB Layout SOTA
+
+Implementation:
+
+- Updated the generalized demo default from
+  `GGML_MOE_STREAM_ONE_CACHE_MIB=7168` to `12288`.
+- No prompt-specific profile, no cosubmit, no down batch. This is a pure VRAM
+  layout change that spends more free VRAM on the prompt-general gate
+  one-stream cache.
+
+Why it can improve token rate:
+
+- The accepted gate7168 path still had many gate expert misses:
+  - gate7168 Quantum n96: `3369` direct reads, `15013773312` bytes.
+- Larger gate cache keeps more gate experts resident across decode and reduces
+  SSD direct-read volume.
+- gate12288 Quantum n96 measured:
+  - `2913` direct reads, `12981633024` bytes.
+- The objective upper-bound improvement from bytes alone is roughly:
+  `(15.01GB - 12.98GB) / measured SSD+direct-read bandwidth`, which is enough
+  to move a borderline `5.4 tok/s` run into the displayed `5.5 tok/s` range
+  when read latency is not dominated by long-tail stalls.
+
+Accepted SOTA evidence:
+
+| prompt/config | run | eval tok/s | prompt tok/s | TTFT ms | RAM peak | source | correctness |
+| --- | --- | ---: | ---: | ---: | ---: | --- | --- |
+| Quantum n96 gate12288 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T062449Z-20260709-clean-gate12288-quantum-n96` | 5.5 | 3.6 | 16102.45 | 14873735168 | clean `e82857ff5` | pass |
+| Quantum n96 gate12288 repro1 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T062543Z-20260709-clean-gate12288-quantum-n96-repro1` | 5.5 | 3.6 | 16045.33 | 14859661312 | clean `e82857ff5` | pass |
+| Deploy n96 gate12288 general check | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T062638Z-20260709-clean-gate12288-deploy-n96-general-check` | 6.0 | 4.4 | 16575.34 | 14852141056 | clean `e82857ff5` | pass |
+
+Constraints:
+
+- Host RAM remains below 16GB including page cache:
+  - peak range: `14852141056` to `14873735168` bytes.
+- TTFT does not regress beyond 20% versus accepted gate7168 Quantum n96:
+  - gate7168 accepted TTFT: `15802.83 ms`;
+  - gate12288 accepted Quantum TTFT: `16045-16102 ms`, about `+1.5-1.9%`.
+- Output is semantically correct and coherent:
+  - Quantum answer explains qubits/superposition/entanglement coherently;
+  - Deploy answer gives appropriate deployment/quantization guidance.
+- This is prompt-general: no dev profile, no held-out tuning, no
+  prompt-specific pack.
+
+Decision:
+
+- Promote gate12288 clean layout as the current generalized cold-start SOTA:
+  `eval_tok_s=5.5` on Quantum n96, with a Deploy prompt check at `6.0 tok/s`.
+- The code/default config must be pushed to
+  `origin/vendor/deepseek-token-rate-16gb` so future demo runs use the accepted
+  layout without extra env overrides.
+
+Remaining caveat:
+
+- gate9216 and some gate11264 runs showed token-rate variance despite identical
+  gate read counts. The new one-pack read summary should remain available for
+  diagnosing SSD/direct-read long tails, but it is not enabled in the accepted
+  SOTA runs.
