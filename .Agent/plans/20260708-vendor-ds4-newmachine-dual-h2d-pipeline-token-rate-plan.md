@@ -5151,3 +5151,64 @@ Next implementation target:
 3. Measure whether this reduces `iouring_reads` enough to beat clean gate7168.
 4. If repeat filtering loses too many down hits, move to a small per-layer hot
    set learned from the allowed dev prompt set, not held-out prompts.
+
+### 2026-07-09 Repeat-Filtered Cosubmit Probe
+
+Implementation:
+
+- Added default-off `GGML_MOE_GATE_UPDOWN_COSUBMIT_MIN_SEEN`.
+- `MIN_SEEN=1` means a `(tensor, expert)` is not cosubmitted on its first
+  gate observation; it is eligible from the second observation onward.
+- Added `repeat_skips` to the gate/up/down cosubmit atexit report.
+- Commit: `109816d vendor-ds4: add cosubmit repeat filter`.
+
+Result:
+
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T054734Z-20260709-hitonly-cosubmitdownonly-minseen1-gate7168-bcache8192-noprofile-quantum-n96`.
+- Config:
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=7168`;
+  - `GGML_MOE_VRAM_CACHE_MIB=8192`;
+  - `GGML_MOE_STREAM_DOWN_BATCH=1`;
+  - `GGML_MOE_DOWN_BATCH_HIT_ONLY=1`;
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`;
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY=1`;
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT_MIN_SEEN=1`;
+  - corrected up/down pack alias with preserved expert-pack source path.
+- Metrics:
+  - `eval_tok_s=4.6`;
+  - `prompt_tok_s=3.3`;
+  - `TTFT=16379.814546 ms`;
+  - `memory_peak_bytes=14861430784`;
+  - `ram_ok=true`;
+  - `run_ok=true`;
+  - output coherent.
+- Counters:
+  - batch `iouring_reads=1475`;
+  - batch `iouring_bytes=6573260800`;
+  - batch `iouring_wait_us=950593`;
+  - batch cache `hits=3039`, `misses=0`, `preloads=2950`;
+  - cosubmit `jobs=1475`, `cache_hits=7208`, `no_slot_skips=720`,
+    `repeat_skips=2913`.
+
+Decision:
+
+- Reject. It is slower than both:
+  - no-repeat hit-only n96: `5.1 tok/s`;
+  - accepted clean gate7168 n96: `5.4 tok/s`.
+- The repeat filter skipped many early events, but still filled the same 1475
+  slots and moved the same `6.57GB` through iouring/H2D by the end of the run.
+  It reduced useful early prefetch rather than reducing total payload enough.
+
+Updated next direction:
+
+- A pure repeat threshold is too crude.
+- The next candidate should cap the total down cosubmit working set with a
+  prompt-general hot set or admission score, not simply delay every first use.
+- Required profile before implementation:
+  1. From allowed dev prompts, compute per-layer/expert reuse and hit benefit
+     under the accepted gate7168 path.
+  2. Build a small hot-set admission table that fits the available batch cache
+     without filling it with low-value entries.
+  3. Keep held-out prompts unused until a candidate is frozen.
+  4. Compare against clean gate7168 and against no-repeat hit-only.
