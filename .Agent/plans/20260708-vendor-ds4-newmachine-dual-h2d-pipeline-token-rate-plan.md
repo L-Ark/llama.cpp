@@ -21,6 +21,13 @@ within the 16GB cgroup including page cache.
 diagnostics, kill display processes and stale GPU/model processes first. A run
 is invalid for comparison unless this is done and recorded before launch.
 
+**Non-negotiable pre-launch first step:** the first operational step before
+every DeepSeek run is to stop/kill display processes. This includes normal
+benchmarks, SOTA reproductions, profiling runs, dirty experiments, and one-off
+prompt checks. Do not start `llama-cli`, the demo script, or any model-loading
+process until the display cleanup has completed and the clean `nvidia-smi`
+process list has been captured.
+
 **Launch rule:** every command sequence that starts the DeepSeek model must
 begin with the display/model cleanup block below. This is required even for
 one-off prompt tests, profiling runs, failed experiments, and local smoke
