@@ -5077,3 +5077,77 @@ Next implementation target:
    down-stage time against extra cosubmit IO/H2D bytes.
 4. Acceptance remains unchanged: beat clean gate7168 SOTA with RAM under 16GB,
    coherent output, and TTFT within the 20% gate.
+
+### 2026-07-09 Down Batch Hit-Only Probe
+
+Implementation:
+
+- Added default-off `GGML_MOE_DOWN_BATCH_HIT_ONLY=1`.
+- When unset, down batch behavior is unchanged.
+- When set, down batch only runs when every active down expert is already in
+  the batch VRAM cache. The first miss returns
+  `down_cache_miss_hit_only`, letting the existing CPU fallback compute that
+  down call instead of synchronously staging SSD/H2D for the miss.
+- Commit: `948dc68 vendor-ds4: add down batch hit-only mode`.
+
+Rationale:
+
+- Down-only cosubmit made most down calls cache hits, but a small number of
+  misses still forced synchronous stage on the critical path.
+- Hit-only mode converts those few misses into CPU fallback and keeps the GPU
+  path for resident down experts.
+
+Diagnostic n32 results with profile and decline debug:
+
+| config | run | eval tok/s | accepted down calls | stage_ms | declines | RAM peak | result |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| gate6144/bcache8192/down-only cosubmit/hit-only | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T054149Z-20260709-downbatch-hitonly-cosubmitdownonly-gate6144-bcache8192-quantum-n32` | 4.6 | 1334 | 53.4 | 26 | 14703419392 | rejected |
+| gate7168/bcache8192/down-only cosubmit/hit-only | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T054215Z-20260709-downbatch-hitonly-cosubmitdownonly-gate7168-bcache8192-quantum-n32` | 4.7 | 1224 | 50.5 | 136 | 14824144896 | rejected |
+
+Best no-profile n96 result:
+
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T054334Z-20260709-hitonly-cosubmitdownonly-gate7168-bcache8192-noprofile-quantum-n96`.
+- `eval_tok_s=5.1`.
+- `prompt_tok_s=3.5`.
+- `TTFT=16262.069675 ms`.
+- `memory_peak_bytes=14872895488`.
+- `ram_ok=true`.
+- `run_ok=true`.
+- Output is coherent:
+  "Quantum computing is a type of computing that uses the strange rules of
+  quantum physics..."
+- Counters:
+  - one-stream gate cache: `hits=8947`, `misses=3369`, `hit_rate=72.6%`;
+  - batch cache: `hits=3166`, `misses=0`, `preloads=2950`;
+  - cosubmit: `jobs=1475`, `cache_hits=7228`, `no_slot_skips=3613`;
+  - batch iouring: `iouring_reads=1475`,
+    `iouring_bytes=6573260800`, `iouring_wait_us=759329`.
+
+Decision:
+
+- Reject as SOTA because the accepted clean gate7168 Quantum n96 result remains
+  `5.4 tok/s`.
+- Keep the code default-off. It proves a safe CPU-on-miss mechanism and reduces
+  critical down stage, but still spends too much off-critical-path IO/H2D on
+  cosubmit preloads.
+
+Updated bottleneck:
+
+- The bottleneck has moved from synchronous down miss stage to cosubmit preload
+  volume and prefetch waits.
+- Reaching a real improvement now requires reducing cosubmit bytes/jobs while
+  preserving most later down hits.
+
+Next implementation target:
+
+1. Add selective down-only cosubmit with a cheap, prompt-general reuse filter.
+2. Start with a conservative per-layer/expert repeat filter:
+   - record whether `(down_tensor, expert)` has appeared before in decode;
+   - skip the first appearance;
+   - only cosubmit on the second and later appearances;
+   - combine with hit-only down batch so skipped first appearances use CPU
+     fallback instead of synchronous GPU staging.
+3. Measure whether this reduces `iouring_reads` enough to beat clean gate7168.
+4. If repeat filtering loses too many down hits, move to a small per-layer hot
+   set learned from the allowed dev prompt set, not held-out prompts.
