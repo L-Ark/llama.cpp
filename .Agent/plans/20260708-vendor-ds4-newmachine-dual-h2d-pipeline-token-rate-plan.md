@@ -3211,6 +3211,25 @@ Decision:
   target variance and request-local cache quality, or reduce gate copy cost,
   rather than increasing cache size.
 
+Length-sensitivity check:
+
+- The weak Quantum result is measured at n64, where rounding and early-token
+  overhead can dominate. Run Quantum n96 with the same default 4352MiB config
+  before changing kernels again. If n96 is stable `>5`, record that the
+  remaining gap is short-output stability; if n96 also fails, continue with
+  gate copy/caching work.
+
+Result:
+
+- Default 4352MiB Quantum n96:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T001017Z-20260709-default4352-quantum-n96`,
+  source clean `256e55303c`, `eval_tok_s=5.1`, `prompt_tok_s=3.6`,
+  `first_output_ms=15808.1 ms`, `memory_peak_bytes=14875435008`,
+  `ram_ok=true`, strict `>5` flag true.
+- Interpretation: the 4352MiB candidate crosses `>5` on the weak Quantum prompt
+  for n96, but n64 remains borderline. Held-out should use the locked n192
+  protocol used by previous SOTA artifacts after candidate freeze.
+
 ## 2026-07-09 Request-Local Gate Cache Admission Plan
 
 Hypothesis:
