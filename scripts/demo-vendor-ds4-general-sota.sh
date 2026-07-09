@@ -940,9 +940,19 @@ def apply_output_guard(text, mode):
     if mode != 'sentence' or not text:
         return text, False
     def strip_dangling_markdown_tail(value):
-        return re.sub(r'(?s)(?:\n\s*)+(?:#{1,6}\s*)?(?:[0-9]+[.)]|[-*+])\s*$', '', value).rstrip()
+        prev = None
+        cur = value.rstrip()
+        while cur != prev:
+            prev = cur
+            cur = re.sub(r'(?s)(?:\n\s*)+(?:#{1,6}\s*)?(?:[0-9]+[.)]|[-*+])\s*$', '', cur).rstrip()
+            cur = re.sub(r'(?s)(?:\n\s*)+(?:#{1,6}\s*)?[A-Z][A-Za-z0-9 /_-]{0,64}\s+vs\.\s*$', '', cur).rstrip()
+            cur = re.sub(r'(?s)(?:\n\s*)+(?:Given|Note|Example):\s+[^\n]{0,96}$', '', cur).rstrip()
+        return cur
     stripped = text.strip()
     cleaned = re.sub(r'^[a-z]{1,4}(?=(?:[A-Z]|\*\*))', '', stripped)
+    cleaned = re.sub(r'^[\s,，、。；;：:]+', '', cleaned)
+    if cleaned and 'a' <= cleaned[0] <= 'z':
+        cleaned = cleaned[0].upper() + cleaned[1:]
     cleaned = strip_dangling_markdown_tail(cleaned)
     changed = cleaned != stripped
     stripped = cleaned.strip()

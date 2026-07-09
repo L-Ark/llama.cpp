@@ -4050,3 +4050,91 @@ Held-out v2 decision:
   default `one5120/vram12000`; the next work should be prompt-general output
   quality/stopping, not more token-rate tuning, unless a future change
   preserves the held-out speed floor while improving completeness.
+
+## 2026-07-09 Output Quality Follow-Up After Speed SOTA
+
+Rule:
+
+- Do not tune on held-out v2. The following diagnostics use only non-held-out
+  dev prompts and generic prompt/output controls.
+
+Rejected system-prompt diagnostics:
+
+- Candidate A:
+  `LLAMA_DEMO_SYSTEM_PROMPT='Answer directly and concisely. Stop after a complete answer.'`.
+  Runs were clean source `6e2e23dda`, strict cold, 16GB cgroup, display cleanup
+  before every prompt.
+  - Deploy:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T021035Z-20260709-clean-6e2e23d-sysprompt-direct-deploy-n192`,
+    `eval_tok_s=5.4`, `first_output_ms=18692.4 ms`,
+    `memory_peak_bytes=14890561536`, `ram_ok=true`, but output still truncates
+    near the cap.
+  - AI infra:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T021132Z-20260709-clean-6e2e23d-sysprompt-direct-aiinfra-n192`,
+    `eval_tok_s=6.2`, `first_output_ms=17975.6 ms`,
+    `memory_peak_bytes=14900764672`, `ram_ok=true`, output improved.
+  - Fibonacci:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T021225Z-20260709-clean-6e2e23d-sysprompt-direct-fibonacci-n192`,
+    `eval_tok_s=5.9`, `first_output_ms=18111.6 ms`,
+    `memory_peak_bytes=14887374848`, `ram_ok=true`, but output changed into
+    incomplete matrix-exponentiation code. Reject as default.
+- Candidate B:
+  `LLAMA_DEMO_SYSTEM_PROMPT='Direct final answer only. Use at most 80 words unless code is requested. No headings or lists. Stop after the answer.'`.
+  - Deploy:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T021404Z-20260709-clean-6e2e23d-sysprompt-final80-deploy-n192`,
+    `eval_tok_s=5.2`, `first_output_ms=22179.8 ms`,
+    `memory_peak_bytes=14886039552`, `ram_ok=true`; answer quality improves,
+    but TTFT exceeds the 20% bound versus the accepted baseline.
+  - Fibonacci:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T021447Z-20260709-clean-6e2e23d-sysprompt-final80-fibonacci-n192`,
+    `eval_tok_s=5.2`, `first_output_ms=20353.9 ms`,
+    `memory_peak_bytes=14907428864`, `ram_ok=true`; answer has a leading
+    fragment and no fenced code block.
+  - AI infra:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T021548Z-20260709-clean-6e2e23d-sysprompt-final80-aiinfra-n192`,
+    `eval_tok_s=6.3`, `first_output_ms=20622.4 ms`,
+    `memory_peak_bytes=14914994176`, `ram_ok=true`; TTFT still too high.
+  - Reject as default. It improves some answer lengths but violates TTFT and
+    degrades code formatting.
+
+Output guard v3:
+
+- Keep model prompt unchanged. Strengthen only the prompt-general wrapper
+  display guard:
+  - strip leading punctuation such as stray Chinese comma/colon;
+  - capitalize a lowercase initial ASCII character when the answer starts with
+    one;
+  - repeatedly strip dangling markdown list/headline tails;
+  - strip short final `Given:` / `Note:` / `Example:` style residual fragments;
+  - strip short title-like tails ending in `vs.`.
+- This is not a token-rate optimization and does not alter generated raw
+  output; `raw_answer` remains in `summary.json` and `answer.raw.txt`.
+
+Dirty-script dev validation for guard v3:
+
+- Deploy:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T021756Z-20260709-dirty-outputguardv3-deploy-n192`,
+  `eval_tok_s=5.4`, `prompt_tok_s=4.3`,
+  `first_output_ms=16845.8 ms`, `memory_peak_bytes=14918897664`,
+  `memory_file_bytes=13914517504`, `ram_ok=true`. Output remains coherent and
+  ends cleanly after the quantization section.
+- Fibonacci:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T021852Z-20260709-dirty-outputguardv3-fibonacci-n192`,
+  `eval_tok_s=5.5`, `prompt_tok_s=3.8`,
+  `first_output_ms=15564.0 ms`, `memory_peak_bytes=14920466432`,
+  `memory_file_bytes=13914025984`, `ram_ok=true`. Code output remains
+  syntactically valid.
+- Climate:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T021948Z-20260709-dirty-outputguardv3-climate-n192`,
+  `eval_tok_s=5.7`, `prompt_tok_s=3.7`,
+  `first_output_ms=16866.3 ms`, `memory_peak_bytes=14918639616`,
+  `memory_file_bytes=13952892928`, `ram_ok=true`. One-paragraph answer is
+  coherent and complete.
+
+Decision:
+
+- Accept output guard v3 as a wrapper-quality improvement. It preserves the
+  `>5 tok/s` dev floor and RAM/TTFT constraints because it does not alter the
+  model execution path.
+- Commit and push, then re-run at least deploy and Fibonacci from clean source
+  to verify the committed script state.
