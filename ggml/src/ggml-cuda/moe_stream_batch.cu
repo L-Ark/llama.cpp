@@ -7621,15 +7621,18 @@ static std::atomic<uint64_t> g_gate_updown_cosubmit_missing_pack{0};
 static std::atomic<uint64_t> g_gate_updown_cosubmit_iouring_ok{0};
 static std::atomic<uint64_t> g_gate_updown_cosubmit_fallback_ok{0};
 static std::atomic<uint64_t> g_gate_updown_cosubmit_no_slot_skips{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_repeat_skips{0};
 static std::atomic<uint64_t> g_gate_updown_cosubmit_failures{0};
 static std::atomic<bool> g_gate_updown_cosubmit_report_registered{false};
+static std::mutex g_gate_updown_cosubmit_seen_mu;
+static std::unordered_map<uintptr_t, uint32_t> g_gate_updown_cosubmit_seen;
 
 static void gate_updown_cosubmit_report_atexit() {
     const uint64_t calls = g_gate_updown_cosubmit_calls.load(std::memory_order_relaxed);
     if (calls == 0) return;
     std::fprintf(stderr,
             "[moe_stream_batch] gate/up/down cosubmit: calls=%lu jobs=%lu cache_hits=%lu missing_pack=%lu "
-            "iouring_ok=%lu fallback_ok=%lu no_slot_skips=%lu failures=%lu\n",
+            "iouring_ok=%lu fallback_ok=%lu no_slot_skips=%lu repeat_skips=%lu failures=%lu\n",
             (unsigned long)calls,
             (unsigned long)g_gate_updown_cosubmit_jobs.load(std::memory_order_relaxed),
             (unsigned long)g_gate_updown_cosubmit_cache_hits.load(std::memory_order_relaxed),
@@ -7637,6 +7640,7 @@ static void gate_updown_cosubmit_report_atexit() {
             (unsigned long)g_gate_updown_cosubmit_iouring_ok.load(std::memory_order_relaxed),
             (unsigned long)g_gate_updown_cosubmit_fallback_ok.load(std::memory_order_relaxed),
             (unsigned long)g_gate_updown_cosubmit_no_slot_skips.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_repeat_skips.load(std::memory_order_relaxed),
             (unsigned long)g_gate_updown_cosubmit_failures.load(std::memory_order_relaxed));
 }
 
@@ -7648,6 +7652,14 @@ static bool gate_updown_cosubmit_env_enabled() {
 static bool gate_updown_cosubmit_down_only_enabled() {
     const char *env = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY");
     return env && env[0] && env[0] != '0';
+}
+
+static uint32_t gate_updown_cosubmit_min_seen() {
+    const char *env = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_MIN_SEEN");
+    const long value = (env && env[0]) ? std::atol(env) : 0;
+    if (value <= 0) return 0;
+    if (value > 1024) return 1024;
+    return (uint32_t)value;
 }
 
 extern "C" int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_name, int expert_idx, size_t expert_bytes) {
@@ -7672,6 +7684,7 @@ extern "C" int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_n
     std::vector<gate_updown_cosubmit_job> planned;
     planned.reserve(2);
     const bool down_only = gate_updown_cosubmit_down_only_enabled();
+    const uint32_t min_seen = gate_updown_cosubmit_min_seen();
     for (int i = 0; i < 2; ++i) {
         const char *tensor = names[i];
         const bool is_down = std::strstr(tensor, ".ffn_down_exps.") != nullptr;
@@ -7679,6 +7692,21 @@ extern "C" int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_n
             continue;
         }
         const uintptr_t key = batch_key_hash(tensor, expert_idx);
+        if (min_seen > 0) {
+            uint32_t seen = 0;
+            {
+                std::lock_guard<std::mutex> lk(g_gate_updown_cosubmit_seen_mu);
+                uint32_t &slot_seen = g_gate_updown_cosubmit_seen[key];
+                seen = slot_seen;
+                if (slot_seen != UINT32_MAX) {
+                    ++slot_seen;
+                }
+            }
+            if (seen < min_seen) {
+                ++g_gate_updown_cosubmit_repeat_skips;
+                continue;
+            }
+        }
         if (batch_cache_find_slot(cache, key) >= 0) {
             ++g_gate_updown_cosubmit_cache_hits;
             continue;
