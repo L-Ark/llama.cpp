@@ -656,6 +656,23 @@ static bool one_pack_read_profile_enabled() {
     return env && env[0];
 }
 
+static bool one_pack_read_summary_enabled() {
+    const char *env = std::getenv("GGML_MOE_ONE_PACK_READ_SUMMARY");
+    return env && env[0] && env[0] != '0';
+}
+
+static std::atomic<uint64_t> g_one_pack_direct_read_time_us{0};
+static std::atomic<uint64_t> g_one_pack_direct_read_max_us{0};
+static std::atomic<uint64_t> g_one_pack_buffered_read_time_us{0};
+static std::atomic<uint64_t> g_one_pack_buffered_read_max_us{0};
+
+static void one_pack_read_summary_update(std::atomic<uint64_t> &total, std::atomic<uint64_t> &max_value, uint64_t value) {
+    total.fetch_add(value, std::memory_order_relaxed);
+    uint64_t prev = max_value.load(std::memory_order_relaxed);
+    while (value > prev && !max_value.compare_exchange_weak(prev, value, std::memory_order_relaxed)) {
+    }
+}
+
 static void one_pack_read_profile_record(
         const one_expert_pack_entry *entry,
         bool direct,
@@ -703,6 +720,24 @@ static void one_pack_report_atexit() {
         g_one_pack.direct_enabled ? 1 : 0,
         g_one_pack.direct_reads.load(), g_one_pack.direct_failures.load(),
         g_one_pack.direct_fallbacks.load());
+    if (one_pack_read_summary_enabled()) {
+        const uint64_t direct_reads = g_one_pack.direct_reads.load(std::memory_order_relaxed);
+        const uint64_t direct_us = g_one_pack_direct_read_time_us.load(std::memory_order_relaxed);
+        const uint64_t buffered_reads = g_one_pack.reads.load(std::memory_order_relaxed) - direct_reads;
+        const uint64_t buffered_us = g_one_pack_buffered_read_time_us.load(std::memory_order_relaxed);
+        std::fprintf(stderr,
+            "[moe_stream] one expert pack read summary: direct_reads=%lu direct_total_ms=%.3f "
+            "direct_avg_ms=%.6f direct_max_ms=%.6f buffered_reads=%lu buffered_total_ms=%.3f "
+            "buffered_avg_ms=%.6f buffered_max_ms=%.6f\n",
+            (unsigned long)direct_reads,
+            direct_us / 1000.0,
+            direct_reads ? (direct_us / 1000.0) / direct_reads : 0.0,
+            g_one_pack_direct_read_max_us.load(std::memory_order_relaxed) / 1000.0,
+            (unsigned long)buffered_reads,
+            buffered_us / 1000.0,
+            buffered_reads ? (buffered_us / 1000.0) / buffered_reads : 0.0,
+            g_one_pack_buffered_read_max_us.load(std::memory_order_relaxed) / 1000.0);
+    }
 }
 
 static void one_pack_init_once() {
@@ -844,14 +879,19 @@ static bool one_pack_read_entry(const one_expert_pack_entry * entry, void * dst,
         return false;
     }
     const bool profile = one_pack_read_profile_enabled();
+    const bool summary = one_pack_read_summary_enabled();
     if (g_one_pack.fd_direct >= 0) {
-        const auto t0 = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        const auto t0 = (profile || summary) ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         const bool direct_ok = one_pack_read_exact_fd(g_one_pack.fd_direct, dst, sz, entry->offset);
-        if (profile) {
+        if (profile || summary) {
             const auto t1 = std::chrono::steady_clock::now();
+            const uint64_t elapsed_us = (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            if (summary) {
+                one_pack_read_summary_update(g_one_pack_direct_read_time_us, g_one_pack_direct_read_max_us, elapsed_us);
+            }
             one_pack_read_profile_record(
                     entry, true, !direct_ok, direct_ok,
-                    std::chrono::duration<double, std::milli>(t1 - t0).count());
+                    elapsed_us / 1000.0);
         }
         if (direct_ok) {
             ++g_one_pack.reads;
@@ -862,13 +902,17 @@ static bool one_pack_read_entry(const one_expert_pack_entry * entry, void * dst,
         ++g_one_pack.direct_failures;
         ++g_one_pack.direct_fallbacks;
     }
-    const auto t0 = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    const auto t0 = (profile || summary) ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     const bool buffered_ok = one_pack_read_exact_fd(g_one_pack.fd, dst, sz, entry->offset);
-    if (profile) {
+    if (profile || summary) {
         const auto t1 = std::chrono::steady_clock::now();
+        const uint64_t elapsed_us = (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+        if (summary) {
+            one_pack_read_summary_update(g_one_pack_buffered_read_time_us, g_one_pack_buffered_read_max_us, elapsed_us);
+        }
         one_pack_read_profile_record(
                 entry, false, g_one_pack.fd_direct >= 0, buffered_ok,
-                std::chrono::duration<double, std::milli>(t1 - t0).count());
+                elapsed_us / 1000.0);
     }
     if (!buffered_ok) {
         ++g_one_pack.failures;

@@ -5367,3 +5367,16 @@ Next profiling needed:
 - Then rerun gate7168/gate9216 repeated A/B with identical source and cold
   procedure. Promote only if the median and at least one immediate replay exceed
   the accepted SOTA while RAM/TTFT/correctness remain valid.
+
+Implementation:
+
+- Added default-off `GGML_MOE_ONE_PACK_READ_SUMMARY=1`.
+- It records aggregate one-stream expert-pack read latency without per-read CSV
+  file writes:
+  - `direct_reads`;
+  - `direct_total_ms`;
+  - `direct_avg_ms`;
+  - `direct_max_ms`;
+  - equivalent buffered counters if O_DIRECT falls back.
+- Demo wrapper records and passes the env through the 16GB cgroup.
+- This is profiling-only and must not change default SOTA behavior.

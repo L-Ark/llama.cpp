@@ -487,6 +487,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_CPU_FALLBACK_PACK_MMAP": $(printf '%s' "${GGML_MOE_CPU_FALLBACK_PACK_MMAP:-}" | json_string),
     "GGML_MOE_VRAM_PROFILE": $(printf '%s' "${GGML_MOE_VRAM_PROFILE:-}" | json_string),
     "GGML_MOE_VRAM_PROFILE_PRELOAD": $(printf '%s' "${GGML_MOE_VRAM_PROFILE_PRELOAD:-}" | json_string),
+    "GGML_MOE_ONE_PACK_READ_SUMMARY": $(printf '%s' "${GGML_MOE_ONE_PACK_READ_SUMMARY:-}" | json_string),
     "GGML_MOE_PREFETCH_DOWN": $(printf '%s' "${GGML_MOE_PREFETCH_DOWN:-}" | json_string),
     "GGML_MOE_PREFETCH_DOWN_DEPTH": $(printf '%s' "${GGML_MOE_PREFETCH_DOWN_DEPTH:-}" | json_string),
     "GGML_KIMI_CPU_MOE_PROFILE": $(printf '%s' "${GGML_KIMI_CPU_MOE_PROFILE:-}" | json_string),
@@ -808,6 +809,7 @@ for passthrough_env in \
   GGML_MOE_COPY_PROFILE_H2D \
   GGML_MOE_H2D_COALESCE_PROFILE_OUT \
   GGML_MOE_ONE_PACK_READ_PROFILE_OUT \
+  GGML_MOE_ONE_PACK_READ_SUMMARY \
   GGML_KIMI_CPU_MOE_PROFILE \
   GGML_KIMI_CPU_MOE_NAME_PROFILE \
   GGML_KIMI_CPU_MOE_NAME_PROFILE_TOP \
