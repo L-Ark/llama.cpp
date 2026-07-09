@@ -4821,3 +4821,76 @@ Next step after this layout SOTA:
   bound is measured.
 - Do not let up/down cache/workspace regress the accepted gate7168 hit rate or
   TTFT.
+
+### 2026-07-09 Execution: Up/Down Batch GPU Probe
+
+Finding:
+
+- The previous SOTA binary had `GGML_CUDA_MOE_STREAM_BATCH=OFF`, so up/down
+  could not enter the real CUDA batch implementation. This is one concrete
+  reason CPU fallback persisted: the exported batch symbol was the stub path.
+- Rebuilt the remote diagnostic binary with
+  `GGML_CUDA_MOE_STREAM_BATCH=ON`. This is a diagnostic build, not the accepted
+  SOTA build/config.
+- Added demo passthrough/override for:
+  `GGML_MOE_STREAM_DECLINE_DEBUG`,
+  `GGML_MOE_STREAM_DOWN_BATCH`,
+  `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH`, and
+  `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH`.
+- Changed the demo defaults so up/down batch stays disabled unless explicitly
+  requested. This preserves the accepted gate7168 SOTA even if a user builds
+  with `GGML_CUDA_MOE_STREAM_BATCH=ON`.
+
+Diagnostic results:
+
+| config | run | eval tok/s | result |
+| --- | --- | ---: | --- |
+| batch OFF, gate7168 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T044902Z-20260709-clean-gate7168-quantum-n96` | 5.4 | accepted layout SOTA |
+| batch ON, up+down, bcache2048, n16 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T050237Z-20260709-batchon-gate7168-updown-decline-debug-n16` | 3.2 | rejected; batch accepted but slow |
+| batch ON, up+down, bcache4096, n32 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T050351Z-20260709-batchon-gate7168-bcache4096-quantum-n32` | 3.5 | rejected |
+| batch ON, up+down, bcache6144, n32 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T050419Z-20260709-batchon-gate7168-bcache6144-quantum-n32` | 3.7 | rejected |
+| batch ON, down-only, bcache6144, n32 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T050612Z-20260709-batchon-gate7168-downonly-bcache6144-quantum-n32` | 4.2 | rejected |
+| batch ON, down-only, bcache6144, n96 no profile | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T050709Z-20260709-batchon-gate7168-downonly-bcache6144-noprofile-quantum-n96` | 4.2 | rejected |
+
+Important evidence:
+
+- With batch ON and bcache2048, `kimi_cpu_moe_profile` reported
+  `batch_accept=1440`, `batch_decline=0`, proving the real GPU batch path was
+  entered and accepted.
+- With up+down bcache6144, down-batch profile showed:
+  - `calls=2720`;
+  - `stage_ms=1695.2`;
+  - `kernel_ms=505.9`;
+  - `wall_ms=2498.3`;
+  - `hits=2716`, `miss=644`;
+  - end-to-end `3.7 tok/s`.
+- With down-only bcache6144, down-batch profile showed:
+  - `calls=1360`;
+  - `stage_ms=1002.9`;
+  - `kernel_ms=177.2`;
+  - `wall_ms=1253.3`;
+  - `hits=1062`, `miss=618`;
+  - end-to-end `4.2 tok/s`.
+- Removing CSV profiling did not improve down-only n96: still `4.2 tok/s`.
+  Therefore the regression is the batch path/stage/cache behavior, not profile
+  output overhead.
+
+Interpretation:
+
+- Up/down GPU path is now partially technically open: CUDA batch accepts and
+  computes down, and up can reuse the Q80-compatible down-batch path.
+- It is not acceptable as an optimization yet. Stage/cache movement dominates
+  the GPU path, and the current batch path is slower than CPU fallback plus the
+  accepted gate7168 fast path.
+- The next optimization must reduce `stage_ms`, not just increase batch cache:
+  2048 -> 6144 MiB improved hit rate but still stayed far below SOTA.
+
+Next implementation task:
+
+- Build a prompt-general up/down fast source, analogous to the gate expert pack,
+  so up/down batch cache fills do not stage from slow GGUF/page-cache paths.
+- Then rerun down-only first. Acceptance target for the first useful GPU path:
+  down-only must exceed clean gate7168 baseline on at least Quantum n96 while
+  keeping RAM below 16GB and TTFT within the 20% limit.
+- Only after down-only is faster should up Q80-compatible batch be re-enabled,
+  because current up+down is slower than down-only.
