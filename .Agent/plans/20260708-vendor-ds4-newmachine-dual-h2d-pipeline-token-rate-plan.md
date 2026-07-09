@@ -4165,3 +4165,20 @@ Status:
 - Output guard v3 improves wrapper-level quality without changing raw
   generation or token-rate path, but product completion still requires a fresh
   frozen held-out check to prove random-prompt output quality.
+
+Held-out v3 freeze:
+
+- Freeze a new held-out set after guard v3 was pushed and clean-verified. Do
+  not tune on this set:
+  1. `Explain DNS in one paragraph.`
+  2. `Write a short JavaScript function to reverse a string.`
+  3. `How can a small business reduce cloud costs?`
+  4. `用一段话介绍成都。`
+  5. `What should I pack for a two-day business trip?`
+- Run once under strict cold, 16GB cgroup including page cache,
+  display/model cleanup before every prompt, source clean at the pushed
+  branch head, default one5120/vram12000, and
+  `LLAMA_DEMO_OUTPUT_GUARD=sentence`.
+- Completion requires all prompts to stay strict `>5 tok/s`, RAM OK, TTFT
+  within bound, and outputs semantically correct/coherent with no serious
+  truncation or unrelated tail.
