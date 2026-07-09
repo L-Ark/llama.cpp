@@ -3575,3 +3575,50 @@ Decision:
 - Commit the guard refinement for reproducibility, but do not freeze SOTA yet.
   Correctness is improved, but the weak Quantum prompt still has insufficient
   strict speed margin at n192 on this machine.
+
+## 2026-07-09 Weak-Prompt Speed Margin Sweep After Guard
+
+Goal:
+
+- After output correctness improved, recover enough margin for the weak Quantum
+  prompt at n192 to be stably strict `>5 tok/s` under the 16GB cgroup.
+
+Results:
+
+- `GGML_MOE_VRAM_CACHE_MIB=15000`, Quantum n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T005447Z-20260709-clean-outputguard-vram15000-quantum-n192`,
+  source clean `d47f97f3b9`, `eval_tok_s=4.9`,
+  `first_output_ms=16171.2 ms`, `memory_peak_bytes=14881845248`,
+  `ram_ok=true`, display cleanup recorded. Reject: slower than default
+  `13824MiB`.
+- Default cache, Quantum n160:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T005607Z-20260709-clean-outputguard-default-quantum-n160`,
+  source clean `d47f97f3b9`, `eval_tok_s=5.0`,
+  `first_output_ms=16125.7 ms`, `memory_peak_bytes=14886711296`,
+  `ram_ok=true`, display cleanup recorded. Reject: displayed `5.0` does not
+  satisfy strict `>5`.
+- `GGML_MOE_STAGE_PINNED_SLOTS=12`, Quantum n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T005718Z-20260709-clean-outputguard-pinned12-quantum-n192`,
+  source clean `d47f97f3b9`, `eval_tok_s=4.7`,
+  `first_output_ms=16006.4 ms`, `memory_peak_bytes=14889324544`,
+  `ram_ok=true`, display cleanup recorded. Reject: more pinned slots hurt.
+- `GGML_MOE_STAGE_PINNED_SLOTS=4`, Quantum n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T005835Z-20260709-clean-outputguard-pinned4-quantum-n192`,
+  source clean `d47f97f3b9`, `eval_tok_s=5.0`,
+  `first_output_ms=16119.3 ms`, `memory_peak_bytes=14866485248`,
+  `ram_ok=true`, display cleanup recorded. Reject: not strict `>5`.
+- `GGML_MOE_IO_REFILL_BATCH=16`, Quantum n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T010008Z-20260709-clean-outputguard-refill16-quantum-n192`,
+  source clean `d47f97f3b9`, `eval_tok_s=4.7`,
+  `first_output_ms=16007.9 ms`, `memory_peak_bytes=14898253824`,
+  `ram_ok=true`, display cleanup recorded. Reject: larger refill batch hurts.
+
+Conclusion:
+
+- Keep default `GGML_MOE_VRAM_CACHE_MIB=13824`,
+  `GGML_MOE_STAGE_PINNED_SLOTS=8`, and `GGML_MOE_IO_REFILL_BATCH=8`.
+- The remaining speed gap is not solved by simple VRAM-cache, pinned-slot, or
+  refill-batch sweeps. The next real optimization should reduce H2D bytes or
+  improve H2D coalescing/copy overlap in the MoE streaming path. This matches
+  the measured hardware state: PCIe is still effectively `16 GT/s x4` with
+  about `6.6-6.7 GB/s` H2D, far below the old x16 reference.
