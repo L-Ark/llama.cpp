@@ -7574,6 +7574,11 @@ static int down_batch_min_active() {
     return (int)value;
 }
 
+static bool down_batch_demand_prefill_enabled() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_DEMAND_PREFILL");
+    return env && env[0] && env[0] != '0';
+}
+
 static int down_prefetch_depth() {
     const char *env = std::getenv("GGML_MOE_PREFETCH_DOWN_DEPTH");
     long depth = (env && env[0]) ? std::atol(env) : 8;
@@ -10245,6 +10250,35 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     if (profile) cudaEventRecord(bc.ev_start, st);
 
+    const bool down_hit_only = down_batch_hit_only_enabled();
+    const bool down_demand_prefill = down_hit_only && down_batch_demand_prefill_enabled();
+    if (down_demand_prefill) {
+        int demand_prefills = 0;
+        cudaStream_t prefill_stream = bc.prefetch_stream ? bc.prefetch_stream : st;
+        for (int j = 0; j < n_active; ++j) {
+            const uintptr_t cache_key = batch_key_hash(src0_name, active_experts[j]);
+            if (batch_cache_find_slot(cache, cache_key) >= 0) {
+                continue;
+            }
+            const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
+            const int slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, prefill_stream,
+                    true, true, nullptr, 0, true, src0_name, active_experts[j],
+                    true, true, true);
+            if (slot >= 0) {
+                ++demand_prefills;
+            }
+        }
+        if (demand_prefills > 0) {
+            static std::atomic<int> first_demand_prefill{0};
+            if (first_demand_prefill.fetch_add(1) == 0) {
+                std::fprintf(stderr,
+                        "[moe_stream_batch] down demand prefill active: tensor=%s prefills=%d active=%d\n",
+                        src0_name ? src0_name : "", demand_prefills, n_active);
+            }
+            return decline("down_demand_prefill");
+        }
+    }
+
     struct down_stage_copy_job {
         int slot = -1;
         void *dst = nullptr;
@@ -10297,7 +10331,6 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     std::vector<down_stage_copy_job> down_jobs_a;
     std::vector<down_stage_copy_job> down_jobs_b;
-    const bool down_hit_only = down_batch_hit_only_enabled();
 
     for (int j = 0; j < n_active; ++j) {
         const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;

@@ -5640,3 +5640,79 @@ Next implementation direction:
   4. launch fewer, larger GPU down batches.
 - Until this is implemented, clean gate12288 remains the accepted generalized
   SOTA.
+
+## 2026-07-09 demand-driven down prefill plan
+
+Objective:
+
+- Continue the original `5df8d52 plan: prioritize ds4 vram layout profiling`
+  direction: use the measured free VRAM/cache budget to make the up/down GPU
+  path useful, not just functional.
+- The immediate target is down first, because the latest profiles show down
+  CPU fallback is material, but synchronous down miss staging can cost more
+  than the CPU fallback it replaces.
+
+Implementation:
+
+- Add default-off `GGML_MOE_DOWN_BATCH_DEMAND_PREFILL=1`.
+- It only activates together with `GGML_MOE_DOWN_BATCH_HIT_ONLY=1`.
+- On a down batch cache miss:
+  - insert the real routed down expert into the batch VRAM cache;
+  - copy it on `prefetch_stream` and mark the slot pending with a CUDA event;
+  - return `false` for the current call so the existing CPU fallback computes
+    the current token exactly;
+  - later calls that route the same down expert use `batch_cache_lookup_slot`,
+    wait on the event only if the copy is still pending, and then run the GPU
+    down batch path.
+
+Theory:
+
+- The previous gate-triggered cosubmit wasted reads because it guessed future
+  up/down experts from the gate hook; min-active results showed many preloaded
+  down entries were never used by accepted GPU down batches.
+- Demand-driven prefill should have much higher precision: every prefilled
+  entry was actually requested by the current route.
+- The upper bound is limited by the CPU fallback wall time covered by repeated
+  down experts. The latest lifecycle profile measured up/down CPU fallback at
+  about `57.5 ms/token`, with down contributing a material share. A perfect
+  down cache hit conversion can only recover the repeated-down portion; it
+  cannot fix gate H2D or up fallback.
+- The expected win is therefore incremental, not a jump to 10 tok/s: if
+  repeated down fallback accounts for `10-25 ms/token`, a successful prefill
+  should move the generalized rate from the clean `5.5 tok/s` class toward
+  roughly `5.8-6.2 tok/s`, provided gate cache hit rate is not displaced.
+
+Test matrix:
+
+1. Clean source/build verification after the default-off change.
+2. Quantum dev prompt, cold start, `n96`, 16GB cgroup:
+   - clean gate12288 SOTA replay;
+   - gate12288 + `GGML_MOE_VRAM_CACHE_MIB=1024`;
+   - `GGML_MOE_STREAM_DOWN_BATCH=1`;
+   - `GGML_MOE_DOWN_BATCH_HIT_ONLY=1`;
+   - `GGML_MOE_DOWN_BATCH_DEMAND_PREFILL=1`;
+   - no gate-side up/down cosubmit.
+3. If the first run beats clean SOTA, replay the same prompt once.
+4. If replay holds, run at least one different dev prompt such as Deploy.
+5. Only after the config is frozen and documented should held-out test prompts
+   be used.
+
+Acceptance gate:
+
+- `source_dirty=false` for the accepted reproduction.
+- 16GB cgroup includes page cache: `memory_peak_bytes < 16000000000` and
+  `ram_ok=true`.
+- Correctness output is semantically coherent for the tested prompt.
+- TTFT does not exceed the clean baseline by more than 20%.
+- Generalized result must beat the current accepted clean gate12288 SOTA, not
+  only match it.
+- If accepted, immediately record exact run paths, config, commit hash,
+  memory/page-cache evidence, TTFT, output text, and push the source to
+  `vendor/deepseek-token-rate-16gb` as `L-Ark`.
+
+Rollback rule:
+
+- If demand prefill increases TTFT, hurts correctness, exceeds RAM, causes OOM,
+  displaces gate cache enough to lose token rate, or fails to replay above the
+  clean SOTA, keep it default-off, record the rejection, and do not promote it
+  as SOTA.
