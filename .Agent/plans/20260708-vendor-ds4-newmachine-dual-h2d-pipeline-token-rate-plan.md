@@ -5716,3 +5716,63 @@ Rollback rule:
   displaces gate cache enough to lose token rate, or fails to replay above the
   clean SOTA, keep it default-off, record the rejection, and do not promote it
   as SOTA.
+
+First experiment result:
+
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T071911Z-20260709-gate12288-bcache1024-demandprefill-quantum-n96`.
+- Source state: remote dirty experiment tree carrying local `0634d32`
+  contents on top of the older applied remote head. This is not acceptable as
+  final SOTA evidence.
+- Config:
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=12288`;
+  - `GGML_MOE_VRAM_CACHE_MIB=1024`;
+  - `GGML_MOE_STREAM_DOWN_BATCH=1`;
+  - `GGML_MOE_DOWN_BATCH_HIT_ONLY=1`;
+  - `GGML_MOE_DOWN_BATCH_DEMAND_PREFILL=1`;
+  - gate-side up/down cosubmit disabled.
+- Result:
+  - `eval_tok_s=4.7`;
+  - `prompt_tok_s=3.3`;
+  - `first_output_ms=16476.89`;
+  - `memory_peak_bytes=14873661440`;
+  - `memory_file_bytes=13901287424`;
+  - `ram_ok=true`;
+  - `source_dirty=true`.
+- Output was coherent but truncated by `n96`, ending at
+  `Another key idea is entanglement, where qubits become`, so it is not a
+  quality-acceptable SOTA run.
+- Counters:
+  - batch down cache: `1.0 GiB`, `240` slots;
+  - demand prefill activated;
+  - pinned staging `copies=2212`, `waits=2204`;
+  - batch expert pack `direct_reads=2212`, `iouring_reads=0`;
+  - batch cache `hits=1848`, `preloads=2212`, `hit_rate=100%`;
+  - gate one-stream stayed at `2913` reads / `12.98GB`, same as clean
+    gate12288.
+
+Diagnosis:
+
+- The naive demand-prefill path is functionally correct but not actually
+  hiding the miss cost.
+- Each down miss immediately performs a direct expert-pack read plus pinned
+  staging/H2D submission inside the current down call before returning to CPU
+  fallback.
+- The high `copies/waits` count means the prefill work competes with decode
+  instead of becoming free background work.
+- Because many entries are low-reuse, this extra transfer pressure overwhelms
+  the CPU fallback time saved by later GPU hits.
+
+Next refinement:
+
+- Add `GGML_MOE_DOWN_BATCH_DEMAND_MIN_SEEN`.
+- Default remains `1`, preserving the first implementation when explicitly
+  enabled.
+- Candidate tests should use `2` or `3`: only prefill a down expert after it
+  has appeared multiple times in real routed down work.
+- Expected benefit: reduce one-off down preloads and pinned waits while keeping
+  repeated down experts eligible for later GPU batch hits.
+- If min-seen still cannot beat clean gate12288, the next real fix is not more
+  admission knobs; it is a queued/background prefill worker or a true grouped
+  route scheduler that can submit multiple down fills without blocking the
+  current token.

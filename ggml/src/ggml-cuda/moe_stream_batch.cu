@@ -7579,6 +7579,14 @@ static bool down_batch_demand_prefill_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static int down_batch_demand_min_seen() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_DEMAND_MIN_SEEN");
+    long value = (env && env[0]) ? std::atol(env) : 1;
+    if (value < 1) value = 1;
+    if (value > 1024) value = 1024;
+    return (int)value;
+}
+
 static int down_prefetch_depth() {
     const char *env = std::getenv("GGML_MOE_PREFETCH_DOWN_DEPTH");
     long depth = (env && env[0]) ? std::atol(env) : 8;
@@ -10253,11 +10261,22 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const bool down_hit_only = down_batch_hit_only_enabled();
     const bool down_demand_prefill = down_hit_only && down_batch_demand_prefill_enabled();
     if (down_demand_prefill) {
+        static std::unordered_map<uintptr_t, uint32_t> down_demand_seen;
+        const int demand_min_seen = down_batch_demand_min_seen();
         int demand_prefills = 0;
+        int demand_seen_skips = 0;
         cudaStream_t prefill_stream = bc.prefetch_stream ? bc.prefetch_stream : st;
         for (int j = 0; j < n_active; ++j) {
             const uintptr_t cache_key = batch_key_hash(src0_name, active_experts[j]);
             if (batch_cache_find_slot(cache, cache_key) >= 0) {
+                continue;
+            }
+            uint32_t &seen = down_demand_seen[cache_key];
+            if (seen != UINT32_MAX) {
+                ++seen;
+            }
+            if ((int)seen < demand_min_seen) {
+                ++demand_seen_skips;
                 continue;
             }
             const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
@@ -10272,8 +10291,8 @@ extern "C" bool ggml_cuda_moe_stream_batch(
             static std::atomic<int> first_demand_prefill{0};
             if (first_demand_prefill.fetch_add(1) == 0) {
                 std::fprintf(stderr,
-                        "[moe_stream_batch] down demand prefill active: tensor=%s prefills=%d active=%d\n",
-                        src0_name ? src0_name : "", demand_prefills, n_active);
+                        "[moe_stream_batch] down demand prefill active: tensor=%s prefills=%d active=%d min_seen=%d seen_skips=%d\n",
+                        src0_name ? src0_name : "", demand_prefills, n_active, demand_min_seen, demand_seen_skips);
             }
             return decline("down_demand_prefill");
         }
