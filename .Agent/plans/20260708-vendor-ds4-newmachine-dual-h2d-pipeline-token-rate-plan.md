@@ -3772,3 +3772,84 @@ Current direction after rejects:
   - reduce gate miss bytes through a prompt-general packed/compressed gate
     representation. Simple cache policy tweaks have not produced stable
     strict `>5 tok/s`.
+
+## 2026-07-09 Post-Plan Execution: Early Stop, CUDA Graph, Cache Lookup
+
+Baseline reproduction before changes:
+
+- Clean source `94e20f63aa`, strict cold, 16GB cgroup including page cache,
+  display/model processes killed before launch, Quantum n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T012628Z-20260709-current-default-quantum-n192-after-display-rule`.
+- Result: `eval_tok_s=5.0`, `prompt_tok_s=3.6`,
+  `first_output_ms=15933.5 ms`, `elapsed_seconds=53.59`,
+  `memory_peak_bytes=14901022720`,
+  `memory_file_bytes=13875474432`, `ram_ok=true`,
+  `display_processes_stopped_before_run=true`.
+- H2D benchmark remained low-H2D Case A-like:
+  `6.58GB/s`, PCIe under load `16.0 GT/s x4`. Output was coherent and
+  semantically correct, but the strict `>5 tok/s` flag was false.
+
+True CLI early-stop diagnostic:
+
+- Implemented dirty-source, default-off `LLAMA_CLI_EARLY_STOP_SENTENCE`
+  prototype in `tools/cli/cli.cpp`, with demo passthrough/recording. The
+  stopping rule was output-only and prompt-general: minimum length, closed
+  code fences, complete sentence ending, then cancel the server reader.
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T013101Z-20260709-dirty-cli-earlystop-quantum-n192`,
+  `LLAMA_CLI_EARLY_STOP_SENTENCE=1`,
+  `LLAMA_CLI_EARLY_STOP_SENTENCE_MIN_CHARS=120`,
+  `LLAMA_CLI_EARLY_STOP_SENTENCE_MIN_SENTENCES=1`.
+- Result: `eval_tok_s=4.9`, `prompt_tok_s=3.3`,
+  `first_output_ms=18982.2 ms`, `elapsed_seconds=24.65`,
+  `memory_peak_bytes=14857285632`,
+  `memory_file_bytes=13945532416`, `ram_ok=true`,
+  `display_processes_stopped_before_run=true`.
+- Output was a short coherent one-sentence quantum explanation, but token rate
+  regressed and TTFT increased. Reject and revert the code path; do not
+  promote as SOTA.
+
+CUDA graph current-config diagnostic:
+
+- Dirty-source diagnostic only because the remote tree still contained the
+  early-stop prototype, but early-stop was disabled. Runtime env:
+  `GGML_CUDA_DISABLE_GRAPHS=0`, current 4352MiB/output-guard configuration.
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T013350Z-20260709-dirty-cudagraph-current4352-quantum-n192`.
+- Result: `eval_tok_s=5.0`, `prompt_tok_s=3.8`,
+  `first_output_ms=15751.8 ms`, `elapsed_seconds=53.41`,
+  `memory_peak_bytes=14866206720`,
+  `memory_file_bytes=13823164416`, `ram_ok=true`,
+  `display_processes_stopped_before_run=true`.
+- Output was correct, but the strict `>5 tok/s` flag remained false. Reject
+  CUDA graph enablement as a current SOTA route.
+
+VRAM one-cache hash lookup diagnostic:
+
+- Implemented dirty-source prototype to make the existing one-cache hash table
+  active instead of linearly scanning all cache slots in
+  `vram_cache_lookup()` / `vram_cache_contains_key()`. This did not change
+  model math or expert data movement, only cache metadata lookup.
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T013802Z-20260709-dirty-vcache-hash-quantum-n192`.
+- Result: `eval_tok_s=5.0`, `prompt_tok_s=3.6`,
+  `first_output_ms=16185.8 ms`, `elapsed_seconds=53.63`,
+  `memory_peak_bytes=14900527104`,
+  `memory_file_bytes=13794189312`, `ram_ok=true`,
+  `display_processes_stopped_before_run=true`.
+- Output was correct, but the strict `>5 tok/s` flag remained false. Reject
+  the hash lookup prototype for now because it does not move the measured
+  product metric; revert source.
+
+Updated conclusion:
+
+- The weak Quantum n192 result is still bounded by low H2D/expert movement,
+  not by CLI output handling, CUDA graph launch overhead, or cache metadata
+  lookup.
+- The accepted source remains clean `94e20f63aa` plus prior pushed defaults.
+  Remote test builds must be reset/rebuilt from clean source before the next
+  candidate.
+- Next implementation should target actual bytes or overlap on the active
+  expert path: prompt-general packed gate/up/down source, lower-byte exact
+  representation only if mathematically identical, or a route scheduler that
+  reduces H2D wait without increasing total transferred bytes.
