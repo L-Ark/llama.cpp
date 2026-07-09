@@ -4941,3 +4941,54 @@ Next rerun:
    `native.gguf`.
 4. Accept only if the answer is present/coherent, RAM stays under 16GB, TTFT
    stays within the 20% gate, and token rate beats the clean gate7168 SOTA.
+
+Execution results:
+
+| config | run | eval tok/s | RAM peak | result |
+| --- | --- | ---: | ---: | --- |
+| preserve source, gate7168, bcache6144 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T052212Z-20260709-batchon-downonly-packalias-preserve-bcache6144-quantum-n32` | 2.9 | 14814023680 | rejected: valid source and answer, but slow |
+| preserve source, gate7168, bcache7168 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T052329Z-20260709-batchon-downonly-packalias-preserve-bcache7168-quantum-n32` | 4.2 | 14692495360 | rejected: below gate7168 SOTA |
+| preserve source, gate7168, bcache8192 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T052356Z-20260709-batchon-downonly-packalias-preserve-bcache8192-quantum-n32` | 4.2 | 14857048064 | rejected: below gate7168 SOTA |
+| preserve source, gate6144, bcache8192 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T052531Z-20260709-batchon-downonly-packalias-preserve-gate6144-bcache8192-quantum-n32` | 4.2 | 14810861568 | rejected: below gate7168 SOTA |
+| preserve source, gate5120, bcache8192 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T052558Z-20260709-batchon-downonly-packalias-preserve-gate5120-bcache8192-quantum-n32` | 4.0 | 14792900608 | rejected: gate miss regression |
+
+Important findings:
+
+- Corrected pack-alias source now opens
+  `/home/wici/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`.
+- Corrected source produces coherent Quantum output and stays within the 16GB
+  host RAM cgroup.
+- The apparent `9.8 tok/s` wrong-source run remains rejected.
+- Increasing batch cache does not reduce down miss count:
+  - gate7168/bcache6144: `hits=893`, `misses=787`;
+  - gate7168/bcache8192: `hits=893`, `misses=787`;
+  - gate6144/bcache8192: `hits=893`, `misses=787`;
+  - gate5120/bcache8192: `hits=893`, `misses=787`.
+- Therefore the dominant down-batch cost is not capacity eviction. It is the
+  first-use synchronous miss path: each unique down expert still pays
+  `SSD/O_DIRECT read + pinned staging + H2D + cache insert` before the current
+  token can continue.
+- For bcache8192, even when the cache allocated `8.0 GiB` / `1927` slots,
+  misses stayed `787` and `stage_ms` increased to `1532.9`.
+- The GPU down kernel is still cheap (`~177 ms` total for n32); the blocking
+  miss stage is what makes GPU down slower than CPU fallback.
+
+Revised next implementation direction:
+
+1. Stop trying to make synchronous GPU-on-miss down batch the accepted path.
+2. Implement an opt-in CPU-on-miss / async-fill policy for up/down:
+   - if an up/down expert is already resident in the batch VRAM cache, use the
+     GPU batch kernel;
+   - if it is missing, do not block the current token on read/H2D;
+   - let the existing CPU fallback compute the current token;
+   - submit an asynchronous pack/alias read + H2D cache fill for future tokens;
+   - ensure cache slot state cannot be observed as ready until H2D completes.
+3. Profile the new policy with:
+   - CPU fallback wall time;
+   - async fill submits/completions;
+   - later GPU cache-hit count;
+   - stage time exposed on the critical path;
+   - answer correctness and exact RAM cgroup accounting.
+4. Acceptance target: beat clean gate7168 SOTA on Quantum n96 and at least one
+   additional dev prompt, with `ram_ok=true`, coherent output, and TTFT within
+   the 20% gate.
