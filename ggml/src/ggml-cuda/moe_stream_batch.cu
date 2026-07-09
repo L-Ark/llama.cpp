@@ -7561,6 +7561,11 @@ static bool down_prefetch_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static bool down_batch_hit_only_enabled() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_HIT_ONLY");
+    return env && env[0] && env[0] != '0';
+}
+
 static int down_prefetch_depth() {
     const char *env = std::getenv("GGML_MOE_PREFETCH_DOWN_DEPTH");
     long depth = (env && env[0]) ? std::atol(env) : 8;
@@ -10237,6 +10242,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     std::vector<down_stage_copy_job> down_jobs_a;
     std::vector<down_stage_copy_job> down_jobs_b;
+    const bool down_hit_only = down_batch_hit_only_enabled();
 
     for (int j = 0; j < n_active; ++j) {
         const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
@@ -10244,6 +10250,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         batch_route_profile_hit(src0_name, active_experts[j], src0_bytes);
         int cache_slot = batch_cache_lookup_slot(cache, cache_key);
         if (cache_slot < 0) {
+            if (down_hit_only) {
+                return decline("down_cache_miss_hit_only");
+            }
             ++down_profile_cache_misses;
             cache_slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, st, true, false,
                     nullptr, 0, !down_parallel_stage, src0_name, active_experts[j]);
