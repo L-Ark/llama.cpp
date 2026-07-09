@@ -4899,3 +4899,45 @@ Next implementation task:
   keeping RAM below 16GB and TTFT within the 20% limit.
 - Only after down-only is faster should up Q80-compatible batch be re-enabled,
   because current up+down is slower than down-only.
+
+### 2026-07-09 Up/Down Pack-Alias Source Guard
+
+The first up/down pack-alias probe exposed a source-path hazard:
+
+- Run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T051905Z-20260709-batchon-downonly-packalias-bcache6144-quantum-n32`.
+- Requested input alias:
+  `/home/wici/runs/vendor-ds4-16gb/updown-pack-alias/ds4-native-updown-pack-payload-alias-newmachine.tsv`,
+  with `source_path` pointing to
+  `/home/wici/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`.
+- The demo script still rewrote the effective alias first column to `$MODEL`.
+  The batch loader therefore opened
+  `/home/wici/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`
+  while using offsets from the expert pack.
+- Observed result: apparent `eval_tok_s=9.8`, `memory_peak_bytes=12922929152`,
+  `ram_ok=true`, but `run_ok=false` and `answer_present=false`. This is
+  rejected and must never be promoted because the source mapping was wrong and
+  the output was empty.
+
+Code update:
+
+- Add `DS4_ALIAS_PRESERVE_SOURCE_PATH=1` to
+  `scripts/demo-vendor-ds4-general-sota.sh`.
+- Default remains unchanged: static GGUF aliases are still rewritten to `$MODEL`.
+- For expert-pack alias experiments, set `DS4_ALIAS_PRESERVE_SOURCE_PATH=1` so
+  the effective run TSV preserves the pack `source_path`.
+
+Next rerun:
+
+1. Use the same corrected up/down pack-alias TSV.
+2. Run down-only batch first with:
+   `DS4_ALIAS_PRESERVE_SOURCE_PATH=1`,
+   `GGML_MOE_STREAM_DOWN_BATCH=1`,
+   `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=0`,
+   `GGML_MOE_GATE_BATCH_PREFETCH=0`,
+   `GGML_MOE_GATE_UPDOWN_COSUBMIT=0`,
+   and `GGML_MOE_VRAM_CACHE_MIB=6144`.
+3. Verify stderr opens the alias source as `native.expert-pack`, not
+   `native.gguf`.
+4. Accept only if the answer is present/coherent, RAM stays under 16GB, TTFT
+   stays within the 20% gate, and token rate beats the clean gate7168 SOTA.

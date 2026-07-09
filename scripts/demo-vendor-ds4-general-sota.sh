@@ -180,6 +180,7 @@ RUN_ROOT="${RUN_ROOT:-/root/lfz/runs/vendor-ds4-16gb/demo-general-sota}"
 BASELINE_ARTIFACT="${BASELINE_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json}"
 SOTA_ARTIFACT="${SOTA_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-coldstart/gate-fullpack-generalized-sota-20260708.json}"
 DS4_ALIAS_TSV="${DS4_ALIAS_TSV:-${REPO_DIR}/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv}"
+DS4_ALIAS_PRESERVE_SOURCE_PATH="${DS4_ALIAS_PRESERVE_SOURCE_PATH:-0}"
 GATE_FULLPACK_PATH="${GATE_FULLPACK_PATH:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack}"
 CALIBRATION_OVERLAY_PACK_PATH="${CALIBRATION_OVERLAY_PACK_PATH:-}"
 LLAMA_DEMO_REPEAT_PENALTY="${LLAMA_DEMO_REPEAT_PENALTY:-}"
@@ -356,8 +357,12 @@ mkdir -p "$RUN_DIR"
 printf '%s\n' "$PROMPT" > "$RUN_DIR/prompt.txt"
 
 EFFECTIVE_DS4_ALIAS_TSV="$RUN_DIR/ds4-native-full-gguf-alias-source.effective.tsv"
-awk -v model="$MODEL" 'BEGIN{FS=OFS="\t"} NR==1 {print; next} {$1=model; print}' \
-  "$DS4_ALIAS_TSV" > "$EFFECTIVE_DS4_ALIAS_TSV"
+if [[ "$DS4_ALIAS_PRESERVE_SOURCE_PATH" == "1" ]]; then
+  cp "$DS4_ALIAS_TSV" "$EFFECTIVE_DS4_ALIAS_TSV"
+else
+  awk -v model="$MODEL" 'BEGIN{FS=OFS="\t"} NR==1 {print; next} {$1=model; print}' \
+    "$DS4_ALIAS_TSV" > "$EFFECTIVE_DS4_ALIAS_TSV"
+fi
 
 source_status="$(git -C "$REPO_DIR" status --short)"
 printf '%s\n' "$source_status" > "$RUN_DIR/source_status.txt"
@@ -433,6 +438,7 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "GGML_MOE_BATCH_FULLPACK": $(printf '%s' "${GGML_MOE_BATCH_FULLPACK:-0}" | json_string),
     "GGML_MOE_EXPERT_GGUF_ALIAS_TSV": $(printf '%s' "$EFFECTIVE_DS4_ALIAS_TSV" | json_string),
     "GGML_MOE_EXPERT_GGUF_ALIAS_TSV_SOURCE": $(printf '%s' "$DS4_ALIAS_TSV" | json_string),
+    "DS4_ALIAS_PRESERVE_SOURCE_PATH": $(printf '%s' "$DS4_ALIAS_PRESERVE_SOURCE_PATH" | json_string),
     "GGML_MOE_IO_BACKEND": "iouring",
     "GGML_MOE_IO_BYTES": $(printf '%s' "${GGML_MOE_IO_BYTES:-8388608}" | json_string),
     "GGML_MOE_IO_ALIGNED_ALIAS_BATCH": "1",
