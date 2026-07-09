@@ -21,6 +21,13 @@ within the 16GB cgroup including page cache.
 diagnostics, kill display processes and stale GPU/model processes first. A run
 is invalid for comparison unless this is done and recorded before launch.
 
+**Launch rule:** every command sequence that starts the DeepSeek model must
+begin with the display/model cleanup block below. This is required even for
+one-off prompt tests, profiling runs, failed experiments, and local smoke
+checks. If the cleanup block is not executed before the model process is
+created, the resulting metrics must be marked invalid and cannot be used as a
+baseline, candidate, SOTA, regression, or historical comparison.
+
 ## Required Pre-Run Procedure
 
 Before every model run on the new machine, including diagnostic runs, profile
@@ -31,6 +38,9 @@ cache/workspace budget.
 
 中文硬性要求：每次运行模型前必须先杀掉显示进程；没有完成并记录该步骤的 run
 不能进入 baseline/SOTA/候选优化比较，只能作为无效诊断参考。
+
+执行顺序也必须固定：先杀掉显示进程和旧模型进程，再确认 GPU 进程列表，再启动
+16GB cgroup 下的模型。不能先启动模型后补记录。
 
 Run-0 display cleanup is mandatory before **every** execution, not only before
 final SOTA validation. If this cleanup is skipped, the run is invalid for
