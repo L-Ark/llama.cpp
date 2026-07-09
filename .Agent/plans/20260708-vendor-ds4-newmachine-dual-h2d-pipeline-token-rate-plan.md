@@ -3361,3 +3361,61 @@ Decision:
   on Quantum.
 - Revert the dirty runtime knob. Request-local policy must be more selective
   than a fixed "cache after N accesses" rule.
+
+## 2026-07-09 Output Correctness Recovery Plan
+
+Reason:
+
+- The frozen 4352MiB candidate already demonstrated the speed side of the
+  product target on held-out v1: all five held-out prompts were strict
+  `>5 tok/s` under the 16GB cgroup with display cleanup recorded.
+- It cannot be promoted because one held-out prompt degenerated into repeated
+  marker-like tokens and several long answers ran until the token cap.
+- Further tuning must not use held-out v1. The next work uses only calibration
+  and dev prompts, then freezes a new candidate before any future held-out
+  validation.
+
+Hypothesis:
+
+- The current demo uses deterministic greedy decoding:
+  `--temp 0 --top-p 1 --top-k 1`. This is fast and reproducible, but it gives
+  the sampler no generic protection against repeated low-quality token loops.
+- A prompt-general repetition-control layer, such as repeat penalty or DRY
+  sampling, should reduce marker loops and cap-runaway answers without changing
+  the MoE streaming path. Because sampling overhead is small relative to
+  expert movement/compute, token rate should remain close to the current
+  4352MiB candidate.
+
+Design:
+
+1. Add default-off runtime/script knobs for generic sampler controls only:
+   repeat penalty, repeat-last-n, frequency/presence penalty, and DRY options.
+   Do not add prompt-specific strings, prompt-specific stop rules, or
+   held-out-derived heuristics.
+2. Run calibration/dev prompts only, for example:
+   - `Please introduce France in a short paragraph.`
+   - `Explain quantum computing briefly.`
+   - `Write a short Python function for Fibonacci.`
+   - `Introduce Japan in a short paragraph.`
+   - `Summarize climate change in one paragraph.`
+   - `How to deploy a large model on a small devices?`
+   - `AI infra 是做什么的`
+   - `今天吃什么`
+3. For each candidate sampler setting, require:
+   - strict cold run with display/model cleanup before launch;
+   - 16GB cgroup including page cache, no swap/OOM;
+   - France output semantically correct and coherent;
+   - no obvious marker-token loop or immediate degeneration on the dev set;
+   - TTFT not more than 20% above the accepted baseline;
+   - token rate still targets `>5 tok/s` on the weak dev prompts.
+4. If a generic output-control candidate passes the dev set, freeze it and only
+   then run a held-out validation set. The held-out result determines whether
+   it can become the product SOTA.
+
+Initial priority:
+
+- First test low-risk repeat controls because they require no CUDA or IO code
+  changes and can be enabled through `llama-cli` flags.
+- If repeat controls reduce correctness failures but cost too much speed, keep
+  them as an optional rejected/diagnostic path and return to the MoE bottleneck
+  plan.
