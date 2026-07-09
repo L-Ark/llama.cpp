@@ -4840,6 +4840,10 @@ Finding:
 - Changed the demo defaults so up/down batch stays disabled unless explicitly
   requested. This preserves the accepted gate7168 SOTA even if a user builds
   with `GGML_CUDA_MOE_STREAM_BATCH=ON`.
+- Follow-up safety fix: `GGML_MOE_STREAM_DOWN_BATCH` must be unset when
+  disabled, not set to `0`, because the CPU-side check tests env presence.
+  Also defaulted gate batch prefetch/cosubmit off so a batch-enabled build does
+  not allocate the 12GB batch cache before the one-stream gate cache.
 
 Diagnostic results:
 
@@ -4851,6 +4855,7 @@ Diagnostic results:
 | batch ON, up+down, bcache6144, n32 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T050419Z-20260709-batchon-gate7168-bcache6144-quantum-n32` | 3.7 | rejected |
 | batch ON, down-only, bcache6144, n32 | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T050612Z-20260709-batchon-gate7168-downonly-bcache6144-quantum-n32` | 4.2 | rejected |
 | batch ON, down-only, bcache6144, n96 no profile | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T050709Z-20260709-batchon-gate7168-downonly-bcache6144-noprofile-quantum-n96` | 4.2 | rejected |
+| batch ON build, default script after safety fix | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T051226Z-20260709-batchbuild-default-gate7168-sanity4-n32` | 5.2 | sanity pass: only one-stream gate cache allocated |
 
 Important evidence:
 
