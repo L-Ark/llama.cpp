@@ -3622,3 +3622,47 @@ Conclusion:
   improve H2D coalescing/copy overlap in the MoE streaming path. This matches
   the measured hardware state: PCIe is still effectively `16 GT/s x4` with
   about `6.6-6.7 GB/s` H2D, far below the old x16 reference.
+
+## 2026-07-09 H2D Coalescing Profile Plan
+
+Goal:
+
+- Before implementing another optimization, quantify whether the weak Quantum
+  prompt is spending time on many small expert H2D copies that can be merged, or
+  on unavoidable bytes over the x4 PCIe link.
+
+Experiment:
+
+- Run strict-cold Quantum n192 with the current clean source and default
+  accepted runtime knobs:
+  `GGML_MOE_VRAM_CACHE_MIB=13824`, `GGML_MOE_STAGE_PINNED_SLOTS=8`,
+  `GGML_MOE_IO_REFILL_BATCH=8`, `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`,
+  `GGML_MOE_UPDOWN_PAIRED_READ=1`, `LLAMA_DEMO_OUTPUT_GUARD=sentence`.
+- Enable diagnostic outputs only:
+  - `GGML_MOE_H2D_COALESCE_PROFILE_OUT`
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT`
+  - `GGML_MOE_IO_WAIT_TRACE_OUT`
+  - optionally `GGML_MOE_COPY_PROFILE_OUT` with
+    `GGML_MOE_COPY_PROFILE_H2D=1` only if overhead is acceptable.
+- As always, kill display/model processes before launch, enforce the 16GB
+  cgroup, and record RAM/page-cache/TTFT/token-rate.
+
+Analysis:
+
+- Summarize `h2d_coalesce_profile` by op:
+  `copy_count`, theoretical `coalesced_copy_count`,
+  `both_contiguous_pairs`, and bytes.
+- If `copy_count - coalesced_copy_count` is large for `runtime_load` or
+  `gate_updown_cosubmit`, implement actual H2D coalescing for contiguous
+  staged payloads and contiguous destination cache slots.
+- If coalescing opportunity is low, avoid a risky copy-merging change and move
+  to reducing bytes: lower precision staged payloads, fewer misses through a
+  better prompt-general cache policy, or true early-stop in the generation loop
+  so output-control correctness does not require generating to the cap.
+
+Acceptance:
+
+- A promoted optimization must improve the weak Quantum n192 result to stable
+  strict `>5 tok/s` while preserving RAM/page-cache limit, TTFT bound, display
+  cleanup, and prompt-general correctness. If it only improves profiling but
+  not measured token rate, record and reject.
