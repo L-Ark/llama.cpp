@@ -6012,15 +6012,154 @@ Diagnosis:
 
 Next implementation direction:
 
-1. Keep the route-group hot-path hook as default-off infrastructure.
-2. Do not enable `targets=updown` for SOTA until up has an admission rule with
-   measured reuse above down.
-3. Optimize `targets=down` first:
-   - group selected down misses per layer before notifying the worker;
-   - submit same-size down jobs as one explicit batch instead of one notify per
-     expert;
-   - add an optional decode-only/admission gate if prompt-phase fills dominate
-     useful cache budget;
-   - evaluate `min_seen=7/8/9` only after batching is improved.
-4. Only after down batching beats clean gate12288 should up be reintroduced,
-   with its own budget and reuse threshold.
+This subsection is superseded by the strict native expert-pack parity plan
+below. The earlier down-only direction was useful as a diagnostic, but it does
+not satisfy the architectural requirement that up/down be aligned with the
+current gate path.
+
+## 2026-07-09 strict route-group plan: native expert-pack parity for gate/up/down
+
+Goal:
+
+- After router selection, immediately collect the current layer's selected
+  expert ids and plan all three expert tensors from the same source of truth:
+  `ffn_gate_exps`, `ffn_up_exps`, and `ffn_down_exps`.
+- up/down must be aligned with the current gate mechanism from the native
+  expert-pack upward. The implementation must not rely on a separate
+  GGUF-alias-only slow path as the target design.
+- The required load order is fixed:
+  1. move `up` and `gate` together in the same route-group batch;
+  2. compute/use the fused or paired up+gate path when both are ready;
+  3. move `down` afterwards, using the same native expert-pack read/cache/H2D
+     mechanism as the up+gate batch, not a different fallback mechanism.
+
+Hard implementation requirements:
+
+1. **Native expert-pack first**
+   - Treat `DeepSeek-V4-Flash-FP4-FP8-native.expert-pack` as the canonical
+     fast source for all three tensor roles.
+   - gate/up/down lookup must share the same pack entry path and validation:
+     `(tensor_name, expert_id) -> pack entry -> O_DIRECT/io_uring read ->
+     pinned staging -> H2D -> VRAM cache slot`.
+   - The plan may generate a derived manifest or index for faster lookup, but
+     it must be generated from the native expert-pack and be reproducible from
+     the same source. It must not be prompt-specific.
+
+2. **Same cache model for gate/up/down**
+   - All three roles must use explicit VRAM cache accounting with role-aware
+     counters:
+     `gate_hits/misses`, `up_hits/misses`, `down_hits/misses`,
+     `reads`, `bytes`, `H2D enqueues`, `waits`, `evictions`, and
+     `evicted_unused`.
+   - Cache keys must remain `(tensor_name, expert_id)`.
+   - A reserved-but-not-ready slot must not be reported as a hit.
+   - Cache admission can be role-specific, but the loading mechanism must be
+     the same.
+
+3. **Route-group batch construction**
+   - At the CPU hot path where `matrix_row_counts` is available for
+     `ffn_gate_exps`, build a route-group object:
+     - layer id / tensor prefix;
+     - selected expert ids;
+     - gate tensor requests;
+     - up tensor requests;
+     - down tensor requests.
+   - Do not enqueue one job per expert immediately. First aggregate all selected
+     requests for the layer, group by source file and payload size, then submit
+     batch reads.
+   - The batcher target is one up+gate batch per layer group, followed by one
+     down batch per layer group when possible. The success criterion is that
+     `batches ~= jobs` must disappear; the counters should show multi-job
+     batches for route-group reads.
+
+4. **Required load order**
+   - Stage A: `up + gate`
+     - For every selected expert in the layer, check both up and gate cache
+       residency.
+     - Submit missing up and missing gate entries together through the same
+       native expert-pack batch path.
+     - The route-group log must show one combined up+gate planning event, with
+       role counts and bytes.
+   - Stage B: `down`
+     - After up+gate has been planned/submitted, submit selected down misses
+       through the same native expert-pack batch path.
+     - down may be overlapped with up+gate compute only if the implementation
+       preserves correctness and does not expose unready slots as hits.
+   - Forbidden target behavior:
+     - up via one mechanism and gate via another;
+     - down via a different queue that bypasses the native expert-pack batch
+       counters;
+     - single-expert notify loops that produce mostly batch size 1.
+
+5. **Computation path**
+   - Once up and gate are available together, prefer the existing batched/fused
+     up+gate CUDA path, or extend it if needed.
+   - If the fused path is not taken, the run must record why:
+     unsupported type, cache miss, workspace limit, kernel incompatibility, or
+     explicit disable flag.
+   - Current-token CPU fallback remains allowed only as a diagnostic fallback,
+     not as the target optimized path.
+
+Implementation steps:
+
+1. **Pack/index audit**
+   - Verify the native expert-pack contains all expected entries:
+     - `43 MoE layers * 256 experts * 3 roles = 33024` entries.
+   - Print exact role counts for `ffn_gate_exps`, `ffn_up_exps`,
+     `ffn_down_exps`.
+   - Confirm offsets/sizes for up/gate/down by layer are suitable for grouped
+     native expert-pack reads. If layout is poor, generate a reproducible
+     derived up/gate/down route-group index from the native pack.
+
+2. **Route-group planner**
+   - Replace the current `route_group_preload_updown_from_gate` behavior with a
+     planner that creates a full `gate/up/down` request set.
+   - Add counters:
+     - selected experts per layer;
+     - requested/hit/miss entries per role;
+     - up+gate batch count and average jobs per batch;
+     - down batch count and average jobs per batch;
+     - bytes and H2D time per role.
+
+3. **Native expert-pack batch loader**
+   - Implement a shared batch loader for route-group requests:
+     - input: vector of pack entries with role labels;
+     - output: reserved VRAM slots and ready events;
+     - path: native expert-pack O_DIRECT/io_uring -> pinned staging -> H2D.
+   - Use it for up+gate and down. Do not keep a separate down-only worker as
+     the target path.
+
+4. **up+gate compute integration**
+   - Connect the route-group loaded up+gate entries to the existing
+     `up_gate_batch` / fused path.
+   - Add a correctness guard comparing against the current accepted path on a
+     short diagnostic run before performance testing.
+
+5. **down integration**
+   - Use the same shared batch loader for down.
+   - Connect ready down entries to the existing down batch CUDA path.
+   - Record whether any down CPU fallback remains and why.
+
+6. **Evaluation sequence**
+   - First run short correctness probes with deterministic prompts:
+     France, Quantum, Fibonacci.
+   - Then run generalized cold tests under the 16GB cgroup with display
+     processes killed before every run.
+   - Test prompts used for tuning must remain separate from held-out test
+     prompts. The final SOTA must be measured on held-out prompts.
+
+Acceptance criteria:
+
+- New result must beat clean gate12288 generalized SOTA, currently `5.5 tok/s`,
+  on clean source.
+- `memory_peak_bytes` must stay below `16000000000`, including page cache.
+- TTFT must not increase by more than `20%` unless explicitly recorded as a
+  rejected/non-accepted diagnostic.
+- Output must be semantically correct and not artificially prompt-specific.
+- Counters must prove route-group parity:
+  - up and gate loaded in the same native expert-pack batch path;
+  - down loaded afterwards through the same native expert-pack batch path;
+  - no hidden GGUF-alias-only or page-cache slow path is required for the
+    optimized expert movement.
+- When a conforming new SOTA appears, immediately record full reproduction
+  metadata, commit, and push to `vendor/deepseek-token-rate-16gb`.
