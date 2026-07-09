@@ -5902,3 +5902,48 @@ Next step:
     high-value gate entries.
 - The route-group implementation should directly target reducing "batches
   ~= jobs" to a small number of grouped submits per layer.
+
+First route-group hook probe:
+
+- Added a default-off hook at `ggml_cuda_moe_stream_up_gate_batch`:
+  - `GGML_MOE_ROUTE_GROUP_DOWN_QUEUE=1`;
+  - `GGML_MOE_ROUTE_GROUP_MIN_SEEN`;
+  - once `active_experts` is built from `matrix_row_counts`, derive the current
+    layer `ffn_down_exps` tensor name from `ffn_up_exps` / `ffn_gate_exps`;
+  - use `expert_pack_lookup_any_size()` so route-group does not guess down
+    expert byte size;
+  - enqueue down fills through the default-off background queue.
+- Test run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T081947Z-20260709-gate12288-bcache1024-routegroup-downqueue-minseen2-quantum-n96`.
+- Result:
+  - `eval_tok_s=5.6`;
+  - `prompt_tok_s=3.5`;
+  - `first_output_ms=16339.77`;
+  - `memory_peak_bytes=14872551424`;
+  - `memory_file_bytes=13935788032`;
+  - `source_dirty=true`.
+- Rejection/diagnosis:
+  - no `route group down queue active` log appeared;
+  - no route-group or down-demand queue atexit counters appeared;
+  - stderr only showed the existing gate one-stream counters and down batch
+    cache allocation;
+  - therefore the current SOTA hot path did not enter
+    `ggml_cuda_moe_stream_up_gate_batch`.
+- This `5.6 tok/s` run is not accepted as SOTA. It is a dirty-source,
+  route-group-inactive observation and could be normal run variance.
+
+Revised route-group implementation target:
+
+- The next hook must attach to the actual SOTA hot path.
+- Current evidence shows the accepted path is still:
+  - `ggml_cuda_moe_stream_one` for `ffn_gate_exps`;
+  - batch/down path and CPU fallback for down;
+  - not the fused `up_gate_batch` path.
+- Therefore either:
+  1. make the fused `up_gate_batch` path part of the SOTA hot path and then use
+     the new route-group hook; or
+  2. implement a small per-layer aggregator around the current gate one-stream
+     selected-expert calls, replacing the old one-expert-at-a-time
+     `gate_updown_cosubmit` behavior with a grouped flush.
+- The immediate next profiling check should confirm which tensor paths are
+  active under the clean gate12288 SOTA before adding more planner code.
