@@ -3388,10 +3388,11 @@ Hypothesis:
 
 Design:
 
-1. Add default-off runtime/script knobs for generic sampler controls only:
-   repeat penalty, repeat-last-n, frequency/presence penalty, and DRY options.
-   Do not add prompt-specific strings, prompt-specific stop rules, or
-   held-out-derived heuristics.
+1. Add default-off runtime/script knobs for generic output controls:
+   repeat penalty, repeat-last-n, frequency/presence penalty, DRY options,
+   conversation-mode forcing, and a generic system prompt. Do not add
+   prompt-specific strings, prompt-specific stop rules, or held-out-derived
+   heuristics.
 2. Run calibration/dev prompts only, for example:
    - `Please introduce France in a short paragraph.`
    - `Explain quantum computing briefly.`
@@ -3416,6 +3417,70 @@ Initial priority:
 
 - First test low-risk repeat controls because they require no CUDA or IO code
   changes and can be enabled through `llama-cli` flags.
+- If repeat controls do not address cap-runaway output, test whether a generic
+  concise-answer system prompt plus explicit conversation mode improves natural
+  stopping and avoids malformed first tokens. This remains prompt-general and
+  must be validated on the dev set before any held-out run.
 - If repeat controls reduce correctness failures but cost too much speed, keep
   them as an optional rejected/diagnostic path and return to the MoE bottleneck
   plan.
+
+Execution notes:
+
+- Added default-off demo knobs for prompt-general sampler/output controls:
+  `LLAMA_DEMO_REPEAT_PENALTY`, `LLAMA_DEMO_REPEAT_LAST_N`,
+  `LLAMA_DEMO_FREQUENCY_PENALTY`, `LLAMA_DEMO_PRESENCE_PENALTY`,
+  `LLAMA_DEMO_DRY_*`, `LLAMA_DEMO_SYSTEM_PROMPT`, and
+  `LLAMA_DEMO_FORCE_CONVERSATION`. When unset, the previous command line is
+  unchanged.
+- Default 4352MiB greedy dev probe, sleep tips n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T002804Z-20260709-dev-default4352-sleep-tips-n192`,
+  `eval_tok_s=5.3`, `first_output_ms=16362.2 ms`,
+  `memory_peak_bytes=14903431168`, `ram_ok=true`, display cleanup recorded.
+  Output is semantically correct but runs into the token cap.
+- Repeat-penalty diagnostic, desk tips n192, `repeat_penalty=1.08`,
+  `repeat_last_n=128`:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T003156Z-20260709-dev-repeat108-desk-tips-n192`,
+  `eval_tok_s=5.2`, `first_output_ms=16469.2 ms`,
+  `memory_peak_bytes=14898249728`, `ram_ok=true`, display cleanup recorded.
+  Output does not degenerate, but it still runs into the token cap and begins
+  with a malformed `inHere` prefix. Reject as a correctness fix.
+- Generic system prompt plus forced conversation, France n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T003520Z-20260709-dev-sysprompt-conv-france-n192`,
+  `eval_tok_s=5.8`, `first_output_ms=18993.0 ms`,
+  `memory_peak_bytes=14865874944`, `ram_ok=true`, display cleanup recorded.
+  France content is semantically correct, but output remains too long and TTFT
+  is close to the 20% ceiling. Reject as default.
+- Longer concise system prompt without forced conversation, France n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T003716Z-20260709-dev-sysprompt-brief-france-n192`,
+  `eval_tok_s=5.9`, `first_output_ms=19887.1 ms`,
+  `memory_peak_bytes=14887485440`, `ram_ok=true`, display cleanup recorded.
+  Output is coherent and naturally complete, but TTFT exceeds the likely 20%
+  bound versus the 4352MiB candidate. Reject as default unless a higher TTFT
+  exception is explicitly marked unacceptable.
+- Short system prompt, France n192, `Be concise. Stop when done.`:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T003825Z-20260709-dev-sysprompt-short-france-n192`,
+  `eval_tok_s=5.9`, `first_output_ms=17924.1 ms`,
+  `memory_peak_bytes=14884691968`, `ram_ok=true`, display cleanup recorded.
+  TTFT is better, but output still runs into the token cap. Reject.
+- Short max-word system prompt, France n192, `Max 80 words. Stop after
+  answer.`:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T003938Z-20260709-dev-sysprompt-max80-france-n192`,
+  `eval_tok_s=5.9`, `first_output_ms=18182.4 ms`,
+  `memory_peak_bytes=14899146752`, `ram_ok=true`, display cleanup recorded.
+  Output ignores the hard word budget and truncates. Reject.
+- One-paragraph system prompt, France n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T004059Z-20260709-dev-sysprompt-onepara-france-n192`,
+  `eval_tok_s=6.0`, `first_output_ms=18444.7 ms`,
+  `memory_peak_bytes=14913933312`, `ram_ok=true`, display cleanup recorded.
+  Output still runs into the token cap. Reject.
+
+Decision:
+
+- Prompt-general sampler/system-prompt controls are useful diagnostics but do
+  not yet produce an accepted product SOTA. The only complete France output was
+  the longer system prompt, but it raises TTFT too much for promotion.
+- Next correctness work should be a runtime-generic stopping strategy, for
+  example a wrapper-level sentence-boundary/repetition guard or a llama-cli
+  generation-loop change that stops after a coherent completed answer without
+  using held-out or prompt-specific text.

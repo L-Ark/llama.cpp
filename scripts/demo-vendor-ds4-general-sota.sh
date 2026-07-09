@@ -46,6 +46,16 @@ Current known generalized status:
 
 Artifacts:
   /root/lfz/runs/vendor-ds4-16gb/demo-general-sota/<timestamp>-<label>/
+
+Optional generic sampler controls are configured through environment variables
+and are default-off:
+  LLAMA_DEMO_REPEAT_PENALTY, LLAMA_DEMO_REPEAT_LAST_N,
+  LLAMA_DEMO_FREQUENCY_PENALTY, LLAMA_DEMO_PRESENCE_PENALTY,
+  LLAMA_DEMO_DRY_MULTIPLIER, LLAMA_DEMO_DRY_BASE,
+  LLAMA_DEMO_DRY_ALLOWED_LENGTH, LLAMA_DEMO_DRY_PENALTY_LAST_N,
+  LLAMA_DEMO_SYSTEM_PROMPT, LLAMA_DEMO_FORCE_CONVERSATION.
+These controls must stay prompt-general and must not be tuned on held-out
+prompts.
 USAGE
 }
 
@@ -170,6 +180,16 @@ SOTA_ARTIFACT="${SOTA_ARTIFACT:-${REPO_DIR}/.Agent/runs/20260705-vendor-ds4-cold
 DS4_ALIAS_TSV="${DS4_ALIAS_TSV:-${REPO_DIR}/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv}"
 GATE_FULLPACK_PATH="${GATE_FULLPACK_PATH:-/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack}"
 CALIBRATION_OVERLAY_PACK_PATH="${CALIBRATION_OVERLAY_PACK_PATH:-}"
+LLAMA_DEMO_REPEAT_PENALTY="${LLAMA_DEMO_REPEAT_PENALTY:-}"
+LLAMA_DEMO_REPEAT_LAST_N="${LLAMA_DEMO_REPEAT_LAST_N:-}"
+LLAMA_DEMO_FREQUENCY_PENALTY="${LLAMA_DEMO_FREQUENCY_PENALTY:-}"
+LLAMA_DEMO_PRESENCE_PENALTY="${LLAMA_DEMO_PRESENCE_PENALTY:-}"
+LLAMA_DEMO_DRY_MULTIPLIER="${LLAMA_DEMO_DRY_MULTIPLIER:-}"
+LLAMA_DEMO_DRY_BASE="${LLAMA_DEMO_DRY_BASE:-}"
+LLAMA_DEMO_DRY_ALLOWED_LENGTH="${LLAMA_DEMO_DRY_ALLOWED_LENGTH:-}"
+LLAMA_DEMO_DRY_PENALTY_LAST_N="${LLAMA_DEMO_DRY_PENALTY_LAST_N:-}"
+LLAMA_DEMO_SYSTEM_PROMPT="${LLAMA_DEMO_SYSTEM_PROMPT:-}"
+LLAMA_DEMO_FORCE_CONVERSATION="${LLAMA_DEMO_FORCE_CONVERSATION:-0}"
 
 MEMORY_MAX_BYTES=16000000000
 MAX_TOKENS=96
@@ -390,6 +410,18 @@ cat > "$RUN_DIR/config.json" <<EOF_CFG
     "batch": 16,
     "ubatch": 16,
     "threads": 20,
+    "sampler_controls": {
+      "repeat_penalty": $(printf '%s' "$LLAMA_DEMO_REPEAT_PENALTY" | json_string),
+      "repeat_last_n": $(printf '%s' "$LLAMA_DEMO_REPEAT_LAST_N" | json_string),
+      "frequency_penalty": $(printf '%s' "$LLAMA_DEMO_FREQUENCY_PENALTY" | json_string),
+      "presence_penalty": $(printf '%s' "$LLAMA_DEMO_PRESENCE_PENALTY" | json_string),
+      "dry_multiplier": $(printf '%s' "$LLAMA_DEMO_DRY_MULTIPLIER" | json_string),
+      "dry_base": $(printf '%s' "$LLAMA_DEMO_DRY_BASE" | json_string),
+      "dry_allowed_length": $(printf '%s' "$LLAMA_DEMO_DRY_ALLOWED_LENGTH" | json_string),
+      "dry_penalty_last_n": $(printf '%s' "$LLAMA_DEMO_DRY_PENALTY_LAST_N" | json_string),
+      "system_prompt": $(printf '%s' "$LLAMA_DEMO_SYSTEM_PROMPT" | json_string),
+      "force_conversation": $(printf '%s' "$LLAMA_DEMO_FORCE_CONVERSATION" | json_string)
+    },
     "GGML_CUDA_DISABLE_GRAPHS": $(printf '%s' "${GGML_CUDA_DISABLE_GRAPHS:-1}" | json_string),
     "GGML_MOE_STREAM": "1",
     "GGML_MOE_STREAM_DONTNEED": "1",
@@ -464,6 +496,16 @@ GATE_FULLPACK=$(printf '%q' "$GATE_FULLPACK")
 GATE_FULLPACK_PATH=$(printf '%q' "$GATE_FULLPACK_PATH")
 CALIBRATION_OVERLAY_PACK_PATH=$(printf '%q' "$CALIBRATION_OVERLAY_PACK_PATH")
 ROUTE_PROFILE=$(printf '%q' "$ROUTE_PROFILE")
+LLAMA_DEMO_REPEAT_PENALTY=$(printf '%q' "$LLAMA_DEMO_REPEAT_PENALTY")
+LLAMA_DEMO_REPEAT_LAST_N=$(printf '%q' "$LLAMA_DEMO_REPEAT_LAST_N")
+LLAMA_DEMO_FREQUENCY_PENALTY=$(printf '%q' "$LLAMA_DEMO_FREQUENCY_PENALTY")
+LLAMA_DEMO_PRESENCE_PENALTY=$(printf '%q' "$LLAMA_DEMO_PRESENCE_PENALTY")
+LLAMA_DEMO_DRY_MULTIPLIER=$(printf '%q' "$LLAMA_DEMO_DRY_MULTIPLIER")
+LLAMA_DEMO_DRY_BASE=$(printf '%q' "$LLAMA_DEMO_DRY_BASE")
+LLAMA_DEMO_DRY_ALLOWED_LENGTH=$(printf '%q' "$LLAMA_DEMO_DRY_ALLOWED_LENGTH")
+LLAMA_DEMO_DRY_PENALTY_LAST_N=$(printf '%q' "$LLAMA_DEMO_DRY_PENALTY_LAST_N")
+LLAMA_DEMO_SYSTEM_PROMPT=$(printf '%q' "$LLAMA_DEMO_SYSTEM_PROMPT")
+LLAMA_DEMO_FORCE_CONVERSATION=$(printf '%q' "$LLAMA_DEMO_FORCE_CONVERSATION")
 cd "\$RUN_DIR"
 PROMPT="\$(cat prompt.txt)"
 
@@ -528,6 +570,38 @@ if [[ "$ROUTE_PROFILE" == "1" ]]; then
   export GGML_DS4_GROUPED_RETAINED_ROUTE_DETAIL_OUT="\$RUN_DIR/grouped_route_detail.csv"
 fi
 
+sampler_args=()
+if [[ -n "\$LLAMA_DEMO_REPEAT_PENALTY" ]]; then
+  sampler_args+=(--repeat-penalty "\$LLAMA_DEMO_REPEAT_PENALTY")
+fi
+if [[ -n "\$LLAMA_DEMO_REPEAT_LAST_N" ]]; then
+  sampler_args+=(--repeat-last-n "\$LLAMA_DEMO_REPEAT_LAST_N")
+fi
+if [[ -n "\$LLAMA_DEMO_FREQUENCY_PENALTY" ]]; then
+  sampler_args+=(--frequency-penalty "\$LLAMA_DEMO_FREQUENCY_PENALTY")
+fi
+if [[ -n "\$LLAMA_DEMO_PRESENCE_PENALTY" ]]; then
+  sampler_args+=(--presence-penalty "\$LLAMA_DEMO_PRESENCE_PENALTY")
+fi
+if [[ -n "\$LLAMA_DEMO_DRY_MULTIPLIER" ]]; then
+  sampler_args+=(--dry-multiplier "\$LLAMA_DEMO_DRY_MULTIPLIER")
+fi
+if [[ -n "\$LLAMA_DEMO_DRY_BASE" ]]; then
+  sampler_args+=(--dry-base "\$LLAMA_DEMO_DRY_BASE")
+fi
+if [[ -n "\$LLAMA_DEMO_DRY_ALLOWED_LENGTH" ]]; then
+  sampler_args+=(--dry-allowed-length "\$LLAMA_DEMO_DRY_ALLOWED_LENGTH")
+fi
+if [[ -n "\$LLAMA_DEMO_DRY_PENALTY_LAST_N" ]]; then
+  sampler_args+=(--dry-penalty-last-n "\$LLAMA_DEMO_DRY_PENALTY_LAST_N")
+fi
+if [[ -n "\$LLAMA_DEMO_SYSTEM_PROMPT" ]]; then
+  sampler_args+=(--system-prompt "\$LLAMA_DEMO_SYSTEM_PROMPT")
+fi
+if [[ "\$LLAMA_DEMO_FORCE_CONVERSATION" == "1" ]]; then
+  sampler_args+=(-cnv)
+fi
+
 cmd=(
   "\$BINARY"
   -m "\$MODEL"
@@ -550,6 +624,7 @@ cmd=(
   --no-display-prompt
   --n-cpu-moe 40
   --defer-experts
+  "\${sampler_args[@]}"
 )
 
 printf '%q ' "\${cmd[@]}" > exact_command.txt
