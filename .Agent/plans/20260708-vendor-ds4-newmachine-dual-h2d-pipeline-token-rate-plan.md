@@ -3639,9 +3639,11 @@ Experiment:
   `GGML_MOE_IO_REFILL_BATCH=8`, `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`,
   `GGML_MOE_UPDOWN_PAIRED_READ=1`, `LLAMA_DEMO_OUTPUT_GUARD=sentence`.
 - Enable diagnostic outputs only:
+  - `GGML_MOE_STREAM_ONE_TRACE_OUT` for the active one-gate expert-pack path
   - `GGML_MOE_H2D_COALESCE_PROFILE_OUT`
   - `GGML_MOE_IO_BATCH_PROFILE_OUT`
   - `GGML_MOE_IO_WAIT_TRACE_OUT`
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT`
   - optionally `GGML_MOE_COPY_PROFILE_OUT` with
     `GGML_MOE_COPY_PROFILE_H2D=1` only if overhead is acceptable.
 - As always, kill display/model processes before launch, enforce the 16GB
@@ -3649,6 +3651,10 @@ Experiment:
 
 Analysis:
 
+- First use `GGML_MOE_STREAM_ONE_TRACE_OUT`, because the current SOTA gate path
+  is implemented in `moe_stream.cu`, not in the batch expert-pack profile path.
+  Split totals by `src0_ms`, `src1_ms`, `kernel_ms`, `d2h_ms`, `sync_ms`,
+  `scatter_ms`, cache hit/insert, tensor name, and expert.
 - Summarize `h2d_coalesce_profile` by op:
   `copy_count`, theoretical `coalesced_copy_count`,
   `both_contiguous_pairs`, and bytes.
@@ -3666,3 +3672,96 @@ Acceptance:
   strict `>5 tok/s` while preserving RAM/page-cache limit, TTFT bound, display
   cleanup, and prompt-general correctness. If it only improves profiling but
   not measured token rate, record and reject.
+
+Initial profile result:
+
+- The batch H2D coalescing profile did not fire because the active SOTA gate
+  path uses `moe_stream.cu` one-expert streaming, not
+  `moe_stream_batch.cu`'s `expert_pack_iouring_copy_jobs` path.
+- `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT` on Quantum n192 showed
+  `gate_one` rows=`23836`, cache hits=`15903`, cache misses=`7933`,
+  pack hits=`7933`, `src0_ms≈6861 ms`, `total_ms≈12954 ms`.
+- After adding `GGML_MOE_STREAM_ONE_TRACE_OUT` passthrough, one-trace showed:
+  - hit count=`15903`, hit total=`622 ms`;
+  - miss+insert count=`7933`, miss total=`12332 ms`;
+  - miss sums: `src0_ms≈6851 ms`, `sync_ms≈5304 ms`,
+    `kernel_ms≈95 ms`, `src1_ms≈41 ms`, `d2h_ms≈23 ms`;
+  - each miss is about `1.55 ms` total for a `4.25 MiB` gate expert.
+- Interpretation: remaining weak-prompt gap is dominated by gate cache misses
+  and their O_DIRECT read + H2D/cache-insert synchronization. Kernel time is
+  not the bottleneck. The theoretical lower bound from moving `35.35GB` over
+  the measured `6.6-6.7GB/s` H2D link is about `5.3s`, so reducing misses or
+  bytes has higher expected value than trying to merge copy calls in the batch
+  path.
+
+Next cache experiment:
+
+- Use the existing default-off one-cache partition mechanism:
+  `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_FILTER` and
+  `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_SLOTS`.
+- Theory: Quantum has especially high miss cost in early gate layers
+  (`blk.0`, `blk.1`, `blk.2`) and late layer `blk.39`. A prompt-general cache
+  partition can reserve a bounded region for those tensor names so they do not
+  evict or get evicted by the rest of the gate layers. This is not
+  prompt-specific because it uses model tensor/layer structure, not a prompt
+  profile or held-out data.
+- First dirty diagnostic: expose the two env vars through the demo wrapper,
+  test a small tail partition for `blk.0`, `blk.1`, `blk.2`, and `blk.39` on
+  Quantum n192 with `LLAMA_DEMO_OUTPUT_GUARD=sentence`. If it does not strictly
+  exceed `5 tok/s`, reject or adjust once; avoid broad parameter sweeping.
+
+Partition result:
+
+- Dirty diagnostic with early/late gate-layer tail partition, 512 slots:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T011456Z-20260709-dirty-partition512-quantum-n192`,
+  `eval_tok_s=4.7`, `prompt_tok_s=1.7`, `first_output_ms=18966.7 ms`,
+  `memory_peak_bytes=14906073088`, `ram_ok=true`, display cleanup recorded.
+- Gate profile regressed: cache hits=`14725`, misses=`9111`,
+  `src0_ms≈8856 ms`, `total_ms≈15708 ms`, worse than default misses=`7933`
+  and total≈`12954 ms`.
+- Reject partition. It over-isolates early layers and increases overall miss
+  churn.
+
+Next cache-policy implementation:
+
+- Add a default-off one-cache eviction policy
+  `GGML_MOE_STREAM_ONE_CACHE_POLICY=lfu_lru`.
+- Current one-cache eviction is pure LRU. The trace shows hit entries are cheap
+  (`622 ms` total for `15903` hits) while misses dominate. A request-local LFU
+  tie-breaker can protect frequently reused experts without using prompt
+  profiles or held-out data.
+- Implementation should add per-slot hit counters in `moe_stream.cu`:
+  increment on cache hit; on insert set to zero; when policy is `lfu_lru`,
+  evict the slot with lowest hit count, tie-broken by oldest `slot_used`.
+- Theoretical upper bound: each avoided miss saves roughly `1.55 ms` measured
+  in Quantum n192. Reducing misses by only `300-500` would save about
+  `0.47-0.78s`, enough to move displayed `5.0` closer to a stable strict `>5`
+  if the policy does not increase lookup/eviction overhead.
+
+LFU-LRU dirty diagnostic:
+
+- Implemented default-off one-cache LFU-LRU eviction locally and rebuilt
+  `build-cuda/bin/llama-cli` successfully.
+- Default-off regression run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T011830Z-20260709-dirty-lfu-default-off-quantum-n192`,
+  `eval_tok_s=5.1`, `prompt_tok_s=3.8`, `first_output_ms=15438.1 ms`,
+  `memory_peak_bytes=14913486848`, `ram_ok=true`, display cleanup recorded.
+- LFU-LRU enabled run:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T011927Z-20260709-dirty-lfu-on-quantum-n192`,
+  `eval_tok_s=5.1`, `prompt_tok_s=3.8`, `first_output_ms=16360.1 ms`,
+  `memory_peak_bytes=14903492608`, `ram_ok=true`, display cleanup recorded.
+- Decision: reject and revert LFU-LRU. It did not improve displayed token
+  rate and increased TTFT/elapsed time versus the same dirty build's
+  default-off run.
+
+Current direction after rejects:
+
+- Accepted source must keep the default LRU cache policy.
+- Retain `GGML_MOE_STREAM_ONE_TRACE_OUT` wrapper passthrough because it is
+  diagnostic-only and does not change default runtime behavior.
+- The next optimization should either:
+  - implement a true generation-loop early stop so correctness no longer
+    requires generating all the way to n192, or
+  - reduce gate miss bytes through a prompt-general packed/compressed gate
+    representation. Simple cache policy tweaks have not produced stable
+    strict `>5 tok/s`.
