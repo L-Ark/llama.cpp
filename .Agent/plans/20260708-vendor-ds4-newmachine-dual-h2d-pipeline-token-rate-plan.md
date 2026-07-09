@@ -5532,3 +5532,14 @@ Next implementation direction:
   3. Consider a true fused multi-layer down work queue rather than per-call
      down GPU hits. The profile shows per-call GPU down wall median is close to
      CPU fallback, so launch/sync amortization is the next real bottleneck.
+
+Implementation follow-up:
+
+- The CUDA batch allocator already supports free-VRAM clamping through:
+  - `GGML_MOE_VRAM_CACHE_GRAPH_RESERVE_MIB`;
+  - `GGML_MOE_VRAM_CACHE_SAFETY_MIB`;
+  - `GGML_MOE_VRAM_CACHE_AUTO_CLAMP`.
+- The generalized demo did not record/pass these envs through `systemd-run`.
+- Add demo passthrough and config recording so future up/down GPU probes can
+  reserve workspace explicitly instead of relying on failed `cudaMalloc`
+  retries. This is default-off and does not change clean gate12288 behavior.
