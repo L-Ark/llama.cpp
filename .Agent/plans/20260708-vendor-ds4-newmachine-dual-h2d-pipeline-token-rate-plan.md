@@ -3853,3 +3853,106 @@ Updated conclusion:
   expert path: prompt-general packed gate/up/down source, lower-byte exact
   representation only if mathematically identical, or a route scheduler that
   reduces H2D wait without increasing total transferred bytes.
+
+## 2026-07-09 5120MiB Gate / 12000MiB UpDown Candidate
+
+Theory:
+
+- The previous default used `GGML_MOE_STREAM_ONE_CACHE_MIB=4352` and
+  `GGML_MOE_VRAM_CACHE_MIB=13824`. Quantum n192 stayed around displayed
+  `5.0 tok/s` because gate cache misses still moved too many full gate experts
+  over the low-H2D `~6.6GB/s` link.
+- A blunt `5120MiB` gate cache had previously regressed under the old
+  `vram13824` budget. The new hypothesis was that the regression came from
+  total VRAM/cache pressure, not from gate residency itself. Shifting budget
+  from up/down cache to gate cache should reduce gate miss H2D while keeping
+  enough up/down cache for correctness and speed.
+- Test only one fixed prompt-general budget redistribution first:
+  `GGML_MOE_STREAM_ONE_CACHE_MIB=5120`,
+  `GGML_MOE_VRAM_CACHE_MIB=12000`, all other SOTA knobs unchanged.
+
+Clean single-prompt confirmation:
+
+- Clean source `94e20f63aa`, strict cold, 16GB cgroup including page cache,
+  display/model cleanup before launch, Quantum n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T014150Z-20260709-clean-vram12000-one5120-quantum-n192`.
+- Result: `eval_tok_s=5.2`, `prompt_tok_s=3.6`,
+  `first_output_ms=16225.1 ms`, `elapsed_seconds=52.25`,
+  `memory_peak_bytes=14908006400`,
+  `memory_file_bytes=13907668992`, `ram_ok=true`,
+  `display_processes_stopped_before_run=true`, source clean.
+- Output was coherent and semantically correct. H2D remained low at
+  `6.58GB/s`, so the improvement came from software/cache budget rather than
+  hardware link recovery.
+
+Clean dev validation with explicit env:
+
+- France n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T014323Z-20260709-clean-one5120-vram12000-france-n192`,
+  `eval_tok_s=6.2`, `prompt_tok_s=3.8`,
+  `first_output_ms=15992.9 ms`, `memory_peak_bytes=14911021056`,
+  `memory_file_bytes=13952106496`, `ram_ok=true`, correctness pass.
+- Fibonacci n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T014414Z-20260709-clean-one5120-vram12000-fibonacci-n192`,
+  `eval_tok_s=5.3`, `prompt_tok_s=3.8`,
+  `first_output_ms=15598.2 ms`, `memory_peak_bytes=14914482176`,
+  `memory_file_bytes=13865021440`, `ram_ok=true`. Function body is complete
+  and syntactically valid after the generic code-fence guard.
+- Deploy n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T014511Z-20260709-clean-one5120-vram12000-deploy-n192`,
+  `eval_tok_s=5.2`, `prompt_tok_s=4.3`,
+  `first_output_ms=16602.2 ms`, `memory_peak_bytes=14910631936`,
+  `memory_file_bytes=13899255808`, `ram_ok=true`. Output was semantically
+  useful but exposed a dangling `### 2.` after sentence trimming.
+- AI infra n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T014608Z-20260709-clean-one5120-vram12000-aiinfra-n192`,
+  `eval_tok_s=5.8`, `prompt_tok_s=3.8`,
+  `first_output_ms=15848.2 ms`, `memory_peak_bytes=14928039936`,
+  `memory_file_bytes=13928628224`, `ram_ok=true`. Output had a short malformed
+  Chinese prefix before the main answer.
+- Chinese food n192:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T014701Z-20260709-clean-one5120-vram12000-foodcn-n192`,
+  `eval_tok_s=6.1`, `prompt_tok_s=3.3`,
+  `first_output_ms=14783.4 ms`, `memory_peak_bytes=14903648256`,
+  `memory_file_bytes=13927268352`, `ram_ok=true`, coherent answer.
+
+Guard/default update:
+
+- Updated the demo default to the fixed candidate:
+  `GGML_MOE_STREAM_ONE_CACHE_MIB=5120` and
+  `GGML_MOE_VRAM_CACHE_MIB=12000`.
+- Strengthened the prompt-general output guard:
+  - remove a short leading Chinese structural fragment such as the observed
+    `的缩写是...` before the main answer;
+  - strip dangling markdown headings/list markers both before and after
+    sentence-boundary trimming.
+- Dirty default validation after the script update, with no explicit cache env:
+  - Quantum:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T015027Z-20260709-dirty-default-one5120-guard-quantum-n192`,
+    `eval_tok_s=5.2`, `first_output_ms=15830.2 ms`,
+    `memory_peak_bytes=14895230976`, `ram_ok=true`.
+  - Deploy guard v2:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T015447Z-20260709-dirty-default-one5120-guardv2-deploy-n192`,
+    `eval_tok_s=5.3`, `first_output_ms=16663.9 ms`,
+    `memory_peak_bytes=14868197376`, `ram_ok=true`; dangling `### 2.` was
+    removed and the answer ends after the completed quantization section.
+  - AI infra:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T015219Z-20260709-dirty-default-one5120-guard-aiinfra-n192`,
+    `eval_tok_s=5.9`, `first_output_ms=15658.9 ms`,
+    `memory_peak_bytes=14888525824`, `ram_ok=true`; malformed prefix was
+    removed.
+  - Fibonacci:
+    `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T015311Z-20260709-dirty-default-one5120-guard-fibonacci-n192`,
+    `eval_tok_s=5.4`, `first_output_ms=15619.3 ms`,
+    `memory_peak_bytes=14915854336`, `ram_ok=true`; code function remains
+    syntactically valid.
+
+Decision:
+
+- Promote `one5120/vram12000` plus guard v2 as the next generalized
+  candidate default because every dev prompt above is strict `>5 tok/s`, RAM
+  including page cache stays below 16GB, display cleanup is recorded for every
+  run, TTFT remains within the previous accepted range, and correctness is
+  improved by the guard.
+- This must be committed and pushed immediately, then re-run from clean source
+  for final candidate reproduction before any held-out validation.
