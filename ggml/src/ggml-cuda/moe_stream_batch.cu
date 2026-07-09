@@ -13,6 +13,7 @@ bool ggml_cuda_moe_stream_handoff_upload(const float *, int64_t, int64_t) { retu
 int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *, int, size_t) { return 0; }
 int ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit(void) { return 0; }
 int ggml_cuda_moe_stream_batch_preload_active_from_pack(int, const char *, int64_t, size_t, const int64_t *) { return 0; }
+int ggml_cuda_moe_stream_route_group_preload_updown_from_gate(const char *, int64_t, const int64_t *) { return 0; }
 bool ggml_cuda_moe_stream_preload_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_preload_tensor_prompt(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
@@ -143,6 +144,10 @@ int ggml_cuda_moe_stream_batch_preload_active_from_pack(
     const char *src0_name,
     int64_t n_as,
     size_t expert_bytes,
+    const int64_t *matrix_row_counts);
+int ggml_cuda_moe_stream_route_group_preload_updown_from_gate(
+    const char *src0_gate_name,
+    int64_t n_as,
     const int64_t *matrix_row_counts);
 const void * ggml_cuda_moe_stream_cache_dev_ptr(const char *src0_name, size_t expert_bytes, int expert_idx);
 
@@ -7885,6 +7890,11 @@ static bool route_group_down_queue_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static bool route_group_updown_queue_enabled() {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_UPDOWN_QUEUE");
+    return env && env[0] && env[0] != '0';
+}
+
 static int route_group_min_seen() {
     const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_MIN_SEEN");
     long value = (env && env[0]) ? std::atol(env) : 1;
@@ -7893,11 +7903,24 @@ static int route_group_min_seen() {
     return (int)value;
 }
 
+static bool route_group_target_enabled(const char *target) {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_TARGETS");
+    if (!env || !env[0]) {
+        return true;
+    }
+    if (std::strcmp(env, "updown") == 0 || std::strcmp(env, "all") == 0) {
+        return true;
+    }
+    return std::strstr(env, target) != nullptr;
+}
+
 static std::atomic<uint64_t> g_route_group_calls{0};
 static std::atomic<uint64_t> g_route_group_submitted{0};
 static std::atomic<uint64_t> g_route_group_cache_hits{0};
 static std::atomic<uint64_t> g_route_group_missing_pack{0};
 static std::atomic<uint64_t> g_route_group_repeat_skips{0};
+static std::atomic<uint64_t> g_route_group_invalid_gate{0};
+static std::atomic<uint64_t> g_route_group_inactive_expert_skips{0};
 static std::atomic<bool> g_route_group_report_registered{false};
 static std::mutex g_route_group_seen_mu;
 static std::unordered_map<uintptr_t, uint32_t> g_route_group_seen;
@@ -7907,12 +7930,116 @@ static void route_group_report_atexit() {
     if (calls == 0) return;
     std::fprintf(stderr,
             "[moe_stream_batch] route group down queue: calls=%lu submitted=%lu cache_hits=%lu "
-            "missing_pack=%lu repeat_skips=%lu\n",
+            "missing_pack=%lu repeat_skips=%lu invalid_gate=%lu inactive_expert_skips=%lu\n",
             (unsigned long)calls,
             (unsigned long)g_route_group_submitted.load(std::memory_order_relaxed),
             (unsigned long)g_route_group_cache_hits.load(std::memory_order_relaxed),
             (unsigned long)g_route_group_missing_pack.load(std::memory_order_relaxed),
-            (unsigned long)g_route_group_repeat_skips.load(std::memory_order_relaxed));
+            (unsigned long)g_route_group_repeat_skips.load(std::memory_order_relaxed),
+            (unsigned long)g_route_group_invalid_gate.load(std::memory_order_relaxed),
+            (unsigned long)g_route_group_inactive_expert_skips.load(std::memory_order_relaxed));
+}
+
+static bool name_from_gate(const char *gate_name, const char *target, char *out, size_t out_sz) {
+    if (!gate_name || !target || !out || out_sz == 0) return false;
+    const char *needle = std::strstr(gate_name, ".ffn_gate_exps.");
+    if (!needle) return false;
+    const size_t prefix = (size_t)(needle - gate_name);
+    const char *suffix = needle + std::strlen(".ffn_gate_exps.");
+    const int n = std::snprintf(out, out_sz, "%.*s.%s.%s", (int)prefix, gate_name, target, suffix);
+    return n > 0 && (size_t)n < out_sz;
+}
+
+static int route_group_enqueue_tensor(
+        const char *tensor_name,
+        int expert,
+        cudaStream_t st,
+        int min_seen) {
+    const expert_pack_entry *entry = expert_pack_lookup_any_size(tensor_name, expert);
+    if (!entry || entry->nbytes == 0) {
+        ++g_route_group_missing_pack;
+        return 0;
+    }
+    const uintptr_t key = batch_key_hash(tensor_name, expert);
+    if (min_seen > 1) {
+        uint32_t seen = 0;
+        {
+            std::lock_guard<std::mutex> lk(g_route_group_seen_mu);
+            uint32_t &slot_seen = g_route_group_seen[key];
+            seen = slot_seen;
+            if (slot_seen != UINT32_MAX) {
+                ++slot_seen;
+            }
+        }
+        if ((int)seen + 1 < min_seen) {
+            ++g_route_group_repeat_skips;
+            return 0;
+        }
+    }
+
+    batch_vram_cache *cache = batch_cache_get((size_t)entry->nbytes);
+    if (!cache) {
+        return 0;
+    }
+    if (batch_cache_find_slot(cache, key) >= 0) {
+        ++g_route_group_cache_hits;
+        return 0;
+    }
+    if (down_demand_prefill_enqueue(cache, key, nullptr, (size_t)entry->nbytes,
+                tensor_name, expert, st)) {
+        ++g_route_group_submitted;
+        return 1;
+    }
+    return 0;
+}
+
+extern "C" int ggml_cuda_moe_stream_route_group_preload_updown_from_gate(
+        const char *src0_gate_name,
+        int64_t n_as,
+        const int64_t *matrix_row_counts) {
+    if (!route_group_updown_queue_enabled()) {
+        return 0;
+    }
+    if (!src0_gate_name || !matrix_row_counts || n_as <= 0) {
+        return 0;
+    }
+    if (!g_route_group_report_registered.exchange(true)) {
+        std::atexit(route_group_report_atexit);
+    }
+    ++g_route_group_calls;
+
+    char up_name[128] = {};
+    char down_name[128] = {};
+    if (!name_from_gate(src0_gate_name, "ffn_up_exps", up_name, sizeof(up_name)) ||
+            !name_from_gate(src0_gate_name, "ffn_down_exps", down_name, sizeof(down_name))) {
+        ++g_route_group_invalid_gate;
+        return 0;
+    }
+
+    const int min_seen = route_group_min_seen();
+    int submitted = 0;
+    int active = 0;
+    for (int64_t expert = 0; expert < n_as; ++expert) {
+        if (matrix_row_counts[expert] <= 0) {
+            ++g_route_group_inactive_expert_skips;
+            continue;
+        }
+        ++active;
+        if (route_group_target_enabled("up")) {
+            submitted += route_group_enqueue_tensor(up_name, (int)expert, nullptr, min_seen);
+        }
+        if (route_group_target_enabled("down")) {
+            submitted += route_group_enqueue_tensor(down_name, (int)expert, nullptr, min_seen);
+        }
+    }
+
+    static std::atomic<int> first_route_group_updown{0};
+    if (submitted > 0 && first_route_group_updown.fetch_add(1, std::memory_order_relaxed) == 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] route group up/down queue active: gate=%s submitted=%d active=%d min_seen=%d\n",
+                src0_gate_name, submitted, active, min_seen);
+    }
+    return submitted;
 }
 
 static int route_group_enqueue_down(

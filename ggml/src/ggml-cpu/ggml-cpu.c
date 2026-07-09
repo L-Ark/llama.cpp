@@ -195,6 +195,10 @@ __attribute__((weak)) extern int ggml_cuda_moe_stream_batch_preload_active_from_
     int64_t n_as,
     size_t expert_bytes,
     const int64_t * matrix_row_counts);
+__attribute__((weak)) extern int ggml_cuda_moe_stream_route_group_preload_updown_from_gate(
+    const char * src0_gate_name,
+    int64_t n_as,
+    const int64_t * matrix_row_counts);
 __attribute__((weak)) extern const void * ggml_cuda_moe_expert_pack_mmap_ptr(
     const char * tensor_name,
     int expert_idx,
@@ -255,6 +259,8 @@ static bool (*ggml_cuda_moe_stream_batch)(
     const int64_t *, const ggml_moe_stream_row_mapping *, int64_t) = NULL;
 static int (*ggml_cuda_moe_stream_batch_preload_active_from_pack)(
     int, const char *, int64_t, size_t, const int64_t *) = NULL;
+static int (*ggml_cuda_moe_stream_route_group_preload_updown_from_gate)(
+    const char *, int64_t, const int64_t *) = NULL;
 static bool (*ggml_cuda_moe_stream_handoff_upload)(const float *, int64_t, int64_t) = NULL;
 static bool (*ggml_cuda_moe_stream_up_gate_batch)(
     int, int, const char *, const void *, const char *, const void *, int64_t,
@@ -4879,6 +4885,14 @@ static void ggml_compute_forward_mul_mat_id(
                         (size_t) ne01 * nb01,
                         matrix_row_counts);
                 (void) gate_prefetch_jobs;
+            }
+            if (ggml_cuda_moe_stream_route_group_preload_updown_from_gate &&
+                    src0->name && strstr(src0->name, ".ffn_gate_exps.") != NULL) {
+                const int updown_prefetch_jobs = ggml_cuda_moe_stream_route_group_preload_updown_from_gate(
+                        src0->name,
+                        n_as,
+                        matrix_row_counts);
+                (void) updown_prefetch_jobs;
             }
 
             for (int cur_a = 0; cur_a < n_as; ++cur_a) {

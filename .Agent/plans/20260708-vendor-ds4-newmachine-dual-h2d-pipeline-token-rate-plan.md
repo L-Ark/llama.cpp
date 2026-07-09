@@ -5947,3 +5947,80 @@ Revised route-group implementation target:
      `gate_updown_cosubmit` behavior with a grouped flush.
 - The immediate next profiling check should confirm which tensor paths are
   active under the clean gate12288 SOTA before adding more planner code.
+
+CPU hot-path route-group hook update, 2026-07-09:
+
+- Corrected the implementation target: `ffn_gate_exps` is not the router gate.
+  Like `ffn_up_exps` and `ffn_down_exps`, it is selected after router chooses
+  expert ids. Therefore gate/up/down can be planned from the same per-layer
+  selected expert set.
+- Added default-off infrastructure on the actual SOTA hot path:
+  - CPU side calls
+    `ggml_cuda_moe_stream_route_group_preload_updown_from_gate()` immediately
+    before the `ggml_cuda_moe_stream_one()` loop for `ffn_gate_exps`;
+  - CUDA side derives current-layer `ffn_up_exps` and `ffn_down_exps` names
+    from the gate tensor name;
+  - active experts come from `matrix_row_counts`, which is already the
+    router-selected per-layer expert set;
+  - misses are looked up from the prompt-general expert pack with
+    `expert_pack_lookup_any_size()`;
+  - fills are submitted to the existing background queue;
+  - new switches:
+    `GGML_MOE_ROUTE_GROUP_UPDOWN_QUEUE`,
+    `GGML_MOE_ROUTE_GROUP_TARGETS=updown|up|down`,
+    `GGML_MOE_ROUTE_GROUP_MIN_SEEN`.
+- This code is default-off and must not change accepted SOTA behavior unless
+  explicitly enabled.
+
+Dirty probe results on the new machine:
+
+| config | run | eval tok/s | prompt tok/s | TTFT ms | peak RAM | file RAM | submitted | reads/bytes | useful rate | decision |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | --- |
+| `targets=updown,min_seen=2` | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T082736Z-20260709-routegroup-updown-hotpath-minseen2-quantum-n96` | 3.7 | 2.6 | 20124.70 | 14885445632 | 13901737984 | 13318 | 59.35GB | 10.9% | reject: severe cache/IO pollution |
+| `targets=updown,min_seen=8` | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T082904Z-20260709-routegroup-updown-hotpath-minseen8-quantum-n96` | 5.2 | 3.8 | 16185.69 | 14866280448 | 13905485824 | 2132 | 9.50GB | 17.9% | reject: below clean SOTA |
+| `targets=down,min_seen=8` | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T083114Z-20260709-routegroup-down-hotpath-minseen8-quantum-n96` | 5.5 | 3.6 | 16264.45 | 14872051712 | 13927759872 | 370 | 1.65GB | 58.9% | diagnostic only: matches but does not beat SOTA |
+| `targets=down,min_seen=6` | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T083225Z-20260709-routegroup-down-hotpath-minseen6-quantum-n96` | 5.4 | 3.6 | 16167.53 | 14870360064 | 13929824256 | not promoted | not promoted | not promoted | reject: below clean SOTA |
+| default-off regression | `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260709T083323Z-20260709-defaultoff-routegroup-infra-regression-quantum-n96` | 5.6 | 3.6 | 16168.19 | 14865346560 | 13941719040 | 0 | route-group off | n/a | default-off path is not regressed |
+
+Important caveats:
+
+- These runs are dirty-source probes on the remote tree and are not accepted
+  SOTA evidence.
+- The Quantum n96 answer is semantically coherent but truncated at
+  "where qubits become"; it cannot be used as a final correctness pass.
+- No new SOTA is promoted. The accepted generalized SOTA remains the clean
+  gate12288 result at `5.5 tok/s` until a clean-source generalized run beats it
+  with non-truncated output and full 16GB cgroup evidence.
+
+Diagnosis:
+
+- The route-group hook now triggers on the real hot path; the earlier issue
+  where `up_gate_batch` was inactive is fixed.
+- Treating `up` and `down` equally is currently wrong:
+  - `updown,min_seen=2` submitted `13318` fills and read `59.35GB`, with only
+    `10.9%` useful reuse;
+  - even `updown,min_seen=8` still read `9.50GB` for only `17.9%` useful reuse.
+- `down` has a much better short-term cache payoff:
+  - `down,min_seen=8` read only `1.65GB` and reached `58.9%` useful reuse;
+  - it matched, but did not exceed, the clean SOTA.
+- The remaining problem is not knowing selected experts. That part is solved.
+  The remaining problem is admission and batching:
+  - too many prompt/decode selected experts are not reused enough;
+  - the background worker still creates many tiny batches
+    (`370` jobs became `362` batches in the best down-only probe);
+  - fills often arrive as waits rather than free future hits.
+
+Next implementation direction:
+
+1. Keep the route-group hot-path hook as default-off infrastructure.
+2. Do not enable `targets=updown` for SOTA until up has an admission rule with
+   measured reuse above down.
+3. Optimize `targets=down` first:
+   - group selected down misses per layer before notifying the worker;
+   - submit same-size down jobs as one explicit batch instead of one notify per
+     expert;
+   - add an optional decode-only/admission gate if prompt-phase fills dominate
+     useful cache budget;
+   - evaluate `min_seen=7/8/9` only after batching is improved.
+4. Only after down batching beats clean gate12288 should up be reintroduced,
+   with its own budget and reuse threshold.
