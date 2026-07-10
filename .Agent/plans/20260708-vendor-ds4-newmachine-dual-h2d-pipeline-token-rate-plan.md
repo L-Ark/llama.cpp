@@ -431,6 +431,64 @@ Promotion requirements:
     correctness risk, but its bandwidth floor suggests only low-`6 tok/s`
     potential unless paired with a deeper representation/layout change.
 
+## 2026-07-10 Gate Direct Hot Pool First320 SOTA
+
+- Method: add a prompt-general direct hot pool in front of the current
+  gate12288 one-cache path. The manifest is generated from the full native
+  expert pack, not from a prompt route profile:
+
+  ```bash
+  python3 scripts/ds4-expert-pack-direct-manifest.py \
+    --pack /home/wici/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack \
+    --tensor-substr ffn_gate_exps \
+    --limit 320 \
+    --output /home/wici/runs/vendor-ds4-16gb/ds4-gate-pack-first320.direct_manifest.csv
+  ```
+
+- Runtime delta:
+  - keep `GGML_MOE_STREAM_ONE_CACHE_MIB=12288`;
+  - add `GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB=1400`;
+  - add `GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT=320`;
+  - add `GGML_MOE_STREAM_ONE_DIRECT_PREFILL_ASYNC=1`;
+  - set `GGML_MOE_STREAM_ONE_DIRECT_MODEL` to the same native expert-pack
+    file and `GGML_MOE_STREAM_ONE_DIRECT_IO=direct`.
+- Reproduction helper added:
+  `scripts/demo-vendor-ds4-gate-hotpool-sota.sh`.
+- Accepted candidate evidence:
+  - Quantum n96 repeat 1:
+    `/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260710T034736Z-interactive`,
+    `eval_tok_s=5.6`, `prompt_tok_s=3.6`, `TTFT=16178.44 ms`,
+    `memory_peak_bytes=14881206272`, `memory_file_bytes=13976903680`,
+    RAM OK, coherent output.
+  - Quantum n96 repeat 2:
+    `/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260710T034831Z-interactive`,
+    `eval_tok_s=5.7`, `prompt_tok_s=3.6`, `TTFT=18769.04 ms`,
+    `memory_peak_bytes=14884630528`, `memory_file_bytes=13955420160`,
+    RAM OK, coherent output.
+  - France correctness guard:
+    `/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260710T034924Z-interactive`,
+    `eval_tok_s=6.8`, `prompt_tok_s=3.9`, `TTFT=16663.37 ms`,
+    `memory_peak_bytes=14873145344`, RAM OK, semantically correct France
+    answer.
+- TTFT constraint: the worst accepted repeat is `18769.04 ms`, about `+16.9%`
+  versus the clean gate12288 reference `16059.33 ms`, so it remains below the
+  `+20%` limit.
+- Promotion: accept `5.6 tok/s` as the current prompt-general strict-cold
+  SOTA for the Quantum n96 calibration metric, because the repeat pair is
+  `5.6` and `5.7` and all hard constraints pass.
+- Boundary probes:
+  - first240 / 1024MiB pool reduced one-pack reads to `2778` and produced
+    `5.6` then `5.5 tok/s`; useful but not enough to promote alone.
+  - first480 / 2048MiB pool is rejected. It allocated the direct hot pool
+    first, caused the 12288MiB one-cache allocation to fail, and fell to
+    `3.1 tok/s` with `11746` one-pack reads / `52.35GB`.
+- Updated next direction:
+  - do not exceed the VRAM point where the 12288MiB one-cache fails;
+  - test a narrow range between first320 and the failure boundary only if the
+    script records direct hot pool and one-cache allocation counters;
+  - investigate allocation order or reserved VRAM accounting so direct hot
+    pool cannot silently disable the main gate one-cache.
+
 ## 2026-07-08 Execution Notes
 
 - Added run-artifact hardware metadata collection to
