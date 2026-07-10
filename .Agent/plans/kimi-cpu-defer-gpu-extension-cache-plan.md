@@ -197,6 +197,87 @@ Decision:
 - If a few gate layers dominate exposed wait, test a small gate-only hotset A/B, default-off.
 - If up/gate jointly dominate, proceed to Phase 2.
 
+## Phase 1 result: n32 dev role/layer profile
+
+Timestamp: 2026-07-10 13:08 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-cpu-defer-gpu-ext-phase1-profile-n32-dev3-130834`
+
+Command shape:
+
+- Same cold-start 16GB cgroup runner as Phase 0.
+- N32, `PROFILE=1`, all 7 dev prompts, current RAM tier profile enabled.
+- First 3 prompts were run first, then the same out root was resumed with `--skip-existing` for the remaining 4 prompts.
+
+Quality note:
+
+- 6/7 automatic quality gates passed.
+- `dev_linear_equation` failed only because N32 truncated the answer after `**x =`; the N96 Phase 0 baseline for the same prompt passed with `x = 7`.
+- Therefore this profile is valid for bottleneck localization only. It is not an acceptance-quality run and must not be used as SOTA evidence.
+
+Aggregate profile metrics:
+
+- Token rate under profiling: min `1.46`, median `1.68`, mean `1.65`, max `1.84` tok/s.
+- TTFT under profiling: min `7722.46`, median `9463.29`, mean `9819.32`, max `12411.67` ms.
+- RAM peak: min `13.44`, median `13.59`, max `13.59` GiB.
+- `iouring_wait_s`: min `17.32`, median `19.15`, mean `19.78`, max `23.41`.
+- `iouring_bytes_gib`: min `192.7`, median `207.6`, mean `222.5`, max `265.5`.
+- `fallback-profile.csv` rows: `0`, so this profile did not expose CPU fallback.
+
+Role/layer evidence:
+
+- `up-gate-profile.csv`: `6083` decode rows, `28` layers, all `n_active=8`.
+- `down-batch-profile.csv`: `13027` decode rows, all decode rows are `down`; prompt rows contain gate/up/down and are excluded from decode down ranking.
+- Total n32 dev exposed up/gate wait: `18707.3 ms`; total up/gate wall: `35260.5 ms`.
+- Total n32 dev decode down stage: `32703.7 ms`; total down wall: `34930.2 ms`.
+
+Top up/gate exposed-wait layers:
+
+| layer | calls | exposed wait ms | up/gate wall ms | misses | hit rate | type |
+|---:|---:|---:|---:|---:|---:|---:|
+| 10 | 217 | 1095.1 | 1142.1 | 2298 | 33.8% | 22 |
+| 27 | 217 | 1083.1 | 1130.0 | 2170 | 37.5% | 22 |
+| 12 | 217 | 1076.5 | 1123.6 | 2235 | 35.6% | 22 |
+| 20 | 217 | 1076.5 | 1123.4 | 2234 | 35.7% | 22 |
+| 16 | 217 | 1068.9 | 1115.6 | 2158 | 37.8% | 22 |
+| 25 | 217 | 1064.9 | 1111.4 | 2246 | 35.3% | 22 |
+| 18 | 217 | 1061.4 | 1108.7 | 2126 | 38.8% | 22 |
+| 24 | 217 | 1057.5 | 1103.8 | 2192 | 36.9% | 22 |
+
+Top down decode-stage layers:
+
+| layer | calls | stage ms | wall ms | misses | hit rate |
+|---:|---:|---:|---:|---:|---:|
+| 10 | 217 | 1131.0 | 1162.2 | 1266 | 27.1% |
+| 6 | 217 | 1126.8 | 1157.5 | 1252 | 27.9% |
+| 4 | 217 | 1109.9 | 1141.4 | 1359 | 21.7% |
+| 8 | 217 | 1109.2 | 1140.7 | 1248 | 28.1% |
+| 7 | 217 | 1102.7 | 1133.7 | 1217 | 29.9% |
+| 9 | 217 | 1098.1 | 1128.9 | 1201 | 30.8% |
+| 18 | 217 | 1070.0 | 1100.9 | 1200 | 30.9% |
+| 58 | 217 | 1054.5 | 1085.5 | 1214 | 30.1% |
+
+Top combined `upgate_wait + down_stage` layers:
+
+| layer | upgate wait ms | down stage ms | combined ms |
+|---:|---:|---:|---:|
+| 10 | 1095.1 | 1131.0 | 2226.1 |
+| 18 | 1061.4 | 1070.0 | 2131.4 |
+| 20 | 1076.5 | 1046.1 | 2122.6 |
+| 16 | 1068.9 | 1045.4 | 2114.3 |
+| 25 | 1064.9 | 1028.3 | 2093.2 |
+| 24 | 1057.5 | 1030.8 | 2088.3 |
+| 22 | 1055.8 | 1020.5 | 2076.3 |
+| 23 | 1051.2 | 1016.8 | 2068.0 |
+
+Decision:
+
+- Kimi does not show a DeepSeek-style gate-only CPU bottleneck.
+- The visible issue is paired up/gate staging wait for type `22` layers plus down staging; gate-only hotpool is not the right next primary move because up remains on the same critical path.
+- The first optimization probe should be role-aware cache allocation, starting with a controlled upgate/down split sweep. If moving slots from down to upgate regresses, the next probe should be a joint layer-profile cache rather than more upgate-only space.
+
 ## Phase 2: Role-aware joint up/gate/down VRAM cache allocation
 
 Hypothesis:
@@ -223,6 +304,43 @@ Acceptance:
 
 - Held-out min token rate improves without TTFT/RAM/quality regression.
 - Improvement must survive paired baseline rerun.
+
+### Phase 2A exact next experiment: upgate/down split sweep
+
+Timestamp: 2026-07-10 13:25 CST.
+
+Hypothesis:
+
+- Current split is `GGML_MOE_VRAM_CACHE_UPGATE_PCT=62`.
+- Phase 1 shows upgate type `22` exposed wait is material, but down stage is larger. A small reallocation toward upgate may improve decode if added upgate hits reduce exposed wait more than the removed down slots increase down staging.
+- This is a default-off env-only experiment; no source behavior changes.
+
+Theoretical bound:
+
+- N32 full-dev profile exposed upgate wait is `18.7s`; down decode stage is `32.7s`.
+- A split-only change cannot remove all upgate wait because misses are broad across many layers and experts.
+- Practical upside for N96 is expected to be modest, likely single-digit percentage unless the extra upgate slots cover high-repeat misses. Any down regression can erase the gain.
+
+Experiment:
+
+1. Run a quick cold-start N32 dev smoke using the first 3 dev prompts:
+   - control: `UPGATE_PCT=62`;
+   - candidate A1: `UPGATE_PCT=66`;
+   - candidate A2: `UPGATE_PCT=70`.
+2. Keep all other env exactly the same as Phase 0, including RAM tier.
+3. Do not use held-out test prompts.
+4. Compare quality, TTFT, token rate, RAM peak, upgate/down slots, hit rates, `iouring_wait_us`, and expert pack batch histograms.
+
+Promotion:
+
+- If neither candidate improves median and minimum token rate on the 3-prompt smoke, reject the split-only approach.
+- If one candidate improves without quality/RAM/TTFT regression, run all 7 dev prompts at N96 with paired control and candidate.
+- Only after paired N96 dev improvement, run a refreshed sealed held-out test set.
+
+Rollback:
+
+- Env-only rejected candidates require no source rollback.
+- If a source patch is later needed for joint cache profile support, it must be default-off and reverted if it fails gates.
 
 ## Phase 3: Explicit RAM tier for second-hot experts
 
