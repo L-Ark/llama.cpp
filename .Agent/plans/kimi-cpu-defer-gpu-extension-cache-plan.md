@@ -306,6 +306,65 @@ Conclusion:
   co-submit path that increases ready jobs after routing without blocking
   earlier slices or damaging current-down overlap.
 
+## 2026-07-11 Phase 4U.1 plan: fused-path co-submit audit
+
+Current code audit:
+
+- Existing `GGML_MOE_GATE_UPDOWN_COSUBMIT=1` is a single-gate expert path in
+  `moe_stream.cu`. It does not cover the dominant Kimi SOTA path, which is
+  `ggml_cuda_moe_stream_up_gate_batch`.
+- Existing `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1` was already rejected:
+  it caused CUDA OOM on two N32 dev prompts and a severe slowdown on the third.
+  Do not retry it as the next candidate.
+- Existing `GGML_MOE_ROUTE_GROUP_NATIVE_PARITY=1` has useful route-group
+  planning code, but its current entry point is gate-name based and is not
+  called from the fused up/gate batch path.
+- The route-group native planner also uses each pack entry's actual `nbytes`
+  as its cache key. The fused up/gate batch often uses a shared
+  `max(up_bytes, gate_bytes)` cache slot for both roles. If reused blindly,
+  an early up/gate preload can land in a different cache and will not be hit by
+  the later fused up/gate stage.
+
+Design constraint for any new co-submit implementation:
+
+- Hook must be inside `ggml_cuda_moe_stream_up_gate_batch` after active experts
+  are known and before normal up/gate staging starts.
+- The hook must use the exact same cache/key convention as fused up/gate:
+  `up_key_name`, `gate_key_name`, and the fused batch's `cache_slot_bytes`
+  cache for up/gate.
+- Down jobs may use the down tensor's natural cache size, but must not duplicate
+  current-down overlap work already submitted.
+- The path must be default-off, e.g.
+  `GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT=1`.
+- The first implementation may be a shadow/counter probe only. A real copy path
+  is allowed only after counters prove it can create larger ready job groups
+  without increasing exposed wait.
+- It must not block on a whole co-submit group before available up/gate work can
+  run.
+- It must record enough evidence for acceptance/rejection:
+  planned jobs by role, cache hits/misses, pack misses, submitted jobs, copied
+  bytes, iouring batches, failures, and whether the later fused stage actually
+  hit the preloaded slots.
+
+Immediate implementation step:
+
+1. Extend `.Agent/run-tools/kimi-general-prompt-repro.sh` metrics parsing for
+   existing co-submit and route-group lines:
+   - `gate/up/down cosubmit`;
+   - `route group native parity`;
+   - `route group down queue`;
+   - `fused upgate/down shadow`;
+   - `down demand queue`.
+2. Run a default-off shadow probe on a dev prompt with:
+   - `GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT_SHADOW=1`;
+   - `GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT_SHADOW_OUT=<run>/fused-upgate-down-shadow.csv`;
+   - `GGML_MOE_PHASE_REPORT=1`.
+3. If the shadow shows large same-layer plannable jobs but current-down overlap
+   already covers most down misses, implement only the fused up/gate-side
+   cache-compatible hook first.
+4. If the shadow shows no material plannable jobs beyond current-down overlap,
+   stop this direction and move to RAM/VRAM cache layout work.
+
 ## 2026-07-11 goal: Kimi CPU/defer + GPU-extension path
 
 Goal:
