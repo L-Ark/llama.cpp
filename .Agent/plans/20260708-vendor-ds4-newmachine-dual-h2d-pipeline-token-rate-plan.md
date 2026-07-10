@@ -307,6 +307,27 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      Conclusion: same-route-call batching is too small; the real next step must
      aggregate across a larger short horizon or avoid the separate down queue
      for current-token data entirely.
+   - Clean cost-isolation probe skipped priority down admission with
+     `GGML_MOE_ROUTE_GROUP_NATIVE_DOWN_MIN_SEEN=999` to measure the Stage A
+     gate+up cost without the down queue. Run
+     `20260710T045757Z-route-priority-nodown-minseen999-n32`, clean
+     `7c14c0b`, same prompt and strict cold 16GB cgroup. Result:
+     `eval_tok_s=2.6`, `prompt_tok_s=2.3`, `TTFT=19280.224 ms`,
+     `memory_peak_bytes=14804123648`, `memory_file_bytes=13926166528`, RAM OK,
+     output coherent; rejected. Counters:
+     `stage_a_jobs=3510`, `stage_a_batches=873`,
+     `stage_a_bytes=15.64GB`, `stage_a_copy_us=2421749`,
+     `stage_b_jobs=0`, `priority_down_enqueued=0`,
+     `seen_skips=4636`; expert pack `iouring_reads=3510`,
+     `iouring_bytes=15.64GB`, `iouring_wait_us=1315630`, total
+     `batches=873`; aggregated Stage A profile
+     `wait_ms=1316.944`, `submit_ms=495.876`, `wall_ms=2406.593`.
+     Conclusion: down queue is not the only blocker. Even with down removed,
+     full native gate+up parity moves too many full expert tensors and remains
+     far below the gate-hotpool SOTA. Next accepted work should reduce Stage A
+     bytes or preserve the current gate hotpool SOTA while introducing up/down
+     only through compact/pinned/hot subsets. A full native up/down parity path
+     is diagnostic until its Stage A movement is compressed.
 
 5. **Make the full lifecycle observable before claiming speedup**
    - Add per-layer/per-token counters for Stage A and Stage B:
