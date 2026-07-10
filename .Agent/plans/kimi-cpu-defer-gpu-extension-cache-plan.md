@@ -746,6 +746,131 @@ Acceptance:
 - The gain must be explained by lower exposed wait, not by noise or shorter output.
 - If accepted on N32, run N96 dev before any SOTA claim.
 
+### Phase 4C result: early current-down overlap rejected
+
+Timestamp: 2026-07-10 14:02 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4c-early-down-n32-dev3-215843`
+
+Paired fresh control command shape:
+
+```bash
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --repo /root/lfz/llama.cpp-vendor-kimi \
+  --prompt-file .Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root /root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4c-early-down-n32-dev3-215843/control \
+  --mode dev \
+  --n 32 \
+  --max-prompts 3 \
+  --keep-going \
+  --memory-max 15900000000 \
+  --runtime-max-sec 600 \
+  --upgate-pct 62 \
+  --extra-runtime-env "<1800 MiB blk1 gate RAM tier env>"
+```
+
+Candidate adds:
+
+```bash
+GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1
+```
+
+Control result:
+
+| prompt | quality | tok/s | TTFT ms | decode ms/runs | RAM peak GiB |
+|---|---:|---:|---:|---:|---:|
+| dev_france_regression | pass | 1.86 | 8104.82 | 16649.94/31 | 13.55 |
+| dev_japan_factual | pass | 1.89 | 7382.51 | 16428.44/31 | 13.56 |
+| dev_photosynthesis_factual | pass | 1.88 | 7071.07 | 16527.53/31 | 13.41 |
+
+Candidate result:
+
+| prompt | quality | tok/s | TTFT ms | decode ms/runs | RAM peak GiB | failure |
+|---|---:|---:|---:|---:|---:|---|
+| dev_france_regression | fail | n/a | n/a | n/a | 3.51 | exit `134`, CUDA OOM |
+| dev_japan_factual | fail | n/a | n/a | n/a | 7.19 | exit `134`, CUDA OOM |
+| dev_photosynthesis_factual | pass | 0.91 | 7772.54 | 34146.30/31 | 7.97 | severe slowdown |
+
+Failure evidence:
+
+- France/Japan stderr:
+  - `ggml_cuda_compute_forward: MUL failed`
+  - `CUDA error: out of memory`
+  - abort signal `6`, exit `134`.
+- The third run survived only after the earlier failures, but free VRAM was much lower:
+  - `VRAM cache budget: requested=15000 MiB actual=3729 MiB free=4241 MiB`;
+  - upgate slots dropped from the control `1735` to `431`;
+  - down slots dropped from `723` to `180`;
+  - upgate hit rate collapsed to `12.8%`;
+  - decode regressed to `0.91 tok/s`.
+- After the run, `nvidia-smi` showed no persistent process and memory returned to normal, so this is not accepted as a stable runtime state.
+
+Historical cross-check:
+
+- The parent plan already rejected `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1` in Phase 7GG:
+  - first n32 decode `28927.32 ms / 31`;
+  - repeat n32 decode `29231.83 ms / 31`;
+  - repeat fell inside baseline noise;
+  - no n96 was run.
+- Phase 7NW also closed the same-layer IO-fill direction because early overlap, aux ring, combined up/gate IO, and dual-fence variants either failed reproducibility or lost endpoint overlap.
+
+Decision:
+
+- Reject `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1` for current Kimi SOTA.
+- Do not run N96.
+- Do not enable this flag in reproduction scripts.
+- Keep the default-off code only as diagnostic/historical infrastructure.
+- The next direction should not be "submit more same-layer IO" unless it first proves how it avoids the 7GG/7GH/7KW/7LE endpoint-overlap loss.
+
+### Phase 4D plan: RAM/VRAM cache co-design trace and candidate screen
+
+Reason:
+
+- Phase 4B shadow shows large up/gate/down miss traffic, but Phase 4C and older 7NW evidence show that simply exposing more same-layer IO concurrency is not enough.
+- Current N32 control still spends most host memory on file-backed pages, while the explicit 1800 MiB `blk1_gate_full384.csv` RAM tier has only about `0.6%` total RAM-tier hit rate in the Phase 4B/4C dev3 runs.
+- The next practical question is whether the same or slightly larger RAM budget can be moved from low-value page cache / low-hit RAM tier entries into higher-yield expert entries selected from actual foreground IO across dev prompts.
+
+Hypothesis:
+
+- A prompt-agnostic RAM tier generated from multi-prompt foreground IO traces can outperform the current static `blk1_gate_full384.csv` tier.
+- It must improve exposed wait or token rate, not only RAM hit rate.
+- Candidate budgets must stay inside the 16 GB cgroup gate; based on the fresh control peak around `13.56 GiB`, `1800 MiB` is safe and `2400-3000 MiB` is only a guarded experiment.
+
+Experiment sequence:
+
+1. Run cold-start N32 dev3 trace with current accepted runtime, no early overlap, and tracing only:
+
+```bash
+GGML_MOE_IO_READ_TRACE_OUT=$RUN/io-read-trace.csv
+GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv
+```
+
+2. Use only dev traces, never held-out test prompts, to generate candidate RAM profiles with:
+
+```bash
+.Agent/run-tools/kimi_ram_candidate_multidev_screen.py
+.Agent/run-tools/kimi_make_ram_slab_profile_from_io_trace.py
+```
+
+3. Screen at least:
+   - current control profile: `blk1_gate_full384.csv`, 1800 MiB;
+   - best dev-trace `down` profile at 1800 MiB;
+   - best dev-trace `up,gate` profile at 1800 MiB;
+   - if the reports justify it, guarded 2400/3000 MiB profiles.
+4. A/B only the strongest one or two candidates on N32 dev3.
+5. Run N96 dev and held-out test only if N32 dev3 improves min and median token rate with quality pass.
+
+Acceptance:
+
+- Quality passes for all dev smoke prompts.
+- RAM peak `<15900000000` bytes with `MemorySwapMax=0`.
+- TTFT ratio `<=1.20`.
+- N32 dev3 min and median token rate beat paired fresh control.
+- RAM-tier hits must replace SSD waits on the critical path; if hit rate rises but token rate falls, reject.
+- Any accepted improvement must be committed and pushed with run roots, exact profiles, commands, RAM/TTFT/quality, and rollback point.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
