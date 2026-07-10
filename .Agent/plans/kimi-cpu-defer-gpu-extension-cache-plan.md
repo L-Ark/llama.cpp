@@ -30,17 +30,18 @@ Non-negotiable acceptance gates:
 
 Immediate execution plan:
 
-1. Finish the current `blk.1 gate` profile-only VRAM-protection N96 paired A/B.
-   - Candidate env must include `GGML_MOE_VRAM_PROFILE_PROTECT_PROFILE_ONLY=1`.
-   - Parse per-prompt token rate, TTFT, decode time, RAM peak, `iouring_wait_us`, SSD bytes, upgate/down hit rates, and profile preload events.
-   - Accept only if N96 dev improves without quality/RAM/TTFT regression; otherwise reject without held-out.
+1. Phase 4H `blk.1 gate` profile-only VRAM-protection is rejected.
+   - N96 dev mean token rate regressed from `1.803` to `1.783`.
+   - Decode sum increased by `2.151s`.
+   - `iouring_wait` increased by `3.404s`.
+   - SSD bytes and upgate/down hit rates were unchanged, so the slab did not reduce the real bottleneck.
+   - Do not run held-out and do not promote the profile.
 
-2. If the `blk.1 gate` profile-only A/B passes N96 dev, run the same config on N96 held-out.
-   - Do not inspect held-out traces for tuning.
-   - If held-out improves, promote the profile to tracked `.Agent/profiles/`, commit, and push as SOTA with full reproduction body.
-   - If held-out does not improve, document rejection and keep only default-off infrastructure if useful.
+2. Stop adding isolated single-role slabs unless a new profile proves a much larger removable bound.
+   - The measured `blk.1 gate` upper bound was too small and did not translate to exposed-wait reduction.
+   - Future residency work must target cross-role critical-path stalls, not one role in isolation.
 
-3. If `blk.1 gate` fails, stop adding isolated slabs and move to the next higher-upside path:
+3. Move to the next higher-upside path:
    - same-layer aggressive co-submit of up/gate/down misses after routing;
    - layer/role-aware RAM cache replacing low-value decode-time file cache;
    - pack-layout changes that increase batchable contiguous reads instead of fragmenting SSD/RAM traffic.
@@ -1766,6 +1767,88 @@ Next:
   - control: current RAM tier only;
   - candidate: same profile-only `blk.1 gate` VRAM slab.
 - Promote to held-out only if N96 full-dev min/median/mean improve, quality passes, TTFT remains within `1.20x`, and RAM remains under the 16 GB gate.
+
+### Phase 4H N96 result: profile-only `blk.1 gate` slab rejected
+
+Timestamp: 2026-07-11 01:33 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4h-profile-only-blk1gate-n96-011553`
+
+Candidate env delta:
+
+- `GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4h-profile-only-blk1gate-n96-011553/blk1_gate_full384_vram_profile.csv`
+- `GGML_MOE_VRAM_PROFILE_PROTECT=1`
+- `GGML_MOE_VRAM_PROFILE_PROTECT_PROFILE_ONLY=1`
+- `GGML_MOE_VRAM_PROFILE_PRELOAD=1`
+- `GGML_MOE_VRAM_PROFILE_PRELOAD_EVICT=1`
+- `GGML_MOE_VRAM_PROFILE_RESERVE_PCT=20`
+
+Aggregate:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | decode sum s | TTFT median ms | TTFT mean ms | TTFT max ms | RAM peak GiB | iouring wait s | iouring bytes GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control | 7/7 | 1.64 | 1.81 | 1.803 | 266.989 | 9170.23 | 9146.69 | 11181.33 | 13.56 | 285.925 | 2799.676 |
+| profile-only | 7/7 | 1.62 | 1.81 | 1.783 | 269.140 | 9341.36 | 9515.89 | 12177.74 | 13.56 | 289.329 | 2799.676 |
+
+Aggregate delta:
+
+- min token rate: `-0.02 tok/s`
+- median token rate: `+0.00 tok/s`
+- mean token rate: `-0.020 tok/s`
+- decode sum: `+2.151s`
+- median TTFT: `+171.13ms`
+- mean TTFT: `+369.20ms`
+- max TTFT: `+996.41ms`
+- `iouring_wait`: `+3.404s`
+- SSD expert bytes: `+0.000 GiB`
+- upgate hit rate: unchanged at `0.415`
+- down hit rate: unchanged at `0.608`
+- host RAM peak: `+1.52 MiB`, still under the 16 GB gate
+
+Per-prompt deltas:
+
+| prompt | token-rate delta | decode delta ms | TTFT delta ms | TTFT ratio | quality |
+|---|---:|---:|---:|---:|---:|
+| dev_france_regression | -0.09 | +2101.39 | +84.17 | 1.009 | pass/pass |
+| dev_japan_factual | -0.01 | +63.47 | +188.68 | 1.022 | pass/pass |
+| dev_linear_equation | -0.02 | +263.54 | +33.22 | 1.003 | pass/pass |
+| dev_mixed_summary | +0.04 | -667.09 | +1349.89 | 1.125 | pass/pass |
+| dev_photosynthesis_factual | +0.04 | -1146.34 | +259.81 | 1.036 | pass/pass |
+| dev_python_reverse | +0.00 | +172.68 | +496.10 | 1.054 | pass/pass |
+| dev_zh_france | -0.10 | +1363.10 | +172.56 | 1.022 | pass/pass |
+
+Mechanism check:
+
+- Candidate did preload the intended profile row:
+  - `profile preload: blk.1.ffn_gate_exps.weight loaded=384`
+- Down cache damage from Phase 4G did not recur:
+  - France down cache stayed `preloads=11676 pinned=0 hit_rate=61.4%`, matching control.
+- Upgate/down cache aggregate hit rates did not improve.
+- SSD expert bytes did not decrease.
+- Exposed `iouring_wait` increased instead of decreasing.
+
+Decision:
+
+- Reject this candidate.
+- Do not run held-out.
+- Do not promote `blk1_gate_full384_vram_profile.csv` into tracked SOTA profiles.
+- Keep `GGML_MOE_VRAM_PROFILE_PROTECT_PROFILE_ONLY=1` only as default-off infrastructure because it fixed the Phase 4G over-pinning mechanism and does not change default behavior.
+
+Reason:
+
+- The initial N32 gain was noise or prompt-length dependent.
+- The theoretical bound for protecting a single `blk.1 gate` role was too small.
+- The protected slab did not reduce the real critical path: aggregate `iouring_wait`, SSD bytes, and cache hit rates did not improve.
+
+Next:
+
+- Stop testing isolated single-role slabs.
+- Prioritize cross-role scheduling and storage layout:
+  - same-layer up/gate/down miss co-submit after routing;
+  - layer/role-aware RAM cache using memory currently occupied by low-value decode file cache;
+  - pack layout that makes mixed-role active expert reads more contiguous and batchable.
 
 ## Phase 5: Commit and push protocol
 
