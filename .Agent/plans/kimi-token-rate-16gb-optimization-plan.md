@@ -97015,3 +97015,32 @@ Decision:
 - Broader held-out validation is still required before replacing a global SOTA
   branch beyond this rollback/prompt0 branch.
 
+### GP112 prompt0 default repro env update
+
+Status: completed on `2026-07-10T03:29+0000`.
+
+The standard `.Agent/run-tools/kimi-general-prompt-repro.sh` env block now
+includes the accepted prompt0 flags by default:
+
+```text
+GGML_MOE_CPU_FALLBACK_PACK_MMAP_PROMPT=1
+GGML_MOE_PROMPT_DOWN_BATCH=1
+GGML_MOE_PROMPT_DOWN_BATCH_TYPES=all
+GGML_MOE_Q4_PROMPT_DOWN_BATCH=1
+GGML_MOE_PROMPT_MATMUL_ID_BATCH=1
+```
+
+Default-script validation without `EXTRA_RUNTIME_ENV`:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-default-n16-france-032849
+quality=pass
+TTFT=9108.81 ms
+decode=9454.09 ms / 15
+token_rate=1.59 tok/s
+host_memory_peak=12744495104
+fallback-profile.csv lines=1
+fallback-source-profile.csv lines=1
+direct_reads=0
+```
+
