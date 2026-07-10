@@ -1509,6 +1509,59 @@ Next candidate design rules:
    - The held-out reasoning/math prompt hit a severe TTFT long tail and cgroup memory peak.
    - Do not accept decode-only improvements if they make TTFT or host memory margin worse.
 
+### Phase 4G planned A/B: protected `blk.1 gate` VRAM slab
+
+Purpose:
+
+- Test the smallest targeted VRAM slab suggested by Phase 4F before writing new runtime code.
+- Use existing `GGML_MOE_VRAM_PROFILE*` support only; keep runtime behavior default-off.
+
+Candidate:
+
+- Tensor: `blk.1.ffn_gate_exps.weight`.
+- Experts: all 384 experts.
+- Expert size from route profile: `4.48 MiB`.
+- Full slab size: `1.68 GiB`.
+- Runtime env:
+  - `GGML_MOE_VRAM_PROFILE=<candidate-profile.csv>`
+  - `GGML_MOE_VRAM_PROFILE_PROTECT=1`
+  - `GGML_MOE_VRAM_PROFILE_PRELOAD=1`
+  - `GGML_MOE_VRAM_PROFILE_PRELOAD_EVICT=1`
+  - keep `GGML_MOE_VRAM_CACHE_MIB=15000`
+  - keep `GGML_MOE_VRAM_CACHE_UPGATE_PCT=62`
+
+Theory and upper bound:
+
+- Phase 4F dev5 profile measured `blk.1 gate` tensor-stage:
+  - stage `5175.4 ms`;
+  - wall `5377.9 ms`;
+  - misses `369`;
+  - hit rate `48.7%`.
+- Ignoring eviction losses, eliminating this stage from the normal dev5 control window would save at most about `5.18s`.
+- Using the normal N96 dev5 control decode window from Phase 4E (`~212.3s`, `386` decode tokens), the ideal ceiling is roughly:
+  - baseline `386 / 212.3 = 1.82 tok/s`;
+  - ideal no-overhead `386 / (212.3 - 5.18) = 1.86 tok/s`;
+  - maximum gain about `+2.5%`.
+- Because the slab consumes `1.68 GiB` inside a nearly full upgate VRAM cache, real gains may be lower or negative if protected entries evict higher-value dynamic entries.
+
+Execution:
+
+1. Generate a temporary dev-only profile under the run directory with rows:
+   - CSV format: `rank,count,expert_bytes,cumulative_bytes,tensor_base,expert_idx,tensor`;
+   - `expert_idx=0..383`;
+   - `tensor=blk.1.ffn_gate_exps.weight`;
+   - `count` set high enough to protect entries when profile policy is active.
+2. Run paired N32 full-dev cold-start A/B:
+   - control: current `blk1_gate_full384.csv` RAM tier only;
+   - candidate: same control plus protected `blk.1 gate` VRAM profile.
+3. Acceptance for promotion to N96:
+   - quality must pass the same N32 caveat as previous full-dev screens;
+   - mean/median/min token rate must not regress;
+   - TTFT must stay within `1.20x`;
+   - host RAM peak `<15900000000`;
+   - logs must show the profile loaded and protected/preloaded entries.
+4. If N32 fails or improvement is within noise with worse TTFT/RAM, reject and do not run N96.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
