@@ -1562,6 +1562,75 @@ Execution:
    - logs must show the profile loaded and protected/preloaded entries.
 4. If N32 fails or improvement is within noise with worse TTFT/RAM, reject and do not run N96.
 
+### Phase 4G N32 result: rejected
+
+Timestamp: 2026-07-11 00:40 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4g-blk1gate-vram-n32-004035`
+
+Candidate profile:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4g-blk1gate-vram-n32-004035/blk1_gate_full384_vram_profile.csv`
+
+Aggregate:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | decode sum s | TTFT median ms | TTFT max ms | RAM peak GiB | iouring wait s | iouring bytes GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control | 6/7 | 1.52 | 1.79 | 1.720 | 126.851 | 8932.37 | 10833.34 | 13.56 | 145.73 | 1557.15 |
+| blk1-gate-vram | 6/7 | 1.45 | 1.63 | 1.599 | 136.095 | 9305.66 | 11199.78 | 13.56 | 149.34 | 1656.58 |
+
+Quality note:
+
+- `dev_linear_equation` failed in both runs due the known N32 truncation caveat.
+- Other prompts passed.
+
+Per-prompt deltas:
+
+| prompt | tok delta | decode delta ms | TTFT delta ms | TTFT ratio |
+|---|---:|---:|---:|---:|
+| dev_france_regression | -0.13 | +1319.88 | +24.46 | 1.003 |
+| dev_japan_factual | -0.14 | +1385.85 | +994.18 | 1.114 |
+| dev_linear_equation | -0.10 | +1482.86 | -278.11 | 0.974 |
+| dev_mixed_summary | -0.11 | +1255.74 | +517.86 | 1.048 |
+| dev_photosynthesis_factual | -0.16 | +1690.21 | +205.14 | 1.027 |
+| dev_python_reverse | -0.01 | +122.36 | -201.20 | 0.979 |
+| dev_zh_france | -0.20 | +1987.95 | +373.34 | 1.046 |
+
+Decision:
+
+- Reject `blk1-gate-vram`; do not run N96.
+- Reason:
+  - mean token rate regressed by `0.121 tok/s`;
+  - median regressed by `0.16 tok/s`;
+  - decode time increased by `9.245s`;
+  - `iouring_wait` increased by `3.617s`;
+  - SSD IO increased by `99.43 GiB`;
+  - TTFT remained within the 20% gate, but endpoint performance clearly regressed.
+
+Mechanism diagnosis:
+
+- Candidate logs confirm the intended profile loaded:
+  - `profile preload: loaded 384 entries`;
+  - `profile preload: blk.1.ffn_gate_exps.weight loaded=384`.
+- But `GGML_MOE_VRAM_PROFILE_PROTECT=1` has broader semantics than intended:
+  - it pins generic preload slots, not only the explicit profile rows;
+  - in the France run, down cache changed from `preloads=4324 pinned=0 hit_rate=57.7%` to `preloads=578 pinned=578 hit_rate=31.5%`;
+  - this destroyed down cache behavior and outweighed any possible `blk.1 gate` benefit.
+- Therefore existing profile protection cannot be used directly for targeted slabs in the current SOTA configuration.
+
+Next plan:
+
+- Add a default-off runtime option that restricts protection to explicit profile-count rows only, for example:
+  - `GGML_MOE_VRAM_PROFILE_PROTECT_PROFILE_ONLY=1`.
+- Intended behavior:
+  - profile preload rows with `profile_count > 0` may be pinned;
+  - ordinary down/current prefetch preloads with `profile_count == 0` must not be pinned just because profile protection is enabled;
+  - existing default behavior must remain unchanged unless the new env is set.
+- Re-run the same N32 A/B only after this code change.
+- Expected bound remains small: if profile-only protection works perfectly, the best case is still only the `blk.1 gate` stage bound (`~5.18s` on profiled dev5), so this remains a screening experiment, not a likely SOTA jump.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
