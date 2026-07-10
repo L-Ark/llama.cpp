@@ -475,6 +475,90 @@ Acceptance:
 - `iouring_wait_us` mean drops without TTFT or RAM regression.
 - Only then run paired N96 dev validation.
 
+### Phase 4A result: standalone gate cosubmit rejected
+
+Timestamp: 2026-07-10 13:34 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4a-cosubmit-c1-n32-dev3-133415`
+
+Candidate env:
+
+```bash
+GGML_MOE_GATE_UPDOWN_COSUBMIT=1
+GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT=$OUT/gate-updown-cosubmit-profile.csv
+```
+
+Paired control:
+
+- Phase 2A `pct62`: `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase2a-upgate-pct-n32-dev3-132403/pct62`
+
+Result:
+
+| run | quality | token rate min | token rate median | token rate mean | TTFT median ms | iouring wait mean s | RAM peak GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| control pct62 | 3/3 pass | 1.84 | 1.84 | 1.85 | 8537.31 | 18.99 | 13.55 |
+| C1 cosubmit | 3/3 pass | 1.78 | 1.79 | 1.81 | 8878.44 | 19.00 | 13.56 |
+
+Activation check:
+
+- No `[moe_stream_batch] gate/up/down cosubmit: ...` atexit counter appeared in `stderr.txt`.
+- The profile CSV existed and had `6116` data rows, but it was pair-observation output:
+  - `up_predict_down`: `177` rows;
+  - `actual_up`: `177` rows;
+  - `actual_down`: `5760` rows.
+- Therefore the current Kimi path did not execute actual standalone cosubmit jobs.
+
+Interpretation:
+
+- The standalone hook lives on the one-stream gate path. Current Kimi SOTA uses fused up/gate batch paths for the relevant work, so this hook is not the right integration point.
+- `up_predict_down` showed `pack_hits=0` because it used the up/gate expert byte size when predicting down; down has a different packed size. Any future fused-path implementation must use exact tensor sizes and per-size cache groups.
+- Since jobs were zero and token rate regressed, do not run C2.
+
+Decision:
+
+- Reject `GGML_MOE_GATE_UPDOWN_COSUBMIT=1` for current Kimi SOTA.
+- Keep it default-off.
+- Next source-level work should be stats-only first: add a fused up/gate path shadow counter that records potential same-layer up/gate/down co-submit opportunities with exact per-role sizes, without issuing extra reads. Only if the shadow proves useful should an actual prefetch path be implemented.
+
+### Phase 4B next plan: fused-path co-submit shadow, stats-only
+
+Hypothesis:
+
+- The useful scheduling point for Kimi is inside the fused up/gate batch path, after routing has produced active expert IDs and before up/gate/down staging completes.
+- Current-down overlap already handles some down preloading, but Phase 1 still shows down stage and up/gate wait on the critical path.
+- A stats-only fused-path shadow can identify whether there are same-layer jobs that could be co-submitted earlier or grouped better without risking correctness.
+
+Implementation plan:
+
+1. Add a default-off env such as `GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT_SHADOW=1`.
+2. In the fused up/gate path, record for each layer/token:
+   - active experts;
+   - up, gate, and down tensor names;
+   - exact expert bytes per role;
+   - cache hit/miss by role;
+   - pack hit/miss by role;
+   - whether current-down overlap already submitted each down expert;
+   - potential grouped job counts by expert byte size.
+3. Write CSV to `GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT_SHADOW_OUT`.
+4. Run N32 dev3 with shadow only and verify:
+   - quality unchanged;
+   - token rate and TTFT not materially changed;
+   - shadow rows are nonzero;
+   - overhead is small enough to run full dev profiling.
+5. Use the shadow report to decide between:
+   - no-op if current-down overlap already covers the opportunities;
+   - exact-size fused down co-submit;
+   - larger grouped IO scheduling for up/gate/down role batches.
+
+Acceptance for shadow:
+
+- No behavior change by default.
+- Shadow run quality passes.
+- Runtime overhead is low enough for diagnostic use.
+- The CSV provides enough evidence to calculate an upper bound before any actual prefetch implementation.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
