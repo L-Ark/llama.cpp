@@ -2545,6 +2545,113 @@ Acceptance to build a real overlay/repacked expert pack:
 - It must be implementable as a dev-trained general pack or overlay, not a France-only pack.
 - Before any pack artifact is used in runtime A/B, record exact build command, source trace set, included tensors, artifact size, and rollback path.
 
+### Phase 4N result: pack layout has a bound, but requires coalesced reads
+
+Timestamp: 2026-07-11 03:05 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4n-pack-layout-screen`
+
+Outputs:
+
+- `pack-layout-screen.json`
+- `pack-layout-screen.md`
+- `pack-layout-screen-maxjobs8.json`
+- `pack-layout-screen-maxjobs8.md`
+
+Full trace screen (`--max-jobs 0`):
+
+| layout | extents | read reduction | read GiB | span GiB | gap GiB |
+|---|---:|---:|---:|---:|---:|
+| current offsets | 260231 | 0 | 1557.450 | 1557.444 | 0.000 |
+| ideal tensor | 66523 | 193708 | 1557.450 | 1557.450 | 0.000 |
+| ideal layer_role | 66523 | 193708 | 1557.450 | 1557.450 | 0.000 |
+| static expert_id | 264679 | -4448 | 1557.450 | 1557.450 | 0.000 |
+| static frequency | 239283 | 20948 | 1557.450 | 1557.450 | 0.000 |
+| static first_use | 210090 | 50141 | 1557.450 | 1557.450 | 0.000 |
+| static greedy_pair | 163708 | 96523 | 1557.450 | 1557.450 | 0.000 |
+
+Small-batch screen (`--max-jobs 8`):
+
+| layout | extents | read reduction | read GiB | span GiB | gap GiB |
+|---|---:|---:|---:|---:|---:|
+| current offsets | 192928 | 0 | 1046.189 | 1046.188 | 0.000 |
+| ideal tensor | 64115 | 128813 | 1046.189 | 1046.189 | 0.000 |
+| ideal layer_role | 64115 | 128813 | 1046.189 | 1046.189 | 0.000 |
+| static expert_id | 192424 | 504 | 1046.189 | 1046.189 | 0.000 |
+| static frequency | 186416 | 6512 | 1046.189 | 1046.189 | 0.000 |
+| static first_use | 160328 | 32600 | 1046.189 | 1046.189 | 0.000 |
+| static greedy_pair | 135009 | 57919 | 1046.189 | 1046.189 | 0.000 |
+
+Interpretation:
+
+- The locality bound is real:
+  - even for small batches, an ideal same-tensor/layer-role layout could cut extents by `128813`;
+  - a dev-trained static `greedy_pair` per-tensor layout could cut extents by `57919`.
+- This is not a bytes-reduction bound:
+  - read GiB is unchanged;
+  - span GiB is unchanged in this model because it treats coalesced adjacent entries as zero-gap extents.
+- Current runtime does not automatically exploit this:
+  - it sorts by offset (`GGML_MOE_IO_SORT_OFFSET=1`);
+  - it still creates one read plan per expert row;
+  - pack layout alone will not reduce read count unless the runtime merges adjacent/low-gap spans.
+- Historical warning:
+  - broad read coalescers and blocking adjacent coalesced staging were previously rejected because they moved waits to slot reuse / blocking read / synchronization paths.
+
+Decision:
+
+- Do not build a layout-only pack and expect speedup.
+- Do not retry the old broad coalescer.
+- The only plausible storage-layout path is a narrow adjacent-span async coalescer paired with a dev-trained per-tensor layout.
+
+### Phase 4O plan: narrow async adjacent-span coalescer design
+
+Reason:
+
+- RAM tier is exhausted for current constraints.
+- Pack layout has a meaningful extents bound, especially under `greedy_pair`, but the runtime needs to merge adjacent spans to realize it.
+- Previous coalescers failed because they were too broad or introduced blocking/slot waits on the critical path.
+
+Design constraints:
+
+- Default-off only.
+- Do not change default runtime behavior.
+- Do not use held-out prompts for layout training.
+- No prompt-specific France pack.
+- Preserve existing CQE-to-H2D streaming shape as much as possible.
+- Merge only adjacent or very-low-gap entries within the same source and same tensor/role batch.
+- Do not wait for a whole coalesced group before making earlier slices available if the old path would have streamed them earlier.
+- Coalesced slot pool must be large enough to avoid the previous slot-wait failure mode, or the experiment should not proceed.
+
+First implementation step before code:
+
+1. Use Phase 4N JSON to estimate a safe narrow subset:
+   - same tensor only;
+   - `gap=0` or `gap <= 4 KiB` first;
+   - span bytes capped at `16 MiB`;
+   - group size at least `2`;
+   - report expected extents saved and affected read GiB.
+2. If the safe subset bound is small, stop.
+3. If the safe subset is material, write a detailed source-level plan before coding:
+   - data structures;
+   - io_uring SQE mapping for grouped spans;
+   - H2D slice enqueue order;
+   - event lifetime;
+   - fallback path;
+   - counters and acceptance gates.
+
+Acceptance before runtime A/B:
+
+- The offline safe-subset bound must exceed N32 noise:
+  - target at least `1s` expected wait reduction;
+  - or `>10%` read-plan count reduction in `jobs<=8` batches.
+- The design must explicitly avoid the known Phase 7LT/7MM failures:
+  - no blocking pread;
+  - no tiny coalesce slot pool;
+  - no waiting for all slices before compute can proceed;
+  - no cross-role broad merge that damages up/gate/down overlap.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
