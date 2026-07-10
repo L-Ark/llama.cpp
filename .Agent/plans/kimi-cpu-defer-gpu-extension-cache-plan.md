@@ -2047,6 +2047,167 @@ Acceptance for moving past diagnostic:
 - Do not implement another RAM tier unless the estimated upper bound exceeds the observed noise band and explains why previous larger tiers regressed.
 - If no RAM/pack-layout candidate has a credible bound, stop storage-layout tuning and move to byte-reduction/compression-style methods.
 
+### Phase 4J result: storage profile points to wait-weighted RAM replacement
+
+Timestamp: 2026-07-11 02:05 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4j-storage-layout-profile-n32-dev3-0205`
+
+Profiling env:
+
+```bash
+GGML_MOE_IO_BATCH_PROFILE_OUT=$OUT/io-batch-profile.csv
+GGML_MOE_IO_LOCALITY_PROFILE_OUT=$OUT/io-locality-profile.csv
+GGML_MOE_IO_WAIT_TRACE_OUT=$OUT/io-wait-trace.csv
+GGML_MOE_H2D_COALESCE_PROFILE_OUT=$OUT/h2d-coalesce-profile.csv
+```
+
+Quality and runtime:
+
+| prompt | quality | tok/s | TTFT ms | decode ms | runs | RAM peak GiB |
+|---|---:|---:|---:|---:|---:|---:|
+| dev_france_regression | pass | 1.79 | 8657.52 | 17358.49 | 31 | 13.56 |
+| dev_japan_factual | pass | 1.81 | 8434.96 | 17145.48 | 31 | 13.56 |
+| dev_photosynthesis_factual | pass | 1.83 | 7299.16 | 16935.96 | 31 | 13.41 |
+
+Final cgroup memory shape:
+
+- `file`: about `11.22 GiB`
+- `active_file`: about `11.18-11.20 GiB`
+- `inactive_file`: about `0.031 GiB`
+- `workingset_refault_file`: `0`
+- Interpretation: after process exit the remaining cgroup memory is mostly active file-backed pages; this confirms RAM is still not being used as a controlled expert cache, but this final sample alone does not prove which pages were useful during decode.
+
+IO batch aggregate:
+
+| op | calls | jobs | read jobs | RAM/prefetch jobs | wait ms | wall ms | slot wait ms | weighted inflight |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| runtime_load | 14564 | 103399 | 102681 | 718 | 49148.14 | 67052.34 | 9276.71 | 4.906 |
+| current_down_overlap | 2692 | 13041 | 13041 | 0 | 6983.06 | 7550.71 | 31.97 | 3.395 |
+
+Current RAM tier behavior:
+
+- `ram-batch-profile.csv` rows: `96`
+- all hits were `runtime_load` on `blk.1.ffn_gate_exps.weight`
+- RAM hit jobs: `718`
+- RAM hit bytes: `3.144 GiB`
+- RAM enqueue/wall: `2143.80 / 2156.79 ms`
+- The first large `blk.1 gate` RAM-hit batch alone cost about `762 ms` wall.
+- This reinforces the Phase 4H conclusion: the current `blk1_gate_full384.csv` RAM tier is not aligned with the top exposed wait rows.
+
+Top runtime-load wait tensors:
+
+| tensor | role | read jobs | wait ms | wall ms | slot wait ms |
+|---|---:|---:|---:|---:|---:|
+| `blk.4.ffn_down_exps.weight` | down | 819 | 466.14 | 921.01 | 85.64 |
+| `blk.6.ffn_down_exps.weight` | down | 740 | 443.91 | 916.91 | 74.12 |
+| `blk.29.ffn_gate_exps.weight` | gate | 699 | 407.95 | 490.42 | 55.40 |
+| `blk.7.ffn_down_exps.weight` | down | 719 | 398.76 | 492.16 | 65.67 |
+| `blk.10.ffn_down_exps.weight` | down | 719 | 396.38 | 484.04 | 63.20 |
+| `blk.9.ffn_down_exps.weight` | down | 699 | 386.33 | 486.94 | 75.42 |
+| `blk.28.ffn_gate_exps.weight` | gate | 710 | 384.06 | 460.84 | 49.45 |
+| `blk.1.ffn_down_exps.weight` | down | 803 | 380.46 | 677.12 | 48.07 |
+
+Locality diagnosis:
+
+- The slowest individual batches have `60-75` read jobs, so the problem is not only tiny batch size.
+- Physical locality is poor even with `GGML_MOE_IO_SORT_OFFSET=1`:
+  - top slow batch `blk.4 down`: `520.7 MiB` read bytes but `span/read=7.77`;
+  - top slow batch `blk.6 down`: `543.4 MiB` read bytes but `span/read=7.43`;
+  - several top batches have `span/read` between `5x` and `9x`.
+- `h2d-coalesce-profile.csv` was not generated, so this run did not hit the H2D coalesce profile path.
+
+Offline wait-weighted RAM candidate screen:
+
+- Input traces:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343/*/io-read-trace.csv`
+- Method:
+  - focus on `runtime_load`;
+  - distribute each batch's `io-wait-trace` wait across read rows by byte share;
+  - rank only actual SSD-read misses, so current RAM-tier hits are naturally excluded.
+
+Top layer/role wait-weighted rows:
+
+| layer/role | entries | trace MiB | wait score ms | prompts |
+|---|---:|---:|---:|---:|
+| blk4 down | 308 | 14512.2 | 1059.99 | 7 |
+| blk6 down | 307 | 13964.1 | 1031.17 | 7 |
+| blk29 gate | 324 | 9375.4 | 941.71 | 7 |
+| blk28 gate | 305 | 9342.9 | 914.03 | 7 |
+| blk7 down | 299 | 13814.2 | 911.46 | 7 |
+| blk10 down | 304 | 13499.2 | 906.85 | 7 |
+| blk9 down | 308 | 13680.4 | 905.64 | 7 |
+| blk8 down | 302 | 13334.0 | 902.63 | 7 |
+
+Candidate budget screen:
+
+| candidate | RAM MiB | entries | wait score ms | trace bytes GiB | rows |
+|---|---:|---:|---:|---:|---:|
+| down-only 1800 | 1794.4 | 254 | 3858.49 | 51.50 | 7452 |
+| down-only 2400 | 2399.0 | 342 | 4664.07 | 61.97 | 9013 |
+| down-only 3000 | 2994.2 | 427 | 5369.27 | 71.20 | 10360 |
+| up/gate 1800 | 1795.7 | 386 | 6254.14 | 51.69 | 11360 |
+| up/gate 2400 | 2397.7 | 514 | 7628.85 | 63.33 | 13882 |
+| all roles 1800 | 1796.7 | 359 | 6633.38 | 61.40 | 12195 |
+| all roles 2400 | 2398.9 | 481 | 8126.24 | 75.12 | 14949 |
+
+Decision:
+
+- The next RAM experiment should replace the current `blk1_gate_full384.csv` tier rather than add to it.
+- Do not test full-layer down slabs first:
+  - they are expensive (`blk4_down_full384.csv` is `2856 MiB`);
+  - previous full-layer/pinned RAM attempts showed RAM-H2D and pressure side effects;
+  - wait-weighted sparse entries have a better RAM-to-wait bound.
+- First candidate should be `up/gate 1800`:
+  - same RAM budget as current SOTA tier;
+  - focuses on critical-path up/gate runtime misses;
+  - avoids large down entries and current-down overlap competition;
+  - estimated full-dev7 wait score `6254 ms`, enough to exceed N32 noise if the bound materializes.
+
+### Phase 4K plan: wait-weighted up/gate RAM-tier replacement A/B
+
+Hypothesis:
+
+- Replacing the current single-layer `blk1_gate_full384.csv` RAM tier with a multi-layer wait-weighted up/gate tier should reduce exposed `runtime_load` wait on general prompts.
+- Because RAM budget stays at about `1800 MiB`, TTFT and host RAM pressure should be comparable to the current SOTA tier.
+- The main risk is fragmented RAM hits reducing SSD batch size or adding RAM->VRAM H2D overhead; therefore N32 must prove lower `iouring_wait`, not just more RAM hits.
+
+Candidate generation:
+
+- Use Phase 4E full-dev7 traces.
+- Rank `runtime_load` up/gate misses by wait-weighted score.
+- Require:
+  - `min_prompts >= 2`;
+  - `min_count >= 2`;
+  - budget about `1800 MiB`;
+  - output profile stored under the experiment run root until accepted.
+
+N32 A/B:
+
+1. Control:
+   - current SOTA RAM tier: `.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv`
+2. Candidate:
+   - generated wait-weighted up/gate 1800 profile.
+3. Keep all other env identical:
+   - `UPGATE_PCT=62`;
+   - `GGML_MOE_RAM_TIER_MIB=1800`;
+   - `GGML_MOE_RAM_TIER_PIN=1`;
+   - `GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1`;
+   - `GGML_MOE_RAM_TIER_PRELOAD_THREADS=4`;
+   - `MemoryMax=15900000000`;
+   - cold start.
+
+Acceptance for N96 dev:
+
+- N32 dev3 quality matches control.
+- Host RAM remains below the hard gate.
+- TTFT ratio remains `<=1.20`.
+- Minimum and median token rate improve versus paired control.
+- Aggregate `iouring_wait` decreases by at least `1s` on N32 dev3 or the gain is not credible.
+- RAM tier profile must show the candidate is not just increasing RAM-H2D wall time.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
