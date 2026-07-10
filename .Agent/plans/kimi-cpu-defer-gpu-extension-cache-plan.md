@@ -342,6 +342,41 @@ Rollback:
 - Env-only rejected candidates require no source rollback.
 - If a source patch is later needed for joint cache profile support, it must be default-off and reverted if it fails gates.
 
+### Phase 2A result: split-only sweep rejected
+
+Timestamp: 2026-07-10 13:24 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase2a-upgate-pct-n32-dev3-132403`
+
+All runs:
+
+- cold start, N32, first 3 dev prompts only;
+- `PROFILE=0`;
+- same 16GB cgroup and RAM tier as Phase 0;
+- quality passed for all 9 prompt runs.
+
+Result:
+
+| split | upgate slots | down slots | token rate min | token rate median | token rate mean | TTFT median ms | iouring wait mean s | RAM peak GiB | decision |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 62 | 1735 | 723 | 1.84 | 1.84 | 1.85 | 8537.31 | 18.99 | 13.55 | control |
+| 66 | 1847 | 647 | 1.83 | 1.89 | 1.87 | 8454.36 | 18.71 | 13.56 | reject: min did not improve |
+| 70 | 1959 | 571 | 1.73 | 1.86 | 1.82 | 8609.74 | 18.86 | 13.55 | reject: France regression |
+
+Per-prompt observations:
+
+- `pct66` improved France and Japan, but `dev_photosynthesis_factual` dropped from `1.84` to `1.83`, so the minimum-token-rate gate failed.
+- `pct70` reduced France from `1.84` to `1.73`, confirming that stealing too many down slots hurts stability.
+- `iouring_wait` moved only slightly; split-only does not fix runtime queue starvation.
+
+Decision:
+
+- Do not promote split-only VRAM reallocation to N96.
+- Keep `GGML_MOE_VRAM_CACHE_UPGATE_PCT=62` for current baseline/SOTA reproduction.
+- Move to a scheduling/cache-completeness experiment that can reduce exposed wait without just trading down misses for upgate misses.
+
 ## Phase 3: Explicit RAM tier for second-hot experts
 
 Hypothesis:
@@ -387,6 +422,58 @@ Acceptance:
 - `iouring_wait_us` drops more than candidate overhead.
 - Token rate improves on paired held-out runs.
 - Extra bytes and TTFT remain bounded.
+
+### Phase 4A exact next experiment: same-layer gate/up/down cosubmit smoke
+
+Timestamp: 2026-07-10 13:33 CST.
+
+Existing default-off mechanism:
+
+- `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`
+- Optional filters:
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY=1`
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT_MIN_SEEN=<n>`
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_MIN_COUNT=<n>`
+  - `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT=<csv>`
+
+Hypothesis:
+
+- When the gate path sees a routed expert, the corresponding up/down expert ID is already known.
+- Co-submitting the paired up/down read can create larger same-layer IO batches and reduce queue starvation.
+- This is closer to the measured bottleneck than split-only cache reallocation.
+
+Risks:
+
+- Kimi's current fused up/gate path may not trigger the standalone gate cosubmit hook often enough; the first check must verify nonzero `gate/up/down cosubmit` jobs.
+- Extra reads can evict useful cache lines or steal IO from demand reads, especially if unfiltered.
+- Previous DeepSeek experiments had rejected variants, so this must stay default-off and pass Kimi-specific dev gates before any promotion.
+
+Theoretical bound:
+
+- The upper bound is a reduction in exposed `iouring_wait`, not total expert bytes.
+- If cosubmit only changes batch shape but keeps the same critical demand order, gain will be small.
+- If it lifts inflight depth from the current `~4` toward the pure IO bench regime without extra stale reads, the improvement could be material; the smoke should first prove `iouring_wait_us` drops and jobs are nonzero.
+
+Experiment:
+
+1. Run cold-start N32 dev3 control from Phase 2A as the paired baseline: `pct62`.
+2. Run candidate C1:
+   - `UPGATE_PCT=62`;
+   - `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`;
+   - `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT=$OUT/gate-updown-cosubmit-profile.csv`.
+3. If C1 has nonzero jobs but regresses from extra reads, test C2:
+   - add `GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY=1`;
+   - add `GGML_MOE_GATE_UPDOWN_COSUBMIT_MIN_SEEN=1`.
+4. Keep all other env identical to Phase 0/2A.
+5. Do not use held-out test prompts.
+
+Acceptance:
+
+- All smoke prompts quality pass.
+- `gate/up/down cosubmit` reports nonzero jobs, zero failures, and no read failures.
+- N32 dev3 minimum and median token rate beat Phase 2A `pct62`.
+- `iouring_wait_us` mean drops without TTFT or RAM regression.
+- Only then run paired N96 dev validation.
 
 ## Phase 5: Commit and push protocol
 
