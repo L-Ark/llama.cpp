@@ -4,6 +4,53 @@ Date: 2026-07-10
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-11 current goal and execution plan
+
+Current goal:
+
+> Improve Kimi's **general-prompt** decode speed on `vendor/kimi-deepseek-41d205-additive` by extending the CPU/defer MoE scheduler's GPU expert-cache path, while preserving cold-start correctness under the strict 16 GB host RAM gate. The immediate engineering target is a reproducible held-out gain toward stable `>2 tok/s`; the product target remains stable `>5 tok/s` on random user prompts with 16 GB host RAM and one 32 GB RTX 5090-class GPU.
+
+Scope of this cycle:
+
+- Do not copy the DeepSeek gate-hotpool result blindly. For Kimi, the useful transferable idea is CPU/defer orchestration plus a stronger GPU expert-cache/compute extension for gate/up/down as a group.
+- Current evidence says decode CPU fallback is already near zero in the stable SOTA path; the dominant remaining bottleneck is exposed expert movement wait: `io_uring_wait`, small runtime read batches, staging/H2D synchronization, and incomplete overlap.
+- RAM tier experiments with scattered hot experts and small single-role slabs have not produced stable gains. More host RAM must be used only when it replaces low-value file cache with batchable, latency-critical expert data.
+- Pack-layout profiling shows a real read-extent bound, but layout alone cannot help unless runtime can merge adjacent/low-gap expert spans without recreating the old blocking coalescer failures.
+
+Hard acceptance gates:
+
+- Cold start only; no warm page cache and no reused process state.
+- Host RAM peak `<15900000000` bytes, including page cache, mmap/file-backed pages, pinned memory, helper processes, and cgroup/kernel accounting.
+- TTFT `<=1.20x` paired baseline.
+- Mandatory quality prompt: `Please introduce France in a short paragraph.` must remain coherent and semantically correct.
+- Optimization is for general prompts. Dev prompts may guide design; held-out prompts are only for validation and cannot be used to tune profiles or packs.
+- A result is SOTA only after paired baseline/candidate N96 dev plus N96 held-out validation.
+- Every accepted improvement must be committed and pushed immediately with exact env, command, prompt split, run path, RAM/VRAM metrics, TTFT, token-rate delta, quality result, and rollback commit.
+
+Next plan:
+
+1. Finish Phase 4O offline safe-adjacent bound before writing runtime code.
+   - Use Phase 4E dev traces only.
+   - Evaluate same-tensor adjacent/zero-gap groups with a conservative `16 MiB` span cap and `jobs <= 8`.
+   - Compare current physical order with dev-trained per-tensor layouts: `expert_id`, `frequency`, and `greedy_pair`.
+   - Record read jobs, safe extents, extents saved, grouped jobs, grouped GiB, and role/op distribution.
+
+2. Decide whether a narrow async adjacent-span coalescer is worth implementing.
+   - Proceed only if the offline bound shows either `>10%` read-plan reduction in small batches or a plausible `>=1s` N32 wait reduction.
+   - Stop if the safe subset is too small, even if the ideal layout bound looks large.
+   - If proceeding, write a source-level design first: grouped SQE structure, slice-to-H2D mapping, event lifetime, fallback path, counters, and rollback.
+
+3. If Phase 4O passes the bound, implement default-off only.
+   - No blocking `pread`.
+   - No tiny coalesced-slot pool.
+   - No waiting for every slice in a coalesced group before earlier slices can be consumed.
+   - No broad cross-role merge that damages current up/gate/down overlap.
+   - Validate with N32 dev A/B before any N96 run.
+
+4. If Phase 4O fails, move to the next ranked bottleneck instead of forcing the idea.
+   - Candidate fallback paths: VRAM cache budget rebalancing by exposed wait, layer/role RAM slabs only when full-batch coherent, or prediction/prefetch only after an acceptance-rate experiment proves usefulness on dev prompts.
+   - Every fallback must start from a measured removable-seconds bound and update this plan before implementation.
+
 ## Current goal and next plan: CPU/defer GPU-extension for Kimi
 
 Goal:
