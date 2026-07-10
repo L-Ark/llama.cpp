@@ -276,6 +276,32 @@ cleanup are diagnostic only and must not be promoted as SOTA.
    - Only implement a default-off compact source if the bound shows meaningful
      gain. It must not replace the native full expert pack or rely on a
      prompt-specific profile.
+   - 2026-07-10 hard-bound update:
+     `20260710T032816Z-20260710-gate12288-routeprofile2-quantum-n96`
+     recorded a clean strict-cold route profile for the current gate12288 SOTA
+     path. Summary:
+     - gate: `12316` active expert uses, `9403` cache hits, `2913` misses,
+       `12.98GB` actual one-pack reads, `76.3%` hit rate;
+     - up: `12316` active expert uses, `54.89GB` logical source bytes, no
+       resident cache in the current SOTA path;
+     - down: `12316` active expert uses, `54.89GB` logical source bytes, no
+       resident cache in the current SOTA path.
+   - Exact partial row/column copy is not a valid shortcut for the current
+     kernels. Up/gate and down both compute exact dense matvec outputs over
+     full `ne00` input and full `ne01` output for each selected expert, so a
+     subset of rows/columns would change model math unless paired with a new
+     compressed representation or a verified approximation.
+   - Decision: do not implement simple partial-copy up/down. Full up+down
+     GPU streaming would require about `109.77GB` of exact expert payload on
+     this n96 profile and has already been empirically slower in native parity
+     experiments. Future up/down work must be a real compact representation,
+     quantized sidecar, or correctness-gated approximation.
+   - The best exact byte-reduction target is now gate first-use misses:
+     removing the remaining `12.98GB` gate reads has an H2D floor of about
+     `1.96s` at the measured `6.63GB/s`, likely moving the `5.5 tok/s` SOTA
+     only into the low-`6 tok/s` range. This still has the best risk/reward
+     because it preserves model math and avoids stealing gate cache for
+     low-yield up/down entries.
 
 9. **Non-expert mmap/page-cache pressure**
    - Profile decode-stage major faults and `memory.stat file/anon` for dense,
@@ -376,11 +402,34 @@ Promotion requirements:
   and display cleanup recorded.
 - Updated next direction: do not continue simple VRAM splits or plain down
   queue delay sweeps. The next meaningful implementation must either:
-  1. make up/down cache fills non-blocking enough that they do not add
-     thousands of small wait points;
-  2. reduce up/down H2D bytes with a compact/partial expert representation; or
-  3. improve the gate one-cache layout/replacement itself without reducing the
-     12GB gate budget.
+  1. improve the gate one-cache layout/replacement/prefetch itself without
+     reducing the 12GB gate budget;
+  2. reduce up/down H2D bytes with a real compact representation or
+     correctness-gated approximation, not simple partial matrix copies; or
+  3. make up/down cache fills non-blocking enough that they do not add
+     thousands of small wait points.
+
+## 2026-07-10 Gate12288 Route Profile Bound
+
+- Diagnostic run:
+  `20260710T032816Z-20260710-gate12288-routeprofile2-quantum-n96`.
+- Source and constraints: commit `e6d4f002d`, source clean, strict cold,
+  display cleanup recorded, `memory_peak_bytes=14857424896`, RAM OK.
+- Metric: `eval_tok_s=5.4` with route-profile overhead; clean SOTA guard
+  without profile remains `5.5 tok/s`.
+- Route profile:
+  - gate logical source bytes `54.89GB`, cache hits `9403`, misses `2913`,
+    actual O_DIRECT one-pack read bytes `12.98GB`;
+  - up logical source bytes `54.89GB`, no current SOTA cache;
+  - down logical source bytes `54.89GB`, no current SOTA cache.
+- Interpretation:
+  - current exact up/down kernels need full expert matrices, so partial
+    row/column copies are not an exact optimization;
+  - full native up/down movement explains why native parity topped out at
+    `5.3 tok/s` and why VRAM split probes regressed;
+  - gate first-use miss reduction is the next exact path with the smallest
+    correctness risk, but its bandwidth floor suggests only low-`6 tok/s`
+    potential unless paired with a deeper representation/layout change.
 
 ## 2026-07-08 Execution Notes
 
