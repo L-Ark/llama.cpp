@@ -63,6 +63,23 @@ def role_from_tensor(name):
     return "other"
 
 
+UPGATE_NUMERIC_FIELDS = [
+    "stage_ms",
+    "quant_ms",
+    "up_ms",
+    "gate_ms",
+    "up_wait_ms",
+    "gate_wait_ms",
+    "up_compute_ms",
+    "gate_compute_ms",
+    "fuse_ms",
+    "kernel_ms",
+    "d2h_ms",
+    "scatter_ms",
+    "wall_ms",
+]
+
+
 def add_total(acc, key, value):
     acc[key] += value
 
@@ -72,6 +89,73 @@ def read_csv_rows(path):
         return []
     with path.open(newline="", errors="replace") as f:
         return list(csv.DictReader(f))
+
+
+def new_upgate_counter():
+    c = defaultdict(float)
+    c["calls"] = 0
+    c["active"] = 0
+    c["up_cache_hits"] = 0
+    c["up_cache_misses"] = 0
+    c["gate_cache_hits"] = 0
+    c["gate_cache_misses"] = 0
+    c["up_stage_jobs"] = 0
+    c["gate_stage_jobs"] = 0
+    c["max_up_stage_jobs"] = 0
+    c["max_gate_stage_jobs"] = 0
+    c["max_combined_stage_jobs"] = 0
+    return c
+
+
+def add_upgate_row(counter, row):
+    counter["calls"] += 1
+    counter["active"] += inum(row.get("n_active"))
+    up_jobs = inum(row.get("up_stage_jobs"))
+    gate_jobs = inum(row.get("gate_stage_jobs"))
+    counter["up_cache_hits"] += inum(row.get("up_cache_hits"))
+    counter["up_cache_misses"] += inum(row.get("up_cache_misses"))
+    counter["gate_cache_hits"] += inum(row.get("gate_cache_hits"))
+    counter["gate_cache_misses"] += inum(row.get("gate_cache_misses"))
+    counter["up_stage_jobs"] += up_jobs
+    counter["gate_stage_jobs"] += gate_jobs
+    counter["max_up_stage_jobs"] = max(counter["max_up_stage_jobs"], up_jobs)
+    counter["max_gate_stage_jobs"] = max(counter["max_gate_stage_jobs"], gate_jobs)
+    counter["max_combined_stage_jobs"] = max(counter["max_combined_stage_jobs"], up_jobs + gate_jobs)
+    for key in UPGATE_NUMERIC_FIELDS:
+        counter[key] += fnum(row.get(key))
+
+
+def upgate_counter_to_row(group, item, counter, decode_runs):
+    calls = counter["calls"] or 1
+    up_total = counter["up_cache_hits"] + counter["up_cache_misses"]
+    gate_total = counter["gate_cache_hits"] + counter["gate_cache_misses"]
+    total_ms = counter["wall_ms"]
+    return {
+        "group": group,
+        "item": item,
+        "calls": int(counter["calls"]),
+        "ms_per_token": fmt(total_ms / decode_runs if decode_runs else 0.0),
+        "wall_ms": fmt(total_ms),
+        "wall_ms_per_call": fmt(total_ms / calls),
+        "avg_active": fmt(counter["active"] / calls),
+        "up_hit_rate": fmt(counter["up_cache_hits"] / up_total if up_total else 0.0),
+        "gate_hit_rate": fmt(counter["gate_cache_hits"] / gate_total if gate_total else 0.0),
+        "up_miss_per_call": fmt(counter["up_cache_misses"] / calls),
+        "gate_miss_per_call": fmt(counter["gate_cache_misses"] / calls),
+        "up_stage_jobs_per_call": fmt(counter["up_stage_jobs"] / calls),
+        "gate_stage_jobs_per_call": fmt(counter["gate_stage_jobs"] / calls),
+        "max_combined_stage_jobs": int(counter["max_combined_stage_jobs"]),
+        "stage_ms_per_call": fmt(counter["stage_ms"] / calls),
+        "up_wait_ms_per_call": fmt(counter["up_wait_ms"] / calls),
+        "gate_wait_ms_per_call": fmt(counter["gate_wait_ms"] / calls),
+        "up_compute_ms_per_call": fmt(counter["up_compute_ms"] / calls),
+        "gate_compute_ms_per_call": fmt(counter["gate_compute_ms"] / calls),
+        "fuse_ms_per_call": fmt(counter["fuse_ms"] / calls),
+        "kernel_ms_per_call": fmt(counter["kernel_ms"] / calls),
+        "d2h_ms_per_call": fmt(counter["d2h_ms"] / calls),
+        "scatter_ms_per_call": fmt(counter["scatter_ms"] / calls),
+        "parallel_stage_wait_ms_per_call": fmt(max(counter["up_wait_ms"], counter["gate_wait_ms"]) / calls),
+    }
 
 
 def parse_cpu_moe_phase_profile(run_dir):
@@ -161,20 +245,35 @@ def summarize_run(run_dir, decode_down_max_active):
     up_stage_by_type = defaultdict(float)
     up_compute_by_type = defaultdict(float)
     up_jobs_by_type = defaultdict(int)
+    upgate_breakdown = defaultdict(new_upgate_counter)
     if (run_dir / "up-gate-profile.csv").exists():
         for row in read_csv_rows(run_dir / "up-gate-profile.csv"):
             if row.get("mode") != "decode":
                 continue
             key = f"up={row.get('up_type')}/gate={row.get('gate_type')}"
+            type_detail = (
+                f"up={row.get('up_type')}/gate={row.get('gate_type')}"
+                f"/parallel_stage={row.get('parallel_stage')}"
+            )
             wall = fnum(row.get("wall_ms"))
             out["upgate_wall_ms"] += wall
             add_total(up_by_type, key, wall)
             add_total(up_stage_by_type, key, fnum(row.get("stage_ms")))
             add_total(up_compute_by_type, key, fnum(row.get("up_ms")) + fnum(row.get("gate_ms")))
             up_jobs_by_type[key] += inum(row.get("up_stage_jobs")) + inum(row.get("gate_stage_jobs"))
+            add_upgate_row(upgate_breakdown[("upgate_type_detail", type_detail)], row)
             layer = layer_from_tensor(row.get("up_tensor", ""))
             if layer is not None:
                 add_total(up_by_layer, f"blk.{layer}", wall)
+                add_upgate_row(
+                    upgate_breakdown[("upgate_layer_type_detail", f"blk.{layer} {type_detail}")],
+                    row,
+                )
+                if row.get("parallel_stage") == "1" and row.get("up_type") != row.get("gate_type"):
+                    add_upgate_row(
+                        upgate_breakdown[("mixed_upgate_layer", f"blk.{layer} {type_detail}")],
+                        row,
+                    )
     else:
         out["missing"].append("up-gate-profile.csv")
 
@@ -230,6 +329,10 @@ def summarize_run(run_dir, decode_down_max_active):
     out["up_compute_by_type"] = dict(up_compute_by_type)
     out["up_jobs_by_type"] = dict(up_jobs_by_type)
     out["up_by_layer"] = dict(up_by_layer)
+    out["upgate_breakdown"] = {
+        f"{group}\t{item}": dict(counter)
+        for (group, item), counter in upgate_breakdown.items()
+    }
     out["down_by_type"] = dict(down_by_type)
     out["down_stage_by_type"] = dict(down_stage_by_type)
     out["down_kernel_by_type"] = dict(down_kernel_by_type)
@@ -249,6 +352,19 @@ def merge_dict_totals(runs, key):
         for item, value in run.get(key, {}).items():
             acc[item] += value
     return dict(acc)
+
+
+def merge_upgate_breakdowns(runs):
+    merged = defaultdict(new_upgate_counter)
+    for run in runs:
+        for key, values in run.get("upgate_breakdown", {}).items():
+            target = merged[key]
+            for field, value in values.items():
+                if field.startswith("max_"):
+                    target[field] = max(target[field], value)
+                else:
+                    target[field] += value
+    return merged
 
 
 def write_csv(path, rows, fields):
@@ -280,10 +396,13 @@ def main():
     )
     args = parser.parse_args()
 
-    run_dirs = sorted(
-        p for p in args.input.iterdir()
-        if p.is_dir() and p.name != "entropy" and (p / "metrics.txt").exists()
-    )
+    if (args.input / "metrics.txt").exists():
+        run_dirs = [args.input]
+    else:
+        run_dirs = sorted(
+            p for p in args.input.iterdir()
+            if p.is_dir() and p.name != "entropy" and (p / "metrics.txt").exists()
+        )
     runs = [summarize_run(p, args.decode_down_max_active) for p in run_dirs]
     total_decode_runs = sum(r["decode_runs"] for r in runs)
     total_decode_ms = sum(r["decode_ms"] for r in runs)
@@ -325,6 +444,10 @@ def main():
         "fallback_by_role",
     ]:
         aggregate[key] = merge_dict_totals(runs, key)
+    aggregate["upgate_breakdown"] = {
+        key: dict(value)
+        for key, value in merge_upgate_breakdowns(runs).items()
+    }
 
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "summary.json").write_text(json.dumps(aggregate, indent=2, sort_keys=True) + "\n")
@@ -405,7 +528,44 @@ def main():
     detail_rows.sort(key=lambda r: float(r["total_ms"]), reverse=True)
     write_csv(args.out / "details.csv", detail_rows, ["group", "item", "total_ms", "ms_per_token"])
 
+    upgate_breakdown_rows = []
+    for key, counter in aggregate["upgate_breakdown"].items():
+        group, item = key.split("\t", 1)
+        upgate_breakdown_rows.append(upgate_counter_to_row(group, item, counter, total_decode_runs))
+    upgate_breakdown_rows.sort(key=lambda r: float(r["wall_ms"]), reverse=True)
+    upgate_breakdown_fields = [
+        "group",
+        "item",
+        "calls",
+        "ms_per_token",
+        "wall_ms",
+        "wall_ms_per_call",
+        "avg_active",
+        "up_hit_rate",
+        "gate_hit_rate",
+        "up_miss_per_call",
+        "gate_miss_per_call",
+        "up_stage_jobs_per_call",
+        "gate_stage_jobs_per_call",
+        "max_combined_stage_jobs",
+        "stage_ms_per_call",
+        "up_wait_ms_per_call",
+        "gate_wait_ms_per_call",
+        "up_compute_ms_per_call",
+        "gate_compute_ms_per_call",
+        "fuse_ms_per_call",
+        "kernel_ms_per_call",
+        "d2h_ms_per_call",
+        "scatter_ms_per_call",
+        "parallel_stage_wait_ms_per_call",
+    ]
+    write_csv(args.out / "upgate_breakdown.csv", upgate_breakdown_rows, upgate_breakdown_fields)
+
     top_details = detail_rows[:20]
+    top_upgate_details = [
+        row for row in upgate_breakdown_rows
+        if row["group"] in {"upgate_type_detail", "mixed_upgate_layer"}
+    ][:24]
     lines = [
         "# Kimi Dev Decode Bottleneck Summary",
         "",
@@ -456,6 +616,22 @@ def main():
         lines.append(f"| `{row['group']}` | `{row['item']}` | {row['total_ms']} | {row['ms_per_token']} |")
     lines += [
         "",
+        "## Up/Gate Critical Detail",
+        "",
+        "| Group | Item | calls | ms/token | wall ms/call | up hit | gate hit | up miss/call | gate miss/call | up jobs/call | gate jobs/call | wait ms/call | up compute ms/call | gate compute ms/call |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in top_upgate_details:
+        lines.append(
+            f"| `{row['group']}` | `{row['item']}` | {row['calls']} | {row['ms_per_token']} | "
+            f"{row['wall_ms_per_call']} | {row['up_hit_rate']} | {row['gate_hit_rate']} | "
+            f"{row['up_miss_per_call']} | {row['gate_miss_per_call']} | "
+            f"{row['up_stage_jobs_per_call']} | {row['gate_stage_jobs_per_call']} | "
+            f"{row['parallel_stage_wait_ms_per_call']} | {row['up_compute_ms_per_call']} | "
+            f"{row['gate_compute_ms_per_call']} |"
+        )
+    lines += [
+        "",
         "## Interpretation",
         "",
         "- `iouring_wait_reported` can exceed decode wall share because wait",
@@ -470,6 +646,9 @@ def main():
         "- `down-batch-profile.csv` has no mode column; this report treats rows",
         "  with `n_active` above the configured threshold as prompt/prefill rows",
         "  and excludes them from decode down totals.",
+        "- `Up/Gate Critical Detail` is computed from `up-gate-profile.csv`. For",
+        "  parallel-stage rows, `wait ms/call` is the larger of up/gate wait and",
+        "  approximates exposed transfer/staging wait before compute can run.",
         "- Any accepted optimization must name the component and detail rows it is",
         "  expected to reduce, compute a best-case bound from this report, and",
         "  then verify the reduction with paired cold-start runs.",

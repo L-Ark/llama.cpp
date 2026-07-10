@@ -59,6 +59,11 @@ Current measured state:
   - CPU MoE down total: `177.815 ms/token`;
   - residual after CPU MoE: `23.132 ms/token`.
 - Largest measured target: mixed `up=22/gate=18`, `260.608 ms/token`.
+- New mixed-only analysis artifact:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4x-mixed-upgate-profile-n96-france-analysis-v2/report.md`.
+- New `upgate_breakdown.csv` fields include per type/layer calls, ms/token,
+  cache hit rates, miss count per call, stage jobs per call, wait per call, and
+  compute per call.
 
 Key interpretation:
 
@@ -72,6 +77,19 @@ Key interpretation:
 - Down-only optimization cannot reach `>2 tok/s` by itself. To move from about
   `665 ms/token` to below `500 ms/token`, the first target must save roughly
   `165 ms/token`; only mixed up/gate is large enough as a single workstream.
+- The corrected mixed up/gate detail shows the largest row is
+  `up=22/gate=18/parallel_stage=1`:
+  - `2465` calls, `260.608 ms/token`, `8.986 ms/call`;
+  - up hit `0.476`, gate hit `0.476`;
+  - up miss `4.190/call`, gate miss `4.190/call`;
+  - wait `5.259 ms/call`, up compute `0.147 ms/call`, gate compute
+    `0.099 ms/call`.
+- Therefore the next optimization should target transfer/staging wait and cache
+  placement for mixed up/gate, not CUDA math throughput.
+- Highest mixed layer targets from the N96 France profile are:
+  `blk.29`, `blk.14`, `blk.28`, `blk.54`, `blk.30`, `blk.33`,
+  `blk.51`, `blk.31`, `blk.32`, and `blk.52`. These are dev-profile
+  candidates only; held-out prompts must not be used to choose layers.
 
 Execution plan:
 
@@ -81,9 +99,12 @@ Execution plan:
    - This is not a SOTA claim and must not change model semantics.
    - Repro record must cite build, guard, N32, and N96 profile runs.
 
-2. Add a mixed up/gate bottleneck subprofile before optimizing.
-   - Split `up=22/gate=18` by layer, hit/miss, staged bytes, stage jobs,
-     `io_uring_wait`, pinned copy, H2D, CUDA compute, D2H/scatter, and wall time.
+2. Add a mixed up/gate bottleneck subprofile before optimizing. Status: partial
+   analysis-tool coverage is done; no runtime behavior change.
+   - Current tool split: layer, hit/miss, stage jobs, wait, CUDA compute,
+     D2H/scatter, and wall time.
+   - Remaining if needed: per-row staged bytes, per-row `io_uring_wait`, pinned
+     copy, and H2D source attribution.
    - Run N32 first, then N96 on dev prompts.
    - Acceptance for instrumentation: same output, no behavior change, overhead in
      profiling-only runs only.
