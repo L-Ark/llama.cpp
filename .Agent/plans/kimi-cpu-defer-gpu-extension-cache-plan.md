@@ -3602,6 +3602,87 @@ Next plan after Phase 4S:
    - If using RAM, prefer batchable whole layer/role slabs or compact adjacent layouts.
    - Any candidate must improve held-out mean/median without increasing aggregate `iouring_wait` or TTFT ratio.
 
+### Phase 4T finding: held-out TTFT long tail is prompt-eval reclaim/refault
+
+Timestamp: 2026-07-11 08:25 CST.
+
+Source runs:
+
+- Control: `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate66-vram-split-n96-heldout/control/test_reasoning_math_01`
+- Candidate: `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate66-vram-split-n96-heldout/upgate66/test_reasoning_math_01`
+
+Observed control metrics:
+
+- prompt: `A train leaves at 3 PM and arrives 2 hours and 15 minutes later. What time does it arrive?`
+- prompt tokens: `33`
+- `prompt eval time`: `211385.62 ms / 33 tokens = 0.16 tok/s`
+- decode time: `35725.05 ms / 61 runs = 1.71 tok/s`
+- total time: `247147.82 ms`
+- host RAM peak: `15899996160 bytes` exactly at the cgroup cap
+- final file cache: `14.66 GB`
+- active_file: `8.47 GB`
+- inactive_file: `6.19 GB`
+- major faults: `16857`
+- workingset file refaults: `21228`
+- direct reclaim scan/steal:
+  - `pgscan_direct=50912572`
+  - `pgsteal_direct=28531879`
+- `expert_pack` total across the run:
+  - `iouring_reads=58392`
+  - `iouring_bytes=333.8 GB`
+  - `iouring_wait_us=37051518`
+- fallback counter:
+  - `[kimi_cpu_fallback_pack_mmap] enabled=1 hits=0 misses=0 bytes=0 fallback_gguf=0`
+
+Comparison with normal held-out prompts:
+
+| prompt | prompt tokens | TTFT ms | decode ms | RAM peak GiB | file GiB | pgmajfault | refault_file | iouring GiB | iouring wait ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `test_english_factual_01` | 16 | 7384.1 | 50092.9 | 11.72 | 11.22 | 2427 | 0 | 485.3 | 51721.9 |
+| `test_english_factual_02` | 18 | 9329.4 | 47226.7 | 11.86 | 11.23 | 2503 | 0 | 471.8 | 50084.2 |
+| `test_reasoning_math_01` | 33 | 211385.6 | 35725.1 | 14.81 | 13.65 | 16857 | 21228 | 310.9 | 37051.5 |
+| `test_coding_01` | 23 | 10275.5 | 58906.3 | 11.86 | 11.23 | 2467 | 153 | 643.3 | 65140.8 |
+| `test_chinese_01` | 17 | 7674.6 | 51014.9 | 11.86 | 11.23 | 2464 | 0 | 489.7 | 53707.3 |
+| `test_mixed_instruction_01` | 22 | 9115.8 | 52469.6 | 11.86 | 11.23 | 2512 | 0 | 534.2 | 54961.3 |
+
+Interpretation:
+
+- The 211s TTFT is not model load and not decode; it is accounted as `prompt eval time`.
+- It is also not explained by total `iouring_wait`, because the math prompt has less total `iouring_wait` than several normal prompts.
+- The distinctive signal is host-memory pressure during prompt eval:
+  - RAM hits the exact cgroup cap;
+  - file cache grows to `13.65-14.66 GB`;
+  - direct reclaim scans/stolen pages explode;
+  - major faults and file refaults are much higher than normal prompts.
+- This suggests prompt eval is still touching file-backed GGUF/mmap pages or otherwise building low-value page cache under the 16 GB cap, even though decode fallback counters are zero.
+- Global VRAM split cannot fix this class of TTFT long tail.
+
+Phase 4T plan:
+
+1. Add phase-level instrumentation before changing cache policy.
+   - Capture cgroup memory snapshots at:
+     - after model load;
+     - after dense/expert mmap drop;
+     - before prompt eval;
+     - after prompt eval and before first decode token;
+     - after `LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT`;
+     - after decode.
+   - Log `madvise(DONTNEED)` wall time separately for dense and expert ranges.
+   - Split `expert_pack` counters by phase: prompt eval vs decode.
+   - Split `iouring_wait`, H2D enqueue count, pinned staging copies, and VRAM cache misses by phase.
+   - Log any GGUF mmap tensor access by phase and tensor/role if feasible.
+
+2. Re-run only a diagnostic prompt pair after instrumentation.
+   - Use a dev prompt first; do not tune from held-out.
+   - If no dev prompt reproduces the reclaim/refault pattern, run `test_reasoning_math_01` only as diagnostic and do not use it to build hotsets/profiles.
+   - Acceptance for instrumentation: no behavior change, same output, and overhead below noise.
+
+3. Decide the optimization from measured phase data.
+   - If prompt eval faults GGUF expert pages, route prompt expert reads through expert pack / alias iouring path instead of mmap.
+   - If `madvise(DONTNEED)` after prompt is the long pole, make it async or reduce the range set.
+   - If file cache is low-value prompt residue, explicitly drop it earlier and replace it with controlled RAM expert cache only after proving no refault regression.
+   - If prompt-phase expert batches are too wide and create reclaim pressure, cap prompt staging/concurrency separately from decode.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
