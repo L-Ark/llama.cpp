@@ -263,6 +263,30 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      into almost one batch per layer/call. Next code work must aggregate
      priority-1 down by layer or short horizon and keep it on a resource path
      that cannot fragment priority-0 or compete for its staging progress.
+   - Clean follow-up with the same code at `a569d7d` tested whether the existing
+     delay knob can approximate short-horizon down aggregation:
+     `20260710T044925Z-route-priority-delay5000-n32`,
+     `GGML_MOE_DOWN_BATCH_DEMAND_QUEUE_DELAY_US=5000`.
+     Result: `eval_tok_s=2.5`, `prompt_tok_s=2.1`,
+     `TTFT=19892.602 ms`, `memory_peak_bytes=14810849280`,
+     `memory_file_bytes=13895303168`, RAM OK, output coherent; rejected.
+     Counters were effectively unchanged:
+     `stage_a_jobs=3732`, `stage_a_batches=929`,
+     `stage_a_copy_us=2508994`;
+     `priority_down_enqueued=1866`;
+     down queue `batches=930`;
+     expert pack `iouring_reads=5598`, `iouring_bytes=24.95GB`,
+     `iouring_wait_us=2644901`, total `batches=1859`.
+     Aggregated batch profile:
+     `route_group_priority_up_gate` `rows=929`, `jobs=3732`,
+     `wait_ms=1536.097`, `wall_ms=2494.288`;
+     `down_demand_queue` `rows=930`, `jobs=1866`,
+     `wait_ms=1111.151`, `wall_ms=1548.468`.
+     Conclusion: increasing the worker delay does not coalesce down across the
+     real scheduling boundary. The next implementation must change the queue
+     producer/consumer contract, for example by collecting a layer/short-horizon
+     vector of down jobs before wakeup instead of waking the worker for each
+     small arrival pattern.
 
 5. **Make the full lifecycle observable before claiming speedup**
    - Add per-layer/per-token counters for Stage A and Stage B:
