@@ -4,6 +4,65 @@ Date: 2026-07-10
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-11 goal: Kimi CPU/defer + GPU-extension path
+
+Goal:
+
+> Use the current Kimi CPU/defer MoE scheduler as the control path, and make the GPU expert-cache/compute extension more effective for Kimi `gate/up/down` experts. The near-term target is a reproducible, general-prompt SOTA above `2 tok/s`; the product target remains stable `>5 tok/s` for random user prompts on a 16 GB host-RAM machine with one 32 GB RTX 5090-class GPU.
+
+How the DeepSeek result transfers to Kimi:
+
+- The transferable part is the architecture: CPU/defer owns routing and scheduling, while GPU acts as a fast expert-residency, transfer, and compute extension.
+- Do not assume Kimi will benefit from a DeepSeek-style gate-only hotpool. Current Kimi profiles show decode CPU fallback is already near zero in the stable path; the main remaining cost is exposed expert movement wait.
+- For Kimi, the useful optimization target is `gate/up/down` together: reduce `io_uring_wait`, staging/H2D gaps, small read batches, and missed overlap on general prompts.
+- A higher VRAM/RAM hit rate is not enough. It must lower exposed decode time and pass held-out prompt quality.
+
+Hard gates for this goal:
+
+- Cold start only; no warm page cache and no reused process state.
+- Host RAM peak `<15900000000` bytes, including page cache, mmap/file-backed pages, pinned memory, helper processes, and cgroup/kernel accounting.
+- TTFT `<=1.20x` the paired baseline.
+- Mandatory quality prompt: `Please introduce France in a short paragraph.` must remain coherent and semantically correct.
+- Optimization must be prompt-general. Dev prompts can guide design; held-out prompts are validation only and must not train/tune packs, hotsets, or thresholds.
+- A result is SOTA only after paired baseline/candidate N96 dev plus N96 held-out validation.
+- Every accepted improvement must be committed and pushed immediately with exact env, command, prompt split, run path, RAM/VRAM metrics, TTFT, token-rate delta, quality result, and rollback commit.
+- Failed candidates must be reverted or left default-off and documented with the measured rejection reason.
+
+Execution plan:
+
+1. Reproduce and profile the current stable Kimi SOTA.
+   - Run N96 cold-start dev and one held-out check from the exact branch/commit.
+   - Record per-token decomposition: routing/top-k, expert read wait, pinned staging, H2D, up/gate compute, down compute, CPU fallback, and synchronization gaps.
+   - Produce a layer/role wait table so changes target removable seconds instead of hit-rate intuition.
+
+2. Audit the CPU/defer GPU-extension boundary.
+   - Confirm which `gate/up/down` paths are GPU extension, which are CPU/defer control only, and whether any residual CPU compute/fallback remains during decode.
+   - If a role still falls through to CPU on general prompts, fix that first only when its measured time is on the critical path.
+   - If CPU fallback is already zero, skip CPU work and target transfer scheduling/residency.
+
+3. Rebalance VRAM by exposed wait, not by equal hit rate.
+   - Use the wait-weighted layer/role profile to decide whether `up/gate` needs more cache than `down`, or whether specific layers need protection.
+   - Test env-only cache split changes first with N32 dev A/B.
+   - Promote only if token rate, TTFT, RAM, and quality all pass; otherwise document and reject.
+
+4. Replace low-value decode RAM with explicit expert data.
+   - Identify decode-time file-backed pages that are not useful after prompt.
+   - Free low-value cache only when it does not cause refaults or TTFT regressions.
+   - Use the freed RAM for batchable second-tier expert storage: prefer whole layer/role slabs or compact adjacent packs over scattered single experts.
+   - Measure whether RAM residency reduces exposed `io_uring_wait`; do not accept changes that only move bytes from SSD to RAM while increasing staging/H2D or synchronization cost.
+
+5. Improve read scheduling only where the runtime can stay async.
+   - Avoid the rejected blocking adjacent coalescer pattern.
+   - If co-submit/coalesce is retried, it must preserve per-slice readiness and current overlap.
+   - Test same-layer `up/gate/down` miss co-submit and one-layer-ahead prefetch only after a profile proves enough predictable work to keep queues fed.
+
+6. Validation ladder and rollback.
+   - N32 dev: quick screen for quality, RAM, TTFT, and obvious regressions.
+   - N96 dev: real performance and bottleneck validation.
+   - N96 held-out: final acceptance only.
+   - Accepted candidate: commit and push immediately with full reproduction details.
+   - Rejected candidate: revert or keep default-off, then update this plan with the failure reason and next ranked bottleneck.
+
 ## 2026-07-11 current goal and execution plan
 
 Current goal:
@@ -3228,6 +3287,220 @@ Next plan after Phase 4Q:
    - group by `runtime_load:up`, `runtime_load:gate`, `runtime_load:down`, `current_down_overlap:down`;
    - rank by exposed wait, miss count, bytes, and whether wait is on critical path;
    - select one candidate that removes wait without increasing first-slice latency.
+
+### Phase 4R result: wait-weighted layer/role bottleneck report
+
+Timestamp: 2026-07-11 05:50 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4r-wait-weighted-layer-role-report`
+
+Inputs:
+
+- Trace root: `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343`
+- Prompts: `7`
+- Source files:
+  - per-prompt `io-wait-trace.csv`
+  - per-prompt `io-read-trace.csv`
+  - per-prompt `metrics.json`
+
+Outputs:
+
+- `wait-weighted-layer-role-report.json`
+- `wait-weighted-layer-role-report.md`
+
+Aggregate:
+
+- total `iouring_wait_ms`: `135530.035`
+- token rate min/median/mean: `1.590/1.780/1.776`
+
+Role summary:
+
+| op | role | wait ms | wait % | read jobs | read GiB | tensors |
+|---|---|---:|---:|---:|---:|---:|
+| `runtime_load` | `gate` | 45628.1 | 33.7% | 94072 | 465.5 | 59 |
+| `runtime_load` | `up` | 44842.6 | 33.1% | 95818 | 437.8 | 60 |
+| `runtime_load` | `down` | 28528.9 | 21.0% | 70368 | 464.2 | 60 |
+| `current_down_overlap` | `down` | 16530.4 | 12.2% | 32312 | 189.9 | 29 |
+
+Interpretation:
+
+- Critical `runtime_load` up+gate is `66.8%` of all measured `iouring_wait`.
+- Runtime down is `21.0%`.
+- Overlap down is only `12.2%`; optimizing it cannot move token rate enough by itself.
+- Adjacent coalescing attacked read extent count, but not the dominant first-expert critical-path wait.
+- The next low-risk candidate should rebalance existing VRAM cache toward up/gate, because:
+  - up/gate wait is both critical and larger;
+  - wait per GiB is higher for up/gate than runtime down;
+  - this does not delay first-slice H2D and does not add new read scheduling.
+
+### Phase 4S plan: VRAM cache split rebalancing toward up/gate
+
+Hypothesis:
+
+> Increasing `GGML_MOE_VRAM_CACHE_UPGATE_PCT` from the current `62` to `70` may reduce critical up/gate runtime misses enough to improve token rate, while the down side may be partly protected by existing `current_down_overlap`.
+
+Why this is the next candidate:
+
+- It targets the dominant wait class from Phase 4R: `runtime_load:gate` + `runtime_load:up`.
+- It avoids the first-slice latency problem that killed adjacent coalescing.
+- It is an env-only A/B, so rollback is immediate.
+- It does not use held-out prompts and does not build prompt-specific artifacts.
+
+Theoretical bound:
+
+- Total measured wait in Phase 4R:
+  - up+gate critical wait: `90470.7 ms`
+  - runtime down wait: `28528.9 ms`
+  - overlap down wait: `16530.4 ms`
+- The best possible split-only gain is bounded by reducing some fraction of the `90470.7 ms` up/gate wait.
+- The risk is increased down wait if down cache hit rate falls.
+- A useful N32 dev3 result must show lower total decode time or lower `iouring_wait`, not just higher up/gate hit rate.
+
+Experiment:
+
+Control:
+
+```bash
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --prompt-file .Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate70-vram-split-n32-dev3/control \
+  --mode dev --n 32 --max-prompts 3 --keep-going --runtime-max-sec 900
+```
+
+Candidate:
+
+```bash
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --prompt-file .Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate70-vram-split-n32-dev3/upgate70 \
+  --mode dev --n 32 --max-prompts 3 --keep-going --runtime-max-sec 900 \
+  --upgate-pct 70
+```
+
+Acceptance:
+
+- quality `3/3`;
+- RAM peak `<15900000000`;
+- TTFT ratio `<=1.20`;
+- min/median/mean token rate must not regress;
+- decode sum and `iouring_wait` should improve, or at minimum one improves without hurting the other;
+- if N32 passes, run N96 dev before held-out.
+
+Rejection:
+
+- any quality failure;
+- TTFT ratio `>1.20`;
+- any clear token-rate regression;
+- down wait increase cancels up/gate gain;
+- no movement in exposed wait.
+
+### Phase 4S result A: `UPGATE_PCT=70` rejected
+
+Timestamp: 2026-07-11 06:10 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate70-vram-split-n32-dev3`
+
+Aggregate result:
+
+| run | quality | min tok/s | median tok/s | mean tok/s | decode sum ms | iouring wait sum ms | max RAM GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| control `UPGATE_PCT=62` | 3/3 | 1.750 | 1.870 | 1.843 | 50476.9 | 57858.8 | 11.85 |
+| candidate `UPGATE_PCT=70` | 3/3 | 1.800 | 1.800 | 1.810 | 51344.9 | 57415.1 | 11.85 |
+
+Paired result:
+
+| prompt | tok/s delta | TTFT ratio | decode delta ms | wait delta ms | read delta | bytes delta GiB |
+|---|---:|---:|---:|---:|---:|---:|
+| `dev_france_regression` | -0.070 | 0.962 | +627.6 | +418.9 | -68 | -0.2 |
+| `dev_japan_factual` | -0.110 | 1.014 | +1004.2 | -83.6 | -351 | -1.5 |
+| `dev_photosynthesis_factual` | +0.080 | 1.050 | -763.8 | -779.1 | -624 | -2.9 |
+
+Interpretation:
+
+- `UPGATE_PCT=70` reduces reads/bytes and slightly reduces aggregate `iouring_wait`, but decode sum and mean token rate regress.
+- The improvement on `dev_photosynthesis_factual` suggests the direction can help some prompts.
+- The regressions on France/Japan suggest `70` is too aggressive or shifts pressure into down/cache scheduling in a prompt-dependent way.
+
+Decision:
+
+- Reject `UPGATE_PCT=70`; no N96 and no held-out.
+- Run exactly one smaller step, `UPGATE_PCT=66`, before abandoning global split rebalancing.
+- If `66` does not improve min/median/mean without wait/decode regression, stop global split tuning and move to layer/role-specific admission.
+
+### Phase 4S plan B: `UPGATE_PCT=66` small-step screen
+
+Hypothesis:
+
+> A smaller shift from `62` to `66` may capture part of the up/gate wait reduction without the down-side/cache scheduling regression seen at `70`.
+
+Experiment:
+
+```bash
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --prompt-file .Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate70-vram-split-n32-dev3/upgate66 \
+  --mode dev --n 32 --max-prompts 3 --keep-going --runtime-max-sec 900 \
+  --upgate-pct 66
+```
+
+Acceptance:
+
+- quality `3/3`;
+- RAM/TTFT gates pass;
+- min/median/mean token rate improve or at least do not regress;
+- decode sum and `iouring_wait` do not regress.
+
+### Phase 4S result B: `UPGATE_PCT=66` passes N32 screen, not SOTA yet
+
+Timestamp: 2026-07-11 06:40 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate70-vram-split-n32-dev3`
+
+Aggregate result:
+
+| run | quality | min tok/s | median tok/s | mean tok/s | decode sum ms | iouring wait sum ms | reads | read GiB | max RAM GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control `UPGATE_PCT=62` | 3/3 | 1.750 | 1.870 | 1.843 | 50476.9 | 57858.8 | 116440 | 620.2 | 11.85 |
+| candidate `UPGATE_PCT=66` | 3/3 | 1.830 | 1.900 | 1.897 | 49151.4 | 54834.2 | 115859 | 617.8 | 11.85 |
+
+Paired result:
+
+| prompt | tok/s delta | TTFT ratio | decode delta ms | wait delta ms | read delta | bytes delta GiB |
+|---|---:|---:|---:|---:|---:|---:|
+| `dev_france_regression` | +0.090 | 0.951 | -710.9 | -1364.0 | +32 | +0.2 |
+| `dev_japan_factual` | -0.010 | 0.940 | +69.2 | -684.5 | -171 | -0.6 |
+| `dev_photosynthesis_factual` | +0.080 | 0.993 | -683.8 | -976.1 | -442 | -2.1 |
+
+Interpretation:
+
+- The smaller split is materially better than `70`.
+- It reduces aggregate `iouring_wait` by `3024.6 ms` and decode sum by `1325.5 ms` on N32 dev3.
+- It passes quality and RAM gates, and TTFT improves on all three prompts.
+- The Japan prompt still has a tiny token-rate/decode regression, so this is only a screen pass, not an accepted SOTA.
+
+Decision:
+
+- Promote `UPGATE_PCT=66` to N96 dev A/B.
+- Do not run held-out until N96 dev passes.
+- Do not claim SOTA yet.
+- If N96 dev confirms the gain, commit/push the SOTA reproduction with `--upgate-pct 66` in the exact command body.
+- If N96 dev regresses or is noisy, reject global split tuning and move to layer/role-specific cache admission from the Phase 4R wait-weighted report.
+
+Next command:
+
+```bash
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --prompt-file .Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate66-vram-split-n96-dev \
+  --mode dev --n 96 --keep-going --runtime-max-sec 1200 \
+  --upgate-pct 66
+```
 
 ## Phase 5: Commit and push protocol
 
