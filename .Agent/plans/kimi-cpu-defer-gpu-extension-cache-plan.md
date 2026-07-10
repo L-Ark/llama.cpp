@@ -91,6 +91,90 @@ Key interpretation:
   `blk.51`, `blk.31`, `blk.32`, and `blk.52`. These are dev-profile
   candidates only; held-out prompts must not be used to choose layers.
 
+## Phase 5B goal: transfer the CPU/defer GPU-extension idea to Kimi safely
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Verify whether the DeepSeek-style `CPU/defer scheduler + GPU expert-cache
+> extension` can give Kimi a prompt-general speedup by reducing exposed expert
+> transfer wait, not by chasing prompt-specific hotsets. The immediate target is
+> a reproducible, pushed improvement toward stable `>2 tok/s` on N96 under the
+> 16 GB host-RAM cap; the strategic target remains stable `>5 tok/s` for random
+> user prompts.
+
+Why this is relevant to Kimi:
+
+- DeepSeek gained largely because work that nominally lived in the CPU/defer MoE
+  path was intercepted by a GPU-resident expert cache and GPU compute extension.
+- Kimi already has `CPU fallback: 0` on the current measured path, so a literal
+  "move CPU fallback to GPU" port is not the next high-yield move.
+- The transferable part is the control pattern: keep CPU/defer as the scheduler,
+  but expose more future expert work to the GPU/IO subsystem early enough that
+  the SSD, pinned staging, H2D, and CUDA streams stay busy.
+- Current corrected profile shows the largest exposed cost is mixed up/gate
+  transfer/staging wait:
+  - current N96 profile is about `665 ms/token` under profiling;
+  - reaching `2 tok/s` requires below `500 ms/token`, so the next accepted
+    optimization must save about `165 ms/token`;
+  - mixed up/gate alone accounts for `~455.6 ms/token`, with the largest
+    `up=22/gate=18` row at `260.6 ms/token`;
+  - future-layer prefetch bound from Phase 5A suggests optimistic savings of
+    `~164 ms/token` at `K=2` and `~227 ms/token` at `K=3`, which is the first
+    direction large enough to plausibly cross `2 tok/s`.
+
+Phase 5B execution plan:
+
+1. Build a prompt-general future-expert predictability study before runtime
+   changes.
+   - Inputs: dev-only `route-trace.csv` files from existing dev runs.
+   - Do not use held-out/test prompts for predictor design, hotset construction,
+     pack layout, thresholds, or layer selection.
+   - Measure whether active experts at layer `L` predict future active experts
+     at `L+1`, `L+2`, and `L+3`.
+   - Report recall at fixed budgets such as 8/16/32 predicted experts per target
+     layer, extra bytes, useful prefetched bytes, false-prefetch bytes, and the
+     theoretical `io_uring_wait` saving upper bound.
+   - Use leave-one-dev-prompt-out where enough traces exist; otherwise label the
+     result as format/proof-of-method only.
+
+2. Decide whether future-layer prefetch is worth implementing.
+   - Continue only if dev traces show enough prompt-general recall to cover a
+     meaningful fraction of the `~165 ms/token` gap to `2 tok/s`.
+   - Reject if recall comes from one prompt, one handpicked layer, or a
+     France-specific hotset pattern.
+   - If predictor quality is weak, stop runtime work and move to explicit
+     RAM/VRAM layout optimization instead.
+
+3. If predictor quality is sufficient, implement default-off runtime prefetch.
+   - CPU/defer remains the owner of routing and execution order.
+   - When layer `L` routing finishes, enqueue predicted misses for future layers
+     into a low-priority prefetch queue that never blocks current-layer demand
+     loads.
+   - Current-layer demand IO always has priority over speculative/future IO.
+   - Prefetched experts may enter VRAM only if they pass role/layer admission
+     and do not evict higher-value current hot experts.
+   - Add counters for predicted jobs, useful hits, wasted reads, evictions,
+     cancelled jobs, prefetch wait hidden, and demand wait regression.
+
+4. Validate with the established gate sequence.
+   - N32 dev smoke first, cold start.
+   - N96 dev paired run next, cold start.
+   - Held-out validation only after dev passes.
+   - Required metrics: token rate, TTFT ratio, host RAM peak, file/page-cache
+     split, VRAM cache hit/miss, `io_uring_wait`, read bytes, H2D bytes,
+     current-demand wait, prefetch waste, output text, and quality result.
+
+5. Promotion/rejection rule.
+   - Promote only if N96 dev and held-out both improve mean/median token rate,
+     do not regress minimum token rate materially, keep TTFT within `1.20x`,
+     keep host RAM below `15900000000` bytes, and pass quality.
+   - If any hard gate fails, keep the code default-off or revert it; document the
+     rejection and do not call it SOTA.
+   - Every accepted SOTA commit must include exact env, command, prompt split,
+     run directories, before/after metrics, quality output, and rollback commit.
+
 Execution plan:
 
 1. Commit and push the profiling-only coverage fix.
