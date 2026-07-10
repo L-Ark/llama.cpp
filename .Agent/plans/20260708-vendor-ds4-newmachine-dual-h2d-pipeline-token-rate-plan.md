@@ -479,15 +479,24 @@ Promotion requirements:
 - Boundary probes:
   - first240 / 1024MiB pool reduced one-pack reads to `2778` and produced
     `5.6` then `5.5 tok/s`; useful but not enough to promote alone.
+  - first360 / 1600MiB pool was tested after parameterizing the helper script
+    and clean-reproducing source `cf2c51bc9`. It preserved the 12GB one-cache
+    and reduced one-pack reads to `2712`, but reached only `5.5 tok/s`:
+    `/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260710T035645Z-interactive`.
+    Reject because the larger async prefill cost (`792.5 ms`, `1.60GB`) erased
+    the read reduction.
   - first480 / 2048MiB pool is rejected. It allocated the direct hot pool
     first, caused the 12288MiB one-cache allocation to fail, and fell to
     `3.1 tok/s` with `11746` one-pack reads / `52.35GB`.
 - Updated next direction:
   - do not exceed the VRAM point where the 12288MiB one-cache fails;
-  - test a narrow range between first320 and the failure boundary only if the
-    script records direct hot pool and one-cache allocation counters;
+  - first360 shows that increasing entries can reduce reads but still lose to
+    prefill overhead, so further entry-count sweeps need a hard expected gain
+    before running;
   - investigate allocation order or reserved VRAM accounting so direct hot
-    pool cannot silently disable the main gate one-cache.
+    pool cannot silently disable the main gate one-cache;
+  - investigate cheaper prefill or overlapped prefill so the hot pool saves
+    decode H2D without adding comparable TTFT/prefill cost.
 
 ## 2026-07-08 Execution Notes
 
