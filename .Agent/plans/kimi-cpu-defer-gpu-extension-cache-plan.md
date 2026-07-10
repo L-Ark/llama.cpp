@@ -2699,6 +2699,171 @@ Acceptance before runtime A/B:
   - no waiting for all slices before compute can proceed;
   - no cross-role broad merge that damages up/gate/down overlap.
 
+### Phase 4O result: safe adjacent-span bound passes the design gate
+
+Timestamp: 2026-07-11 03:35 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4o-safe-adjacent-bound`
+
+Inputs:
+
+- Trace root: `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343`
+- Rows: `195895`
+- `max_jobs=8`
+- `max_span=16777216` bytes
+- gaps tested: `0` and `4096`
+- dev traces only; no held-out prompt was used.
+
+Output files:
+
+- `safe-adjacent-bound.json`
+- `safe-adjacent-bound.md`
+
+Result:
+
+| layout | max gap | read jobs | safe extents | extents saved | saved % | groups | grouped jobs | read GiB | grouped payload GiB | grouped span GiB | extra gap GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| current_actual | 0 | 195895 | 193277 | 2618 | 1.34% | 2593 | 5211 | 1046.189 | 27.981 | 27.981 | 0.000000 |
+| expert_id | 0 | 195895 | 192462 | 3433 | 1.75% | 3412 | 6845 | 1046.189 | 36.724 | 36.724 | 0.000000 |
+| frequency | 0 | 195895 | 187256 | 8639 | 4.41% | 8062 | 16701 | 1046.189 | 90.234 | 90.234 | 0.000000 |
+| greedy_pair | 0 | 195895 | 145443 | 50452 | 25.75% | 45655 | 96107 | 1046.189 | 510.773 | 510.773 | 0.000000 |
+| current_actual | 4096 | 195895 | 193277 | 2618 | 1.34% | 2593 | 5211 | 1046.189 | 27.981 | 27.981 | 0.000000 |
+| expert_id | 4096 | 195895 | 192462 | 3433 | 1.75% | 3412 | 6845 | 1046.189 | 36.724 | 36.724 | 0.000000 |
+| frequency | 4096 | 195895 | 187256 | 8639 | 4.41% | 8062 | 16701 | 1046.189 | 90.234 | 90.234 | 0.000000 |
+| greedy_pair | 4096 | 195895 | 145443 | 50452 | 25.75% | 45655 | 96107 | 1046.189 | 510.773 | 510.773 | 0.000000 |
+
+Role/op detail for `greedy_pair`, `max_gap=0`:
+
+| op:role | jobs | extents | groups | grouped jobs | grouped payload GiB | grouped span GiB |
+|---|---:|---:|---:|---:|---:|---:|
+| runtime_load:up | 63414 | 45728 | 14405 | 32091 | 146.589 | 146.589 |
+| runtime_load:gate | 62205 | 46141 | 14548 | 30612 | 150.622 | 150.622 |
+| runtime_load:down | 37964 | 28767 | 9197 | 18394 | 125.364 | 125.364 |
+| current_down_overlap:down | 32312 | 24807 | 7505 | 15010 | 88.198 | 88.198 |
+
+Interpretation:
+
+- Current physical layout alone is not worth a coalescer:
+  - `current_actual` can save only `2618 / 195895 = 1.34%` read plans.
+  - This is below the N32 noise threshold and would likely recreate coalescer complexity without measurable speed.
+- A dev-trained per-tensor `greedy_pair` layout is materially different:
+  - it can reduce small-batch read plans by `50452 / 195895 = 25.75%`;
+  - grouped payload is `510.773 GiB`;
+  - the bound covers up, gate, runtime down, and current-down-overlap down.
+- `gap=4096` does not improve over `gap=0` in this trace set, so the first runtime design should be exact-adjacent only.
+
+Decision:
+
+- Proceed to a source-level Phase 4P plan.
+- Do not implement a coalescer against the current pack layout only.
+- The next runtime A/B must pair two default-off components:
+  - a dev-trained `greedy_pair` expert pack/repack built only from dev traces;
+  - an exact-adjacent async coalescer in the io_uring pinned-staging path.
+- Held-out prompts must remain unused until after N32/N96 dev evidence shows an actual speedup.
+
+### Phase 4P plan: greedy-pair pack plus exact-adjacent async coalescer
+
+Goal:
+
+> Convert the Phase 4O read-plan reduction bound into a default-off runtime experiment without reintroducing the previous blocking coalescer failure modes.
+
+Required components:
+
+1. Pack/repack artifact:
+   - Extend the existing pack tooling to support a dev-trained per-tensor `greedy_pair` order.
+   - Candidate scripts:
+     - `scripts/kimi-reorder-expert-pack.py` for full-pack reorder;
+     - `scripts/kimi-build-trace-overlay-pack.py` for selected overlay creation.
+   - The trace input must be dev-only:
+     - `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343/*/io-read-trace.csv`
+   - The output artifact must record:
+     - source packs;
+     - trace roots;
+     - layout algorithm;
+     - included entries/tensors/bytes;
+     - sha256;
+     - exact command.
+   - The artifact must not be trained on held-out prompts or on a single prompt such as France.
+
+2. Runtime coalescer:
+   - Implementation target: `ggml/src/ggml-cuda/moe_stream_batch.cu`, inside `expert_pack_iouring_copy_jobs`.
+   - Existing flow:
+     - build one `iouring_read_plan` per expert;
+     - optionally sort by source/offset;
+     - submit one SQE per plan;
+     - on each CQE, enqueue one `cudaMemcpyAsync` from the pinned slot to that expert's `dst`.
+   - New default-off envs:
+     - `GGML_MOE_IO_ADJACENT_COALESCE=1`
+     - `GGML_MOE_IO_ADJACENT_MAX_SPAN_MIB=16`
+     - `GGML_MOE_IO_ADJACENT_MAX_GAP=0`
+     - `GGML_MOE_IO_ADJACENT_MIN_GROUP=2`
+   - Coalesce only when all are true:
+     - same source index;
+     - same tensor;
+     - adjacent offset with `gap=0` for the first implementation;
+     - grouped span `<=16 MiB`;
+     - group size `>=2`;
+     - direct/io_uring source only, no page-cache source.
+
+3. Data structure sketch:
+   - Keep the existing `iouring_read_plan` as the per-expert logical plan.
+   - Add a physical `iouring_group_plan`:
+     - `source_idx`;
+     - `offset`;
+     - `read_sz`;
+     - `std::vector<slice>` where each slice has `plan_idx`, `payload_offset_in_group`, and `expert_bytes`.
+   - `pinned_stage_ensure` must size slots by `max(group.read_sz)`, not by a single expert entry.
+   - `io_uring_prep_read` reads the physical group span into one pinned slot.
+   - CQE handling iterates group slices in offset order:
+     - `slot_src = slot.host + payload_offset_in_group`;
+     - enqueue `cudaMemcpyAsync(job.dst, slot_src, expert_bytes, cudaMemcpyHostToDevice, st)` for each slice;
+     - record one `slot.done` event after the last slice so the pinned slot cannot be reused before all H2D copies finish.
+   - The function still returns only after all group CQEs have been handled and all H2D copies have been enqueued on the same stream.
+
+4. Counters and traces:
+   - Preserve existing expert payload counters where possible:
+     - `iouring_reads` and `iouring_bytes` should remain comparable to old payload-level metrics.
+   - Add physical counters:
+     - `adjacent_coalesce_groups`;
+     - `adjacent_coalesce_slices`;
+     - `adjacent_coalesce_extents_saved`;
+     - `adjacent_coalesce_physical_bytes`;
+     - `adjacent_coalesce_payload_bytes`;
+     - `adjacent_coalesce_max_group_jobs`;
+     - `adjacent_coalesce_max_span_bytes`;
+     - fallback/reject counters by reason: source mismatch, tensor mismatch, gap, span cap, group size.
+   - Keep `GGML_MOE_IO_READ_TRACE_OUT` compatible by writing one row per logical expert read.
+   - Add a separate optional group trace if needed:
+     - `GGML_MOE_IO_COALESCE_TRACE_OUT`.
+
+5. Validation ladder:
+   - Build smoke with coalescer default-off.
+   - N32 dev A/B, current pack + coalescer enabled:
+     - expected: near-zero or tiny gain, no regression.
+     - purpose: validate safety and counters.
+   - N32 dev A/B, greedy-pair pack + coalescer enabled:
+     - expected: read-plan/cqe reduction should appear in counters.
+     - must improve token rate or clearly reduce `iouring_wait_us` before N96.
+   - N96 dev paired run only if N32 passes.
+   - N96 held-out only after N96 dev passes.
+
+6. Rejection criteria:
+   - Any semantic-quality failure.
+   - Host RAM peak `>=15900000000` bytes.
+   - TTFT ratio `>1.20`.
+   - `slot_wait_ms` increases enough to erase `iouring_wait` savings.
+   - token rate improves on dev but regresses on held-out.
+   - counters show fewer CQEs but no reduction in exposed wait.
+
+Expected upper bound:
+
+- Phase 4O shows `25.75%` small-batch read-plan reduction for `greedy_pair`, covering `510.773 GiB` of payload.
+- This is not a bytes-reduction optimization; H2D payload remains approximately unchanged.
+- The only expected speedup is lower per-read io_uring/CQE/wait overhead and fewer tiny exposed reads.
+- Because current runtime wait is not purely per-SQE overhead, the realistic gain is likely much smaller than `25.75%`; require measurement before any SOTA claim.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
