@@ -4,6 +4,126 @@ Date: 2026-07-10
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Current authoritative goal and plan: Kimi CPU/defer GPU-extension, prompt-general
+
+Timestamp: 2026-07-11 CST.
+
+This section is the current execution target. Historical sections below remain as
+audit history, but any new optimization must follow this goal and protocol first.
+
+Goal:
+
+> On `vendor/kimi-deepseek-41d205-additive`, make the Kimi CPU/defer MoE path use
+> the GPU as a more complete expert-residency, transfer, and compute extension for
+> `gate/up/down`, while preserving prompt-general correctness under a strict 16 GB
+> host-RAM cap. The immediate engineering target is a pushed, reproducible
+> held-out improvement toward stable `>2 tok/s`; the product target remains stable
+> `>5 tok/s` for random user prompts on one 32 GB RTX 5090-class GPU.
+
+Hard gates:
+
+- Cold start only. Drop caches before every accepted measurement.
+- Total host RAM peak must stay below `15900000000` bytes, including page cache,
+  pinned memory, mmap/file-backed pages, helpers, and cgroup accounting.
+- Use VRAM aggressively, but not by increasing TTFT, host reclaim, or quality risk.
+- Paired TTFT must stay within `1.20x` of the baseline.
+- Mandatory quality gate: `Please introduce France in a short paragraph.` must be
+  coherent and semantically correct.
+- Optimization must be prompt-general. Dev prompts can guide design; held-out
+  prompts are validation only and must not be used for hotset, pack, threshold, or
+  layer selection.
+- Every accepted SOTA must be reproducible from a pushed commit. The commit body
+  must include improvement size, exact env, command, prompt split, run directory,
+  quality result, TTFT/RAM/VRAM/IO metrics, and rollback commit.
+
+Current measured state:
+
+- Branch: `vendor/kimi-deepseek-41d205-additive`.
+- Rollback before the current profiling-only change:
+  `2d03059f3 prof: attribute Kimi CPU MoE decode residual`.
+- Latest corrected N96 profile run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4x-mixed-upgate-profile-n96-france`.
+- Quality: pass.
+- RAM peak: `12809871360` bytes.
+- TTFT: `11668.39 ms`.
+- Decode: `56536.74 ms / 85 runs`, `1.50 tok/s` under profiling.
+- CPU fallback: `0`; direct reads: `0`.
+- Expert-pack IO: `85754` reads, `491342774272` bytes, `37155.156 ms`
+  `io_uring_wait`.
+- Corrected profile coverage: `up-gate-profile.csv` has `5101` data rows,
+  matching `5101` CPU MoE up_gate decode calls and covering all 60 MoE layers.
+- Corrected per-token attribution:
+  - full up/gate CSV: `455.555 ms/token`;
+  - CPU MoE upgate total: `464.191 ms/token`;
+  - down CSV: `173.197 ms/token`;
+  - CPU MoE down total: `177.815 ms/token`;
+  - residual after CPU MoE: `23.132 ms/token`.
+- Largest measured target: mixed `up=22/gate=18`, `260.608 ms/token`.
+
+Key interpretation:
+
+- The DeepSeek gate-hotpool lesson transfers to Kimi as an architecture pattern,
+  not as a literal gate-only fix.
+- Kimi decode already has zero measured CPU fallback on the current path, so the
+  next gain is not from merely moving CPU math to GPU.
+- The real target is exposed wait inside the CPU/defer GPU-extension path,
+  especially mixed-type up/gate transfer, staging, cache admission, and queue
+  continuity.
+- Down-only optimization cannot reach `>2 tok/s` by itself. To move from about
+  `665 ms/token` to below `500 ms/token`, the first target must save roughly
+  `165 ms/token`; only mixed up/gate is large enough as a single workstream.
+
+Execution plan:
+
+1. Commit and push the profiling-only coverage fix.
+   - Scope: mixed-type `ggml_cuda_moe_stream_up_gate_batch` records profile and
+     CSV rows before returning.
+   - This is not a SOTA claim and must not change model semantics.
+   - Repro record must cite build, guard, N32, and N96 profile runs.
+
+2. Add a mixed up/gate bottleneck subprofile before optimizing.
+   - Split `up=22/gate=18` by layer, hit/miss, staged bytes, stage jobs,
+     `io_uring_wait`, pinned copy, H2D, CUDA compute, D2H/scatter, and wall time.
+   - Run N32 first, then N96 on dev prompts.
+   - Acceptance for instrumentation: same output, no behavior change, overhead in
+     profiling-only runs only.
+
+3. Candidate A: improve mixed up/gate queue continuity.
+   - Hypothesis: routing produces the active experts layer by layer, but the
+     runtime exposes too few independent IO jobs; the mixed path often cannot keep
+     the SSD queue deep enough.
+   - Method: once a layer's routing is known, submit all missing up/gate entries
+     as a coherent scheduler batch and avoid per-role gaps where possible.
+   - Theoretical upper bound: at most the exposed mixed up/gate wait that is not
+     overlapped by existing compute; use the new subprofile to compute the bound.
+   - Reject if total decode time, aggregate `io_uring_wait`, TTFT, RAM peak, or
+     held-out quality regresses.
+
+4. Candidate B: role-aware VRAM admission for mixed up/gate.
+   - Hypothesis: current global split spends some VRAM on down entries that are
+     less critical than mixed up/gate misses on the decode critical path.
+   - Method: default-off layer/role admission profile that protects measured
+     high-wait mixed up/gate entries instead of blindly increasing global hit rate.
+   - Do not tune from held-out prompts. Use dev traces only, then validate on
+     held-out prompts.
+
+5. Candidate C: controlled RAM replacement only after the IO profile proves it.
+   - Goal: replace low-value page cache with batchable expert slabs, not scattered
+     prompt-specific caches.
+   - Prefer whole layer/role slabs or adjacent pack ranges that can feed large
+     RAM-to-VRAM batches.
+   - Reject if pinned/pageable RAM cache increases reclaim, TTFT, H2D bubbles, or
+     mixed SSD/RAM scheduling fragmentation.
+
+6. SOTA promotion protocol.
+   - Update this plan before each implementation.
+   - Run quick N32 dev check.
+   - Run paired N96 dev check.
+   - Run held-out validation only after dev passes.
+   - Commit and push immediately only when all hard gates pass.
+   - If performance, quality, RAM, or TTFT fails, revert the candidate or leave it
+     default-off with a rejection record and do not call it SOTA.
+
 ## 2026-07-11 goal: transfer the DeepSeek CPU/defer GPU-extension pattern to Kimi
 
 This section is the immediate goal and plan for the next Kimi workstream.

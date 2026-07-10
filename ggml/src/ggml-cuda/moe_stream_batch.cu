@@ -12740,14 +12740,139 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         if (cudaMemcpyAsync(bc.h_dst, fused_d, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) {
             return mixed_overlap_fail("mixed_copy_d2h");
         }
+        if (profile) cudaEventRecord(bc.ev_d2h, st);
         if (cudaStreamSynchronize(st) != cudaSuccess) {
             return mixed_overlap_fail("mixed_sync");
         }
         (void)join_current_down_overlap();
         const float *tmp = (const float *)bc.h_dst;
+        const auto scatter_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         for (int j = 0; j < n_active; ++j) {
             float *dst_row = (float *)((char *)dst + (size_t)dst_ids[j] * dst_nb1 + (size_t)token_ids[j] * dst_nb2);
             std::memcpy(dst_row, tmp + (size_t)flat_dst_ids[j] * ne01, (size_t)ne01 * sizeof(float));
+        }
+        if (profile) {
+            float stage_ms = 0.0f;
+            float quant_ms = 0.0f;
+            float up_ms = 0.0f;
+            float gate_ms = 0.0f;
+            float up_wait_ms = 0.0f;
+            float gate_wait_ms = 0.0f;
+            float up_compute_ms = 0.0f;
+            float gate_compute_ms = 0.0f;
+            float fuse_ms = 0.0f;
+            float kernel_ms = 0.0f;
+            float d2h_ms = 0.0f;
+            cudaEventElapsedTime(&stage_ms, bc.ev_start, bc.ev_stage);
+            cudaEventElapsedTime(&quant_ms, bc.ev_stage, bc.ev_quant);
+            if (mixed_parallel_stage && bc.ev_up_start && bc.ev_gate_start) {
+                cudaEventElapsedTime(&up_ms, bc.ev_up_start, bc.ev_up);
+                cudaEventElapsedTime(&gate_ms, bc.ev_gate_start, bc.ev_gate);
+                if (bc.ev_gate_work_start && bc.ev_up_compute_start && bc.ev_gate_compute_start) {
+                    cudaEventElapsedTime(&up_wait_ms, bc.ev_up_start, bc.ev_up_compute_start);
+                    cudaEventElapsedTime(&gate_wait_ms, bc.ev_gate_work_start, bc.ev_gate_compute_start);
+                    cudaEventElapsedTime(&up_compute_ms, bc.ev_up_compute_start, bc.ev_up);
+                    cudaEventElapsedTime(&gate_compute_ms, bc.ev_gate_compute_start, bc.ev_gate);
+                }
+            } else {
+                cudaEventElapsedTime(&up_ms, bc.ev_quant, bc.ev_up);
+                cudaEventElapsedTime(&gate_ms, bc.ev_up, bc.ev_gate);
+            }
+            cudaEventElapsedTime(&fuse_ms, bc.ev_gate, bc.ev_kernel);
+            cudaEventElapsedTime(&kernel_ms, bc.ev_quant, bc.ev_kernel);
+            cudaEventElapsedTime(&d2h_ms, bc.ev_kernel, bc.ev_d2h);
+            const auto scatter_end = std::chrono::steady_clock::now();
+            const double scatter_ms = std::chrono::duration<double, std::milli>(scatter_end - scatter_start).count();
+            const double wall_ms = std::chrono::duration<double, std::milli>(scatter_end - wall_start).count();
+            up_gate_profile_add(
+                g_uprof,
+                (uint64_t)n_active,
+                (uint64_t)up_stage_jobs_count,
+                (uint64_t)gate_stage_jobs_count,
+                stage_ms,
+                quant_ms,
+                up_ms,
+                gate_ms,
+                up_wait_ms,
+                gate_wait_ms,
+                up_compute_ms,
+                gate_compute_ms,
+                fuse_ms,
+                kernel_ms,
+                d2h_ms,
+                scatter_ms,
+                wall_ms);
+            up_gate_type_profile_add(
+                prompt_mode,
+                src0_type,
+                gate_type,
+                (uint64_t)n_active,
+                (uint64_t)up_stage_jobs_count,
+                (uint64_t)gate_stage_jobs_count,
+                stage_ms,
+                quant_ms,
+                up_ms,
+                gate_ms,
+                up_wait_ms,
+                gate_wait_ms,
+                up_compute_ms,
+                gate_compute_ms,
+                fuse_ms,
+                kernel_ms,
+                d2h_ms,
+                scatter_ms,
+                wall_ms);
+            up_gate_layer_profile_add(
+                prompt_mode,
+                up_key_name,
+                gate_key_name,
+                src0_type,
+                gate_type,
+                (uint64_t)n_active,
+                (uint64_t)up_stage_jobs_count,
+                (uint64_t)gate_stage_jobs_count,
+                stage_ms,
+                quant_ms,
+                up_ms,
+                gate_ms,
+                up_wait_ms,
+                gate_wait_ms,
+                up_compute_ms,
+                gate_compute_ms,
+                fuse_ms,
+                kernel_ms,
+                d2h_ms,
+                scatter_ms,
+                wall_ms);
+            up_gate_profile_csv_record(
+                prompt_mode,
+                up_key_name,
+                gate_key_name,
+                src0_type,
+                gate_type,
+                n_active,
+                n_active - up_stage_jobs_count,
+                up_stage_jobs_count,
+                n_active - gate_stage_jobs_count,
+                gate_stage_jobs_count,
+                up_stage_jobs_count,
+                gate_stage_jobs_count,
+                stage_ms,
+                quant_ms,
+                up_ms,
+                gate_ms,
+                up_wait_ms,
+                gate_wait_ms,
+                up_compute_ms,
+                gate_compute_ms,
+                fuse_ms,
+                kernel_ms,
+                d2h_ms,
+                scatter_ms,
+                wall_ms,
+                use_handoff,
+                false,
+                mixed_parallel_stage);
         }
         return true;
     }
