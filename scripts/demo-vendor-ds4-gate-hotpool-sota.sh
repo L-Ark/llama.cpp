@@ -11,10 +11,12 @@ fi
 MODEL="${MODEL:-/home/wici/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf}"
 GATE_FULLPACK_PATH="${GATE_FULLPACK_PATH:-/home/wici/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack}"
 RUN_ROOT="${RUN_ROOT:-/home/wici/runs/vendor-ds4-16gb}"
-MANIFEST="${GGML_MOE_STREAM_ONE_DIRECT_MANIFEST:-${RUN_ROOT}/ds4-gate-pack-first320.direct_manifest.csv}"
+HOTPOOL_LIMIT="${HOTPOOL_LIMIT:-320}"
+HOTPOOL_POOL_MIB="${HOTPOOL_POOL_MIB:-1400}"
+MANIFEST="${GGML_MOE_STREAM_ONE_DIRECT_MANIFEST:-${RUN_ROOT}/ds4-gate-pack-first${HOTPOOL_LIMIT}.direct_manifest.csv}"
 PROMPT="${PROMPT:-Explain quantum computing briefly.}"
 MAX_TOKENS="${MAX_TOKENS:-96}"
-RUN_LABEL="${RUN_LABEL:-gate-hotpool-first320-quantum-n96}"
+RUN_LABEL="${RUN_LABEL:-gate-hotpool-first${HOTPOOL_LIMIT}-quantum-n96}"
 
 [[ -f "$MODEL" ]] || { echo "missing model: $MODEL" >&2; exit 2; }
 [[ -f "$GATE_FULLPACK_PATH" ]] || { echo "missing expert pack: $GATE_FULLPACK_PATH" >&2; exit 2; }
@@ -23,7 +25,7 @@ mkdir -p "$(dirname "$MANIFEST")"
 python3 scripts/ds4-expert-pack-direct-manifest.py \
   --pack "$GATE_FULLPACK_PATH" \
   --tensor-substr ffn_gate_exps \
-  --limit 320 \
+  --limit "$HOTPOOL_LIMIT" \
   --output "$MANIFEST"
 
 bash -lc '
@@ -49,8 +51,8 @@ RUN_LABEL="$RUN_LABEL" \
 GGML_MOE_STREAM_ONE_DIRECT_MANIFEST="$MANIFEST" \
 GGML_MOE_STREAM_ONE_DIRECT_MODEL="$GATE_FULLPACK_PATH" \
 GGML_MOE_STREAM_ONE_DIRECT_IO=direct \
-GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB=1400 \
-GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT=320 \
+GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB="$HOTPOOL_POOL_MIB" \
+GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT="$HOTPOOL_LIMIT" \
 GGML_MOE_STREAM_ONE_DIRECT_PREFILL_ASYNC=1 \
 GGML_MOE_ONE_PACK_READ_SUMMARY=1 \
 ./scripts/demo-vendor-ds4-general-sota.sh \
