@@ -2208,6 +2208,82 @@ Acceptance for N96 dev:
 - Aggregate `iouring_wait` decreases by at least `1s` on N32 dev3 or the gain is not credible.
 - RAM tier profile must show the candidate is not just increasing RAM-H2D wall time.
 
+### Phase 4K result: wait-weighted up/gate RAM replacement rejected
+
+Timestamp: 2026-07-11 02:25 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4k-wait-upgate-1800-n32-dev3-0225`
+
+Generated candidate:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4k-wait-upgate-1800-n32-dev3-0225/wait-upgate-1800.profile.csv`
+- entries: `386`
+- size: `1795.7 MiB`
+- full-dev7 wait score: `6254.14 ms`
+- trace bytes represented: `51.69 GiB`
+- trace rows represented: `11360`
+
+Aggregate:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | decode sum s | TTFT median ms | TTFT max ms | RAM peak GiB | iouring wait s | iouring bytes GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control `blk1_gate_full384` | 3/3 | 1.89 | 1.90 | 1.913 | 48.631 | 8285.77 | 9235.67 | 13.55 | 55.002 | 617.072 |
+| wait-upgate-1800 | 3/3 | 1.83 | 1.90 | 1.903 | 48.894 | 7924.32 | 8458.33 | 13.61 | 54.550 | 596.538 |
+
+Per-prompt deltas:
+
+| prompt | token-rate delta | decode delta ms | TTFT ratio | quality |
+|---|---:|---:|---:|---:|
+| dev_france_regression | +0.08 | -677.72 | 0.858 | pass/pass |
+| dev_japan_factual | -0.05 | +414.16 | 1.021 | pass/pass |
+| dev_photosynthesis_factual | -0.06 | +526.09 | 0.963 | pass/pass |
+
+RAM and IO deltas:
+
+| metric | control | candidate | delta |
+|---|---:|---:|---:|
+| `iouring_wait` | 55.002s | 54.550s | -0.452s |
+| SSD expert bytes | 617.072 GiB | 596.538 GiB | -20.535 GiB |
+| RAM hit jobs | 718 | 5195 | +4477 |
+| RAM hit bytes | 3.144 GiB | 23.679 GiB | +20.535 GiB |
+| RAM wall | 2.426s | 14.351s | +11.925s |
+| RAM enqueue | 2.426s | 0.048s | -2.377s |
+| host RAM peak | 13.55 GiB | 13.61 GiB | +53.5 MiB |
+
+Decision:
+
+- Reject candidate.
+- Do not run N96.
+- Do not promote the generated profile.
+
+Reason:
+
+- It reduced SSD bytes but did not remove the critical wait wave:
+  - `iouring_wait` fell by only `0.452s`, below the required `1s` N32 credibility gate.
+  - decode sum regressed by `0.263s`.
+  - min token rate regressed from `1.89` to `1.83`.
+- The candidate created many partial RAM hits:
+  - RAM jobs increased from `718` to `5195`;
+  - RAM bytes increased by `20.535 GiB`;
+  - RAM wall increased by `11.925s`;
+  - SSD bytes fell by the same amount, but the remaining SSD jobs still determined the batch tail.
+- This confirms the working theory: a scattered expert RAM tier can reduce bytes while leaving enough SSD reads in each batch to keep the same wait latency.
+
+Next:
+
+- Do not test broader scattered wait-weighted RAM tiers.
+- The next RAM/storage candidate must be batch-coherent:
+  - select entries only when they cover most jobs in a slow batch;
+  - or use a layer/role slab that turns an entire high-wait batch into RAM hits;
+  - compare expected saved wait against RAM-H2D wall before running.
+- Use `kimi_ram_candidate_multidev_screen.py` with stricter batch coverage, for example:
+  - `--min-batch-hits >= 4`;
+  - `--min-batch-hit-pct >= 75`;
+  - separate up/gate and down candidates;
+  - reject candidates that mostly create partial hits across many batches.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
