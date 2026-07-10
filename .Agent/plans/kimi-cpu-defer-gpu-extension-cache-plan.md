@@ -436,6 +436,146 @@ Decision:
   3. only implement a runtime path if the bound can save at least
      `~100 ms/token` on dev N96 without prompt-specific tuning.
 
+## Phase 5A plan: layout and future-prefetch bound study
+
+Timestamp: 2026-07-11 CST.
+
+Reason:
+
+- Phase 4Z showed decode-like waits are not queue-empty. The currently visible
+  jobs are already submitted, so a naive same-layer submit-loop rewrite is not
+  enough.
+- The same profile showed poor locality: decode-like same-tensor batches have
+  `gap/read` around `31-33x` and almost no adjacent expert pairs.
+- However, poor locality alone does not prove that repacking will save enough
+  decode wall. We need a bound before changing pack format or runtime prefetch.
+
+Bound study inputs:
+
+- Primary input:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4z-queue-evidence-n32-photosynthesis/dev_photosynthesis_factual`.
+- Use `io-batch-profile.csv`, `io-wait-trace.csv`, `io-locality-profile.csv`,
+  `up-gate-profile.csv`, and `metrics.json`.
+- Use decode-like rows only: `read_jobs <= 8`.
+
+Questions to answer:
+
+1. Layout-only bound:
+   - If same-tensor active experts were arranged closer together, what is the
+     best observed wait/read-job for comparable batch sizes?
+   - Does low `gap/read` actually correlate with lower wait/read-job in the
+     current profile?
+   - If every decode-like batch achieved the best observed wait/read-job for
+     its batch size, how many ms/token would be saved?
+
+2. Future-layer prefetch bound:
+   - If a predictor could expose the next `K` decode-like batches before they
+     are needed, the optimistic wait bound is `sum(wait) - max(wait)` per
+     window.
+   - Evaluate `K = 2, 3, 4, 8, 16`.
+   - Report average jobs per future window. The target is to understand how
+     many future batches are needed to raise visible read jobs from about `5`
+     toward `12-16`.
+
+3. Implementation threshold:
+   - Do not implement pack layout or future-layer prefetch unless the measured
+     bound can plausibly save at least `~100 ms/token` on dev N96 after scaling
+     from this N32 profile.
+   - If layout-only bound is small or weakly correlated with wait, prioritize
+     predictive prefetch or smaller expert representation instead of pack
+     repacking.
+   - If future-layer prefetch bound is large, the next experiment must still
+     validate predictor accuracy on dev prompts and reserve held-out prompts for
+     validation only.
+
+Planned tool:
+
+- Add `.Agent/run-tools/kimi_layout_prefetch_bound.py`.
+- Outputs:
+  - `layout_bins.csv`;
+  - `batch_size_bound.csv`;
+  - `future_prefetch_bound.csv`;
+  - `report.md`.
+- This tool is offline analysis only and must make no SOTA claim.
+
+Phase 5A result: future-layer prefetch has a larger bound than layout-only.
+
+Timestamp: 2026-07-11 CST.
+
+Tool:
+
+- `.Agent/run-tools/kimi_layout_prefetch_bound.py`
+
+Input:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4z-queue-evidence-n32-photosynthesis/dev_photosynthesis_factual`
+
+Output:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5a-layout-prefetch-bound-photosynthesis/report.md`
+
+Baseline decode-like IO:
+
+- decode-like batches: `5577`;
+- read jobs: `26809`;
+- average read jobs/batch: `4.807`;
+- read GiB: `143.232`;
+- wait: `11618.140 ms`;
+- wait/token: `374.779 ms/token`;
+- wait/read job: `0.433 ms`;
+- Pearson correlation `log(gap/read)` vs wait/read-job: `-0.400`.
+
+Layout-only bound:
+
+- p10 same-size bound:
+  - saving: `3207.412 ms`;
+  - saving/token: `103.465 ms/token`.
+- min same-size bound:
+  - saving: `5184.799 ms`;
+  - saving/token: `167.252 ms/token`.
+- But the locality bins do not support a simple "lower gap/read => lower wait"
+  causal story:
+  - runtime_load `gap<=1`: wait/read `0.891 ms`;
+  - runtime_load `16<gap<=64`: wait/read `0.432 ms`;
+  - current_down_overlap `gap<=1`: wait/read `0.726 ms`;
+  - current_down_overlap `16<gap<=64`: wait/read `0.335 ms`.
+- Therefore a pack relayout may still help by enabling better future grouping,
+  but the current profile does not justify a standalone pack-relayout
+  implementation as the next step.
+
+Future-layer prefetch optimistic bound:
+
+| future window batches | avg jobs/window | saving ms | saving ms/token |
+|---:|---:|---:|---:|
+| 2 | 9.612 | 5081.526 | 163.920 |
+| 3 | 14.421 | 7039.994 | 227.097 |
+| 4 | 19.218 | 8006.597 | 258.277 |
+| 8 | 38.408 | 9609.637 | 309.988 |
+| 16 | 76.817 | 10491.626 | 338.440 |
+
+Interpretation:
+
+- The `K=3` bound reaches the desired visible batch scale:
+  average jobs/window `14.421`, within the target `12-16` range.
+- The optimistic `K=3` saving is `227.097 ms/token`, large enough to justify a
+  targeted prefetch/prediction exploration.
+- This is still only an upper bound. It assumes future batches can be known and
+  submitted early, and that waits overlap perfectly. A real predictor must
+  measure accepted/usable future expert IDs and must not tune on held-out
+  prompts.
+
+Decision:
+
+- Do not start with standalone pack relayout.
+- Next implementation plan should test prompt-general future-layer expert
+  prediction/prefetch in a default-off way:
+  1. collect route traces across dev prompts and measure whether layer `L` can
+     predict layer `L+1..L+3` top experts well enough;
+  2. prefetch only when predicted experts have high confidence and a bounded
+     extra-byte budget;
+  3. require a paired N32 dev A/B before any N96 run;
+  4. reject if extra bytes, TTFT, RAM, or quality regress.
+
 ## 2026-07-11 goal: transfer the DeepSeek CPU/defer GPU-extension pattern to Kimi
 
 This section is the immediate goal and plan for the next Kimi workstream.
