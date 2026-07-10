@@ -66,7 +66,10 @@ Execution plan from here:
 Immediate next action:
 
 - `all-1200-minp4` RAM tier has been rejected after N96 held-out validation. It reduced SSD bytes but did not reduce exposed `io_uring_wait` on held-out prompts and slightly regressed median/mean token rate.
-- Next work must return to exposed-wait profiling and layer/role slab candidates, with special attention to prompt-dependent TTFT long tails and queue starvation.
+- Phase 4F control profiling shows no CPU fallback; the next work must target tensor staging, upgate kernel/wait, and cache-budget allocation rather than simply adding more RAM tier.
+- Immediate next A/B candidates:
+  - rebalance the existing 15 GiB VRAM expert-cache budget between upgate and down, with an explicit removable-wait bound before running;
+  - test small layer/role slabs for top staging rows such as `blk.1 gate`, `blk.4 down`, and `blk.6 down`, only if they fit by replacing lower-yield cache entries.
 
 ## Current execution goal
 
@@ -1379,6 +1382,132 @@ Next:
   - RAM tier H2D timing versus SSD wait;
   - prompt/prefill TTFT memory peak and major fault source for the reasoning/math long tail.
 - Screen layer/role slab candidates only if they have a measurable upper bound in removable exposed wait and keep RAM below the 16 GB gate with margin.
+
+### Phase 4F N96 dev5 profile result
+
+Timestamp: 2026-07-11 00:23 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase5-control-n96-profile-dev5-002343/control-profile`
+
+Command shape:
+
+- prompt file: `.Agent/evals/kimi-general-dev-prompts.jsonl`
+- first 5 dev prompts only: France, Japan, photosynthesis, linear equation, Python reverse
+- N96, cold start, `PROFILE=1`
+- control RAM tier: `.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv`
+- host memory gate: `MemoryMax=15900000000`, `MemorySwapMax=0`
+
+Important caveat:
+
+- `PROFILE=1` slows the run and should not be compared as a token-rate SOTA result.
+- This run is for bottleneck attribution only.
+
+Profile summary:
+
+| metric | value |
+|---|---:|
+| prompts | 5 |
+| quality | 5/5 |
+| weighted token rate under profiling | 1.624 tok/s |
+| aggregate iouring throughput | 9.256 GiB/s |
+| peak IO utilization reference | 0.899 of 10.3 GiB/s |
+| direct read ratio | 0.000 |
+| weighted iouring inflight avg | 3.909 |
+| iouring wait / decode fraction | 0.971 |
+
+Prompt-level profile:
+
+| prompt | tok/s | decode ms | down wall ms | upgate wall ms | fallback ms |
+|---|---:|---:|---:|---:|---:|
+| dev_france_regression | 1.64 | 51685 | 22500 | 14053 | 0 |
+| dev_japan_factual | 1.71 | 45601 | 21104 | 12599 | 0 |
+| dev_linear_equation | 1.46 | 23331 | 17604 | 6182 | 0 |
+| dev_photosynthesis_factual | 1.67 | 56272 | 22539 | 15350 | 0 |
+| dev_python_reverse | 1.56 | 60760 | 25264 | 16535 | 0 |
+
+Key result:
+
+- CPU fallback is not the current decode bottleneck in this control profile:
+  - `fallback-profile.csv` is empty;
+  - CPU/MOE profile reports batch accept for upgate and down with no single/fallback path.
+- The main bottlenecks are inside the GPU extension path:
+  - tensor staging / expert movement for down, up, and gate tensors;
+  - upgate CUDA batch kernel/wait time;
+  - cache-budget allocation under a nearly full 32 GB VRAM budget.
+
+Tensor staging totals by prompt:
+
+| prompt | down stage ms | gate stage ms | up stage ms | upgate-call wall ms | upgate up_wait ms | upgate gate_wait ms |
+|---|---:|---:|---:|---:|---:|---:|
+| dev_france_regression | 15725.5 | 3187.9 | 2215.4 | 14052.9 | 7139.1 | 7672.4 |
+| dev_japan_factual | 14436.9 | 3276.8 | 2067.8 | 12599.1 | 6316.7 | 6733.1 |
+| dev_linear_equation | 9418.2 | 4291.3 | 2856.4 | 6181.9 | 3129.4 | 3321.3 |
+| dev_photosynthesis_factual | 16582.7 | 2707.8 | 1838.9 | 15350.4 | 7734.6 | 8252.9 |
+| dev_python_reverse | 18018.3 | 3385.1 | 2347.6 | 16535.1 | 8465.5 | 8903.5 |
+
+Top removable tensor-stage rows from the profile:
+
+| row | stage ms | wall ms | misses | hit rate |
+|---|---:|---:|---:|---:|
+| `blk.1 ffn_gate_exps` type 22 | 5175.4 | 5377.9 | 369 | 48.7% |
+| `blk.4 ffn_down_exps` type 23 | 3043.5 | 3228.3 | 2863 | 24.8% |
+| `blk.6 ffn_down_exps` type 2 | 2995.9 | 3192.7 | 2530 | 33.6% |
+| `blk.1 ffn_down_exps` type 11 | 2451.6 | 2646.0 | 2877 | 24.4% |
+| `blk.3 ffn_down_exps` type 11 | 2339.6 | 2422.3 | 2724 | 28.5% |
+| `blk.10 ffn_down_exps` type 2 | 2203.0 | 2269.3 | 2535 | 33.4% |
+| `blk.58 ffn_down_exps` type 23 | 2200.3 | 2266.4 | 2571 | 32.5% |
+
+Top layer combined pressure:
+
+| layer | tensor stage ms | tensor wall ms | upgate wall ms | up_wait ms | gate_wait ms |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 8246.9 | 8653.0 | 1936.6 | 1809.0 | 1847.4 |
+| 25 | 2470.4 | 2556.6 | 2109.7 | 1904.4 | 2024.0 |
+| 10 | 2461.4 | 2546.6 | 2107.9 | 1897.8 | 2022.4 |
+| 18 | 2434.0 | 2519.3 | 2100.5 | 1892.9 | 2016.0 |
+| 20 | 2429.2 | 2516.5 | 2089.9 | 1880.7 | 2005.4 |
+| 26 | 2467.5 | 2553.6 | 2055.5 | 1827.2 | 1943.8 |
+
+VRAM/RAM constraint from the same run:
+
+- `moe_stream_batch` requested `15000 MiB` expert VRAM cache.
+- End-of-run CUDA free memory for France profile was only `872 MiB`.
+- Therefore a new full-layer VRAM residency experiment cannot simply add entries. It must replace lower-yield cache entries or rebalance the upgate/down split.
+- Host memory peak for France profile was `14627450880` bytes, but held-out reasoning/math previously reached the `15899996160` byte cgroup peak. RAM-tier expansions require extra margin, not just average fit.
+
+Interpretation:
+
+- The rejected `all-1200-minp4` result is consistent with this profile:
+  - RAM tier can reduce SSD bytes;
+  - but if it increases RAM H2D and does not reduce the exposed tensor-stage or upgate wait rows, token rate does not improve.
+- Current bulk SSD throughput is already near the pure IO upper bound in normal runs:
+  - held-out control: `10.039 GiB/s`;
+  - full-dev control: `10.554 GiB/s`;
+  - profile run: `9.256 GiB/s` because profiling adds overhead.
+- The next optimization should not start from "load more random experts into RAM".
+
+Next candidate design rules:
+
+1. VRAM cache rebalance before RAM expansion.
+   - Compute the current marginal value of upgate versus down slots from misses, stage/wait rows, and hit rates.
+   - Try a default-off cache split that moves a small amount of VRAM from low-yield down entries to high-pressure upgate or targeted gate/down slab rows.
+   - Expected upper bound must be stated as removable milliseconds from the Phase 4F table before testing.
+
+2. Layer/role slab only for top rows.
+   - Candidate rows: `blk.1 gate`, `blk.4 down`, `blk.6 down`, `blk.1 down`, `blk.3 down`.
+   - Slab must replace lower-yield cache entries; do not exceed current VRAM cache budget.
+   - If implemented in RAM rather than VRAM, it must prove lower exposed stage/wait, not just lower SSD bytes.
+
+3. Upgate kernel/wait analysis.
+   - `up22_gate22` and `up18_gate18` upgate-call rows contribute large kernel/wait time.
+   - Before changing cache policy again, inspect whether `parallel_up_gate`, `parallel_stage`, and CUDA stream waits are actually overlapping for the dominant type pairs.
+   - If a type pair is compute/stream-bound rather than transfer-bound, RAM/VRAM residency will have limited upside.
+
+4. TTFT long-tail analysis remains separate.
+   - The held-out reasoning/math prompt hit a severe TTFT long tail and cgroup memory peak.
+   - Do not accept decode-only improvements if they make TTFT or host memory margin worse.
 
 ## Phase 5: Commit and push protocol
 
