@@ -479,6 +479,10 @@ Promotion requirements:
 - Boundary probes:
   - first240 / 1024MiB pool reduced one-pack reads to `2778` and produced
     `5.6` then `5.5 tok/s`; useful but not enough to promote alone.
+  - first336 / 1480MiB pool tied the accepted rounded SOTA but did not exceed
+    it: `/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260710T040001Z-interactive`,
+    clean source `730b1ac45`, `eval_tok_s=5.6`, `TTFT=16139.43 ms`,
+    RAM OK, direct hot pool hits `411`, one-pack reads `2723`. Not promoted.
   - first360 / 1600MiB pool was tested after parameterizing the helper script
     and clean-reproducing source `cf2c51bc9`. It preserved the 12GB one-cache
     and reduced one-pack reads to `2712`, but reached only `5.5 tok/s`:
@@ -490,9 +494,9 @@ Promotion requirements:
     `3.1 tok/s` with `11746` one-pack reads / `52.35GB`.
 - Updated next direction:
   - do not exceed the VRAM point where the 12288MiB one-cache fails;
-  - first360 shows that increasing entries can reduce reads but still lose to
-    prefill overhead, so further entry-count sweeps need a hard expected gain
-    before running;
+  - first336/first360 show that increasing entries can reduce reads but still
+    tie or lose to prefill overhead, so stop simple entry-count sweeps unless
+    a new hard bound predicts a larger win;
   - investigate allocation order or reserved VRAM accounting so direct hot
     pool cannot silently disable the main gate one-cache;
   - investigate cheaper prefill or overlapped prefill so the hot pool saves

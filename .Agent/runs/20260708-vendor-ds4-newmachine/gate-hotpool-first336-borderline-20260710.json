@@ -1,0 +1,53 @@
+{
+  "artifact": "gate-hotpool-first336-borderline-20260710",
+  "created_at_local": "2026-07-10",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit": "730b1ac452efa63dae4f3bf93d8dc8651d61636e",
+  "machine": "wici@192.168.9.198",
+  "status": "not_promoted_ties_current_sota",
+  "current_sota_reference": {
+    "method": "gate direct hot pool first320",
+    "accepted_eval_tok_s": 5.6,
+    "repeat_eval_tok_s": [5.6, 5.7]
+  },
+  "test": {
+    "method": "prompt-general gate direct hot pool first336",
+    "prompt_specific": false,
+    "manifest_entries": 336,
+    "manifest_bytes": 1497366528,
+    "direct_pool_mib": 1480,
+    "direct_prefill_limit": 336,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260710T040001Z-interactive",
+    "prompt": "Explain quantum computing briefly.",
+    "max_tokens": 96,
+    "strict_cold": true,
+    "display_processes_stopped_before_run": true,
+    "source_dirty": false,
+    "eval_tok_s": 5.6,
+    "prompt_tok_s": 3.7,
+    "ttft_ms": 16139.426894,
+    "memory_peak_bytes": 14832455680,
+    "memory_file_bytes": 13906018304,
+    "ram_ok": true,
+    "correctness": "pass: coherent quantum-computing explanation, truncated only by n=96"
+  },
+  "counters": {
+    "direct_hot_pool": {
+      "allocated_mib": 1428.0,
+      "slots": 336,
+      "attempted": 336,
+      "inserted": 336,
+      "bytes": 1497366528,
+      "elapsed_ms": 769.674,
+      "read_ms": 490.529,
+      "h2d_ms": 271.383,
+      "lookups": 12230,
+      "hits": 411
+    },
+    "one_cache": "12.0 GiB, 2891 slots, hits=9182 misses=2723 hit_rate=77.1%",
+    "one_pack_reads": 2723,
+    "one_pack_bytes": 12134907904
+  },
+  "decision": "Do not promote. first336 ties the accepted first320 rounded token rate and has no repeat above the current SOTA. It confirms that additional prompt-general hot entries reduce one-pack reads only modestly while adding prefill work.",
+  "next": "Stop simple entry-count sweeps. Focus on preserving the main one-cache allocation, cheaper prefill, or allocation ordering."
+}
