@@ -1075,6 +1075,111 @@ Next plan:
    - held-out N96;
    - and only then be committed as an accepted profile.
 
+### Phase 4E plan: full-dev7 prompt-agnostic RAM tier screen
+
+Timestamp: 2026-07-10 15:12 CST.
+
+Purpose:
+
+- Re-run RAM-tier design with all seven dev prompts instead of the dev3 subset that overfit in Phase 4D.
+- Keep held-out test prompts unused for construction.
+- Require each selected expert to be observed in at least four dev prompts.
+
+Trace run:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343`
+- Env:
+
+```bash
+GGML_MOE_RAM_TIER_MIB=1800
+GGML_MOE_RAM_TIER_PROFILE=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=1
+GGML_MOE_RAM_TIER_PIN_MIB=1800
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+GGML_MOE_RAM_BATCH_PROFILE_OUT=$RUN/ram-batch-profile.csv
+GGML_MOE_IO_READ_TRACE_OUT=$RUN/io-read-trace.csv
+GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv
+```
+
+Trace quality:
+
+- `6/7` auto-quality pass at N32.
+- `dev_linear_equation` failed only because N32 truncated the answer after `x =`; this N32 trace remains valid for route/IO observation, but no SOTA claim can be made without N96 quality passing.
+
+Trace aggregate:
+
+- Total io-read rows: `292570`.
+- Total traced IO: `1557.45 GiB`.
+- Host RAM peak: `13.57 GiB`.
+
+Current tier actual RAM hits during trace:
+
+- `1770` RAM hits;
+- `7.75 GiB` RAM H2D;
+- `5380.88 ms` total RAM batch wall across seven prompts.
+
+Candidate screen command:
+
+```bash
+python3 .Agent/run-tools/kimi_ram_candidate_multidev_screen.py \
+  --input-root /root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343 \
+  --out-profile <candidate>.profile.csv \
+  --out-report <candidate>.report.json \
+  --out-csv <candidate>.candidates.csv \
+  --budget-mib <1200|1800|2400> \
+  --roles <down|up,gate|up,gate,down> \
+  --min-count 2 \
+  --min-prompts 4 \
+  --max-jobs 8
+```
+
+Candidate summary:
+
+| candidate | budget MiB | entries | trace hit rows | trace hit GiB | prompts hit | dominant batches >=4 | role mix |
+|---|---:|---:|---:|---:|---:|---:|---|
+| all-1200-minp4 | 1200 | 214 | 8940 | 49.31 | 7 | 77 | up/down/gate |
+| all-1800-minp4 | 1800 | 320 | 11984 | 66.12 | 7 | 323 | up/down/gate |
+| all-2400-minp4 | 2400 | 427 | 14751 | 81.19 | 7 | 681 | up/down/gate |
+| down-1800-minp4 | 1800 | 267 | 8349 | 55.16 | 7 | 546 | down only |
+| upgate-1800-minp4 | 1800 | 378 | 11307 | 52.34 | 7 | 695 | up/gate only |
+
+Decision before A/B:
+
+- First test `all-1200-minp4` and `all-1800-minp4`.
+- Skip `all-2400-minp4` until a smaller candidate proves endpoint value because Phase 4D showed larger RAM tiers can improve hit bytes but fail held-out endpoint speed.
+- Skip role-only candidates initially because Phase 4B showed up/gate/down misses are coupled; mixed all-role candidates are a better first test.
+
+N32 full-dev A/B plan:
+
+1. Run fresh N32 full-dev control with current `blk1_gate_full384.csv`.
+2. Run `all-1200-minp4` with:
+   - `GGML_MOE_RAM_TIER_MIB=1200`;
+   - `GGML_MOE_RAM_TIER_PIN_MIB=1200`;
+   - profile from the Phase 4E trace candidate directory.
+3. Run `all-1800-minp4` with:
+   - `GGML_MOE_RAM_TIER_MIB=1800`;
+   - `GGML_MOE_RAM_TIER_PIN_MIB=1800`;
+   - profile from the Phase 4E trace candidate directory.
+4. Compare:
+   - token-rate min/median/mean;
+   - per-prompt decode delta;
+   - TTFT ratio;
+   - RAM peak;
+   - iouring wait and bytes;
+   - RAM hits and RAM H2D;
+   - output quality, with the known N32 truncation caveat for `dev_linear_equation`.
+
+N32 promotion rule:
+
+- Candidate must improve full-dev min and median token rate over fresh control.
+- Candidate must not materially worsen coding, mixed, or reasoning prompts.
+- Host RAM must remain under `15900000000`.
+- TTFT median must not exceed `1.20x` control.
+- If N32 passes, run N96 full-dev before any held-out validation.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
