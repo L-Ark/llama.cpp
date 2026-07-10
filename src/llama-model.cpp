@@ -8323,6 +8323,7 @@ void llama_model::drop_expert_mmap_pages_after_prompt() const {
     }
 
     if (drop_expert) {
+        const int64_t t_start_us = ggml_time_us();
         size_t bytes = 0;
         size_t ranges = 0;
         size_t failures = 0;
@@ -8341,11 +8342,14 @@ void llama_model::drop_expert_mmap_pages_after_prompt() const {
                 }
             }
         }
-        LLAMA_LOG_INFO("%s: expert mmap dontneed after prompt bytes=%.2f MiB ranges=%zu failures=%zu\n",
-                __func__, bytes / 1024.0 / 1024.0, ranges, failures);
+        const int64_t t_end_us = ggml_time_us();
+        LLAMA_LOG_INFO("%s: expert mmap dontneed after prompt bytes=%.2f MiB ranges=%zu failures=%zu wall_ms=%.3f\n",
+                __func__, bytes / 1024.0 / 1024.0, ranges, failures,
+                (double)(t_end_us - t_start_us) / 1000.0);
     }
 
     if (drop_dense) {
+        const int64_t t_start_us = ggml_time_us();
         size_t bytes = 0;
         size_t ranges = 0;
         size_t failures = 0;
@@ -8394,8 +8398,10 @@ void llama_model::drop_expert_mmap_pages_after_prompt() const {
                 drop_range(cursor, used.last);
             }
         }
-        LLAMA_LOG_INFO("%s: dense mmap dontneed after prompt bytes=%.2f MiB ranges=%zu failures=%zu\n",
-                __func__, bytes / 1024.0 / 1024.0, ranges, failures);
+        const int64_t t_end_us = ggml_time_us();
+        LLAMA_LOG_INFO("%s: dense mmap dontneed after prompt bytes=%.2f MiB ranges=%zu failures=%zu wall_ms=%.3f\n",
+                __func__, bytes / 1024.0 / 1024.0, ranges, failures,
+                (double)(t_end_us - t_start_us) / 1000.0);
     }
 }
 std::string llama_model::type_name() const {

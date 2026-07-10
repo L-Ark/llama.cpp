@@ -113,6 +113,82 @@ Current execution plan:
    - Rejected candidate: revert or leave default-off, update this plan with the
      measured reason, and move to the next ranked bottleneck.
 
+## 2026-07-11 Phase 4T observability result
+
+Implementation status:
+
+- Added default-off phase reporting gated by `GGML_MOE_PHASE_REPORT=1`.
+- Normal runs without the env flag do not print phase counters and do not read
+  cgroup memory stats from the hot path.
+- Metrics parser now captures `kimi_phase_*`, `moe_phase_*`, and prompt-end
+  `madvise(DONTNEED)` wall times.
+- This is observability infrastructure only. It does not claim or promote a new
+  SOTA.
+
+Validation:
+
+- Build: `cmake --build build-cuda-batch -j 8` passed.
+- Guard: `build-cuda-batch/bin/test-kimi-deepseek2-guards` passed.
+- Diff hygiene: `git diff --check` passed.
+- Env-on France smoke:
+  - Run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4t-instrumentation-n48-france`
+  - Command shape:
+    `--mode dev --n 48 --runtime-max-sec 360 --extra-runtime-env GGML_MOE_PHASE_REPORT=1`
+  - Result: quality `pass`, token rate `1.85 tok/s`, TTFT `7894.82 ms`,
+    decode `25354.05 ms / 47`, memory peak `12722601984` bytes.
+  - Parser captured `3` `kimi_phase` records and `24` `moe_phase` records.
+- Default-off smoke:
+  - Run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4t-default-off-n8-france`
+  - Command shape: `--mode dev --n 8`, no `GGML_MOE_PHASE_REPORT`.
+  - Result: quality `pass`, token rate `1.79 tok/s`, TTFT `7443.69 ms`,
+    decode `3915.18 ms / 7`, memory peak `11.84 GiB`.
+  - `rg "\[kimi_phase\]|\[moe_stream_batch_phase\]" stderr.txt` returned no
+    matches.
+
+Held-out diagnostic, not tuning input:
+
+- Prompt: `test_reasoning_math_01`
+  (`A train leaves at 3 PM and arrives 2 hours and 15 minutes later...`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4t-instrumentation-n96-heldout-math-diagnostic`
+- Command shape:
+  `--mode test --n 96 --runtime-max-sec 360 --extra-runtime-env GGML_MOE_PHASE_REPORT=1`
+- Result: quality `pass`, token rate `1.58 tok/s`, TTFT `214863.14 ms`,
+  decode `38657.04 ms / 61`, memory peak `14.81 GiB`.
+- Phase split:
+  - Before prompt eval: `memory_current=11.345 GiB`, `file=11.121 GiB`,
+    `pgmajfault=1196`.
+  - After prompt eval: `memory_current=14.807 GiB`, `file=13.781 GiB`,
+    `active_file=8.326 GiB`, `inactive_file=5.345 GiB`,
+    `pgmajfault=15697`, `workingset_refault_file=18350`,
+    `pgscan_direct=50933480`, `pgsteal_direct=28498889`.
+  - Prompt MoE/expert-pack work was tiny: `24` iouring reads,
+    `0.131 GiB`, `22.5 ms` iouring wait.
+  - Prompt-end expert mmap `DONTNEED` took `852.524 ms`; dense mmap
+    `DONTNEED` took `4.952 ms`.
+  - Decode phase added `310.728 GiB` iouring bytes and `40.075 s` iouring
+    wait, with only `79` additional major faults and `1279` additional file
+    refaults between `after_prompt_eval` and `after_generation`.
+
+Conclusion:
+
+- The held-out TTFT long tail is not caused by expert-pack transfer during
+  prompt eval. The phase counters show only `22.5 ms` expert-pack iouring wait
+  in prompt, while cgroup memory reaches the 16 GB cap with large file-backed
+  refault and direct reclaim counters.
+- Decode token rate is still limited by exposed expert movement: the same run
+  spends `40.075 s` in decode iouring wait for `61` decode steps.
+- Next work must keep these two bottlenecks separate:
+  - TTFT risk: identify and reduce prompt-phase GGUF/file-backed page-cache
+    growth and refault/reclaim before accepting larger RAM tiers.
+  - Token-rate risk: reduce decode exposed `io_uring_wait` via queue-fed
+    gate/up/down scheduling, RAM/VRAM residency that is batchable, or pack
+    layout changes.
+- Do not use this held-out trace to choose hot experts, layer slabs, or cache
+  thresholds. It only validates the failure mode and the new counters.
+
 ## 2026-07-11 goal: Kimi CPU/defer + GPU-extension path
 
 Goal:

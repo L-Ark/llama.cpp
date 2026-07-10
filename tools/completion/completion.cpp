@@ -7,6 +7,7 @@
 #include "chat.h"
 
 #include <clocale>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -30,6 +31,12 @@
 
 #if defined(_MSC_VER)
 #pragma warning(disable: 4244 4267) // possible loss of data
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+extern "C" void ggml_cuda_moe_stream_batch_phase_report(const char * label) __attribute__((weak));
+#else
+extern "C" void ggml_cuda_moe_stream_batch_phase_report(const char * label);
 #endif
 
 static llama_context           ** g_ctx;
@@ -61,6 +68,104 @@ static bool file_is_empty(const std::string & path) {
     f.exceptions(std::ifstream::failbit | std::ifstream::badbit);
     f.open(path.c_str(), std::ios::in | std::ios::binary | std::ios::ate);
     return f.tellg() == 0;
+}
+
+static bool kimi_phase_report_enabled() {
+    static const bool enabled = []() {
+        const char * env = std::getenv("GGML_MOE_PHASE_REPORT");
+        return env && env[0] && env[0] != '0';
+    }();
+    return enabled;
+}
+
+static std::string kimi_read_text_file(const std::string & path) {
+    std::ifstream f(path);
+    if (!f.good()) {
+        return "";
+    }
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    std::string out = ss.str();
+    while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) {
+        out.pop_back();
+    }
+    return out;
+}
+
+static std::string kimi_cgroup_path() {
+#if defined(__linux__)
+    std::ifstream f("/proc/self/cgroup");
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.rfind("0::", 0) == 0) {
+            std::string rel = line.substr(3);
+            if (rel.empty() || rel[0] != '/') {
+                rel.insert(rel.begin(), '/');
+            }
+            return "/sys/fs/cgroup" + rel;
+        }
+    }
+#endif
+    return "";
+}
+
+static long long kimi_read_ll(const std::string & path) {
+    const std::string text = kimi_read_text_file(path);
+    if (text.empty()) {
+        return -1;
+    }
+    char * end = nullptr;
+    const long long value = std::strtoll(text.c_str(), &end, 10);
+    return end == text.c_str() ? -1 : value;
+}
+
+static long long kimi_read_memstat_key(const std::string & cgroup, const char * key) {
+    if (cgroup.empty()) {
+        return -1;
+    }
+    std::ifstream f(cgroup + "/memory.stat");
+    std::string name;
+    long long value = -1;
+    while (f >> name >> value) {
+        if (name == key) {
+            return value;
+        }
+    }
+    return -1;
+}
+
+static void kimi_phase_report(const char * label, int n_past, int n_consumed, int embd_size) {
+    if (!kimi_phase_report_enabled()) {
+        return;
+    }
+
+    const std::string cg = kimi_cgroup_path();
+    const long long current = kimi_read_ll(cg + "/memory.current");
+    const long long peak = kimi_read_ll(cg + "/memory.peak");
+    const long long file = kimi_read_memstat_key(cg, "file");
+    const long long active_file = kimi_read_memstat_key(cg, "active_file");
+    const long long inactive_file = kimi_read_memstat_key(cg, "inactive_file");
+    const long long anon = kimi_read_memstat_key(cg, "anon");
+    const long long pgmajfault = kimi_read_memstat_key(cg, "pgmajfault");
+    const long long pgfault = kimi_read_memstat_key(cg, "pgfault");
+    const long long refault_file = kimi_read_memstat_key(cg, "workingset_refault_file");
+    const long long pgscan_direct = kimi_read_memstat_key(cg, "pgscan_direct");
+    const long long pgsteal_direct = kimi_read_memstat_key(cg, "pgsteal_direct");
+
+    LOG_INF("[kimi_phase] label=%s n_past=%d n_consumed=%d embd=%d "
+            "memory_current=%lld memory_peak=%lld anon=%lld file=%lld active_file=%lld inactive_file=%lld "
+            "pgfault=%lld pgmajfault=%lld workingset_refault_file=%lld pgscan_direct=%lld pgsteal_direct=%lld\n",
+            label ? label : "unknown", n_past, n_consumed, embd_size,
+            current, peak, anon, file, active_file, inactive_file,
+            pgfault, pgmajfault, refault_file, pgscan_direct, pgsteal_direct);
+
+#if defined(__GNUC__) || defined(__clang__)
+    if (ggml_cuda_moe_stream_batch_phase_report) {
+        ggml_cuda_moe_stream_batch_phase_report(label);
+    }
+#else
+    ggml_cuda_moe_stream_batch_phase_report(label);
+#endif
 }
 
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__)) || defined (_WIN32)
@@ -551,6 +656,8 @@ int main(int argc, char ** argv) {
     int n_remain           = params.n_predict;
     int n_consumed         = 0;
     int n_session_consumed = 0;
+    bool kimi_prompt_phase_started = false;
+    bool kimi_prompt_phase_reported = false;
 
     std::vector<int>   input_tokens;  g_input_tokens  = &input_tokens;
     std::vector<int>   output_tokens; g_output_tokens = &output_tokens;
@@ -692,8 +799,16 @@ int main(int argc, char ** argv) {
             if (!embd.empty()) {
                 const bool is_last_batch = (n_consumed >= (int) embd_inp.size());
                 const bool save_now = session_do_save && is_last_batch;
+                if (!kimi_prompt_phase_started && n_past == 0) {
+                    kimi_phase_report("before_prompt_eval", n_past, n_consumed, (int) embd.size());
+                    kimi_prompt_phase_started = true;
+                }
                 if (!common_prompt_batch_decode(ctx, embd, n_past, params.n_batch, path_session, save_now)) {
                     return 1;
+                }
+                if (!kimi_prompt_phase_reported && n_consumed >= (int) embd_inp.size()) {
+                    kimi_phase_report("after_prompt_eval", n_past, n_consumed, (int) embd.size());
+                    kimi_prompt_phase_reported = true;
                 }
                 session_tokens.insert(session_tokens.end(), embd.begin(), embd.end());
                 n_session_consumed = session_tokens.size();
@@ -992,6 +1107,7 @@ int main(int argc, char ** argv) {
     }
 
     LOG("\n\n");
+    kimi_phase_report("after_generation", n_past, n_consumed, 0);
     common_perf_print(ctx, smpl);
 
     llama_backend_free();

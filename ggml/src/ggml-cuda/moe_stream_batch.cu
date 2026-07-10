@@ -19,6 +19,7 @@ bool ggml_cuda_moe_stream_preload_tensor_prompt(int, const char *, const void *,
 bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_cache_contains(const char *, size_t, int) { return false; }
 const void * ggml_cuda_moe_stream_cache_dev_ptr(const char *, size_t, int) { return nullptr; }
+void ggml_cuda_moe_stream_batch_phase_report(const char *) {}
 bool ggml_cuda_moe_iq2_xxs_q8k_selftest(void) { return false; }
 bool ggml_cuda_moe_stream_up_gate_batch(int, int, const char *, const void *, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, int, float, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *, int, size_t) { return nullptr; }
@@ -3535,6 +3536,199 @@ static void expert_pack_report_atexit() {
 extern "C" void ggml_cuda_moe_stream_batch_report_counters(void) {
     batch_cache_report_atexit();
     expert_pack_report_atexit();
+    std::fflush(stderr);
+}
+
+struct moe_phase_counter_snapshot {
+    uint64_t pack_hits = 0;
+    uint64_t pack_misses = 0;
+    uint64_t pack_read_failures = 0;
+    uint64_t pack_direct_reads = 0;
+    uint64_t pack_direct_fallbacks = 0;
+    uint64_t pack_iouring_reads = 0;
+    uint64_t pack_iouring_bytes = 0;
+    uint64_t pack_iouring_fallbacks = 0;
+    uint64_t pack_iouring_submit_us = 0;
+    uint64_t pack_iouring_wait_us = 0;
+    uint64_t pack_iouring_h2d_enqueues = 0;
+    uint64_t pack_iouring_batches = 0;
+    uint64_t pack_iouring_submit_calls = 0;
+    uint64_t pack_iouring_wait_calls = 0;
+    uint64_t pack_iouring_cqes = 0;
+    uint64_t current_down_calls = 0;
+    uint64_t current_down_planned_jobs = 0;
+    uint64_t current_down_completed_jobs = 0;
+    uint64_t current_down_cache_hits = 0;
+    uint64_t current_down_missing_tensor = 0;
+    uint64_t current_down_missing_pack = 0;
+    uint64_t current_down_submitted_batches = 0;
+    uint64_t current_down_failed_batches = 0;
+    uint64_t current_down_worker_us = 0;
+    uint64_t cache_hits[2] = {};
+    uint64_t cache_misses[2] = {};
+    uint64_t cache_preloads[2] = {};
+    uint64_t cache_pinned[2] = {};
+    uint64_t cache_down_prefetch_loads[2] = {};
+    uint64_t cache_down_prefetch_hits[2] = {};
+    uint64_t cache_async_prefetch_waits[2] = {};
+    uint64_t stage_copies[4] = {};
+    uint64_t stage_waits[4] = {};
+    uint64_t stage_fallbacks[4] = {};
+    uint64_t stage_iouring_batches[4] = {};
+    uint64_t stage_iouring_jobs[4] = {};
+    uint64_t stage_iouring_wait_calls[4] = {};
+    uint64_t stage_iouring_cqes[4] = {};
+};
+
+static moe_phase_counter_snapshot g_moe_phase_last;
+static bool g_moe_phase_last_valid = false;
+static std::atomic<uint64_t> g_moe_phase_seq{0};
+
+static moe_phase_counter_snapshot moe_phase_snapshot_now() {
+    moe_phase_counter_snapshot s;
+    s.pack_hits = g_expert_pack.hits.load();
+    s.pack_misses = g_expert_pack.misses.load();
+    s.pack_read_failures = g_expert_pack.read_failures.load();
+    s.pack_direct_reads = g_expert_pack.direct_reads.load();
+    s.pack_direct_fallbacks = g_expert_pack.direct_fallbacks.load();
+    s.pack_iouring_reads = g_expert_pack.iouring_reads.load();
+    s.pack_iouring_bytes = g_expert_pack.iouring_bytes.load();
+    s.pack_iouring_fallbacks = g_expert_pack.iouring_fallbacks.load();
+    s.pack_iouring_submit_us = g_expert_pack.iouring_submit_us.load();
+    s.pack_iouring_wait_us = g_expert_pack.iouring_wait_us.load();
+    s.pack_iouring_h2d_enqueues = g_expert_pack.iouring_h2d_enqueues.load();
+    s.pack_iouring_batches = g_expert_pack.iouring_batches.load();
+    s.pack_iouring_submit_calls = g_expert_pack.iouring_submit_calls.load();
+    s.pack_iouring_wait_calls = g_expert_pack.iouring_wait_calls.load();
+    s.pack_iouring_cqes = g_expert_pack.iouring_cqes.load();
+    s.current_down_calls = g_current_down_overlap.calls.load();
+    s.current_down_planned_jobs = g_current_down_overlap.planned_jobs.load();
+    s.current_down_completed_jobs = g_current_down_overlap.completed_jobs.load();
+    s.current_down_cache_hits = g_current_down_overlap.cache_hits.load();
+    s.current_down_missing_tensor = g_current_down_overlap.missing_tensor.load();
+    s.current_down_missing_pack = g_current_down_overlap.missing_pack.load();
+    s.current_down_submitted_batches = g_current_down_overlap.submitted_batches.load();
+    s.current_down_failed_batches = g_current_down_overlap.failed_batches.load();
+    s.current_down_worker_us = g_current_down_overlap.worker_us.load();
+    for (int i = 0; i < 2; ++i) {
+        const batch_vram_cache &c = g_bcaches[i];
+        s.cache_hits[i] = c.hits;
+        s.cache_misses[i] = c.misses;
+        s.cache_preloads[i] = c.preloads;
+        s.cache_pinned[i] = c.pinned;
+        s.cache_down_prefetch_loads[i] = c.down_prefetch_loads;
+        s.cache_down_prefetch_hits[i] = c.down_prefetch_hits;
+        s.cache_async_prefetch_waits[i] = c.async_prefetch_waits;
+    }
+    const pinned_stage_ring *rings[4] = {
+        &g_batch.stage_ring,
+        &g_batch.stage_ring_gate,
+        &g_batch.stage_ring_up_aux,
+        &g_batch.stage_ring_gate_aux,
+    };
+    for (int i = 0; i < 4; ++i) {
+        s.stage_copies[i] = rings[i]->copies;
+        s.stage_waits[i] = rings[i]->waits;
+        s.stage_fallbacks[i] = rings[i]->fallbacks;
+        s.stage_iouring_batches[i] = rings[i]->iouring_batches;
+        s.stage_iouring_jobs[i] = rings[i]->iouring_jobs;
+        s.stage_iouring_wait_calls[i] = rings[i]->iouring_wait_calls;
+        s.stage_iouring_cqes[i] = rings[i]->iouring_cqes;
+    }
+    return s;
+}
+
+static uint64_t moe_phase_delta_u64(uint64_t now, uint64_t prev) {
+    return now >= prev ? now - prev : 0;
+}
+
+extern "C" void ggml_cuda_moe_stream_batch_phase_report(const char *label) {
+    if (!label || !label[0]) {
+        label = "unknown";
+    }
+    const moe_phase_counter_snapshot cur = moe_phase_snapshot_now();
+    const moe_phase_counter_snapshot prev = g_moe_phase_last_valid ? g_moe_phase_last : moe_phase_counter_snapshot{};
+    const uint64_t seq = g_moe_phase_seq.fetch_add(1, std::memory_order_relaxed);
+
+    std::fprintf(stderr,
+        "[moe_stream_batch_phase] label=%s seq=%lu "
+        "pack_hits=%lu delta_pack_hits=%lu pack_misses=%lu delta_pack_misses=%lu "
+        "read_failures=%lu delta_read_failures=%lu direct_reads=%lu delta_direct_reads=%lu "
+        "iouring_reads=%lu delta_iouring_reads=%lu iouring_bytes=%lu delta_iouring_bytes=%lu "
+        "iouring_submit_us=%lu delta_iouring_submit_us=%lu iouring_wait_us=%lu delta_iouring_wait_us=%lu "
+        "iouring_h2d=%lu delta_iouring_h2d=%lu iouring_batches=%lu delta_iouring_batches=%lu "
+        "iouring_submit_calls=%lu delta_iouring_submit_calls=%lu iouring_wait_calls=%lu delta_iouring_wait_calls=%lu "
+        "iouring_cqes=%lu delta_iouring_cqes=%lu entries=%zu\n",
+        label, (unsigned long)seq,
+        cur.pack_hits, moe_phase_delta_u64(cur.pack_hits, prev.pack_hits),
+        cur.pack_misses, moe_phase_delta_u64(cur.pack_misses, prev.pack_misses),
+        cur.pack_read_failures, moe_phase_delta_u64(cur.pack_read_failures, prev.pack_read_failures),
+        cur.pack_direct_reads, moe_phase_delta_u64(cur.pack_direct_reads, prev.pack_direct_reads),
+        cur.pack_iouring_reads, moe_phase_delta_u64(cur.pack_iouring_reads, prev.pack_iouring_reads),
+        cur.pack_iouring_bytes, moe_phase_delta_u64(cur.pack_iouring_bytes, prev.pack_iouring_bytes),
+        cur.pack_iouring_submit_us, moe_phase_delta_u64(cur.pack_iouring_submit_us, prev.pack_iouring_submit_us),
+        cur.pack_iouring_wait_us, moe_phase_delta_u64(cur.pack_iouring_wait_us, prev.pack_iouring_wait_us),
+        cur.pack_iouring_h2d_enqueues, moe_phase_delta_u64(cur.pack_iouring_h2d_enqueues, prev.pack_iouring_h2d_enqueues),
+        cur.pack_iouring_batches, moe_phase_delta_u64(cur.pack_iouring_batches, prev.pack_iouring_batches),
+        cur.pack_iouring_submit_calls, moe_phase_delta_u64(cur.pack_iouring_submit_calls, prev.pack_iouring_submit_calls),
+        cur.pack_iouring_wait_calls, moe_phase_delta_u64(cur.pack_iouring_wait_calls, prev.pack_iouring_wait_calls),
+        cur.pack_iouring_cqes, moe_phase_delta_u64(cur.pack_iouring_cqes, prev.pack_iouring_cqes),
+        g_expert_pack.entries.size());
+
+    for (int i = 0; i < 2; ++i) {
+        const char *cache_label = i == 1 ? "upgate" : "down";
+        std::fprintf(stderr,
+            "[moe_stream_batch_phase] label=%s seq=%lu cache=%s "
+            "hits=%lu delta_hits=%lu misses=%lu delta_misses=%lu preloads=%lu delta_preloads=%lu "
+            "pinned=%lu delta_pinned=%lu down_prefetch_loads=%lu delta_down_prefetch_loads=%lu "
+            "down_prefetch_hits=%lu delta_down_prefetch_hits=%lu async_prefetch_waits=%lu delta_async_prefetch_waits=%lu\n",
+            label, (unsigned long)seq, cache_label,
+            cur.cache_hits[i], moe_phase_delta_u64(cur.cache_hits[i], prev.cache_hits[i]),
+            cur.cache_misses[i], moe_phase_delta_u64(cur.cache_misses[i], prev.cache_misses[i]),
+            cur.cache_preloads[i], moe_phase_delta_u64(cur.cache_preloads[i], prev.cache_preloads[i]),
+            cur.cache_pinned[i], moe_phase_delta_u64(cur.cache_pinned[i], prev.cache_pinned[i]),
+            cur.cache_down_prefetch_loads[i], moe_phase_delta_u64(cur.cache_down_prefetch_loads[i], prev.cache_down_prefetch_loads[i]),
+            cur.cache_down_prefetch_hits[i], moe_phase_delta_u64(cur.cache_down_prefetch_hits[i], prev.cache_down_prefetch_hits[i]),
+            cur.cache_async_prefetch_waits[i], moe_phase_delta_u64(cur.cache_async_prefetch_waits[i], prev.cache_async_prefetch_waits[i]));
+    }
+
+    const char *stage_names[4] = {"main", "gate", "up_aux", "gate_aux"};
+    for (int i = 0; i < 4; ++i) {
+        std::fprintf(stderr,
+            "[moe_stream_batch_phase] label=%s seq=%lu stage=%s "
+            "copies=%lu delta_copies=%lu waits=%lu delta_waits=%lu fallbacks=%lu delta_fallbacks=%lu "
+            "iouring_batches=%lu delta_iouring_batches=%lu iouring_jobs=%lu delta_iouring_jobs=%lu "
+            "iouring_wait_calls=%lu delta_iouring_wait_calls=%lu iouring_cqes=%lu delta_iouring_cqes=%lu\n",
+            label, (unsigned long)seq, stage_names[i],
+            cur.stage_copies[i], moe_phase_delta_u64(cur.stage_copies[i], prev.stage_copies[i]),
+            cur.stage_waits[i], moe_phase_delta_u64(cur.stage_waits[i], prev.stage_waits[i]),
+            cur.stage_fallbacks[i], moe_phase_delta_u64(cur.stage_fallbacks[i], prev.stage_fallbacks[i]),
+            cur.stage_iouring_batches[i], moe_phase_delta_u64(cur.stage_iouring_batches[i], prev.stage_iouring_batches[i]),
+            cur.stage_iouring_jobs[i], moe_phase_delta_u64(cur.stage_iouring_jobs[i], prev.stage_iouring_jobs[i]),
+            cur.stage_iouring_wait_calls[i], moe_phase_delta_u64(cur.stage_iouring_wait_calls[i], prev.stage_iouring_wait_calls[i]),
+            cur.stage_iouring_cqes[i], moe_phase_delta_u64(cur.stage_iouring_cqes[i], prev.stage_iouring_cqes[i]));
+    }
+
+    std::fprintf(stderr,
+        "[moe_stream_batch_phase] label=%s seq=%lu current_down "
+        "calls=%lu delta_calls=%lu planned_jobs=%lu delta_planned_jobs=%lu "
+        "completed_jobs=%lu delta_completed_jobs=%lu cache_hits=%lu delta_cache_hits=%lu "
+        "missing_tensor=%lu delta_missing_tensor=%lu missing_pack=%lu delta_missing_pack=%lu "
+        "submitted_batches=%lu delta_submitted_batches=%lu failed_batches=%lu delta_failed_batches=%lu "
+        "worker_us=%lu delta_worker_us=%lu\n",
+        label, (unsigned long)seq,
+        cur.current_down_calls, moe_phase_delta_u64(cur.current_down_calls, prev.current_down_calls),
+        cur.current_down_planned_jobs, moe_phase_delta_u64(cur.current_down_planned_jobs, prev.current_down_planned_jobs),
+        cur.current_down_completed_jobs, moe_phase_delta_u64(cur.current_down_completed_jobs, prev.current_down_completed_jobs),
+        cur.current_down_cache_hits, moe_phase_delta_u64(cur.current_down_cache_hits, prev.current_down_cache_hits),
+        cur.current_down_missing_tensor, moe_phase_delta_u64(cur.current_down_missing_tensor, prev.current_down_missing_tensor),
+        cur.current_down_missing_pack, moe_phase_delta_u64(cur.current_down_missing_pack, prev.current_down_missing_pack),
+        cur.current_down_submitted_batches, moe_phase_delta_u64(cur.current_down_submitted_batches, prev.current_down_submitted_batches),
+        cur.current_down_failed_batches, moe_phase_delta_u64(cur.current_down_failed_batches, prev.current_down_failed_batches),
+        cur.current_down_worker_us, moe_phase_delta_u64(cur.current_down_worker_us, prev.current_down_worker_us));
+
+    g_moe_phase_last = cur;
+    g_moe_phase_last_valid = true;
     std::fflush(stderr);
 }
 

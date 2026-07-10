@@ -258,9 +258,20 @@ patterns = [
     (r"global expert sched shadow: ([^\n]+)", "global_expert_sched_shadow"),
     (r"VRAM cache down: ([^\n]+)", "vram_down"),
     (r"VRAM cache upgate: ([^\n]+)", "vram_upgate"),
+    (r"\[kimi_phase\] ([^\n]+)", "kimi_phase"),
+    (r"\[moe_stream_batch_phase\] ([^\n]+)", "moe_phase"),
+    (r"drop_expert_mmap_pages_after_prompt: expert mmap dontneed after prompt ([^\n]+)", "drop_after_prompt_expert"),
+    (r"drop_expert_mmap_pages_after_prompt: dense mmap dontneed after prompt ([^\n]+)", "drop_after_prompt_dense"),
 ]
 for pattern, name in patterns:
-    limit = 8 if name == "pinned_staging" else 4
+    if name == "moe_phase":
+        limit = 32
+    elif name == "pinned_staging":
+        limit = 16
+    elif name == "kimi_phase":
+        limit = 8
+    else:
+        limit = 4
     for i, match in enumerate(re.findall(pattern, stderr)[-limit:]):
         metrics.append(f"{name}_{i}={match}")
 
