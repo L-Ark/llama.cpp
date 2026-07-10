@@ -2284,6 +2284,60 @@ Next:
   - separate up/gate and down candidates;
   - reject candidates that mostly create partial hits across many batches.
 
+### Phase 4L plan: batch-coherent RAM/slab screen before another A/B
+
+Reason:
+
+- Phase 4K proved that scattered RAM hits can reduce SSD bytes without reducing token time.
+- The missing property is batch coherence: if a slow batch still has enough SSD reads, the batch tail and `iouring_wait` remain.
+- The next candidate must show that it can eliminate or heavily shrink whole slow batches, not just replace isolated rows with RAM-H2D.
+
+Inputs:
+
+- Phase 4E full-dev7 per-expert traces:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343/*/io-read-trace.csv`
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343/*/io-wait-trace.csv`
+- Phase 4J storage profile:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4j-storage-layout-profile-n32-dev3-0205`
+
+Offline method:
+
+1. For each IO batch, join per-row expert reads with total batch wait.
+2. Test candidate families without running the model:
+   - existing scattered candidates (`upgate-1800`, `down-1800`, `all-1800`, and the Phase 4K wait-weighted profile);
+   - layer/role slabs such as `blk4 down`, `blk6 down`, `blk29 gate`, `blk28 gate`, `blk7 down`, `blk10 down`;
+   - paired role slabs for layers where up/gate miss together.
+3. For each candidate family, compute:
+   - RAM MiB;
+   - selected entries;
+   - total candidate row hits;
+   - candidate bytes;
+   - number of batches touched;
+   - number of batches with `>=75%` rows covered;
+   - number of fully covered batches;
+   - wait upper bound from covered batches;
+   - wait upper bound from fully covered batches only;
+   - remaining SSD rows in touched batches.
+
+Acceptance to run a real N32 A/B:
+
+- Candidate RAM cost must fit the 16 GB host gate when replacing the current 1800 MiB tier or must justify a larger tier with explicit page-cache replacement.
+- Candidate must cover enough slow batches to have a credible N32 wait upper bound:
+  - preferred: fully covered wait upper bound `>=1s`;
+  - minimum: `>=75%` covered wait upper bound `>=2s`;
+  - scattered partial-hit candidates are rejected even if byte coverage is high.
+- Candidate must explain why it should avoid Phase 4K's failure mode:
+  - either entire batch becomes RAM-hit;
+  - or remaining SSD rows per touched batch are small enough that the original wait wave should shrink.
+
+If no candidate passes:
+
+- Stop RAM-tier tuning for the current pack layout.
+- Move to pack-layout work:
+  - physically co-locate experts that co-occur in slow batches;
+  - evaluate whether a layout overlay can reduce `span/read` from the current `5x-9x` range;
+  - only then revisit RAM tier.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
