@@ -97410,3 +97410,64 @@ GGML_MOE_RAM_TIER_PRELOAD_THREADS=12
 GGML_MOE_RAM_BATCH_PROFILE_OUT=$RUN/ram-batch-profile.csv" \
       .Agent/run-tools/kimi-general-prompt-repro.sh
 ```
+
+
+RAM-tier staging transfer experiment:
+
+Status: rejected on `2026-07-10T05:28+0800`; do not promote to SOTA.
+
+Motivation:
+
+- Full-layer pinned RAM tier failed because a 5754MiB `cudaHostRegister` region
+  made the first large `blk1 gate` RAM batch very expensive.
+- Full-layer pageable RAM tier passed the TTFT gate and reached `1.93 tok/s`, but
+  the first 70-expert prompt batch still cost about `1.38s`.
+- Hypothesis: copy RAM-resident entries through the existing small pinned staging
+  slots to avoid both large `cudaHostRegister` and pageable H2D overhead.
+
+A/B results:
+
+```text
+shared SSD staging ring, all RAM hits staged:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-ram-blk1-full-gud-stage-unpinned-direct12-n96-051824
+quality=pass
+TTFT=9377.93 ms, +20.96% vs 7753.38 ms baseline, fails +20% gate by ~73 ms
+decode=43251.35 ms / 85
+token_rate=1.97 tok/s
+first RAM batch blk1 gate=1452.90 ms
+first RAM batch blk1 up=32.70 ms
+first RAM batch blk1 down=148.13 ms
+result=rejected despite decode gain because TTFT gate fails
+
+separate RAM staging ring:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-ram-blk1-full-gud-stage-sep-unpinned-direct12-n96-052122
+quality=pass
+TTFT=9672.68 ms, fails +20% gate
+decode=46640.16 ms / 85
+token_rate=1.82 tok/s
+pinned_staging_ram=copies=1767 waits=1743 slot=6.02MiB
+first RAM batch blk1 gate=1391.28 ms
+result=rejected; separate ring removes SSD-ring sharing but worsens decode and does not solve first gate
+
+stage only for small batches, direct pageable for jobs>16:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-ram-blk1-full-gud-stage16-unpinned-direct12-n96-052418
+quality=pass
+TTFT=9375.21 ms, fails +20% gate by ~70 ms
+decode=44666.58 ms / 85
+token_rate=1.90 tok/s
+first RAM batch blk1 gate=1349.14 ms
+result=rejected; thresholding lowers first batch slightly but loses most decode gain
+```
+
+Conclusion:
+
+- The accepted fix remains full `blk.1 gate/up/down` RAM residency with
+  `GGML_MOE_RAM_TIER_PIN=0`, `token_rate=1.93 tok/s`, TTFT within gate.
+- Small pinned staging is not a reliable fix for the first-batch cost in the
+  current implementation. It can improve decode when sharing the existing ring,
+  but it pushes TTFT just outside the strict +20% limit. A separate ring is worse.
+- The next viable direction is not generic staging. It should target the prompt
+  first-batch path directly: either pre-stage exactly the first prompt active set
+  before TTFT accounting if allowed by the benchmark definition, reduce the first
+  `blk1 gate` active set transfer size, or place the most expensive first-batch
+  `blk1 gate` entries in VRAM rather than RAM.
