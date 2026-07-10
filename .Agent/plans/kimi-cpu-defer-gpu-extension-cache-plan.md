@@ -589,6 +589,105 @@ Decision rules:
   `5 tok/s` requires a smaller expert representation, predictive prefetch that
   is validated on held-out prompts, or a different storage/compute format.
 
+Phase 4X result: residual attribution corrected.
+
+- Runtime change:
+  - added prompt/decode phase totals to the existing
+    `[kimi_cpu_moe_profile]` up_gate/down counters;
+  - updated `.Agent/run-tools/kimi_dev_decode_bottleneck_summary.py` so reports
+    include `cpu_moe_*` components and `residual_after_cpu_moe`.
+- This is profiling-only and makes no SOTA claim. Default behavior is
+  unchanged unless `GGML_KIMI_CPU_MOE_PROFILE` is enabled.
+- Build:
+  - `cmake --build build-cuda-batch -j 8` passed.
+  - `build-cuda-batch/bin/test-kimi-deepseek2-guards` passed.
+
+N96 cold-start attribution run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4x-cpu-moe-phase-profile-n96-france`
+- Report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4x-cpu-moe-phase-profile-n96-france-analysis/report.md`
+- Env additions:
+  - `PROFILE=1`
+  - `COPY_PROFILE=1`
+  - `LLAMA_KIMI_GRAPH_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE=1`
+  - `GGML_KIMI_SPLIT_PROFILE_TOP=80`
+- Prompt:
+  `Please introduce France in a short paragraph.`
+- Quality: pass.
+- Host RAM:
+  - peak `12813234176` bytes, below the `15900000000` byte gate;
+  - final file cache `12088602624` bytes;
+  - `workingset_refault_file=0`.
+- Timing:
+  - TTFT `11913.25 ms`;
+  - decode `55884.69 ms / 85 runs`;
+  - token rate `1.52 tok/s`.
+- Expert path:
+  - CPU fallback `0`;
+  - direct reads `0`;
+  - iouring reads `85754`;
+  - iouring bytes `491342774272`;
+  - iouring wait `37717.144 ms`;
+  - VRAM down hit `61.4%`;
+  - VRAM upgate hit `43.5%`.
+
+Corrected decode attribution:
+
+| Component | ms/token | decode share |
+|---|---:|---:|
+| CPU MoE up_gate total | `459.570` | `69.9%` |
+| CPU MoE up_gate CUDA extension | `454.829` | `69.2%` |
+| iouring wait pressure signal | `443.731` | `67.5%` |
+| CPU MoE down total | `175.414` | `26.7%` |
+| CPU MoE down CUDA extension | `173.614` | `26.4%` |
+| residual after CPU MoE | `22.482` | `3.4%` |
+
+Interpretation:
+
+- The old `residual_unattributed` value was a profiling artifact. The
+  `up-gate-profile.csv` path covers only part of the up_gate work; it reported
+  about `175.691 ms/token`, while full CPU/defer up_gate entry timing is
+  `459.570 ms/token`.
+- Dense/attention/shared CUDA graph work is not the main bottleneck in this
+  profile. `GGML_KIMI_SPLIT_PROFILE` shows decode CUDA0 split wall is only
+  `367.240 ms` total, about `4.3 ms/token`.
+- The real bottleneck is the CPU/defer up_gate op using the GPU extension.
+  Most of that time is inside its CUDA extension call and correlates with
+  expert movement and low upgate hit rate.
+- Therefore the next optimization should target complete up_gate movement and
+  scheduling, not generic non-MoE graph kernels and not more down-only cache.
+
+Next plan from Phase 4X:
+
+1. Add complete up_gate subpath attribution.
+   - Split the full CPU MoE up_gate CUDA extension time by layer, quant type,
+     fused/unfused implementation path, cache hit/miss, iouring wait, H2D, and
+     compute.
+   - The current `up-gate-profile.csv` is insufficient because it misses about
+     `459.570 - 175.691 = 283.879 ms/token` of full up_gate entry time.
+   - Acceptance for instrumentation: no behavior change, quality pass, RAM
+     below gate, and profiling overhead within noise.
+
+2. Optimize only after the missing up_gate subpath is identified.
+   - If the missing time is transfer wait, prioritize upgate-specific queue
+     continuity and larger batch construction before adding down prefetch.
+   - If the missing time is H2D tail latency, test staged slab layout or
+     role-specific pinned reuse for upgate only.
+   - If the missing time is compute/dequant, target the upgate CUDA kernel or
+     quant representation.
+   - If it is cache admission churn, change VRAM/RAM policy to favor upgate
+     before compressing down cache.
+
+3. The `>2 tok/s` bound is now clearer.
+   - Current N96 decode is `657.467 ms/token`.
+   - `>2 tok/s` requires below `500 ms/token`.
+   - The first milestone must save at least `158 ms/token`, and the only
+     measured component large enough is full up_gate.
+   - Down-only optimization cannot reach `>2 tok/s` by itself.
+
 ## 2026-07-11 active goal and plan history
 
 This section was the previous source of truth. It is retained as history and

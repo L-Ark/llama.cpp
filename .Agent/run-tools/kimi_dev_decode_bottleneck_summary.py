@@ -74,6 +74,52 @@ def read_csv_rows(path):
         return list(csv.DictReader(f))
 
 
+def parse_cpu_moe_phase_profile(run_dir):
+    result = {}
+    path = run_dir / "stderr.txt"
+    if not path.exists():
+        return result
+    text = path.read_text(errors="replace")
+    for line in text.splitlines():
+        if "[kimi_cpu_moe_profile]" not in line:
+            continue
+        match = re.search(r"\[kimi_cpu_moe_profile\]\s+([A-Za-z0-9_]+)\s+", line)
+        if not match:
+            continue
+        op = match.group(1)
+        if op == "up_gate":
+            prefix = "cpu_moe_upgate"
+        elif op == "down":
+            prefix = "cpu_moe_down"
+        else:
+            prefix = f"cpu_moe_{op}"
+        kv = parse_kv_numbers(line)
+        decode_calls = kv.get("decode_calls", 0.0)
+        prompt_calls = kv.get("prompt_calls", 0.0)
+        result[f"{prefix}_decode_calls"] = decode_calls
+        result[f"{prefix}_decode_total_ms"] = decode_calls * kv.get("decode_total", 0.0)
+        result[f"{prefix}_decode_cuda_ms"] = decode_calls * kv.get("decode_cuda", 0.0)
+        result[f"{prefix}_decode_cuda_batch_ms"] = decode_calls * kv.get("decode_cuda_batch", 0.0)
+        result[f"{prefix}_decode_cuda_single_ms"] = decode_calls * kv.get("decode_cuda_single", 0.0)
+        result[f"{prefix}_decode_fallback_ms"] = decode_calls * kv.get("decode_fallback", 0.0)
+        result[f"{prefix}_prompt_calls"] = prompt_calls
+        result[f"{prefix}_prompt_total_ms"] = prompt_calls * kv.get("prompt_total", 0.0)
+        result[f"{prefix}_prompt_cuda_ms"] = prompt_calls * kv.get("prompt_cuda", 0.0)
+    result["cpu_moe_decode_total_ms"] = (
+        result.get("cpu_moe_upgate_decode_total_ms", 0.0) +
+        result.get("cpu_moe_down_decode_total_ms", 0.0)
+    )
+    result["cpu_moe_decode_cuda_ms"] = (
+        result.get("cpu_moe_upgate_decode_cuda_ms", 0.0) +
+        result.get("cpu_moe_down_decode_cuda_ms", 0.0)
+    )
+    result["cpu_moe_prompt_total_ms"] = (
+        result.get("cpu_moe_upgate_prompt_total_ms", 0.0) +
+        result.get("cpu_moe_down_prompt_total_ms", 0.0)
+    )
+    return result
+
+
 def summarize_run(run_dir, decode_down_max_active):
     metrics = read_metrics(run_dir)
     decode_runs = inum(metrics.get("decode_runs"))
@@ -95,6 +141,12 @@ def summarize_run(run_dir, decode_down_max_active):
         "prompt_fallback_ms": 0.0,
         "missing": [],
     }
+    cpu_moe = parse_cpu_moe_phase_profile(run_dir)
+    out.update(cpu_moe)
+    out["residual_after_cpu_moe_ms"] = (
+        max(decode_ms - cpu_moe.get("cpu_moe_decode_total_ms", 0.0), 0.0)
+        if cpu_moe.get("cpu_moe_decode_total_ms", 0.0) > 0 else 0.0
+    )
     expert_pack = parse_kv_numbers(metrics.get("expert_pack_0", ""))
     out["direct_reads"] = int(expert_pack.get("direct_reads", 0))
     out["iouring_reads"] = int(expert_pack.get("iouring_reads", 0))
@@ -292,6 +344,9 @@ def main():
             "down_stage_ms_per_token": fmt(r["down_stage_ms"] / denom),
             "decode_fallback_ms_per_token": fmt(r["decode_fallback_ms"] / denom),
             "residual_ms_per_token": fmt(r["residual_ms"] / denom),
+            "cpu_moe_upgate_ms_per_token": fmt(r.get("cpu_moe_upgate_decode_total_ms", 0.0) / denom),
+            "cpu_moe_down_ms_per_token": fmt(r.get("cpu_moe_down_decode_total_ms", 0.0) / denom),
+            "cpu_moe_residual_ms_per_token": fmt(r.get("residual_after_cpu_moe_ms", 0.0) / denom),
             "direct_read_ratio": fmt(r["direct_read_ratio"]),
             "iouring_gib_s": fmt(r["iouring_bytes"] / 1024 / 1024 / 1024 / (r["decode_ms"] / 1000.0) if r["decode_ms"] else 0.0),
             "missing": ";".join(r["missing"]),
@@ -307,6 +362,15 @@ def main():
         "decode_fallback": sum(r["decode_fallback_ms"] for r in runs),
         "iouring_wait_reported": sum(r["iouring_wait_ms"] for r in runs),
     }
+    cpu_moe_components = {
+        "cpu_moe_upgate_total": sum(r.get("cpu_moe_upgate_decode_total_ms", 0.0) for r in runs),
+        "cpu_moe_down_total": sum(r.get("cpu_moe_down_decode_total_ms", 0.0) for r in runs),
+        "cpu_moe_upgate_cuda": sum(r.get("cpu_moe_upgate_decode_cuda_ms", 0.0) for r in runs),
+        "cpu_moe_down_cuda": sum(r.get("cpu_moe_down_decode_cuda_ms", 0.0) for r in runs),
+        "residual_after_cpu_moe": sum(r.get("residual_after_cpu_moe_ms", 0.0) for r in runs),
+    }
+    if any(total > 0 for total in cpu_moe_components.values()):
+        components.update(cpu_moe_components)
     for name, total_ms in sorted(components.items(), key=lambda kv: kv[1], reverse=True):
         mspt = total_ms / total_decode_runs if total_decode_runs else 0.0
         remaining = max(base_ms_per_token - mspt, 0.001)
@@ -358,14 +422,15 @@ def main():
         "",
         "## Per Prompt",
         "",
-        "| Prompt | Quality | tok/s | decode ms/token | TTFT ms | up/gate ms/token | down ms/token | fallback ms/token | residual ms/token | direct read ratio | iouring GiB/s |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Prompt | Quality | tok/s | decode ms/token | TTFT ms | up/gate CSV ms/token | down CSV ms/token | residual CSV ms/token | CPU MoE upgate ms/token | CPU MoE down ms/token | CPU MoE residual ms/token | direct read ratio | iouring GiB/s |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in per_prompt_rows:
         lines.append(
             f"| `{row['prompt_id']}` | {row['quality']} | {row['token_rate']} | {row['decode_ms_per_token']} | "
             f"{row['ttft_ms']} | {row['upgate_ms_per_token']} | {row['down_ms_per_token']} | "
-            f"{row['decode_fallback_ms_per_token']} | {row['residual_ms_per_token']} | "
+            f"{row['residual_ms_per_token']} | {row['cpu_moe_upgate_ms_per_token']} | "
+            f"{row['cpu_moe_down_ms_per_token']} | {row['cpu_moe_residual_ms_per_token']} | "
             f"{row['direct_read_ratio']} | {row['iouring_gib_s']} |"
         )
     lines += [
@@ -398,6 +463,10 @@ def main():
         "  exposed-pressure signal, not as an additive component.",
         "- `down_wall`, `upgate_wall`, and `residual_unattributed` are closer to",
         "  additive decode-wall buckets, but they are still profiling estimates.",
+        "- When `cpu_moe_*` rows are present, they come from the CPU/defer MoE",
+        "  op entry profile and are broader than the CSV buckets. Prefer",
+        "  `residual_after_cpu_moe` over `residual_unattributed` for deciding",
+        "  whether the next bottleneck is outside MoE.",
         "- `down-batch-profile.csv` has no mode column; this report treats rows",
         "  with `n_active` above the configured threshold as prompt/prefill rows",
         "  and excludes them from decode down totals.",

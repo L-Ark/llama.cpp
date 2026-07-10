@@ -384,6 +384,16 @@ struct ggml_kimi_cpu_moe_profile_op {
     uint64_t cuda_batch_declined;
     uint64_t cuda_single_accepted;
     uint64_t cuda_single_declined;
+    uint64_t decode_calls;
+    uint64_t decode_total_us;
+    uint64_t decode_cuda_batch_us;
+    uint64_t decode_cuda_single_us;
+    uint64_t decode_fallback_us;
+    uint64_t prompt_calls;
+    uint64_t prompt_total_us;
+    uint64_t prompt_cuda_batch_us;
+    uint64_t prompt_cuda_single_us;
+    uint64_t prompt_fallback_us;
 };
 
 #define GGML_KIMI_CPU_MOE_NAME_PROFILE_MAX 512
@@ -434,6 +444,28 @@ struct ggml_kimi_cpu_moe_profile_state {
 };
 
 static struct ggml_kimi_cpu_moe_profile_state ggml_kimi_cpu_moe_profile;
+
+static void ggml_kimi_cpu_moe_profile_record_phase(
+        struct ggml_kimi_cpu_moe_profile_op * op,
+        bool prompt_phase,
+        uint64_t total_us,
+        uint64_t cuda_batch_us,
+        uint64_t cuda_single_us,
+        uint64_t fallback_us) {
+    if (prompt_phase) {
+        op->prompt_calls++;
+        op->prompt_total_us += total_us;
+        op->prompt_cuda_batch_us += cuda_batch_us;
+        op->prompt_cuda_single_us += cuda_single_us;
+        op->prompt_fallback_us += fallback_us;
+    } else {
+        op->decode_calls++;
+        op->decode_total_us += total_us;
+        op->decode_cuda_batch_us += cuda_batch_us;
+        op->decode_cuda_single_us += cuda_single_us;
+        op->decode_fallback_us += fallback_us;
+    }
+}
 
 struct ggml_kimi_cpu_moe_fallback_profile_entry {
     char name[GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN];
@@ -1384,12 +1416,18 @@ static void ggml_kimi_cpu_moe_profile_report_op(const char * name, const struct 
         return;
     }
 
+    const uint64_t decode_cuda_us = op->decode_cuda_batch_us + op->decode_cuda_single_us;
+    const uint64_t prompt_cuda_us = op->prompt_cuda_batch_us + op->prompt_cuda_single_us;
     fprintf(stderr,
             "[kimi_cpu_moe_profile] %s calls=%" PRIu64
             " total=%.3f ms/call convert_t0=%.3f route=%.3f route_barrier=%.3f"
             " cuda_batch=%.3f cuda_single=%.3f post_cuda_barrier=%.3f fallback_t0=%.3f"
             " batch_accept=%" PRIu64 " batch_decline=%" PRIu64
-            " single_accept=%" PRIu64 " single_decline=%" PRIu64 "\n",
+            " single_accept=%" PRIu64 " single_decline=%" PRIu64
+            " decode_calls=%" PRIu64 " decode_total=%.3f ms/call decode_cuda=%.3f ms/call"
+            " decode_cuda_batch=%.3f ms/call decode_cuda_single=%.3f ms/call decode_fallback=%.3f ms/call"
+            " prompt_calls=%" PRIu64 " prompt_total=%.3f ms/call prompt_cuda=%.3f ms/call"
+            " prompt_cuda_batch=%.3f ms/call prompt_cuda_single=%.3f ms/call prompt_fallback=%.3f ms/call\n",
             name,
             op->calls,
             (double) op->total_us / 1000.0 / (double) op->calls,
@@ -1403,7 +1441,19 @@ static void ggml_kimi_cpu_moe_profile_report_op(const char * name, const struct 
             op->cuda_batch_accepted,
             op->cuda_batch_declined,
             op->cuda_single_accepted,
-            op->cuda_single_declined);
+            op->cuda_single_declined,
+            op->decode_calls,
+            op->decode_calls ? (double) op->decode_total_us / 1000.0 / (double) op->decode_calls : 0.0,
+            op->decode_calls ? (double) decode_cuda_us / 1000.0 / (double) op->decode_calls : 0.0,
+            op->decode_calls ? (double) op->decode_cuda_batch_us / 1000.0 / (double) op->decode_calls : 0.0,
+            op->decode_calls ? (double) op->decode_cuda_single_us / 1000.0 / (double) op->decode_calls : 0.0,
+            op->decode_calls ? (double) op->decode_fallback_us / 1000.0 / (double) op->decode_calls : 0.0,
+            op->prompt_calls,
+            op->prompt_calls ? (double) op->prompt_total_us / 1000.0 / (double) op->prompt_calls : 0.0,
+            op->prompt_calls ? (double) prompt_cuda_us / 1000.0 / (double) op->prompt_calls : 0.0,
+            op->prompt_calls ? (double) op->prompt_cuda_batch_us / 1000.0 / (double) op->prompt_calls : 0.0,
+            op->prompt_calls ? (double) op->prompt_cuda_single_us / 1000.0 / (double) op->prompt_calls : 0.0,
+            op->prompt_calls ? (double) op->prompt_fallback_us / 1000.0 / (double) op->prompt_calls : 0.0);
 }
 
 static void ggml_kimi_cpu_moe_profile_report(void) {
@@ -4801,6 +4851,8 @@ static void ggml_compute_forward_mul_mat_id(
     const bool kimi_cpu_moe_profile = ggml_kimi_cpu_moe_profile_enabled();
     const bool ds4_sparse_fused_mmvq_membership = ggml_ds4_sparse_fused_mmvq_membership_enabled();
     const uint64_t kimi_cpu_moe_total_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
+    uint64_t kimi_cpu_moe_cuda_batch_this_us = 0;
+    uint64_t kimi_cpu_moe_cuda_single_this_us = 0;
 
     const enum ggml_type type = src0->type;
 
@@ -5030,7 +5082,9 @@ static void ggml_compute_forward_mul_mat_id(
                 ids->ne[0]*ids->ne[1]);
             kimi_cpu_moe_batch_done = done;
             if (kimi_cpu_moe_profile) {
-                ggml_kimi_cpu_moe_profile.down.cuda_batch_us += ggml_time_us() - kimi_cpu_moe_cuda_start;
+                const uint64_t elapsed_us = ggml_time_us() - kimi_cpu_moe_cuda_start;
+                ggml_kimi_cpu_moe_profile.down.cuda_batch_us += elapsed_us;
+                kimi_cpu_moe_cuda_batch_this_us += elapsed_us;
                 if (done) {
                     ggml_kimi_cpu_moe_profile.down.cuda_batch_accepted++;
                 } else {
@@ -5157,7 +5211,9 @@ static void ggml_compute_forward_mul_mat_id(
                     nb1, nb2,
                     (const ggml_moe_stream_row_mapping *) (matrix_rows + cur_a * ids->ne[0] * ids->ne[1]));
                 if (kimi_cpu_moe_profile) {
-                    ggml_kimi_cpu_moe_profile.down.cuda_single_us += ggml_time_us() - kimi_cpu_moe_cuda_start;
+                    const uint64_t elapsed_us = ggml_time_us() - kimi_cpu_moe_cuda_start;
+                    ggml_kimi_cpu_moe_profile.down.cuda_single_us += elapsed_us;
+                    kimi_cpu_moe_cuda_single_this_us += elapsed_us;
                     if (done) {
                         ggml_kimi_cpu_moe_profile.down.cuda_single_accepted++;
                     } else {
@@ -5651,6 +5707,13 @@ static void ggml_compute_forward_mul_mat_id(
         ggml_kimi_cpu_moe_profile.down.fallback_us += kimi_cpu_moe_fallback_us;
         ggml_kimi_cpu_moe_profile.down.total_us += kimi_cpu_moe_total_us;
         ggml_kimi_cpu_moe_profile.down.calls++;
+        ggml_kimi_cpu_moe_profile_record_phase(
+                &ggml_kimi_cpu_moe_profile.down,
+                ids->ne[1] > 1,
+                kimi_cpu_moe_total_us,
+                kimi_cpu_moe_cuda_batch_this_us,
+                kimi_cpu_moe_cuda_single_this_us,
+                kimi_cpu_moe_fallback_us);
         ggml_kimi_cpu_moe_name_profile_record(
             src0->name,
             kimi_cpu_moe_total_us,
@@ -5890,6 +5953,7 @@ static void ggml_compute_forward_moe_up_gate(
     const int nth = params->nth;
     const bool kimi_cpu_moe_profile = ggml_kimi_cpu_moe_profile_enabled();
     const uint64_t kimi_cpu_moe_total_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
+    uint64_t kimi_cpu_moe_cuda_batch_this_us = 0;
 
     const enum ggml_type up_type = src0_up->type;
     const enum ggml_type gate_type = src0_gate->type;
@@ -6083,7 +6147,9 @@ static void ggml_compute_forward_moe_up_gate(
                 (const ggml_moe_stream_row_mapping *) matrix_rows,
                 ids->ne[0]*ids->ne[1]);
             if (kimi_cpu_moe_profile) {
-                ggml_kimi_cpu_moe_profile.up_gate.cuda_batch_us += ggml_time_us() - kimi_cpu_moe_cuda_start;
+                const uint64_t elapsed_us = ggml_time_us() - kimi_cpu_moe_cuda_start;
+                ggml_kimi_cpu_moe_profile.up_gate.cuda_batch_us += elapsed_us;
+                kimi_cpu_moe_cuda_batch_this_us += elapsed_us;
                 if (done) {
                     ggml_kimi_cpu_moe_profile.up_gate.cuda_batch_accepted++;
                 } else {
@@ -6236,9 +6302,19 @@ static void ggml_compute_forward_moe_up_gate(
         }
     }
     if (kimi_cpu_moe_profile && ith == 0) {
-        ggml_kimi_cpu_moe_profile.up_gate.fallback_us += ggml_time_us() - kimi_cpu_moe_fallback_start;
-        ggml_kimi_cpu_moe_profile.up_gate.total_us += ggml_time_us() - kimi_cpu_moe_total_start;
+        const uint64_t now_us = ggml_time_us();
+        const uint64_t fallback_us = now_us - kimi_cpu_moe_fallback_start;
+        const uint64_t total_us = now_us - kimi_cpu_moe_total_start;
+        ggml_kimi_cpu_moe_profile.up_gate.fallback_us += fallback_us;
+        ggml_kimi_cpu_moe_profile.up_gate.total_us += total_us;
         ggml_kimi_cpu_moe_profile.up_gate.calls++;
+        ggml_kimi_cpu_moe_profile_record_phase(
+                &ggml_kimi_cpu_moe_profile.up_gate,
+                ids->ne[1] > 1,
+                total_us,
+                kimi_cpu_moe_cuda_batch_this_us,
+                0,
+                fallback_us);
     }
 }
 
