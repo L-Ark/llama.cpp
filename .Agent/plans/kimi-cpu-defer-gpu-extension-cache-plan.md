@@ -1631,6 +1631,87 @@ Next plan:
 - Re-run the same N32 A/B only after this code change.
 - Expected bound remains small: if profile-only protection works perfectly, the best case is still only the `blk.1 gate` stage bound (`~5.18s` on profiled dev5), so this remains a screening experiment, not a likely SOTA jump.
 
+### Phase 4H N32 result: profile-only protection fixed the mechanism
+
+Timestamp: 2026-07-11 00:58 CST.
+
+Code change:
+
+- Added default-off env:
+  - `GGML_MOE_VRAM_PROFILE_PROTECT_PROFILE_ONLY=1`
+- Behavior:
+  - default behavior is unchanged when the env is unset;
+  - when set, `GGML_MOE_VRAM_PROFILE_PROTECT=1` only pins preload inserts that have explicit `profile_count > 0` or were already recorded as profile-pinned keys;
+  - ordinary down/current prefetch preloads with `profile_count == 0` are no longer pinned solely because profile protection is enabled.
+
+Build:
+
+```bash
+cmake --build build-cuda-batch -j $(nproc)
+```
+
+Build result:
+
+- passed;
+- only pre-existing warnings were emitted.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4h-profile-only-blk1gate-n32-005854`
+
+Candidate env delta:
+
+- same as Phase 4G plus:
+  - `GGML_MOE_VRAM_PROFILE_PROTECT_PROFILE_ONLY=1`
+
+Aggregate:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | decode sum s | TTFT median ms | TTFT max ms | RAM peak GiB | iouring wait s | iouring bytes GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control | 6/7 | 1.52 | 1.77 | 1.737 | 125.495 | 9091.74 | 11602.34 | 13.56 | 145.26 | 1557.15 |
+| profile-only | 6/7 | 1.54 | 1.80 | 1.753 | 124.457 | 8858.62 | 10994.27 | 13.55 | 143.53 | 1557.15 |
+
+Quality note:
+
+- `dev_linear_equation` failed in both runs due the known N32 truncation caveat.
+- Other prompts passed.
+
+Per-prompt deltas:
+
+| prompt | tok delta | decode delta ms | TTFT delta ms | TTFT ratio |
+|---|---:|---:|---:|---:|
+| dev_france_regression | +0.02 | -228.51 | -396.69 | 0.956 |
+| dev_japan_factual | +0.01 | -124.52 | +262.21 | 1.031 |
+| dev_linear_equation | +0.02 | -177.49 | -1066.66 | 0.908 |
+| dev_mixed_summary | +0.00 | +5.20 | +92.65 | 1.008 |
+| dev_photosynthesis_factual | +0.03 | -203.04 | +613.63 | 1.079 |
+| dev_python_reverse | +0.01 | -115.19 | -535.21 | 0.946 |
+| dev_zh_france | +0.02 | -194.34 | -225.98 | 0.972 |
+
+Mechanism check:
+
+- Candidate logs confirm profile preload happened:
+  - `profile preload: blk.1.ffn_gate_exps.weight loaded=384`.
+- Candidate logs also confirm the Phase 4G regression mechanism was fixed:
+  - down cache stayed `preloads=4324 pinned=0 hit_rate=57.7%` on France, matching control;
+  - upgate/down hit rates and IO bytes were unchanged in aggregate;
+  - `iouring_wait` decreased by `1.73s`, not because bulk bytes fell but because the protected profile-only behavior avoided the previous down-cache damage.
+
+Decision:
+
+- Keep the default-off code change for N96 dev validation.
+- Do not call this SOTA:
+  - N32 signal is small;
+  - held-out was not run;
+  - profile-only slab must pass N96 dev before any held-out run.
+
+Next:
+
+- Run paired N96 full-dev with:
+  - control: current RAM tier only;
+  - candidate: same profile-only `blk.1 gate` VRAM slab.
+- Promote to held-out only if N96 full-dev min/median/mean improve, quality passes, TTFT remains within `1.20x`, and RAM remains under the 16 GB gate.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:

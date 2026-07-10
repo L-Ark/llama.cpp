@@ -2050,6 +2050,11 @@ static bool profile_preload_enabled() {
     return !env || !env[0] || env[0] != '0';
 }
 
+static bool profile_protect_profile_only_enabled() {
+    const char *env = std::getenv("GGML_MOE_VRAM_PROFILE_PROTECT_PROFILE_ONLY");
+    return env && env[0] && env[0] != '0';
+}
+
 static bool profile_pin_on_insert_enabled() {
     const char *env = std::getenv("GGML_MOE_VRAM_PROFILE_PIN_ON_INSERT");
     return env && env[0] && env[0] != '0';
@@ -6823,7 +6828,9 @@ static int batch_cache_insert_slot(
         bool prefetch_down = false, bool pin_preload = true, bool async_prefetch = false,
         uint64_t profile_count = 0) {
     if (!c || !c->pool || c->n_slots == 0 || sz > c->slot_sz) return -1;
-    bool pin_slot = preload && pin_preload && profile_protect_enabled();
+    const bool protect_profile_only = profile_protect_profile_only_enabled();
+    bool pin_slot = preload && pin_preload && profile_protect_enabled() &&
+        (!protect_profile_only || profile_count > 0 || profile_pinned_key_contains((uint64_t)key));
     if (!pin_slot && profile_pin_on_insert_enabled() && profile_protect_enabled()) {
         load_profile_once();
         if (g_profile_enabled) {
