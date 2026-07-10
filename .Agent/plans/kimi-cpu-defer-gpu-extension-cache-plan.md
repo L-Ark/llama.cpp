@@ -4,10 +4,115 @@ Date: 2026-07-10
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
-## 2026-07-11 active goal and plan
+## 2026-07-11 goal: transfer the DeepSeek CPU/defer GPU-extension pattern to Kimi
 
-This section is the current source of truth. Older sections below are retained as
-history and experiment audit trail.
+This section is the immediate goal and plan for the next Kimi workstream.
+
+Goal:
+
+> Determine whether the DeepSeek SOTA architecture pattern can improve Kimi:
+> keep CPU/defer as the MoE routing and scheduling owner, but make GPU a
+> stronger extension for expert residency, expert movement, and `gate/up/down`
+> compute. The short-term target is a reproducible general-prompt improvement
+> above the current stable Kimi SOTA and toward stable `>2 tok/s`; the product
+> target remains stable `>5 tok/s` for random prompts on one 32 GB RTX
+> 5090-class GPU with total host RAM below 16 GB.
+
+Expected applicability to Kimi:
+
+- The DeepSeek lesson should transfer only as an architecture pattern, not as a
+  literal gate-only optimization.
+- Kimi already has near-zero decode CPU fallback on the current stable path, so
+  the next Kimi gain is not expected to come from simply moving fallback CPU
+  math to GPU.
+- The likely Kimi benefit is broader coverage of the CPU/defer extension path:
+  once routing knows active experts, `gate`, `up`, and `down` should be fetched,
+  cached, overlapped, and computed through GPU-backed paths whenever possible.
+- A useful candidate must reduce exposed decode wait, especially
+  `io_uring_wait`, staging wait, and H2D bubbles. Higher cache hit rate alone is
+  not enough.
+
+Hard success gates:
+
+- Cold start only.
+- Total host RAM peak must stay below `15900000000` bytes, including page
+  cache, pinned memory, mmap/file-backed pages, helper processes, and cgroup
+  accounting.
+- Use VRAM aggressively, but do not accept a result that buys VRAM hit rate by
+  increasing TTFT, RAM pressure, or quality risk.
+- TTFT must be no more than `1.20x` the paired baseline.
+- Mandatory quality prompt: `Please introduce France in a short paragraph.`
+  must remain coherent and semantically correct.
+- Optimization must be prompt-general. Dev prompts can guide design; held-out
+  prompts are validation only and must not be used to tune packs, hotsets,
+  thresholds, or layer choices.
+- Every accepted improvement must be reproducible from a pushed commit with
+  exact env, command, prompt split, run directory, metrics, quality result, and
+  rollback commit in the commit message body and this plan.
+
+Execution plan:
+
+1. Freeze and re-state the current baseline.
+   - Use the current branch `vendor/kimi-deepseek-41d205-additive`.
+   - Record the rollback commit before each candidate.
+   - Run at least one N96 cold-start general-prompt baseline with
+     `GGML_MOE_PHASE_REPORT=1`.
+   - Record token rate, TTFT, decode time, prompt time, RAM peak, file cache,
+     VRAM cache hit rates, expert-pack bytes, `io_uring_wait`, staging wait,
+     H2D time, down compute, up/gate compute, and CPU fallback counters.
+
+2. Audit Kimi's CPU/defer extension coverage.
+   - Confirm which path owns Kimi MoE scheduling under the current run
+     arguments, especially any `n_cpu_moe` or CPU/defer settings.
+   - For every fused and non-fused branch, record whether `gate`, `up`, and
+     `down` are handled by GPU extension, expert pack, VRAM cache, RAM tier,
+     mmap fallback, or CPU fallback.
+   - Treat any remaining CPU fallback as a correctness/performance bug only if
+     it is on the measured critical path.
+
+3. First candidate: close extension coverage gaps without changing model
+   semantics.
+   - Start from default-off switches only.
+   - Prioritize all-path current-down overlap, because shadow profiling showed
+     many plannable same-layer down misses that current overlap does not cover.
+   - Theoretical upper bound: the maximum gain is the exposed down-read wait
+     that can be hidden under already-required up/gate staging and compute; the
+     measured bound must come from phase counters, not from hit-rate deltas.
+   - Accept only if paired N96 dev and held-out runs show lower decode time
+     without RAM, TTFT, or quality regression.
+
+4. Second candidate: role-joint scheduling for active experts.
+   - When routing for a layer is known, submit `gate/up/down` misses in a
+     single scheduler view where this does not break existing compute
+     dependencies.
+   - This is read scheduling, not joint compute. `down` compute still depends
+     on the `up/gate` activation result.
+   - Measure whether larger per-layer batches increase sustained SSD throughput
+     without creating staging or H2D tail latency.
+
+5. Third candidate: explicit RAM/VRAM storage layout.
+   - VRAM holds hottest and most latency-critical experts.
+   - RAM holds second-tier experts only if they replace low-value decode-time
+     file cache and can still be transferred to VRAM in batchable slabs.
+   - Prefer whole layer/role slabs or compact adjacent pack ranges over
+     scattered single-expert entries when scattered entries shrink SSD batch
+     size or increase scheduler overhead.
+   - Before accepting any RAM tier, prove with phase memory counters which page
+     cache pages were evicted and that refault/TTFT did not regress.
+
+6. Validation ladder.
+   - N32 dev smoke: quality, RAM, parser, and obvious latency regression.
+   - N96 dev paired A/B: bottleneck and token-rate validation.
+   - N96 held-out paired A/B: final acceptance gate.
+   - Commit and push immediately for accepted improvements.
+   - Reject or leave default-off any candidate that regresses quality, TTFT,
+     RAM, held-out token rate, or aggregate exposed wait.
+
+## 2026-07-11 active goal and plan history
+
+This section was the previous source of truth. It is retained as history and
+experiment audit trail; the immediate goal and plan are now recorded in the
+section above.
 
 Active goal:
 
