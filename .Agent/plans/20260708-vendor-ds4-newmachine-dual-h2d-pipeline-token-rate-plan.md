@@ -164,7 +164,42 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      validation, the run is rejected for SOTA. Fallback is allowed for safety
      while debugging but must be reported as `fallback_present=true`.
 
-4. **Make the full lifecycle observable before claiming speedup**
+4. **Priority split pipeline is the next optimization**
+   - Do not continue with plain `gate+up+down` co-batch as the promoted path.
+     Diagnostic run
+     `20260709T100926Z-20260709-native-parity-minseen1-cobatch-vram14000-quantum-n96`
+     proved that simple co-batching reduced io_uring batches
+     (`5236 -> 2733`) but regressed token rate (`4.2 -> 3.9 tok/s`) because
+     down work shared the same staging/H2D critical path as gate/up.
+   - Keep `min_seen=1` as the correctness/parity baseline for this work. The
+     `min_seen=6` path is diagnostic only because it skips many up/down native
+     cache admissions and therefore does not prove full gate/up/down parity.
+   - Implement a default-off priority split route-group mode:
+     `GGML_MOE_ROUTE_GROUP_NATIVE_PRIORITY_SPLIT=1`.
+   - In this mode, the router should still generate all selected gate/up/down
+     requests from the same full native expert pack in one route-group planning
+     step, but execution must separate criticality:
+     - priority 0: gate + up
+     - priority 1: down
+   - Gate/up must get first access to ready-event publication, H2D bandwidth,
+     and pinned staging slots. Down may be known at the same time and may be
+     queued early, but it must not delay gate/up cache readiness.
+   - The preferred first implementation is a dual-ring design:
+     - `stage_ring_priority0` for gate/up;
+     - `stage_ring_priority1` for down;
+     - separate counters for priority0 and priority1 copies, waits, H2D bytes,
+       and ready-event waits.
+   - If dual rings are too invasive, start with fixed slot reservation in the
+     existing ring: gate/up reserve most slots, down can only use the remaining
+     slots. Any down copy must back off rather than blocking gate/up.
+   - The next accepted diagnostic must show:
+     - gate/up ready wait decreases or at least does not regress;
+     - down no longer increases gate/up critical-path latency;
+     - `iouring_batches` may decrease, but token rate must not regress;
+     - `iouring_reads`, `iouring_bytes`, `h2d_enqueues`, and async waits are
+       recorded separately for priority 0 and priority 1.
+
+5. **Make the full lifecycle observable before claiming speedup**
    - Add per-layer/per-token counters for Stage A and Stage B:
      request count, cache hit/miss count, io_uring read count, SSD bytes,
      pinned staging ms, H2D bytes, H2D ms, ready-event wait ms, kernel compute
@@ -176,7 +211,7 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      slow path. If CPU fallback remains, quantify which tensor/layout caused it
      and why it is still present.
 
-5. **Cache policy after native parity, not before it**
+6. **Cache policy after native parity, not before it**
    - Do not split VRAM evenly between gate/up/down until the native parity path
      is correct and measured. Equal split is not an objective by itself.
    - First run with one unified native batch cache so all three tensor roles
@@ -188,8 +223,13 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      before held-out prompts.
    - Promotion requires a candidate to beat the clean generalized SOTA, not only
      improve a single prompt or a short `-n 16` diagnostic.
+   - Current evidence says eviction policy is not the primary bottleneck:
+     `min_seen=1 + GGML_MOE_CACHE_POLICY=lfu_lru` reached only `4.2 tok/s`,
+     with the same `12580` reads, `56.06GB` read bytes, and `11008` async
+     waits as the LRU baseline. LFU can remain a secondary knob, but it must
+     not replace priority split/H2D work.
 
-6. **Larger H2D batching / copy coalescing**
+7. **Larger H2D batching / copy coalescing**
    - Once Stage A/Stage B parity is correct, combine adjacent or same-batch
      staging buffers into fewer H2D submissions where tensor layout and kernel
      inputs remain unchanged.
@@ -197,8 +237,11 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      copy size, and per-token H2D wait.
    - This is expected to help Case A most, but should also reduce wait overhead
      in Case B.
+   - This must happen after priority split is in place. Coalescing that mixes
+     down with gate/up on the same critical H2D path is rejected even if it
+     reduces total batch count.
 
-7. **Reduce H2D bytes with compact or partial up/down source**
+8. **Reduce H2D bytes with compact or partial up/down source**
    - First produce a hard-bound profile: actual rows/blocks used per
      token/layer, full-expert bytes copied, partial-copy bytes needed, and
      projected token-rate upper bound for Case A and Case B.
@@ -206,7 +249,7 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      gain. It must not replace the native full expert pack or rely on a
      prompt-specific profile.
 
-8. **Non-expert mmap/page-cache pressure**
+9. **Non-expert mmap/page-cache pressure**
    - Profile decode-stage major faults and `memory.stat file/anon` for dense,
      attention, norm, and other non-expert tensors.
    - Try default-off page retention or pre-touch only if it remains inside the
