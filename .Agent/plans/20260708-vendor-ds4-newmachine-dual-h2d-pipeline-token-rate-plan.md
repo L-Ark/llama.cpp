@@ -578,6 +578,7 @@ Promotion requirements:
 - Promotion: accept `5.6 tok/s` as the current prompt-general strict-cold
   SOTA for the Quantum n96 calibration metric, because the repeat pair is
   `5.6` and `5.7` and all hard constraints pass.
+  Superseded on 2026-07-10 by the first304 hotpool entry below.
 - Boundary probes:
   - first240 / 1024MiB pool reduced one-pack reads to `2778` and produced
     `5.6` then `5.5 tok/s`; useful but not enough to promote alone.
@@ -620,6 +621,55 @@ Allocation-order dirty probe:
   initialization before any direct hot-pool initialization across worker
   threads, or introduce explicit reserved VRAM budgeting. A per-thread
   after-cache call is insufficient.
+
+## 2026-07-10 Gate Direct Hot Pool First304 SOTA
+
+- Method: keep the same prompt-general gate direct hot pool mechanism, but move
+  the boundary from first320/1400MiB to first304/1330MiB. The manifest is still
+  generated from the full native DeepSeek expert pack, not from a prompt route
+  profile:
+
+  ```bash
+  python3 scripts/ds4-expert-pack-direct-manifest.py \
+    --pack /home/wici/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack \
+    --tensor-substr ffn_gate_exps \
+    --limit 304 \
+    --output /home/wici/runs/vendor-ds4-16gb/ds4-gate-pack-first304.direct_manifest.csv
+  ```
+
+- Runtime delta from first320:
+  - `GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB=1330`;
+  - `GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT=304`;
+  - keep `GGML_MOE_STREAM_ONE_CACHE_MIB=12288`;
+  - keep the full native expert pack as the direct source.
+- Reproduction helper default updated:
+  `scripts/demo-vendor-ds4-gate-hotpool-sota.sh` now defaults to
+  `HOTPOOL_LIMIT=304` and `HOTPOOL_POOL_MIB=1330`.
+- Accepted quantum evidence:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260710T050210Z-gate-hotpool-first304-quantum-n96`,
+  clean source `937b5f6be`, strict cold, display/model cleanup recorded.
+  Metrics: `eval_tok_s=5.8`, `prompt_tok_s=3.9`,
+  `TTFT=15890.509 ms`, `memory_peak_bytes=14876348416`,
+  `memory_file_bytes=13928824832`, RAM OK, coherent output.
+  Hotpool counters: `slots=304`, `pool_sz=1354760192`,
+  `elapsed_ms=637.901`, `read_ms=391.118`, `h2d_ms=244.351`,
+  hotpool hits `369`, one-pack runtime reads `2744` / `12.23GB`,
+  VRAM cache hit rate `77.0%`.
+- France correctness guard:
+  `/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260710T050310Z-gate-hotpool-first304-france-n96`,
+  clean source `937b5f6be`, strict cold, display/model cleanup recorded.
+  Metrics: `eval_tok_s=5.4`, `prompt_tok_s=3.9`,
+  `TTFT=18559.179 ms`, `memory_peak_bytes=14872371200`,
+  `memory_file_bytes=13986308096`, RAM OK. The answer is semantically correct
+  and coherent: it describes France as a Western European country with rich
+  history/culture, Paris, the Eiffel Tower, the Louvre, Versailles, wine
+  regions, and cuisine.
+- TTFT constraint: `18559.179 ms` is `+15.6%` versus the clean gate12288
+  reference `16059.33 ms`, under the `+20%` limit.
+- Promotion: accept `5.8 tok/s` as the current prompt-general strict-cold
+  SOTA for the Quantum n96 calibration metric. The product target remains
+  stable `>5 tok/s` across random prompts; held-out validation is still
+  required before claiming final product-level completion.
 
 ## 2026-07-08 Execution Notes
 
