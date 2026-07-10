@@ -3502,6 +3502,106 @@ python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
   --upgate-pct 66
 ```
 
+### Phase 4S result C: `UPGATE_PCT=66` rejected after N96 held-out
+
+Timestamp: 2026-07-11 08:00 CST.
+
+Run roots:
+
+- N96 dev:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate66-vram-split-n96-dev/control`
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate66-vram-split-n96-dev/control-tail`
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate66-vram-split-n96-dev/upgate66`
+- N96 held-out:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate66-vram-split-n96-heldout/control`
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-upgate66-vram-split-n96-heldout/upgate66`
+- Targeted repeat/debug:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-python-timeout-repro`
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-linear-repeat-n96`
+
+Important execution note:
+
+- The first N96 dev control sweep hit a transient timeout on `dev_python_reverse`.
+- Systemd unit: `run-u11147.service`
+- Result: `timeout`, `RuntimeMaxSec=1200`, CPU time `20.489s`, disk read `14.2G`, stdout empty.
+- The same prompt passed targeted reruns:
+  - N32 control: `1.78 tok/s`, TTFT `8631.94 ms`, decode `17391.63 ms / 31`, quality pass.
+  - N96 control with `RuntimeMaxSec=300`: `1.78 tok/s`, TTFT `8080.16 ms`, decode `53297.96 ms / 95`, quality pass.
+- Interpretation: the timeout is a real cold-start long-tail/IO-wait stability risk, but it was not deterministic. For the N96 dev aggregate, completed control rows came from the original control root for prompts 1-4 and from `control-tail` for prompts 5-7.
+
+N96 dev aggregate:
+
+| run | quality | min tok/s | median tok/s | mean tok/s | decode sum ms | iouring wait sum ms | reads | read GiB | max RAM GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control `UPGATE_PCT=62` | 7/7 | 1.670 | 1.780 | 1.784 | 270667.6 | 292393.6 | 528672 | 2814.4 | 11.86 |
+| candidate `UPGATE_PCT=66` | 7/7 | 1.600 | 1.840 | 1.827 | 262926.8 | 281028.9 | 524339 | 2795.4 | 11.86 |
+
+N96 dev paired result:
+
+| prompt | tok/s delta | TTFT ratio | decode delta ms | wait delta ms | read delta | GiB delta | quality |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `dev_france_regression` | +0.140 | 0.981 | -3231.5 | -3867.2 | -416 | -1.6 | pass->pass |
+| `dev_japan_factual` | +0.000 | 0.926 | -61.7 | -2039.6 | -135 | -0.2 | pass->pass |
+| `dev_photosynthesis_factual` | +0.060 | 1.049 | -1525.0 | -2622.5 | -1697 | -7.9 | pass->pass |
+| `dev_linear_equation` | -0.070 | 0.975 | +931.0 | +1461.7 | -1194 | -5.6 | pass->pass |
+| `dev_python_reverse` | +0.080 | 1.055 | -2459.9 | -2643.0 | -804 | -3.7 | pass->pass |
+| `dev_zh_france` | +0.060 | 0.975 | -793.7 | -1148.3 | +106 | +0.9 | pass->pass |
+| `dev_mixed_summary` | +0.030 | 1.004 | -600.0 | -505.7 | -193 | -0.9 | pass->pass |
+
+Linear-repeat check:
+
+- Run root: `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4s-linear-repeat-n96`
+- Control: `1.61 tok/s`, TTFT `10056.42 ms`, decode `21059.05 ms / 34`, quality pass.
+- Candidate `UPGATE_PCT=66`: `1.68 tok/s`, TTFT `9171.51 ms`, decode `20290.26 ms / 34`, quality pass.
+- Interpretation: the single full-dev `dev_linear_equation` regression is likely short-output noise, so `UPGATE_PCT=66` was allowed to proceed to held-out validation.
+
+N96 held-out aggregate:
+
+| run | quality | min tok/s | median tok/s | mean tok/s | decode sum ms | iouring wait sum ms | reads | read GiB | max TTFT ms | max RAM GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control `UPGATE_PCT=62` | 6/6 | 1.610 | 1.805 | 1.782 | 295435.4 | 312667.1 | 551077 | 2935.1 | 211385.6 | 14.81 |
+| candidate `UPGATE_PCT=66` | 6/6 | 1.630 | 1.810 | 1.787 | 294275.8 | 315182.8 | 544140 | 2903.9 | 212810.6 | 14.81 |
+
+N96 held-out paired result:
+
+| prompt | tok/s delta | TTFT ratio | decode delta ms | wait delta ms | RAM GiB control/candidate | quality |
+|---|---:|---:|---:|---:|---:|---|
+| `test_english_factual_01` | -0.040 | 1.029 | +1103.6 | +2589.0 | 11.72/11.71 | pass->pass |
+| `test_english_factual_02` | +0.010 | 0.892 | -357.9 | -184.4 | 11.86/11.86 | pass->pass |
+| `test_reasoning_math_01` | -0.030 | 1.007 | +691.8 | +572.5 | 14.81/14.81 | pass->pass |
+| `test_coding_01` | +0.020 | 0.932 | -676.3 | -524.9 | 11.86/11.86 | pass->pass |
+| `test_chinese_01` | +0.070 | 1.117 | -1838.8 | -1932.8 | 11.86/11.86 | pass->pass |
+| `test_mixed_instruction_01` | +0.000 | 1.064 | -81.9 | +1996.5 | 11.86/11.86 | pass->pass |
+
+Decision:
+
+- Reject `UPGATE_PCT=66` as SOTA.
+- Reason:
+  - held-out mean improvement is only `+0.005 tok/s`, which is noise-level;
+  - held-out aggregate `iouring_wait` regresses by `+2515.7 ms`;
+  - two held-out prompts regress in token rate;
+  - one held-out prompt has very high absolute TTFT around `212s` in both control and candidate, showing a baseline cold-start stability issue that global VRAM split does not solve.
+- No code change is needed because this was env-only.
+- Do not promote `--upgate-pct 66` to default.
+- Stop global `UPGATE_PCT` tuning for now.
+
+Next plan after Phase 4S:
+
+1. Profile the TTFT long-tail prompt `test_reasoning_math_01`.
+   - Goal: determine why cold-start TTFT is around `211-213s` while decode is only around `35-36s`.
+   - Break down prompt/decode initialization, dense mmap drop, expert pack load, GGUF alias setup, prompt fallback, RAM/file-cache growth, and first-token expert IO.
+   - This is required before claiming stable random-prompt behavior under 16 GB host RAM.
+
+2. Move from global split to layer/role-specific admission.
+   - Use Phase 4R wait-weighted rows and N96 dev/held-out per-prompt regressions.
+   - Protect only the layer/role entries that reduce exposed critical wait across dev prompts without increasing held-out wait.
+   - Prefer default-off profile inputs over hardcoded prompt-specific packs.
+
+3. Revisit RAM/VRAM tiering with explicit rejection criteria.
+   - Do not add scattered RAM experts unless they reduce exposed wait on held-out prompts.
+   - If using RAM, prefer batchable whole layer/role slabs or compact adjacent layouts.
+   - Any candidate must improve held-out mean/median without increasing aggregate `iouring_wait` or TTFT ratio.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
