@@ -1,0 +1,74 @@
+{
+  "attempt_id": "20260707-retained-gate-interface-probe",
+  "created_at_local": "2026-07-07",
+  "status": "accepted_default_off_diagnostic_probe_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "source_update": {
+    "file": "src/models/deepseek4.cpp",
+    "env": "DS4_RETAINED_GATE_INTERFACE_PROBE_OUT",
+    "default_off": true,
+    "logit_changing": false,
+    "description": "Adds a CSV graph-construction probe at build_moe_v4 -> build_expert_mix handoff. It records scores, selection, selected_experts, weights, cur_ffn shapes/types/buffers and whether build_expert_mix receives retained gate data."
+  },
+  "build_validation": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-debug -j20",
+    "result": "passed"
+  },
+  "probe_enabled_smoke": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T155914Z-retained-gate-interface-probe-smoke-v2/retained-gate-probe-smoke-cpu40-vram0gb",
+    "prompt": "Explain database indexes briefly.",
+    "n_predict": 32,
+    "constraints": "strict MemoryMax=16000000000, MemorySwapMax=0, drop_caches, page cache counted in cgroup",
+    "eval_tok_s": 1.5,
+    "prompt_tok_s": 0.9,
+    "ttft_estimate_ms": 34433.814523,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15080050688,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "probe_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T155914Z-retained-gate-interface-probe-smoke-v2/retained-gate-probe-smoke-cpu40-vram0gb/retained_gate_interface_probe.csv",
+    "probe_rows": 1806,
+    "probe_header_cols": 72
+  },
+  "probe_observation": {
+    "graph_gate_output_input_available_values": ["0"],
+    "build_expert_mix_receives_scores_values": ["0"],
+    "selected_weights_retained_available_values": ["1"],
+    "selected_src0_is_selection_values": ["1"],
+    "weights_src0_is_scores_values": ["0"],
+    "weights_src1_is_selected_values": ["0"],
+    "first_row": {
+      "il": "0",
+      "moe_tokens": "1",
+      "n_expert_used": "6",
+      "scores_type": "f32",
+      "scores_buft": "no_buffer",
+      "selected_type": "i32",
+      "selected_buft": "no_buffer",
+      "weights_type": "f32",
+      "weights_buft": "no_buffer",
+      "handoff_payload_nbytes": "48"
+    },
+    "interpretation": "The current handoff already retains selected_experts and weights, but build_expert_mix still does not receive scores/gate output. This confirms the blocker is not selected/weights availability; the missing interface is a retained gate/source context that avoids recomputing or restaging gate-side expert source while also reducing up/down fallback."
+  },
+  "default_off_smoke": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T160042Z-retained-gate-probe-default-off-smoke/introduce-canada-in-a-short-paragraph-cpu40-vram0gb",
+    "prompt": "Introduce Canada in a short paragraph.",
+    "n_predict": 32,
+    "eval_tok_s": 1.9,
+    "prompt_tok_s": 0.9,
+    "ttft_estimate_ms": 40122.589339,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15125778432,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "status": "RUN_COMPLETED_STRICT_16GB"
+  },
+  "decision": {
+    "accepted": true,
+    "sota_changed": false,
+    "reason": "Default-off diagnostic probe builds and runs under strict 16GB, emits the required handoff facts, and does not change the default generalized path.",
+    "next_action": "Use probe output to design a retained gate/source context only if a new hard-bound still clears generalized min_eval_tok_s >= 5.5; otherwise switch to compact representation feasibility."
+  }
+}

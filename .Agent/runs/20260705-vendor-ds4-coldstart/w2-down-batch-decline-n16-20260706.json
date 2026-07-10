@@ -1,0 +1,118 @@
+{
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T104039Z-20260706-w2-down-batch-decline-n16/france-n16-down-batch-decline-cpu40-vram0gb",
+  "fallback_reason_by_role_phase": [
+    {
+      "calls": 1171,
+      "entries": 888,
+      "fallback_ms": 4493.635,
+      "fallback_us": 4493635,
+      "key": [
+        "down",
+        "prompt",
+        "eligible",
+        "not_attempted_batch_path_selected",
+        "batch_declined_internal_no_single_retry"
+      ],
+      "rows": 1820
+    },
+    {
+      "calls": 1171,
+      "entries": 888,
+      "fallback_ms": 3078.992,
+      "fallback_us": 3078992,
+      "key": [
+        "up",
+        "prompt",
+        "batch_unsupported",
+        "one_name_filter",
+        "one_name_filter"
+      ],
+      "rows": 1820
+    },
+    {
+      "calls": 1950,
+      "entries": 927,
+      "fallback_ms": 1442.678,
+      "fallback_us": 1442678,
+      "key": [
+        "up",
+        "decode",
+        "batch_unsupported",
+        "one_name_filter",
+        "one_name_filter"
+      ],
+      "rows": 1950
+    },
+    {
+      "calls": 1950,
+      "entries": 927,
+      "fallback_ms": 1375.815,
+      "fallback_us": 1375815,
+      "key": [
+        "down",
+        "decode",
+        "eligible",
+        "not_attempted_batch_path_selected",
+        "batch_declined_internal_no_single_retry"
+      ],
+      "rows": 1950
+    }
+  ],
+  "interpretation": [
+    "With GGML_MOE_STREAM_DOWN_BATCH=1 and batch-on build, down tensors become CPU-side eligible but CUDA batch declines every MXFP4/type39 down tensor as unsupported_type.",
+    "This confirms a CPU/CUDA eligibility mismatch: ggml-cpu permits MXFP4 down batch, while moe_stream_batch.cu::moe_stream_type_supported and launch_moe_mmvq_compact_batch exclude MXFP4.",
+    "Up tensors remain batch_unsupported for the down-batch path and one_name_filter for one-stream, so a separate up path is still required.",
+    "Next step must be guarded MXFP4 batch enablement plus numerical comparison/row mapping validation before any performance promotion."
+  ],
+  "profile_status": "diagnostic_only_n16_truncated_not_accepted",
+  "stderr_decline_reason_counts": [
+    {
+      "count": 720,
+      "reason": "unsupported_type",
+      "src0_type": "39"
+    }
+  ],
+  "summary": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic,",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T104039Z-20260706-w2-down-batch-decline-n16/france-n16-down-batch-decline-cpu40-vram0gb",
+    "correctness_ok": false,
+    "correctness_reason": "too_short,missing_europe,missing_expected_context",
+    "cpu_moe": 40,
+    "elapsed_seconds": 36.91,
+    "eval_ms": null,
+    "eval_tok_s": 3.6,
+    "exit_status": 0,
+    "first_answer_ms": 32971.884727,
+    "load_ms": null,
+    "max_rss_kb": 15598352,
+    "memory_file_bytes": 15161106432,
+    "memory_max_bytes": 16000000000,
+    "memory_max_events": 4603,
+    "memory_peak_bytes": 16000000000,
+    "memory_stat_relevant": {
+      "active_file": 9316683776,
+      "anon": 1142784,
+      "file": 15161106432,
+      "file_mapped": 159744,
+      "inactive_file": 5844332544,
+      "kernel": 78184448,
+      "pgfault": 1717927,
+      "pgmajfault": 154280,
+      "slab": 77590568,
+      "workingset_activate_file": 3480,
+      "workingset_refault_file": 7289,
+      "workingset_restore_file": 3265
+    },
+    "oom_seen": false,
+    "pgmajfault": 154280,
+    "prompt_eval_ms": null,
+    "prompt_tok_s": 1.8,
+    "ram_kill_threshold_bytes": 16000000000,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "systemd_status": 0,
+    "ttft_estimate_ms": 32971.884727,
+    "unit": "vendor-ds4-16gb-20260706T104039Z-cpu40.service",
+    "workingset_refault_file": 7289
+  }
+}

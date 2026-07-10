@@ -1,0 +1,210 @@
+{
+  "by_reason": [
+    {
+      "calls": 27042,
+      "entries": 6176,
+      "expert_call_gib": 112.23486328125,
+      "fallback_ms": 20131.938,
+      "fallback_us": 20131938,
+      "key": [
+        "batch_env_missing",
+        "one_name_filter",
+        "one_name_filter"
+      ],
+      "rows": 28340
+    }
+  ],
+  "by_role_phase_reason": [
+    {
+      "calls": 12350,
+      "entries": 2200,
+      "expert_call_gib": 51.25732421875,
+      "fallback_ms": 6348.759,
+      "fallback_us": 6348759,
+      "key": [
+        "up",
+        "decode",
+        "batch_env_missing",
+        "one_name_filter",
+        "one_name_filter"
+      ],
+      "rows": 12350
+    },
+    {
+      "calls": 12350,
+      "entries": 2200,
+      "expert_call_gib": 51.25732421875,
+      "fallback_ms": 6201.186,
+      "fallback_us": 6201186,
+      "key": [
+        "down",
+        "decode",
+        "batch_env_missing",
+        "one_name_filter",
+        "one_name_filter"
+      ],
+      "rows": 12350
+    },
+    {
+      "calls": 1171,
+      "entries": 888,
+      "expert_call_gib": 4.860107421875,
+      "fallback_ms": 4490.175,
+      "fallback_us": 4490175,
+      "key": [
+        "down",
+        "prompt",
+        "batch_env_missing",
+        "one_name_filter",
+        "one_name_filter"
+      ],
+      "rows": 1820
+    },
+    {
+      "calls": 1171,
+      "entries": 888,
+      "expert_call_gib": 4.860107421875,
+      "fallback_ms": 3091.818,
+      "fallback_us": 3091818,
+      "key": [
+        "up",
+        "prompt",
+        "batch_env_missing",
+        "one_name_filter",
+        "one_name_filter"
+      ],
+      "rows": 1820
+    }
+  ],
+  "by_role_reason": [
+    {
+      "calls": 13521,
+      "entries": 3088,
+      "expert_call_gib": 56.117431640625,
+      "fallback_ms": 10691.361,
+      "fallback_us": 10691361,
+      "key": [
+        "down",
+        "batch_env_missing",
+        "one_name_filter",
+        "one_name_filter"
+      ],
+      "rows": 14170
+    },
+    {
+      "calls": 13521,
+      "entries": 3088,
+      "expert_call_gib": 56.117431640625,
+      "fallback_ms": 9440.577,
+      "fallback_us": 9440577,
+      "key": [
+        "up",
+        "batch_env_missing",
+        "one_name_filter",
+        "one_name_filter"
+      ],
+      "rows": 14170
+    }
+  ],
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T103309Z-20260706-wafer-updown-fallback-reason-n96/france-n96-fallback-reason-cpu40-vram0gb",
+  "fallback_profile_by_role_phase": [
+    {
+      "calls": 12350,
+      "count": 12350,
+      "expert_call_gib": 51.25732421875,
+      "fallback_ms": 6430.774,
+      "fallback_us": 6430774,
+      "key": [
+        "up",
+        "decode"
+      ]
+    },
+    {
+      "calls": 12350,
+      "count": 12350,
+      "expert_call_gib": 51.25732421875,
+      "fallback_ms": 6267.94,
+      "fallback_us": 6267940,
+      "key": [
+        "down",
+        "decode"
+      ]
+    },
+    {
+      "calls": 1171,
+      "count": 1820,
+      "expert_call_gib": 4.860107421875,
+      "fallback_ms": 4492.608,
+      "fallback_us": 4492608,
+      "key": [
+        "down",
+        "prompt"
+      ]
+    },
+    {
+      "calls": 1171,
+      "count": 1820,
+      "expert_call_gib": 4.860107421875,
+      "fallback_ms": 3094.262,
+      "fallback_us": 3094262,
+      "key": [
+        "up",
+        "prompt"
+      ]
+    }
+  ],
+  "fallback_profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260706T103309Z-20260706-wafer-updown-fallback-reason-n96/france-n96-fallback-reason-cpu40-vram0gb/fallback_profile.csv",
+  "fallback_profile_rows": 6176,
+  "fallback_reason_csv": "/root/lfz/runs/vendor-ds4-16gb/20260706T103309Z-20260706-wafer-updown-fallback-reason-n96/france-n96-fallback-reason-cpu40-vram0gb/fallback_reason_profile.csv",
+  "interpretation": [
+    "Under current SOTA env, all recorded up/down CPU fallback is classified as batch_env_missing + one_name_filter.",
+    "batch_env_missing means GGML_MOE_STREAM_DOWN_BATCH is not enabled for generic down/up mul_mat_id batch path.",
+    "one_name_filter means GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps prevents one-stream from accepting ffn_up_exps/ffn_down_exps.",
+    "This confirms the next optimization should not start with IO/page-cache tweaks; it should enable or implement a correct up/down GPU path with numerical validation."
+  ],
+  "profile_status": "diagnostic_only_n96_truncated_not_accepted",
+  "reason_rows": 6176,
+  "summary": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T103309Z-20260706-wafer-updown-fallback-reason-n96/france-n96-fallback-reason-cpu40-vram0gb",
+    "correctness_ok": false,
+    "correctness_reason": "unfinished_sentence",
+    "cpu_moe": 40,
+    "elapsed_seconds": 52.19,
+    "eval_ms": null,
+    "eval_tok_s": 4.4,
+    "exit_status": 0,
+    "first_answer_ms": 30986.922549,
+    "load_ms": null,
+    "max_rss_kb": 15597740,
+    "memory_file_bytes": 15119908864,
+    "memory_max_bytes": 16000000000,
+    "memory_max_events": 12636,
+    "memory_peak_bytes": 16000000000,
+    "memory_stat_relevant": {
+      "active_file": 14191722496,
+      "anon": 1146880,
+      "file": 15119908864,
+      "file_mapped": 159744,
+      "inactive_file": 928145408,
+      "kernel": 104349696,
+      "pgfault": 2099467,
+      "pgmajfault": 230648,
+      "slab": 103550248,
+      "workingset_activate_file": 369068,
+      "workingset_refault_file": 698088,
+      "workingset_restore_file": 368997
+    },
+    "oom_seen": false,
+    "pgmajfault": 230648,
+    "prompt_eval_ms": null,
+    "prompt_tok_s": 1.8,
+    "ram_kill_threshold_bytes": 16000000000,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "systemd_status": 0,
+    "ttft_estimate_ms": 30986.922549,
+    "unit": "vendor-ds4-16gb-20260706T103309Z-cpu40.service",
+    "workingset_refault_file": 698088
+  }
+}

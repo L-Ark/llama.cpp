@@ -1,0 +1,212 @@
+{
+  "date": "2026-07-09",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "repo": "https://github.com/wici-ai/ssd-llama.git",
+  "machine": "wici@192.168.9.198",
+  "constraint": {
+    "host_ram_cgroup_bytes": 16000000000,
+    "swap": 0,
+    "page_cache_counted": true,
+    "display_processes_stopped_before_each_run": true,
+    "prompt_specific_optimization": false
+  },
+  "finding": "The split top-k default from 7c2f1f2 is invalidated for generalized SOTA because Fibonacci/code-generation output degrades into meta/reasoning text. The default demo path was restored to top3-all-layers for correctness.",
+  "commits": {
+    "schedule_diagnostic": "afebe2d196",
+    "safe_top3_default": "c3ed5da8b8",
+    "safe_top3_vram13824_cosubmit_default": "05572dd55f"
+  },
+  "invalidated_configs": [
+    {
+      "name": "split top-k default, layers 0-29 top2, 30-39 top3",
+      "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T175204Z-20260709T-default-fibonacci-control-n96",
+      "eval_tok_s": 3.7,
+      "ram_ok": true,
+      "correctness": "fail",
+      "reason": "Fibonacci answer begins with meta/reasoning text and does not directly provide a clean function within n96."
+    },
+    {
+      "name": "schedule 0-9:1",
+      "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T174218Z-20260709T-schedule-l0-9-top1-deploy-n96",
+      "eval_tok_s": 4.2,
+      "ram_ok": true,
+      "correctness": "fail",
+      "reason": "Deploy answer exposes step-by-step reasoning text."
+    },
+    {
+      "name": "schedule 0-4:1",
+      "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T174317Z-20260709T-schedule-l0-4-top1-deploy-n96",
+      "eval_tok_s": 4.5,
+      "ram_ok": true,
+      "correctness": "fail",
+      "reason": "Deploy answer repeats assistant persona text."
+    },
+    {
+      "name": "schedule 0-19:2",
+      "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T175522Z-20260709T-top2-l0-19-fibonacci-n96",
+      "eval_tok_s": 3.6,
+      "ram_ok": true,
+      "correctness": "fail",
+      "reason": "Fibonacci answer degrades into meta/reasoning text."
+    },
+    {
+      "name": "schedule 0-9:2",
+      "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T175619Z-20260709T-top2-l0-9-fibonacci-n96",
+      "eval_tok_s": 3.3,
+      "ram_ok": true,
+      "correctness": "fail",
+      "reason": "Fibonacci answer has an abnormal meta prefix."
+    },
+    {
+      "name": "vram13824 plus gate/up/down cosubmit on split top-k",
+      "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T175108Z-20260709T-vram13824-cosubmit-fibonacci-n96",
+      "eval_tok_s": 4.6,
+      "ram_ok": true,
+      "correctness": "fail",
+      "reason": "Fibonacci answer still degrades into meta/reasoning text."
+    }
+  ],
+  "accepted_safe_default": {
+    "commit": "c3ed5da8b8",
+    "config": {
+      "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "0-39",
+      "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+      "GGML_MOE_KEEP_TOPK_UPDOWN": "3",
+      "GGML_MOE_KEEP_TOPK_GATE": "1",
+      "GGML_MOE_VRAM_CACHE_MIB": "13312",
+      "GGML_MOE_GATE_BATCH_PREFETCH": "1",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "0"
+    },
+    "runs": [
+      {
+        "prompt": "Write a short Python function for Fibonacci.",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T180233Z-20260709T-clean-safe-default-fibonacci-n96",
+        "eval_tok_s": 3.0,
+        "prompt_tok_s": 4.2,
+        "ttft_ms": 14986.852179,
+        "memory_peak_bytes": 14241767424,
+        "memory_file_bytes": 13333807104,
+        "ram_ok": true,
+        "correctness": "pass"
+      },
+      {
+        "prompt": "How to deploy a large model on a small devices?",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T180323Z-20260709T-clean-safe-default-deploy-n96",
+        "eval_tok_s": 3.1,
+        "prompt_tok_s": 4.9,
+        "ttft_ms": 16879.160497,
+        "memory_peak_bytes": 14403170304,
+        "memory_file_bytes": 13525520384,
+        "ram_ok": true,
+        "correctness": "pass"
+      },
+      {
+        "prompt": "Please introduce France in a short paragraph.",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T180431Z-20260709T-clean-safe-default-france-n96",
+        "eval_tok_s": 3.5,
+        "prompt_tok_s": 4.2,
+        "ttft_ms": 16556.055477,
+        "memory_peak_bytes": 14246940672,
+        "memory_file_bytes": 13462044672,
+        "ram_ok": true,
+        "correctness": "pass"
+      },
+      {
+        "prompt": "AI infra 是做什么的",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T180533Z-20260709T-clean-safe-default-aiinfra-n96",
+        "eval_tok_s": 3.4,
+        "prompt_tok_s": 4.0,
+        "ttft_ms": 16105.459367,
+        "memory_peak_bytes": 14397513728,
+        "memory_file_bytes": 13534089216,
+        "ram_ok": true,
+        "correctness": "pass"
+      }
+    ],
+    "observed_dev_eval_tok_s_range": {
+      "min": 3.0,
+      "max": 3.5
+    },
+    "product_target_gt_5_tok_s_met": false
+  },
+  "accepted_safe_default_v2": {
+    "commit": "05572dd55f",
+    "config": {
+      "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "0-39",
+      "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+      "GGML_MOE_KEEP_TOPK_UPDOWN": "3",
+      "GGML_MOE_KEEP_TOPK_GATE": "1",
+      "GGML_MOE_VRAM_CACHE_MIB": "13824",
+      "GGML_MOE_GATE_UPDOWN_COSUBMIT": "1",
+      "GGML_MOE_GATE_BATCH_PREFETCH": "1",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "0"
+    },
+    "manual_env_validation_runs": [
+      {
+        "prompt": "How to deploy a large model on a small devices?",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T180949Z-20260709T-safe-top3-vram13824-cosubmit-deploy-n96",
+        "eval_tok_s": 3.6,
+        "ttft_ms": 16267.845555,
+        "ram_ok": true,
+        "correctness": "pass"
+      },
+      {
+        "prompt": "Write a short Python function for Fibonacci.",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181101Z-20260709T-safe-top3-vram13824-cosubmit-fibonacci-n96",
+        "eval_tok_s": 3.1,
+        "ttft_ms": 14321.950861,
+        "ram_ok": true,
+        "correctness": "pass"
+      },
+      {
+        "prompt": "Please introduce France in a short paragraph.",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181150Z-20260709T-safe-top3-vram13824-cosubmit-france-n96",
+        "eval_tok_s": 4.2,
+        "ttft_ms": 16303.24236,
+        "ram_ok": true,
+        "correctness": "pass"
+      },
+      {
+        "prompt": "AI infra 是做什么的",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181231Z-20260709T-safe-top3-vram13824-cosubmit-aiinfra-n96",
+        "eval_tok_s": 4.2,
+        "ttft_ms": 16054.832913,
+        "ram_ok": true,
+        "correctness": "pass"
+      }
+    ],
+    "clean_default_confirmation_runs": [
+      {
+        "prompt": "How to deploy a large model on a small devices?",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181502Z-20260709T-clean-default-05572dd-deploy-n96",
+        "eval_tok_s": 3.1,
+        "ttft_ms": 16499.479114,
+        "ram_ok": true,
+        "correctness": "pass",
+        "note": "Low repeat caused by higher io_uring wait, not by different read count."
+      },
+      {
+        "prompt": "How to deploy a large model on a small devices?",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181626Z-20260709T-clean-default-05572dd-deploy-repeat-n96",
+        "eval_tok_s": 3.6,
+        "ttft_ms": 15743.353416,
+        "ram_ok": true,
+        "correctness": "pass"
+      },
+      {
+        "prompt": "Please introduce France in a short paragraph.",
+        "run": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T181728Z-20260709T-clean-default-05572dd-france-n96",
+        "eval_tok_s": 3.7,
+        "ttft_ms": 15763.254014,
+        "ram_ok": true,
+        "correctness": "pass"
+      }
+    ],
+    "observed_dev_eval_tok_s_range": {
+      "min": 3.1,
+      "max": 4.2
+    },
+    "product_target_gt_5_tok_s_met": false
+  },
+  "next_step": "Continue from safe top3-all-layers plus vram13824/cosubmit. Avoid rank-pruning changes unless they pass Fibonacci/code-generation correctness; prioritize non-math-changing reductions in expert movement or scheduling, and investigate io_uring wait variance."
+}

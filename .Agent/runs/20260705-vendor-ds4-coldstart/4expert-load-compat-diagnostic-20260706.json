@@ -1,0 +1,83 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/4expert-load-compat-diagnostic-20260706.json",
+  "status": "diagnostic_not_accepted",
+  "date": "2026-07-06",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "model": {
+    "path": "/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf",
+    "sha256": "e9e7e22ba585f83330d08235de39e8dcd8cbb513fd9fad6103764da74a4e64bc",
+    "size_bytes": 164465760544
+  },
+  "code_changes": [
+    "default-off GGUF metadata compatibility: LLAMA_GGUF_ALLOW_U64_TO_U32 and LLAMA_GGUF_ALLOW_F64_TO_F32",
+    "tokenizer.ggml.model=bpe now uses the existing BPE path",
+    "default-off DeepSeek4 4Expert tensor aliases via LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS",
+    "default-off uncreated tensor dump via LLAMA_DUMP_UNCREATED_TENSORS",
+    "CUDA binbcast supports f32 + f16 -> f32",
+    "CUDA concat supports pure f16 concat in addition to f32",
+    "default-off CUDA debug envs: GGML_CUDA_BINBCAST_DEBUG and GGML_CUDA_CONCAT_DEBUG"
+  ],
+  "diagnostic_runs": [
+    {
+      "name": "metadata_u64_compat_failed_f64",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T144444Z-4expert-u64-compat-france-strict-smoke/france-4expert-u64-cpu40-vram0gb",
+      "result": "load failed: deepseek4.rope.freq_base f64 expected f32"
+    },
+    {
+      "name": "numeric_bpe_hc_tensor_alias_sequence",
+      "result": "progressively fixed bpe tokenizer alias, output_hc/hc weight aliases, attn_kv_latent -> attn_kv, compressor tensor aliases, and exp_probs_b.bias"
+    },
+    {
+      "name": "uncreated_tensor_dump",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T150623Z-4expert-uncreated-tensor-dump-v2-france-strict-smoke/france-4expert-uncreated-dump-v2-cpu40-vram0gb-cpu40-vram0gb",
+      "result": "remaining uncreated tensors were blk.3..42.exp_probs_b.bias"
+    },
+    {
+      "name": "binbcast_debug",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T151526Z-4expert-binbcast-debug-streamoff-france-strict-smoke/france-4expert-binbcast-debug-streamoff-cpu40-vram0gb",
+      "result": "identified f32 + f16 ADD on blk.2.attn_compressor_ape.weight causing nb10 stride assert"
+    },
+    {
+      "name": "concat_debug",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T152044Z-4expert-concat-debug-streamoff-france-strict-smoke/france-4expert-concat-debug-streamoff-cpu40-vram0gb-cpu40-vram0gb",
+      "result": "identified pure f16 concat on two views of blk.2.attn_compressor_ape.weight"
+    }
+  ],
+  "best_4expert_smoke_after_fixes": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T152334Z-4expert-concat-f16-fix-streamoff-france-strict-smoke/france-4expert-concat-f16-fix-streamoff-cpu40-vram0gb-cpu40-vram0gb",
+    "env": {
+      "LLAMA_GGUF_ALLOW_U64_TO_U32": "1",
+      "LLAMA_GGUF_ALLOW_F64_TO_F32": "1",
+      "LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS": "1",
+      "LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS": "1",
+      "GGML_MOE_STREAM": "0"
+    },
+    "cpu_moe": 40,
+    "vram_cache_gb": 0,
+    "strict_cold_drop_caches": true,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 14895955968,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "eval_tok_s": 2.0,
+    "prompt_tok_s": 1.4,
+    "elapsed_seconds": 136.6,
+    "exit_status": 0,
+    "correctness_ok": false,
+    "answer": "",
+    "rejection_reason": "empty answer; missing France/Europe/expected semantic content; not a SOTA candidate"
+  },
+  "native_regression_after_changes": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T152707Z-native-regression-after-4expert-compat-france-strict-smoke/france-native-regression-cpu40-vram0gb-cpu40-vram0gb",
+    "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+    "note": "regression smoke only; config did not use the accepted SOTA pack/profile and is not comparable to the 4.4 France SOTA",
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 14978998272,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "eval_tok_s": 1.6,
+    "prompt_tok_s": 0.7,
+    "ttft_estimate_ms": 46905.717439
+  },
+  "conclusion": "4Expert is now load-compatible enough to execute under the 16GB cgroup, but it is rejected because output correctness is false and token rate is below the generalized target. The accepted native DeepSeek SOTA is unchanged."
+}

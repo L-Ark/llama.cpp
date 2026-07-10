@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260707-iq2s-stage3-france-singleturn-correctness",
+  "created_at_utc": "2026-07-07T01:25:29.191050Z",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "d378f88fd7ca0d0e6df3ac04b8a2730283e36dc8",
+  "git_status_before_artifact": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "status": "load_passed_correctness_failed_not_sota",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-france-correctness/france-n192-singleturn",
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+  "env": {
+    "LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS": "1",
+    "LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS": "1",
+    "LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL": "1",
+    "GGML_CUDA_DISABLE_GRAPHS": "1"
+  },
+  "exit_status": 0,
+  "memory_peak_bytes": 16000000000,
+  "memory_events": "low 0\nhigh 0\nmax 42630\noom 0\noom_kill 0\noom_group_kill 0\n",
+  "stdout_size_bytes": 2573,
+  "stderr_size_bytes": 2115,
+  "metrics_observed": {
+    "prompt_tok_s": 1.2,
+    "eval_tok_s": 2.7,
+    "elapsed_wall": "1:37.87",
+    "major_page_faults": 776055,
+    "file_system_inputs": 193645128
+  },
+  "answer_excerpt": " ▀▀\n\nbuild      : b15731-3021dc6d3\nmodel      : DeepSeek-V4-Flash.IQ2_S.gguf\nmodalities : text\n\navailable commands:\n  /exit or Ctrl+C     stop or exit\n  /regen              regenerate the last response\n  /clear              clear the chat history\n  /read <file>        add a text file\n  /glob <pattern>     add text files using globbing pattern\n\n\n> Please introduce France in a short paragraph.\n\n|\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b \b[Start thinking]\n.\n\nThe user wants a short paragraph introducing France. I need to keep it concise but informative. Key points to include: location (Western Europe), capital (Paris), language (French), and perhaps some notable aspects like culture, landmarks, or history. Since it's a short paragraph, I should cover the essentials: geography, culture, and maybe a bit about its significance.\n\nI'll start with a brief overview: its location, capital, language, and a few key points about its geography, culture, and a bit about its capital, language, and perhaps mention something about its cultural aspects enough to make it interesting: landmarks like Paris, culture, famous, culture, language French, landmarks.\n\nI'll mention: famous landmarks, landmarks, or landmarks.\n\nGeography, culture, geography, geography, geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography geography famous something\n\n[ Prompt: 1.2 t/s | Generation: 2.7 t/s ]\n\nExiting...\n",
+  "correctness_ok": false,
+  "correctness_reason": "Output stays in [Start thinking] and degenerates into repeated geography tokens; it does not provide a semantically correct coherent France short paragraph.",
+  "ram_ok": true,
+  "accepted_sota_changed": false,
+  "interpretation": "IQ2_S with alias env is vendor-loadable under strict 16GB, but default single-turn output is not acceptable. Token rate is also only about 2.7 tok/s, below generalized target.",
+  "next_allowed": "One template/reasoning compatibility check is allowed with --chat-template deepseek3 --reasoning off because it is model-interface configuration, not prompt-specific tuning. If that fails correctness or speed/RAM, reject IQ2_S."
+}

@@ -1,0 +1,58 @@
+{
+  "artifact": "gp4-alias-down-blk3-debug-20260707",
+  "status": "diagnostic_boundary_not_sota",
+  "date": "2026-07-07",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit": "47349f3cf",
+  "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-down-call3-debug",
+  "parity_run": "/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-down-call3-debug/parity-blk3-full",
+  "perf_run": "/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-down-call3-debug/perf-blk3-only",
+  "target_tensor": "blk.3.ffn_down_exps.weight",
+  "common_config": {
+    "GGML_MOE_EXPERT_GGUF_ALIAS_TSV": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv",
+    "GGML_MOE_IO_ALIGNED_ALIAS_BATCH": "1",
+    "GGML_MOE_IO_BACKEND": "iouring",
+    "GGML_MOE_IO_URING_SINGLE": "1",
+    "GGML_MOE_STREAM_DOWN_BATCH": "1",
+    "GGML_MOE_STREAM_BATCH_ONLY": "1",
+    "GGML_MOE_STREAM_DOWN_MXFP4_PROBE_TENSOR": "blk.3.ffn_down_exps.weight"
+  },
+  "parity_result": {
+    "mode": "parity",
+    "top1": {"same_top1": 145, "first_mismatch_pos": -1, "max_abs": 0, "mean_abs": 0},
+    "probe": {
+      "active": 6,
+      "compared": 24576,
+      "max_abs": 0.00697596481,
+      "mean_abs": 0.0009336933,
+      "max_rel": 0.0324131084,
+      "mean_rel": 0.1158542,
+      "worst_active": 5,
+      "worst_expert": 201,
+      "worst_col": 3342,
+      "gpu": 0.208244517,
+      "cpu": 0.215220481
+    },
+    "read_counters": {"hits": 6, "misses": 0, "iouring_reads": 6, "iouring_bytes": 26738688, "direct_fallbacks": 0}
+  },
+  "perf_result": {
+    "mode": "perf",
+    "top1": {
+      "same_top1": 141,
+      "same_top1_ratio": 0.972414,
+      "first_mismatch_pos": 3,
+      "max_abs": 7.26641,
+      "mean_abs": 0.126753,
+      "mismatch_positions_preview": [3, 71, 78, 134]
+    },
+    "read_counters": {"hits": 6, "misses": 0, "iouring_reads": 6, "iouring_bytes": 26738688, "direct_fallbacks": 0},
+    "stage": {"sync_done_ms": 110.256669, "active": 6}
+  },
+  "conclusion": {
+    "source_io_status": "healthy; alias hits and io_uring reads are correct with no misses",
+    "first_bad_tensor": "blk.3.ffn_down_exps.weight",
+    "interpretation": "The standalone blk.3 down GPU writeback is enough to flip top1, even though the direct row compare error is small. The next issue is numerical tolerance propagation or writeback semantics, not expert source loading.",
+    "next_action": "Add targeted output-diff capture for blk.3 after writeback: per dst row full vector diff before/after scatter, active expert ids, token/dst rows, and compare against CPU dst buffer used by ggml."
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "artifact": "gate-topk-unified12-sota-20260708",
+  "created_at_local": "2026-07-08",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "base_head": "7f195aa702a128f36f0d2a0a95c77f4cbdfe6000",
+  "machine": "wici@192.168.9.198",
+  "status": "accepted_clean_default_reproduced_below_product_target",
+  "optimization": {
+    "name": "gate topk plus unified 12GiB batch cache",
+    "env_defaults_promoted_in_demo": {
+      "GGML_MOE_KEEP_TOPK_GATE": "1",
+      "GGML_MOE_GATE_BATCH_PREFETCH": "1",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "0",
+      "GGML_MOE_VRAM_CACHE_MIB": "12288"
+    },
+    "rationale": "Gate-topk removes gate work for pruned routed ids. Unified 12GiB cache then moves remaining gate/up/down misses through the batch io_uring/cache path instead of splitting VRAM between gate one-stream cache and up/down batch cache.",
+    "prompt_specific": false,
+    "kimi_behavior_changed": false
+  },
+  "comparison": {
+    "safe_default_before_gate_topk_france_tok_s": 2.6,
+    "gate_topk_split_cache_clean_france_tok_s": 3.1,
+    "gate_topk_unified12_france_observed_high_tok_s": 3.2,
+    "gate_topk_unified12_clean_default_repeat_tok_s": 3.1,
+    "product_target_tok_s": 5.0,
+    "product_target_met": false
+  },
+  "validation_runs": [
+    {
+      "prompt": "Please introduce France in a short paragraph.",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T155637Z-20260708T-gatetopk-unified12-france-n96",
+      "eval_tok_s": 3.2,
+      "prompt_tok_s": 4.0,
+      "ttft_ms": 16895.338266,
+      "elapsed_seconds": 45.05,
+      "memory_peak_bytes": 14633455616,
+      "memory_file_bytes": 13644005376,
+      "ram_ok": true,
+      "display_processes_stopped_before_run": true,
+      "source_dirty": false,
+      "h2d_gbps": 6.574804,
+      "correctness": "pass: coherent and semantically correct France paragraph",
+      "batch_iouring_reads": 11379,
+      "batch_iouring_bytes": 50709921792,
+      "gate_batch_prefetch_jobs_first_layer": 4
+    },
+    {
+      "prompt": "Write a short Python function for Fibonacci.",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T155749Z-20260708T-gatetopk-unified12-fibonacci-n96",
+      "eval_tok_s": 2.9,
+      "prompt_tok_s": 4.0,
+      "ttft_ms": 17448.663025,
+      "elapsed_seconds": 48.32,
+      "memory_peak_bytes": 14658211840,
+      "memory_file_bytes": 13859409920,
+      "ram_ok": true,
+      "display_processes_stopped_before_run": true,
+      "source_dirty": false,
+      "h2d_gbps": 6.695086,
+      "correctness": "pass: valid Python Fibonacci generator",
+      "batch_iouring_reads": 13374,
+      "batch_iouring_bytes": 59600535552,
+      "gate_batch_prefetch_jobs_first_layer": 4
+    },
+    {
+      "prompt": "How to deploy a large model on a small devices?",
+      "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T155859Z-20260708T-gatetopk-unified12-deploy-n96",
+      "eval_tok_s": 3.0,
+      "prompt_tok_s": 4.6,
+      "ttft_ms": 17199.452785,
+      "elapsed_seconds": 47.0,
+      "memory_peak_bytes": 14721003520,
+      "memory_file_bytes": 13744168960,
+      "ram_ok": true,
+      "display_processes_stopped_before_run": true,
+      "source_dirty": false,
+      "h2d_gbps": 6.639648,
+      "correctness": "pass: coherent deployment guidance",
+      "batch_iouring_reads": 12592,
+      "batch_iouring_bytes": 56115593216,
+      "gate_batch_prefetch_jobs_first_layer": 4
+    }
+  ],
+  "clean_default_repeat_after_commit": {
+    "commit": "471df3481e528015acb0142716b50efe17df6ba2",
+    "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260708T160217Z-20260708T-clean-default-unified12-gatetopk-france-n96",
+    "manual_sota_envs_supplied": false,
+    "observed_default_envs": {
+      "GGML_MOE_KEEP_TOPK_GATE": "1",
+      "GGML_MOE_GATE_BATCH_PREFETCH": "1",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "0",
+      "GGML_MOE_VRAM_CACHE_MIB": "12288"
+    },
+    "eval_tok_s": 3.1,
+    "prompt_tok_s": 4.0,
+    "ttft_ms": 16721.465165,
+    "elapsed_seconds": 45.64,
+    "memory_peak_bytes": 14643257344,
+    "memory_file_bytes": 13673680896,
+    "ram_ok": true,
+    "display_processes_stopped_before_run": true,
+    "source_dirty": false,
+    "h2d_gbps": 6.696628,
+    "correctness": "pass: coherent and semantically correct France paragraph",
+    "batch_iouring_reads": 11379,
+    "batch_iouring_bytes": 50709921792,
+    "decision": "3.2 tok/s is retained as observed high; clean default reproducible value is 3.1 tok/s"
+  },
+  "promotion_requirements": {
+    "strict_16gb_ram": "pass",
+    "page_cache_counted": "pass",
+    "display_processes_stopped": "pass",
+    "ttft_not_more_than_20_percent_above_baseline": "pass; TTFT decreased versus default France baseline",
+    "correctness": "pass on France, Fibonacci, and deployment prompts",
+    "new_machine_sota": "pass: best observed strict cold prompt-general result is 3.2 tok/s, clean default repeat is 3.1 tok/s",
+    "product_target_gt_5_tok_s": "fail; goal remains active"
+  },
+  "next_steps": [
+    "Superseded by the 14GiB-request/12.2GiB-actual cache sweep recorded in gate-topk-unified14-sota-20260708.json.",
+    "Continue with deeper gate/up byte reduction; hardware still reports only about 6.6GB/s H2D on Gen4 x4."
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "artifact_id": "moe-stream-remote-range-teamblobfish-iq1m-down-row-parity-20260708",
+  "date_local": "2026-07-08",
+  "purpose": "Use HTTP Range to fetch tiny real ffn_down_exps row slices from teamblobfish IQ1_M compact candidate and verify vendor down-stream parity without full model download.",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head_before_commit": "8a58be38ec9f2821ff7a362362c15fe9025ef34b",
+  "changed_files": [
+    "ggml/src/ggml-cuda/moe_stream_batch.cu",
+    ".Agent/run-tools/ds4_moe_stream_direct_probe.cpp"
+  ],
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-remote-range-teamblobfish-iq1m",
+  "range_metadata": {
+    "source_url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+    "q2_k": {
+      "tensor": "blk.0.ffn_down_exps.weight",
+      "type": "Q2_K",
+      "start": 772629024,
+      "end": 772639775,
+      "bytes": 10752,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-remote-range-teamblobfish-iq1m/teamblobfish-iq1m-blk0-down-exp0-first16-q2k.rows.bin",
+      "actual_bytes": 10752,
+      "ne00": 2048,
+      "ne01": 16,
+      "nb01": 672
+    },
+    "iq1_m": {
+      "tensor": "blk.3.ffn_down_exps.weight",
+      "type": "IQ1_M",
+      "start": 5880581088,
+      "end": 5880588255,
+      "bytes": 7168,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-remote-range-teamblobfish-iq1m/teamblobfish-iq1m-blk3-down-exp0-first16-iq1m.rows.bin",
+      "actual_bytes": 7168,
+      "ne00": 2048,
+      "ne01": 16,
+      "nb01": 448
+    }
+  },
+  "header_source": "/root/lfz/models/_gguf_header_probe/20260707-alt-candidates/teamblobfish_iq1m_part1.head16m",
+  "range_download_bytes_total": 17920,
+  "q2_k_probe": {
+    "rc": 0,
+    "stdout": "accept type=iq2_xs nb01=74 nb02=1184 finite=1 max_abs=0.00187444687 mean_abs=0.000706717372 first_gpu=4.67988873 first_ref=4.67941236\naccept type=iq1_s nb01=50 nb02=800 finite=1 max_abs=0.00330495834 mean_abs=0.00118012726 first_gpu=4.75261307 first_ref=4.75274944\naccept type=iq1_m nb01=56 nb02=896 finite=1 max_abs=0.00184059143 mean_abs=0.000628918409 first_gpu=4.79929638 first_ref=4.7991128\naccept type=q2_K nb01=84 nb02=1344 finite=1 max_abs=0.00194692612 mean_abs=0.000715896487 first_gpu=4.55068064 first_ref=4.55053616\nreal-rows accept type=q2_K ne00=2048 ne01=16 nb01=672 finite=1 max_abs=0.00108321384 mean_abs=0.000358266465 first_gpu=-0.0126298014 first_ref=-0.0126857581\n",
+    "stderr": "[moe_stream] batched decode path active: experts=1 ne01=16 ne00=256\n[moe_stream_batch] VRAM cache budget: requested=16384 MiB actual=16384 MiB free=31290 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\nggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\n[moe_stream_batch] VRAM cache: 0.2 GiB, 16384 slots (0.01 MiB each)\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n",
+    "parsed_real_rows": {
+      "type": "q2_K",
+      "finite": true,
+      "max_abs": 0.00108321384,
+      "mean_abs": 0.000358266465,
+      "ne00": 2048,
+      "ne01": 16,
+      "nb01": 672
+    }
+  },
+  "iq1_m_probe": {
+    "rc": 0,
+    "stdout": "accept type=iq2_xs nb01=74 nb02=1184 finite=1 max_abs=0.00187444687 mean_abs=0.000706717372 first_gpu=4.67988873 first_ref=4.67941236\naccept type=iq1_s nb01=50 nb02=800 finite=1 max_abs=0.00330495834 mean_abs=0.00118012726 first_gpu=4.75261307 first_ref=4.75274944\naccept type=iq1_m nb01=56 nb02=896 finite=1 max_abs=0.00184059143 mean_abs=0.000628918409 first_gpu=4.79929638 first_ref=4.7991128\naccept type=q2_K nb01=84 nb02=1344 finite=1 max_abs=0.00194692612 mean_abs=0.000715896487 first_gpu=4.55068064 first_ref=4.55053616\nreal-rows accept type=iq1_m ne00=2048 ne01=16 nb01=448 finite=1 max_abs=0.000894099474 mean_abs=0.000409348926 first_gpu=0.223621488 first_ref=0.223936573\n",
+    "stderr": "[moe_stream] batched decode path active: experts=1 ne01=16 ne00=256\n[moe_stream_batch] VRAM cache budget: requested=16384 MiB actual=16384 MiB free=31290 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\nggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\n[moe_stream_batch] VRAM cache: 0.1 GiB, 16384 slots (0.01 MiB each)\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n",
+    "parsed_real_rows": {
+      "type": "iq1_m",
+      "finite": true,
+      "max_abs": 0.000894099474,
+      "mean_abs": 0.000409348926,
+      "ne00": 2048,
+      "ne01": 16,
+      "nb01": 448
+    }
+  },
+  "decision": {
+    "sota_changed": false,
+    "production_enable": false,
+    "meaning": "Real candidate tensor bytes from teamblobfish IQ1_M shard1 pass down-stream parity for Q2_K and IQ1_M row slices. This removes a key correctness concern for these down tensor types but is still not a full-model acceptance gate.",
+    "limitations": [
+      "Only small row slices were fetched and tested.",
+      "No full model was loaded or generated from.",
+      "No prompt-general token-rate, TTFT, RAM, or semantic correctness benchmark was run.",
+      "IQ1_S-XL candidate still needs equivalent real-byte parity or full load/correctness after download."
+    ],
+    "next_step": "Repeat the range-byte parity method for teamblobfish IQ1_S-XL if its header can be parsed, then only proceed to full compact target load after disk cleanup/download approval."
+  },
+  "committed_source_head": "dca7f4b0735282c3df3008148486c7b4e80c440d",
+  "source_head_note": "source_head_before_commit records the tree used for the run before committing this artifact; committed_source_head records the commit storing the source/artifact/plan update."
+}

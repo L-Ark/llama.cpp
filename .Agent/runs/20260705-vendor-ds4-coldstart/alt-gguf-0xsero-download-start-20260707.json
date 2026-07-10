@@ -1,0 +1,29 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-0xsero-download-start-20260707.json",
+  "created_utc": "2026-07-06T17:06:34Z",
+  "source_head_before_artifact": "4fac5faf26e0140299c1ae199205e38b61ab7cbb",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "attempt_id": "20260707-0xsero-alt-gguf-download-start",
+  "status": "download_started_not_sota",
+  "prompt_scope": "no prompt run; held_out_test_set_v1_locked not used",
+  "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+  "model_path": "/root/lfz/models/DeepSeek-V4-Flash-162B-GGUF/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+  "expected_size_bytes": 52593532000,
+  "head_x_linked_etag": "e917278028d7a9e25dfc9d04bf5848375dad7573c5aeab1720d6a83714352406",
+  "head_final_etag": "7f4deb0dc07cdbc01ff88ae11e616fd8d2d1d8263efec15b034c5d731fe83070",
+  "download_unit": "ds4-0xsero-alt-gguf-download-20260706T170631Z.service",
+  "log_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T170631Z-0xsero-alt-gguf-download",
+  "download_log": "/root/lfz/runs/vendor-ds4-16gb/20260706T170631Z-0xsero-alt-gguf-download/download.log",
+  "file_exists_now": false,
+  "file_size_now": 0,
+  "aria2_sidecar_exists_now": false,
+  "df_h_root_after_launch": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/root       993G  882G  111G  89% /\n",
+  "completion_gate": [
+    ".aria2 sidecar absent",
+    "stat size == 52593532000",
+    "sha256 recorded",
+    "GGUF header metadata validates deepseek4 and expected candidate properties before generation"
+  ],
+  "claim_rule": "This is only a download launch record. No correctness, token-rate, or SOTA claim is allowed until validation and strict 16GB runs pass."
+}

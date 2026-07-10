@@ -1,0 +1,67 @@
+{
+  "attempt_id": "20260707-partial-exact-row128-offset-smoke",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "created_at_utc": "2026-07-06T20:32:38.538915Z",
+  "decision": {
+    "promotion_allowed": false,
+    "reason": "Nonzero row0 exact partial payload validates model_offset + row0*nb01 and dst[row0+col] compare mapping, but it is still a diagnostic partial-output probe after CPU fallback, not a token-rate path."
+  },
+  "manifest": {
+    "entries": 96,
+    "partial_exact_manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.partial_exact_manifest.csv",
+    "payload_bytes": 2506752,
+    "row0": 128,
+    "row_count": 16,
+    "sha256": "99f084b2312b94a244ae6e07d7acf568df4be0b7087d3845225f6a98f70ea612"
+  },
+  "prompt_scope": "fixed France text verifier only; calibration-derived top48 partial exact row128 manifest; held-out unused; not SOTA",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "run": {
+    "exit_status": 0,
+    "hashes": {
+      "environment.txt": "94bc570f72f174a08d5979734b0d7092b930b3afbfc685f433110c579fdbeb59",
+      "hot-batch-probe.csv": "eb660d5b808b2fa598ce6ece5ecb74055957b72f35df59736f188ba291392113",
+      "partial-repr-probe.csv": "3e2038ba1ab5cac2a5148af113782f6885ca695b501bb4092cf5e967b4f88389",
+      "repr-report.csv": "c56209ad01168d1dae25d2e4ffbe0d346f8d1e4a1f24041f560e900c42cc1ba9",
+      "run_case.sh": "1a62cb3f52d66025b9e024c9305405c06e165badb4bf30b09109cac49d2d005d",
+      "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+    },
+    "memory_events": {
+      "high": 0,
+      "low": 0,
+      "max": 0,
+      "oom": 0,
+      "oom_group_kill": 0,
+      "oom_kill": 0
+    },
+    "memory_peak_bytes": 1000103936,
+    "partial_probe_aggregate": {
+      "compare_ok": 3786,
+      "compare_ran": 3786,
+      "d2h_us": 28222,
+      "diff_count": 0,
+      "elapsed_us": 2840225,
+      "h2d_us": 55645,
+      "kernel_us": 2680961,
+      "matched_experts": 4246,
+      "max_abs": 0.0,
+      "nonzero_rows": 3786,
+      "out_bytes": 271744,
+      "q80_bytes": 13858944,
+      "records": 4246,
+      "rows": 11600,
+      "src0_bytes": 110871552
+    },
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T203111Z-20260707-partial-exact-row128-smoke/partial-row128",
+    "top1": {
+      "first_mismatch_pos": -1,
+      "max_abs": 0,
+      "mean_abs": 0,
+      "n_tokens": 145,
+      "same_top1": 145,
+      "same_top1_ratio": 1
+    }
+  },
+  "source_head": "2d053082e",
+  "status": "passed_nonzero_row_offset_compare_not_sota"
+}

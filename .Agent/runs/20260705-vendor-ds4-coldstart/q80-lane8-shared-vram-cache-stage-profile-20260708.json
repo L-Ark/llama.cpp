@@ -1,0 +1,108 @@
+{
+  "artifact_id": "20260708-q80-lane8-shared-vram-cache-stage-profile",
+  "purpose": "Profile current correct Q80 lane8/shared down GPU path after f32 writeback rejection, testing whether larger batch VRAM cache fixes the stage bottleneck.",
+  "source_head": "cb42f7f5725517a08c2294ed3eac6cef0cdff16b",
+  "source_status": [
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/explicit-swiglu-down-split-profile-20260708.json",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+    "?? prof.nsys-rep"
+  ],
+  "constraints": {
+    "strict_memory_max_bytes": 16000000000,
+    "memory_swap_max_bytes": 0,
+    "held_out_prompts_used": false,
+    "prompt": "France dev smoke, short n=8 profile"
+  },
+  "common_env": [
+    "GGML_MOE_STREAM_DOWN_BATCH=1",
+    "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1",
+    "GGML_MOE_BATCH_PROFILE=1",
+    "GGML_KIMI_CPU_MOE_PROFILE=1"
+  ],
+  "results": {
+    "vram2": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T223854Z-20260708-q80-lane8-shared-current-profile-events/france-q80-lane8-profile-events-cpu40-vram2gb",
+      "eval_tok_s": 0.9,
+      "prompt_tok_s": 0.7,
+      "ttft_estimate_ms": 47944.483493,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15120519168,
+      "ram_ok": true,
+      "down_profile": {
+        "rows": 400,
+        "total_active": 5040,
+        "cache_hits": 2248,
+        "cache_misses": 2792,
+        "hit_rate": 0.44603174603174606,
+        "stage_ms_mean": 31.962350985000022,
+        "kernel_ms_mean": 0.37600784,
+        "d2h_ms_mean": 0.011379439999999998,
+        "scatter_ms_mean": 0.0351883475,
+        "wall_ms_mean": 32.42036531750001
+      },
+      "cpu_profile_line": "[kimi_cpu_moe_profile] down calls=1200 total=24.732 ms/call convert_t0=0.004 route=0.002 route_barrier=0.003 cuda_batch=10.824 cuda_single=0.001 post_cuda_barrier=0.022 fallback_t0=13.842 batch_accept=400 batch_decline=0 single_accept=0 single_decline=7548",
+      "cache_lines": [
+        "[moe_stream_batch] VRAM cache: hits=2248 misses=2792 preloads=0 hit_rate=44.6%",
+        "[moe_stream_batch] VRAM cache down: slots=481 slot=4.25 MiB hits=2248 misses=2792 preloads=0 pinned=0 hit_rate=44.6%"
+      ]
+    },
+    "vram8": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T224048Z-20260708-q80-lane8-shared-vram8-profile-events/france-q80-lane8-vram8-profile-cpu40-vram8gb",
+      "eval_tok_s": 1.0,
+      "prompt_tok_s": 0.7,
+      "ttft_estimate_ms": 46105.288255,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15111880704,
+      "ram_ok": true,
+      "down_profile": {
+        "rows": 400,
+        "total_active": 5040,
+        "cache_hits": 3035,
+        "cache_misses": 2005,
+        "hit_rate": 0.6021825396825397,
+        "stage_ms_mean": 27.781169842499967,
+        "kernel_ms_mean": 0.37462280000000026,
+        "d2h_ms_mean": 0.010943440000000006,
+        "scatter_ms_mean": 0.03552384999999997,
+        "wall_ms_mean": 28.249168132499996
+      },
+      "cpu_profile_line": "[kimi_cpu_moe_profile] down calls=1200 total=23.173 ms/call convert_t0=0.003 route=0.002 route_barrier=0.022 cuda_batch=9.434 cuda_single=0.001 post_cuda_barrier=0.019 fallback_t0=13.649 batch_accept=400 batch_decline=0 single_accept=0 single_decline=7548",
+      "cache_lines": [
+        "[moe_stream_batch] VRAM cache: hits=3035 misses=2005 preloads=0 hit_rate=60.2%",
+        "[moe_stream_batch] VRAM cache down: slots=1927 slot=4.25 MiB hits=3035 misses=2005 preloads=0 pinned=0 hit_rate=60.2%"
+      ]
+    },
+    "vram12": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T224214Z-20260708-q80-lane8-shared-vram12-profile-events/france-q80-lane8-vram12-profile-cpu40-vram12gb",
+      "eval_tok_s": 1.0,
+      "prompt_tok_s": 0.7,
+      "ttft_estimate_ms": 47244.797657,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15112265728,
+      "ram_ok": true,
+      "down_profile": {
+        "rows": 400,
+        "total_active": 5040,
+        "cache_hits": 3037,
+        "cache_misses": 2003,
+        "hit_rate": 0.602579365079365,
+        "stage_ms_mean": 27.140151582499993,
+        "kernel_ms_mean": 0.37560128,
+        "d2h_ms_mean": 0.011111519999999986,
+        "scatter_ms_mean": 0.035737932499999986,
+        "wall_ms_mean": 27.614552982499987
+      },
+      "cpu_profile_line": "[kimi_cpu_moe_profile] down calls=1200 total=23.152 ms/call convert_t0=0.004 route=0.002 route_barrier=0.012 cuda_batch=9.221 cuda_single=0.001 post_cuda_barrier=0.019 fallback_t0=13.857 batch_accept=400 batch_decline=0 single_accept=0 single_decline=7548",
+      "cache_lines": [
+        "[moe_stream_batch] VRAM cache: hits=3037 misses=2003 preloads=0 hit_rate=60.3%",
+        "[moe_stream_batch] VRAM cache down: slots=2891 slot=4.25 MiB hits=3037 misses=2003 preloads=0 pinned=0 hit_rate=60.3%"
+      ]
+    }
+  },
+  "interpretation": "The Q80 lane8/shared math is not the bottleneck: kernel mean is ~0.376 ms/call and D2H/scatter are negligible. Stage dominates: 31.96 ms/call at 2GB and still 27.14 ms/call at 12GB. Increasing VRAM cache from 8GB to 12GB does not improve hit rate (~60.2% to ~60.3%) because the remaining misses are cold first-touch unique down experts, not steady eviction. fallback_reason shows gate/up CPU fallback remains the larger unresolved bucket.",
+  "decision": "Do not pursue more down-only cache size/source micro-edits as a SOTA route. Down GPU correctness is available through Q80 lane8/shared, but performance needs either source prefetch/pack strategy that removes cold first-touch stage cost, or more importantly a prompt-general up/gate/down grouped GPU path. No SOTA changed.",
+  "next_step": "Plan should prioritize prompt-general up/gate GPU compatibility/fusion or a general expert source pack; any down-only change must first prove it reduces stage miss cost, not just increase VRAM cache."
+}

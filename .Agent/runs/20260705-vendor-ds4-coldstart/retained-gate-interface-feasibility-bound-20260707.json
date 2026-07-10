@@ -1,0 +1,93 @@
+{
+  "attempt_id": "20260707-retained-gate-interface-feasibility-bound",
+  "created_at_local": "2026-07-07",
+  "status": "feasibility_bound_recorded_no_source_change_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Convert existing generalized bottleneck/profile evidence into an implementation gate for a retained-gate interface path.",
+  "source_evidence": {
+    "generalized_source_movement_combination": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-source-movement-combination-hard-bound-20260707.json",
+    "generalized_residual_bottleneck_after_updown": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-residual-bottleneck-after-updown-bound-20260707.json",
+    "generalized_exact_graph_dataflow_recheck": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-exact-graph-dataflow-recheck-20260707.json",
+    "exact_graph_dataflow_current_hard_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/exact-graph-dataflow-current-hard-bound.json"
+  },
+  "target": {
+    "product_target_min_tok_s_random_prompt": 5.0,
+    "pre_source_edit_hard_bound_required_min_tok_s": 5.5,
+    "host_ram_limit_bytes_including_page_cache": 16000000000,
+    "gpu": "32GB RTX 5090",
+    "prompt_scope": "prompt-general calibration/dev; held-out prompts remain reserved"
+  },
+  "combination_bound_quantum_prompt": {
+    "baseline_observed_tok_s": 1.9000000000000001,
+    "remove_updown_fallback_only_zero_overhead_tok_s": 3.744899721848057,
+    "remove_gate_one_stream_only_zero_overhead_tok_s": 3.192904021124478,
+    "remove_fallback_and_gate_source_zero_overhead_tok_s": 18.54992823850161,
+    "combined_50pct_50pct_tok_s": 3.4469425263602287,
+    "combined_70pct_70pct_tok_s": 5.111671312474382,
+    "combined_80pct_80pct_tok_s": 6.738998159325846,
+    "combined_90pct_90pct_tok_s": 9.88637716669761,
+    "interpretation": "70/70 only barely clears 5 tok/s and does not meet the 5.5 pre-source margin. 80/80 is the first symmetric cut with enough overhead margin."
+  },
+  "required_cut_pairs_for_5_tok_s_quantum": [
+    {
+      "fallback_cut_fraction": 0.5,
+      "required_gate_source_cut_fraction": 0.9228211080429363
+    },
+    {
+      "fallback_cut_fraction": 0.7,
+      "required_gate_source_cut_fraction": 0.6794986776444631
+    },
+    {
+      "fallback_cut_fraction": 0.8,
+      "required_gate_source_cut_fraction": 0.5578374624452266
+    },
+    {
+      "fallback_cut_fraction": 0.9,
+      "required_gate_source_cut_fraction": 0.43617624724599
+    },
+    {
+      "gate_source_cut_fraction": 0.5,
+      "required_fallback_cut_fraction": 0.847539770460545
+    },
+    {
+      "gate_source_cut_fraction": 0.7,
+      "required_fallback_cut_fraction": 0.6831488430212018
+    },
+    {
+      "gate_source_cut_fraction": 0.8,
+      "required_fallback_cut_fraction": 0.6009533793015304
+    },
+    {
+      "gate_source_cut_fraction": 0.9,
+      "required_fallback_cut_fraction": 0.518757915581859
+    }
+  ],
+  "residual_bottleneck_evidence": {
+    "aggregate_gate_src0_ms_total_trace_sum": 167285.982,
+    "aggregate_updown_decode_fallback_ms_sum": 176622.28300000043,
+    "summary": "Gate source/cache time and up/down fallback time are same-order bottlenecks across generalized trace data, so a narrow up/down-only implementation is not enough."
+  },
+  "current_graph_blocker": {
+    "retained_gate_output_available": false,
+    "reason": "Existing exact graph/dataflow recheck says accepted graph does not expose a retained gate output to build_expert_mix; DS4_HOT recomputes gate and adds payload.",
+    "runtime_token_rate_patch_allowed_now": false
+  },
+  "implementation_gate": {
+    "runtime_source_patch_allowed_for_sota_candidate_now": false,
+    "minimum_bound_to_reopen": "A new retained-gate interface proof must show >=80% gate source cut and >=80% up/down fallback cut, or another cut pair with generalized calibration/dev min_eval_tok_s >= 5.5 after estimated overhead.",
+    "correctness_requirements": [
+      "No prompt-specific packs, traces, or admission profiles.",
+      "Fixed-text top1/correctness proof before strict cold benchmark.",
+      "France prompt must remain semantically correct and coherent.",
+      "16GB cgroup must include page cache and must use MemorySwapMax=0.",
+      "Accepted TTFT increase must remain <=20%."
+    ]
+  },
+  "next_action": {
+    "type": "pre-implementation probe/design",
+    "description": "Design or instrument a retained-gate interface that makes gate/topk/weights available to the expert mix path without recomputing gate or adding large payload, then rerun a hard-bound using measured eligibility/coverage before any token-rate runtime patch.",
+    "success_gate": "new hard-bound min_eval_tok_s >= 5.5 on calibration/dev and no held-out prompt usage",
+    "failure_gate": "if retained gate cannot cut both source terms near 80/80 under VRAM/RAM constraints, close this path and switch to compact representation feasibility."
+  }
+}

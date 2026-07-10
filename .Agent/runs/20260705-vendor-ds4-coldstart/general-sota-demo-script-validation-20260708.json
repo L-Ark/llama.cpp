@@ -1,0 +1,36 @@
+{
+  "artifact_id": "general-sota-demo-script-validation-20260708",
+  "purpose": "Record validation for the interactive prompt-general DeepSeek V4 vendor demo script.",
+  "script_path": "scripts/demo-vendor-ds4-general-sota.sh",
+  "script_sha256": "3909b8ea38b6ee5a11efc2db99d4beb4ee856907fc99175078c31ac9b7dfd70b",
+  "source_commit_before_demo_commit": "b2fd098cb3c4f347313de6950126e36a68b5d92e",
+  "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli",
+  "binary_sha256": "c3aa016da81aee65db5b65fbb79a19604ef212e5897840c93dad3c9b8f1eab78",
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "config_summary": "Prompt-general demo config: cpu_moe=40, GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1, GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps, GGML_MOE_STREAM_ONE_CACHE_MIB=13568, GGML_MOE_KEEP_TOPK_UPDOWN=4, layer range 10-39 value 3, GGML_MOE_VRAM_CACHE_GB=0, no prompt-specific expert pack/profile/alias, strict systemd MemoryMax=16000000000 and MemorySwapMax=0.",
+  "validation_status": "pass_smoke",
+  "validation_note": "This is a short n32 smoke run to verify the demo script accepts arbitrary user prompts, enforces the 16GB cgroup, records metrics, and produces output. It is not a promoted SOTA benchmark and does not replace the existing n192 prompt-general baseline artifact.",
+  "validation_run_dir": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T162939Z-validation-cn-food-n32-ttftfix",
+  "validation_prompt": "今天吃什么？请简短回答。",
+  "validation_max_tokens": 32,
+  "validation_metrics": {
+    "eval_tok_s": 1.7,
+    "prompt_tok_s": 1.0,
+    "ttft_estimate_ms": 35815.193757,
+    "elapsed_seconds": 52.4,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15089393664,
+    "ram_ok": true,
+    "exit_status": 0,
+    "systemd_status": 0
+  },
+  "validation_answer": "并提供一些简单的建议：  \n- 如果你在家：**冰箱库存优先**（冻肉/蔬菜/鸡蛋/豆制品等）  \n- 如果",
+  "known_current_prompt_general_baseline": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+    "n_tokens": 192,
+    "min_eval_tok_s": 1.8,
+    "mean_eval_tok_s": 2.18,
+    "max_eval_tok_s": 2.7,
+    "target_gt_5_tok_s_met": false
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "artifact_id": "down-empty-fast-exit-rejected-20260708",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T203206Z-down-empty-fast-exit-probe",
+  "source_head_before_revert": "2d3fd911cf4f6f1b0d4ba729183600dd3640d4ac",
+  "source_dirty_during_probe": true,
+  "patch_summary": "Default-off GGML_MOE_STREAM_DOWN_EMPTY_FAST_EXIT attempted to return early after accepted down batch consumed all rows.",
+  "held_out_test_used": false,
+  "prompt": "fixed France correctness text, not held-out; diagnostic only",
+  "top1_same_vs_previous_default": 145,
+  "top1_n_compare": 145,
+  "top1_first_mismatch": -1,
+  "max_abs_top2_logit_diff_vs_previous_default": 0.0,
+  "mean_abs_top2_logit_diff_vs_previous_default": 0.0,
+  "memory_peak_bytes": 16000000000,
+  "memory_file_bytes": 14937059328,
+  "memory_events": {
+    "low": 0,
+    "high": 0,
+    "max": 84867,
+    "oom": 0,
+    "oom_kill": 0,
+    "oom_group_kill": 0
+  },
+  "ram_ok": true,
+  "profile_lines": [
+    "[kimi_cpu_moe_profile] down calls=17400 total=9.527 ms/call convert_t0=0.001 route=0.001 route_barrier=0.004 cuda_batch=4.682 cuda_single=0.000 post_cuda_barrier=0.023 fallback_t0=4.809 batch_accept=5800 batch_decline=0 single_accept=0 single_decline=69600"
+  ],
+  "fallback_reason_by_role": {
+    "gate": {
+      "calls": 34800,
+      "fallback_ms": 49683.96,
+      "reasons": [
+        [
+          "one_declined_internal",
+          34800
+        ]
+      ]
+    },
+    "up": {
+      "calls": 34800,
+      "fallback_ms": 33399.864,
+      "reasons": [
+        [
+          "one_declined_internal",
+          34800
+        ]
+      ]
+    }
+  },
+  "interpretation": [
+    "Correctness/top1 remained identical to the previous default report.",
+    "No speedup: service runtime was 3min26.308s versus the previous full-down lane8/shared 3min22.80s.",
+    "The aggregate profile bucket named down still reports fallback_t0 because it covers ordinary mul_mat_id fallback for gate/up as well; fallback_reason.csv confirms true down CPU fallback rows are absent in the full-down run.",
+    "Therefore a down-only empty fast-exit does not solve the main bottleneck. The next useful route is up/gate/down fusion or a broader ordinary MoE GPU path, not this guard."
+  ],
+  "decision": "rejected_no_speedup_source_reverted"
+}

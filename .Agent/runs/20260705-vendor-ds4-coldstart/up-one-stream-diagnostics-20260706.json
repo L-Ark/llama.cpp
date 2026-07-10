@@ -1,0 +1,264 @@
+{
+  "created_at": "2026-07-06T15:46:00Z",
+  "purpose": "Calibration-only diagnostic for generic DeepSeek up CPU fallback. No held-out prompts used. Not a SOTA run.",
+  "constraints": {
+    "memory_max_bytes": 16000000000,
+    "drop_caches": true,
+    "prompt_specific_pack_or_profile": false,
+    "prompt": "Please introduce France in a short paragraph.",
+    "held_out_used": false
+  },
+  "runs": {
+    "gate_only_reference_n32": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T153652Z-20260706-upgate-decline-diagnostic-n32/france-upgate-decline-cpu40-vram0gb",
+      "summary": {
+        "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T153652Z-20260706-upgate-decline-diagnostic-n32/france-upgate-decline-cpu40-vram0gb",
+        "correctness_ok": false,
+        "correctness_reason": "unfinished_sentence",
+        "cpu_moe": 40,
+        "elapsed_seconds": 53.25,
+        "eval_ms": null,
+        "eval_tok_s": 1.9,
+        "exit_status": 0,
+        "first_answer_ms": 38349.266845,
+        "load_ms": null,
+        "max_rss_kb": 15596872,
+        "memory_file_bytes": 15121788928,
+        "memory_max_bytes": 16000000000,
+        "memory_max_events": 11678,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 11340738560,
+          "anon": 1138688,
+          "file": 15121788928,
+          "file_mapped": 159744,
+          "inactive_file": 3781050368,
+          "kernel": 121839616,
+          "pgfault": 2235783,
+          "pgmajfault": 161968,
+          "slab": 121117704,
+          "workingset_activate_file": 96071,
+          "workingset_refault_file": 294446,
+          "workingset_restore_file": 95469
+        },
+        "oom_seen": false,
+        "pgmajfault": 161968,
+        "prompt_eval_ms": null,
+        "prompt_tok_s": 0.9,
+        "ram_kill_threshold_bytes": 16000000000,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "systemd_status": 0,
+        "ttft_estimate_ms": 38349.266845,
+        "unit": "vendor-ds4-16gb-20260706T153652Z-cpu40.service",
+        "workingset_refault_file": 294446
+      },
+      "fallback_aggregate": {
+        "up|batch_env_missing|one_name_filter|prompt": {
+          "fallback_ms": 3893.623,
+          "calls": 1171,
+          "rows": 1820
+        },
+        "down|batch_env_missing|one_name_filter|prompt": {
+          "fallback_ms": 4347.132,
+          "calls": 1171,
+          "rows": 1820
+        },
+        "up|batch_env_missing|one_name_filter|decode": {
+          "fallback_ms": 4583.853,
+          "calls": 4030,
+          "rows": 4030
+        },
+        "down|batch_env_missing|one_name_filter|decode": {
+          "fallback_ms": 2980.18,
+          "calls": 4030,
+          "rows": 4030
+        }
+      },
+      "stream_lines": [
+        "[moe_stream] first call: ne01=2048 ne00=4096 nb01=2176 src0_bytes=4456448 cne1=2",
+        "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+        "[moe_stream] VRAM cache: hits=6536 misses=2935 hit_rate=69.0%",
+        "[ Prompt: 0.9 t/s | Generation: 1.9 t/s ]"
+      ],
+      "env_subset": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "GGML_MOE_FALLBACK_REASON_PROFILE_OUT": "/root/lfz/runs/vendor-ds4-16gb/20260706T153652Z-20260706-upgate-decline-diagnostic-n32/france-upgate-decline-cpu40-vram0gb/fallback_reason.csv",
+        "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+        "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+        "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+        "GGML_MOE_STREAM": "1",
+        "GGML_MOE_STREAM_DECLINE_DEBUG": "1",
+        "GGML_MOE_STREAM_DONTNEED": "1",
+        "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+        "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+        "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+        "GGML_MOE_VRAM_CACHE_GB": "0"
+      }
+    },
+    "up_one_cached_gpuonly_n16": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T153940Z-20260706-up-one-gpuonly-diagnostic-n16/france-up-one-gpuonly-cpu40-vram0gb",
+      "summary": {
+        "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic,",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T153940Z-20260706-up-one-gpuonly-diagnostic-n16/france-up-one-gpuonly-cpu40-vram0gb",
+        "correctness_ok": false,
+        "correctness_reason": "too_short,missing_europe,missing_expected_context",
+        "cpu_moe": 40,
+        "elapsed_seconds": 46.14,
+        "eval_ms": null,
+        "eval_tok_s": 1.6,
+        "exit_status": 0,
+        "first_answer_ms": 38811.285754,
+        "load_ms": null,
+        "max_rss_kb": 15592816,
+        "memory_file_bytes": 15137005568,
+        "memory_max_bytes": 16000000000,
+        "memory_max_events": 7956,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 2658283520,
+          "anon": 1130496,
+          "file": 15137005568,
+          "file_mapped": 159744,
+          "inactive_file": 12478562304,
+          "kernel": 106377216,
+          "pgfault": 2012828,
+          "pgmajfault": 76647,
+          "slab": 105579512,
+          "workingset_activate_file": 40457,
+          "workingset_refault_file": 62578,
+          "workingset_restore_file": 40224
+        },
+        "oom_seen": false,
+        "pgmajfault": 76647,
+        "prompt_eval_ms": null,
+        "prompt_tok_s": 0.8,
+        "ram_kill_threshold_bytes": 16000000000,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "systemd_status": 0,
+        "ttft_estimate_ms": 38811.285754,
+        "unit": "vendor-ds4-16gb-20260706T153940Z-cpu40.service",
+        "workingset_refault_file": 62578
+      },
+      "fallback_aggregate": {
+        "down|batch_env_missing|one_name_filter|prompt": {
+          "fallback_ms": 5012.57,
+          "calls": 1172,
+          "rows": 1820
+        },
+        "down|batch_env_missing|one_name_filter|decode": {
+          "fallback_ms": 2602.707,
+          "calls": 1950,
+          "rows": 1950
+        }
+      },
+      "stream_lines": [
+        "[moe_stream] first call: ne01=2048 ne00=4096 nb01=2176 src0_bytes=4456448 cne1=2",
+        "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+        "[moe_stream] VRAM cache: hits=4967 misses=3786 hit_rate=56.7%",
+        "[ Prompt: 0.8 t/s | Generation: 1.6 t/s ]"
+      ],
+      "env_subset": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "GGML_MOE_FALLBACK_REASON_PROFILE_OUT": "/root/lfz/runs/vendor-ds4-16gb/20260706T153940Z-20260706-up-one-gpuonly-diagnostic-n16/france-up-one-gpuonly-cpu40-vram0gb/fallback_reason.csv",
+        "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+        "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+        "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+        "GGML_MOE_STREAM": "1",
+        "GGML_MOE_STREAM_DONTNEED": "1",
+        "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+        "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+        "GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER": "ffn_up_exps",
+        "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps,ffn_up_exps",
+        "GGML_MOE_VRAM_CACHE_GB": "0"
+      }
+    },
+    "up_one_no_cache_admit_gpuonly_n32": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T154122Z-20260706-up-one-no-cache-admit-diagnostic-n32/france-up-one-nocache-cpu40-vram0gb",
+      "summary": {
+        "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T154122Z-20260706-up-one-no-cache-admit-diagnostic-n32/france-up-one-nocache-cpu40-vram0gb",
+        "correctness_ok": false,
+        "correctness_reason": "unfinished_sentence",
+        "cpu_moe": 40,
+        "elapsed_seconds": 59.15,
+        "eval_ms": null,
+        "eval_tok_s": 1.5,
+        "exit_status": 0,
+        "first_answer_ms": 40705.368092,
+        "load_ms": null,
+        "max_rss_kb": 15595676,
+        "memory_file_bytes": 15118700544,
+        "memory_max_bytes": 16000000000,
+        "memory_max_events": 10935,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 14541541376,
+          "anon": 1138688,
+          "file": 15118700544,
+          "file_mapped": 163840,
+          "inactive_file": 577110016,
+          "kernel": 121925632,
+          "pgfault": 2452933,
+          "pgmajfault": 82211,
+          "slab": 121198088,
+          "workingset_activate_file": 193093,
+          "workingset_refault_file": 461022,
+          "workingset_restore_file": 192488
+        },
+        "oom_seen": false,
+        "pgmajfault": 82211,
+        "prompt_eval_ms": null,
+        "prompt_tok_s": 0.8,
+        "ram_kill_threshold_bytes": 16000000000,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "systemd_status": 0,
+        "ttft_estimate_ms": 40705.368092,
+        "unit": "vendor-ds4-16gb-20260706T154122Z-cpu40.service",
+        "workingset_refault_file": 461022
+      },
+      "fallback_aggregate": {
+        "down|batch_env_missing|one_name_filter|prompt": {
+          "fallback_ms": 4833.678,
+          "calls": 1172,
+          "rows": 1820
+        },
+        "down|batch_env_missing|one_name_filter|decode": {
+          "fallback_ms": 4493.092,
+          "calls": 4030,
+          "rows": 4030
+        }
+      },
+      "stream_lines": [
+        "[moe_stream] first call: ne01=2048 ne00=4096 nb01=2176 src0_bytes=4456448 cne1=2",
+        "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+        "[moe_stream] VRAM cache: hits=6548 misses=8125 hit_rate=44.6%",
+        "[ Prompt: 0.8 t/s | Generation: 1.5 t/s ]"
+      ],
+      "env_subset": {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "GGML_MOE_FALLBACK_REASON_PROFILE_OUT": "/root/lfz/runs/vendor-ds4-16gb/20260706T154122Z-20260706-up-one-no-cache-admit-diagnostic-n32/france-up-one-nocache-cpu40-vram0gb/fallback_reason.csv",
+        "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+        "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3",
+        "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+        "GGML_MOE_STREAM": "1",
+        "GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER": "ffn_gate_exps",
+        "GGML_MOE_STREAM_DONTNEED": "1",
+        "GGML_MOE_STREAM_ONE_CACHE_MIB": "13568",
+        "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+        "GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER": "ffn_up_exps",
+        "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps,ffn_up_exps",
+        "GGML_MOE_VRAM_CACHE_GB": "0"
+      }
+    }
+  },
+  "conclusion": {
+    "up_one_stream_functional": true,
+    "simple_up_one_stream_rejected": true,
+    "reason": "Allowing ffn_up_exps through one-stream eliminates up CPU fallback under GPU-only fail-fast, but end-to-end token rate falls from 1.9 tok/s gate-only n32 diagnostic to 1.6 tok/s cached n16 and 1.5 tok/s no-cache n32. Cache hit rate drops to 56.7% when up shares cache and to 44.6% when up is copied without admission, showing per-expert H2D/sync/cache pressure dominates. The next optimization should be grouped/batched up path or fused up/gate with controlled cache partition, not simple broadening of GGML_MOE_STREAM_ONE_NAME_FILTER.",
+    "next_action": "Design a grouped up MXFP4 decode path with numerical parity and per-component timing; keep down MXFP4 perf probe rejected unless paired with up solution. Continue using calibration/dev prompts only until candidate freeze, then held-out test."
+  }
+}

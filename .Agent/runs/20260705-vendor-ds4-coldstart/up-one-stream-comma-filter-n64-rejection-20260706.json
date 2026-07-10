@@ -1,0 +1,71 @@
+{
+  "artifact_id": "up-one-stream-comma-filter-n64-rejection-20260706",
+  "timestamp_local": "2026-07-06T12:25:00+08:00",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "base_head_before_commit": "361f06ec4",
+  "prompt_scope": "calibration_dev_set_v1_france_only",
+  "held_out_used": false,
+  "source_change": {
+    "files": [
+      "ggml/src/ggml-cpu/ggml-cpu.c",
+      "ggml/src/ggml-cuda/moe_stream.cu"
+    ],
+    "default_behavior": "unchanged when GGML_MOE_STREAM_ONE_NAME_FILTER is absent or a single substring and GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER is unset",
+    "new_capability": [
+      "GGML_MOE_STREAM_ONE_NAME_FILTER accepts comma/colon separated substrings, e.g. ffn_gate_exps,ffn_up_exps",
+      "GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER aborts if matching mul_mat_id rows remain for CPU fallback after stream attempts"
+    ]
+  },
+  "candidate_run": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T121537Z-20260706T-up-one-stream-comma-filter-n64-dev-smoke/france-up-one-stream-comma-cpu40-vram0gb",
+    "config_delta": "GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps; no prompt-specific pack/profile; n=64",
+    "metrics": {
+      "eval_tok_s": 1.9,
+      "prompt_tok_s": 0.8,
+      "ttft_ms": 38614.208237,
+      "elapsed_seconds": 69.24,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15063433216,
+      "pgmajfault": 110659,
+      "workingset_refault_file": 1317816,
+      "ram_ok": true,
+      "oom_seen": false,
+      "correctness_ok": true
+    },
+    "fallback_summary": {
+      "remaining_roles": [
+        "down"
+      ],
+      "down_decode_fallback_ms": 8205.193,
+      "down_prompt_fallback_ms": 4904.79,
+      "up_fallback_ms": 0.0,
+      "vram_cache": "hits=19629 misses=6884 hit_rate=74.0%"
+    }
+  },
+  "control_run": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T121752Z-20260706T-gate-only-n64-dev-control-after-filter-patch/france-gate-only-n64-control-cpu40-vram0gb",
+    "config_delta": "GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps; no prompt-specific pack/profile; n=64",
+    "metrics": {
+      "eval_tok_s": 2.2,
+      "prompt_tok_s": 0.9,
+      "ttft_ms": 37992.446775,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15086784512,
+      "pgmajfault": 212715,
+      "workingset_refault_file": 948400,
+      "ram_ok": true,
+      "correctness_ok": false,
+      "correctness_reason": "unfinished_sentence due n64 truncation"
+    },
+    "fallback_summary": {
+      "up_decode_fallback_ms": 7469.804,
+      "up_prompt_fallback_ms": 3772.828,
+      "down_decode_fallback_ms": 5037.867,
+      "down_prompt_fallback_ms": 4480.035,
+      "vram_cache": "hits=13435 misses=3716 hit_rate=78.3%"
+    }
+  },
+  "decision": "rejected_not_sota",
+  "conclusion": "Adding ffn_up_exps to one-stream removes up CPU fallback locally, but end-to-end n64 speed drops from gate-only 2.2 tok/s to 1.9 tok/s. The shared one-stream cache hit rate is poor and down fallback remains, so this is not a valid generalized improvement.",
+  "next_action": "Do not pursue naive gate+up one-stream with shared cache as a performance candidate. Use the new filter/GPU-only diagnostic capability for narrower future probes, and focus on a hard-bound design that avoids cache thrash or reduces down/up movement without stealing gate cache residency."
+}

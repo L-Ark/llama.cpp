@@ -1,0 +1,90 @@
+{
+  "attempt_id": "20260708-disk-cleanup-admission-for-lowbit-correctness",
+  "created_at_local": "2026-07-08",
+  "status": "cleanup_candidates_recorded_no_deletion_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Identify safe-looking disk cleanup candidates before any external lowbit full-model correctness gate download.",
+  "disk_state": {
+    "filesystem": "/",
+    "size_gib": 993,
+    "used_gib": 960,
+    "available_gib": 34,
+    "available_gib_precise_from_size_admission": 33.220829010009766,
+    "use_percent": 97
+  },
+  "download_requirement": {
+    "smallest_checked_candidate": {
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "group": "DeepSeek-V4-Flash-REAP-K128-uniform",
+      "size_gib": 46.975316405296326
+    },
+    "minimum_extra_free_gib_needed_before_safety_margin": 13.75448739528656,
+    "recommended_extra_free_gib_with_margin": 25
+  },
+  "large_disk_areas": {
+    "/root/lfz/models": "521G",
+    "/root/lfz/runs": "79G",
+    "/root/lfz/vendor": "4.7G",
+    "/root/lfz/hf-venv": "4.8G"
+  },
+  "large_model_files": [
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf",
+      "size_gib": 153.17,
+      "notes": "4Expert model; do not delete unless 4Expert repro is explicitly no longer needed."
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "size_gib": 145.42,
+      "notes": "Primary native vendor model; must keep."
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+      "size_gib": 137.07,
+      "notes": "Primary expert pack; keep unless a newer exact reproduction path no longer needs it."
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+      "size_gib": 81.97,
+      "notes": "Previously rejected IQ2_S route; likely cleanup candidate if no longer needed for rejection reproduction."
+    },
+    {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/.cache/huggingface/download/AgEKDDObETLESPB-bwGREqjQfJM=.82822c4c3330cdc17762cff6f044fd50abb04278779309a157d4401ef8a9c17b.42532000.incomplete",
+      "size_gib": 2.76,
+      "notes": "Incomplete Hugging Face download; likely safe cleanup candidate after confirming no active download."
+    }
+  ],
+  "large_run_artifacts": [
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack",
+      "size_gib": 35.78,
+      "notes": "Promptset gate expert pack; deleting could affect historical repro."
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack",
+      "size_gib": 19.09,
+      "notes": "France-specific expert pack; deleting could affect historical repro, but current generalized route should not use France-specific packs."
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top512-down-20260703.pack",
+      "size_gib": 2.13,
+      "notes": "France-specific rejected/old pack."
+    },
+    {
+      "path": "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-decode-top256-updown-20260703.pack",
+      "size_gib": 1.06,
+      "notes": "France-specific rejected/old pack."
+    }
+  ],
+  "decision": {
+    "deleted_anything": false,
+    "download_allowed_now": false,
+    "reason": "Every checked full external lowbit candidate exceeds current free disk. There are plausible cleanup candidates, but deleting model/pack artifacts could break historical reproducibility and needs explicit approval or a replacement archival plan.",
+    "next_allowed_actions": [
+      "Ask for approval before deleting specific cleanup candidates.",
+      "Prefer deleting rejected IQ2_S model or prompt-specific historical expert packs only after confirming their reproductions are no longer needed.",
+      "If cleanup is not approved, search for smaller draft/verifier artifacts or remote/header-only correctness evidence."
+    ]
+  }
+}

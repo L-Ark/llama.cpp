@@ -1,0 +1,203 @@
+{
+  "attempt_id": "20260707-cpucompat-q80-mxfp4-down-batch-design",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "build": "cmake --build build-ds4-moe-stream-batch-on --target llama-cli llama-results -j2 passed",
+  "correctness": {
+    "blk0_only": {
+      "check_exit_status": 0,
+      "fallback_reason_aggregate": {
+        "down|decode|eligible|not_attempted_batch_path_selected|batch_declined_internal_no_single_retry": {
+          "batch_accepts": 0,
+          "batch_attempts": 33930,
+          "calls": 33930,
+          "fallback_us": 35437626,
+          "rows": 33930,
+          "single_accepts": 0,
+          "single_attempts": 0
+        },
+        "gate|decode|batch_unsupported|one_declined_internal|one_declined_internal": {
+          "batch_accepts": 0,
+          "batch_attempts": 0,
+          "calls": 34800,
+          "fallback_us": 38772978,
+          "rows": 34800,
+          "single_accepts": 0,
+          "single_attempts": 34800
+        },
+        "up|decode|batch_unsupported|one_declined_internal|one_declined_internal": {
+          "batch_accepts": 0,
+          "batch_attempts": 0,
+          "calls": 34800,
+          "fallback_us": 36542964,
+          "rows": 34800,
+          "single_accepts": 0,
+          "single_attempts": 34800
+        }
+      },
+      "files": {
+        "top1": {
+          "bytes": 285,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-correctness/top1-blk0-only/top1-check.json",
+          "sha256": "c11ab7732ce188b139447e0159288d9ff0462b9c5d9b52863fb0e89928be9611"
+        }
+      },
+      "memory": {
+        "memory_events": {
+          "high": 0,
+          "low": 0,
+          "max": 84738,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0
+        },
+        "memory_peak_bytes": 16000000000,
+        "memory_stat": {
+          "anon": 1011712,
+          "file": 14856323072,
+          "pgmajfault": 824341,
+          "workingset_refault_file": 25179701
+        },
+        "ram_ok": true
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-correctness/top1-blk0-only",
+      "timing": {
+        "elapsed": "mm:ss or m:ss): 2:34.69",
+        "exit_status": "0",
+        "max_rss_kb": "15597440"
+      },
+      "top1": {
+        "base_top1_matches_next_token": 122,
+        "calc_top1_matches_next_token": 122,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "mismatches_preview": [],
+        "n_tokens": 145,
+        "n_vocab": 129280,
+        "next_token_positions": 144,
+        "same_top1": 145,
+        "same_top1_ratio": 1
+      }
+    },
+    "full_down": {
+      "check_exit_status": 0,
+      "fallback_reason_aggregate": {
+        "gate|decode|batch_unsupported|one_declined_internal|one_declined_internal": {
+          "batch_accepts": 0,
+          "batch_attempts": 0,
+          "calls": 34800,
+          "fallback_us": 50741802,
+          "rows": 34800,
+          "single_accepts": 0,
+          "single_attempts": 34800
+        },
+        "up|decode|batch_unsupported|one_declined_internal|one_declined_internal": {
+          "batch_accepts": 0,
+          "batch_attempts": 0,
+          "calls": 34800,
+          "fallback_us": 34007670,
+          "rows": 34800,
+          "single_accepts": 0,
+          "single_attempts": 34800
+        }
+      },
+      "files": {
+        "top1": {
+          "bytes": 285,
+          "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-correctness/top1-full-down/top1-check.json",
+          "sha256": "c11ab7732ce188b139447e0159288d9ff0462b9c5d9b52863fb0e89928be9611"
+        }
+      },
+      "memory": {
+        "memory_events": {
+          "high": 0,
+          "low": 0,
+          "max": 85555,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0
+        },
+        "memory_peak_bytes": 16000000000,
+        "memory_stat": {
+          "anon": 1130496,
+          "file": 14860238848,
+          "pgmajfault": 529488,
+          "workingset_refault_file": 26180179
+        },
+        "ram_ok": true
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-correctness/top1-full-down",
+      "timing": {
+        "elapsed": "mm:ss or m:ss): 3:21.42",
+        "exit_status": "0",
+        "max_rss_kb": "15590516"
+      },
+      "top1": {
+        "base_top1_matches_next_token": 122,
+        "calc_top1_matches_next_token": 122,
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "mismatches_preview": [],
+        "n_tokens": 145,
+        "n_vocab": 129280,
+        "next_token_positions": 144,
+        "same_top1": 145,
+        "same_top1_ratio": 1
+      }
+    }
+  },
+  "decision": "Reject this naive CPU-compatible Q8_0 MXFP4 down batch implementation for performance. It passes fixed-text top1 exactly, including full down coverage, but a strict cold France n96 run timed out at 420s, far below SOTA requirements. Source was reverted; keep the result as correctness scaffold evidence only.",
+  "interpretation": "The Q8_0 math path fixes correctness (max_abs=0 in top1 verifier) but the naive scalar/output-column kernel and per-call H2D Q8_0 staging are too slow. Next source work should port/reuse the existing moe_stream.cu hot-batch rowtile/warp Q8_0 CPU-compatible kernels into the batch cache path, or implement a tiled kernel with shared Q8_0 rows and coalesced expert loads.",
+  "next_step": "Design optimized Q8_0 down batch v2: row-tile/warp kernel, reduce per-output-thread serial 2048 loop cost, keep same API/default-off gate, rerun top1 first, then strict cold performance.",
+  "performance_probe": {
+    "completed": false,
+    "exit_status": null,
+    "files": {
+      "resource_samples": {
+        "bytes": 19371,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-perf/france-n96/resource_samples.tsv",
+        "sha256": "64558e5043d083a3f7af216976d1d2b17eb5210f6a226c352f5fa162d60f52ae"
+      },
+      "stderr": {
+        "bytes": 1724,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-perf/france-n96/stderr.txt",
+        "sha256": "bb101dcfa3c19f0fc6c16980d5487efc15dbb70ce1dd5cbf5e0a38446d857d38"
+      },
+      "stdout": {
+        "bytes": 903062224,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-perf/france-n96/stdout.txt",
+        "sha256": "3185e7742b3928450a58373ac2e18daa587ead87cd1a54a90a09e79982ac9729"
+      }
+    },
+    "memory": {
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 61355,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_peak_bytes": 16000000000,
+      "memory_stat": {
+        "anon": 550092800,
+        "file": 14882291712,
+        "pgmajfault": 488004,
+        "workingset_refault_file": 16035641
+      },
+      "ram_ok": true
+    },
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-perf/france-n96",
+    "stderr_bytes": 1724,
+    "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\n[moe_stream] enabled (8 streams, GPU expert compute, defer_sync=0)\n[moe_stream] batched decode path active: experts=12 ne01=4096 ne00=2048\n[moe_stream_batch] VRAM cache budget: requested=2048 MiB actual=2048 MiB free=13812 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0\n[moe_stream_batch] VRAM cache: 2.0 GiB, 481 slots (4.25 MiB each)\ncommon_memory_breakdown_print: | memory breakdown [MiB] | total    free      self    model   context   compute    unaccounted |\ncommon_memory_breakdown_print: |   - CUDA0 (RTX 5090)   | 32109 = 11600 + ( 17362 =  17339 +      18 +       4) +        3146 |\ncommon_memory_breakdown_print: |   - Host               |                  137609 = 137608 +       0 +       1                |\n~llama_context:      CUDA0 compute buffer size of   4.0703 MiB, does not match expectation of   1.3138 MiB\n~llama_context:  CUDA_Host compute buffer size of   1.3830 MiB, does not match expectation of   0.5012 MiB\n[moe_stream_batch] VRAM cache: hits=13979 misses=12181 preloads=0 hit_rate=53.4%\n[moe_stream_batch] VRAM cache down: slots=481 slot=4.25 MiB hits=13979 misses=12181 preloads=0 pinned=0 hit_rate=53.4%\n[moe_fallback_reason_profile] written: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-perf/france-n96/fallback_reason_profile.csv entries=9934 dropped=0\n[kimi_cpu_moe_profile] down calls=11760 total=9.876 ms/call convert_t0=0.002 route=0.001 route_barrier=0.009 cuda_batch=4.638 cuda_single=0.000 post_cuda_barrier=0.018 fallback_t0=5.184 batch_accept=3920 batch_decline=0 single_accept=0 single_decline=49788\n",
+    "stdout_bytes": 903062224,
+    "stdout_tail": "\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\n> \n\nExiting...\n",
+    "timeout_seconds": 420
+  },
+  "source_change_summary": "Extended CPU batch API to pass src1 Q8_0 wdata/row_size/ne1 and added default-off GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH path in moe_stream_batch.cu with one thread per output column using CPU-compatible Q8_0 math.",
+  "source_diff_excerpt": "diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c\nindex b89c40dcc..f311bc1bf 100644\n--- a/ggml/src/ggml-cpu/ggml-cpu.c\n+++ b/ggml/src/ggml-cpu/ggml-cpu.c\n@@ -176,6 +176,9 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(\n     const float * src1_f32,\n     size_t src1_nb1,\n     size_t src1_nb2,\n+    const void * src1_q8_0,\n+    size_t src1_q8_0_row_size,\n+    int64_t src1_q8_0_ne1,\n     float * dst,\n     size_t dst_nb1,\n     size_t dst_nb2,\n@@ -229,8 +232,8 @@ static bool (*ggml_cuda_moe_stream_one)(\n     const ggml_moe_stream_row_mapping *) = NULL;\n static bool (*ggml_cuda_moe_stream_batch)(\n     int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t,\n-    const float *, size_t, size_t, float *, size_t, size_t, const int64_t *,\n-    const ggml_moe_stream_row_mapping *, int64_t) = NULL;\n+    const float *, size_t, size_t, const void *, size_t, int64_t, float *, size_t, size_t,\n+    const int64_t *, const ggml_moe_stream_row_mapping *, int64_t) = NULL;\n static bool (*ggml_cuda_moe_stream_up_gate_batch)(\n     int, int, const char *, const void *, const char *, const void *, int64_t,\n     int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *,\n@@ -4078,6 +4081,8 @@ static void ggml_compute_forward_mul_mat_id(\n     if (use_gpu_stream_batch) {\n         if (ith == 0) {\n             const uint64_t kimi_cpu_moe_cuda_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;\n+            const void * src1_q8_0_batch = (src1->type == vec_dot_type) ? src1->data : params->wdata;\n+            const size_t src1_q8_0_row_size_batch = ggml_row_size(vec_dot_type, ne10);\n             const bool done = ggml_cuda_moe_stream_batch(\n                 src0->type,\n                 src0->name,\n@@ -4086,6 +4091,9 @@ static void ggml_compute_forward_mul_mat_id(\n                 ne01, ne00, nb01, nb02,\n                 (const float *) src1->data,\n                 nb11, nb12,\n+                src1_q8_0_batch,\n+                src1_q8_0_row_size_batch,\n+                ne11,\n                 (float *) dst->data,\n                 nb1, nb2,\n                 matrix_row_counts,\ndiff --git a/ggml/src/ggml-cuda/moe_stream_batch.cu b/ggml/src/ggml-cuda/moe_stream_batch.cu\nindex 51f46c2e2..fcb2d688f 100644\n--- a/ggml/src/ggml-cuda/moe_stream_batch.cu\n+++ b/ggml/src/ggml-cuda/moe_stream_batch.cu\n@@ -8,7 +8,7 @@ typedef struct { float direct_up; float direct_gate; float direct_fused; float r\n void ggml_cuda_moe_stream_batch_link_anchor(void) {}\n void ggml_cuda_moe_ttft_trace_mark(const char *) {}\n bool ggml_cuda_moe_iq2_prompt_replay(int, const void *, const void *, int64_t, int64_t, size_t, const float *, int64_t, int, float, ggml_moe_iq2_replay_result *) { return false; }\n-bool ggml_cuda_moe_stream_batch(int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }\n+bool ggml_cuda_moe_stream_batch(int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, const float *, size_t, size_t, const void *, size_t, int64_t, float *, size_t, size_t, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }\n bool ggml_cuda_moe_stream_preload_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }\n bool ggml_cuda_moe_stream_preload_tensor_prompt(int, const char *, const void *, int64_t, size_t, size_t) { return false; }\n bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }\n@@ -120,6 +120,9 @@ bool ggml_cuda_moe_stream_batch(\n     size_t nb02,\n     const float *src1_f32,\n     size_t src1_nb1, size_t src1_nb2,\n+    const void *src1_q8_0,\n+    size_t src1_q8_0_row_size,\n+    int64_t src1_q8_0_ne1,\n     float *dst,\n     size_t dst_nb1, size_t dst_nb2,\n     const int64_t *matrix_row_counts,\n@@ -5977,13 +5980,22 @@ static const char *mxfp4_down_probe_mode() {\n     return env;\n }\n \n-static bool mxfp4_down_probe_candidate(const char *name, ggml_type type) {\n-    if (!mxfp4_down_probe_mode()) return false;\n+static bool mxfp4_down_tensor_target_match(const char *name, ggml_type type, const char *target_env) {\n     if (type != GGML_TYPE_MXFP4 || !name || !std::strstr(name, \"ffn_down_exps\")) return false;\n-    const char *target = std::getenv(\"GGML_MOE_STREAM_DOWN_MXFP4_PROBE_TENSOR\");\n+    const char *target = target_env ? std::getenv(target_env) : nullptr;\n     return !target || !target[0] || std::strcmp(target, name) == 0;\n }\n \n+static bool mxfp4_down_probe_candidate(const char *name, ggml_type type) {\n+    if (!mxfp4_down_probe_mode()) return false;\n+    return mxfp4_down_tensor_target_match(name, type, \"GGML_MOE_STREAM_DOWN_MXFP4_PROBE_TENSOR\");\n+}\n+\n+static bool mxfp4_down_q80_compat_candidate(const char *name, ggml_type type) {\n+    if (!expert_pack_env_bool(\"GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH\", false)) return false;\n+    return mxfp4_down_tensor_target_match(name, type, \"GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR\");\n+}\n+\n static bool mxfp4_down_probe_parity_mode() {\n     const char *mode = mxfp4_down_probe_mode();\n     return mode && std::strcmp(mode, \"perf\") != 0;\n@@ -6176,6 +6188,147 @@ static void mxfp4_down_probe_report(\n             worst_gpu, worst_cpu);\n }\n \n+\n+static __device__ __forceinline__ int mxfp4_q80_value_dev(int q) {\n+    switch (q & 0x0F) {\n+        case 0x0: return 0;\n+        case 0x1: return 1;\n+        case 0x2: return 2;\n+        case 0x3: return 3;\n+        case 0x4: return 4;\n+        case 0x5: return 6;\n+        case 0x6: return 8;\n+        case 0x7: return 12;\n+        case 0x8: return 0;\n+        case 0x9: return -1;\n+        case 0xA: return -2;\n+        case 0xB: return -3;\n+        case 0xC: return -4;\n+        case 0xD: return -6;\n+        case 0xE: return -8;\n+        default:  return -12;\n+    }\n+}\n+\n+static __device__ __forceinline__ void mxfp4_q80_block_lanes(\n+        const block_mxfp4 &x,\n+        const block_q8_0 &y,\n+        int lanes[8]) {\n+#pragma unroll\n+    for (int group = 0; group < 4; ++group) {\n+        int lo = 0;\n+        int hi = 0;\n+#pragma unroll\n+        for (int r = 0; r < 4; ++r) {\n+            const int j = group * 4 + r;\n+            const uint8_t q = x.qs[j];\n+            lo += y.qs[j] * mxfp4_q80_value_dev(q & 0x0F);\n+            hi += y.qs[j + QK_MXFP4/2] * mxfp4_q80_value_dev(q >> 4);\n+        }\n+        lanes[group] = lo;\n+        lanes[group + 4] = hi;\n+    }\n+}\n+\n+static __device__ __forceinline__ float mxfp4_q80_hsum8(\n+        const float acc1[8],\n+        const float acc2[8]) {\n+    const float x0 = acc1[0] + acc2[0];\n+    const float x1 = acc1[1] + acc2[1];\n+    const float x2 = acc1[2] + acc2[2];\n+    const float x3 = acc1[3] + acc2[3];\n+    const float x4 = acc1[4] + acc2[4];\n+    const float x5 = acc1[5] + acc2[5];\n+    const float x6 = acc1[6] + acc2[6];\n+    const float x7 = acc1[7] + acc2[7];\n+    const float r0 = x4 + x0;\n+    const float r1 = x5 + x1;\n+    const float r2 = x6 + x2;\n+    const float r3 = x7 + x3;\n+    return (r0 + r2) + (r1 + r3);\n+}\n+\n+static __global__ void mxfp4_down_q80_compat_batch_kernel(\n+        const char * __restrict__ src0_pool,\n+        const int32_t * __restrict__ x_ids,\n+        int64_t slot_stride,\n+        int64_t ne00,\n+        int64_t ne01,\n+        int64_t nb01,\n+        const char * __restrict__ q80,\n+        size_t q80_row_size,\n+        float * __restrict__ dst,\n+        int64_t n_active) {\n+    const int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;\n+    const int64_t total = n_active * ne01;\n+    if (idx >= total) return;\n+\n+    const int64_t row = idx / ne01;\n+    const int64_t col = idx - row * ne01;\n+    const int32_t slot = x_ids[row];\n+    if (slot < 0) return;\n+\n+    const char *src0 = src0_pool + (size_t)slot * (size_t)slot_stride;\n+    const block_mxfp4 *x = (const block_mxfp4 *)(src0 + (size_t)col * (size_t)nb01);\n+    const block_q8_0 *y = (const block_q8_0 *)(q80 + (size_t)row * q80_row_size);\n+    const int64_t nb = ne00 / QK_MXFP4;\n+\n+    float acc1[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};\n+    float acc2[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};\n+\n+    int64_t ib = 0;\n+    for (; ib + 1 < nb; ib += 2) {\n+        int p1[8];\n+        int p2[8];\n+        mxfp4_q80_block_lanes(x[ib + 0], y[ib + 0], p1);\n+        mxfp4_q80_block_lanes(x[ib + 1], y[ib + 1], p2);\n+        const float scale0 = __half2float(y[ib + 0].d) * (ggml_cuda_e8m0_to_fp32(x[ib + 0].e) * 0.5f);\n+        const float scale1 = __half2float(y[ib + 1].d) * (ggml_cuda_e8m0_to_fp32(x[ib + 1].e) * 0.5f);\n+#pragma unroll\n+        for (int lane = 0; lane < 8; ++lane) {\n+            acc1[lane] = fmaf(scale0, (float)p1[lane], acc1[lane]);\n+            acc2[lane] = fmaf(scale1, (float)p2[lane], acc2[lane]);\n+        }\n+    }\n+\n+    float sum = mxfp4_q80_hsum8(acc1, acc2);\n+    for (; ib < nb; ++ib) {\n+        int sumi1 = 0;\n+        int sumi2 = 0;\n+#pragma unroll\n+        for (int j = 0; j < QK_MXFP4/2; ++j) {\n+            const uint8_t q = x[ib].qs[j];\n+            sumi1 += y[ib].qs[j] * mxfp4_q80_value_dev(q & 0x0F);\n+            sumi2 += y[ib].qs[j + QK_MXFP4/2] * mxfp4_q80_value_dev(q >> 4);\n+        }\n+        const float scale = __half2float(y[ib].d) * (ggml_cuda_e8m0_to_fp32(x[ib].e) * 0.5f);\n+        sum = fmaf(scale, (float)(sumi1 + sumi2), sum);\n+    }\n+    dst[(size_t)row * (size_t)ne01 + (size_t)col] = sum;\n+}\n+\n+static bool launch_mxfp4_down_q80_compat_batch(\n+        const char *src0_pool,\n+        const int32_t *d_x_ids,\n+        int64_t slot_stride,\n+        int64_t ne00,\n+        int64_t ne01,\n+        int64_t nb01,\n+        const char *d_q80,\n+        size_t q80_row_size,\n+        float *d_dst,\n+        int64_t n_active,\n+        cudaStream_t st) {\n+    if (!src0_pool || !d_x_ids || !d_q80 || !d_dst || ne00 <= 0 || ne01 <= 0 || n_active <= 0) return false;\n+    if (ne00 % QK_MXFP4 != 0) return false;\n+    const int threads = 128;\n+    const int64_t total = n_active * ne01;\n+    const int blocks = (int)((total + threads - 1) / threads);\n+    mxfp4_down_q80_compat_batch_kernel<<<blocks, threads, 0, st>>>(\n+            src0_pool, d_x_ids, slot_stride, ne00, ne01, nb01, d_q80, q80_row_size, d_dst, n_active);\n+    return cudaGetLastError() == cudaSuccess;\n+}\n+\n static bool q4_down_route_profile_candidate(const char *name, ggml_type type) {\n     const char *path = std::getenv(\"GGML_MOE_Q4_DOWN_ROUTE_PROFILE_OUT\");\n     if (!path || !path[0]) return false;\n@@ -8566,6 +8719,9 @@ extern \"C\" bool ggml_cuda_moe_stream_batch(\n     size_t nb02,\n     const float *src1_f32,\n     size_t src1_nb1, size_t src1_nb2,\n+    const void *src1_q8_0,\n+    size_t src1_q8_0_row_size,\n+    int64_t src1_q8_0_ne1,\n     float *dst,\n     size_t dst_nb1, size_t dst_nb2,\n     const int64_t *matrix_row_counts,\n@@ -8595,8 +8751,10 @@ extern \"C\" bool ggml_cuda_moe_stream_batch(\n     const bool q4_parity_candidate = q4_down_parity_candidate(src0_name, src0_type);\n     const bool q4_route_profile_candidate = q4_down_route_profile_candidate(src0_name, src0_type);\n     const bool mxfp4_probe_candidate = mxfp4_down_probe_candidate(src0_name, src0_type);\n-    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate && !mxfp4_probe_candidate) return decline(\"unsupported_type\");\n+    const bool mxfp4_q80_compat_candidate = mxfp4_down_q80_compat_candidate(src0_name, src0_type);\n+    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate && !mxfp4_probe_candidate && !mxfp4_q80_compat_candidate) return decline(\"unsupported_type\");\n     if (!src1_f32) return decline(\"missing_src1\");\n+    if (mxfp4_q80_compat_candidate && (!src1_q8_0 || src1_q8_0_row_size == 0 || src1_q8_0_ne1 <= 0)) return decline(\"missing_src1_q8_0\");\n     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);\n \n     for (int64_t e = 0; e < n_as; ++e) {\n@@ -8703,6 +8861,8 @@ extern \"C\" bool ggml_cuda_moe_stream_batch(\n     const size_t src0_all_bytes = (size_t)n_active * src0_bytes;\n     const size_t src1_f32_bytes = (size_t)n_active * ne00 * sizeof(float);\n     const size_t src1_q8_bytes = (size_t)n_active * moe_stream_q8_1_row_bytes(ne00);\n+    const size_t src1_q80_bytes = mxfp4_q80_compat_candidate ? (size_t)n_active * src1_q8_0_row_size : 0;\n+    const size_t src1_q8_alloc_bytes = std::max(src1_q8_bytes, src1_q80_bytes);\n     const char *down_q8k_env = std::getenv(\"GGML_MOE_STREAM_DOWN_Q8K\");\n     const char *down_q8k_types_env = std::getenv(\"GGML_MOE_STREAM_DOWN_Q8K_TYPES\");\n     const char *down_q8k_layer_range = std::getenv(\"GGML_MOE_STREAM_DOWN_Q8K_LAYER_RANGE\");\n@@ -8749,15 +8909,15 @@ extern \"C\" bool ggml_cuda_moe_stream_batch(\n     mxfp4_stage_trace(\"sizes\");\n \n     bool ok = ensure_dev(bc.d_src0, bc.d_src0_sz, src0_all_bytes)\n-        && (use_handoff || ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes))\n-        && ensure_dev(bc.d_src1_q8, bc.d_src1_q8_sz, src1_q8_bytes)\n+        && (use_handoff || mxfp4_q80_compat_candidate || ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes))\n+        && ensure_dev(bc.d_src1_q8, bc.d_src1_q8_sz, src1_q8_alloc_bytes)\n         && (!down_q8k_requested || ensure_dev(bc.d_src1_q8k, bc.d_src1_q8k_sz, src1_q8k_bytes))\n         && ensure_dev(bc.d_dst, bc.d_dst_sz, dst_bytes)\n         && ensure_dev((void *&)bc.d_ids_src1, bc.d_ids_src1_sz, ids_bytes)\n         && ensure_dev((void *&)bc.d_ids_dst, bc.d_ids_dst_sz, ids_bytes)\n         && ensure_dev((void *&)bc.d_x_ids, bc.d_x_ids_sz, ids_bytes)\n         && ensure_dev((void *&)bc.d_bounds, bc.d_bounds_sz, bounds_bytes)\n-        && (use_handoff || ensure_host_pinned(bc.h_src1, bc.h_src1_sz, src1_f32_bytes))\n+        && (use_handoff || ensure_host_pinned(bc.h_src1, bc.h_src1_sz, std::max(src1_f32_bytes, src1_q80_bytes)))\n         && ensure_host_pinned(bc.h_dst, bc.h_dst_sz, dst_bytes);\n     if (!ok) {\n         mxfp4_stage_trace(\"ensure_buffers_fail\");\n@@ -8866,7 +9026,13 @@ extern \"C\" bool ggml_cuda_moe_stream_batch(\n         if (cache_slot < 0) return decline(\"cache_insert\");\n         bc.h_x_ids[j] = cache_slot;\n \n-        if (!use_handoff) {\n+        if (mxfp4_q80_compat_candidate) {\n+            const int64_t q80_i11 = ((int64_t)dst_ids[j] % src1_q8_0_ne1 + src1_q8_0_ne1) % src1_q8_0_ne1;\n+            const int64_t q80_i12 = (int64_t)token_ids[j];\n+            if (q80_i12 < 0) return decline(\"bad_q80_row\");\n+            const char *q80_row = (const char *)src1_q8_0 + (size_t)(q80_i11 + q80_i12 * src1_q8_0_ne1) * src1_q8_0_row_size;\n+            std::memcpy((char *)bc.h_src1 + (size_t)j * src1_q8_0_row_size, q80_row, src1_q8_0_row_size);\n+        } else if (!use_handoff) {\n             const char *src1_base = (const char *)src1_f32;\n             const char *src_row = src1_base + (size_t)dst_ids[j] * src1_nb1 + (size_t)token_ids[j] * src1_nb2;\n             std::memcpy((char *)bc.h_src1 + (size_t)j * ne00 * sizeof(float), src_row, (size_t)ne00 * sizeof(float));\n@@ -8901,7 +9067,11 @@ extern \"C\" bool ggml_cuda_moe_stream_batch(\n     }\n     mxfp4_stage_trace(\"parallel_stage_done\");\n \n-    if (!use_handoff && cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline(\"copy_src1_h2d\");\n+    if (mxfp4_q80_compat_candidate) {\n+        if (cudaMemcpyAsync(bc.d_src1_q8, bc.h_src1, src1_q80_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline(\"copy_src1_q80_h2d\");\n+    } else if (!use_handoff && cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {\n+        return decline(\"copy_src1_h2d\");\n+    }\n     if (cudaMemcpyAsync(bc.d_ids_src1, bc.h_ids_src1, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline(\"copy_ids_src1_h2d\");\n     if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline(\"copy_ids_dst_h2d\");\n     if (cudaMemcpyAsync(bc.d_x_ids, bc.h_x_ids, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline(\"copy_x_ids_h2d\");\n@@ -8923,7 +9093,14 @@ extern \"C\" bool ggml_cuda_moe_stream_batch(\n     const int64_t src1_run_stride = use_handoff ? g_handoff.ne01 : ne00;\n     const int32_t *src1_rows = use_handoff ? bc.h_ids_dst : nullptr;\n     mxfp4_stage_trace(\"pre_kernel\");\n-    if (down_q8k_requested) {\n+    if (mxfp4_q80_compat_candidate) {\n+        if (!launch_mxfp4_down_q80_compat_batch(\n+                (const char *)cache->pool, bc.d_x_ids, cache->slot_sz,\n+                ne00, ne01, nb01, (const char *)bc.d_src1_q8, src1_q8_0_row_size,\n+                (float *)bc.d_dst, n_active, st)) {\n+            return decline(\"launch_mxfp4_down_q80_compat_batch\");\n+        }\n+    } else if (down_q8k_requested) {\n         if (ne00 % QK_K != 0) return decline(\"down_q8k_bad_ne00\");\n         const int nblocks = (int)(n_active * (ne00 / QK_K));\n         moe_quantize_row_q8_k_kernel<<<nblocks, 1, 0, st>>>((const float *)bc.d_src1_f32, (block_q8_K *)bc.d_src1_q8k, nblocks);\n",
+  "source_diff_sha256": "0aecb407f4ec3e41473459aedd66b45319aac5948a1ef2f6de07bc5d09a161c0",
+  "source_head_before_revert": "68b4455768d32129c4d7819774cb24dac7b1e78d",
+  "status": "rejected_performance_timeout_source_reverted"
+}

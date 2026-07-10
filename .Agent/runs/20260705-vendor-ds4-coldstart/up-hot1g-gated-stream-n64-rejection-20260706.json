@@ -1,0 +1,58 @@
+{
+  "artifact_id": "20260706-up-hot1g-gated-stream-n64-rejection",
+  "candidate_run": {
+    "correctness_ok": true,
+    "eval_tok_s": 2.2,
+    "fallback_summary": {
+      "down_decode_ms": 4862.231,
+      "down_prompt_ms": 4296.002,
+      "up_decode_ms": 7201.154,
+      "up_prompt_ms": 3271.456
+    },
+    "memory_file_bytes": 15074291712,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.0,
+    "ram_ok": true,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T123541Z-20260706T-up-hot1g-gated-stream-n64-smoke/france-up-hot1g-gated-cpu40-vram0gb",
+    "ttft_ms": 36769.252077,
+    "vram_cache": "hits=15519 misses=10990 hit_rate=58.5%"
+  },
+  "decision": "Do not promote or expand 1GiB up hotset to full dev set. It only ties n64 gate-only control and lowers cache hit rate substantially. Keep source controls as default-off diagnostics.",
+  "defaultoff_control": {
+    "correctness_ok": false,
+    "correctness_reason": "unfinished_sentence due n64 truncation",
+    "eval_tok_s": 2.2,
+    "fallback_summary": {
+      "down_decode_ms": 4766.268,
+      "down_prompt_ms": 4112.119,
+      "up_decode_ms": 7643.444,
+      "up_prompt_ms": 3953.053
+    },
+    "memory_file_bytes": 15083479040,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 1.0,
+    "ram_ok": true,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T123731Z-20260706T-hotset-gated-defaultoff-gate-only-n64-control/france-defaultoff-gate-only-n64-cpu40-vram0gb",
+    "ttft_ms": 36660.292232,
+    "vram_cache": "hits=13435 misses=3716 hit_rate=78.3%"
+  },
+  "held_out_used": false,
+  "profile": {
+    "covered_up_fallback_ms": 26574.059,
+    "path": ".Agent/profiles/vendor-ds4/calib-dev-up-hot1g-20260706.tsv",
+    "payload_gib": 0.99609375,
+    "selected_pairs": 240,
+    "source": "calibration_dev_set_v1 fallback profiles only",
+    "summary": ".Agent/runs/20260705-vendor-ds4-coldstart/calib-dev-up-hot1g-profile-summary-20260706.json",
+    "up_coverage_fraction": 0.21521981872901164
+  },
+  "source_change": {
+    "default_guard": "gate-only n64 control matched prior 2.2 tok/s behavior when new envs were unset",
+    "default_off_envs": [
+      "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE_APPLIES_FILTER",
+      "GGML_MOE_STREAM_ONE_REQUIRE_CACHE_ADMIT_FILTER"
+    ],
+    "file": "ggml/src/ggml-cuda/moe_stream.cu"
+  },
+  "status": "rejected_tie_not_sota"
+}

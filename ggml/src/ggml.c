@@ -3431,6 +3431,17 @@ struct ggml_tensor * ggml_moe_up_gate(
         struct ggml_tensor  * b,
         struct ggml_tensor  * ids,
         enum ggml_unary_op    op) {
+    return ggml_moe_up_gate_limit(ctx, as_up, as_gate, b, ids, op, 0.0f);
+}
+
+struct ggml_tensor * ggml_moe_up_gate_limit(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * as_up,
+        struct ggml_tensor  * as_gate,
+        struct ggml_tensor  * b,
+        struct ggml_tensor  * ids,
+        enum ggml_unary_op    op,
+        float                 limit) {
     const char * mixed_env = getenv("GGML_MOE_STREAM_FUSED_UP_GATE_MIXED_TYPES");
     const bool mixed_enabled = mixed_env && mixed_env[0] && mixed_env[0] != '0';
     const bool mixed_iq2_iq3 =
@@ -3439,9 +3450,19 @@ struct ggml_tensor * ggml_moe_up_gate(
          (as_up->type == GGML_TYPE_IQ3_XXS && as_gate->type == GGML_TYPE_IQ2_S));
     const bool same_or_scoped_mixed = as_gate != NULL &&
         (as_up->type == as_gate->type || (mixed_enabled && mixed_iq2_iq3));
-    if (as_gate == NULL || !same_or_scoped_mixed || !ggml_are_same_shape(as_up, as_gate)) {
+    const char * force_explicit_env = getenv("GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT");
+    const bool force_explicit = force_explicit_env && force_explicit_env[0] && force_explicit_env[0] != '0';
+    const char * allow_limited_fused_env = getenv("GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED");
+    const bool allow_limited_fused = allow_limited_fused_env && allow_limited_fused_env[0] && allow_limited_fused_env[0] != '0';
+    const bool limited_requires_explicit = limit > 1.0e-6f && !allow_limited_fused;
+    if (force_explicit || limited_requires_explicit || as_gate == NULL || !same_or_scoped_mixed || !ggml_are_same_shape(as_up, as_gate)) {
         struct ggml_tensor * up   = ggml_mul_mat_id(ctx, as_up, b, ids);
         struct ggml_tensor * gate = as_gate ? ggml_mul_mat_id(ctx, as_gate, b, ids) : up;
+
+        if (op == GGML_UNARY_OP_SILU && as_gate && limit > 1.0e-6f) {
+            gate = ggml_clamp(ctx, gate, -INFINITY, limit);
+            up   = ggml_clamp(ctx, up,   -limit,   limit);
+        }
 
         switch (op) {
             case GGML_UNARY_OP_SILU:
@@ -3473,6 +3494,7 @@ struct ggml_tensor * ggml_moe_up_gate(
     struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
 
     ggml_set_op_params_i32(result, 0, (int32_t) op);
+    ggml_set_op_params_f32(result, 1, limit);
 
     result->op     = GGML_OP_MOE_FUSED_UP_GATE;
     result->src[0] = as_up;

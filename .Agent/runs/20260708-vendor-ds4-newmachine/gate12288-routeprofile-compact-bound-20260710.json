@@ -1,0 +1,99 @@
+{
+  "artifact": "gate12288-routeprofile-compact-bound-20260710",
+  "created_at_local": "2026-07-10",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit": "e6d4f002d",
+  "machine": "wici@192.168.9.198",
+  "status": "diagnostic_hard_bound_not_sota",
+  "task_background": "Improve vendor DeepSeek token rate for arbitrary prompts on a 16GB host-RAM machine with a 32GB RTX 5090 while preserving correctness and TTFT constraints.",
+  "run": {
+    "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260710T032816Z-20260710-gate12288-routeprofile2-quantum-n96",
+    "prompt": "Explain quantum computing briefly.",
+    "max_tokens": 96,
+    "strict_cold": true,
+    "display_processes_stopped_before_run": true,
+    "source_dirty": false,
+    "ram_ok": true,
+    "memory_peak_bytes": 14857424896,
+    "memory_file_bytes": 13887983616,
+    "eval_tok_s": 5.4,
+    "prompt_tok_s": 3.6,
+    "ttft_ms": 16158.719973,
+    "h2d_gbps": 6.625567,
+    "correctness": "pass: coherent quantum-computing explanation, truncated only by n=96"
+  },
+  "current_sota_reference": {
+    "run_dir": "/home/wici/runs/vendor-ds4-16gb/demo-general-sota/20260710T032341Z-20260710-clean-e6d4f00-gate12288-quantum-n96",
+    "eval_tok_s": 5.5,
+    "prompt_tok_s": 3.6,
+    "ttft_ms": 16059.333836,
+    "memory_peak_bytes": 14850457600,
+    "source_dirty": false,
+    "ram_ok": true
+  },
+  "route_profile_totals": {
+    "gate": {
+      "records": 3920,
+      "active_experts": 12316,
+      "rows": 12720,
+      "logical_source_bytes": 54885613568,
+      "cache_contains_count": 9403,
+      "cache_missing_count": 2913,
+      "actual_one_pack_read_bytes": 12981633024,
+      "vram_cache_hit_rate_pct": 76.3
+    },
+    "up": {
+      "records": 3920,
+      "active_experts": 12316,
+      "rows": 12720,
+      "logical_source_bytes": 54885613568,
+      "cache_contains_count": 0,
+      "cache_missing_count": 12316
+    },
+    "down": {
+      "records": 3920,
+      "active_experts": 12316,
+      "rows": 12720,
+      "logical_source_bytes": 54885613568,
+      "cache_contains_count": 0,
+      "cache_missing_count": 12316
+    }
+  },
+  "phase_totals": {
+    "decode_gate": {
+      "active_experts": 11400,
+      "logical_source_bytes": 50803507200,
+      "cache_contains_count": 9160,
+      "cache_missing_count": 2240
+    },
+    "decode_up": {
+      "active_experts": 11400,
+      "logical_source_bytes": 50803507200,
+      "cache_missing_count": 11400
+    },
+    "decode_down": {
+      "active_experts": 11400,
+      "logical_source_bytes": 50803507200,
+      "cache_missing_count": 11400
+    }
+  },
+  "compact_partial_bound": {
+    "up_gate_kernel_shape": "The up/gate CUDA path computes full ne01 output values for every routed expert and multiplies by the full ne00 input vector; the current kernel therefore needs the full expert matrix for exact output.",
+    "down_kernel_shape": "The down CUDA path computes a full output row from a full intermediate vector; the current exact kernel also needs the full expert matrix.",
+    "partial_row_or_column_copy_exact_saving": "No exact row/column subset saving is available without changing math, adding a new compressed representation, or applying approximation/pruning.",
+    "full_up_down_gpu_streaming_bytes": 109771227136,
+    "decision": "Do not implement simple partial-copy up/down. It cannot reduce bytes on the current exact matvec kernels and previous full native parity runs showed up/down streaming below the gate-only SOTA."
+  },
+  "gate_bound": {
+    "remaining_gate_miss_bytes": 12981633024,
+    "h2d_floor_seconds_at_measured_6_625567_gbps": 1.959,
+    "estimated_direct_read_wall_seconds_from_prior_one_pack_profile": 2.8,
+    "interpretation": "Eliminating all remaining gate first-use misses would likely move 5.5 tok/s into roughly the 6 tok/s range, not 10 tok/s. It is still the highest-value exact path because it does not change model math.",
+    "constraints": "A gate prefill/hotset must be prompt-general, must keep host RAM including page cache below 16GB, and must not raise TTFT by more than 20%."
+  },
+  "next_direction": [
+    "Prioritize gate one-cache layout/replacement/prefetch that reduces first-use gate misses without stealing gate cache budget.",
+    "Only revisit up/down if using a new exact compact representation or a verified approximation with correctness gates.",
+    "Avoid simple VRAM split/unified-cache repeats; current evidence shows they regress below 5.5 tok/s."
+  ]
+}

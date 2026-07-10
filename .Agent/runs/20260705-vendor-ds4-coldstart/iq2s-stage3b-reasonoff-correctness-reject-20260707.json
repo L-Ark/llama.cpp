@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260707-iq2s-stage3b-reasonoff-correctness",
+  "created_at_utc": "2026-07-07T01:30:37.176085Z",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "f6729e244282692f94d619cdb579fc618091ff9e",
+  "git_status_before_artifact": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "status": "rejected_correctness_failed_not_sota",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-france-correctness/france-n192-deepseek3-reasonoff",
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+  "model_sha256": "817627eb3aa7b42e73264b653218fc1a1f27659fb999aa52840c17469415e809",
+  "env": {
+    "LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS": "1",
+    "LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS": "1",
+    "LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL": "1",
+    "GGML_CUDA_DISABLE_GRAPHS": "1"
+  },
+  "cli_extra": "--chat-template deepseek3 --reasoning off --single-turn",
+  "exit_status": 0,
+  "memory_peak_bytes": 16000000000,
+  "memory_events": "low 0\nhigh 0\nmax 33601\noom 0\noom_kill 0\noom_group_kill 0\n",
+  "metrics_observed": {
+    "prompt_tok_s": 0.9,
+    "eval_tok_s": 2.9,
+    "elapsed_wall": "1:24.67",
+    "major_page_faults": 591678,
+    "file_system_inputs": 158783840
+  },
+  "answer_excerpt": "\nLoading model... |\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b \b\n\n\n▄▄ ▄▄\n██ ██\n██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄\n██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██\n██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀\n                                    ██    ██\n                                    ▀▀    ▀▀\n\nbuild      : b15731-3021dc6d3\nmodel      : DeepSeek-V4-Flash.IQ2_S.gguf\nmodalities : text\n\navailable commands:\n  /exit or Ctrl+C     stop or exit\n  /regen              regenerate the last response\n  /clear              clear the chat history\n  /read <file>        add a text file\n  /glob <pattern>     add text files using globbing pattern\n\n\n> Please introduce France in a short paragraph.\n\n|\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b \b2b:latest\",\n    \"provider\": \"unknown\",\n    \"model_name\": \"unknown-unknown\",\n    \"model_version\": \"unknown\",\n    \"model_type\": \"unknown\",\n    \"model_id\": \"unknown\"\n  },\n  \"reads\": {\n    \"total_reads\": 250000000,\n    \"total_reads_after_trimming\": 250000000,\n    \"total_processing\": \"unknown\"\n  }\n}\",\n    \"model\": \"unknown\"\n    \"unknown\": unknown\n    \"unknown\": \"unknown\"\n    \"\": \"unknown unknown-un\"\n    \"       \"    \"unknown unspecified\"\n    \"\": \"unknown unspecified\"\n    \"\",\n    \"\":\":\":\":\":  \n   \":\":\": \"250000000\"\n    \"\":\":\":\":\":\":}\"\n}{\n]}\"\n    \" \"\": null    \n    \"\": \"}\"\n    \"\": \"}\"\n    \" \"}\"  \n   \n\n[ Prompt: 0.9 t/s | Generation: 2.9 t/s ]\n\nExiting...\n",
+  "correctness_ok": false,
+  "correctness_reason": "Output is malformed JSON/unknown metadata text, not a coherent short paragraph introducing France.",
+  "ram_ok": true,
+  "ttft_ok_for_promotion": false,
+  "accepted_sota_changed": false,
+  "held_out_used": false,
+  "decision": "Reject IQ2_S route. It is vendor-loadable with alias envs but fails France correctness and remains far below >5 tok/s; do not run calibration/dev or held-out.",
+  "cleanup_note": "Downloaded model remains on disk for now; it is a rejected candidate and may be removed later only with explicit cleanup decision."
+}

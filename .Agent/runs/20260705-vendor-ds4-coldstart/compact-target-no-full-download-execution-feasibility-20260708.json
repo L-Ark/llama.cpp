@@ -1,0 +1,62 @@
+{
+  "artifact_id": "compact-target-no-full-download-execution-feasibility-20260708",
+  "date_local": "2026-07-08",
+  "purpose": "Assess whether the remote-range row parity work can be extended into an executable compact-target model path without full download or disk cleanup.",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "428d48ff12ede7e6817a94d85b7032db12768799",
+  "current_disk": {
+    "available_note": "df -h /root reports about 34G available",
+    "local_rejected_iq2s": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+    "local_rejected_iq2s_du": "82G"
+  },
+  "evidence": {
+    "alias_tsv_loader": {
+      "file": "ggml/src/ggml-cuda/moe_stream_batch.cu",
+      "required_columns": [
+        "source_path",
+        "tensor",
+        "expert",
+        "model_offset",
+        "nbytes"
+      ],
+      "source_open_behavior": "expert_pack_open_alias_source uses fopen(path, rb) and optionally open(path, O_RDONLY|O_DIRECT). It does not support HTTP URLs or callbacks.",
+      "read_behavior": "expert_pack_read_entry uses local FILE/pread/io_uring from source fd and entry offset/nbytes."
+    },
+    "remote_range_parity": {
+      "iq1m_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-remote-range-teamblobfish-iq1m-down-row-parity-20260708.json",
+      "iq1sxl_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-remote-range-teamblobfish-iq1sxl-down-row-parity-20260708.json",
+      "meaning": "HTTP Range can fetch small real tensor slices for offline parity; it is not currently integrated into runtime expert source reads."
+    }
+  },
+  "feasibility_assessment": {
+    "can_execute_compact_model_without_full_download_now": false,
+    "reason": [
+      "The model loader still needs a coherent local GGUF for dense tensors, metadata, tokenizer, and all tensors used in graph construction.",
+      "The expert alias TSV runtime currently points only to local files; source_path is opened with fopen/open, so HTTP URLs are not valid runtime sources.",
+      "A sparse local GGUF with only sampled ranges would read zeros for missing ranges and would not pass correctness.",
+      "Aliasing compact candidate expert bytes into the current native model is not sufficient because expert nbytes/type must match the loaded tensor requests, and compact candidate types differ from the current native model."
+    ],
+    "possible_paths": [
+      {
+        "path": "disk cleanup + full compact download",
+        "status": "practical_next_step_needs_approval",
+        "notes": "Delete the already-rejected local IQ2_S only with explicit approval, download exactly one priority candidate, then run strict load/correctness/token-rate/TTFT/16GB gates."
+      },
+      {
+        "path": "new HTTP range source in expert alias runtime",
+        "status": "source_project_not_small_patch",
+        "notes": "Would need authenticated/redirect-capable HTTP range reader, cache policy counted under 16GB cgroup, retry/error handling, and correctness gates. Dense/model-loader tensors remain unresolved unless the whole GGUF is also represented by a remote/range-aware loader."
+      },
+      {
+        "path": "local sparse full-file materialization with on-demand range population",
+        "status": "unsafe_without_complete_population_or_page_fault_handler",
+        "notes": "Plain sparse holes read as zeros; correctness requires either prefetching all accessed ranges or a FUSE/userfaultfd-like backing layer."
+      }
+    ]
+  },
+  "decision": {
+    "sota_changed": false,
+    "production_enable": false,
+    "next_step": "Current no-full-download path should stop at parity evidence. Real token-rate progress requires either explicit disk cleanup/full compact target download or a separate remote-backed loader/expert-source project with strict correctness gates."
+  }
+}

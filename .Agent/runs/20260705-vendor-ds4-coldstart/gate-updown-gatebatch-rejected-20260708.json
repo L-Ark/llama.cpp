@@ -1,0 +1,87 @@
+{
+  "stage": "X10-BS gate-included up/down batch probe",
+  "date": "2026-07-08",
+  "status": "rejected_not_sota_reverted",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "12a85c69ac10f8ec60ee7136c24c40b3c99a9598",
+  "source_dirty_during_probe": true,
+  "implementation_summary": {
+    "default_off": true,
+    "env": {
+      "GGML_MOE_GATE_UPDOWN_COSUBMIT": 1,
+      "GGML_MOE_GATE_UPDOWN_COSUBMIT_GATE_BATCH": 1
+    },
+    "behavior": "On a one-stream gate cache miss, build one job group containing the gate expert plus eligible same-expert up/down cache misses, submit the group through expert_pack_iouring_copy_jobs, and insert the loaded gate expert back into the one-stream gate VRAM cache.",
+    "reverted": true
+  },
+  "baseline": {
+    "stage": "X10-BR gate cache 6144 generalized SOTA",
+    "france_n96_probe_eval_tok_s": 5.0,
+    "france_n192_postpush_eval_tok_s": 4.8,
+    "heldout_n192_min_mean_max_tok_s": [4.0, 4.30, 4.6]
+  },
+  "runs": [
+    {
+      "label": "defaultoff_after_gatebatch_france_n32",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T062818Z-france-n32-defaultoff-after-gatebatch",
+      "eval_tok_s": 4.4,
+      "prompt_tok_s": 3.3,
+      "ttft_ms": 23642.354405,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15124086784,
+      "ram_ok": true,
+      "run_ok": true
+    },
+    {
+      "label": "gatebatch_france_n32",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T062906Z-france-n32-gate-updown-gatebatch",
+      "eval_tok_s": 4.5,
+      "prompt_tok_s": 3.1,
+      "ttft_ms": 23309.834151,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15127502848,
+      "ram_ok": true,
+      "run_ok": true,
+      "gate_batch_calls": 3329,
+      "gate_batch_gate_jobs": 3329,
+      "gate_batch_updown_jobs": 1659,
+      "gate_aux_iouring_jobs": 4988,
+      "gate_aux_iouring_inflight_avg": 1.50,
+      "gate_aux_iouring_batch_hist": "1:2499,2-4:830,5-8:0,9-16:0,17-32:0,gt32:0"
+    },
+    {
+      "label": "gatebatch_france_n96_vram9",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T063019Z-france-n96-gate-updown-gatebatch",
+      "run_ok": false,
+      "exit_code": 134,
+      "failure": "CUDA OOM in ggml_cuda_compute_forward GET_ROWS",
+      "ttft_ms": 18554.876849,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15027073024,
+      "ram_ok": true
+    },
+    {
+      "label": "gatebatch_france_n96_vram6",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T063126Z-france-n96-gate-updown-gatebatch-vram6",
+      "eval_tok_s": 4.8,
+      "prompt_tok_s": 3.1,
+      "ttft_ms": 25766.091887,
+      "elapsed_seconds": 45.01,
+      "memory_peak_bytes": 15941677056,
+      "memory_file_bytes": 15083233280,
+      "ram_ok": true,
+      "run_ok": true,
+      "gate_batch_calls": 6473,
+      "gate_batch_gate_jobs": 6473,
+      "gate_batch_updown_jobs": 1445,
+      "gate_aux_iouring_jobs": 7918,
+      "gate_aux_iouring_inflight_avg": 1.27,
+      "gate_aux_iouring_batch_hist": "1:5750,2-4:723,5-8:0,9-16:0,17-32:0,gt32:0",
+      "total_iouring_reads": 16133,
+      "total_iouring_wait_us": 17623390,
+      "quality": "France output semantically correct but truncated by n96 limit."
+    }
+  ],
+  "decision": "Reject and revert. This was a true gate-included batch probe, but it made batches too small and increased total iouring reads. With vram9 it OOMed; with vram6 it ran but dropped below the 5.0 tok/s France n96 SOTA and raised TTFT.",
+  "next_direction": "A useful gate/up/down co-submit needs a read-only aggregation layer or background worker that can collect multiple gate/up/down reads before H2D, rather than synchronously submitting one tiny group per gate miss on the gate stream."
+}

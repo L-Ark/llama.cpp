@@ -1,0 +1,46 @@
+{
+  "artifact_id": "20260707-ds4-act-parity-probe-identity",
+  "created_at_utc": "2026-07-07T13:43:00Z",
+  "status": "act_level_parity_probe_scaffold_validated_identity_not_sota",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit_before_commit": "081658ea2b4bdbf3f79be6bbd95ff1b70de6715b",
+  "source_commit_oneline_before_commit": "081658ea2 vendor-ds4: repro latest down q80 correctness",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-identity-smoke-v2",
+  "script": ".Agent/run-tools/run_ds4_act_parity_probe.py",
+  "binary_sha256": "7d355ca27f337e44763f0defb2fd84bfc08ab6e323ff3813b50988d90644f9dd  /root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-debug",
+  "model_stat": "path=/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf size=156148189760 mtime=2026-06-22 14:12:05.810122536 +0000",
+  "prompt_scope": "calibration fixed France prompt only; held-out set was not used",
+  "constraints": {
+    "systemd_memory_max_bytes": 16000000000,
+    "systemd_memory_swap_max": 0,
+    "drop_caches_before_each_case": true
+  },
+  "debug_change": "common_debug_cb_eval now respects --tensor-filter during ask=true, so llama-debug only retrieves matching tensors instead of every graph tensor.",
+  "tensor_filter": ".*ffn_moe_(gate_clamped|up_clamped|swiglu).*",
+  "identity_probe": {
+    "candidate_env": {},
+    "explicit_records": 129,
+    "candidate_records": 129,
+    "record_names": 129,
+    "max_abs_sum_diff": 0.0,
+    "num_diffs_over_atol": 0,
+    "pass": true,
+    "status": "pass"
+  },
+  "runtime": {
+    "explicit": {
+      "elapsed": "0:34.12",
+      "max_rss_kb": 15603528,
+      "major_page_faults": 195718,
+      "exit_status": 0
+    },
+    "candidate": {
+      "elapsed": "0:33.18",
+      "max_rss_kb": 15601712,
+      "major_page_faults": 196613,
+      "exit_status": 0
+    }
+  },
+  "decision": "Accept this as a default-off act-level parity probe scaffold. It is not a fused up/gate candidate and not a token-rate SOTA; it provides the required gate/up/act comparison gate for the next fused candidate."
+}

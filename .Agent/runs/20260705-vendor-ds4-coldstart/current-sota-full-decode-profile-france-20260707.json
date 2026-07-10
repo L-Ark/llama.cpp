@@ -1,0 +1,248 @@
+{
+  "cpu_chunk_trace": {
+    "by_role": {
+      "down": {
+        "logical_gib": 1216.9443359375,
+        "rows": 127068,
+        "sum_chunk_ms": 84842.79400002898
+      },
+      "up": {
+        "logical_gib": 647.4775390625,
+        "rows": 72932,
+        "sum_chunk_ms": 63028.23000000233
+      }
+    },
+    "max_thread_ms": 7505.41899999997,
+    "median_thread_ms": 7398.532499999931,
+    "sum_chunk_ms": 147871.02400003132
+  },
+  "created_at_utc": "2026-07-06T19:18:31.945489Z",
+  "derived": {
+    "decode_ms_per_token": 227.27272727272725,
+    "decode_tokens_from_graph": 138,
+    "decode_wall_ms_from_eval_rate": 31363.63636363636,
+    "fallback_decode_ms_per_token_counter": 132.05248550724633,
+    "fallback_decode_ms_sum_us_counter": 18223.242999999995,
+    "fallback_prompt_ms_sum_us_counter": 7382.702999999986,
+    "graph_submit_total_ms_prompt_plus_decode": 44352.676,
+    "graph_sync_decode_ms": 109.163,
+    "graph_sync_decode_ms_per_token": 0.7910362318840579,
+    "one_stream_stage_share": {
+      "d2h_ms": 0.01289790100053695,
+      "dontneed_ms": 0.009640843193450814,
+      "kernel_ms": 0.03864734473124231,
+      "scatter_ms": 0.005465005195839026,
+      "src0_ms": 0.8380654106814062,
+      "src1_ms": 0.02090614247081767,
+      "sync_ms": 0.0735729708523905,
+      "total_ms": 1.0
+    },
+    "one_stream_total_ms_per_decode_token_contextual": 60.49293478260527,
+    "one_stream_total_ms_sum_call_wall": 8348.024999999527,
+    "residual_wall_ms_after_fallback_counter_if_serial": 13140.393363636365
+  },
+  "fallback_source_profile": {
+    "by_phase_role": {
+      "decode/down": {
+        "calls": 17940,
+        "fallback_ms": 8941.973000000018,
+        "rows": 17940
+      },
+      "decode/up": {
+        "calls": 17940,
+        "fallback_ms": 9281.269999999977,
+        "rows": 17940
+      },
+      "prompt/down": {
+        "calls": 1171,
+        "fallback_ms": 4281.4129999999905,
+        "rows": 1820
+      },
+      "prompt/up": {
+        "calls": 1171,
+        "fallback_ms": 3101.2899999999954,
+        "rows": 1820
+      }
+    },
+    "by_reason_top": [
+      {
+        "batch_reason": "batch_env_missing",
+        "calls": 17940,
+        "dst_buft": "CUDA_Host",
+        "fallback_ms": 9281.269999999977,
+        "final_reason": "one_name_filter",
+        "ids_buft": "CUDA_Host",
+        "phase": "decode",
+        "role": "up",
+        "rows": 17940,
+        "single_reason": "one_name_filter",
+        "src0_buft": "CPU_Mapped",
+        "src1_buft": "CUDA_Host"
+      },
+      {
+        "batch_reason": "batch_env_missing",
+        "calls": 17940,
+        "dst_buft": "CUDA_Host",
+        "fallback_ms": 8941.973000000018,
+        "final_reason": "one_name_filter",
+        "ids_buft": "CUDA_Host",
+        "phase": "decode",
+        "role": "down",
+        "rows": 17940,
+        "single_reason": "one_name_filter",
+        "src0_buft": "CPU_Mapped",
+        "src1_buft": "CUDA_Host"
+      },
+      {
+        "batch_reason": "batch_env_missing",
+        "calls": 1171,
+        "dst_buft": "CUDA_Host",
+        "fallback_ms": 4281.4129999999905,
+        "final_reason": "one_name_filter",
+        "ids_buft": "CUDA_Host",
+        "phase": "prompt",
+        "role": "down",
+        "rows": 1820,
+        "single_reason": "one_name_filter",
+        "src0_buft": "CPU_Mapped",
+        "src1_buft": "CUDA_Host"
+      },
+      {
+        "batch_reason": "batch_env_missing",
+        "calls": 1171,
+        "dst_buft": "CUDA_Host",
+        "fallback_ms": 3101.2899999999954,
+        "final_reason": "one_name_filter",
+        "ids_buft": "CUDA_Host",
+        "phase": "prompt",
+        "role": "up",
+        "rows": 1820,
+        "single_reason": "one_name_filter",
+        "src0_buft": "CPU_Mapped",
+        "src1_buft": "CUDA_Host"
+      }
+    ],
+    "rows": 7030
+  },
+  "graph_profile": {
+    "submit": {
+      "avg_ms_per_call": 314.558,
+      "calls": 141,
+      "total_ms": 44352.676
+    },
+    "sync": {
+      "avg_ms_per_call": 0.133,
+      "calls": 835,
+      "decode_avg_ms": 0.791,
+      "decode_calls": 138,
+      "decode_tokens": 138,
+      "decode_total_ms": 109.163,
+      "idle_avg_ms": 0.001,
+      "idle_calls": 695,
+      "idle_total_ms": 0.409,
+      "prompt_avg_ms": 0.638,
+      "prompt_calls": 2,
+      "prompt_tokens": 14,
+      "prompt_total_ms": 1.276,
+      "total_ms": 110.848
+    }
+  },
+  "interpretation": {
+    "next_direction": "Do not simple-enable up/down one-stream; previous traces showed it eliminates fallback but loses speed. Need combine non-updown reductions with representation/residency changes, and estimate generalized held-out-safe baseline before any SOTA claim.",
+    "primary_decode_gap": "current accepted path still spends most removable decode time in up/down CPU fallback plus gate source movement; graph sync overhead is negligible (<1 ms/token).",
+    "routing_findings": "fallback source rows are up/down only with CPU_Mapped src0 and CUDA_Host src1/ids/dst; reasons remain batch_env_missing + one_name_filter."
+  },
+  "one_stream_trace": {
+    "by_cache": {
+      "('gate', 0, 0)": {
+        "calls": 1286,
+        "src0_ms": 1483.137,
+        "total_ms": 1720.0070000000007
+      },
+      "('gate', 0, 1)": {
+        "calls": 600,
+        "src0_ms": 716.0899999999999,
+        "total_ms": 826.5559999999998
+      },
+      "('gate', 1, 0)": {
+        "calls": 33265,
+        "src0_ms": 4796.964000003249,
+        "total_ms": 5801.461999999631
+      }
+    },
+    "by_role": {
+      "gate": {
+        "avg_cne1": 1.037808312708031,
+        "cache_hits": 33265,
+        "cache_inserted": 600,
+        "calls": 35151,
+        "d2h_ms": 107.67200000000138,
+        "dontneed_ms": 80.48200000000267,
+        "kernel_ms": 322.6290000000108,
+        "scatter_ms": 45.621999999991495,
+        "src0_bytes_logical_gib": 151.40625,
+        "src0_ms": 6996.191000003249,
+        "src1_ms": 174.52499999993776,
+        "sync_ms": 614.1889999999925,
+        "total_ms": 8348.024999999527
+      }
+    },
+    "rows": 35151,
+    "stage_totals_ms": {
+      "d2h_ms": 107.67200000000138,
+      "dontneed_ms": 80.48200000000267,
+      "kernel_ms": 322.6290000000108,
+      "scatter_ms": 45.621999999991495,
+      "src0_ms": 6996.191000003249,
+      "src1_ms": 174.52499999993776,
+      "sync_ms": 614.1889999999925,
+      "total_ms": 8348.024999999527
+    }
+  },
+  "prompt_scope": "France calibration only; held-out test set not used",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T191504Z-20260707-current-sota-full-decode-profile-rerun/france-full-decode-profile-cpu40-vram0gb",
+  "status": "diagnostic_profile_not_sota",
+  "summary": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T191504Z-20260707-current-sota-full-decode-profile-rerun/france-full-decode-profile-cpu40-vram0gb",
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "cpu_moe": 40,
+    "elapsed_seconds": 63.59,
+    "eval_ms": null,
+    "eval_tok_s": 4.4,
+    "exit_status": 0,
+    "first_answer_ms": 32262.474937,
+    "load_ms": null,
+    "max_rss_kb": 15597032,
+    "memory_file_bytes": 15065071616,
+    "memory_max_bytes": 16000000000,
+    "memory_max_events": 17449,
+    "memory_peak_bytes": 16000000000,
+    "memory_stat_relevant": {
+      "active_file": 10656137216,
+      "anon": 868352,
+      "file": 15065071616,
+      "file_mapped": 0,
+      "inactive_file": 4408926208,
+      "kernel": 112603136,
+      "pgfault": 2351505,
+      "pgmajfault": 256256,
+      "slab": 112139264,
+      "workingset_activate_file": 606255,
+      "workingset_refault_file": 1652063,
+      "workingset_restore_file": 606197
+    },
+    "oom_seen": false,
+    "pgmajfault": 256256,
+    "prompt_eval_ms": null,
+    "prompt_tok_s": 1.9,
+    "ram_kill_threshold_bytes": 16000000000,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "systemd_status": 0,
+    "ttft_estimate_ms": 32262.474937,
+    "unit": "vendor-ds4-16gb-20260706T191504Z-cpu40.service",
+    "workingset_refault_file": 1652063
+  }
+}

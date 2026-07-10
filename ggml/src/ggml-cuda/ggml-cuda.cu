@@ -2469,6 +2469,205 @@ static void ggml_cuda_mul_mat(ggml_backend_cuda_context & ctx, const ggml_tensor
     }
 }
 
+
+struct ds4_exact_mmid_dataflow_probe_state {
+    std::mutex mutex;
+    FILE * fp = nullptr;
+    bool fp_attempted = false;
+    uint64_t seq = 0;
+};
+
+static ds4_exact_mmid_dataflow_probe_state & ds4_exact_mmid_dataflow_probe() {
+    static ds4_exact_mmid_dataflow_probe_state state;
+    return state;
+}
+
+static bool ds4_exact_mmid_dataflow_probe_enabled() {
+    static const bool enabled = []() {
+        const char * env = std::getenv("DS4_EXACT_MMID_DATAFLOW_PROBE_OUT");
+        return env != nullptr && env[0] != '\0' && strcmp(env, "0") != 0;
+    }();
+    return enabled;
+}
+
+static const char * ds4_exact_mmid_tensor_buft_name(const ggml_tensor * tensor) {
+    if (tensor == nullptr || tensor->buffer == nullptr) {
+        return "none";
+    }
+    ggml_backend_buffer_type_t buft = ggml_backend_buffer_get_type(tensor->buffer);
+    const char * name = buft ? ggml_backend_buft_name(buft) : nullptr;
+    return name ? name : "unknown";
+}
+
+static int ds4_exact_mmid_tensor_is_cuda(const ggml_tensor * tensor) {
+    if (tensor == nullptr || tensor->buffer == nullptr) {
+        return 0;
+    }
+    ggml_backend_buffer_type_t buft = ggml_backend_buffer_get_type(tensor->buffer);
+    return buft && ggml_backend_buft_is_cuda(buft) ? 1 : 0;
+}
+
+static int ds4_exact_mmid_tensor_is_cuda_host(const ggml_tensor * tensor) {
+    if (tensor == nullptr || tensor->buffer == nullptr) {
+        return 0;
+    }
+    ggml_backend_buffer_type_t buft = ggml_backend_buffer_get_type(tensor->buffer);
+    return buft && ggml_backend_buft_is_cuda_host(buft) ? 1 : 0;
+}
+
+static int ds4_exact_mmid_tensor_is_host(const ggml_tensor * tensor) {
+    if (tensor == nullptr || tensor->buffer == nullptr) {
+        return 0;
+    }
+    return ggml_backend_buffer_is_host(tensor->buffer) ? 1 : 0;
+}
+
+static const char * ds4_exact_mmid_role(const char * name) {
+    if (name == nullptr) {
+        return "other";
+    }
+    if (strstr(name, "ffn_gate_up_exps") != nullptr) {
+        return "gate_up";
+    }
+    if (strstr(name, "ffn_gate_exps") != nullptr) {
+        return "gate";
+    }
+    if (strstr(name, "ffn_up_exps") != nullptr) {
+        return "up";
+    }
+    if (strstr(name, "ffn_down_exps") != nullptr) {
+        return "down";
+    }
+    return "other";
+}
+
+static uint64_t ds4_exact_mmid_tensor_nbytes(const ggml_tensor * tensor) {
+    return tensor ? (uint64_t) ggml_nbytes(tensor) : 0;
+}
+
+static FILE * ds4_exact_mmid_dataflow_probe_fp_locked() {
+    auto & state = ds4_exact_mmid_dataflow_probe();
+    if (state.fp != nullptr) {
+        return state.fp;
+    }
+    if (state.fp_attempted) {
+        return nullptr;
+    }
+    state.fp_attempted = true;
+
+    const char * path = std::getenv("DS4_EXACT_MMID_DATAFLOW_PROBE_OUT");
+    if (path == nullptr || path[0] == '\0' || strcmp(path, "0") == 0) {
+        return nullptr;
+    }
+
+    state.fp = std::fopen(path, "w");
+    if (state.fp == nullptr) {
+        std::fprintf(stderr, "ds4_exact_mmid_dataflow_probe: failed to open %s\n", path);
+        return nullptr;
+    }
+    std::setvbuf(state.fp, nullptr, _IOLBF, 0);
+    std::fprintf(state.fp,
+        "seq,path,cc,src0_role,src0_name,src1_name,ids_name,dst_name,"
+        "src0_buft,src1_buft,ids_buft,dst_buft,src0_type,src1_type,ids_type,dst_type,"
+        "src0_nbytes,src1_nbytes,ids_nbytes,dst_nbytes,"
+        "src0_ne0,src0_ne1,src0_ne2,src0_ne3,src1_ne0,src1_ne1,src1_ne2,src1_ne3,"
+        "ids_ne0,ids_ne1,ids_ne2,ids_ne3,dst_ne0,dst_ne1,dst_ne2,dst_ne3,"
+        "src0_cuda,src1_cuda,ids_cuda,dst_cuda,src0_cuda_host,src1_cuda_host,ids_cuda_host,dst_cuda_host,"
+        "src0_host,src1_host,ids_host,dst_host,src0_quantized,mmvq_mmid_max,"
+        "mmvq_fast_candidate,mmq_fast_candidate,mmf_fast_candidate,slow_sync_required,cuda_graph_fast_candidate\n");
+    std::fprintf(stderr, "ds4_exact_mmid_dataflow_probe: enabled out=%s\n", path);
+    return state.fp;
+}
+
+static void ds4_exact_mmid_dataflow_probe_write(
+        const char * path,
+        int cc,
+        const ggml_tensor * src0,
+        const ggml_tensor * src1,
+        const ggml_tensor * ids,
+        const ggml_tensor * dst,
+        int mmvq_mmid_max,
+        bool mmvq_fast_candidate,
+        bool mmq_fast_candidate,
+        bool mmf_fast_candidate) {
+    if (!ds4_exact_mmid_dataflow_probe_enabled()) {
+        return;
+    }
+
+    auto & state = ds4_exact_mmid_dataflow_probe();
+    std::lock_guard<std::mutex> lock(state.mutex);
+    FILE * fp = ds4_exact_mmid_dataflow_probe_fp_locked();
+    if (fp == nullptr) {
+        return;
+    }
+
+    const bool slow_sync_required = strcmp(path, "slow_sync") == 0;
+    const bool cuda_graph_fast_candidate = !slow_sync_required;
+    std::fprintf(fp,
+        "%llu,%s,%d,%s,%s,%s,%s,%s,"
+        "%s,%s,%s,%s,%s,%s,%s,%s,"
+        "%llu,%llu,%llu,%llu,"
+        "%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld,"
+        "%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld,"
+        "%d,%d,%d,%d,%d,%d,%d,%d,"
+        "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+        (unsigned long long) state.seq++,
+        path,
+        cc,
+        ds4_exact_mmid_role(src0 ? src0->name : nullptr),
+        src0 ? src0->name : "",
+        src1 ? src1->name : "",
+        ids ? ids->name : "",
+        dst ? dst->name : "",
+        ds4_exact_mmid_tensor_buft_name(src0),
+        ds4_exact_mmid_tensor_buft_name(src1),
+        ds4_exact_mmid_tensor_buft_name(ids),
+        ds4_exact_mmid_tensor_buft_name(dst),
+        src0 ? ggml_type_name(src0->type) : "none",
+        src1 ? ggml_type_name(src1->type) : "none",
+        ids ? ggml_type_name(ids->type) : "none",
+        dst ? ggml_type_name(dst->type) : "none",
+        (unsigned long long) ds4_exact_mmid_tensor_nbytes(src0),
+        (unsigned long long) ds4_exact_mmid_tensor_nbytes(src1),
+        (unsigned long long) ds4_exact_mmid_tensor_nbytes(ids),
+        (unsigned long long) ds4_exact_mmid_tensor_nbytes(dst),
+        (long long) (src0 ? src0->ne[0] : -1),
+        (long long) (src0 ? src0->ne[1] : -1),
+        (long long) (src0 ? src0->ne[2] : -1),
+        (long long) (src0 ? src0->ne[3] : -1),
+        (long long) (src1 ? src1->ne[0] : -1),
+        (long long) (src1 ? src1->ne[1] : -1),
+        (long long) (src1 ? src1->ne[2] : -1),
+        (long long) (src1 ? src1->ne[3] : -1),
+        (long long) (ids ? ids->ne[0] : -1),
+        (long long) (ids ? ids->ne[1] : -1),
+        (long long) (ids ? ids->ne[2] : -1),
+        (long long) (ids ? ids->ne[3] : -1),
+        (long long) (dst ? dst->ne[0] : -1),
+        (long long) (dst ? dst->ne[1] : -1),
+        (long long) (dst ? dst->ne[2] : -1),
+        (long long) (dst ? dst->ne[3] : -1),
+        ds4_exact_mmid_tensor_is_cuda(src0),
+        ds4_exact_mmid_tensor_is_cuda(src1),
+        ds4_exact_mmid_tensor_is_cuda(ids),
+        ds4_exact_mmid_tensor_is_cuda(dst),
+        ds4_exact_mmid_tensor_is_cuda_host(src0),
+        ds4_exact_mmid_tensor_is_cuda_host(src1),
+        ds4_exact_mmid_tensor_is_cuda_host(ids),
+        ds4_exact_mmid_tensor_is_cuda_host(dst),
+        ds4_exact_mmid_tensor_is_host(src0),
+        ds4_exact_mmid_tensor_is_host(src1),
+        ds4_exact_mmid_tensor_is_host(ids),
+        ds4_exact_mmid_tensor_is_host(dst),
+        src0 && ggml_is_quantized(src0->type) ? 1 : 0,
+        mmvq_mmid_max,
+        mmvq_fast_candidate ? 1 : 0,
+        mmq_fast_candidate ? 1 : 0,
+        mmf_fast_candidate ? 1 : 0,
+        slow_sync_required ? 1 : 0,
+        cuda_graph_fast_candidate ? 1 : 0);
+}
+
 static void ggml_cuda_mul_mat_id(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
     const ggml_tensor * src0 = dst->src[0];
     const ggml_tensor * src1 = dst->src[1];
@@ -2481,19 +2680,34 @@ static void ggml_cuda_mul_mat_id(ggml_backend_cuda_context & ctx, ggml_tensor * 
     GGML_TENSOR_BINARY_OP_LOCALS
 
     const int cc = ggml_cuda_info().devices[ggml_cuda_get_device()].cc;
+    const int mmvq_mmid_max = get_mmvq_mmid_max_batch(src0->type, cc);
+    const bool mmid_f32_io = src1->type == GGML_TYPE_F32 && dst->type == GGML_TYPE_F32;
+    const bool mmvq_fast_candidate = mmid_f32_io && ne2 <= MMVQ_MAX_BATCH_SIZE &&
+        ggml_is_quantized(src0->type) && ne2 <= mmvq_mmid_max;
+    const bool mmvf_fast_candidate = mmid_f32_io && ne2 <= MMVQ_MAX_BATCH_SIZE &&
+        !ggml_is_quantized(src0->type) && GGML_CUDA_CC_IS_AMD(cc);
+    const bool mmq_fast_candidate = mmid_f32_io &&
+        ggml_cuda_should_use_mmq(src0->type, cc, ne12, /*n_experts=*/ne02);
+    const bool mmf_fast_candidate = mmid_f32_io &&
+        ggml_cuda_should_use_mmf(src0->type, cc, WARP_SIZE, src0->ne, src0->nb, src1->ne[2], /*mul_mat_id=*/true);
 
     // [TAG_MUL_MAT_ID_CUDA_GRAPHS]
-    if (src1->type == GGML_TYPE_F32 && dst->type == GGML_TYPE_F32) {
+    if (mmid_f32_io) {
         static_assert(MMVQ_MAX_BATCH_SIZE == MMVF_MAX_BATCH_SIZE);
         if (ne2 <= MMVQ_MAX_BATCH_SIZE) {
             if (ggml_is_quantized(src0->type)) {
-                const int mmvq_mmid_max = get_mmvq_mmid_max_batch(src0->type, cc);
                 if (ne2 <= mmvq_mmid_max) {
+                    ds4_exact_mmid_dataflow_probe_write(
+                        "mmvq", cc, src0, src1, ids, dst, mmvq_mmid_max,
+                        mmvq_fast_candidate, mmq_fast_candidate, mmf_fast_candidate);
                     ggml_cuda_mul_mat_vec_q(ctx, src0, src1, ids, dst);
                     return;
                 }
             } else {
-                if (GGML_CUDA_CC_IS_AMD(cc)) {
+                if (mmvf_fast_candidate) {
+                    ds4_exact_mmid_dataflow_probe_write(
+                        "mmvf", cc, src0, src1, ids, dst, mmvq_mmid_max,
+                        mmvq_fast_candidate, mmq_fast_candidate, mmf_fast_candidate);
                     ggml_cuda_mul_mat_vec_f(ctx, src0, src1, ids, dst);
                     return;
                 }
@@ -2501,15 +2715,25 @@ static void ggml_cuda_mul_mat_id(ggml_backend_cuda_context & ctx, ggml_tensor * 
         }
 
         if (ggml_cuda_should_use_mmq(src0->type, cc, ne12, /*n_experts=*/ne02)) {
+            ds4_exact_mmid_dataflow_probe_write(
+                "mmq", cc, src0, src1, ids, dst, mmvq_mmid_max,
+                mmvq_fast_candidate, mmq_fast_candidate, mmf_fast_candidate);
             ggml_cuda_mul_mat_q(ctx, src0, src1, ids, dst);
             return;
         }
 
         if (ggml_cuda_should_use_mmf(src0->type, cc, WARP_SIZE, src0->ne, src0->nb, src1->ne[2], /*mul_mat_id=*/true)) {
+            ds4_exact_mmid_dataflow_probe_write(
+                "mmf", cc, src0, src1, ids, dst, mmvq_mmid_max,
+                mmvq_fast_candidate, mmq_fast_candidate, mmf_fast_candidate);
             ggml_cuda_mul_mat_f(ctx, src0, src1, ids, dst);
             return;
         }
     }
+
+    ds4_exact_mmid_dataflow_probe_write(
+        "slow_sync", cc, src0, src1, ids, dst, mmvq_mmid_max,
+        mmvq_fast_candidate, mmq_fast_candidate, mmf_fast_candidate);
 
     // note: this path should not be reached when recording CUDA graphs, because it requires stream synchronization
     // TODO: add asserts to verify this. should work with CUDA, HIP, etc.

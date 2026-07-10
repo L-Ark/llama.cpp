@@ -1,0 +1,277 @@
+{
+  "aggregate": {
+    "40": {
+      "max_zero_overhead_tok_s_if_decode_updown_removed": 5.6164196510621895,
+      "mean_margin_ms_after_reaching_5": -1660.134613487604,
+      "mean_zero_overhead_tok_s_if_decode_updown_removed": 4.916419052318928,
+      "min_margin_ms_after_reaching_5": -12163.902705882138,
+      "min_zero_overhead_tok_s_if_decode_updown_removed": 3.59218660228526,
+      "prompts_below_5_even_with_decode_updown_removed": [
+        "quantum",
+        "fibonacci"
+      ]
+    },
+    "43": {
+      "max_zero_overhead_tok_s_if_decode_updown_removed": 6.151691258760012,
+      "mean_margin_ms_after_reaching_5": 920.1857037324713,
+      "mean_zero_overhead_tok_s_if_decode_updown_removed": 5.432916872694881,
+      "min_margin_ms_after_reaching_5": -7960.465633378699,
+      "min_zero_overhead_tok_s_if_decode_updown_removed": 3.919371077693945,
+      "prompts_below_5_even_with_decode_updown_removed": [
+        "fibonacci"
+      ]
+    }
+  },
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json",
+  "assumptions": {
+    "decode_tokens_estimation": "decode_up_calls / (layers * topk)",
+    "layer_count_sensitivity": [
+      40,
+      43
+    ],
+    "topk": 4,
+    "zero_overhead_model": "current decode window inferred from eval_tok_s minus measured decode up/down fallback_ms; excludes real kernel/H2D/D2H/staging overhead and ignores prompt/TTFT effects"
+  },
+  "date": "2026-07-07",
+  "decision": {
+    "next_allowed_work": "Search for an exact dataflow or representation route that removes most decode up/down fallback globally; require a hard-bound proof of near-full fallback removal with overhead below the per-prompt margins before runtime code.",
+    "reason": "This artifact is only a target feasibility bound. It shows the target is mathematically possible if essentially all decode up/down fallback is removed, but previous grouped/hotset/streaming routes cannot remove enough payload under VRAM/RAM constraints.",
+    "source_edit_allowed_by_this_artifact": false,
+    "summary": "Ideal decode up/down fallback removal is sufficient to pass generalized 5 tok/s on calibration/dev in the zero-overhead model, but the margin is limited and any route must remove bytes/compute by construction rather than staging a small hotset."
+  },
+  "prompt_scope": "calibration_dev_set_v1 only; held_out_test_set_v1_locked not used",
+  "results": [
+    {
+      "by_role_phase_ms": {
+        "down/decode": 9706.408999999976,
+        "down/prompt": 4199.5639999999985,
+        "up/decode": 13454.805000000004,
+        "up/prompt": 3872.4349999999995
+      },
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T112616Z-dev-fallback-profile-no-prompt-specific-20260706/france-cpu40-vram0gb",
+      "correctness_ok": true,
+      "decode_down_calls": 17940,
+      "decode_up_calls": 17940,
+      "decode_updown_fallback_ms": 23161.21400000004,
+      "eval_tok_s": 2.6,
+      "fallback_total_ms": 31233.213,
+      "memory_peak_bytes": 16000000000,
+      "prompt_id": "france",
+      "prompt_tok_s": 0.9,
+      "prompt_updown_fallback_ms": 8071.99900000006,
+      "ram_ok": true,
+      "sensitivity": [
+        {
+          "current_decode_ms": 43125.0,
+          "decode_fallback_removal_margin_ms": 2461.21400000004,
+          "decode_updown_fallback_ms": 23161.21400000004,
+          "estimated_decode_tokens": 112.125,
+          "layers": 40,
+          "required_save_ms_for_5tok_s": 20700.0,
+          "target5_decode_ms": 22425.0,
+          "zero_overhead_tok_s_if_all_updown_ms_subtracted_sanity": 9.428776347911423,
+          "zero_overhead_tok_s_if_decode_updown_removed": 5.6164196510621895
+        },
+        {
+          "current_decode_ms": 40116.27906976744,
+          "decode_fallback_removal_margin_ms": 3905.400046511666,
+          "decode_updown_fallback_ms": 23161.21400000004,
+          "estimated_decode_tokens": 104.30232558139535,
+          "layers": 43,
+          "required_save_ms_for_5tok_s": 19255.813953488374,
+          "target5_decode_ms": 20860.46511627907,
+          "zero_overhead_tok_s_if_all_updown_ms_subtracted_sanity": 11.741703231993034,
+          "zero_overhead_tok_s_if_decode_updown_removed": 6.151691258760012
+        }
+      ],
+      "total_updown_fallback_ms": 31233.213000000058,
+      "ttft_ms": 37516.648734
+    },
+    {
+      "by_role_phase_ms": {
+        "down/decode": 21084.470999999903,
+        "down/prompt": 3398.298999999999,
+        "up/decode": 28547.33999999999,
+        "up/prompt": 3322.644000000003
+      },
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T112751Z-dev-fallback-profile-no-prompt-specific-20260706/quantum-cpu40-vram0gb",
+      "correctness_ok": true,
+      "decode_down_calls": 24830,
+      "decode_up_calls": 24830,
+      "decode_updown_fallback_ms": 49631.81100000018,
+      "eval_tok_s": 1.9,
+      "fallback_total_ms": 56352.754,
+      "memory_peak_bytes": 16000000000,
+      "prompt_id": "quantum",
+      "prompt_tok_s": 0.9,
+      "prompt_updown_fallback_ms": 6720.942999999986,
+      "ram_ok": true,
+      "sensitivity": [
+        {
+          "current_decode_ms": 81677.63157894737,
+          "decode_fallback_removal_margin_ms": -1008.3205789471904,
+          "decode_updown_fallback_ms": 49631.81100000018,
+          "estimated_decode_tokens": 155.1875,
+          "layers": 40,
+          "required_save_ms_for_5tok_s": 50640.131578947374,
+          "target5_decode_ms": 31037.5,
+          "zero_overhead_tok_s_if_all_updown_ms_subtracted_sanity": 6.1278677267529345,
+          "zero_overhead_tok_s_if_decode_updown_removed": 4.8426751818598115
+        },
+        {
+          "current_decode_ms": 75979.19216646267,
+          "decode_fallback_removal_margin_ms": 2524.7118567933285,
+          "decode_updown_fallback_ms": 49631.81100000018,
+          "estimated_decode_tokens": 144.36046511627907,
+          "layers": 43,
+          "required_save_ms_for_5tok_s": 47107.099143206855,
+          "target5_decode_ms": 28872.093023255813,
+          "zero_overhead_tok_s_if_all_updown_ms_subtracted_sanity": 7.355408245341251,
+          "zero_overhead_tok_s_if_decode_updown_removed": 5.479120076648647
+        }
+      ],
+      "total_updown_fallback_ms": 56352.754000000095,
+      "ttft_ms": 36335.945769
+    },
+    {
+      "by_role_phase_ms": {
+        "down/decode": 18727.003999999975,
+        "down/prompt": 4325.713000000003,
+        "up/decode": 29358.357999999982,
+        "up/prompt": 3939.910999999989
+      },
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T113014Z-dev-fallback-profile-no-prompt-specific-20260706/fibonacci-cpu40-vram0gb",
+      "correctness_ok": true,
+      "decode_down_calls": 24830,
+      "decode_up_calls": 24830,
+      "decode_updown_fallback_ms": 48085.36200000023,
+      "eval_tok_s": 1.7,
+      "fallback_total_ms": 56350.986,
+      "memory_peak_bytes": 16000000000,
+      "prompt_id": "fibonacci",
+      "prompt_tok_s": 0.9,
+      "prompt_updown_fallback_ms": 8265.624000000003,
+      "ram_ok": true,
+      "sensitivity": [
+        {
+          "current_decode_ms": 91286.76470588236,
+          "decode_fallback_removal_margin_ms": -12163.902705882138,
+          "decode_updown_fallback_ms": 48085.36200000023,
+          "estimated_decode_tokens": 155.1875,
+          "layers": 40,
+          "required_save_ms_for_5tok_s": 60249.264705882364,
+          "target5_decode_ms": 31037.5,
+          "zero_overhead_tok_s_if_all_updown_ms_subtracted_sanity": 4.442079316636814,
+          "zero_overhead_tok_s_if_decode_updown_removed": 3.59218660228526
+        },
+        {
+          "current_decode_ms": 84917.92065663474,
+          "decode_fallback_removal_margin_ms": -7960.465633378699,
+          "decode_updown_fallback_ms": 48085.36200000023,
+          "estimated_decode_tokens": 144.36046511627907,
+          "layers": 43,
+          "required_save_ms_for_5tok_s": 56045.827633378925,
+          "target5_decode_ms": 28872.093023255813,
+          "zero_overhead_tok_s_if_all_updown_ms_subtracted_sanity": 5.0534111150337235,
+          "zero_overhead_tok_s_if_decode_updown_removed": 3.919371077693945
+        }
+      ],
+      "total_updown_fallback_ms": 56350.9860000002,
+      "ttft_ms": 39047.801183
+    },
+    {
+      "by_role_phase_ms": {
+        "down/decode": 9858.454000000007,
+        "down/prompt": 4407.482999999986,
+        "up/decode": 14711.023999999998,
+        "up/prompt": 4004.8060000000146
+      },
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T113247Z-dev-fallback-profile-no-prompt-specific-20260706/japan-cpu40-vram0gb",
+      "correctness_ok": true,
+      "decode_down_calls": 17550,
+      "decode_up_calls": 17550,
+      "decode_updown_fallback_ms": 24569.478000000006,
+      "eval_tok_s": 2.4,
+      "fallback_total_ms": 32981.767,
+      "memory_peak_bytes": 16000000000,
+      "prompt_id": "japan",
+      "prompt_tok_s": 0.9,
+      "prompt_updown_fallback_ms": 8412.289000000017,
+      "ram_ok": true,
+      "sensitivity": [
+        {
+          "current_decode_ms": 45703.125,
+          "decode_fallback_removal_margin_ms": 803.8530000000064,
+          "decode_updown_fallback_ms": 24569.478000000006,
+          "estimated_decode_tokens": 109.6875,
+          "layers": 40,
+          "required_save_ms_for_5tok_s": 23765.625,
+          "target5_decode_ms": 21937.5,
+          "zero_overhead_tok_s_if_all_updown_ms_subtracted_sanity": 8.622310605518736,
+          "zero_overhead_tok_s_if_decode_updown_removed": 5.190183218258545
+        },
+        {
+          "current_decode_ms": 42514.53488372093,
+          "decode_fallback_removal_margin_ms": 2461.919860465121,
+          "decode_updown_fallback_ms": 24569.478000000006,
+          "estimated_decode_tokens": 102.03488372093024,
+          "layers": 43,
+          "required_save_ms_for_5tok_s": 22107.558139534885,
+          "target5_decode_ms": 20406.976744186046,
+          "zero_overhead_tok_s_if_all_updown_ms_subtracted_sanity": 10.70359469207003,
+          "zero_overhead_tok_s_if_decode_updown_removed": 5.685960450395252
+        }
+      ],
+      "total_updown_fallback_ms": 32981.76700000007,
+      "ttft_ms": 38760.496441
+    },
+    {
+      "by_role_phase_ms": {
+        "down/decode": 12832.000000000025,
+        "down/prompt": 4521.875000000006,
+        "up/decode": 18342.417999999954,
+        "up/prompt": 3920.2920000000067
+      },
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T113425Z-dev-fallback-profile-no-prompt-specific-20260706/climate-cpu40-vram0gb",
+      "correctness_ok": true,
+      "decode_down_calls": 20150,
+      "decode_up_calls": 20150,
+      "decode_updown_fallback_ms": 31174.417999999965,
+      "eval_tok_s": 2.3,
+      "fallback_total_ms": 39616.585,
+      "memory_peak_bytes": 16000000000,
+      "prompt_id": "climate",
+      "prompt_tok_s": 0.9,
+      "prompt_updown_fallback_ms": 8442.167,
+      "ram_ok": true,
+      "sensitivity": [
+        {
+          "current_decode_ms": 54755.4347826087,
+          "decode_fallback_removal_margin_ms": 1606.4832173912619,
+          "decode_updown_fallback_ms": 31174.417999999965,
+          "estimated_decode_tokens": 125.9375,
+          "layers": 40,
+          "required_save_ms_for_5tok_s": 29567.934782608703,
+          "target5_decode_ms": 25187.5,
+          "zero_overhead_tok_s_if_all_updown_ms_subtracted_sanity": 8.31882882837473,
+          "zero_overhead_tok_s_if_decode_updown_removed": 5.340630608128836
+        },
+        {
+          "current_decode_ms": 50935.28816986856,
+          "decode_fallback_removal_margin_ms": 3669.36238827094,
+          "decode_updown_fallback_ms": 31174.417999999965,
+          "estimated_decode_tokens": 117.15116279069767,
+          "layers": 43,
+          "required_save_ms_for_5tok_s": 27505.055611729025,
+          "target5_decode_ms": 23430.232558139534,
+          "zero_overhead_tok_s_if_all_updown_ms_subtracted_sanity": 10.350228381513238,
+          "zero_overhead_tok_s_if_decode_updown_removed": 5.928441499976551
+        }
+      ],
+      "total_updown_fallback_ms": 39616.58499999998,
+      "ttft_ms": 39247.277955
+    }
+  ],
+  "source_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+  "status": "completed_bound_no_source_change"
+}

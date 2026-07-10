@@ -1,0 +1,1862 @@
+{
+  "created_at_utc": "2026-07-06T19:44:28.158843Z",
+  "decision": {
+    "most_plausible_family_from_bound": "8x gate + 8x up/down or asymmetric 8x on the dominant side; 4x/4x has too little overhead margin.",
+    "next_source_edit_allowed_if": "Implement a default-off resident/batched microprobe only after selecting a family with passes_design_gate=true and defining exact tensor/row layout plus top1 verifier plan.",
+    "reason": "Need a concrete resident/partial representation with >=6 tok/s zero-overhead bound and a kernel design whose overhead budget remains positive. Current per-call Q80 is correctness-only.",
+    "write_runtime_now": false
+  },
+  "family_overhead_budgets": [
+    {
+      "best_gate_budget_gib": 8,
+      "best_updown_budget_gib": 5.25,
+      "gate_compression": 4,
+      "mean_bound_tok_s": 6.902439369909851,
+      "min_bound_tok_s": 5.742872399925731,
+      "overhead_allowance_ms_per_token_for_5tok_s": 25.871109374999804,
+      "overhead_budget_grid": [
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 24.033427454471394,
+          "launch_ms": 0.02,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 8.802158363949903,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 21.45342745447139,
+          "launch_ms": 0.05,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 9.860710365823971,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 17.15342745447139,
+          "launch_ms": 0.1,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 12.332581056715567,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 8.553427454471393,
+          "launch_ms": 0.2,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 24.73231176727532,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": false,
+          "kernel_budget_ms_per_token_to_stay_gt5": -17.246572545528608,
+          "launch_ms": 0.5,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": null,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 24.893427454471393,
+          "launch_ms": 0.02,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 8.49806780804547,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 23.603427454471394,
+          "launch_ms": 0.05,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 8.962513384584055,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 21.45342745447139,
+          "launch_ms": 0.1,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 9.860710365823971,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 17.15342745447139,
+          "launch_ms": 0.2,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 12.332581056715567,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 4.253427454471392,
+          "launch_ms": 0.5,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 49.73542789835806,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.433427454471392,
+          "launch_ms": 0.02,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 8.317637678266095,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 24.95342745447139,
+          "launch_ms": 0.05,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 8.477634379835536,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 24.15342745447139,
+          "launch_ms": 0.1,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 8.758427137577788,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 22.553427454471393,
+          "launch_ms": 0.2,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 9.37977320342137,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 17.753427454471392,
+          "launch_ms": 0.5,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 11.91578555888815,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.593427454471392,
+          "launch_ms": 0.02,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 8.265639092656958,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.353427454471394,
+          "launch_ms": 0.05,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 8.343883084945576,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 24.95342745447139,
+          "launch_ms": 0.1,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 8.477634379835536,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 24.15342745447139,
+          "launch_ms": 0.2,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 8.758427137577788,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 21.753427454471392,
+          "launch_ms": 0.5,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 9.724721997281195,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.673427454471394,
+          "launch_ms": 0.02,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 8.23988284610261,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.553427454471393,
+          "launch_ms": 0.05,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 8.278577692157763,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.353427454471394,
+          "launch_ms": 0.1,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 8.343883084945576,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 24.95342745447139,
+          "launch_ms": 0.2,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 8.477634379835536,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 23.753427454471392,
+          "launch_ms": 0.5,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 8.905916204650154,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.713427454471393,
+          "launch_ms": 0.02,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 8.227064822740003,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.65342745447139,
+          "launch_ms": 0.05,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 8.246306847621103,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.553427454471393,
+          "launch_ms": 0.1,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 8.278577692157763,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.353427454471394,
+          "launch_ms": 0.2,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 8.343883084945576,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 24.753427454471392,
+          "launch_ms": 0.5,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 8.546131030615944,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.733427454471393,
+          "launch_ms": 0.02,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 8.22067075429553,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.70342745447139,
+          "launch_ms": 0.05,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 8.230265588411163,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.65342745447139,
+          "launch_ms": 0.1,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 8.246306847621103,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.553427454471393,
+          "launch_ms": 0.2,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 8.278577692157763,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.253427454471392,
+          "launch_ms": 0.5,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 8.376923681514056,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        }
+      ],
+      "passes_5": true,
+      "passes_6": false,
+      "updown_compression": 4,
+      "zero_overhead_ms_per_token": 174.1288906250002
+    },
+    {
+      "best_gate_budget_gib": 4,
+      "best_updown_budget_gib": 9.25,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 8.958339986542745,
+      "min_bound_tok_s": 6.292044869358467,
+      "overhead_allowance_ms_per_token_for_5tok_s": 41.069156249999935,
+      "overhead_budget_grid": [
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 39.231474329471524,
+          "launch_ms": 0.02,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 5.3922529830555135,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 36.651474329471526,
+          "launch_ms": 0.05,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 5.771828783232712,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 32.35147432947152,
+          "launch_ms": 0.1,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 6.538992082040743,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 23.751474329471524,
+          "launch_ms": 0.2,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 8.90664855361278,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": false,
+          "kernel_budget_ms_per_token_to_stay_gt5": -2.048525670528477,
+          "launch_ms": 0.5,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": null,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.091474329471524,
+          "launch_ms": 0.02,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 5.27658406234389,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.801474329471525,
+          "launch_ms": 0.05,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 5.452010217098363,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 36.651474329471526,
+          "launch_ms": 0.1,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 5.771828783232712,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 32.35147432947152,
+          "launch_ms": 0.2,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 6.538992082040743,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 19.451474329471523,
+          "launch_ms": 0.5,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 10.875578421438151,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.63147432947152,
+          "launch_ms": 0.02,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 5.206457259398938,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.151474329471526,
+          "launch_ms": 0.05,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 5.268699045690634,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 39.35147432947152,
+          "launch_ms": 0.1,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 5.375809625621201,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 37.75147432947152,
+          "launch_ms": 0.2,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 5.6036496121056265,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 32.95147432947152,
+          "launch_ms": 0.5,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 6.41992623357534,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.79147432947153,
+          "launch_ms": 0.02,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 5.186035512570778,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.551474329471525,
+          "launch_ms": 0.05,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 5.216728564885091,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.151474329471526,
+          "launch_ms": 0.1,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 5.268699045690634,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 39.35147432947152,
+          "launch_ms": 0.2,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 5.375809625621201,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 36.95147432947152,
+          "launch_ms": 0.5,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 5.724968714280368,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.871474329471525,
+          "launch_ms": 0.02,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 5.175884598080608,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.75147432947152,
+          "launch_ms": 0.05,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 5.191125915406899,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.551474329471525,
+          "launch_ms": 0.1,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 5.216728564885091,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.151474329471526,
+          "launch_ms": 0.2,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 5.268699045690634,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.95147432947152,
+          "launch_ms": 0.5,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 5.4310148235569695,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.911474329471524,
+          "launch_ms": 0.02,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 5.170824027976097,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.85147432947152,
+          "launch_ms": 0.05,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 5.178418599451691,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.75147432947152,
+          "launch_ms": 0.1,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 5.191125915406899,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.551474329471525,
+          "launch_ms": 0.2,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 5.216728564885091,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 39.95147432947152,
+          "launch_ms": 0.5,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 5.295074538130492,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.93147432947152,
+          "launch_ms": 0.02,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 5.168297451979174,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.901474329471526,
+          "launch_ms": 0.05,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 5.172088242558271,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.85147432947152,
+          "launch_ms": 0.1,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 5.178418599451691,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.75147432947152,
+          "launch_ms": 0.2,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 5.191125915406899,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.45147432947152,
+          "launch_ms": 0.5,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 5.2296248280037005,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        }
+      ],
+      "passes_5": true,
+      "passes_6": true,
+      "updown_compression": 4,
+      "zero_overhead_ms_per_token": 158.93084375000007
+    },
+    {
+      "best_gate_budget_gib": 8,
+      "best_updown_budget_gib": 5.25,
+      "gate_compression": 4,
+      "mean_bound_tok_s": 9.377761273409828,
+      "min_bound_tok_s": 6.374453315927538,
+      "overhead_allowance_ms_per_token_for_5tok_s": 43.12380208333343,
+      "overhead_budget_grid": [
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 41.28612016280502,
+          "launch_ms": 0.02,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 5.123902019578533,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.70612016280502,
+          "launch_ms": 0.05,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 5.46544147522297,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 34.40612016280502,
+          "launch_ms": 0.1,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 6.14850013549194,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.80612016280502,
+          "launch_ms": 0.2,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 8.197514122547759,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 0.006120162805018481,
+          "launch_ms": 0.5,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 34565.42598985973,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.14612016280502,
+          "launch_ms": 0.02,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 5.019347775443709,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 40.85612016280502,
+          "launch_ms": 0.05,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 5.177829750837376,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.70612016280502,
+          "launch_ms": 0.1,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 5.46544147522297,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 34.40612016280502,
+          "launch_ms": 0.2,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 6.14850013549194,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 21.50612016280502,
+          "launch_ms": 0.5,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 9.836550381069149,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.68612016280502,
+          "launch_ms": 0.02,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.955850606143666,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.20612016280502,
+          "launch_ms": 0.05,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 5.012212296859917,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 41.40612016280502,
+          "launch_ms": 0.1,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 5.109052324897364,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 39.806120162805016,
+          "launch_ms": 0.2,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 5.314409784664922,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 35.00612016280502,
+          "launch_ms": 0.5,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 6.043115703737205,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.84612016280502,
+          "launch_ms": 0.02,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.937344004052974,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.60612016280502,
+          "launch_ms": 0.05,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.965156030974102,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.20612016280502,
+          "launch_ms": 0.1,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 5.012212296859917,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 41.40612016280502,
+          "launch_ms": 0.2,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 5.109052324897364,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 39.00612016280502,
+          "launch_ms": 0.5,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 5.42340621419923,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.92612016280502,
+          "launch_ms": 0.02,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.928142438227175,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.806120162805016,
+          "launch_ms": 0.05,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.941957684512942,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.60612016280502,
+          "launch_ms": 0.1,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.965156030974102,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.20612016280502,
+          "launch_ms": 0.2,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 5.012212296859917,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 41.00612016280502,
+          "launch_ms": 0.5,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 5.158889298545328,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.96612016280502,
+          "launch_ms": 0.02,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.923554504832627,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.90612016280502,
+          "launch_ms": 0.05,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.930439612811839,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.806120162805016,
+          "launch_ms": 0.1,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.941957684512942,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.60612016280502,
+          "launch_ms": 0.2,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.965156030974102,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.00612016280502,
+          "launch_ms": 0.5,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 5.036076497016627,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.986120162805015,
+          "launch_ms": 0.02,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.921263740052654,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.95612016280502,
+          "launch_ms": 0.05,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.924700687142894,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.90612016280502,
+          "launch_ms": 0.1,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.930439612811839,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.806120162805016,
+          "launch_ms": 0.2,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.941957684512942,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.50612016280502,
+          "launch_ms": 0.5,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.9768370689327694,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        }
+      ],
+      "passes_5": true,
+      "passes_6": true,
+      "updown_compression": 8,
+      "zero_overhead_ms_per_token": 156.87619791666657
+    },
+    {
+      "best_gate_budget_gib": 6,
+      "best_updown_budget_gib": 7.25,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "overhead_allowance_ms_per_token_for_5tok_s": 47.10374479166683,
+      "overhead_budget_grid": [
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.266062871138416,
+          "launch_ms": 0.02,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 4.673391522584574,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.68606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 4.955857257704422,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.386062871138414,
+          "launch_ms": 0.1,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 5.5110115145936245,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 29.786062871138416,
+          "launch_ms": 0.2,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 7.102181829064049,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 3.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 53.071424441015225,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.126062871138416,
+          "launch_ms": 0.02,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 4.586258208808133,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 44.83606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 4.718211656780722,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.68606287113842,
+          "launch_ms": 0.1,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 4.955857257704422,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.386062871138414,
+          "launch_ms": 0.2,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 5.5110115145936245,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.486062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 8.300459570878758,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.666062871138415,
+          "launch_ms": 0.02,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.5331879628867,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.18606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.580300231976546,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.386062871138414,
+          "launch_ms": 0.1,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.661035152649989,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 43.78606287113841,
+          "launch_ms": 0.2,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.8313554727524775,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 5.426196412343224,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.82606287113842,
+          "launch_ms": 0.02,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.517698510440999,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.58606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.54097258804453,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.18606287113842,
+          "launch_ms": 0.1,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.580300231976546,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.386062871138414,
+          "launch_ms": 0.2,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.661035152649989,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.9212702990948785,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.90606287113842,
+          "launch_ms": 0.02,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.509993410956778,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.78606287113841,
+          "launch_ms": 0.05,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.5215609414584454,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.58606287113842,
+          "launch_ms": 0.1,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.54097258804453,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.18606287113842,
+          "launch_ms": 0.2,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.580300231976546,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 44.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.702479412095421,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.946062871138416,
+          "launch_ms": 0.02,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.50615070881297,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.886062871138414,
+          "launch_ms": 0.05,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.51191722077777,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.78606287113841,
+          "launch_ms": 0.1,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.5215609414584454,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.58606287113842,
+          "launch_ms": 0.2,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.54097258804453,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.600220616310431,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.96606287113841,
+          "launch_ms": 0.02,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.504231812302025,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.93606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.507110770316463,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.886062871138414,
+          "launch_ms": 0.1,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.51191722077777,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.78606287113841,
+          "launch_ms": 0.2,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.5215609414584454,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.486062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.550741048326126,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        }
+      ],
+      "passes_5": true,
+      "passes_6": true,
+      "updown_compression": 8,
+      "zero_overhead_ms_per_token": 152.89625520833317
+    },
+    {
+      "best_gate_budget_gib": 4,
+      "best_updown_budget_gib": 9.25,
+      "gate_compression": 16,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "overhead_allowance_ms_per_token_for_5tok_s": 47.10374479166683,
+      "overhead_budget_grid": [
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.266062871138416,
+          "launch_ms": 0.02,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 4.673391522584574,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.68606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 4.955857257704422,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.386062871138414,
+          "launch_ms": 0.1,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 5.5110115145936245,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 29.786062871138416,
+          "launch_ms": 0.2,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 7.102181829064049,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 3.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 53.071424441015225,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.126062871138416,
+          "launch_ms": 0.02,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 4.586258208808133,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 44.83606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 4.718211656780722,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.68606287113842,
+          "launch_ms": 0.1,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 4.955857257704422,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.386062871138414,
+          "launch_ms": 0.2,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 5.5110115145936245,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.486062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 8.300459570878758,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.666062871138415,
+          "launch_ms": 0.02,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.5331879628867,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.18606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.580300231976546,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.386062871138414,
+          "launch_ms": 0.1,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.661035152649989,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 43.78606287113841,
+          "launch_ms": 0.2,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.8313554727524775,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 5.426196412343224,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.82606287113842,
+          "launch_ms": 0.02,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.517698510440999,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.58606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.54097258804453,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.18606287113842,
+          "launch_ms": 0.1,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.580300231976546,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.386062871138414,
+          "launch_ms": 0.2,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.661035152649989,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.9212702990948785,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.90606287113842,
+          "launch_ms": 0.02,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.509993410956778,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.78606287113841,
+          "launch_ms": 0.05,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.5215609414584454,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.58606287113842,
+          "launch_ms": 0.1,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.54097258804453,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.18606287113842,
+          "launch_ms": 0.2,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.580300231976546,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 44.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.702479412095421,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.946062871138416,
+          "launch_ms": 0.02,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.50615070881297,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.886062871138414,
+          "launch_ms": 0.05,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.51191722077777,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.78606287113841,
+          "launch_ms": 0.1,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.5215609414584454,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.58606287113842,
+          "launch_ms": 0.2,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.54097258804453,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.600220616310431,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.96606287113841,
+          "launch_ms": 0.02,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.504231812302025,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.93606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.507110770316463,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.886062871138414,
+          "launch_ms": 0.1,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.51191722077777,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.78606287113841,
+          "launch_ms": 0.2,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.5215609414584454,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.486062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.550741048326126,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        }
+      ],
+      "passes_5": true,
+      "passes_6": true,
+      "updown_compression": 8,
+      "zero_overhead_ms_per_token": 152.89625520833317
+    },
+    {
+      "best_gate_budget_gib": 6,
+      "best_updown_budget_gib": 7.25,
+      "gate_compression": 8,
+      "mean_bound_tok_s": 10.41352635633519,
+      "min_bound_tok_s": 6.540382553107147,
+      "overhead_allowance_ms_per_token_for_5tok_s": 47.10374479166683,
+      "overhead_budget_grid": [
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.266062871138416,
+          "launch_ms": 0.02,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 4.673391522584574,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.68606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 4.955857257704422,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.386062871138414,
+          "launch_ms": 0.1,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 5.5110115145936245,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 29.786062871138416,
+          "launch_ms": 0.2,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 7.102181829064049,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 3.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 86,
+          "required_kernel_speedup_vs_current": 53.071424441015225,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.126062871138416,
+          "launch_ms": 0.02,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 4.586258208808133,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 44.83606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 4.718211656780722,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.68606287113842,
+          "launch_ms": 0.1,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 4.955857257704422,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.386062871138414,
+          "launch_ms": 0.2,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 5.5110115145936245,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 25.486062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 43,
+          "required_kernel_speedup_vs_current": 8.300459570878758,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.666062871138415,
+          "launch_ms": 0.02,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.5331879628867,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.18606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.580300231976546,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.386062871138414,
+          "launch_ms": 0.1,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.661035152649989,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 43.78606287113841,
+          "launch_ms": 0.2,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 4.8313554727524775,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 38.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 16,
+          "required_kernel_speedup_vs_current": 5.426196412343224,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.82606287113842,
+          "launch_ms": 0.02,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.517698510440999,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.58606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.54097258804453,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.18606287113842,
+          "launch_ms": 0.1,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.580300231976546,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.386062871138414,
+          "launch_ms": 0.2,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.661035152649989,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 42.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 8,
+          "required_kernel_speedup_vs_current": 4.9212702990948785,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.90606287113842,
+          "launch_ms": 0.02,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.509993410956778,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.78606287113841,
+          "launch_ms": 0.05,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.5215609414584454,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.58606287113842,
+          "launch_ms": 0.1,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.54097258804453,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.18606287113842,
+          "launch_ms": 0.2,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.580300231976546,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 44.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 4,
+          "required_kernel_speedup_vs_current": 4.702479412095421,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.946062871138416,
+          "launch_ms": 0.02,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.50615070881297,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.886062871138414,
+          "launch_ms": 0.05,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.51191722077777,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.78606287113841,
+          "launch_ms": 0.1,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.5215609414584454,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.58606287113842,
+          "launch_ms": 0.2,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.54097258804453,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 45.986062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 2,
+          "required_kernel_speedup_vs_current": 4.600220616310431,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.96606287113841,
+          "launch_ms": 0.02,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.504231812302025,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.93606287113842,
+          "launch_ms": 0.05,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.507110770316463,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.886062871138414,
+          "launch_ms": 0.1,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.51191722077777,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.78606287113841,
+          "launch_ms": 0.2,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.5215609414584454,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        },
+        {
+          "feasible_by_budget": true,
+          "kernel_budget_ms_per_token_to_stay_gt5": 46.486062871138415,
+          "launch_ms": 0.5,
+          "launches_per_token": 1,
+          "required_kernel_speedup_vs_current": 4.550741048326126,
+          "transfer_ms_at_32gib_s": 0.11768192052841187
+        }
+      ],
+      "passes_5": true,
+      "passes_6": true,
+      "updown_compression": 16,
+      "zero_overhead_ms_per_token": 152.89625520833317
+    }
+  ],
+  "inputs": {
+    "lowbit_coverage_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-lowbit-representation-coverage-bound-20260707.json",
+    "q80_correctness_profile": ".Agent/runs/20260705-vendor-ds4-coldstart/current-head-q80-cpucompat-all-updown-revalidation-20260707.json"
+  },
+  "interpretation": {
+    "what_q80_does_not_prove": "It does not prove any 4x/8x compressed weight representation is numerically safe; low-bit/partial representation still needs its own top1 gate.",
+    "what_q80_proves": "Current Q8_0 CPU-compatible path proves MXFP4 weights x Q8_0 activations can be token-stable for fixed text when it replaces CPU fallback.",
+    "why_per_call_not_perf": "Per-call path copies about 1.079 GiB src0 per token and spends 211.5 ms/token in kernel_sync, so it is much slower than target."
+  },
+  "prompt_scope": "calibration/dev bounds plus fixed France correctness profile; held-out unused",
+  "q80_current_per_call_profile_per_token": {
+    "alloc_free_ms": 51.798206896551726,
+    "d2h_scatter_ms": 3.1464620689655174,
+    "h2d_ms": 83.62094482758621,
+    "host_src0_ms": 527.3018551724138,
+    "kernel_sync_ms": 211.5460344827586,
+    "out_mib": 3.046875,
+    "q80_mib": 0.809326171875,
+    "records": 260.0,
+    "src0_gib": 1.0791015625,
+    "total_ms": 879.9490689655173
+  },
+  "recommendation_table": [
+    {
+      "gate_compression": 4,
+      "kernel_budget_at_8launch_0p10ms_32gibs": 24.95342745447139,
+      "min_bound_tok_s": 5.742872399925731,
+      "overhead_allowance_ms_per_token": 25.871109374999804,
+      "passes_design_gate": false,
+      "required_kernel_speedup": 8.477634379835536,
+      "updown_compression": 4
+    },
+    {
+      "gate_compression": 8,
+      "kernel_budget_at_8launch_0p10ms_32gibs": 40.151474329471526,
+      "min_bound_tok_s": 6.292044869358467,
+      "overhead_allowance_ms_per_token": 41.069156249999935,
+      "passes_design_gate": true,
+      "required_kernel_speedup": 5.268699045690634,
+      "updown_compression": 4
+    },
+    {
+      "gate_compression": 4,
+      "kernel_budget_at_8launch_0p10ms_32gibs": 42.20612016280502,
+      "min_bound_tok_s": 6.374453315927538,
+      "overhead_allowance_ms_per_token": 43.12380208333343,
+      "passes_design_gate": true,
+      "required_kernel_speedup": 5.012212296859917,
+      "updown_compression": 8
+    },
+    {
+      "gate_compression": 8,
+      "kernel_budget_at_8launch_0p10ms_32gibs": 46.18606287113842,
+      "min_bound_tok_s": 6.540382553107147,
+      "overhead_allowance_ms_per_token": 47.10374479166683,
+      "passes_design_gate": true,
+      "required_kernel_speedup": 4.580300231976546,
+      "updown_compression": 8
+    },
+    {
+      "gate_compression": 16,
+      "kernel_budget_at_8launch_0p10ms_32gibs": 46.18606287113842,
+      "min_bound_tok_s": 6.540382553107147,
+      "overhead_allowance_ms_per_token": 47.10374479166683,
+      "passes_design_gate": true,
+      "required_kernel_speedup": 4.580300231976546,
+      "updown_compression": 8
+    },
+    {
+      "gate_compression": 8,
+      "kernel_budget_at_8launch_0p10ms_32gibs": 46.18606287113842,
+      "min_bound_tok_s": 6.540382553107147,
+      "overhead_allowance_ms_per_token": 47.10374479166683,
+      "passes_design_gate": true,
+      "required_kernel_speedup": 4.580300231976546,
+      "updown_compression": 16
+    }
+  ],
+  "replacement_design_constraints": {
+    "must_batch_or_capture_kernel_launches": true,
+    "must_keep_top1_gate": true,
+    "must_remove_host_src0_copy": true,
+    "must_remove_per_call_cuda_alloc_free": true,
+    "preferred_bound_min_tok_s_before_runtime": 6.0,
+    "target_decode_ms_per_token_for_5tok_s": 200.0
+  },
+  "status": "design_hard_bound_not_sota"
+}

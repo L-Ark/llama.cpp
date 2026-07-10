@@ -1,0 +1,154 @@
+{
+  "date": "2026-07-08",
+  "status": "diagnostic_no_new_sota",
+  "experiment": "scheduler knobs for up/down iouring granularity",
+  "source_head": "7129f32ab",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "objective": "Find a scheduler-level way to reduce small up/down read batches without increasing reads/bytes.",
+  "baseline_reference": {
+    "n32_default": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T101552Z-france-n32-post-revert-default",
+      "eval_tok_s": 4.6,
+      "prompt_tok_s": 3.5,
+      "batch_reads": 4247,
+      "batch_bytes": 18926534656,
+      "batch_batches": 1829,
+      "iouring_wait_us_approx": 4775773
+    },
+    "n96_current_sota_profile": {
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/20260708T064721Z-france-n96-current-sota-io-profile",
+      "eval_tok_s": 5.0,
+      "batch_reads": 8194,
+      "batch_bytes": 36516134912,
+      "batch_batches": 4431,
+      "iouring_wait_us_approx": 9732530
+    }
+  },
+  "runs": [
+    {
+      "name": "sort-offset-n32",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T104352Z-france-n32-sort-offset",
+      "env": {
+        "GGML_MOE_IO_SORT_OFFSET": "1"
+      },
+      "eval_tok_s": 4.5,
+      "prompt_tok_s": 3.4,
+      "ttft_ms": 24248.903211,
+      "memory_peak_bytes": 16000000000,
+      "ram_ok": true,
+      "batch_reads": 4247,
+      "batch_bytes": 18926534656,
+      "batch_batches": 1829,
+      "inflight_avg": 2.91,
+      "iouring_submit_us": 899968,
+      "iouring_wait_us": 4909288,
+      "decision": "reject_no_improvement"
+    },
+    {
+      "name": "sqpoll-n32",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T104505Z-france-n32-sqpoll",
+      "env": {
+        "GGML_MOE_IO_SQPOLL": "1"
+      },
+      "eval_tok_s": 4.6,
+      "prompt_tok_s": 3.5,
+      "ttft_ms": 24006.794928,
+      "memory_peak_bytes": 16000000000,
+      "ram_ok": true,
+      "batch_reads": 4247,
+      "batch_bytes": 18926534656,
+      "batch_batches": 1829,
+      "inflight_avg": 2.91,
+      "iouring_submit_us": 17504,
+      "iouring_wait_us": 5684264,
+      "decision": "reject_submit_lower_but_wait_higher"
+    },
+    {
+      "name": "sqpoll-depth16-rerun-n32",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T104738Z-france-n32-sqpoll-depth16-rerun",
+      "env": {
+        "GGML_MOE_IO_SQPOLL": "1",
+        "GGML_MOE_STAGE_PINNED_SLOTS": "16",
+        "GGML_MOE_IO_DEPTH": "16",
+        "GGML_MOE_IO_REFILL_BATCH": "8"
+      },
+      "eval_tok_s": 4.6,
+      "prompt_tok_s": 3.5,
+      "ttft_ms": 24394.337742,
+      "memory_peak_bytes": 16000000000,
+      "ram_ok": true,
+      "batch_reads": 4247,
+      "batch_bytes": 18926534656,
+      "batch_batches": 1829,
+      "inflight_avg": 3.39,
+      "inflight_max": 16,
+      "iouring_submit_us": 16267,
+      "iouring_wait_us": 5823649,
+      "decision": "reject_no_token_gain"
+    },
+    {
+      "name": "down-single-ring-n32",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T105011Z-france-n32-down-single-ring-rerun",
+      "env": {
+        "GGML_MOE_DOWN_STAGE_SINGLE_RING": "1"
+      },
+      "eval_tok_s": 4.5,
+      "prompt_tok_s": 3.4,
+      "ttft_ms": 23844.834714,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15161466880,
+      "ram_ok": true,
+      "batch_reads": 4247,
+      "batch_bytes": 18926534656,
+      "batch_batches": 915,
+      "inflight_avg": 3.95,
+      "iouring_submit_us": 794484,
+      "iouring_wait_us": 2177727,
+      "decision": "reject_wait_lower_but_token_rate_lower"
+    },
+    {
+      "name": "down-single-ring-n96",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T105142Z-france-n96-down-single-ring",
+      "env": {
+        "GGML_MOE_DOWN_STAGE_SINGLE_RING": "1"
+      },
+      "eval_tok_s": 5.0,
+      "prompt_tok_s": 3.4,
+      "ttft_ms": 23338.049729,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15163588608,
+      "ram_ok": true,
+      "batch_reads": 8194,
+      "batch_bytes": 36516134912,
+      "batch_batches": 2216,
+      "inflight_avg": 3.2,
+      "iouring_submit_us": 1606849,
+      "iouring_wait_us": 4671714,
+      "decision": "reject_ties_france_n96_not_generalized_sota"
+    },
+    {
+      "name": "single-ring-sqpoll-n32",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T105319Z-france-n32-single-ring-sqpoll",
+      "env": {
+        "GGML_MOE_DOWN_STAGE_SINGLE_RING": "1",
+        "GGML_MOE_IO_SQPOLL": "1"
+      },
+      "eval_tok_s": 4.6,
+      "prompt_tok_s": 3.4,
+      "ttft_ms": 23892.225934,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15162040320,
+      "ram_ok": true,
+      "batch_reads": 4247,
+      "batch_bytes": 18926534656,
+      "batch_batches": 915,
+      "inflight_avg": 4.03,
+      "iouring_submit_us": 10474,
+      "iouring_wait_us": 3042790,
+      "decision": "reject_ties_n32_no_sota"
+    }
+  ],
+  "failed_run_note": "An initial sqpoll-depth16 and single-ring attempt failed at model load due to unrelated llama-simple occupying VRAM; that process was killed and clean reruns were used.",
+  "conclusion": "Single-ring proves scheduler aggregation can halve up/down iouring batch count and reduce wait by roughly 50%, without increasing reads/bytes. However, token rate does not improve because single-ring also serializes H2D/copy work and loses the existing dual-stream overlap. The next source change must decouple disk read aggregation from H2D stream fanout.",
+  "next_direction": "Implement a default-off read-aggregate/H2D-fanout path: aggregate up/down read jobs through one iouring submission batch, but enqueue H2D copies to separate CUDA streams or preserve current up/gate stream split after reads complete. Acceptance requires reads/bytes not increase, batch count lower, wait lower, TTFT within limit, and token rate above current generalized SOTA."
+}

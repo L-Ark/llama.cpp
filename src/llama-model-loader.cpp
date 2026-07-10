@@ -8,14 +8,87 @@
 #include <algorithm>
 #include <array>
 #include <cinttypes>
+#include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <future>
+#include <limits>
 #include <regex>
+#include <type_traits>
+#include <utility>
 
 static const size_t kiB = 1024;
 static const size_t MiB = 1024*kiB;
 static const size_t GiB = 1024*MiB;
+
+static bool llama_deepseek4_hc_weight_alias_enabled() {
+    const char * env = std::getenv("LLAMA_DEEPSEEK4_HC_WEIGHT_ALIAS");
+    const char * env_4expert = std::getenv("LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS");
+    return (env && env[0] && env[0] != '0') || (env_4expert && env_4expert[0] && env_4expert[0] != '0');
+}
+
+static std::string llama_deepseek4_hc_weight_alias(const char * name) {
+    const std::string tensor_name(name);
+    if (tensor_name == "hc_head_base") {
+        return "output_hc_base.weight";
+    }
+    if (tensor_name == "hc_head_fn") {
+        return "output_hc_fn.weight";
+    }
+    if (tensor_name == "hc_head_scale") {
+        return "output_hc_scale.weight";
+    }
+    if (tensor_name.rfind("blk.", 0) == 0 &&
+            (tensor_name.find(".hc_attn_base")  != std::string::npos ||
+             tensor_name.find(".hc_attn_fn")    != std::string::npos ||
+             tensor_name.find(".hc_attn_scale") != std::string::npos ||
+             tensor_name.find(".hc_ffn_base")   != std::string::npos ||
+             tensor_name.find(".hc_ffn_fn")     != std::string::npos ||
+             tensor_name.find(".hc_ffn_scale")  != std::string::npos)) {
+        return tensor_name + ".weight";
+    }
+    return {};
+}
+
+static bool llama_deepseek4_4expert_tensor_alias_enabled() {
+    const char * env = std::getenv("LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS");
+    return env && env[0] && env[0] != '0';
+}
+
+static std::string llama_deepseek4_4expert_tensor_alias(const char * name) {
+    const std::string tensor_name(name);
+    const std::string from = ".attn_kv_latent.weight";
+    const size_t pos = tensor_name.find(from);
+    if (tensor_name.rfind("blk.", 0) == 0 && pos != std::string::npos) {
+        std::string alias = tensor_name;
+        alias.replace(pos, from.size(), ".attn_kv.weight");
+        return alias;
+    }
+    for (const auto & item : {
+            std::make_pair(std::string(".exp_probs_b"),              std::string(".exp_probs_b.bias")),
+            std::make_pair(std::string(".attn_compress_ape"),        std::string(".attn_compressor_ape.weight")),
+            std::make_pair(std::string(".attn_compress_kv.weight"),  std::string(".attn_compressor_kv.weight")),
+            std::make_pair(std::string(".attn_compress_gate.weight"),std::string(".attn_compressor_gate.weight")),
+            std::make_pair(std::string(".attn_compress_norm.weight"),std::string(".attn_compressor_norm.weight")),
+            std::make_pair(std::string(".indexer.compress_ape"),        std::string(".indexer_compressor_ape.weight")),
+            std::make_pair(std::string(".indexer.compress_kv.weight"),  std::string(".indexer_compressor_kv.weight")),
+            std::make_pair(std::string(".indexer.compress_gate.weight"),std::string(".indexer_compressor_gate.weight")),
+            std::make_pair(std::string(".indexer.compress_norm.weight"),std::string(".indexer_compressor_norm.weight")),
+        }) {
+        const size_t alias_pos = tensor_name.find(item.first);
+        if (tensor_name.rfind("blk.", 0) == 0 && alias_pos != std::string::npos) {
+            std::string alias = tensor_name;
+            alias.replace(alias_pos, item.first.size(), item.second);
+            return alias;
+        }
+    }
+    if (tensor_name.rfind("blk.", 0) == 0 && tensor_name.find(".weight") == std::string::npos) {
+        return tensor_name + ".weight";
+    }
+    return {};
+}
 
 const char * llama_file_version_name(llama_fver version) {
     switch (version) {
@@ -158,10 +231,81 @@ namespace GGUFMeta {
         GKV() = delete;
 
         public:
+        static bool allow_u64_to_u32_metadata() {
+            const char * env = std::getenv("LLAMA_GGUF_ALLOW_U64_TO_U32");
+            return env && env[0] && env[0] != '0';
+        }
+
+        static bool allow_f64_to_f32_metadata() {
+            const char * env = std::getenv("LLAMA_GGUF_ALLOW_F64_TO_F32");
+            return env && env[0] && env[0] != '0';
+        }
+
+        template<typename U = T>
+        static typename std::enable_if<std::is_integral<U>::value && !std::is_same<U, bool>::value, bool>::type
+        try_get_compatible_integer(const gguf_context * ctx, const int k, const enum gguf_type kt, U & out) {
+            if (!allow_u64_to_u32_metadata()) {
+                return false;
+            }
+            if (kt == GGUF_TYPE_UINT64) {
+                const uint64_t value = gguf_get_val_u64(ctx, k);
+                if (value > uint64_t(std::numeric_limits<U>::max())) {
+                    throw std::runtime_error(format("key %s value %" PRIu64 " overflows expected type %s",
+                        gguf_get_key(ctx, k), value, gguf_type_name(GKV::gt)));
+                }
+                out = U(value);
+                return true;
+            }
+            if (kt == GGUF_TYPE_INT64) {
+                const int64_t value = gguf_get_val_i64(ctx, k);
+                if (value < int64_t(std::numeric_limits<U>::min()) || value > int64_t(std::numeric_limits<U>::max())) {
+                    throw std::runtime_error(format("key %s value %" PRId64 " overflows expected type %s",
+                        gguf_get_key(ctx, k), value, gguf_type_name(GKV::gt)));
+                }
+                out = U(value);
+                return true;
+            }
+            return false;
+        }
+
+        template<typename U = T>
+        static typename std::enable_if<!std::is_integral<U>::value || std::is_same<U, bool>::value, bool>::type
+        try_get_compatible_integer(const gguf_context *, const int, const enum gguf_type, U &) {
+            return false;
+        }
+
+        template<typename U = T>
+        static typename std::enable_if<std::is_same<U, float>::value, bool>::type
+        try_get_compatible_float(const gguf_context * ctx, const int k, const enum gguf_type kt, U & out) {
+            if (!allow_f64_to_f32_metadata() || kt != GGUF_TYPE_FLOAT64) {
+                return false;
+            }
+            const double value = gguf_get_val_f64(ctx, k);
+            if (!std::isfinite(value) || value < -double(std::numeric_limits<U>::max()) || value > double(std::numeric_limits<U>::max())) {
+                throw std::runtime_error(format("key %s value %.17g cannot be represented as expected type %s",
+                    gguf_get_key(ctx, k), value, gguf_type_name(GKV::gt)));
+            }
+            out = U(value);
+            return true;
+        }
+
+        template<typename U = T>
+        static typename std::enable_if<!std::is_same<U, float>::value, bool>::type
+        try_get_compatible_float(const gguf_context *, const int, const enum gguf_type, U &) {
+            return false;
+        }
+
         static T get_kv(const gguf_context * ctx, const int k) {
             const enum gguf_type kt = gguf_get_kv_type(ctx, k);
 
             if (kt != GKV::gt) {
+                T compatible_value{};
+                if (try_get_compatible_integer(ctx, k, kt, compatible_value)) {
+                    return compatible_value;
+                }
+                if (try_get_compatible_float(ctx, k, kt, compatible_value)) {
+                    return compatible_value;
+                }
                 throw std::runtime_error(format("key %s has wrong type %s but expected type %s",
                     gguf_get_key(ctx, k), gguf_type_name(kt), gguf_type_name(GKV::gt)));
             }
@@ -1006,6 +1150,18 @@ const llama_model_loader::llama_tensor_weight & llama_model_loader::require_weig
 
 struct ggml_tensor * llama_model_loader::get_tensor_meta(const char * name) const {
     const auto * weight = get_weight(name);
+    if (!weight && llama_deepseek4_4expert_tensor_alias_enabled()) {
+        const std::string alias = llama_deepseek4_4expert_tensor_alias(name);
+        if (!alias.empty()) {
+            weight = get_weight(alias.c_str());
+        }
+    }
+    if (!weight && llama_deepseek4_hc_weight_alias_enabled()) {
+        const std::string alias = llama_deepseek4_hc_weight_alias(name);
+        if (!alias.empty()) {
+            weight = get_weight(alias.c_str());
+        }
+    }
     if (!weight) {
         return nullptr;
     }
@@ -1266,6 +1422,7 @@ struct ggml_tensor * llama_model_loader::create_tensor(
 
             size_data -= nbytes;
             n_created++;
+            created_tensor_names.insert(ggml_get_name(t_meta));
 
             return nullptr;
         }
@@ -1440,6 +1597,7 @@ struct ggml_tensor * llama_model_loader::create_tensor(
         size_data += ggml_nbytes(cur);
     } else {
         n_created++;
+        created_tensor_names.insert(ggml_get_name(cur));
     }
 
     return tensor;
@@ -1469,12 +1627,24 @@ struct ggml_tensor * llama_model_loader::create_tensor_as_view(struct ggml_conte
     ggml_set_name(tensor, name.c_str());
 
     n_created++;
+    created_tensor_names.insert(name);
 
     return tensor;
 }
 
 void llama_model_loader::done_getting_tensors() const {
     if (n_created != n_tensors) {
+        const char * dump_env = std::getenv("LLAMA_DUMP_UNCREATED_TENSORS");
+        if (dump_env && dump_env[0] && dump_env[0] != '0') {
+            int missing = 0;
+            for (const auto & it : weights_map) {
+                if (created_tensor_names.find(it.first) == created_tensor_names.end()) {
+                    std::fprintf(stderr, "%s: uncreated tensor[%d]: %s\n", __func__, missing, it.first.c_str());
+                    missing++;
+                }
+            }
+            std::fprintf(stderr, "%s: uncreated tensor count = %d\n", __func__, missing);
+        }
         throw std::runtime_error(format("%s: wrong number of tensors; expected %d, got %d", __func__, n_tensors, n_created));
     }
     if (n_tensors_moved > 0) {

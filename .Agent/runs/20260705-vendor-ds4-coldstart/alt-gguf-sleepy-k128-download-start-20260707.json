@@ -1,0 +1,34 @@
+{
+  "aria2_sidecar_exists_now": true,
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-download-start-20260707.json",
+  "attempt_id": "20260707-sleepy-k128-alt-gguf-download-start",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "claim_rule": "Download start only; no correctness/token-rate/SOTA claim.",
+  "cleanup_before_download": {
+    "deleted_rejected_0xsero_model_path": "/root/lfz/models/DeepSeek-V4-Flash-162B-GGUF/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+    "reason": "0xSero was rejected by load smoke and its sha256/reject artifacts were already pushed; deleting frees disk for the next header-compatible candidate."
+  },
+  "completion_gate": [
+    ".aria2 sidecar absent",
+    "stat size == 50439361920",
+    "sha256 recorded",
+    "GGUF header validation",
+    "France strict 16GB correctness smoke"
+  ],
+  "created_utc": "2026-07-06T17:33:56Z",
+  "df_before": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/root       993G  882G  111G  89% /\n",
+  "download_log": "/root/lfz/runs/vendor-ds4-16gb/20260706T173353Z-sleepy-k128-alt-gguf-download/download.log",
+  "download_unit": "ds4-sleepy-k128-alt-gguf-download-20260706T173353Z.service",
+  "expected_size_bytes": 50439361920,
+  "file_exists_now": true,
+  "file_size_now": 44153438208,
+  "head_x_linked_etag": "54927e791ae4e0fbc848e5f2574681b0d8c32721fddd1da82918ece04c0d928b",
+  "log_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T173353Z-sleepy-k128-alt-gguf-download",
+  "model_path": "/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+  "prompt_scope": "no prompt run; held_out_test_set_v1_locked not used",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "source_head_before_artifact": "10046990f1b6ba52dc982896841f9ab9c68c3523",
+  "status": "download_started_not_sota",
+  "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+  "working_directory": "/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF"
+}

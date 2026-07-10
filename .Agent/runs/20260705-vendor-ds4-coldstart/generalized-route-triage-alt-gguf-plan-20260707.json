@@ -1,0 +1,117 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-route-triage-alt-gguf-plan-20260707.json",
+  "created_utc": "2026-07-06T17:04:37Z",
+  "source_head_before_artifact": "ed5d287bc5f3cab54aac83c25640be85fc7200ff",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "prompt_scope": "no new prompt run; held_out_test_set_v1_locked was not used",
+  "objective": "random/generalized prompts on 16GB host RAM + 32GB RTX 5090 should stably exceed 5 tok/s under vendor DeepSeek",
+  "basis_artifacts": {
+    "generalized_baseline": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+    "fallback_profile": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+    "full_updown_removal_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json",
+    "residual_bottleneck_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-residual-bottleneck-after-updown-bound-20260707.json",
+    "graph_dataflow_recheck": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-exact-graph-dataflow-recheck-20260707.json",
+    "dflash_oracle_verifier": ".Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json",
+    "alternate_gguf_old_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/alternate-gguf-target-representation-hard-bound.json",
+    "exact_compact_representation_closure": ".Agent/runs/20260705-vendor-ds4-coldstart/exact-compact-representation-closure-bound.json"
+  },
+  "known_generalized_baseline": {
+    "calibration_dev_only": true,
+    "mean_eval_tok_s": 2.18,
+    "min_eval_tok_s": 1.8,
+    "per_prompt_eval_tok_s": {
+      "France": 2.7,
+      "quantum": 1.8,
+      "fibonacci": 1.8,
+      "Japan": 2.4,
+      "climate": 2.2
+    },
+    "ram_peak_bytes_all": 16000000000,
+    "prompt_specific_artifacts_excluded": true
+  },
+  "closed_routes_under_current_evidence": [
+    {
+      "route": "native up/down grouped staging or hot cache",
+      "reason": "zero-overhead gate-preserving grouped staging bound only reaches mean about 2.64-2.68 tok/s and min about 1.94-1.96; larger payloads still do not reach generalized >5 and would damage gate cache/VRAM."
+    },
+    {
+      "route": "up/down-only CPU fallback removal",
+      "reason": "ideal zero-overhead removal reaches mean about 4.916 tok/s with 40-layer sensitivity and min about 3.592; 43-layer sensitivity still leaves fibonacci below 5."
+    },
+    {
+      "route": "exact graph/dataflow patch from current source",
+      "reason": "current graph lacks retained gate output/source-reuse interface; graph_gate_output_input_available is hardcoded false and build_expert_mix does not receive reusable gate output."
+    },
+    {
+      "route": "DFlash/MTP/speculative current vendor path",
+      "reason": "oracle target verifier W=2/4/8 speedups are only 1.010x/1.013x/1.002x vs W=1, below the minimum 1.128x reopen gate; vendor also lacks source-ready DFlash/MTP runtime."
+    },
+    {
+      "route": "native exact compact representation",
+      "reason": "native MXFP4 hotset is already information-dense: measured zstd/entropy reduction about 1.04x-1.085x, far below the 4x-5.33x reduction needed for resident top hotset."
+    },
+    {
+      "route": "4Expert GGUF",
+      "reason": "token_type empty-output issue was fixed default-off, but full France smoke still fails semantic correctness and runs around 2.0 tok/s; not a token-rate candidate until numerical/alias correctness is solved."
+    }
+  ],
+  "reopened_candidate": {
+    "route": "alternate low-bit DeepSeek GGUF, starting with 0xSero Spark-Mini-Q2-REAP-ds4",
+    "why_reopen_now": "Previous alternate-GGUF bound rejected candidates for a France-only 10 tok/s target and disk was nearly full. The current product target is generalized >5 tok/s, disk now has enough space for one 52.6GB candidate, and the existing 0xSero size/VRAM bound is above 5 even with 3-4GiB VRAM reserve.",
+    "must_be_labeled_as": "alternate model/quantization candidate, not native GGUF SOTA, until correctness and prompt-set behavior are proven",
+    "old_bound": {
+      "size_bytes": 52593532000,
+      "size_ratio_vs_native": 0.33681807058305535,
+      "size_only_tok_s_bound": 7.436328164693365,
+      "vram_placement_tok_s_with_3gib_reserve": 9.069222534338879,
+      "vram_placement_tok_s_with_4gib_reserve": 8.984340227746708,
+      "caveat": "old bound used France-era assumptions; must rerun no-prompt-specific calibration/dev and only use held-out after candidate freeze"
+    }
+  },
+  "disk_audit_20260707": {
+    "root_filesystem": {
+      "size": "993G",
+      "used": "882G",
+      "avail": "111G",
+      "use_percent": "89%"
+    },
+    "major_model_dirs": {
+      "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF": "286G",
+      "/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF": "154G",
+      "/root/lfz/models/_gguf_header_probe": "87M"
+    },
+    "enough_for_one_0xsero_download_without_deleting_sota_evidence": true,
+    "expected_remaining_free_after_0xsero_gib_approx": 62
+  },
+  "remote_head_probe_20260707": {
+    "0xSero_Spark_Mini_Q2_REAP_ds4": {
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-162B-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+      "http_status": "302 then 200",
+      "x_linked_size_bytes": 52593532000,
+      "x_linked_etag": "e917278028d7a9e25dfc9d04bf5848375dad7573c5aeab1720d6a83714352406",
+      "final_content_length_bytes": 52593532000,
+      "final_etag": "7f4deb0dc07cdbc01ff88ae11e616fd8d2d1d8263efec15b034c5d731fe83070"
+    },
+    "other_old_artifact_urls_checked": {
+      "sleepyeldrazi_old_filename": "404 with checked URL; needs repo listing before use",
+      "teamblobfish_old_filename": "404 with checked URL; needs repo listing before use",
+      "antirez_old_iq2xxs_filename": "404 with checked URL; needs repo listing before use"
+    }
+  },
+  "next_plan": [
+    "Do not touch held-out test prompts during download/load/correctness tuning.",
+    "Download exactly one candidate first: 0xSero Spark-Mini-Q2-REAP-ds4, because current HEAD confirms size and previous header probe shows deepseek4 metadata/expert_used_count=6.",
+    "After download, record size and sha256, then run metadata/header validation before any model generation.",
+    "Run strict 16GB France correctness smoke with no prompt-specific pack/profile; if semantic correctness fails, reject and do not benchmark token rate.",
+    "If France passes, run calibration_dev_set_v1 strict cold baseline with no prompt-specific artifacts. Only after code/env/model candidate is frozen may held_out_test_set_v1_locked be run for final SOTA acceptance.",
+    "If any accepted generalized SOTA appears, record complete repro info and immediately commit/push to ssd/vendor/deepseek-token-rate-16gb, then rerun from pushed commit."
+  ],
+  "decision": {
+    "runtime_source_patch_allowed_now": false,
+    "download_allowed_next": true,
+    "candidate_to_download_next": "0xSero/DeepSeek-V4-Flash-162B-GGUF DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+    "accepted_sota_changed": false,
+    "held_out_used": false
+  }
+}

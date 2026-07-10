@@ -1,0 +1,111 @@
+{
+  "attempt_id": "20260707-compressed-partial-manifest-report-only-parser",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "build": "cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2 passed after final lookup optimization",
+  "created_at_utc": "2026-07-06T20:13:32.645639Z",
+  "decision": {
+    "next_step": "Generate real compressed/partial payload candidates and add compare-only loader/kernel mapping behind the same top1 gate.",
+    "promotion_allowed": false,
+    "reason": "Parser/report-only layer is default-off and preserves top1, but it does not load compressed payload or write logits; it is a scaffold for the next compressed/partial representation step, not a token-rate SOTA."
+  },
+  "manifest": {
+    "compressed_bytes_proxy": 106954752,
+    "entries": 96,
+    "original_bytes": 427819008,
+    "repr_manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.repr_manifest.csv",
+    "repr_type": "q80_report_only",
+    "sha256": "aba31c6db2537459473d3b3eca5320547fa9f0fec994fca439613c8a5359fc0d",
+    "source_direct_manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.direct_manifest.csv"
+  },
+  "new_env": {
+    "GGML_MOE_STREAM_ONE_DIRECT_REPR_MANIFEST": "extended report-only manifest metadata",
+    "GGML_MOE_STREAM_ONE_DIRECT_REPR_REPORT": "manifest/probe report CSV"
+  },
+  "prompt_scope": "fixed France text verifier only; calibration-derived top48 repr manifest; held-out unused; not SOTA",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "runs": {
+    "default-off": {
+      "exit_status": 0,
+      "hashes": {
+        "environment.txt": "529d4579d0eab797de6d7777cdbf12c32efcc05836dc97ee4ad38212e6f792e2",
+        "run_case.sh": "2cd420a6f9b26224e0c815983c24f19fbc698b55bf6cedd24ddf1bc2e8b421bb",
+        "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 1660,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_peak_bytes": 16000000000,
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T200629Z-20260707-compressed-partial-manifest-parser-validation/default-off",
+      "top1": {
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "n_tokens": 145,
+        "same_top1": 145,
+        "same_top1_ratio": 1
+      }
+    },
+    "repr-report": {
+      "exit_status": 0,
+      "hashes": {
+        "environment.txt": "0c095d3b01944e1d55d574ea151733d8a37375bf3b7ddf411663ee63d52c2c63",
+        "run_case.sh": "9ac8add10a5bb4951bc0e13850f35cb87a47137960cd01bbff79a1d2a83288b6",
+        "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "hashes_extra": {
+        "hot-batch-probe.csv": "1cf61150cbab445bd836045773dd7acf48490b8d8e09895bf1ffe6224ede0541",
+        "repr-report.csv": "4250ad3e080a06c00c87ba3f6d678f5094fa36d414ddfaadbc48aee4d8424f32"
+      },
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_peak_bytes": 7547629568,
+      "probe_aggregate": {
+        "compare_ok": 3786,
+        "compare_ran": 3786,
+        "diff_count": 0,
+        "max_abs": 0.0,
+        "mean_abs_avg": 0.0,
+        "mean_abs_n": 3786,
+        "not_in_manifest_rows": 33454,
+        "not_ready_rows": 0,
+        "ready_rows": 4246,
+        "repr_compressed_rows": 4246,
+        "repr_exact_rows": 0,
+        "repr_experts_sum": 4246,
+        "repr_partial_rows": 0,
+        "repr_resident_compressed_bytes": 4730519552,
+        "repr_resident_original_bytes": 18922078208,
+        "repr_rows": 4246,
+        "repr_src0_bytes_projected": 18922078208,
+        "rows": 11600,
+        "rows_total": 37700
+      },
+      "repr_report_counts": {
+        "entry": 96,
+        "probe": 11600
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T200629Z-20260707-compressed-partial-manifest-parser-validation/repr-report",
+      "top1": {
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "n_tokens": 145,
+        "same_top1": 145,
+        "same_top1_ratio": 1
+      }
+    }
+  },
+  "source_head_before_commit": "34eefb522477de0949e15f84cb67dbdeff8bb987",
+  "status": "passed_report_only_probe_not_sota"
+}

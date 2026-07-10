@@ -1,0 +1,20 @@
+{
+  "attempt_id": "20260707-iq2s-stage2-default-load-smoke",
+  "created_at_utc": "2026-07-07T01:10:04.272567Z",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "672cf7779aeb4872cdd1659313e892e229be7ea7",
+  "git_status_before_artifact": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "status": "default_load_failed_missing_hc_head_base_not_sota",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-load-smoke/france-n1-load",
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+  "command_summary": "strict MemoryMax=16000000000 MemorySwapMax=0, n=1 France calibration, no prompt-specific env, no tensor alias env, stdout controlled",
+  "exit_status": 1,
+  "stderr_tail": "llama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: missing tensor 'hc_head_base'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf'\nsrv    load_model: failed to load model, '/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf'\nCommand exited with non-zero status 1\n\tCommand being timed: \"env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin GGML_CUDA_DISABLE_GRAPHS=1 /root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf -p Please introduce France in a short paragraph. -n 1 -c 256 -b 16 -ub 16 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts\"\n\tUser time (seconds): 0.55\n\tSystem time (seconds): 0.68\n\tPercent of CPU this job got: 64%\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:01.92\n\tAverage shared text size (kbytes): 0\n\tAverage unshared data size (kbytes): 0\n\tAverage stack size (kbytes): 0\n\tAverage total size (kbytes): 0\n\tMaximum resident set size (kbytes): 382236\n\tAverage resident set size (kbytes): 0\n\tMajor (requiring I/O) page faults: 1449\n\tMinor (reclaiming a frame) page faults: 50465\n\tVoluntary context switches: 1757\n\tInvoluntary context switches: 2\n\tSwaps: 0\n\tFile system inputs: 372888\n\tFile system outputs: 16\n\tSocket messages sent: 0\n\tSocket messages received: 0\n\tSignals delivered: 0\n\tPage size (bytes): 4096\n\tExit status: 1",
+  "stdout_head": "\nLoading model... |\b-\b\\\b|\b/\b-\b\\\b \b\nFailed to load the model",
+  "memory_peak_bytes": 375943168,
+  "memory_events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+  "correctness_ok": false,
+  "accepted_sota_changed": false,
+  "interpretation": "Default vendor load fails before inference because tensor hc_head_base is missing. This is likely a tensor naming/layout compatibility issue for this external GGUF. It is not a token-rate result.",
+  "next_allowed": "Before rejecting the downloaded candidate completely, one controlled follow-up may try existing DeepSeek4 tensor alias envs already present in source; these are model-compatibility flags, not prompt-specific optimization. If alias load also fails or output correctness fails, reject the IQ2_S route."
+}

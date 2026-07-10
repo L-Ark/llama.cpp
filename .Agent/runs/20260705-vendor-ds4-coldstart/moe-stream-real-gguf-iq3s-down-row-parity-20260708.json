@@ -1,0 +1,69 @@
+{
+  "artifact_id": "moe-stream-real-gguf-iq3s-down-row-parity-20260708",
+  "date_local": "2026-07-08",
+  "purpose": "Use real GGUF ffn_down_exps tensor bytes from the local IQ2_S rejected model to test vendor down MoE stream parity for a supported lowbit type (IQ3_S).",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head_before_commit": "b34f01964e8f22022aa122eee93baa6455dede21",
+  "changed_files": [
+    ".Agent/run-tools/ds4_moe_stream_direct_probe.cpp"
+  ],
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-real-rows-iq3s",
+  "input_tensor": {
+    "source": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+    "tensor": "blk.0.ffn_down_exps.weight",
+    "tensor_type": "GGMLQuantizationType.IQ3_S",
+    "shape": [
+      2048,
+      4096,
+      256
+    ],
+    "data_shape": [
+      256,
+      4096,
+      880
+    ],
+    "data_offset": 1218625120,
+    "n_bytes": 922746880,
+    "extracted": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-real-rows-iq3s/blk0-down-exp0-first16-iq3s.rows.bin",
+    "extracted_bytes": 14080,
+    "expert": 0,
+    "rows": 16,
+    "ne00": 2048,
+    "ne01": 16,
+    "nb01": 880
+  },
+  "command_env": {
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_DOWN_LOWBIT_PROBE": "1",
+    "GGML_MOE_STREAM_REAL_ROWS_BIN": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-real-rows-iq3s/blk0-down-exp0-first16-iq3s.rows.bin",
+    "GGML_MOE_STREAM_REAL_ROWS_TYPE": "21",
+    "GGML_MOE_STREAM_REAL_ROWS_NE00": "2048",
+    "GGML_MOE_STREAM_REAL_ROWS_NE01": "16",
+    "GGML_MOE_STREAM_REAL_ROWS_NB01": "880"
+  },
+  "rc": 0,
+  "stdout": "accept type=iq1_s nb01=50 nb02=800 finite=1 max_abs=0.00330495834 mean_abs=0.00118012726 first_gpu=4.75261307 first_ref=4.75274944\naccept type=iq1_m nb01=56 nb02=896 finite=1 max_abs=0.00184059143 mean_abs=0.000628918409 first_gpu=4.79929638 first_ref=4.7991128\naccept type=q2_K nb01=84 nb02=1344 finite=1 max_abs=0.00194692612 mean_abs=0.000715896487 first_gpu=4.55068064 first_ref=4.55053616\nreal-rows accept type=iq3_s ne00=2048 ne01=16 nb01=880 finite=1 max_abs=0.00103905052 mean_abs=0.000351050141 first_gpu=0.0976380631 first_ref=0.0975392535\n",
+  "stderr": "[moe_stream] batched decode path active: experts=1 ne01=16 ne00=256\n[moe_stream_batch] VRAM cache budget: requested=16384 MiB actual=16384 MiB free=31290 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\nggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\n[moe_stream_batch] VRAM cache: 0.2 GiB, 16384 slots (0.01 MiB each)\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n",
+  "parsed_real_rows_result": {
+    "type": "iq3_s",
+    "ne00": 2048,
+    "ne01": 16,
+    "nb01": 880,
+    "finite": true,
+    "max_abs": 0.00103905052,
+    "mean_abs": 0.000351050141
+  },
+  "decision": {
+    "sota_changed": false,
+    "production_enable": false,
+    "meaning": "The dedicated down-stream entry computes correct output for a real GGUF IQ3_S ffn_down_exps row slice, compared to CPU to_float reference. This strengthens real-layout evidence but does not prove full-model correctness or performance.",
+    "limitations": [
+      "Only expert0 first 16 rows of blk.0.ffn_down_exps.weight were tested.",
+      "The source GGUF was previously rejected as a full model, so this is tensor-layout evidence only.",
+      "No full model token generation, prompt-general benchmark, TTFT, or 16GB model-run gate was executed."
+    ],
+    "next_step": "Extend real-row parity to the exact compact target types needed for a viable model, or run strict load/correctness for one compact target after disk cleanup approval."
+  },
+  "committed_source_head": "c046716bc49b3c2ddbd98c13bcdf282f8965bc1b",
+  "source_head_note": "source_head_before_commit records the tree used for the run before committing this artifact; committed_source_head records the commit storing the probe extension, artifact, and plan update."
+}

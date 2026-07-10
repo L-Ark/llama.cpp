@@ -1,0 +1,147 @@
+{
+  "artifact_id": "20260707-grouped-retained-onecache-profiler-validation",
+  "status": "profiler_validated_not_sota",
+  "timestamp_utc": "2026-07-07T10:16:00Z",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "base_commit_before_source_commit": "462e98899",
+  "purpose": "Validate the default-off grouped-retained route profiler and fix its cache visibility so it can see the existing one-stream gate cache instead of reporting false all-miss counts.",
+  "source_changes": [
+    "Add GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT default-off CSV profiler in ggml-cpu.c.",
+    "Record role, layer, phase, tensor/type, unique experts, rows, expert bytes, logical bytes, cache contains/misses, and grouped-retained eligibility for gate/up/down/up_gate routes.",
+    "Add ggml_cuda_moe_stream_one_cache_contains as a read-only CUDA one-stream cache query. It uses one_cache_key_for and does not mutate cache LRU, hit, or miss counters.",
+    "Pass src0 data pointers and expert strides from CPU route builders so profiler cache queries use the same one-stream key as execution."
+  ],
+  "source_sha256": {
+    "ggml/src/ggml-cpu/ggml-cpu.c": "c95f515d4cfbd90346d248466deded461f403147403b1a37aeb6fcedb9f08b30",
+    "ggml/src/ggml-cuda/moe_stream.cu": "3d455fb62748dde669fc1892b6ef624b613d0a0f2a8932822f869b5d8fe1036b"
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream -j20 --target llama-cli llama-results",
+    "result": "passed",
+    "binary": "build-ds4-moe-stream/bin/llama-cli",
+    "binary_sha256": "c3aa016da81aee65db5b65fbb79a19604ef212e5897840c93dad3c9b8f1eab78"
+  },
+  "profiler_validation_run": {
+    "prompt_scope": "calibration/dev only; held_out_test_set_v1_locked not used",
+    "prompt": "Describe database indexing in one concise paragraph.",
+    "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260707T101116Z-20260707-grouped-retained-onecache-profile-rerun",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T101116Z-20260707-grouped-retained-onecache-profile-rerun/database-indexing-grouped-onecache-profile-cpu40-vram0gb",
+    "profile_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T101116Z-20260707-grouped-retained-onecache-profile-rerun/database-indexing-grouped-onecache-profile-cpu40-vram0gb/grouped_route_profile.csv",
+    "config": {
+      "cpu_moe": 40,
+      "vram_cache_gb": 0,
+      "n_predict": 96,
+      "context": 256,
+      "batch": 16,
+      "ubatch": 16,
+      "drop_caches_before_case": true,
+      "memory_max_bytes": 16000000000,
+      "memory_swap_max": 0,
+      "prompt_specific_pack_profile_alias": "unset",
+      "GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT": "{case_dir}/grouped_route_profile.csv"
+    },
+    "metrics": {
+      "eval_tok_s": 1.9,
+      "prompt_tok_s": 0.9,
+      "ttft_estimate_ms": 38884.836529,
+      "elapsed_seconds": 87.06,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15034089472,
+      "memory_max_events": 22414,
+      "pgmajfault": 282269,
+      "workingset_refault_file": 3121479,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "oom_seen": false,
+      "runner_correctness_ok": true,
+      "manual_quality_note": "Diagnostic n=96 output is semantically coherent but truncated at the end; this run is not a correctness/SOTA promotion run."
+    },
+    "csv_summary": {
+      "records": 11760,
+      "line_count_including_header": 11761,
+      "by_role": {
+        "gate": {
+          "records": 3920,
+          "unique_experts": 24867,
+          "rows": 26160,
+          "logical_bytes": 110818492416,
+          "cache_contains": 19825,
+          "cache_missing": 5042,
+          "unknown_cache": 0,
+          "eligible_records": 3920
+        },
+        "up": {
+          "records": 3920,
+          "unique_experts": 13534,
+          "rows": 14170,
+          "logical_bytes": 60313567232,
+          "cache_contains": 0,
+          "cache_missing": 13534,
+          "unknown_cache": 0,
+          "eligible_records": 3920
+        },
+        "down": {
+          "records": 3920,
+          "unique_experts": 13534,
+          "rows": 14170,
+          "logical_bytes": 60313567232,
+          "cache_contains": 0,
+          "cache_missing": 13534,
+          "unknown_cache": 0,
+          "eligible_records": 3920
+        }
+      },
+      "decode_phase": {
+        "gate": {
+          "records": 3800,
+          "unique_experts": 22800,
+          "rows": 22800,
+          "logical_bytes": 101607014400,
+          "cache_contains": 19305,
+          "cache_missing": 3495
+        },
+        "up": {
+          "records": 3800,
+          "unique_experts": 12350,
+          "rows": 12350,
+          "logical_bytes": 55037132800,
+          "cache_contains": 0,
+          "cache_missing": 12350
+        },
+        "down": {
+          "records": 3800,
+          "unique_experts": 12350,
+          "rows": 12350,
+          "logical_bytes": 55037132800,
+          "cache_contains": 0,
+          "cache_missing": 12350
+        }
+      }
+    }
+  },
+  "default_off_guard_run": {
+    "purpose": "Verify profiler source is no-logit-change when GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT is unset.",
+    "prompt": "Please introduce France in a short paragraph.",
+    "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260707T101343Z-20260707-defaultoff-profiler-guard",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T101343Z-20260707-defaultoff-profiler-guard/defaultoff-france-after-profiler-cpu40-vram0gb",
+    "metrics": {
+      "eval_tok_s": 2.5,
+      "prompt_tok_s": 0.9,
+      "ttft_estimate_ms": 39044.30398,
+      "elapsed_seconds": 91.31,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15033208832,
+      "ram_ok": true,
+      "oom_seen": false,
+      "ram_limit_killed": false,
+      "correctness_ok": true
+    },
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage."
+  },
+  "interpretation": {
+    "cache_visibility_fix_result": "The profiler now sees the active one-stream gate cache: gate cache_contains=19825 instead of the previous false zero. Up/down remain cache_contains=0, confirming the prompt-general baseline still has no retained GPU source path for up/down.",
+    "optimization_implication": "A future generalized >5 tok/s candidate cannot focus only on gate. It must either reduce up/down logical source movement/fallback at large scale or implement a joint grouped-retained path that preserves gate cache behavior while avoiding per-expert up/down staging.",
+    "sota_status": "not_sota_diagnostic_only"
+  }
+}

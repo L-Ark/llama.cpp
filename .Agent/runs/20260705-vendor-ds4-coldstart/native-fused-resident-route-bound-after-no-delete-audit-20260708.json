@@ -1,0 +1,91 @@
+{
+  "artifact_id": "20260708-native-fused-resident-route-bound-after-no-delete-audit",
+  "source_head": "af17de4c3",
+  "purpose": "Quantify whether a no-delete native fused/resident up-down route can reach generalized 5 tok/s after q80 down correctness is fixed.",
+  "input_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/no-delete-next-route-audit-after-q80-correctness-20260708.json",
+  "held_out_test_used": false,
+  "per_prompt_after_ideal_up_down": [
+    {
+      "prompt_id": "france",
+      "current_eval_tok_s": 2.7,
+      "estimated_decode_seconds": 51.003351265999996,
+      "up_down_fallback_seconds": 31.233213000000003,
+      "remaining_decode_seconds_after_ideal_up_down": 19.770138265999993,
+      "target_decode_seconds_at_5_tok_s": 27.541809683639997,
+      "additional_saving_needed_after_ideal_up_down_seconds": 0.0,
+      "additional_saving_fraction_of_remaining_after_up_down": 0.0,
+      "ideal_up_down_tok_s": 6.965507603708938,
+      "native_up_down_only_sufficient": true
+    },
+    {
+      "prompt_id": "quantum",
+      "current_eval_tok_s": 1.8,
+      "estimated_decode_seconds": 99.02405423100001,
+      "up_down_fallback_seconds": 56.352754,
+      "remaining_decode_seconds_after_ideal_up_down": 42.67130023100001,
+      "target_decode_seconds_at_5_tok_s": 35.648659523160006,
+      "additional_saving_needed_after_ideal_up_down_seconds": 7.022640707840004,
+      "additional_saving_fraction_of_remaining_after_up_down": 0.16457526885337723,
+      "ideal_up_down_tok_s": 4.177123655733114,
+      "native_up_down_only_sufficient": false
+    },
+    {
+      "prompt_id": "fibonacci",
+      "current_eval_tok_s": 1.8,
+      "estimated_decode_seconds": 106.142198817,
+      "up_down_fallback_seconds": 56.350986000000006,
+      "remaining_decode_seconds_after_ideal_up_down": 49.79121281699999,
+      "target_decode_seconds_at_5_tok_s": 38.21119157412,
+      "additional_saving_needed_after_ideal_up_down_seconds": 11.580021242879987,
+      "additional_saving_fraction_of_remaining_after_up_down": 0.2325715841757177,
+      "ideal_up_down_tok_s": 3.8371420791214113,
+      "native_up_down_only_sufficient": false
+    },
+    {
+      "prompt_id": "japan",
+      "current_eval_tok_s": 2.4,
+      "estimated_decode_seconds": 51.959503559,
+      "up_down_fallback_seconds": 32.981767,
+      "remaining_decode_seconds_after_ideal_up_down": 18.977736559,
+      "target_decode_seconds_at_5_tok_s": 24.940561708319997,
+      "additional_saving_needed_after_ideal_up_down_seconds": 0.0,
+      "additional_saving_fraction_of_remaining_after_up_down": 0.0,
+      "ideal_up_down_tok_s": 6.571005354295581,
+      "native_up_down_only_sufficient": true
+    },
+    {
+      "prompt_id": "climate",
+      "current_eval_tok_s": 2.2,
+      "estimated_decode_seconds": 65.922722045,
+      "up_down_fallback_seconds": 39.616585,
+      "remaining_decode_seconds_after_ideal_up_down": 26.306137045,
+      "target_decode_seconds_at_5_tok_s": 29.0059976998,
+      "additional_saving_needed_after_ideal_up_down_seconds": 0.0,
+      "additional_saving_fraction_of_remaining_after_up_down": 0.0,
+      "ideal_up_down_tok_s": 5.513161748184758,
+      "native_up_down_only_sufficient": true
+    }
+  ],
+  "aggregate": {
+    "min_ideal_up_down_tok_s": 3.8371420791214113,
+    "max_additional_saving_needed_after_ideal_up_down_seconds": 11.580021242879987,
+    "max_additional_saving_prompt_id": "fibonacci",
+    "total_additional_saving_needed_after_ideal_up_down_seconds": 18.60266195071999,
+    "all_native_up_down_only_sufficient": false
+  },
+  "interpretation": [
+    "A pure native up/down fallback removal is not sufficient for the generalized 5 tok/s product target under the conservative decode-time estimate.",
+    "The worst prompt remains at 3.837 tok/s after ideal up+down removal and still needs 11.58s additional decode saving beyond all up/down fallback.",
+    "Therefore a native no-delete implementation must combine up/down removal with another mechanism: page/refault reduction, persistent/resident dataflow that removes source movement outside the measured fallback bucket, speculative acceptance, or a compact representation. A small down-only or q80-only patch is not justified."
+  ],
+  "candidate_native_route_requirements": {
+    "must_reduce_up_down_fallback": true,
+    "must_reduce_non_updown_remaining_decode_by_at_least_seconds": 11.580021242879987,
+    "must_address_worst_prompt": "fibonacci",
+    "must_preserve_no_prompt_specific_rule": true,
+    "must_not_use_held_out_prompts_before_candidate_freeze": true,
+    "must_stay_in_16gb_cgroup_including_page_cache": true
+  },
+  "decision": "Do not implement native fused/resident source changes until a design accounts for the extra post-up/down savings. Compact target remains the only prepared route with plausible representation-level upside, but it requires explicit cleanup approval.",
+  "accepted_sota_changed": false
+}

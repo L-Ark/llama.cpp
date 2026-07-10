@@ -164,6 +164,10 @@ __attribute__((weak)) extern void ggml_cuda_moe_stream_q80_hot_batch_probe(
     const float * dst,
     size_t dst_nb1,
     size_t dst_nb2);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_handoff_upload(
+    const float * host_ptr,
+    int64_t ne01,
+    int64_t dst_cols);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     int src0_type_int,
     const char * src0_name,
@@ -177,12 +181,25 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_batch(
     int64_t src1_ne1,
     size_t src1_nb1,
     size_t src1_nb2,
+    const void * src1_q8_0,
+    size_t src1_q8_0_row_size,
+    int64_t src1_q8_0_ne1,
     float * dst,
     size_t dst_nb1,
     size_t dst_nb2,
     const int64_t * matrix_row_counts,
     const ggml_moe_stream_row_mapping * rows,
     int64_t rows_stride);
+__attribute__((weak)) extern int ggml_cuda_moe_stream_batch_preload_active_from_pack(
+    int src0_type_int,
+    const char * src0_name,
+    int64_t n_as,
+    size_t expert_bytes,
+    const int64_t * matrix_row_counts);
+__attribute__((weak)) extern int ggml_cuda_moe_stream_route_group_preload_updown_from_gate(
+    const char * src0_gate_name,
+    int64_t n_as,
+    const int64_t * matrix_row_counts);
 __attribute__((weak)) extern const void * ggml_cuda_moe_expert_pack_mmap_ptr(
     const char * tensor_name,
     int expert_idx,
@@ -231,6 +248,15 @@ __attribute__((weak)) extern bool ggml_cuda_moe_stream_up_gate_batch(
     const int64_t * matrix_row_counts,
     const ggml_moe_stream_row_mapping * rows,
     int64_t rows_stride);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_cache_contains(
+    const char * src0_name,
+    size_t expert_bytes,
+    int expert_idx);
+__attribute__((weak)) extern bool ggml_cuda_moe_stream_one_cache_contains(
+    const char * src0_name,
+    const void * src0_data,
+    size_t expert_bytes,
+    int64_t expert_idx);
 #else
 static bool (*ggml_cuda_moe_stream_available)(void) = NULL;
 static void (*ggml_cuda_moe_stream_sync)(void) = NULL;
@@ -240,19 +266,35 @@ static bool (*ggml_cuda_moe_stream_one)(
     const ggml_moe_stream_row_mapping *) = NULL;
 static bool (*ggml_cuda_moe_stream_batch)(
     int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t,
-    const float *, size_t, size_t, float *, size_t, size_t, const int64_t *,
-    const ggml_moe_stream_row_mapping *, int64_t) = NULL;
+    const float *, size_t, size_t, const void *, size_t, int64_t, float *, size_t, size_t,
+    const int64_t *, const ggml_moe_stream_row_mapping *, int64_t) = NULL;
+static int (*ggml_cuda_moe_stream_batch_preload_active_from_pack)(
+    int, const char *, int64_t, size_t, const int64_t *) = NULL;
+static int (*ggml_cuda_moe_stream_route_group_preload_updown_from_gate)(
+    const char *, int64_t, const int64_t *) = NULL;
+static bool (*ggml_cuda_moe_stream_handoff_upload)(const float *, int64_t, int64_t) = NULL;
 static bool (*ggml_cuda_moe_stream_up_gate_batch)(
     int, int, const char *, const void *, const char *, const void *, int64_t,
     int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *,
     size_t, size_t, int, float, const int64_t *, const ggml_moe_stream_row_mapping *,
     int64_t) = NULL;
+static bool (*ggml_cuda_moe_stream_cache_contains)(const char *, size_t, int) = NULL;
+static bool (*ggml_cuda_moe_stream_one_cache_contains)(const char *, const void *, size_t, int64_t) = NULL;
 #endif
 
 static bool ggml_cuda_moe_stream_supports_type(enum ggml_type type) {
     return type == GGML_TYPE_IQ3_XXS || type == GGML_TYPE_IQ3_S ||
            type == GGML_TYPE_IQ2_S ||
            type == GGML_TYPE_MXFP4 || type == GGML_TYPE_F8_E4M3_B128;
+}
+
+static bool ggml_moe_gate_batch_prefetch_enabled(void) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char * env = getenv("GGML_MOE_GATE_BATCH_PREFETCH");
+        enabled = (env && env[0] && env[0] != '0') ? 1 : 0;
+    }
+    return enabled != 0;
 }
 
 static bool ggml_cuda_moe_stream_one_q4k_enabled(void) {
@@ -274,17 +316,28 @@ static bool ggml_cuda_moe_stream_supports_down_batch(enum ggml_type type, const 
     const bool is_down = name && strstr(name, "ffn_down_exps");
     const bool is_up = name && strstr(name, "ffn_up_exps");
     const bool is_gate = name && strstr(name, "ffn_gate_exps");
+
+    if (is_up && type == GGML_TYPE_MXFP4) {
+        const char * env = getenv("GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH");
+        if (!env || !env[0] || env[0] == '0') {
+            return false;
+        }
+        const char * target = getenv("GGML_MOE_STREAM_UP_Q80_COMPAT_TENSOR");
+        return !target || !target[0] || strcmp(target, name) == 0;
+    }
+
     const char * prompt_matmul_roles = getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH_ROLES");
     const bool prompt_matmul_role_allowed =
         !prompt_matmul_roles || !prompt_matmul_roles[0] ||
         strcmp(prompt_matmul_roles, "all") == 0 ||
         (is_up && strstr(prompt_matmul_roles, "up")) ||
         (is_gate && strstr(prompt_matmul_roles, "gate"));
+    const char * prompt_matmul_env = getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH");
     const bool prompt_matmul_id =
         (is_up || is_gate) &&
         prompt_matmul_role_allowed &&
-        getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH") != NULL &&
-        getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH")[0] != '0';
+        prompt_matmul_env != NULL &&
+        prompt_matmul_env[0] != '0';
 
     if (!is_down && !prompt_matmul_id) {
         return false;
@@ -407,6 +460,85 @@ struct ggml_kimi_cpu_moe_fallback_profile_state {
 };
 
 static struct ggml_kimi_cpu_moe_fallback_profile_state ggml_kimi_cpu_moe_fallback_profile;
+
+#define GGML_MOE_FALLBACK_REASON_PROFILE_MAX 32768
+#define GGML_MOE_FALLBACK_REASON_LEN 64
+
+struct ggml_moe_fallback_reason_profile_entry {
+    char tensor[GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN];
+    char role[16];
+    char phase[8];
+    char batch_reason[GGML_MOE_FALLBACK_REASON_LEN];
+    char single_reason[GGML_MOE_FALLBACK_REASON_LEN];
+    char final_reason[GGML_MOE_FALLBACK_REASON_LEN];
+    int expert_idx;
+    int src0_type;
+    size_t expert_bytes;
+    uint64_t rows;
+    uint64_t calls;
+    uint64_t fallback_us;
+    uint64_t batch_attempts;
+    uint64_t batch_accepts;
+    uint64_t single_attempts;
+    uint64_t single_accepts;
+};
+
+struct ggml_moe_fallback_reason_profile_state {
+    bool initialized;
+    bool registered;
+    bool enabled;
+    const char * out;
+    struct ggml_moe_fallback_reason_profile_entry entries[GGML_MOE_FALLBACK_REASON_PROFILE_MAX];
+    int n_entries;
+    uint64_t dropped;
+};
+
+static struct ggml_moe_fallback_reason_profile_state ggml_moe_fallback_reason_profile;
+
+#define GGML_MOE_FALLBACK_SOURCE_PROBE_MAX 32768
+#define GGML_MOE_FALLBACK_SOURCE_PROBE_NAME_LEN 96
+#define GGML_MOE_FALLBACK_SOURCE_PROBE_BUFT_LEN 64
+
+struct ggml_moe_fallback_source_probe_entry {
+    char tensor[GGML_MOE_FALLBACK_SOURCE_PROBE_NAME_LEN];
+    char role[16];
+    char phase[8];
+    char batch_reason[GGML_MOE_FALLBACK_REASON_LEN];
+    char single_reason[GGML_MOE_FALLBACK_REASON_LEN];
+    char final_reason[GGML_MOE_FALLBACK_REASON_LEN];
+    char src0_buft[GGML_MOE_FALLBACK_SOURCE_PROBE_BUFT_LEN];
+    char src1_buft[GGML_MOE_FALLBACK_SOURCE_PROBE_BUFT_LEN];
+    char ids_buft[GGML_MOE_FALLBACK_SOURCE_PROBE_BUFT_LEN];
+    char dst_buft[GGML_MOE_FALLBACK_SOURCE_PROBE_BUFT_LEN];
+    int expert_idx;
+    int src0_type;
+    int src1_type;
+    int ids_type;
+    int dst_type;
+    int64_t src0_ne[4];
+    int64_t src1_ne[4];
+    int64_t ids_ne[4];
+    int64_t dst_ne[4];
+    size_t src0_nbytes;
+    size_t src1_nbytes;
+    size_t ids_nbytes;
+    size_t dst_nbytes;
+    uint64_t rows;
+    uint64_t calls;
+    uint64_t fallback_us;
+};
+
+struct ggml_moe_fallback_source_probe_state {
+    bool initialized;
+    bool registered;
+    bool enabled;
+    const char * out;
+    struct ggml_moe_fallback_source_probe_entry entries[GGML_MOE_FALLBACK_SOURCE_PROBE_MAX];
+    int n_entries;
+    uint64_t dropped;
+};
+
+static struct ggml_moe_fallback_source_probe_state ggml_moe_fallback_source_probe;
 
 struct ggml_kimi_cpu_fallback_pack_mmap_state {
     bool initialized;
@@ -800,6 +932,392 @@ static bool ggml_kimi_cpu_moe_fallback_profile_enabled(void) {
     }
 
     return ggml_kimi_cpu_moe_fallback_profile.enabled;
+}
+
+static const char * ggml_kimi_cpu_moe_eligibility_reason_name(enum ggml_kimi_cpu_moe_eligibility_reason reason) {
+    switch (reason) {
+        case GGML_KIMI_CPU_MOE_ELIGIBLE: return "eligible";
+        case GGML_KIMI_CPU_MOE_INELIG_ENV: return "batch_env_missing";
+        case GGML_KIMI_CPU_MOE_INELIG_BATCH_FN: return "batch_fn_missing";
+        case GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FN: return "available_fn_missing";
+        case GGML_KIMI_CPU_MOE_INELIG_AVAILABLE_FALSE: return "stream_available_false";
+        case GGML_KIMI_CPU_MOE_INELIG_UNSUPPORTED: return "batch_unsupported";
+        case GGML_KIMI_CPU_MOE_INELIG_SRC1_TYPE: return "src1_not_f32";
+        case GGML_KIMI_CPU_MOE_INELIG_NE13: return "ne13_not1";
+        case GGML_KIMI_CPU_MOE_INELIG_DST_TYPE: return "dst_not_f32";
+        default: return "unknown";
+    }
+}
+
+static bool ggml_moe_name_filter_matches_any(const char * filter, const char * name) {
+    if (!filter || !filter[0] || !name) {
+        return false;
+    }
+
+    const char * p = filter;
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == ',' || *p == ':') {
+            ++p;
+        }
+        const char * start = p;
+        while (*p && *p != ',' && *p != ':') {
+            ++p;
+        }
+        const char * end = p;
+        while (end > start && (end[-1] == ' ' || end[-1] == '\t')) {
+            --end;
+        }
+        const size_t len = (size_t) (end - start);
+        if (len > 0) {
+            for (const char * hit = name; *hit; ++hit) {
+                if (strncmp(hit, start, len) == 0) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+static bool ggml_moe_stream_one_name_filter_would_allow(const char * name) {
+    const char * filter = getenv("GGML_MOE_STREAM_ONE_NAME_FILTER");
+    if (!filter || !filter[0]) {
+        return true;
+    }
+    return ggml_moe_name_filter_matches_any(filter, name);
+}
+
+static bool ggml_moe_stream_one_gpu_only_filter_matches(const char * name) {
+    return ggml_moe_name_filter_matches_any(getenv("GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER"), name);
+}
+
+static void ggml_moe_fallback_reason_profile_report(void) {
+    if (!ggml_moe_fallback_reason_profile.enabled ||
+            !ggml_moe_fallback_reason_profile.out ||
+            !ggml_moe_fallback_reason_profile.out[0]) {
+        return;
+    }
+
+    FILE * f = fopen(ggml_moe_fallback_reason_profile.out, "w");
+    if (!f) {
+        fprintf(stderr,
+                "[moe_fallback_reason_profile] open failed: %s\n",
+                ggml_moe_fallback_reason_profile.out);
+        return;
+    }
+
+    fprintf(f, "rank,role,tensor,phase,expert_idx,src0_type,expert_bytes,rows,calls,fallback_us,batch_reason,single_reason,final_reason,batch_attempts,batch_accepts,single_attempts,single_accepts\n");
+    for (int i = 0; i < ggml_moe_fallback_reason_profile.n_entries; ++i) {
+        const struct ggml_moe_fallback_reason_profile_entry * e =
+            &ggml_moe_fallback_reason_profile.entries[i];
+        fprintf(f,
+                "%d,%s,%s,%s,%d,%d,%zu,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%s,%s,%s,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n",
+                i + 1,
+                e->role,
+                e->tensor,
+                e->phase,
+                e->expert_idx,
+                e->src0_type,
+                e->expert_bytes,
+                e->rows,
+                e->calls,
+                e->fallback_us,
+                e->batch_reason,
+                e->single_reason,
+                e->final_reason,
+                e->batch_attempts,
+                e->batch_accepts,
+                e->single_attempts,
+                e->single_accepts);
+    }
+    fclose(f);
+
+    fprintf(stderr,
+            "[moe_fallback_reason_profile] written: %s entries=%d dropped=%" PRIu64 "\n",
+            ggml_moe_fallback_reason_profile.out,
+            ggml_moe_fallback_reason_profile.n_entries,
+            ggml_moe_fallback_reason_profile.dropped);
+}
+
+static bool ggml_moe_fallback_reason_profile_enabled(void) {
+    if (!ggml_moe_fallback_reason_profile.initialized) {
+        ggml_moe_fallback_reason_profile.initialized = true;
+        ggml_moe_fallback_reason_profile.out = getenv("GGML_MOE_FALLBACK_REASON_PROFILE_OUT");
+        ggml_moe_fallback_reason_profile.enabled =
+            ggml_moe_fallback_reason_profile.out &&
+            ggml_moe_fallback_reason_profile.out[0];
+        if (ggml_moe_fallback_reason_profile.enabled &&
+                !ggml_moe_fallback_reason_profile.registered) {
+            ggml_moe_fallback_reason_profile.registered = true;
+            atexit(ggml_moe_fallback_reason_profile_report);
+        }
+    }
+
+    return ggml_moe_fallback_reason_profile.enabled;
+}
+
+static void ggml_moe_fallback_reason_profile_record(
+        const char * role,
+        const char * tensor,
+        int src0_type,
+        bool prompt_phase,
+        int expert_idx,
+        int64_t rows,
+        size_t expert_bytes,
+        uint64_t fallback_us,
+        const char * batch_reason,
+        const char * single_reason,
+        const char * final_reason,
+        bool batch_attempted,
+        bool batch_accepted,
+        bool single_attempted,
+        bool single_accepted) {
+    if (!ggml_moe_fallback_reason_profile_enabled() || rows <= 0) {
+        return;
+    }
+
+    const char * safe_role = role ? role : "unknown";
+    const char * safe_tensor = tensor ? tensor : "<unnamed>";
+    const char * safe_phase = prompt_phase ? "prompt" : "decode";
+    const char * safe_batch_reason = batch_reason ? batch_reason : "unknown";
+    const char * safe_single_reason = single_reason ? single_reason : "unknown";
+    const char * safe_final_reason = final_reason ? final_reason : "unknown";
+    int idx = -1;
+
+    for (int i = 0; i < ggml_moe_fallback_reason_profile.n_entries; ++i) {
+        struct ggml_moe_fallback_reason_profile_entry * e =
+            &ggml_moe_fallback_reason_profile.entries[i];
+        if (e->expert_idx == expert_idx &&
+                e->src0_type == src0_type &&
+                e->expert_bytes == expert_bytes &&
+                strcmp(e->role, safe_role) == 0 &&
+                strcmp(e->phase, safe_phase) == 0 &&
+                strncmp(e->tensor, safe_tensor, GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN) == 0 &&
+                strncmp(e->batch_reason, safe_batch_reason, GGML_MOE_FALLBACK_REASON_LEN) == 0 &&
+                strncmp(e->single_reason, safe_single_reason, GGML_MOE_FALLBACK_REASON_LEN) == 0 &&
+                strncmp(e->final_reason, safe_final_reason, GGML_MOE_FALLBACK_REASON_LEN) == 0) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx < 0) {
+        if (ggml_moe_fallback_reason_profile.n_entries >= GGML_MOE_FALLBACK_REASON_PROFILE_MAX) {
+            ggml_moe_fallback_reason_profile.dropped++;
+            return;
+        }
+        idx = ggml_moe_fallback_reason_profile.n_entries++;
+        struct ggml_moe_fallback_reason_profile_entry * e =
+            &ggml_moe_fallback_reason_profile.entries[idx];
+        snprintf(e->tensor, GGML_KIMI_CPU_MOE_NAME_PROFILE_LEN, "%s", safe_tensor);
+        snprintf(e->role, sizeof(e->role), "%s", safe_role);
+        snprintf(e->phase, sizeof(e->phase), "%s", safe_phase);
+        snprintf(e->batch_reason, GGML_MOE_FALLBACK_REASON_LEN, "%s", safe_batch_reason);
+        snprintf(e->single_reason, GGML_MOE_FALLBACK_REASON_LEN, "%s", safe_single_reason);
+        snprintf(e->final_reason, GGML_MOE_FALLBACK_REASON_LEN, "%s", safe_final_reason);
+        e->expert_idx = expert_idx;
+        e->src0_type = src0_type;
+        e->expert_bytes = expert_bytes;
+    }
+
+    struct ggml_moe_fallback_reason_profile_entry * e =
+        &ggml_moe_fallback_reason_profile.entries[idx];
+    e->rows += (uint64_t) rows;
+    e->calls++;
+    e->fallback_us += fallback_us;
+    if (batch_attempted) {
+        e->batch_attempts++;
+    }
+    if (batch_accepted) {
+        e->batch_accepts++;
+    }
+    if (single_attempted) {
+        e->single_attempts++;
+    }
+    if (single_accepted) {
+        e->single_accepts++;
+    }
+}
+
+static void ggml_moe_fallback_source_probe_report(void);
+
+static const char * ggml_moe_fallback_source_probe_buft_name(const struct ggml_tensor * tensor) {
+    if (tensor == NULL || tensor->buffer == NULL) {
+        return "none";
+    }
+    const char * name = ggml_backend_buffer_name(tensor->buffer);
+    return name ? name : "unknown";
+}
+
+static void ggml_moe_fallback_source_probe_copy_ne(int64_t dst_ne[4], const struct ggml_tensor * tensor) {
+    for (int i = 0; i < 4; ++i) {
+        dst_ne[i] = tensor ? tensor->ne[i] : -1;
+    }
+}
+
+static bool ggml_moe_fallback_source_probe_enabled(void) {
+    if (!ggml_moe_fallback_source_probe.initialized) {
+        ggml_moe_fallback_source_probe.initialized = true;
+        ggml_moe_fallback_source_probe.out = getenv("GGML_MOE_FALLBACK_SOURCE_PROBE_OUT");
+        ggml_moe_fallback_source_probe.enabled =
+            ggml_moe_fallback_source_probe.out &&
+            ggml_moe_fallback_source_probe.out[0] &&
+            ggml_moe_fallback_source_probe.out[0] != '0';
+        if (ggml_moe_fallback_source_probe.enabled && !ggml_moe_fallback_source_probe.registered) {
+            ggml_moe_fallback_source_probe.registered = true;
+            atexit(ggml_moe_fallback_source_probe_report);
+        }
+    }
+    return ggml_moe_fallback_source_probe.enabled;
+}
+
+static void ggml_moe_fallback_source_probe_report(void) {
+    if (!ggml_moe_fallback_source_probe.enabled ||
+            !ggml_moe_fallback_source_probe.out ||
+            !ggml_moe_fallback_source_probe.out[0]) {
+        return;
+    }
+
+    FILE * f = fopen(ggml_moe_fallback_source_probe.out, "w");
+    if (!f) {
+        fprintf(stderr, "[moe_fallback_source_probe] open failed: %s\n", ggml_moe_fallback_source_probe.out);
+        return;
+    }
+
+    fprintf(f,
+            "rank,role,tensor,phase,expert_idx,rows,calls,fallback_us,batch_reason,single_reason,final_reason,"
+            "src0_buft,src1_buft,ids_buft,dst_buft,src0_type,src1_type,ids_type,dst_type,"
+            "src0_nbytes,src1_nbytes,ids_nbytes,dst_nbytes,"
+            "src0_ne0,src0_ne1,src0_ne2,src0_ne3,src1_ne0,src1_ne1,src1_ne2,src1_ne3,"
+            "ids_ne0,ids_ne1,ids_ne2,ids_ne3,dst_ne0,dst_ne1,dst_ne2,dst_ne3\n");
+    for (int i = 0; i < ggml_moe_fallback_source_probe.n_entries; ++i) {
+        const struct ggml_moe_fallback_source_probe_entry * e = &ggml_moe_fallback_source_probe.entries[i];
+        fprintf(f,
+                "%d,%s,%s,%s,%d,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%s,%s,%s,"
+                "%s,%s,%s,%s,%d,%d,%d,%d,%zu,%zu,%zu,%zu,"
+                "%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ","
+                "%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "\n",
+                i + 1,
+                e->role,
+                e->tensor,
+                e->phase,
+                e->expert_idx,
+                e->rows,
+                e->calls,
+                e->fallback_us,
+                e->batch_reason,
+                e->single_reason,
+                e->final_reason,
+                e->src0_buft,
+                e->src1_buft,
+                e->ids_buft,
+                e->dst_buft,
+                e->src0_type,
+                e->src1_type,
+                e->ids_type,
+                e->dst_type,
+                e->src0_nbytes,
+                e->src1_nbytes,
+                e->ids_nbytes,
+                e->dst_nbytes,
+                e->src0_ne[0], e->src0_ne[1], e->src0_ne[2], e->src0_ne[3],
+                e->src1_ne[0], e->src1_ne[1], e->src1_ne[2], e->src1_ne[3],
+                e->ids_ne[0], e->ids_ne[1], e->ids_ne[2], e->ids_ne[3],
+                e->dst_ne[0], e->dst_ne[1], e->dst_ne[2], e->dst_ne[3]);
+    }
+    fclose(f);
+
+    fprintf(stderr,
+            "[moe_fallback_source_probe] written: %s entries=%d dropped=%" PRIu64 "\n",
+            ggml_moe_fallback_source_probe.out,
+            ggml_moe_fallback_source_probe.n_entries,
+            ggml_moe_fallback_source_probe.dropped);
+}
+
+static void ggml_moe_fallback_source_probe_record(
+        const char * role,
+        const char * tensor_name,
+        bool prompt_phase,
+        int expert_idx,
+        int64_t rows,
+        uint64_t fallback_us,
+        const char * batch_reason,
+        const char * single_reason,
+        const char * final_reason,
+        const struct ggml_tensor * src0,
+        const struct ggml_tensor * src1,
+        const struct ggml_tensor * ids,
+        const struct ggml_tensor * dst) {
+    if (!ggml_moe_fallback_source_probe_enabled() || rows <= 0) {
+        return;
+    }
+
+    const char * safe_role = role ? role : "unknown";
+    const char * safe_tensor = tensor_name ? tensor_name : "<unnamed>";
+    const char * safe_phase = prompt_phase ? "prompt" : "decode";
+    const char * safe_batch_reason = batch_reason ? batch_reason : "unknown";
+    const char * safe_single_reason = single_reason ? single_reason : "unknown";
+    const char * safe_final_reason = final_reason ? final_reason : "unknown";
+    const char * src0_buft = ggml_moe_fallback_source_probe_buft_name(src0);
+    const char * src1_buft = ggml_moe_fallback_source_probe_buft_name(src1);
+    const char * ids_buft = ggml_moe_fallback_source_probe_buft_name(ids);
+    const char * dst_buft = ggml_moe_fallback_source_probe_buft_name(dst);
+    int idx = -1;
+
+    for (int i = 0; i < ggml_moe_fallback_source_probe.n_entries; ++i) {
+        struct ggml_moe_fallback_source_probe_entry * e = &ggml_moe_fallback_source_probe.entries[i];
+        if (e->expert_idx == expert_idx &&
+                strcmp(e->role, safe_role) == 0 &&
+                strcmp(e->phase, safe_phase) == 0 &&
+                strncmp(e->tensor, safe_tensor, GGML_MOE_FALLBACK_SOURCE_PROBE_NAME_LEN) == 0 &&
+                strncmp(e->batch_reason, safe_batch_reason, GGML_MOE_FALLBACK_REASON_LEN) == 0 &&
+                strncmp(e->single_reason, safe_single_reason, GGML_MOE_FALLBACK_REASON_LEN) == 0 &&
+                strncmp(e->final_reason, safe_final_reason, GGML_MOE_FALLBACK_REASON_LEN) == 0 &&
+                strncmp(e->src0_buft, src0_buft, GGML_MOE_FALLBACK_SOURCE_PROBE_BUFT_LEN) == 0 &&
+                strncmp(e->src1_buft, src1_buft, GGML_MOE_FALLBACK_SOURCE_PROBE_BUFT_LEN) == 0 &&
+                strncmp(e->ids_buft, ids_buft, GGML_MOE_FALLBACK_SOURCE_PROBE_BUFT_LEN) == 0 &&
+                strncmp(e->dst_buft, dst_buft, GGML_MOE_FALLBACK_SOURCE_PROBE_BUFT_LEN) == 0) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx < 0) {
+        if (ggml_moe_fallback_source_probe.n_entries >= GGML_MOE_FALLBACK_SOURCE_PROBE_MAX) {
+            ggml_moe_fallback_source_probe.dropped++;
+            return;
+        }
+        idx = ggml_moe_fallback_source_probe.n_entries++;
+        struct ggml_moe_fallback_source_probe_entry * e = &ggml_moe_fallback_source_probe.entries[idx];
+        snprintf(e->tensor, sizeof(e->tensor), "%s", safe_tensor);
+        snprintf(e->role, sizeof(e->role), "%s", safe_role);
+        snprintf(e->phase, sizeof(e->phase), "%s", safe_phase);
+        snprintf(e->batch_reason, sizeof(e->batch_reason), "%s", safe_batch_reason);
+        snprintf(e->single_reason, sizeof(e->single_reason), "%s", safe_single_reason);
+        snprintf(e->final_reason, sizeof(e->final_reason), "%s", safe_final_reason);
+        snprintf(e->src0_buft, sizeof(e->src0_buft), "%s", src0_buft);
+        snprintf(e->src1_buft, sizeof(e->src1_buft), "%s", src1_buft);
+        snprintf(e->ids_buft, sizeof(e->ids_buft), "%s", ids_buft);
+        snprintf(e->dst_buft, sizeof(e->dst_buft), "%s", dst_buft);
+        e->expert_idx = expert_idx;
+        e->src0_type = src0 ? (int) src0->type : -1;
+        e->src1_type = src1 ? (int) src1->type : -1;
+        e->ids_type = ids ? (int) ids->type : -1;
+        e->dst_type = dst ? (int) dst->type : -1;
+        e->src0_nbytes = src0 ? ggml_nbytes(src0) : 0;
+        e->src1_nbytes = src1 ? ggml_nbytes(src1) : 0;
+        e->ids_nbytes = ids ? ggml_nbytes(ids) : 0;
+        e->dst_nbytes = dst ? ggml_nbytes(dst) : 0;
+        ggml_moe_fallback_source_probe_copy_ne(e->src0_ne, src0);
+        ggml_moe_fallback_source_probe_copy_ne(e->src1_ne, src1);
+        ggml_moe_fallback_source_probe_copy_ne(e->ids_ne, ids);
+        ggml_moe_fallback_source_probe_copy_ne(e->dst_ne, dst);
+    }
+
+    struct ggml_moe_fallback_source_probe_entry * e = &ggml_moe_fallback_source_probe.entries[idx];
+    e->rows += (uint64_t) rows;
+    e->calls++;
+    e->fallback_us += fallback_us;
 }
 
 static void ggml_kimi_cpu_moe_fallback_profile_record(
@@ -1240,6 +1758,471 @@ static const char * ggml_moe_tensor_role(const char * name) {
     return "other";
 }
 
+static bool ggml_ds4_grouped_retained_route_profile_enabled(void) {
+    static int initialized = 0;
+    static bool enabled = false;
+    if (!initialized) {
+        const char * env = getenv("GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT");
+        enabled = env && env[0] && env[0] != '0';
+        initialized = 1;
+    }
+    return enabled;
+}
+
+static const char * ggml_ds4_grouped_retained_route_profile_out(void) {
+    const char * env = getenv("GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT");
+    return env && env[0] && env[0] != '0' ? env : NULL;
+}
+
+static const char * ggml_ds4_grouped_retained_route_detail_out(void) {
+    const char * env = getenv("GGML_DS4_GROUPED_RETAINED_ROUTE_DETAIL_OUT");
+    return env && env[0] && env[0] != '0' ? env : NULL;
+}
+
+static bool ggml_ds4_grouped_retained_handoff_profile_enabled(void) {
+    static int initialized = 0;
+    static bool enabled = false;
+    if (!initialized) {
+        const char * env = getenv("GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT");
+        enabled = env && env[0] && env[0] != '0';
+        initialized = 1;
+    }
+    return enabled;
+}
+
+static const char * ggml_ds4_grouped_retained_handoff_profile_out(void) {
+    const char * env = getenv("GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT");
+    return env && env[0] && env[0] != '0' ? env : NULL;
+}
+
+static int ggml_ds4_grouped_retained_parse_layer(const char * name) {
+    if (!name) {
+        return -1;
+    }
+    const char * p = strstr(name, "blk.");
+    if (p) {
+        return atoi(p + 4);
+    }
+    const char * dash = strrchr(name, 45);
+    if (dash && dash[1]) {
+        return atoi(dash + 1);
+    }
+    return -1;
+}
+
+static bool ggml_ds4_grouped_retained_role_supported(const char * role) {
+    return role &&
+        (strcmp(role, "gate") == 0 ||
+         strcmp(role, "up") == 0 ||
+         strcmp(role, "down") == 0 ||
+         strcmp(role, "up_gate") == 0);
+}
+
+static void ggml_ds4_grouped_retained_route_profile_write(
+        const char * role,
+        const char * tensor_name,
+        int src0_type,
+        const void * src0_data,
+        size_t expert_stride,
+        bool prompt_phase,
+        const int64_t * matrix_row_counts,
+        int64_t n_as,
+        size_t expert_bytes,
+        size_t logical_bytes_per_expert,
+        bool eligible,
+        const char * reason) {
+    if (!ggml_ds4_grouped_retained_route_profile_enabled() ||
+            !matrix_row_counts || n_as <= 0 || !tensor_name || !tensor_name[0]) {
+        return;
+    }
+
+    int64_t unique_experts = 0;
+    int64_t rows = 0;
+    int64_t cache_contains = 0;
+    int64_t cache_missing = 0;
+    const bool can_query_cache =
+        expert_bytes > 0 &&
+        ((ggml_cuda_moe_stream_one_cache_contains && src0_data && expert_stride > 0) ||
+         ggml_cuda_moe_stream_cache_contains);
+
+    for (int64_t i = 0; i < n_as; ++i) {
+        const int64_t c = matrix_row_counts[i];
+        if (c <= 0) {
+            continue;
+        }
+        ++unique_experts;
+        rows += c;
+        if (can_query_cache) {
+            bool contains = false;
+            if (ggml_cuda_moe_stream_one_cache_contains && src0_data && expert_stride > 0) {
+                const char * expert_data = (const char *) src0_data + (size_t)i * expert_stride;
+                contains = ggml_cuda_moe_stream_one_cache_contains(tensor_name, expert_data, expert_bytes, i);
+            }
+            if (!contains && ggml_cuda_moe_stream_cache_contains) {
+                contains = ggml_cuda_moe_stream_cache_contains(tensor_name, expert_bytes, (int)i);
+            }
+            if (contains) {
+                ++cache_contains;
+            } else {
+                ++cache_missing;
+            }
+        }
+    }
+
+    if (unique_experts == 0) {
+        return;
+    }
+    if (!can_query_cache) {
+        cache_contains = -1;
+        cache_missing = -1;
+    }
+
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+    static uint64_t seq = 0;
+    static bool header_written = false;
+
+    const char * path = ggml_ds4_grouped_retained_route_profile_out();
+    if (!path) {
+        return;
+    }
+
+    pthread_mutex_lock(&mu);
+    FILE * f = fopen(path, "a");
+    if (!f) {
+        pthread_mutex_unlock(&mu);
+        return;
+    }
+    if (!header_written) {
+        fprintf(f,
+                "seq,role,layer,phase,tensor_name,src0_type,active_experts,unique_experts,rows,"
+                "expert_bytes,logical_source_bytes,cache_contains_count,cache_missing_count,"
+                "eligible_grouped_retained,reason_if_ineligible\n");
+        header_written = true;
+    }
+
+    const uint64_t cur_seq = ++seq;
+    const size_t logical_source_bytes = (size_t)unique_experts * logical_bytes_per_expert;
+    fprintf(f,
+            "%" PRIu64 ",%s,%d,%s,%s,%d,%" PRId64 ",%" PRId64 ",%" PRId64
+            ",%zu,%zu,%" PRId64 ",%" PRId64 ",%d,%s\n",
+            cur_seq,
+            role ? role : "other",
+            ggml_ds4_grouped_retained_parse_layer(tensor_name),
+            prompt_phase ? "prompt" : "decode",
+            tensor_name,
+            src0_type,
+            unique_experts,
+            unique_experts,
+            rows,
+            expert_bytes,
+            logical_source_bytes,
+            cache_contains,
+            cache_missing,
+            eligible ? 1 : 0,
+            reason ? reason : "ok");
+    fclose(f);
+
+    const char * detail_path = ggml_ds4_grouped_retained_route_detail_out();
+    if (detail_path && role && strcmp(role, "up_gate") != 0) {
+        static bool detail_header_written = false;
+        FILE * df = fopen(detail_path, "a");
+        if (df) {
+            if (!detail_header_written) {
+                fprintf(df,
+                        "seq,role,layer,phase,tensor_name,src0_type,expert_id,rows,"
+                        "expert_bytes,logical_source_bytes,cache_contains,"
+                        "eligible_grouped_retained,reason_if_ineligible\n");
+                detail_header_written = true;
+            }
+            for (int64_t i = 0; i < n_as; ++i) {
+                const int64_t c = matrix_row_counts[i];
+                if (c <= 0) {
+                    continue;
+                }
+                int cache_state = -1;
+                if (can_query_cache) {
+                    bool contains = false;
+                    if (ggml_cuda_moe_stream_one_cache_contains && src0_data && expert_stride > 0) {
+                        const char * expert_data = (const char *) src0_data + (size_t)i * expert_stride;
+                        contains = ggml_cuda_moe_stream_one_cache_contains(tensor_name, expert_data, expert_bytes, i);
+                    }
+                    if (!contains && ggml_cuda_moe_stream_cache_contains) {
+                        contains = ggml_cuda_moe_stream_cache_contains(tensor_name, expert_bytes, (int)i);
+                    }
+                    cache_state = contains ? 1 : 0;
+                }
+                fprintf(df,
+                        "%" PRIu64 ",%s,%d,%s,%s,%d,%" PRId64 ",%" PRId64
+                        ",%zu,%zu,%d,%d,%s\n",
+                        cur_seq,
+                        role,
+                        ggml_ds4_grouped_retained_parse_layer(tensor_name),
+                        prompt_phase ? "prompt" : "decode",
+                        tensor_name,
+                        src0_type,
+                        i,
+                        c,
+                        expert_bytes,
+                        expert_bytes,
+                        cache_state,
+                        eligible ? 1 : 0,
+                        reason ? reason : "ok");
+            }
+            fclose(df);
+        }
+    }
+    pthread_mutex_unlock(&mu);
+}
+
+static void ggml_ds4_grouped_retained_route_profile_record(
+        const char * tensor_name,
+        int src0_type,
+        const void * src0_data,
+        size_t expert_stride,
+        bool prompt_phase,
+        const int64_t * matrix_row_counts,
+        int64_t n_as,
+        size_t expert_bytes) {
+    if (!ggml_ds4_grouped_retained_route_profile_enabled()) {
+        return;
+    }
+    const char * role = ggml_moe_tensor_role(tensor_name);
+    const bool supported_role = ggml_ds4_grouped_retained_role_supported(role);
+    const bool supported_type = ggml_cuda_moe_stream_supports_type((enum ggml_type)src0_type);
+    const bool eligible = supported_role && supported_type && expert_bytes > 0;
+    const char * reason = "ok";
+    if (!supported_role) {
+        reason = "unsupported_role";
+    } else if (!supported_type) {
+        reason = "unsupported_type";
+    } else if (expert_bytes == 0) {
+        reason = "bad_expert_bytes";
+    }
+    ggml_ds4_grouped_retained_route_profile_write(
+            role, tensor_name, src0_type, src0_data, expert_stride, prompt_phase,
+            matrix_row_counts, n_as, expert_bytes, expert_bytes,
+            eligible, reason);
+}
+
+static void ggml_ds4_grouped_retained_route_profile_record_up_gate(
+        const char * up_tensor_name,
+        const char * gate_tensor_name,
+        int up_type,
+        int gate_type,
+        const void * up_data,
+        size_t up_expert_stride,
+        const void * gate_data,
+        size_t gate_expert_stride,
+        bool prompt_phase,
+        const int64_t * matrix_row_counts,
+        int64_t n_as,
+        size_t up_expert_bytes,
+        size_t gate_expert_bytes) {
+    if (!ggml_ds4_grouped_retained_route_profile_enabled()) {
+        return;
+    }
+    char combined_name[192];
+    snprintf(combined_name, sizeof(combined_name), "%s+%s",
+            up_tensor_name ? up_tensor_name : "up",
+            gate_tensor_name ? gate_tensor_name : "gate");
+
+    const bool supported_type =
+        ggml_cuda_moe_stream_supports_type((enum ggml_type)up_type) &&
+        ggml_cuda_moe_stream_supports_type((enum ggml_type)gate_type);
+    const bool eligible = supported_type && up_expert_bytes > 0 && gate_expert_bytes > 0;
+    const char * reason = "ok";
+    if (!supported_type) {
+        reason = "unsupported_type";
+    } else if (up_expert_bytes == 0 || gate_expert_bytes == 0) {
+        reason = "bad_expert_bytes";
+    }
+    (void) up_data;
+    (void) up_expert_stride;
+    (void) gate_data;
+    (void) gate_expert_stride;
+    ggml_ds4_grouped_retained_route_profile_write(
+            "up_gate", combined_name, up_type, NULL, 0, prompt_phase,
+            matrix_row_counts, n_as,
+            up_expert_bytes > gate_expert_bytes ? up_expert_bytes : gate_expert_bytes,
+            up_expert_bytes + gate_expert_bytes,
+            eligible, reason);
+}
+
+struct ggml_ds4_grouped_retained_last_up_gate {
+    const void * dst_data;
+    int layer;
+    int64_t ne01;
+    int64_t dst_rows;
+    int64_t active_experts;
+    int64_t rows;
+    char up_name[128];
+    char gate_name[128];
+    uint64_t serial;
+};
+
+static pthread_mutex_t ggml_ds4_grouped_retained_handoff_mu = PTHREAD_MUTEX_INITIALIZER;
+static struct ggml_ds4_grouped_retained_last_up_gate ggml_ds4_grouped_retained_last_up_gate = {0};
+
+static void ggml_ds4_grouped_retained_handoff_mark_up_gate(
+        const char * up_name,
+        const char * gate_name,
+        const void * dst_data,
+        int64_t ne01,
+        const int64_t * matrix_row_counts,
+        int64_t n_as,
+        int64_t rows_stride) {
+    if (!ggml_ds4_grouped_retained_handoff_profile_enabled() || !dst_data || !matrix_row_counts) {
+        return;
+    }
+
+    int64_t active_experts = 0;
+    int64_t rows = 0;
+    for (int64_t e = 0; e < n_as; ++e) {
+        const int64_t c = matrix_row_counts[e];
+        if (c <= 0) {
+            continue;
+        }
+        ++active_experts;
+        rows += c;
+    }
+
+    pthread_mutex_lock(&ggml_ds4_grouped_retained_handoff_mu);
+    ggml_ds4_grouped_retained_last_up_gate.dst_data = dst_data;
+    ggml_ds4_grouped_retained_last_up_gate.layer = ggml_ds4_grouped_retained_parse_layer(up_name);
+    ggml_ds4_grouped_retained_last_up_gate.ne01 = ne01;
+    ggml_ds4_grouped_retained_last_up_gate.dst_rows = rows_stride;
+    ggml_ds4_grouped_retained_last_up_gate.active_experts = active_experts;
+    ggml_ds4_grouped_retained_last_up_gate.rows = rows;
+    snprintf(ggml_ds4_grouped_retained_last_up_gate.up_name,
+            sizeof(ggml_ds4_grouped_retained_last_up_gate.up_name), "%s", up_name ? up_name : "");
+    snprintf(ggml_ds4_grouped_retained_last_up_gate.gate_name,
+            sizeof(ggml_ds4_grouped_retained_last_up_gate.gate_name), "%s", gate_name ? gate_name : "");
+    ++ggml_ds4_grouped_retained_last_up_gate.serial;
+    pthread_mutex_unlock(&ggml_ds4_grouped_retained_handoff_mu);
+}
+
+static void ggml_ds4_grouped_retained_handoff_mark_glu_act(const struct ggml_tensor * dst) {
+    if (!dst || !dst->data || !dst->name[0]) {
+        return;
+    }
+    if (!strstr(dst->name, "ffn_moe_swiglu")) {
+        return;
+    }
+    const enum ggml_glu_op op = ggml_get_glu_op(dst);
+    if (op != GGML_GLU_OP_SWIGLU && op != GGML_GLU_OP_SWIGLU_OAI) {
+        return;
+    }
+    const char * upload_env = getenv("GGML_MOE_GPU_HANDOFF_UPLOAD_GLU");
+    const bool upload_enabled = upload_env && upload_env[0] && upload_env[0] != 0x30;
+    if (!ggml_ds4_grouped_retained_handoff_profile_enabled() && !upload_enabled) {
+        return;
+    }
+
+    const struct ggml_tensor * gate = dst->src[0];
+    const struct ggml_tensor * up = dst->src[1];
+    pthread_mutex_lock(&ggml_ds4_grouped_retained_handoff_mu);
+    ggml_ds4_grouped_retained_last_up_gate.dst_data = dst->data;
+    ggml_ds4_grouped_retained_last_up_gate.layer = ggml_ds4_grouped_retained_parse_layer(dst->name);
+    ggml_ds4_grouped_retained_last_up_gate.ne01 = dst->ne[0];
+    ggml_ds4_grouped_retained_last_up_gate.dst_rows = dst->ne[1] * dst->ne[2];
+    ggml_ds4_grouped_retained_last_up_gate.active_experts = dst->ne[1];
+    ggml_ds4_grouped_retained_last_up_gate.rows = dst->ne[1] * dst->ne[2];
+    snprintf(ggml_ds4_grouped_retained_last_up_gate.up_name,
+            sizeof(ggml_ds4_grouped_retained_last_up_gate.up_name), "%s",
+            up && up->name[0] ? up->name : "");
+    snprintf(ggml_ds4_grouped_retained_last_up_gate.gate_name,
+            sizeof(ggml_ds4_grouped_retained_last_up_gate.gate_name), "%s",
+            gate && gate->name[0] ? gate->name : "");
+    ++ggml_ds4_grouped_retained_last_up_gate.serial;
+    pthread_mutex_unlock(&ggml_ds4_grouped_retained_handoff_mu);
+
+    if (upload_enabled && ggml_cuda_moe_stream_handoff_upload) {
+        const int64_t dst_cols = dst->ne[1] * dst->ne[2];
+        (void) ggml_cuda_moe_stream_handoff_upload((const float *) dst->data, dst->ne[0], dst_cols);
+    }
+}
+
+static void ggml_ds4_grouped_retained_handoff_record_down(
+        const char * down_name,
+        const void * src1_data,
+        int64_t ne00,
+        int64_t ne01,
+        const int64_t * matrix_row_counts,
+        int64_t n_as) {
+    if (!ggml_ds4_grouped_retained_handoff_profile_enabled() || !down_name || !matrix_row_counts) {
+        return;
+    }
+    if (strcmp(ggml_moe_tensor_role(down_name), "down") != 0) {
+        return;
+    }
+
+    int64_t active_experts = 0;
+    int64_t rows = 0;
+    for (int64_t e = 0; e < n_as; ++e) {
+        const int64_t c = matrix_row_counts[e];
+        if (c <= 0) {
+            continue;
+        }
+        ++active_experts;
+        rows += c;
+    }
+    if (active_experts == 0) {
+        return;
+    }
+
+    static uint64_t seq = 0;
+    static bool header_written = false;
+    const char * path = ggml_ds4_grouped_retained_handoff_profile_out();
+    if (!path) {
+        return;
+    }
+
+    pthread_mutex_lock(&ggml_ds4_grouped_retained_handoff_mu);
+    const struct ggml_ds4_grouped_retained_last_up_gate last = ggml_ds4_grouped_retained_last_up_gate;
+    const uint64_t cur_seq = ++seq;
+    const int down_layer = ggml_ds4_grouped_retained_parse_layer(down_name);
+    const bool ptr_match = src1_data && last.dst_data == src1_data;
+    const bool layer_match = last.layer == down_layer;
+    const bool width_match = last.ne01 == ne00;
+    const bool shape_ok = ptr_match && layer_match && width_match;
+
+    FILE * f = fopen(path, "a");
+    if (f) {
+        if (!header_written) {
+            fprintf(f,
+                    "seq,down_layer,down_tensor,up_gate_serial,up_layer,up_tensor,gate_tensor,"
+                    "ptr_match,layer_match,width_match,shape_ok,down_active_experts,down_rows,"
+                    "up_active_experts,up_rows,down_ne00,down_ne01,up_ne01,up_dst_rows\n");
+            header_written = true;
+        }
+        fprintf(f,
+                "%" PRIu64 ",%d,%s,%" PRIu64 ",%d,%s,%s,%d,%d,%d,%d,%" PRId64
+                ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64
+                ",%" PRId64 ",%" PRId64 "\n",
+                cur_seq,
+                down_layer,
+                down_name,
+                last.serial,
+                last.layer,
+                last.up_name,
+                last.gate_name,
+                ptr_match ? 1 : 0,
+                layer_match ? 1 : 0,
+                width_match ? 1 : 0,
+                shape_ok ? 1 : 0,
+                active_experts,
+                rows,
+                last.active_experts,
+                last.rows,
+                ne00,
+                ne01,
+                last.ne01,
+                last.dst_rows);
+        fclose(f);
+    }
+    pthread_mutex_unlock(&ggml_ds4_grouped_retained_handoff_mu);
+}
+
 static double ggml_moe_cpu_trace_now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -1391,8 +2374,39 @@ static int ggml_moe_keep_topk_updown(void) {
     return keep_topk;
 }
 
+static int ggml_moe_gpu_keep_topk_updown(void) {
+    static int keep_topk = -1;
+    if (keep_topk < 0) {
+        const char * env = getenv("GGML_MOE_GPU_KEEP_TOPK_UPDOWN");
+        keep_topk = env && env[0] ? atoi(env) : 0;
+        if (keep_topk < 0) {
+            keep_topk = 0;
+        }
+    }
+    return keep_topk;
+}
+
+static bool ggml_moe_gpu_keep_topk_applies(const char * name) {
+    if (!name) {
+        return false;
+    }
+    return strstr(name, "ffn_up_exps") || strstr(name, "ffn_down_exps");
+}
+
 static bool ggml_moe_keep_topk_applies(const char * name) {
-    return name && (strstr(name, "ffn_up_exps") || strstr(name, "ffn_down_exps"));
+    if (!name) {
+        return false;
+    }
+    if (strstr(name, "ffn_up_exps") || strstr(name, "ffn_down_exps")) {
+        return true;
+    }
+
+    static int gate_enabled = -1;
+    if (gate_enabled < 0) {
+        const char * env = getenv("GGML_MOE_KEEP_TOPK_GATE");
+        gate_enabled = env && env[0] && strcmp(env, "0") != 0 ? 1 : 0;
+    }
+    return gate_enabled && strstr(name, "ffn_gate_exps");
 }
 
 static int ggml_moe_tensor_layer(const char * name) {
@@ -1697,12 +2711,120 @@ static void ggml_ds4_sparse_fused_mmvq_membership_record(
     pthread_mutex_unlock(&ggml_ds4_sparse_fused_mmvq_membership.mutex);
 }
 
+enum { GGML_MOE_KEEP_TOPK_MAX_SCHEDULE = 16 };
+
+struct ggml_moe_keep_topk_schedule_entry {
+    int start;
+    int end;
+    int keep_topk;
+};
+
+struct ggml_moe_keep_topk_schedule_state {
+    int initialized;
+    int count;
+    struct ggml_moe_keep_topk_schedule_entry entries[GGML_MOE_KEEP_TOPK_MAX_SCHEDULE];
+};
+
+static void ggml_moe_keep_topk_schedule_init(
+        struct ggml_moe_keep_topk_schedule_state * state,
+        const char * env_name) {
+    if (state->initialized) {
+        return;
+    }
+    state->initialized = 1;
+    const char * env = getenv(env_name);
+    if (!env || !env[0]) {
+        return;
+    }
+
+    const char * p = env;
+    while (*p && state->count < GGML_MOE_KEEP_TOPK_MAX_SCHEDULE) {
+        while (*p == ' ' || *p == '\t' || *p == ',') {
+            ++p;
+        }
+        int start = -1;
+        int end = -1;
+        int keep = 0;
+        int consumed = 0;
+        if (sscanf(p, "%d-%d:%d%n", &start, &end, &keep, &consumed) == 3 ||
+            sscanf(p, "%d:%d%n", &start, &keep, &consumed) == 2) {
+            if (end < 0) {
+                end = start;
+            }
+            if (start > end) {
+                const int tmp = start;
+                start = end;
+                end = tmp;
+            }
+            if (keep < 0) {
+                keep = 0;
+            }
+            state->entries[state->count++] = (struct ggml_moe_keep_topk_schedule_entry) {
+                start,
+                end,
+                keep,
+            };
+            p += consumed;
+            while (*p && *p != ',') {
+                ++p;
+            }
+            continue;
+        }
+        break;
+    }
+}
+
+static int ggml_moe_keep_topk_schedule_lookup(
+        struct ggml_moe_keep_topk_schedule_state * state,
+        const char * env_name,
+        int layer) {
+    ggml_moe_keep_topk_schedule_init(state, env_name);
+    for (int i = 0; i < state->count; ++i) {
+        if (layer >= state->entries[i].start && layer <= state->entries[i].end) {
+            return state->entries[i].keep_topk;
+        }
+    }
+    return -1;
+}
+
 static int ggml_moe_keep_topk_for_tensor(const char * name) {
     if (!ggml_moe_keep_topk_applies(name)) {
         return 0;
     }
 
     const int fallback_keep_topk = ggml_moe_keep_topk_updown();
+    const int layer = ggml_moe_tensor_layer(name);
+
+    const char * role = ggml_moe_tensor_role(name);
+    static struct ggml_moe_keep_topk_schedule_state up_schedule;
+    static struct ggml_moe_keep_topk_schedule_state gate_schedule;
+    static struct ggml_moe_keep_topk_schedule_state down_schedule;
+    if (strcmp(role, "up") == 0) {
+        const int keep = ggml_moe_keep_topk_schedule_lookup(
+                &up_schedule, "GGML_MOE_KEEP_TOPK_UP_LAYER_SCHEDULE", layer);
+        if (keep >= 0) {
+            return keep;
+        }
+    } else if (strcmp(role, "gate") == 0) {
+        const int keep = ggml_moe_keep_topk_schedule_lookup(
+                &gate_schedule, "GGML_MOE_KEEP_TOPK_GATE_LAYER_SCHEDULE", layer);
+        if (keep >= 0) {
+            return keep;
+        }
+    } else if (strcmp(role, "down") == 0) {
+        const int keep = ggml_moe_keep_topk_schedule_lookup(
+                &down_schedule, "GGML_MOE_KEEP_TOPK_DOWN_LAYER_SCHEDULE", layer);
+        if (keep >= 0) {
+            return keep;
+        }
+    }
+
+    static struct ggml_moe_keep_topk_schedule_state schedule;
+    const int scheduled_keep = ggml_moe_keep_topk_schedule_lookup(
+            &schedule, "GGML_MOE_KEEP_TOPK_LAYER_SCHEDULE", layer);
+    if (scheduled_keep >= 0) {
+        return scheduled_keep;
+    }
 
     static int initialized = 0;
     static int layer_start = -1;
@@ -1731,7 +2853,6 @@ static int ggml_moe_keep_topk_for_tensor(const char * name) {
         }
     }
 
-    const int layer = ggml_moe_tensor_layer(name);
     if (layer_keep_topk > 0 && layer >= layer_start && layer <= layer_end) {
         return layer_keep_topk;
     }
@@ -3723,6 +4844,12 @@ static void ggml_compute_forward_mul_mat_id(
     uint64_t * fallback_touch_us =
         incr_ptr_aligned(&wdata_cur, n_as*sizeof(uint64_t), sizeof(uint64_t));
 
+    int64_t * gpu_tail_row_counts =
+        incr_ptr_aligned(&wdata_cur, n_as*sizeof(int64_t), sizeof(int64_t));
+
+    struct mmid_row_mapping * gpu_tail_matrix_rows =
+        incr_ptr_aligned(&wdata_cur, n_as*ids->ne[0]*ids->ne[1]*sizeof(struct mmid_row_mapping), sizeof(int64_t));
+
     GGML_ASSERT(params->wsize >= (size_t)((char *) wdata_cur - (char *) params->wdata));
 
     const uint64_t kimi_cpu_moe_convert_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
@@ -3792,6 +4919,22 @@ static void ggml_compute_forward_mul_mat_id(
         if (kimi_cpu_moe_profile) {
             ggml_kimi_cpu_moe_profile.down.route_us += ggml_time_us() - kimi_cpu_moe_route_start;
         }
+        ggml_ds4_grouped_retained_route_profile_record(
+                src0->name,
+                src0->type,
+                src0->data,
+                nb02,
+                ids->ne[1] > 1,
+                matrix_row_counts,
+                n_as,
+                (size_t)ne01 * nb01);
+        ggml_ds4_grouped_retained_handoff_record_down(
+                src0->name,
+                src1->data,
+                ne10,
+                ne01,
+                matrix_row_counts,
+                n_as);
     }
 
     // reset current_chunk
@@ -3837,10 +4980,37 @@ static void ggml_compute_forward_mul_mat_id(
     const bool use_gpu_stream_batch =
         kimi_cpu_moe_batch_reason == GGML_KIMI_CPU_MOE_ELIGIBLE;
     bool kimi_cpu_moe_batch_done = false;
+    int64_t kimi_cpu_moe_single_attempts = 0;
+    int64_t kimi_cpu_moe_single_accepts = 0;
 
     if (use_gpu_stream_batch) {
         if (ith == 0) {
             const uint64_t kimi_cpu_moe_cuda_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;
+            const int gpu_keep_topk =
+                ggml_moe_gpu_keep_topk_applies(src0->name) ? ggml_moe_gpu_keep_topk_updown() : 0;
+            const bool split_gpu_cpu_tail =
+                gpu_keep_topk > 0 && gpu_keep_topk < ids->ne[0];
+            if (split_gpu_cpu_tail) {
+                memset(gpu_tail_row_counts, 0, n_as*sizeof(int64_t));
+                for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                    const int64_t original_count = matrix_row_counts[cur_a];
+                    int64_t gpu_count = 0;
+                    int64_t tail_count = 0;
+                    for (int64_t k = 0; k < original_count; ++k) {
+                        const struct mmid_row_mapping row =
+                            matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + k];
+                        if (row.i1 < gpu_keep_topk) {
+                            matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + gpu_count++] = row;
+                        } else {
+                            gpu_tail_matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + tail_count++] = row;
+                        }
+                    }
+                    matrix_row_counts[cur_a] = gpu_count;
+                    gpu_tail_row_counts[cur_a] = tail_count;
+                }
+            }
+            const void * src1_q8_0_batch = (src1->type == vec_dot_type) ? src1->data : params->wdata;
+            const size_t src1_q8_0_row_size_batch = ggml_row_size(vec_dot_type, ne10);
             const bool done = ggml_cuda_moe_stream_batch(
                 src0->type,
                 src0->name,
@@ -3850,6 +5020,9 @@ static void ggml_compute_forward_mul_mat_id(
                 (const float *) src1->data,
                 ne11,
                 nb11, nb12,
+                src1_q8_0_batch,
+                src1_q8_0_row_size_batch,
+                ne11,
                 (float *) dst->data,
                 nb1, nb2,
                 matrix_row_counts,
@@ -3866,7 +5039,44 @@ static void ggml_compute_forward_mul_mat_id(
             }
 
             if (done) {
-                memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
+                if (ggml_moe_stream_compare_cpu_enabled()) {
+                    for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                        const int64_t cne1 = matrix_row_counts[cur_a];
+                        if (cne1 == 0) {
+                            continue;
+                        }
+                        const char * src0_cur = (const char *) src0->data + cur_a * nb02;
+                        ggml_moe_stream_compare_cpu_result(
+                            dst, src0, src1, cur_a, cne1,
+                            src0_cur,
+                            matrix_rows + cur_a * ids->ne[0] * ids->ne[1],
+                            ggml_row_size(type_traits_cpu[src0->type].vec_dot_type, ne10),
+                            src1_cont,
+                            src1->type == type_traits_cpu[src0->type].vec_dot_type ? src1->data : params->wdata);
+                    }
+                }
+                if (split_gpu_cpu_tail) {
+                    for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                        const int64_t tail_count = gpu_tail_row_counts[cur_a];
+                        for (int64_t k = 0; k < tail_count; ++k) {
+                            matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + k] =
+                                gpu_tail_matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + k];
+                        }
+                        matrix_row_counts[cur_a] = tail_count;
+                    }
+                } else {
+                    memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
+                }
+            } else if (split_gpu_cpu_tail) {
+                for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                    const int64_t gpu_count = matrix_row_counts[cur_a];
+                    const int64_t tail_count = gpu_tail_row_counts[cur_a];
+                    for (int64_t k = 0; k < tail_count; ++k) {
+                        matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + gpu_count + k] =
+                            gpu_tail_matrix_rows[cur_a * ids->ne[0] * ids->ne[1] + k];
+                    }
+                    matrix_row_counts[cur_a] = gpu_count + tail_count;
+                }
             }
         }
 
@@ -3892,6 +5102,35 @@ static void ggml_compute_forward_mul_mat_id(
         if (ith == 0) {
             const void * wdata_stream = (src1->type == vec_dot_type) ? src1->data : params->wdata;
             const size_t row_size_stream = ggml_row_size(vec_dot_type, ne10);
+            const char * route_group_native_parity_env = getenv("GGML_MOE_ROUTE_GROUP_NATIVE_PARITY");
+            const bool route_group_native_parity =
+                route_group_native_parity_env && route_group_native_parity_env[0] && route_group_native_parity_env[0] != '0';
+            if (ggml_moe_gate_batch_prefetch_enabled() &&
+                    !route_group_native_parity &&
+                    ggml_cuda_moe_stream_batch_preload_active_from_pack &&
+                    src0->name && strstr(src0->name, ".ffn_gate_exps.") != NULL) {
+                static bool gate_batch_prefetch_logged = false;
+                if (!gate_batch_prefetch_logged) {
+                    fprintf(stderr, "[moe_stream_cpu] gate batch prefetch requested: tensor=%s n_as=%" PRId64 " expert_bytes=%zu\n",
+                            src0->name, (int64_t) n_as, (size_t) ne01 * nb01);
+                    gate_batch_prefetch_logged = true;
+                }
+                const int gate_prefetch_jobs = ggml_cuda_moe_stream_batch_preload_active_from_pack(
+                        src0->type,
+                        src0->name,
+                        n_as,
+                        (size_t) ne01 * nb01,
+                        matrix_row_counts);
+                (void) gate_prefetch_jobs;
+            }
+            if (ggml_cuda_moe_stream_route_group_preload_updown_from_gate &&
+                    src0->name && strstr(src0->name, ".ffn_gate_exps.") != NULL) {
+                const int updown_prefetch_jobs = ggml_cuda_moe_stream_route_group_preload_updown_from_gate(
+                        src0->name,
+                        n_as,
+                        matrix_row_counts);
+                (void) updown_prefetch_jobs;
+            }
 
             for (int cur_a = 0; cur_a < n_as; ++cur_a) {
                 const int64_t cne1 = matrix_row_counts[cur_a];
@@ -3902,6 +5141,7 @@ static void ggml_compute_forward_mul_mat_id(
 
                 const char * src0_cur = (const char *) src0->data + cur_a * nb02;
                 const uint64_t kimi_cpu_moe_cuda_start = kimi_cpu_moe_profile ? ggml_time_us() : 0;
+                kimi_cpu_moe_single_attempts++;
                 const bool done = ggml_cuda_moe_stream_one(
                     src0->type,
                     src0->name,
@@ -3926,6 +5166,7 @@ static void ggml_compute_forward_mul_mat_id(
                 }
 
                 if (done) {
+                    kimi_cpu_moe_single_accepts++;
                     if (ggml_moe_stream_compare_cpu_enabled()) {
                         ggml_moe_stream_compare_cpu_result(
                             dst, src0, src1, cur_a, cne1,
@@ -3948,6 +5189,21 @@ static void ggml_compute_forward_mul_mat_id(
         ggml_barrier(params->threadpool);
         if (kimi_cpu_moe_profile && ith == 0) {
             ggml_kimi_cpu_moe_profile.down.post_cuda_barrier_us += ggml_time_us() - kimi_cpu_moe_post_cuda_barrier_start;
+        }
+    }
+
+    if (ggml_moe_stream_one_gpu_only_filter_matches(src0->name)) {
+        int64_t gpu_only_rows = 0;
+        for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+            gpu_only_rows += matrix_row_counts[cur_a];
+        }
+        if (gpu_only_rows > 0) {
+            fprintf(stderr,
+                    "[moe_stream] GPU-only filter matched but CPU fallback remains: tensor=%s rows=%" PRId64 " batch_reason=%s single_attempts=%" PRId64 " single_accepts=%" PRId64 "\n",
+                    src0->name ? src0->name : "", gpu_only_rows,
+                    ggml_kimi_cpu_moe_eligibility_reason_name(kimi_cpu_moe_batch_reason),
+                    kimi_cpu_moe_single_attempts, kimi_cpu_moe_single_accepts);
+            abort();
         }
     }
 
@@ -4064,7 +5320,9 @@ static void ggml_compute_forward_mul_mat_id(
         ggml_barrier(params->threadpool);
     }
 
+    const bool moe_fallback_reason_profile = ggml_moe_fallback_reason_profile_enabled();
     const uint64_t kimi_cpu_moe_fallback_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
+    const uint64_t moe_fallback_reason_start = (moe_fallback_reason_profile && ith == 0) ? ggml_time_us() : 0;
     const uint64_t ds4_sparse_fused_mmvq_fallback_start =
         (ds4_sparse_fused_mmvq_membership && ith == 0) ? ggml_time_us() : 0;
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
@@ -4247,6 +5505,90 @@ static void ggml_compute_forward_mul_mat_id(
                     sink);
             }
             ggml_barrier(params->threadpool);
+        }
+    }
+    if (moe_fallback_reason_profile && ith == 0) {
+        const uint64_t moe_fallback_reason_us = ggml_time_us() - moe_fallback_reason_start;
+        int64_t fallback_rows = 0;
+        for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+            fallback_rows += matrix_row_counts[cur_a];
+        }
+        const char * batch_reason_name = ggml_kimi_cpu_moe_eligibility_reason_name(kimi_cpu_moe_batch_reason);
+        const char * single_reason_name = "not_attempted";
+        const char * final_reason_name = "cpu_fallback";
+        if (use_gpu_stream_batch) {
+            single_reason_name = "not_attempted_batch_path_selected";
+            final_reason_name = kimi_cpu_moe_batch_done ? "post_batch_residual" : "batch_declined_internal_no_single_retry";
+        } else if (getenv("GGML_MOE_STREAM_BATCH_ONLY") != NULL) {
+            single_reason_name = "stream_batch_only";
+            final_reason_name = "batch_only_cpu_fallback";
+        } else if (!ggml_cuda_moe_stream_one) {
+            single_reason_name = "one_fn_missing";
+            final_reason_name = "one_fn_missing";
+        } else if (!ggml_cuda_moe_stream_available) {
+            single_reason_name = "available_fn_missing";
+            final_reason_name = "available_fn_missing";
+        } else if (!ggml_cuda_moe_stream_available()) {
+            single_reason_name = "stream_available_false";
+            final_reason_name = "stream_available_false";
+        } else if (!ggml_cuda_moe_stream_supports_one_type(src0->type)) {
+            single_reason_name = "one_unsupported_type";
+            final_reason_name = "one_unsupported_type";
+        } else if (src1->type != GGML_TYPE_F32) {
+            single_reason_name = "src1_not_f32";
+            final_reason_name = "src1_not_f32";
+        } else if (ne13 != 1) {
+            single_reason_name = "ne13_not1";
+            final_reason_name = "ne13_not1";
+        } else if (dst->type != GGML_TYPE_F32) {
+            single_reason_name = "dst_not_f32";
+            final_reason_name = "dst_not_f32";
+        } else if (!ggml_moe_stream_one_name_filter_would_allow(src0->name)) {
+            single_reason_name = "one_name_filter";
+            final_reason_name = "one_name_filter";
+        } else {
+            single_reason_name = "one_declined_internal";
+            final_reason_name = "one_declined_internal";
+        }
+        if (fallback_rows > 0) {
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                const int64_t cne1 = matrix_row_counts[cur_a];
+                if (cne1 == 0) {
+                    continue;
+                }
+                const uint64_t expert_fallback_us =
+                    (uint64_t) (((double) moe_fallback_reason_us * (double) cne1) / (double) fallback_rows);
+                ggml_moe_fallback_reason_profile_record(
+                        ggml_moe_tensor_role(src0->name),
+                        src0->name,
+                        src0->type,
+                        ids->ne[1] > 1,
+                        cur_a,
+                        cne1,
+                        (size_t) nb02,
+                        expert_fallback_us,
+                        batch_reason_name,
+                        single_reason_name,
+                        final_reason_name,
+                        use_gpu_stream_batch,
+                        kimi_cpu_moe_batch_done,
+                        kimi_cpu_moe_single_attempts > 0,
+                        false);
+                ggml_moe_fallback_source_probe_record(
+                        ggml_moe_tensor_role(src0->name),
+                        src0->name,
+                        ids->ne[1] > 1,
+                        cur_a,
+                        cne1,
+                        expert_fallback_us,
+                        batch_reason_name,
+                        single_reason_name,
+                        final_reason_name,
+                        src0,
+                        src1,
+                        ids,
+                        dst);
+            }
         }
     }
     if (ds4_sparse_fused_mmvq_membership && ith == 0) {
@@ -4433,6 +5775,19 @@ static float ggml_moe_up_gate_activate(float x, enum ggml_unary_op op) {
     }
 }
 
+static float ggml_moe_up_gate_clamp(float x, float lo, float hi) {
+    return MIN(hi, MAX(lo, x));
+}
+
+static float ggml_moe_up_gate_fuse_value(float up, float gate, enum ggml_unary_op op, float limit) {
+    if (op == GGML_UNARY_OP_SILU && limit > 1.0e-6f) {
+        const float gate_v = ggml_silu_f32(MIN(gate, limit));
+        const float up_v = ggml_moe_up_gate_clamp(up, -limit, limit);
+        return up_v * gate_v;
+    }
+    return up * ggml_moe_up_gate_activate(gate, op);
+}
+
 static void ggml_compute_forward_moe_up_gate_one_chunk(
     struct ggml_tensor * dst,
     const struct ggml_tensor * src0_up,
@@ -4450,7 +5805,8 @@ static void ggml_compute_forward_moe_up_gate_one_chunk(
     const size_t row_size,
     const bool src1_cont,
     const void * wdata,
-    enum ggml_unary_op op) {
+    enum ggml_unary_op op,
+    float limit) {
 
     const enum ggml_type type_up = src0_up->type;
     const enum ggml_type type_gate = src0_gate->type;
@@ -4496,13 +5852,26 @@ static void ggml_compute_forward_moe_up_gate_one_chunk(
 
                 float * dst_col = (float *) ((char *) dst->data + (id*nb1 + i12*nb2));
 
-                for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ++ir0) {
+                const int64_t ir0_stop = MIN(iir0 + blck_0, ir0_end);
+                for (int64_t ir0 = iir0; ir0 < ir0_stop; ++ir0) {
                     vec_dot_up(ne00,   &up_tmp[ir0 - iir0],   0, src0_up_cur   + ir0*up_nb01,   0, src1_col, 0, 1);
                     vec_dot_gate(ne00, &gate_tmp[ir0 - iir0], 0, src0_gate_cur + ir0*gate_nb01, 0, src1_col, 0, 1);
-                    fused_tmp[ir0 - iir0] = up_tmp[ir0 - iir0] * ggml_moe_up_gate_activate(gate_tmp[ir0 - iir0], op);
                 }
 
-                memcpy(&dst_col[iir0], fused_tmp, (MIN(iir0 + blck_0, ir0_end) - iir0)*sizeof(float));
+                const int64_t n_cur = ir0_stop - iir0;
+                if (op == GGML_UNARY_OP_SILU && limit > 1.0e-6f) {
+                    for (int64_t i = 0; i < n_cur; ++i) {
+                        gate_tmp[i] = MIN(gate_tmp[i], limit);
+                        up_tmp[i]   = ggml_moe_up_gate_clamp(up_tmp[i], -limit, limit);
+                    }
+                    ggml_vec_swiglu_f32((int) n_cur, fused_tmp, gate_tmp, up_tmp);
+                } else {
+                    for (int64_t i = 0; i < n_cur; ++i) {
+                        fused_tmp[i] = ggml_moe_up_gate_fuse_value(up_tmp[i], gate_tmp[i], op, limit);
+                    }
+                }
+
+                memcpy(&dst_col[iir0], fused_tmp, n_cur*sizeof(float));
             }
         }
     }
@@ -4529,6 +5898,7 @@ static void ggml_compute_forward_moe_up_gate(
     ggml_from_float_t const from_float   = type_traits_cpu[vec_dot_type].from_float;
     const bool same_weight_type = up_type == gate_type;
     const bool scoped_mixed_pair = ggml_kimi_moe_mixed_iq2_iq3_pair(up_type, gate_type);
+    const float fused_limit = ggml_get_op_params_f32(dst, 1);
 
     GGML_ASSERT(src0_gate != NULL);
     GGML_ASSERT(same_weight_type || scoped_mixed_pair);
@@ -4626,6 +5996,48 @@ static void ggml_compute_forward_moe_up_gate(
         if (kimi_cpu_moe_profile) {
             ggml_kimi_cpu_moe_profile.up_gate.route_us += ggml_time_us() - kimi_cpu_moe_route_start;
         }
+        const size_t up_expert_bytes = (size_t)ne01 * nb01;
+        const size_t gate_expert_bytes = (size_t)src0_gate->ne[1] * src0_gate->nb[1];
+        ggml_ds4_grouped_retained_route_profile_record(
+                src0_up->name,
+                src0_up->type,
+                src0_up->data,
+                src0_up->nb[2],
+                ids->ne[1] > 1,
+                matrix_row_counts,
+                n_as,
+                up_expert_bytes);
+        ggml_ds4_grouped_retained_route_profile_record(
+                src0_gate->name,
+                src0_gate->type,
+                src0_gate->data,
+                src0_gate->nb[2],
+                ids->ne[1] > 1,
+                matrix_row_counts,
+                n_as,
+                gate_expert_bytes);
+        ggml_ds4_grouped_retained_route_profile_record_up_gate(
+                src0_up->name,
+                src0_gate->name,
+                src0_up->type,
+                src0_gate->type,
+                src0_up->data,
+                src0_up->nb[2],
+                src0_gate->data,
+                src0_gate->nb[2],
+                ids->ne[1] > 1,
+                matrix_row_counts,
+                n_as,
+                up_expert_bytes,
+                gate_expert_bytes);
+        ggml_ds4_grouped_retained_handoff_mark_up_gate(
+                src0_up->name,
+                src0_gate->name,
+                dst->data,
+                ne01,
+                matrix_row_counts,
+                n_as,
+                ids->ne[0]*ids->ne[1]);
     }
 
     for (int cur_a = ith; cur_a < n_as; cur_a += nth) {
@@ -4666,7 +6078,7 @@ static void ggml_compute_forward_moe_up_gate(
                 (float *) dst->data,
                 nb1, nb2,
                 ggml_get_op_params_i32(dst, 0),
-                0.0f,
+                fused_limit,
                 matrix_row_counts,
                 (const ggml_moe_stream_row_mapping *) matrix_rows,
                 ids->ne[0]*ids->ne[1]);
@@ -4693,7 +6105,9 @@ static void ggml_compute_forward_moe_up_gate(
     const size_t row_size = ggml_row_size(vec_dot_type, ne10);
     const enum ggml_unary_op op = (enum ggml_unary_op) ggml_get_op_params_i32(dst, 0);
 
+    const bool moe_fallback_reason_profile = ggml_moe_fallback_reason_profile_enabled();
     const uint64_t kimi_cpu_moe_fallback_start = (kimi_cpu_moe_profile && ith == 0) ? ggml_time_us() : 0;
+    const uint64_t moe_fallback_reason_start = (moe_fallback_reason_profile && ith == 0) ? ggml_time_us() : 0;
     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
         const int64_t cne1 = matrix_row_counts[cur_a];
 
@@ -4745,7 +6159,7 @@ static void ggml_compute_forward_moe_up_gate(
             ggml_compute_forward_moe_up_gate_one_chunk(
                 dst, src0_up, src0_gate, src1, ids, cur_a,
                 ir0_start, ir0_end, ir1_start, ir1_end,
-                src0_up_cur, src0_gate_cur, matrix_rows, row_size, src1_cont, wdata, op);
+                src0_up_cur, src0_gate_cur, matrix_rows, row_size, src1_cont, wdata, op, fused_limit);
 
             if (trace_cpu_chunk) {
                 const double trace_t1_ms = ggml_moe_cpu_trace_now_ms();
@@ -4770,6 +6184,55 @@ static void ggml_compute_forward_moe_up_gate(
             }
 
             current_chunk = atomic_fetch_add_explicit(current_chunk_ctr, 1, memory_order_relaxed);
+        }
+    }
+    if (moe_fallback_reason_profile && ith == 0) {
+        const uint64_t moe_fallback_reason_us = ggml_time_us() - moe_fallback_reason_start;
+        int64_t fallback_rows = 0;
+        for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+            fallback_rows += matrix_row_counts[cur_a];
+        }
+        const char * batch_reason_name = use_gpu_stream ? "eligible" : "upgate_batch_precondition_failed";
+        const char * final_reason_name = use_gpu_stream ? "upgate_batch_declined_internal" : "upgate_batch_not_attempted";
+        if (fallback_rows > 0) {
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                const int64_t cne1 = matrix_row_counts[cur_a];
+                if (cne1 == 0) {
+                    continue;
+                }
+                const uint64_t expert_fallback_us =
+                    (uint64_t) (((double) moe_fallback_reason_us * (double) cne1) / (double) fallback_rows);
+                ggml_moe_fallback_reason_profile_record(
+                        "up_gate",
+                        src0_up->name,
+                        src0_up->type,
+                        ids->ne[1] > 1,
+                        cur_a,
+                        cne1,
+                        (size_t) ne01 * nb01 + (size_t) src0_gate->ne[1] * src0_gate->nb[1],
+                        expert_fallback_us,
+                        batch_reason_name,
+                        "not_applicable",
+                        final_reason_name,
+                        use_gpu_stream,
+                        false,
+                        false,
+                        false);
+                ggml_moe_fallback_source_probe_record(
+                        "up_gate",
+                        src0_up->name,
+                        ids->ne[1] > 1,
+                        cur_a,
+                        cne1,
+                        expert_fallback_us,
+                        batch_reason_name,
+                        "not_applicable",
+                        final_reason_name,
+                        src0_up,
+                        src1,
+                        ids,
+                        dst);
+            }
         }
     }
     if (kimi_cpu_moe_profile && ith == 0) {
@@ -5108,6 +6571,7 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
         case GGML_OP_GLU:
             {
                 ggml_compute_forward_glu(params, tensor);
+                ggml_ds4_grouped_retained_handoff_mark_glu_act(tensor);
             } break;
         case GGML_OP_GET_REL_POS:
             {
@@ -5939,6 +7403,10 @@ struct ggml_cplan ggml_graph_plan(
                         cur += n_as * sizeof(void *) + sizeof(void *);
                         // CPU fallback source-touch profile timings
                         cur += n_as * sizeof(uint64_t) + sizeof(uint64_t);
+                        // GPU top-k / CPU-tail split counts
+                        cur += n_as * sizeof(int64_t) + sizeof(int64_t);
+                        // GPU top-k / CPU-tail split rows
+                        cur += n_as*ids->ne[0]*ids->ne[1]*sizeof(struct mmid_row_mapping) + sizeof(int64_t);
                     } break;
                 case GGML_OP_MOE_FUSED_UP_GATE:
                     {

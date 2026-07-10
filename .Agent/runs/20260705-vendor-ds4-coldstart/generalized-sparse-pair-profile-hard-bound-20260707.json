@@ -1,0 +1,3259 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-sparse-pair-profile-hard-bound-20260707.json",
+  "assumptions": {
+    "decode_tokens_estimation": "decode_up_calls / (layers * topk)",
+    "layer_count_sensitivity": [
+      40,
+      43
+    ],
+    "payload_model": "each selected pair stages both up and down expert tensors; native model expert tensor bytes come from fallback CSV and GGUF manifest where available",
+    "profile_scope": "no prompt-specific single-prompt profile; global topN pairs are ranked by summed decode fallback time across all calibration/dev prompts",
+    "topk": 4,
+    "zero_overhead_model": "subtracts selected pair fallback_ms from current decode window; excludes real staging, H2D/D2H, kernel launch, indexing, and prompt/TTFT overhead, so this is an optimistic upper bound"
+  },
+  "bounds_by_top_n": {
+    "128": {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.8255862918303323,
+          "mean_margin_ms_after_reaching_5": -31553.064613487688,
+          "mean_zero_overhead_tok_s": 2.387547145294541,
+          "min_margin_ms_after_reaching_5": -54202.97770588237,
+          "min_zero_overhead_tok_s": 1.8205845881749516,
+          "prompts_below_5": [
+            "france",
+            "quantum",
+            "fibonacci",
+            "japan",
+            "climate"
+          ]
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 2.8440936535879597,
+          "mean_margin_ms_after_reaching_5": -28972.744296267618,
+          "mean_zero_overhead_tok_s": 2.4047552746069614,
+          "min_margin_ms_after_reaching_5": -49999.54063337893,
+          "min_zero_overhead_tok_s": 1.8303217319517935,
+          "prompts_below_5": [
+            "france",
+            "quantum",
+            "fibonacci",
+            "japan",
+            "climate"
+          ]
+        }
+      },
+      "per_prompt": [
+        {
+          "covered_calls_updown": 7066,
+          "covered_decode_down_ms": 1475.935,
+          "covered_decode_up_ms": 1967.035,
+          "covered_decode_updown_ms": 3442.97,
+          "covered_ratio_of_decode_updown": 0.14865239792698257,
+          "decode_updown_fallback_ms": 23161.214,
+          "eval_tok_s_current": 2.6,
+          "prompt_id": "france",
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -17257.03,
+              "remaining_decode_ms_after_selected_pairs_removed": 39682.03,
+              "required_additional_save_ms_for_5tok_s": 17257.03,
+              "target5_decode_ms": 22425.0,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.8255862918303323
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -15812.843953488373,
+              "remaining_decode_ms_after_selected_pairs_removed": 36673.30906976744,
+              "required_additional_save_ms_for_5tok_s": 15812.843953488373,
+              "target5_decode_ms": 20860.46511627907,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.8440936535879597
+            }
+          ],
+          "ttft_ms_current": 37516.648734
+        },
+        {
+          "covered_calls_updown": 11530,
+          "covered_decode_down_ms": 3677.525,
+          "covered_decode_up_ms": 4922.314,
+          "covered_decode_updown_ms": 8599.839,
+          "covered_ratio_of_decode_updown": 0.1732727222063285,
+          "decode_updown_fallback_ms": 49631.811,
+          "eval_tok_s_current": 1.9,
+          "prompt_id": "quantum",
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -42040.29257894738,
+              "remaining_decode_ms_after_selected_pairs_removed": 73077.79257894738,
+              "required_additional_save_ms_for_5tok_s": 42040.29257894738,
+              "target5_decode_ms": 31037.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.12359315358832
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -38507.26014320686,
+              "remaining_decode_ms_after_selected_pairs_removed": 67379.35316646268,
+              "required_additional_save_ms_for_5tok_s": 38507.26014320686,
+              "target5_decode_ms": 28872.093023255813,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.1425029824734634
+            }
+          ],
+          "ttft_ms_current": 36335.945769
+        },
+        {
+          "covered_calls_updown": 7596,
+          "covered_decode_down_ms": 2264.594,
+          "covered_decode_up_ms": 3781.693,
+          "covered_decode_updown_ms": 6046.287,
+          "covered_ratio_of_decode_updown": 0.12574069838550866,
+          "decode_updown_fallback_ms": 48085.362,
+          "eval_tok_s_current": 1.7,
+          "prompt_id": "fibonacci",
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -54202.97770588237,
+              "remaining_decode_ms_after_selected_pairs_removed": 85240.47770588237,
+              "required_additional_save_ms_for_5tok_s": 54202.97770588237,
+              "target5_decode_ms": 31037.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 1.8205845881749516
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -49999.54063337893,
+              "remaining_decode_ms_after_selected_pairs_removed": 78871.63365663475,
+              "required_additional_save_ms_for_5tok_s": 49999.54063337893,
+              "target5_decode_ms": 28872.093023255813,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 1.8303217319517935
+            }
+          ],
+          "ttft_ms_current": 39047.801183
+        },
+        {
+          "covered_calls_updown": 7990,
+          "covered_decode_down_ms": 1721.614,
+          "covered_decode_up_ms": 2526.723,
+          "covered_decode_updown_ms": 4248.337,
+          "covered_ratio_of_decode_updown": 0.17291116237797158,
+          "decode_updown_fallback_ms": 24569.478,
+          "eval_tok_s_current": 2.4,
+          "prompt_id": "japan",
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -19517.288,
+              "remaining_decode_ms_after_selected_pairs_removed": 41454.788,
+              "required_additional_save_ms_for_5tok_s": 19517.288,
+              "target5_decode_ms": 21937.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.6459549135795846
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -17859.221139534886,
+              "remaining_decode_ms_after_selected_pairs_removed": 38266.19788372093,
+              "required_additional_save_ms_for_5tok_s": 17859.221139534886,
+              "target5_decode_ms": 20406.976744186046,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.666449487116083
+            }
+          ],
+          "ttft_ms_current": 38760.496441
+        },
+        {
+          "covered_calls_updown": 7882,
+          "covered_decode_down_ms": 1993.237,
+          "covered_decode_up_ms": 2826.963,
+          "covered_decode_updown_ms": 4820.2,
+          "covered_ratio_of_decode_updown": 0.1546203685342257,
+          "decode_updown_fallback_ms": 31174.418,
+          "eval_tok_s_current": 2.3,
+          "prompt_id": "climate",
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -24747.734782608706,
+              "remaining_decode_ms_after_selected_pairs_removed": 49935.234782608706,
+              "required_additional_save_ms_for_5tok_s": 24747.734782608706,
+              "target5_decode_ms": 25187.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.5220167792995167
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -22684.855611729028,
+              "remaining_decode_ms_after_selected_pairs_removed": 46115.08816986856,
+              "required_additional_save_ms_for_5tok_s": 22684.855611729028,
+              "target5_decode_ms": 23430.232558139534,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.540408517905509
+            }
+          ],
+          "ttft_ms_current": 39247.277955
+        }
+      ]
+    },
+    "256": {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.9919727073383715,
+          "mean_margin_ms_after_reaching_5": -28674.567013487693,
+          "mean_zero_overhead_tok_s": 2.520892355249234,
+          "min_margin_ms_after_reaching_5": -50740.57670588237,
+          "min_zero_overhead_tok_s": 1.897666297021598,
+          "prompts_below_5": [
+            "france",
+            "quantum",
+            "fibonacci",
+            "japan",
+            "climate"
+          ]
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.026189545095394,
+          "mean_margin_ms_after_reaching_5": -26094.24669626762,
+          "mean_zero_overhead_tok_s": 2.550873906893963,
+          "min_margin_ms_after_reaching_5": -46537.13963337893,
+          "min_zero_overhead_tok_s": 1.9143606164725744,
+          "prompts_below_5": [
+            "france",
+            "quantum",
+            "fibonacci",
+            "japan",
+            "climate"
+          ]
+        }
+      },
+      "per_prompt": [
+        {
+          "covered_calls_updown": 11136,
+          "covered_decode_down_ms": 2419.332,
+          "covered_decode_up_ms": 3230.393,
+          "covered_decode_updown_ms": 5649.725,
+          "covered_ratio_of_decode_updown": 0.24393043473455236,
+          "decode_updown_fallback_ms": 23161.214,
+          "eval_tok_s_current": 2.6,
+          "prompt_id": "france",
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -15050.275000000001,
+              "remaining_decode_ms_after_selected_pairs_removed": 37475.275,
+              "required_additional_save_ms_for_5tok_s": 15050.275000000001,
+              "target5_decode_ms": 22425.0,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.9919727073383715
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -13606.088953488375,
+              "remaining_decode_ms_after_selected_pairs_removed": 34466.554069767444,
+              "required_additional_save_ms_for_5tok_s": 13606.088953488375,
+              "target5_decode_ms": 20860.46511627907,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 3.026189545095394
+            }
+          ],
+          "ttft_ms_current": 37516.648734
+        },
+        {
+          "covered_calls_updown": 15266,
+          "covered_decode_down_ms": 5134.922,
+          "covered_decode_up_ms": 6873.129,
+          "covered_decode_updown_ms": 12008.051,
+          "covered_ratio_of_decode_updown": 0.24194263231700328,
+          "decode_updown_fallback_ms": 49631.811,
+          "eval_tok_s_current": 1.9,
+          "prompt_id": "quantum",
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -38632.08057894738,
+              "remaining_decode_ms_after_selected_pairs_removed": 69669.58057894738,
+              "required_additional_save_ms_for_5tok_s": 38632.08057894738,
+              "target5_decode_ms": 31037.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.2274786027188207
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -35099.04814320686,
+              "remaining_decode_ms_after_selected_pairs_removed": 63971.14116646267,
+              "required_additional_save_ms_for_5tok_s": 35099.04814320686,
+              "target5_decode_ms": 28872.093023255813,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.256649834346883
+            }
+          ],
+          "ttft_ms_current": 36335.945769
+        },
+        {
+          "covered_calls_updown": 11746,
+          "covered_decode_down_ms": 3659.79,
+          "covered_decode_up_ms": 5848.898,
+          "covered_decode_updown_ms": 9508.688,
+          "covered_ratio_of_decode_updown": 0.1977460001236967,
+          "decode_updown_fallback_ms": 48085.362,
+          "eval_tok_s_current": 1.7,
+          "prompt_id": "fibonacci",
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -50740.57670588237,
+              "remaining_decode_ms_after_selected_pairs_removed": 81778.07670588237,
+              "required_additional_save_ms_for_5tok_s": 50740.57670588237,
+              "target5_decode_ms": 31037.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 1.897666297021598
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -46537.13963337893,
+              "remaining_decode_ms_after_selected_pairs_removed": 75409.23265663475,
+              "required_additional_save_ms_for_5tok_s": 46537.13963337893,
+              "target5_decode_ms": 28872.093023255813,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 1.9143606164725744
+            }
+          ],
+          "ttft_ms_current": 39047.801183
+        },
+        {
+          "covered_calls_updown": 12194,
+          "covered_decode_down_ms": 2685.889,
+          "covered_decode_up_ms": 3990.029,
+          "covered_decode_updown_ms": 6675.918,
+          "covered_ratio_of_decode_updown": 0.2717159070290382,
+          "decode_updown_fallback_ms": 24569.478,
+          "eval_tok_s_current": 2.4,
+          "prompt_id": "japan",
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -17089.707000000002,
+              "remaining_decode_ms_after_selected_pairs_removed": 39027.207,
+              "required_additional_save_ms_for_5tok_s": 17089.707000000002,
+              "target5_decode_ms": 21937.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.8105393245281425
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -15431.640139534888,
+              "remaining_decode_ms_after_selected_pairs_removed": 35838.61688372093,
+              "required_additional_save_ms_for_5tok_s": 15431.640139534888,
+              "target5_decode_ms": 20406.976744186046,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.8470653332405194
+            }
+          ],
+          "ttft_ms_current": 38760.496441
+        },
+        {
+          "covered_calls_updown": 12298,
+          "covered_decode_down_ms": 3151.792,
+          "covered_decode_up_ms": 4555.947,
+          "covered_decode_updown_ms": 7707.739,
+          "covered_ratio_of_decode_updown": 0.24724564224422726,
+          "decode_updown_fallback_ms": 31174.418,
+          "eval_tok_s_current": 2.3,
+          "prompt_id": "climate",
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -21860.195782608702,
+              "remaining_decode_ms_after_selected_pairs_removed": 47047.6957826087,
+              "required_additional_save_ms_for_5tok_s": 21860.195782608702,
+              "target5_decode_ms": 25187.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.676804844639238
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -19797.316611729024,
+              "remaining_decode_ms_after_selected_pairs_removed": 43227.54916986856,
+              "required_additional_save_ms_for_5tok_s": 19797.316611729024,
+              "target5_decode_ms": 23430.232558139534,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.7101042053144435
+            }
+          ],
+          "ttft_ms_current": 39247.277955
+        }
+      ]
+    },
+    "48": {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.737723455918477,
+          "mean_margin_ms_after_reaching_5": -34030.98261348769,
+          "mean_zero_overhead_tok_s": 2.293546588532591,
+          "min_margin_ms_after_reaching_5": -57750.06870588237,
+          "min_zero_overhead_tok_s": 1.7478516673215143,
+          "prompts_below_5": [
+            "france",
+            "quantum",
+            "fibonacci",
+            "japan",
+            "climate"
+          ]
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 2.748643243801843,
+          "mean_margin_ms_after_reaching_5": -31450.662296267612,
+          "mean_zero_overhead_tok_s": 2.302562318839037,
+          "min_margin_ms_after_reaching_5": -53546.63163337893,
+          "min_zero_overhead_tok_s": 1.7515493683953527,
+          "prompts_below_5": [
+            "france",
+            "quantum",
+            "fibonacci",
+            "japan",
+            "climate"
+          ]
+        }
+      },
+      "per_prompt": [
+        {
+          "covered_calls_updown": 4364,
+          "covered_decode_down_ms": 907.118,
+          "covered_decode_up_ms": 1262.321,
+          "covered_decode_updown_ms": 2169.439,
+          "covered_ratio_of_decode_updown": 0.09366689500818048,
+          "decode_updown_fallback_ms": 23161.214,
+          "eval_tok_s_current": 2.6,
+          "prompt_id": "france",
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -18530.561,
+              "remaining_decode_ms_after_selected_pairs_removed": 40955.561,
+              "required_additional_save_ms_for_5tok_s": 18530.561,
+              "target5_decode_ms": 22425.0,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.737723455918477
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -17086.374953488375,
+              "remaining_decode_ms_after_selected_pairs_removed": 37946.840069767444,
+              "required_additional_save_ms_for_5tok_s": 17086.374953488375,
+              "target5_decode_ms": 20860.46511627907,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.748643243801843
+            }
+          ],
+          "ttft_ms_current": 37516.648734
+        },
+        {
+          "covered_calls_updown": 5814,
+          "covered_decode_down_ms": 1984.341,
+          "covered_decode_up_ms": 2669.527,
+          "covered_decode_updown_ms": 4653.868,
+          "covered_ratio_of_decode_updown": 0.09376784578745273,
+          "decode_updown_fallback_ms": 49631.811,
+          "eval_tok_s_current": 1.9,
+          "prompt_id": "quantum",
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -45986.26357894737,
+              "remaining_decode_ms_after_selected_pairs_removed": 77023.76357894737,
+              "required_additional_save_ms_for_5tok_s": 45986.26357894737,
+              "target5_decode_ms": 31037.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.014800274475511
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -42453.23114320685,
+              "remaining_decode_ms_after_selected_pairs_removed": 71325.32416646267,
+              "required_additional_save_ms_for_5tok_s": 42453.23114320685,
+              "target5_decode_ms": 28872.093023255813,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.0239720856979675
+            }
+          ],
+          "ttft_ms_current": 36335.945769
+        },
+        {
+          "covered_calls_updown": 3008,
+          "covered_decode_down_ms": 926.571,
+          "covered_decode_up_ms": 1572.625,
+          "covered_decode_updown_ms": 2499.196,
+          "covered_ratio_of_decode_updown": 0.05197415379757357,
+          "decode_updown_fallback_ms": 48085.362,
+          "eval_tok_s_current": 1.7,
+          "prompt_id": "fibonacci",
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -57750.06870588237,
+              "remaining_decode_ms_after_selected_pairs_removed": 88787.56870588237,
+              "required_additional_save_ms_for_5tok_s": 57750.06870588237,
+              "target5_decode_ms": 31037.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 1.7478516673215143
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -53546.63163337893,
+              "remaining_decode_ms_after_selected_pairs_removed": 82418.72465663475,
+              "required_additional_save_ms_for_5tok_s": 53546.63163337893,
+              "target5_decode_ms": 28872.093023255813,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 1.7515493683953527
+            }
+          ],
+          "ttft_ms_current": 39047.801183
+        },
+        {
+          "covered_calls_updown": 4442,
+          "covered_decode_down_ms": 909.92,
+          "covered_decode_up_ms": 1389.757,
+          "covered_decode_updown_ms": 2299.677,
+          "covered_ratio_of_decode_updown": 0.09359893604577192,
+          "decode_updown_fallback_ms": 24569.478,
+          "eval_tok_s_current": 2.4,
+          "prompt_id": "japan",
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -21465.947999999997,
+              "remaining_decode_ms_after_selected_pairs_removed": 43403.448,
+              "required_additional_save_ms_for_5tok_s": 21465.947999999997,
+              "target5_decode_ms": 21937.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.527160975782385
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -19807.881139534882,
+              "remaining_decode_ms_after_selected_pairs_removed": 40214.85788372093,
+              "required_additional_save_ms_for_5tok_s": 19807.881139534882,
+              "target5_decode_ms": 20406.976744186046,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.5372434242080013
+            }
+          ],
+          "ttft_ms_current": 38760.496441
+        },
+        {
+          "covered_calls_updown": 4964,
+          "covered_decode_down_ms": 1300.494,
+          "covered_decode_up_ms": 1845.369,
+          "covered_decode_updown_ms": 3145.863,
+          "covered_ratio_of_decode_updown": 0.10091168341939855,
+          "decode_updown_fallback_ms": 31174.418,
+          "eval_tok_s_current": 2.3,
+          "prompt_id": "climate",
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -26422.071782608706,
+              "remaining_decode_ms_after_selected_pairs_removed": 51609.571782608706,
+              "required_additional_save_ms_for_5tok_s": 26422.071782608706,
+              "target5_decode_ms": 25187.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.440196569165067
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -24359.192611729028,
+              "remaining_decode_ms_after_selected_pairs_removed": 47789.42516986856,
+              "required_additional_save_ms_for_5tok_s": 24359.192611729028,
+              "target5_decode_ms": 23430.232558139534,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.451403472092022
+            }
+          ],
+          "ttft_ms_current": 39247.277955
+        }
+      ]
+    },
+    "512": {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.278688524590164,
+          "mean_margin_ms_after_reaching_5": -24553.395613487686,
+          "mean_zero_overhead_tok_s": 2.738346032977325,
+          "min_margin_ms_after_reaching_5": -46146.00270588236,
+          "min_zero_overhead_tok_s": 2.0106304399187724,
+          "prompts_below_5": [
+            "france",
+            "quantum",
+            "fibonacci",
+            "japan",
+            "climate"
+          ]
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.3441589761728676,
+          "mean_margin_ms_after_reaching_5": -21973.075296267612,
+          "mean_zero_overhead_tok_s": 2.7921733213895346,
+          "min_margin_ms_after_reaching_5": -41942.56563337892,
+          "min_zero_overhead_tok_s": 2.0385675487931443,
+          "prompts_below_5": [
+            "france",
+            "quantum",
+            "fibonacci",
+            "japan",
+            "climate"
+          ]
+        }
+      },
+      "per_prompt": [
+        {
+          "covered_calls_updown": 17016,
+          "covered_decode_down_ms": 3793.905,
+          "covered_decode_up_ms": 5132.97,
+          "covered_decode_updown_ms": 8926.875,
+          "covered_ratio_of_decode_updown": 0.3854234497379973,
+          "decode_updown_fallback_ms": 23161.214,
+          "eval_tok_s_current": 2.6,
+          "prompt_id": "france",
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -11773.125,
+              "remaining_decode_ms_after_selected_pairs_removed": 34198.125,
+              "required_additional_save_ms_for_5tok_s": 11773.125,
+              "target5_decode_ms": 22425.0,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 3.278688524590164
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -10328.938953488374,
+              "remaining_decode_ms_after_selected_pairs_removed": 31189.404069767443,
+              "required_additional_save_ms_for_5tok_s": 10328.938953488374,
+              "target5_decode_ms": 20860.46511627907,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 3.3441589761728676
+            }
+          ],
+          "ttft_ms_current": 37516.648734
+        },
+        {
+          "covered_calls_updown": 21318,
+          "covered_decode_down_ms": 7502.555,
+          "covered_decode_up_ms": 10250.738,
+          "covered_decode_updown_ms": 17753.293,
+          "covered_ratio_of_decode_updown": 0.35769988324625107,
+          "decode_updown_fallback_ms": 49631.811,
+          "eval_tok_s_current": 1.9,
+          "prompt_id": "quantum",
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -32886.83857894737,
+              "remaining_decode_ms_after_selected_pairs_removed": 63924.33857894737,
+              "required_additional_save_ms_for_5tok_s": 32886.83857894737,
+              "target5_decode_ms": 31037.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.427674708097941
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -29353.806143206853,
+              "remaining_decode_ms_after_selected_pairs_removed": 58225.89916646267,
+              "required_additional_save_ms_for_5tok_s": 29353.806143206853,
+              "target5_decode_ms": 28872.093023255813,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.4793170596398237
+            }
+          ],
+          "ttft_ms_current": 36335.945769
+        },
+        {
+          "covered_calls_updown": 16496,
+          "covered_decode_down_ms": 5501.58,
+          "covered_decode_up_ms": 8601.682,
+          "covered_decode_updown_ms": 14103.262,
+          "covered_ratio_of_decode_updown": 0.2932963674059478,
+          "decode_updown_fallback_ms": 48085.362,
+          "eval_tok_s_current": 1.7,
+          "prompt_id": "fibonacci",
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -46146.00270588236,
+              "remaining_decode_ms_after_selected_pairs_removed": 77183.50270588236,
+              "required_additional_save_ms_for_5tok_s": 46146.00270588236,
+              "target5_decode_ms": 31037.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.0106304399187724
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -41942.56563337892,
+              "remaining_decode_ms_after_selected_pairs_removed": 70814.65865663474,
+              "required_additional_save_ms_for_5tok_s": 41942.56563337892,
+              "target5_decode_ms": 28872.093023255813,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.0385675487931443
+            }
+          ],
+          "ttft_ms_current": 39047.801183
+        },
+        {
+          "covered_calls_updown": 16914,
+          "covered_decode_down_ms": 3962.322,
+          "covered_decode_up_ms": 6016.474,
+          "covered_decode_updown_ms": 9978.796,
+          "covered_ratio_of_decode_updown": 0.4061460320809421,
+          "decode_updown_fallback_ms": 24569.478,
+          "eval_tok_s_current": 2.4,
+          "prompt_id": "japan",
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -13786.828999999998,
+              "remaining_decode_ms_after_selected_pairs_removed": 35724.329,
+              "required_additional_save_ms_for_5tok_s": 13786.828999999998,
+              "target5_decode_ms": 21937.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 3.0703865704517503
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -12128.762139534883,
+              "remaining_decode_ms_after_selected_pairs_removed": 32535.73888372093,
+              "required_additional_save_ms_for_5tok_s": 12128.762139534883,
+              "target5_decode_ms": 20406.976744186046,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 3.1360862614982077
+            }
+          ],
+          "ttft_ms_current": 38760.496441
+        },
+        {
+          "covered_calls_updown": 17516,
+          "covered_decode_down_ms": 4741.894,
+          "covered_decode_up_ms": 6651.858,
+          "covered_decode_updown_ms": 11393.752,
+          "covered_ratio_of_decode_updown": 0.3654840324525064,
+          "decode_updown_fallback_ms": 31174.418,
+          "eval_tok_s_current": 2.3,
+          "prompt_id": "climate",
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -18174.182782608703,
+              "remaining_decode_ms_after_selected_pairs_removed": 43361.6827826087,
+              "required_additional_save_ms_for_5tok_s": 18174.182782608703,
+              "target5_decode_ms": 25187.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.9043499218279973
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -16111.303611729025,
+              "remaining_decode_ms_after_selected_pairs_removed": 39541.53616986856,
+              "required_additional_save_ms_for_5tok_s": 16111.303611729025,
+              "target5_decode_ms": 23430.232558139534,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.9627367608436317
+            }
+          ],
+          "ttft_ms_current": 39247.277955
+        }
+      ]
+    },
+    "64": {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.7651757283047456,
+          "mean_margin_ms_after_reaching_5": -33428.05241348769,
+          "mean_zero_overhead_tok_s": 2.315550214042486,
+          "min_margin_ms_after_reaching_5": -56595.336705882364,
+          "min_zero_overhead_tok_s": 1.7708829912792612,
+          "prompts_below_5": [
+            "france",
+            "quantum",
+            "fibonacci",
+            "japan",
+            "climate"
+          ]
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 2.7784139943156063,
+          "mean_margin_ms_after_reaching_5": -30847.732096267613,
+          "mean_zero_overhead_tok_s": 2.3264144417911132,
+          "min_margin_ms_after_reaching_5": -52391.899633378926,
+          "min_zero_overhead_tok_s": 1.7764382526249511,
+          "prompts_below_5": [
+            "france",
+            "quantum",
+            "fibonacci",
+            "japan",
+            "climate"
+          ]
+        }
+      },
+      "per_prompt": [
+        {
+          "covered_calls_updown": 5452,
+          "covered_decode_down_ms": 1077.545,
+          "covered_decode_up_ms": 1498.495,
+          "covered_decode_updown_ms": 2576.04,
+          "covered_ratio_of_decode_updown": 0.11122214923621879,
+          "decode_updown_fallback_ms": 23161.214,
+          "eval_tok_s_current": 2.6,
+          "prompt_id": "france",
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -18123.96,
+              "remaining_decode_ms_after_selected_pairs_removed": 40548.96,
+              "required_additional_save_ms_for_5tok_s": 18123.96,
+              "target5_decode_ms": 22425.0,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.7651757283047456
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -16679.773953488373,
+              "remaining_decode_ms_after_selected_pairs_removed": 37540.23906976744,
+              "required_additional_save_ms_for_5tok_s": 16679.773953488373,
+              "target5_decode_ms": 20860.46511627907,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.7784139943156063
+            }
+          ],
+          "ttft_ms_current": 37516.648734
+        },
+        {
+          "covered_calls_updown": 6756,
+          "covered_decode_down_ms": 2258.486,
+          "covered_decode_up_ms": 3060.417,
+          "covered_decode_updown_ms": 5318.903,
+          "covered_ratio_of_decode_updown": 0.10716721580036642,
+          "decode_updown_fallback_ms": 49631.811,
+          "eval_tok_s_current": 1.9,
+          "prompt_id": "quantum",
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -45321.22857894737,
+              "remaining_decode_ms_after_selected_pairs_removed": 76358.72857894737,
+              "required_additional_save_ms_for_5tok_s": 45321.22857894737,
+              "target5_decode_ms": 31037.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.032347878075936
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -41788.19614320685,
+              "remaining_decode_ms_after_selected_pairs_removed": 70660.28916646267,
+              "required_additional_save_ms_for_5tok_s": 41788.19614320685,
+              "target5_decode_ms": 28872.093023255813,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.0430211483594745
+            }
+          ],
+          "ttft_ms_current": 36335.945769
+        },
+        {
+          "covered_calls_updown": 4588,
+          "covered_decode_down_ms": 1366.871,
+          "covered_decode_up_ms": 2287.057,
+          "covered_decode_updown_ms": 3653.928,
+          "covered_ratio_of_decode_updown": 0.07598836419282858,
+          "decode_updown_fallback_ms": 48085.362,
+          "eval_tok_s_current": 1.7,
+          "prompt_id": "fibonacci",
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -56595.336705882364,
+              "remaining_decode_ms_after_selected_pairs_removed": 87632.83670588236,
+              "required_additional_save_ms_for_5tok_s": 56595.336705882364,
+              "target5_decode_ms": 31037.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 1.7708829912792612
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -52391.899633378926,
+              "remaining_decode_ms_after_selected_pairs_removed": 81263.99265663474,
+              "required_additional_save_ms_for_5tok_s": 52391.899633378926,
+              "target5_decode_ms": 28872.093023255813,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 1.7764382526249511
+            }
+          ],
+          "ttft_ms_current": 39047.801183
+        },
+        {
+          "covered_calls_updown": 5454,
+          "covered_decode_down_ms": 1073.356,
+          "covered_decode_up_ms": 1624.767,
+          "covered_decode_updown_ms": 2698.123,
+          "covered_ratio_of_decode_updown": 0.10981604900193648,
+          "decode_updown_fallback_ms": 24569.478,
+          "eval_tok_s_current": 2.4,
+          "prompt_id": "japan",
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -21067.502,
+              "remaining_decode_ms_after_selected_pairs_removed": 43005.002,
+              "required_additional_save_ms_for_5tok_s": 21067.502,
+              "target5_decode_ms": 21937.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.55057539585744
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -19409.435139534886,
+              "remaining_decode_ms_after_selected_pairs_removed": 39816.41188372093,
+              "required_additional_save_ms_for_5tok_s": 19409.435139534886,
+              "target5_decode_ms": 20406.976744186046,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.5626338209206523
+            }
+          ],
+          "ttft_ms_current": 38760.496441
+        },
+        {
+          "covered_calls_updown": 5776,
+          "covered_decode_down_ms": 1457.152,
+          "covered_decode_up_ms": 2078.548,
+          "covered_decode_updown_ms": 3535.7,
+          "covered_ratio_of_decode_updown": 0.11341671238256956,
+          "decode_updown_fallback_ms": 31174.418,
+          "eval_tok_s_current": 2.3,
+          "prompt_id": "climate",
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "margin_ms_after_reaching_5": -26032.234782608706,
+              "remaining_decode_ms_after_selected_pairs_removed": 51219.734782608706,
+              "required_additional_save_ms_for_5tok_s": 26032.234782608706,
+              "target5_decode_ms": 25187.5,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.4587690766950474
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "margin_ms_after_reaching_5": -23969.355611729028,
+              "remaining_decode_ms_after_selected_pairs_removed": 47399.58816986856,
+              "required_additional_save_ms_for_5tok_s": 23969.355611729028,
+              "target5_decode_ms": 23430.232558139534,
+              "zero_overhead_tok_s_if_selected_pairs_removed": 2.4715649927348835
+            }
+          ],
+          "ttft_ms_current": 39247.277955
+        }
+      ]
+    }
+  },
+  "complete_pair_count_available": 6485,
+  "date": "2026-07-07",
+  "decision": {
+    "best_top_n_43_layer_aggregate": {
+      "max_zero_overhead_tok_s": 3.3441589761728676,
+      "mean_margin_ms_after_reaching_5": -21973.075296267612,
+      "mean_zero_overhead_tok_s": 2.7921733213895346,
+      "min_margin_ms_after_reaching_5": -41942.56563337892,
+      "min_zero_overhead_tok_s": 2.0385675487931443,
+      "prompts_below_5": [
+        "france",
+        "quantum",
+        "fibonacci",
+        "japan",
+        "climate"
+      ]
+    },
+    "best_top_n_by_min_43_layer_bound": 512,
+    "next_action": "Do not implement prompt/hotset-specific sparse pair staging. Return to exact generic dataflow: remove up/down CPU fallback by using selected_experts/weights tensors in the graph or by introducing a compact per-token exact-gather GPU path, then prove coverage on calibration/dev before touching held-out.",
+    "source_edit_allowed_by_this_artifact": false,
+    "summary": "Generalized sparse pair hotset is rejected as a main optimization route. The distribution is too diffuse: top2048 already needs about 17.0 GiB of up/down payload and still has a 43-layer zero-overhead min of 2.76 tok/s; top4096 needs about 34.0 GiB and still leaves quantum/fibonacci below 5 tok/s; even all 6485 observed pairs need about 53.8 GiB and Fibonacci remains below 5 under the existing full-up/down zero-overhead model."
+  },
+  "extended_payload_curve_no_profile_files": {
+    "complete_pair_count_available": 6485,
+    "complete_payload_mib": 55122.5,
+    "curve": [
+      {
+        "actual_pairs": 512,
+        "aggregate": {
+          "40": {
+            "max_zero_overhead_tok_s": 3.278688524590164,
+            "mean_covered_ratio": 0.36160995298472887,
+            "mean_margin_ms_after_reaching_5": -24553.395613487686,
+            "mean_zero_overhead_tok_s": 2.738346032977325,
+            "min_covered_ratio": 0.2932963674059478,
+            "min_margin_ms_after_reaching_5": -46146.00270588236,
+            "min_zero_overhead_tok_s": 2.0106304399187724,
+            "prompts_below_5": [
+              "france",
+              "quantum",
+              "fibonacci",
+              "japan",
+              "climate"
+            ]
+          },
+          "43": {
+            "max_zero_overhead_tok_s": 3.3441589761728676,
+            "mean_covered_ratio": 0.36160995298472887,
+            "mean_margin_ms_after_reaching_5": -21973.075296267612,
+            "mean_zero_overhead_tok_s": 2.7921733213895346,
+            "min_covered_ratio": 0.2932963674059478,
+            "min_margin_ms_after_reaching_5": -41942.56563337892,
+            "min_zero_overhead_tok_s": 2.0385675487931443,
+            "prompts_below_5": [
+              "france",
+              "quantum",
+              "fibonacci",
+              "japan",
+              "climate"
+            ]
+          }
+        },
+        "payload_mib": 4352.0,
+        "per_prompt": [
+          {
+            "covered_decode_updown_ms": 8926.875,
+            "covered_ratio_of_decode_updown": 0.3854234497379973,
+            "prompt_id": "france",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -11773.125,
+                "remaining_decode_ms_after_selected_pairs_removed": 34198.125,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.278688524590164
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -10328.938953488374,
+                "remaining_decode_ms_after_selected_pairs_removed": 31189.404069767443,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.3441589761728676
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 17753.293,
+            "covered_ratio_of_decode_updown": 0.35769988324625107,
+            "prompt_id": "quantum",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -32886.83857894737,
+                "remaining_decode_ms_after_selected_pairs_removed": 63924.33857894737,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.427674708097941
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -29353.806143206853,
+                "remaining_decode_ms_after_selected_pairs_removed": 58225.89916646267,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.4793170596398237
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 14103.262,
+            "covered_ratio_of_decode_updown": 0.2932963674059478,
+            "prompt_id": "fibonacci",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -46146.00270588236,
+                "remaining_decode_ms_after_selected_pairs_removed": 77183.50270588236,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.0106304399187724
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -41942.56563337892,
+                "remaining_decode_ms_after_selected_pairs_removed": 70814.65865663474,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.0385675487931443
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 9978.796,
+            "covered_ratio_of_decode_updown": 0.4061460320809421,
+            "prompt_id": "japan",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -13786.828999999998,
+                "remaining_decode_ms_after_selected_pairs_removed": 35724.329,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.0703865704517503
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -12128.762139534883,
+                "remaining_decode_ms_after_selected_pairs_removed": 32535.73888372093,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.1360862614982077
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 11393.752,
+            "covered_ratio_of_decode_updown": 0.3654840324525064,
+            "prompt_id": "climate",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -18174.182782608703,
+                "remaining_decode_ms_after_selected_pairs_removed": 43361.6827826087,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.9043499218279973
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -16111.303611729025,
+                "remaining_decode_ms_after_selected_pairs_removed": 39541.53616986856,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.9627367608436317
+              }
+            ]
+          }
+        ],
+        "top_n": 512
+      },
+      {
+        "actual_pairs": 1024,
+        "aggregate": {
+          "40": {
+            "max_zero_overhead_tok_s": 3.7278230683576195,
+            "mean_covered_ratio": 0.5344237546500552,
+            "mean_margin_ms_after_reaching_5": -18534.040013487687,
+            "mean_zero_overhead_tok_s": 3.1163460838585797,
+            "min_covered_ratio": 0.46025019006823736,
+            "min_margin_ms_after_reaching_5": -38117.96770588236,
+            "min_zero_overhead_tok_s": 2.2440380370213266,
+            "prompts_below_5": [
+              "france",
+              "quantum",
+              "fibonacci",
+              "japan",
+              "climate"
+            ]
+          },
+          "43": {
+            "max_zero_overhead_tok_s": 3.8531799501155035,
+            "mean_covered_ratio": 0.5344237546500552,
+            "mean_margin_ms_after_reaching_5": -15953.719696267615,
+            "mean_zero_overhead_tok_s": 3.22053013708303,
+            "min_covered_ratio": 0.46025019006823736,
+            "min_margin_ms_after_reaching_5": -33914.530633378934,
+            "min_zero_overhead_tok_s": 2.2992232534393384,
+            "prompts_below_5": [
+              "france",
+              "quantum",
+              "fibonacci",
+              "japan",
+              "climate"
+            ]
+          }
+        },
+        "payload_mib": 8704.0,
+        "per_prompt": [
+          {
+            "covered_decode_updown_ms": 13047.124,
+            "covered_ratio_of_decode_updown": 0.5633177949998649,
+            "prompt_id": "france",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -7652.876,
+                "remaining_decode_ms_after_selected_pairs_removed": 30077.876,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.7278230683576195
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -6208.689953488374,
+                "remaining_decode_ms_after_selected_pairs_removed": 27069.155069767443,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.8531799501155035
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 25756.092,
+            "covered_ratio_of_decode_updown": 0.5189432237320536,
+            "prompt_id": "quantum",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -24884.03957894737,
+                "remaining_decode_ms_after_selected_pairs_removed": 55921.53957894737,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.775093482197744
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -21351.007143206854,
+                "remaining_decode_ms_after_selected_pairs_removed": 50223.10016646267,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.8743837922748994
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 22131.297,
+            "covered_ratio_of_decode_updown": 0.46025019006823736,
+            "prompt_id": "fibonacci",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -38117.96770588236,
+                "remaining_decode_ms_after_selected_pairs_removed": 69155.46770588236,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.2440380370213266
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -33914.530633378934,
+                "remaining_decode_ms_after_selected_pairs_removed": 62786.62365663474,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.2992232534393384
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 14494.879,
+            "covered_ratio_of_decode_updown": 0.5899546990782629,
+            "prompt_id": "japan",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -9270.746,
+                "remaining_decode_ms_after_selected_pairs_removed": 31208.246,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.5146960838491212
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -7612.679139534885,
+                "remaining_decode_ms_after_selected_pairs_removed": 28019.65588372093,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.6415466394150555
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 16823.364,
+            "covered_ratio_of_decode_updown": 0.5396528653718572,
+            "prompt_id": "climate",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -12744.570782608702,
+                "remaining_decode_ms_after_selected_pairs_removed": 37932.0707826087,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.3200797478670867
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -10681.691611729024,
+                "remaining_decode_ms_after_selected_pairs_removed": 34111.92416986856,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.4343170501703506
+              }
+            ]
+          }
+        ],
+        "top_n": 1024
+      },
+      {
+        "actual_pairs": 2048,
+        "aggregate": {
+          "40": {
+            "max_zero_overhead_tok_s": 4.468499796391836,
+            "mean_covered_ratio": 0.7488935414635489,
+            "mean_margin_ms_after_reaching_5": -10921.051213487688,
+            "mean_zero_overhead_tok_s": 3.7560685217298273,
+            "min_covered_ratio": 0.6800019099367496,
+            "min_margin_ms_after_reaching_5": -27551.126705882365,
+            "min_zero_overhead_tok_s": 2.648764934857553,
+            "prompts_below_5": [
+              "france",
+              "quantum",
+              "fibonacci",
+              "japan",
+              "climate"
+            ]
+          },
+          "43": {
+            "max_zero_overhead_tok_s": 4.723068626191351,
+            "mean_covered_ratio": 0.7488935414635489,
+            "mean_margin_ms_after_reaching_5": -8340.730896267614,
+            "mean_zero_overhead_tok_s": 3.9726128279909654,
+            "min_covered_ratio": 0.6800019099367496,
+            "min_margin_ms_after_reaching_5": -23347.68963337893,
+            "min_zero_overhead_tok_s": 2.7644784748627727,
+            "prompts_below_5": [
+              "france",
+              "quantum",
+              "fibonacci",
+              "japan",
+              "climate"
+            ]
+          }
+        },
+        "payload_mib": 17408.0,
+        "per_prompt": [
+          {
+            "covered_decode_updown_ms": 18032.686,
+            "covered_ratio_of_decode_updown": 0.7785725739592062,
+            "prompt_id": "france",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -2667.3139999999985,
+                "remaining_decode_ms_after_selected_pairs_removed": 25092.314,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.468499796391836
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -1223.1279534883724,
+                "remaining_decode_ms_after_selected_pairs_removed": 22083.59306976744,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.723068626191351
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 36443.46,
+            "covered_ratio_of_decode_updown": 0.7342762487550575,
+            "prompt_id": "quantum",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -14196.671578947375,
+                "remaining_decode_ms_after_selected_pairs_removed": 45234.171578947375,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.43075808803419
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -10663.63914320686,
+                "remaining_decode_ms_after_selected_pairs_removed": 39535.73216646267,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.651392226871089
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 32698.138,
+            "covered_ratio_of_decode_updown": 0.6800019099367496,
+            "prompt_id": "fibonacci",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -27551.126705882365,
+                "remaining_decode_ms_after_selected_pairs_removed": 58588.626705882365,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.648764934857553
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -23347.68963337893,
+                "remaining_decode_ms_after_selected_pairs_removed": 52219.78265663474,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 2.7644784748627727
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 19444.994,
+            "covered_ratio_of_decode_updown": 0.7914288614515945,
+            "prompt_id": "japan",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -4320.631000000001,
+                "remaining_decode_ms_after_selected_pairs_removed": 26258.131,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.177277506917761
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -2662.5641395348866,
+                "remaining_decode_ms_after_selected_pairs_removed": 23069.540883720932,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.422926500151173
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 23698.422,
+            "covered_ratio_of_decode_updown": 0.7601881132151368,
+            "prompt_id": "climate",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -5869.512782608705,
+                "remaining_decode_ms_after_selected_pairs_removed": 31057.012782608705,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.055042282447797
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -3806.6336117290266,
+                "remaining_decode_ms_after_selected_pairs_removed": 27236.86616986856,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.301198311878441
+              }
+            ]
+          }
+        ],
+        "top_n": 2048
+      },
+      {
+        "actual_pairs": 3072,
+        "aggregate": {
+          "40": {
+            "max_zero_overhead_tok_s": 4.932462111322535,
+            "mean_covered_ratio": 0.8710093021671235,
+            "mean_margin_ms_after_reaching_5": -6402.966213487689,
+            "mean_zero_overhead_tok_s": 4.242392887262161,
+            "min_covered_ratio": 0.8324116807106495,
+            "min_margin_ms_after_reaching_5": -20222.44770588236,
+            "min_zero_overhead_tok_s": 3.027461145501547,
+            "prompts_below_5": [
+              "france",
+              "quantum",
+              "fibonacci",
+              "japan",
+              "climate"
+            ]
+          },
+          "43": {
+            "max_zero_overhead_tok_s": 5.288270492830788,
+            "mean_covered_ratio": 0.8710093021671235,
+            "mean_margin_ms_after_reaching_5": -3822.645896267615,
+            "mean_zero_overhead_tok_s": 4.568754067212711,
+            "min_covered_ratio": 0.8324116807106495,
+            "min_margin_ms_after_reaching_5": -16019.010633378926,
+            "min_zero_overhead_tok_s": 3.2157922919532216,
+            "prompts_below_5": [
+              "quantum",
+              "fibonacci",
+              "japan",
+              "climate"
+            ]
+          }
+        },
+        "payload_mib": 26112.0,
+        "per_prompt": [
+          {
+            "covered_decode_updown_ms": 20392.945,
+            "covered_ratio_of_decode_updown": 0.8804782426344319,
+            "prompt_id": "france",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -307.0550000000003,
+                "remaining_decode_ms_after_selected_pairs_removed": 22732.055,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.932462111322535
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 1137.1310465116258,
+                "remaining_decode_ms_after_selected_pairs_removed": 19723.334069767443,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.288270492830788
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 43078.592,
+            "covered_ratio_of_decode_updown": 0.8679633310176813,
+            "prompt_id": "quantum",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -7561.539578947377,
+                "remaining_decode_ms_after_selected_pairs_removed": 38599.03957894738,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.020501590009563
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -4028.5071432068617,
+                "remaining_decode_ms_after_selected_pairs_removed": 32900.600166462675,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.387776040129303
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 40026.817,
+            "covered_ratio_of_decode_updown": 0.8324116807106495,
+            "prompt_id": "fibonacci",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -20222.44770588236,
+                "remaining_decode_ms_after_selected_pairs_removed": 51259.94770588236,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.027461145501547
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -16019.010633378926,
+                "remaining_decode_ms_after_selected_pairs_removed": 44891.10365663474,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.2157922919532216
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 21945.974,
+            "covered_ratio_of_decode_updown": 0.8932210118586972,
+            "prompt_id": "japan",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -1819.6510000000017,
+                "remaining_decode_ms_after_selected_pairs_removed": 23757.151,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.617030888931084
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -161.58413953488707,
+                "remaining_decode_ms_after_selected_pairs_removed": 20568.560883720933,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.960720601589882
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 27463.797,
+            "covered_ratio_of_decode_updown": 0.8809722446141576,
+            "prompt_id": "climate",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -2104.1377826087046,
+                "remaining_decode_ms_after_selected_pairs_removed": 27291.637782608705,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.6145087005460805
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -41.2586117290266,
+                "remaining_decode_ms_after_selected_pairs_removed": 23471.49116986856,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.991210909560362
+              }
+            ]
+          }
+        ],
+        "top_n": 3072
+      },
+      {
+        "actual_pairs": 4096,
+        "aggregate": {
+          "40": {
+            "max_zero_overhead_tok_s": 5.276114543611504,
+            "mean_covered_ratio": 0.940484176060896,
+            "mean_margin_ms_after_reaching_5": -3823.24321348769,
+            "mean_zero_overhead_tok_s": 4.5807477468664395,
+            "min_covered_ratio": 0.9223489676546471,
+            "min_margin_ms_after_reaching_5": -15897.780705882367,
+            "min_zero_overhead_tok_s": 3.30641465579965,
+            "prompts_below_5": [
+              "quantum",
+              "fibonacci",
+              "japan",
+              "climate"
+            ]
+          },
+          "43": {
+            "max_zero_overhead_tok_s": 5.717478819214087,
+            "mean_covered_ratio": 0.940484176060896,
+            "mean_margin_ms_after_reaching_5": -1242.9228962676164,
+            "mean_zero_overhead_tok_s": 4.9971220578929705,
+            "min_covered_ratio": 0.9223489676546471,
+            "min_margin_ms_after_reaching_5": -11694.343633378932,
+            "min_zero_overhead_tok_s": 3.5586183311633945,
+            "prompts_below_5": [
+              "quantum",
+              "fibonacci"
+            ]
+          }
+        },
+        "payload_mib": 34816.0,
+        "per_prompt": [
+          {
+            "covered_decode_updown_ms": 21873.566,
+            "covered_ratio_of_decode_updown": 0.9444049867161539,
+            "prompt_id": "france",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": 1173.565999999999,
+                "remaining_decode_ms_after_selected_pairs_removed": 21251.434,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.276114543611504
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 2617.752046511625,
+                "remaining_decode_ms_after_selected_pairs_removed": 18242.713069767444,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.717478819214087
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 46903.971,
+            "covered_ratio_of_decode_updown": 0.9450384754245618,
+            "prompt_id": "quantum",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -3736.160578947376,
+                "remaining_decode_ms_after_selected_pairs_removed": 34773.660578947376,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.462788714684625
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -203.12814320686084,
+                "remaining_decode_ms_after_selected_pairs_removed": 29075.221166462674,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.965068512799283
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 44351.484,
+            "covered_ratio_of_decode_updown": 0.9223489676546471,
+            "prompt_id": "fibonacci",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -15897.780705882367,
+                "remaining_decode_ms_after_selected_pairs_removed": 46935.28070588237,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.30641465579965
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -11694.343633378932,
+                "remaining_decode_ms_after_selected_pairs_removed": 40566.436656634745,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.5586183311633945
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 23292.012,
+            "covered_ratio_of_decode_updown": 0.9480059771721646,
+            "prompt_id": "japan",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -473.6130000000012,
+                "remaining_decode_ms_after_selected_pairs_removed": 22411.113,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.894335234488354
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 1184.4538604651134,
+                "remaining_decode_ms_after_selected_pairs_removed": 19222.522883720932,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.3080901158578415
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 29385.707,
+            "covered_ratio_of_decode_updown": 0.942622473336952,
+            "prompt_id": "climate",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -182.22778260870473,
+                "remaining_decode_ms_after_selected_pairs_removed": 25369.727782608705,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.9640855857480615
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 1880.6513882709733,
+                "remaining_decode_ms_after_selected_pairs_removed": 21549.58116986856,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.436354510430247
+              }
+            ]
+          }
+        ],
+        "top_n": 4096
+      },
+      {
+        "actual_pairs": 5120,
+        "aggregate": {
+          "40": {
+            "max_zero_overhead_tok_s": 5.497027903477436,
+            "mean_covered_ratio": 0.9796405078017199,
+            "mean_margin_ms_after_reaching_5": -2382.2258134876865,
+            "mean_zero_overhead_tok_s": 4.794069739855692,
+            "min_covered_ratio": 0.9774808305964204,
+            "min_margin_ms_after_reaching_5": -13242.445705882361,
+            "min_zero_overhead_tok_s": 3.504690385819153,
+            "prompts_below_5": [
+              "quantum",
+              "fibonacci"
+            ]
+          },
+          "43": {
+            "max_zero_overhead_tok_s": 5.998294012962451,
+            "mean_covered_ratio": 0.9796405078017199,
+            "mean_margin_ms_after_reaching_5": 198.09450373238724,
+            "mean_zero_overhead_tok_s": 5.272671041405742,
+            "min_covered_ratio": 0.9774808305964204,
+            "min_margin_ms_after_reaching_5": -9039.008633378926,
+            "min_zero_overhead_tok_s": 3.807867848942207,
+            "prompts_below_5": [
+              "fibonacci"
+            ]
+          }
+        },
+        "payload_mib": 43520.0,
+        "per_prompt": [
+          {
+            "covered_decode_updown_ms": 22727.614,
+            "covered_ratio_of_decode_updown": 0.9812790469446032,
+            "prompt_id": "france",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": 2027.6140000000014,
+                "remaining_decode_ms_after_selected_pairs_removed": 20397.386,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.497027903477436
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 3471.8000465116274,
+                "remaining_decode_ms_after_selected_pairs_removed": 17388.66506976744,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.998294012962451
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 48721.815,
+            "covered_ratio_of_decode_updown": 0.9816650655765916,
+            "prompt_id": "quantum",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -1918.3165789473715,
+                "remaining_decode_ms_after_selected_pairs_removed": 32955.81657894737,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.708956296932904
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 1614.7158567931438,
+                "remaining_decode_ms_after_selected_pairs_removed": 27257.37716646267,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.296197951646625
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 47006.819,
+            "covered_ratio_of_decode_updown": 0.9775702426863294,
+            "prompt_id": "fibonacci",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -13242.445705882361,
+                "remaining_decode_ms_after_selected_pairs_removed": 44279.94570588236,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.504690385819153
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -9039.008633378926,
+                "remaining_decode_ms_after_selected_pairs_removed": 37911.10165663474,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.807867848942207
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 24083.183,
+            "covered_ratio_of_decode_updown": 0.980207353204655,
+            "prompt_id": "japan",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": 317.5580000000009,
+                "remaining_decode_ms_after_selected_pairs_removed": 21619.942,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.073440992579907
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 1975.6248604651155,
+                "remaining_decode_ms_after_selected_pairs_removed": 18431.35188372093,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.535941387514295
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 30472.396,
+            "covered_ratio_of_decode_updown": 0.9774808305964204,
+            "prompt_id": "climate",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": 904.4612173912974,
+                "remaining_decode_ms_after_selected_pairs_removed": 24283.038782608703,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.186233120469063
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 2967.3403882709754,
+                "remaining_decode_ms_after_selected_pairs_removed": 20462.89216986856,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.725054005963135
+              }
+            ]
+          }
+        ],
+        "top_n": 5120
+      },
+      {
+        "actual_pairs": 6485,
+        "aggregate": {
+          "40": {
+            "max_zero_overhead_tok_s": 5.616419651062179,
+            "mean_covered_ratio": 1.0,
+            "mean_margin_ms_after_reaching_5": -1660.1346134876876,
+            "mean_zero_overhead_tok_s": 4.916419052318918,
+            "min_covered_ratio": 1.0,
+            "min_margin_ms_after_reaching_5": -12163.902705882363,
+            "min_zero_overhead_tok_s": 3.592186602285241,
+            "prompts_below_5": [
+              "quantum",
+              "fibonacci"
+            ]
+          },
+          "43": {
+            "max_zero_overhead_tok_s": 6.151691258759998,
+            "mean_covered_ratio": 1.0,
+            "mean_margin_ms_after_reaching_5": 920.1857037323862,
+            "mean_zero_overhead_tok_s": 5.432916872694868,
+            "min_covered_ratio": 1.0,
+            "min_margin_ms_after_reaching_5": -7960.465633378928,
+            "min_zero_overhead_tok_s": 3.9193710776939215,
+            "prompts_below_5": [
+              "fibonacci"
+            ]
+          }
+        },
+        "payload_mib": 55122.5,
+        "per_prompt": [
+          {
+            "covered_decode_updown_ms": 23161.214,
+            "covered_ratio_of_decode_updown": 1.0,
+            "prompt_id": "france",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": 2461.214,
+                "remaining_decode_ms_after_selected_pairs_removed": 19963.786,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.616419651062179
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 3905.400046511626,
+                "remaining_decode_ms_after_selected_pairs_removed": 16955.065069767443,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 6.151691258759998
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 49631.811,
+            "covered_ratio_of_decode_updown": 1.0,
+            "prompt_id": "quantum",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -1008.3205789473723,
+                "remaining_decode_ms_after_selected_pairs_removed": 32045.820578947372,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 4.842675181859785
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 2524.711856793143,
+                "remaining_decode_ms_after_selected_pairs_removed": 26347.38116646267,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.479120076648609
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 48085.362,
+            "covered_ratio_of_decode_updown": 1.0,
+            "prompt_id": "fibonacci",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": -12163.902705882363,
+                "remaining_decode_ms_after_selected_pairs_removed": 43201.40270588236,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.592186602285241
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": -7960.465633378928,
+                "remaining_decode_ms_after_selected_pairs_removed": 36832.55865663474,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 3.9193710776939215
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 24569.478,
+            "covered_ratio_of_decode_updown": 1.0,
+            "prompt_id": "japan",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": 803.8529999999992,
+                "remaining_decode_ms_after_selected_pairs_removed": 21133.647,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.190183218258543
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 2461.9198604651137,
+                "remaining_decode_ms_after_selected_pairs_removed": 17945.056883720932,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.68596045039525
+              }
+            ]
+          },
+          {
+            "covered_decode_updown_ms": 31174.418,
+            "covered_ratio_of_decode_updown": 1.0,
+            "prompt_id": "climate",
+            "sensitivity": [
+              {
+                "layers": 40,
+                "margin_ms_after_reaching_5": 1606.4832173912982,
+                "remaining_decode_ms_after_selected_pairs_removed": 23581.0167826087,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.340630608128844
+              },
+              {
+                "layers": 43,
+                "margin_ms_after_reaching_5": 3669.362388270976,
+                "remaining_decode_ms_after_selected_pairs_removed": 19760.870169868558,
+                "zero_overhead_tok_s_if_selected_pairs_removed": 5.928441499976563
+              }
+            ]
+          }
+        ],
+        "top_n": 6485
+      }
+    ],
+    "description": "Extended generalized hotset curve computed from the same calibration/dev fallback CSVs without writing large profile files for topN above 512. Held-out set is not used. This is still a zero-overhead upper bound."
+  },
+  "input_prompts": [
+    "france",
+    "quantum",
+    "fibonacci",
+    "japan",
+    "climate"
+  ],
+  "profiles": [
+    {
+      "manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.offset_manifest.csv",
+      "payload_mib": 408.0,
+      "profile_json": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.profile.json",
+      "sha256": {
+        "manifest": "8872a762e7f3d3efbb00e1c18909874caa53ab06b2d4b9ab36f3bb6b4f45ee1f",
+        "profile_json": "d4f30db1bff5060233f145469ffdf22431faf5e68408ec5cfa100ad3b4db748a",
+        "tsv": "e0566dd83ee8c252aa0187986eda5c94d685f11ee315e852f85305fe44273c44"
+      },
+      "top_n": 48,
+      "tsv": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.tsv"
+    },
+    {
+      "manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top64-updown-20260707.offset_manifest.csv",
+      "payload_mib": 544.0,
+      "profile_json": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top64-updown-20260707.profile.json",
+      "sha256": {
+        "manifest": "e67e2dadd8455708a5568c475817cc4647f67f801f4d21d000b4c009b69a91d4",
+        "profile_json": "0750844e0798d84897b94e4f9d9068e62afc1ab1c07f230acfa66bf24098de6f",
+        "tsv": "dbcb715ce1ee9090ed709921f1f2f95cb41584a2b9c176a1451ffaecb7a3b48c"
+      },
+      "top_n": 64,
+      "tsv": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top64-updown-20260707.tsv"
+    },
+    {
+      "manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top128-updown-20260707.offset_manifest.csv",
+      "payload_mib": 1088.0,
+      "profile_json": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top128-updown-20260707.profile.json",
+      "sha256": {
+        "manifest": "e559d0d4bdf29b37eb238bc82fc32369ab50167d66708a90c8a6e204bc130941",
+        "profile_json": "5107f376bddb6f23773aedcaf35e2749b26fe0fda5cb2a523624adc329029beb",
+        "tsv": "ec50ee36f89993798b72d33851714e28f32548ee667633c20fd23e6c5d6dc33e"
+      },
+      "top_n": 128,
+      "tsv": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top128-updown-20260707.tsv"
+    },
+    {
+      "manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top256-updown-20260707.offset_manifest.csv",
+      "payload_mib": 2176.0,
+      "profile_json": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top256-updown-20260707.profile.json",
+      "sha256": {
+        "manifest": "e91ec13de26795820a4c2637113db9bbce49c60e9bfd60b8eeca2805aef4fa62",
+        "profile_json": "a6679368ca4dbae9a55b58f0e98f46ee94a3bb7b53b4ba49d716b1fd2e6b511d",
+        "tsv": "3ea9802c01be05bf81f90baf34696fcd6837285e8a8561b142123cf6dfd0a529"
+      },
+      "top_n": 256,
+      "tsv": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top256-updown-20260707.tsv"
+    },
+    {
+      "manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top512-updown-20260707.offset_manifest.csv",
+      "payload_mib": 4352.0,
+      "profile_json": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top512-updown-20260707.profile.json",
+      "sha256": {
+        "manifest": "7fffb267e7fbda756ed588e1aa8d538a615dcfd1faf11df8bbd545952ecef65b",
+        "profile_json": "366ed7cfcafec2425dc2c18c8101c22d94e48b620dfc20038f8e64de209c8f1e",
+        "tsv": "9164fcbc936755503a7fe3be3697d64f9f1e40bb193c85940285fd129ba0ec76"
+      },
+      "top_n": 512,
+      "tsv": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top512-updown-20260707.tsv"
+    }
+  ],
+  "prompt_scope": "calibration_dev_set_v1 only; held_out_test_set_v1_locked not used",
+  "source_artifacts": {
+    "fallback_profile": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+    "full_updown_removal_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json"
+  },
+  "status": "completed_hard_bound_no_sota",
+  "top_pairs_preview": [
+    {
+      "down_calls": 509,
+      "down_hot_ms": 286.277,
+      "down_nbytes": 4456448,
+      "down_rows": 509,
+      "down_tensor": "blk.22.ffn_down_exps.weight",
+      "expert": 66,
+      "fused_calls": 509,
+      "hot_ms": 709.663,
+      "layer": 22,
+      "pair_key": "blk.22.expert.66",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 132,
+          "down_ms": 78.078,
+          "hot_ms": 173.97,
+          "up_calls": 132,
+          "up_ms": 95.892
+        },
+        "fibonacci": {
+          "down_calls": 20,
+          "down_ms": 17.5,
+          "hot_ms": 44.13,
+          "up_calls": 20,
+          "up_ms": 26.63
+        },
+        "france": {
+          "down_calls": 101,
+          "down_ms": 40.4,
+          "hot_ms": 92.487,
+          "up_calls": 101,
+          "up_ms": 52.087
+        },
+        "japan": {
+          "down_calls": 124,
+          "down_ms": 58.104,
+          "hot_ms": 163.372,
+          "up_calls": 124,
+          "up_ms": 105.268
+        },
+        "quantum": {
+          "down_calls": 132,
+          "down_ms": 92.195,
+          "hot_ms": 235.704,
+          "up_calls": 132,
+          "up_ms": 143.509
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 509,
+      "up_hot_ms": 423.386,
+      "up_nbytes": 4456448,
+      "up_rows": 509,
+      "up_tensor": "blk.22.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 440,
+      "down_hot_ms": 308.228,
+      "down_nbytes": 4456448,
+      "down_rows": 440,
+      "down_tensor": "blk.3.ffn_down_exps.weight",
+      "expert": 101,
+      "fused_calls": 440,
+      "hot_ms": 701.273,
+      "layer": 3,
+      "pair_key": "blk.3.expert.101",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 112,
+          "down_ms": 90.179,
+          "hot_ms": 162.017,
+          "up_calls": 112,
+          "up_ms": 71.838
+        },
+        "fibonacci": {
+          "down_calls": 21,
+          "down_ms": 11.015,
+          "hot_ms": 37.808,
+          "up_calls": 21,
+          "up_ms": 26.793
+        },
+        "france": {
+          "down_calls": 101,
+          "down_ms": 61.715,
+          "hot_ms": 131.966,
+          "up_calls": 101,
+          "up_ms": 70.251
+        },
+        "japan": {
+          "down_calls": 116,
+          "down_ms": 63.26,
+          "hot_ms": 153.363,
+          "up_calls": 116,
+          "up_ms": 90.103
+        },
+        "quantum": {
+          "down_calls": 90,
+          "down_ms": 82.059,
+          "hot_ms": 216.119,
+          "up_calls": 90,
+          "up_ms": 134.06
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 440,
+      "up_hot_ms": 393.045,
+      "up_nbytes": 4456448,
+      "up_rows": 440,
+      "up_tensor": "blk.3.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 366,
+      "down_hot_ms": 235.929,
+      "down_nbytes": 4456448,
+      "down_rows": 366,
+      "down_tensor": "blk.18.ffn_down_exps.weight",
+      "expert": 166,
+      "fused_calls": 366,
+      "hot_ms": 597.821,
+      "layer": 18,
+      "pair_key": "blk.18.expert.166",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 72,
+          "down_ms": 37.634,
+          "hot_ms": 108.591,
+          "up_calls": 72,
+          "up_ms": 70.957
+        },
+        "fibonacci": {
+          "down_calls": 70,
+          "down_ms": 50.451,
+          "hot_ms": 126.16,
+          "up_calls": 70,
+          "up_ms": 75.709
+        },
+        "france": {
+          "down_calls": 74,
+          "down_ms": 42.187,
+          "hot_ms": 100.123,
+          "up_calls": 74,
+          "up_ms": 57.936
+        },
+        "japan": {
+          "down_calls": 80,
+          "down_ms": 37.502,
+          "hot_ms": 93.652,
+          "up_calls": 80,
+          "up_ms": 56.15
+        },
+        "quantum": {
+          "down_calls": 70,
+          "down_ms": 68.155,
+          "hot_ms": 169.295,
+          "up_calls": 70,
+          "up_ms": 101.14
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 366,
+      "up_hot_ms": 361.892,
+      "up_nbytes": 4456448,
+      "up_rows": 366,
+      "up_tensor": "blk.18.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 487,
+      "down_hot_ms": 220.089,
+      "down_nbytes": 4456448,
+      "down_rows": 487,
+      "down_tensor": "blk.17.ffn_down_exps.weight",
+      "expert": 3,
+      "fused_calls": 487,
+      "hot_ms": 582.88,
+      "layer": 17,
+      "pair_key": "blk.17.expert.3",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 112,
+          "down_ms": 49.097,
+          "hot_ms": 137.76,
+          "up_calls": 112,
+          "up_ms": 88.663
+        },
+        "fibonacci": {
+          "down_calls": 85,
+          "down_ms": 55.566,
+          "hot_ms": 136.563,
+          "up_calls": 85,
+          "up_ms": 80.997
+        },
+        "france": {
+          "down_calls": 95,
+          "down_ms": 27.136,
+          "hot_ms": 79.735,
+          "up_calls": 95,
+          "up_ms": 52.599
+        },
+        "japan": {
+          "down_calls": 98,
+          "down_ms": 36.3,
+          "hot_ms": 98.672,
+          "up_calls": 98,
+          "up_ms": 62.372
+        },
+        "quantum": {
+          "down_calls": 97,
+          "down_ms": 51.99,
+          "hot_ms": 130.15,
+          "up_calls": 97,
+          "up_ms": 78.16
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 487,
+      "up_hot_ms": 362.791,
+      "up_nbytes": 4456448,
+      "up_rows": 487,
+      "up_tensor": "blk.17.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 276,
+      "down_hot_ms": 185.853,
+      "down_nbytes": 4456448,
+      "down_rows": 276,
+      "down_tensor": "blk.4.ffn_down_exps.weight",
+      "expert": 233,
+      "fused_calls": 276,
+      "hot_ms": 457.237,
+      "layer": 4,
+      "pair_key": "blk.4.expert.233",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 77,
+          "down_ms": 45.962,
+          "hot_ms": 109.719,
+          "up_calls": 77,
+          "up_ms": 63.757
+        },
+        "fibonacci": {
+          "down_calls": 27,
+          "down_ms": 28.089,
+          "hot_ms": 56.307,
+          "up_calls": 27,
+          "up_ms": 28.218
+        },
+        "france": {
+          "down_calls": 59,
+          "down_ms": 20.941,
+          "hot_ms": 62.361,
+          "up_calls": 59,
+          "up_ms": 41.42
+        },
+        "japan": {
+          "down_calls": 59,
+          "down_ms": 35.158,
+          "hot_ms": 100.738,
+          "up_calls": 59,
+          "up_ms": 65.58
+        },
+        "quantum": {
+          "down_calls": 54,
+          "down_ms": 55.703,
+          "hot_ms": 128.112,
+          "up_calls": 54,
+          "up_ms": 72.409
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 276,
+      "up_hot_ms": 271.384,
+      "up_nbytes": 4456448,
+      "up_rows": 276,
+      "up_tensor": "blk.4.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 403,
+      "down_hot_ms": 181.45,
+      "down_nbytes": 4456448,
+      "down_rows": 403,
+      "down_tensor": "blk.27.ffn_down_exps.weight",
+      "expert": 152,
+      "fused_calls": 403,
+      "hot_ms": 448.759,
+      "layer": 27,
+      "pair_key": "blk.27.expert.152",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 78,
+          "down_ms": 28.694,
+          "hot_ms": 80.101,
+          "up_calls": 78,
+          "up_ms": 51.407
+        },
+        "fibonacci": {
+          "down_calls": 41,
+          "down_ms": 29.709,
+          "hot_ms": 69.965,
+          "up_calls": 41,
+          "up_ms": 40.256
+        },
+        "france": {
+          "down_calls": 116,
+          "down_ms": 45.557,
+          "hot_ms": 109.387,
+          "up_calls": 116,
+          "up_ms": 63.83
+        },
+        "japan": {
+          "down_calls": 120,
+          "down_ms": 54.349,
+          "hot_ms": 126.082,
+          "up_calls": 120,
+          "up_ms": 71.733
+        },
+        "quantum": {
+          "down_calls": 48,
+          "down_ms": 23.141,
+          "hot_ms": 63.224,
+          "up_calls": 48,
+          "up_ms": 40.083
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 403,
+      "up_hot_ms": 267.309,
+      "up_nbytes": 4456448,
+      "up_rows": 403,
+      "up_tensor": "blk.27.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 367,
+      "down_hot_ms": 190.046,
+      "down_nbytes": 4456448,
+      "down_rows": 367,
+      "down_tensor": "blk.18.ffn_down_exps.weight",
+      "expert": 79,
+      "fused_calls": 367,
+      "hot_ms": 445.354,
+      "layer": 18,
+      "pair_key": "blk.18.expert.79",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 93,
+          "down_ms": 32.425,
+          "hot_ms": 78.715,
+          "up_calls": 93,
+          "up_ms": 46.29
+        },
+        "fibonacci": {
+          "down_calls": 27,
+          "down_ms": 23.377,
+          "hot_ms": 46.724,
+          "up_calls": 27,
+          "up_ms": 23.347
+        },
+        "france": {
+          "down_calls": 66,
+          "down_ms": 22.481,
+          "hot_ms": 66.792,
+          "up_calls": 66,
+          "up_ms": 44.311
+        },
+        "japan": {
+          "down_calls": 73,
+          "down_ms": 33.581,
+          "hot_ms": 83.328,
+          "up_calls": 73,
+          "up_ms": 49.747
+        },
+        "quantum": {
+          "down_calls": 108,
+          "down_ms": 78.182,
+          "hot_ms": 169.795,
+          "up_calls": 108,
+          "up_ms": 91.613
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 367,
+      "up_hot_ms": 255.308,
+      "up_nbytes": 4456448,
+      "up_rows": 367,
+      "up_tensor": "blk.18.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 317,
+      "down_hot_ms": 152.092,
+      "down_nbytes": 4456448,
+      "down_rows": 317,
+      "down_tensor": "blk.8.ffn_down_exps.weight",
+      "expert": 200,
+      "fused_calls": 317,
+      "hot_ms": 412.382,
+      "layer": 8,
+      "pair_key": "blk.8.expert.200",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 56,
+          "down_ms": 25.084,
+          "hot_ms": 61.848,
+          "up_calls": 56,
+          "up_ms": 36.764
+        },
+        "fibonacci": {
+          "down_calls": 75,
+          "down_ms": 41.591,
+          "hot_ms": 130.965,
+          "up_calls": 75,
+          "up_ms": 89.374
+        },
+        "france": {
+          "down_calls": 63,
+          "down_ms": 17.497,
+          "hot_ms": 54.23,
+          "up_calls": 63,
+          "up_ms": 36.733
+        },
+        "japan": {
+          "down_calls": 57,
+          "down_ms": 16.566,
+          "hot_ms": 46.574,
+          "up_calls": 57,
+          "up_ms": 30.008
+        },
+        "quantum": {
+          "down_calls": 66,
+          "down_ms": 51.354,
+          "hot_ms": 118.765,
+          "up_calls": 66,
+          "up_ms": 67.411
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 317,
+      "up_hot_ms": 260.29,
+      "up_nbytes": 4456448,
+      "up_rows": 317,
+      "up_tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 382,
+      "down_hot_ms": 167.331,
+      "down_nbytes": 4456448,
+      "down_rows": 382,
+      "down_tensor": "blk.16.ffn_down_exps.weight",
+      "expert": 176,
+      "fused_calls": 382,
+      "hot_ms": 411.988,
+      "layer": 16,
+      "pair_key": "blk.16.expert.176",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 94,
+          "down_ms": 46.059,
+          "hot_ms": 105.092,
+          "up_calls": 94,
+          "up_ms": 59.033
+        },
+        "fibonacci": {
+          "down_calls": 35,
+          "down_ms": 14.867,
+          "hot_ms": 47.789,
+          "up_calls": 35,
+          "up_ms": 32.922
+        },
+        "france": {
+          "down_calls": 58,
+          "down_ms": 11.845,
+          "hot_ms": 41.442,
+          "up_calls": 58,
+          "up_ms": 29.597
+        },
+        "japan": {
+          "down_calls": 37,
+          "down_ms": 5.18,
+          "hot_ms": 14.207,
+          "up_calls": 37,
+          "up_ms": 9.027
+        },
+        "quantum": {
+          "down_calls": 158,
+          "down_ms": 89.38,
+          "hot_ms": 203.458,
+          "up_calls": 158,
+          "up_ms": 114.078
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 382,
+      "up_hot_ms": 244.657,
+      "up_nbytes": 4456448,
+      "up_rows": 382,
+      "up_tensor": "blk.16.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 299,
+      "down_hot_ms": 187.091,
+      "down_nbytes": 4456448,
+      "down_rows": 299,
+      "down_tensor": "blk.6.ffn_down_exps.weight",
+      "expert": 111,
+      "fused_calls": 299,
+      "hot_ms": 401.186,
+      "layer": 6,
+      "pair_key": "blk.6.expert.111",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 58,
+          "down_ms": 35.111,
+          "hot_ms": 62.016,
+          "up_calls": 58,
+          "up_ms": 26.905
+        },
+        "fibonacci": {
+          "down_calls": 37,
+          "down_ms": 18.575,
+          "hot_ms": 49.477,
+          "up_calls": 37,
+          "up_ms": 30.902
+        },
+        "france": {
+          "down_calls": 72,
+          "down_ms": 47.991,
+          "hot_ms": 94.758,
+          "up_calls": 72,
+          "up_ms": 46.767
+        },
+        "japan": {
+          "down_calls": 71,
+          "down_ms": 37.36,
+          "hot_ms": 95.146,
+          "up_calls": 71,
+          "up_ms": 57.786
+        },
+        "quantum": {
+          "down_calls": 61,
+          "down_ms": 48.054,
+          "hot_ms": 99.789,
+          "up_calls": 61,
+          "up_ms": 51.735
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 299,
+      "up_hot_ms": 214.095,
+      "up_nbytes": 4456448,
+      "up_rows": 299,
+      "up_tensor": "blk.6.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 347,
+      "down_hot_ms": 140.875,
+      "down_nbytes": 4456448,
+      "down_rows": 347,
+      "down_tensor": "blk.8.ffn_down_exps.weight",
+      "expert": 146,
+      "fused_calls": 347,
+      "hot_ms": 344.245,
+      "layer": 8,
+      "pair_key": "blk.8.expert.146",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 90,
+          "down_ms": 38.529,
+          "hot_ms": 100.729,
+          "up_calls": 90,
+          "up_ms": 62.2
+        },
+        "fibonacci": {
+          "down_calls": 9,
+          "down_ms": 8.395,
+          "hot_ms": 22.002,
+          "up_calls": 9,
+          "up_ms": 13.607
+        },
+        "france": {
+          "down_calls": 100,
+          "down_ms": 32.181,
+          "hot_ms": 85.881,
+          "up_calls": 100,
+          "up_ms": 53.7
+        },
+        "japan": {
+          "down_calls": 119,
+          "down_ms": 38.359,
+          "hot_ms": 93.579,
+          "up_calls": 119,
+          "up_ms": 55.22
+        },
+        "quantum": {
+          "down_calls": 29,
+          "down_ms": 23.411,
+          "hot_ms": 42.054,
+          "up_calls": 29,
+          "up_ms": 18.643
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 347,
+      "up_hot_ms": 203.37,
+      "up_nbytes": 4456448,
+      "up_rows": 347,
+      "up_tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 281,
+      "down_hot_ms": 139.441,
+      "down_nbytes": 4456448,
+      "down_rows": 281,
+      "down_tensor": "blk.20.ffn_down_exps.weight",
+      "expert": 112,
+      "fused_calls": 281,
+      "hot_ms": 342.037,
+      "layer": 20,
+      "pair_key": "blk.20.expert.112",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 106,
+          "down_ms": 46.079,
+          "hot_ms": 126.453,
+          "up_calls": 106,
+          "up_ms": 80.374
+        },
+        "fibonacci": {
+          "down_calls": 2,
+          "down_ms": 1.324,
+          "hot_ms": 5.217,
+          "up_calls": 2,
+          "up_ms": 3.893
+        },
+        "france": {
+          "down_calls": 60,
+          "down_ms": 21.139,
+          "hot_ms": 42.709,
+          "up_calls": 60,
+          "up_ms": 21.57
+        },
+        "japan": {
+          "down_calls": 61,
+          "down_ms": 22.171,
+          "hot_ms": 56.831,
+          "up_calls": 61,
+          "up_ms": 34.66
+        },
+        "quantum": {
+          "down_calls": 52,
+          "down_ms": 48.728,
+          "hot_ms": 110.827,
+          "up_calls": 52,
+          "up_ms": 62.099
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 281,
+      "up_hot_ms": 202.596,
+      "up_nbytes": 4456448,
+      "up_rows": 281,
+      "up_tensor": "blk.20.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 272,
+      "down_hot_ms": 134.885,
+      "down_nbytes": 4456448,
+      "down_rows": 272,
+      "down_tensor": "blk.20.ffn_down_exps.weight",
+      "expert": 60,
+      "fused_calls": 272,
+      "hot_ms": 331.883,
+      "layer": 20,
+      "pair_key": "blk.20.expert.60",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 81,
+          "down_ms": 32.566,
+          "hot_ms": 84.754,
+          "up_calls": 81,
+          "up_ms": 52.188
+        },
+        "fibonacci": {
+          "down_calls": 11,
+          "down_ms": 11.869,
+          "hot_ms": 30.8,
+          "up_calls": 11,
+          "up_ms": 18.931
+        },
+        "france": {
+          "down_calls": 69,
+          "down_ms": 38.06,
+          "hot_ms": 75.765,
+          "up_calls": 69,
+          "up_ms": 37.705
+        },
+        "japan": {
+          "down_calls": 92,
+          "down_ms": 34.543,
+          "hot_ms": 92.961,
+          "up_calls": 92,
+          "up_ms": 58.418
+        },
+        "quantum": {
+          "down_calls": 19,
+          "down_ms": 17.847,
+          "hot_ms": 47.603,
+          "up_calls": 19,
+          "up_ms": 29.756
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 272,
+      "up_hot_ms": 196.998,
+      "up_nbytes": 4456448,
+      "up_rows": 272,
+      "up_tensor": "blk.20.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 403,
+      "down_hot_ms": 139.081,
+      "down_nbytes": 4456448,
+      "down_rows": 403,
+      "down_tensor": "blk.14.ffn_down_exps.weight",
+      "expert": 1,
+      "fused_calls": 403,
+      "hot_ms": 323.657,
+      "layer": 14,
+      "pair_key": "blk.14.expert.1",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 79,
+          "down_ms": 31.329,
+          "hot_ms": 64.744,
+          "up_calls": 79,
+          "up_ms": 33.415
+        },
+        "fibonacci": {
+          "down_calls": 82,
+          "down_ms": 25.815,
+          "hot_ms": 61.782,
+          "up_calls": 82,
+          "up_ms": 35.967
+        },
+        "france": {
+          "down_calls": 88,
+          "down_ms": 26.417,
+          "hot_ms": 64.71,
+          "up_calls": 88,
+          "up_ms": 38.293
+        },
+        "japan": {
+          "down_calls": 101,
+          "down_ms": 27.131,
+          "hot_ms": 70.98,
+          "up_calls": 101,
+          "up_ms": 43.849
+        },
+        "quantum": {
+          "down_calls": 53,
+          "down_ms": 28.389,
+          "hot_ms": 61.441,
+          "up_calls": 53,
+          "up_ms": 33.052
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 403,
+      "up_hot_ms": 184.576,
+      "up_nbytes": 4456448,
+      "up_rows": 403,
+      "up_tensor": "blk.14.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 361,
+      "down_hot_ms": 123.582,
+      "down_nbytes": 4456448,
+      "down_rows": 361,
+      "down_tensor": "blk.34.ffn_down_exps.weight",
+      "expert": 246,
+      "fused_calls": 361,
+      "hot_ms": 310.078,
+      "layer": 34,
+      "pair_key": "blk.34.expert.246",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 81,
+          "down_ms": 30.885,
+          "hot_ms": 71.459,
+          "up_calls": 81,
+          "up_ms": 40.574
+        },
+        "fibonacci": {
+          "down_calls": 7,
+          "down_ms": 1.672,
+          "hot_ms": 3.162,
+          "up_calls": 7,
+          "up_ms": 1.49
+        },
+        "france": {
+          "down_calls": 118,
+          "down_ms": 41.489,
+          "hot_ms": 101.805,
+          "up_calls": 118,
+          "up_ms": 60.316
+        },
+        "japan": {
+          "down_calls": 124,
+          "down_ms": 40.124,
+          "hot_ms": 103.866,
+          "up_calls": 124,
+          "up_ms": 63.742
+        },
+        "quantum": {
+          "down_calls": 31,
+          "down_ms": 9.412,
+          "hot_ms": 29.786,
+          "up_calls": 31,
+          "up_ms": 20.374
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 361,
+      "up_hot_ms": 186.496,
+      "up_nbytes": 4456448,
+      "up_rows": 361,
+      "up_tensor": "blk.34.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 152,
+      "down_hot_ms": 111.667,
+      "down_nbytes": 4456448,
+      "down_rows": 152,
+      "down_tensor": "blk.10.ffn_down_exps.weight",
+      "expert": 40,
+      "fused_calls": 152,
+      "hot_ms": 304.768,
+      "layer": 10,
+      "pair_key": "blk.10.expert.40",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 25,
+          "down_ms": 14.152,
+          "hot_ms": 48.144,
+          "up_calls": 25,
+          "up_ms": 33.992
+        },
+        "fibonacci": {
+          "down_calls": 56,
+          "down_ms": 36.764,
+          "hot_ms": 107.188,
+          "up_calls": 56,
+          "up_ms": 70.424
+        },
+        "france": {
+          "down_calls": 23,
+          "down_ms": 11.918,
+          "hot_ms": 35.152,
+          "up_calls": 23,
+          "up_ms": 23.234
+        },
+        "japan": {
+          "down_calls": 20,
+          "down_ms": 13.594,
+          "hot_ms": 42.57,
+          "up_calls": 20,
+          "up_ms": 28.976
+        },
+        "quantum": {
+          "down_calls": 28,
+          "down_ms": 35.239,
+          "hot_ms": 71.714,
+          "up_calls": 28,
+          "up_ms": 36.475
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 152,
+      "up_hot_ms": 193.101,
+      "up_nbytes": 4456448,
+      "up_rows": 152,
+      "up_tensor": "blk.10.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 157,
+      "down_hot_ms": 116.877,
+      "down_nbytes": 4456448,
+      "down_rows": 157,
+      "down_tensor": "blk.9.ffn_down_exps.weight",
+      "expert": 242,
+      "fused_calls": 157,
+      "hot_ms": 289.592,
+      "layer": 9,
+      "pair_key": "blk.9.expert.242",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 29,
+          "down_ms": 20.423,
+          "hot_ms": 52.068,
+          "up_calls": 29,
+          "up_ms": 31.645
+        },
+        "fibonacci": {
+          "down_calls": 31,
+          "down_ms": 22.996,
+          "hot_ms": 62.631,
+          "up_calls": 31,
+          "up_ms": 39.635
+        },
+        "france": {
+          "down_calls": 31,
+          "down_ms": 11.08,
+          "hot_ms": 29.365,
+          "up_calls": 31,
+          "up_ms": 18.285
+        },
+        "japan": {
+          "down_calls": 25,
+          "down_ms": 16.148,
+          "hot_ms": 36.092,
+          "up_calls": 25,
+          "up_ms": 19.944
+        },
+        "quantum": {
+          "down_calls": 41,
+          "down_ms": 46.23,
+          "hot_ms": 109.436,
+          "up_calls": 41,
+          "up_ms": 63.206
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 157,
+      "up_hot_ms": 172.715,
+      "up_nbytes": 4456448,
+      "up_rows": 157,
+      "up_tensor": "blk.9.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 361,
+      "down_hot_ms": 127.053,
+      "down_nbytes": 4456448,
+      "down_rows": 361,
+      "down_tensor": "blk.28.ffn_down_exps.weight",
+      "expert": 142,
+      "fused_calls": 361,
+      "hot_ms": 287.835,
+      "layer": 28,
+      "pair_key": "blk.28.expert.142",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 103,
+          "down_ms": 43.519,
+          "hot_ms": 108.566,
+          "up_calls": 103,
+          "up_ms": 65.047
+        },
+        "fibonacci": {
+          "down_calls": 33,
+          "down_ms": 13.5,
+          "hot_ms": 24.764,
+          "up_calls": 33,
+          "up_ms": 11.264
+        },
+        "france": {
+          "down_calls": 49,
+          "down_ms": 15.988,
+          "hot_ms": 30.582,
+          "up_calls": 49,
+          "up_ms": 14.594
+        },
+        "japan": {
+          "down_calls": 52,
+          "down_ms": 14.821,
+          "hot_ms": 32.757,
+          "up_calls": 52,
+          "up_ms": 17.936
+        },
+        "quantum": {
+          "down_calls": 124,
+          "down_ms": 39.225,
+          "hot_ms": 91.166,
+          "up_calls": 124,
+          "up_ms": 51.941
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 361,
+      "up_hot_ms": 160.782,
+      "up_nbytes": 4456448,
+      "up_rows": 361,
+      "up_tensor": "blk.28.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 288,
+      "down_hot_ms": 108.21,
+      "down_nbytes": 4456448,
+      "down_rows": 288,
+      "down_tensor": "blk.12.ffn_down_exps.weight",
+      "expert": 122,
+      "fused_calls": 288,
+      "hot_ms": 282.463,
+      "layer": 12,
+      "pair_key": "blk.12.expert.122",
+      "per_prompt_ms": {
+        "climate": {
+          "down_calls": 59,
+          "down_ms": 29.749,
+          "hot_ms": 79.681,
+          "up_calls": 59,
+          "up_ms": 49.932
+        },
+        "fibonacci": {
+          "down_calls": 46,
+          "down_ms": 8.464,
+          "hot_ms": 31.786,
+          "up_calls": 46,
+          "up_ms": 23.322
+        },
+        "france": {
+          "down_calls": 67,
+          "down_ms": 25.193,
+          "hot_ms": 61.46,
+          "up_calls": 67,
+          "up_ms": 36.267
+        },
+        "japan": {
+          "down_calls": 78,
+          "down_ms": 31.989,
+          "hot_ms": 74.56,
+          "up_calls": 78,
+          "up_ms": 42.571
+        },
+        "quantum": {
+          "down_calls": 38,
+          "down_ms": 12.815,
+          "hot_ms": 34.976,
+          "up_calls": 38,
+          "up_ms": 22.161
+        }
+      },
+      "prompt_count": 5,
+      "prompt_ids": [
+        "climate",
+        "fibonacci",
+        "france",
+        "japan",
+        "quantum"
+      ],
+      "up_calls": 288,
+      "up_hot_ms": 174.253,
+      "up_nbytes": 4456448,
+      "up_rows": 288,
+      "up_tensor": "blk.12.ffn_up_exps.weight"
+    },
+    {
+      "down_calls": 142,
+      "down_hot_ms": 106.765,
+      "down_nbytes": 4456448,
+      "down_rows": 142,
+      "down_tensor": "blk.23.ffn_down_exps.weight",
+      "expert": 244,
+      "fused_calls": 142,
+      "hot_ms": 276.906,
+      "layer": 23,
+      "pair_key": "blk.23.expert.244",
+      "per_prompt_ms": {
+        "fibonacci": {
+          "down_calls": 142,
+          "down_ms": 106.765,
+          "hot_ms": 276.906,
+          "up_calls": 142,
+          "up_ms": 170.141
+        }
+      },
+      "prompt_count": 1,
+      "prompt_ids": [
+        "fibonacci"
+      ],
+      "up_calls": 142,
+      "up_hot_ms": 170.141,
+      "up_nbytes": 4456448,
+      "up_rows": 142,
+      "up_tensor": "blk.23.ffn_up_exps.weight"
+    }
+  ],
+  "total_decode_updown_fallback_ms_all_prompts": 176622.283
+}

@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260707-limited-down-mxfp4-parity-probe",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "build_dir": "build-ds4-moe-stream-batch-on",
+  "decision": "reject as performance/correctness gate: limited compare envs compiled, but batch=ON run still timed out before down_mxfp4_probe.csv, so latency is before CPU reference compare, likely stage/kernel/sync",
+  "down_mxfp4_probe_csv_present": false,
+  "env_limits": {
+    "MAX_ACTIVE": 1,
+    "MAX_CALLS": 4,
+    "MAX_COLS": 128
+  },
+  "fallback_reason_aggregate": {
+    "down|prompt|eligible|not_attempted_batch_path_selected|batch_declined_internal_no_single_retry": {
+      "batch_accepts": 0,
+      "batch_attempts": 1171,
+      "calls": 1171,
+      "fallback_us": 4268589,
+      "rows": 1820
+    },
+    "up|prompt|batch_unsupported|one_name_filter|one_name_filter": {
+      "batch_accepts": 0,
+      "batch_attempts": 0,
+      "calls": 1171,
+      "fallback_us": 3893647,
+      "rows": 1820
+    }
+  },
+  "next_step": "add stage-level timing/early-return probe around down batch staging, launch_moe_mmvq_compact_batch, d2h, and sync, or create a one-call no-CPU-reference mode to isolate where batch=ON stalls before parity report",
+  "profile_files": {
+    "fallback_reason_profile.csv": {
+      "bytes": 249174,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-limited-down-mxfp4-parity-probe/france-n1-active1-cols128/fallback_reason_profile.csv",
+      "sha256": "983a3094c5130fc6f6baca87e4d559cc1e96aee089423ab4155f47b1a6237690"
+    },
+    "stderr.txt": {
+      "bytes": 14635,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-limited-down-mxfp4-parity-probe/france-n1-active1-cols128/stderr.txt",
+      "sha256": "1eccd6a79d4b83be17e7807ec092dffe7859dcba61c1698b1b07ce8f697794d1"
+    }
+  },
+  "prompt_scope": "France n1 calibration diagnostic only; held-out not used; not SOTA",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-limited-down-mxfp4-parity-probe/france-n1-active1-cols128",
+  "source_change": "ggml/src/ggml-cuda/moe_stream_batch.cu adds GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE and MAX_COLS for diagnostic compare loops; default unset preserves full compare",
+  "source_head_before_commit": "6d916b83c03f5cac0c49b7bdf1bc4ef6ca0d74f8",
+  "status": "rejected_probe_still_times_out_before_csv_not_sota",
+  "stderr_probe_lines": [
+    "[moe_stream_batch] MXFP4 down batch probe active mode=parity",
+    "[moe_stream_batch] mxfp4_down_probe active tensor=blk.0.ffn_down_exps.weight call=0 active=8 ne01=4096 ne00=2048",
+    "[moe_stream] batched decode path active: experts=8 ne01=4096 ne00=2048",
+    "[moe_stream_batch] mxfp4_down_probe active tensor=blk.1.ffn_down_exps.weight call=1 active=8 ne01=4096 ne00=2048",
+    "[moe_stream_batch] mxfp4_down_probe active tensor=blk.2.ffn_down_exps.weight call=2 active=8 ne01=4096 ne00=2048",
+    "[moe_stream_batch] mxfp4_down_probe active tensor=blk.3.ffn_down_exps.weight call=3 active=8 ne01=4096 ne00=2048"
+  ],
+  "stdout_bytes": 385377182,
+  "systemd_runtime_before_kill": "2min36.824s"
+}

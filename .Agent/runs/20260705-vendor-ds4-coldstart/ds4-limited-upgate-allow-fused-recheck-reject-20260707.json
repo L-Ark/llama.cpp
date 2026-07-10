@@ -1,0 +1,190 @@
+{
+  "artifact": "ds4-limited-upgate-allow-fused-recheck-reject-20260707",
+  "binary_sha256": "7d355ca27f337e44763f0defb2fd84bfc08ab6e323ff3813b50988d90644f9dd  /root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-debug",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "candidate_env": {
+    "DS4_FUSED_UP_GATE_REF": "1",
+    "DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT": "1",
+    "GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED": "1"
+  },
+  "commit": "4e60525e4426f9e6b985daf05c46ba976f50284e",
+  "common_env_extra": {},
+  "comparison": {
+    "atol": 0.0,
+    "candidate_records": 129,
+    "diffs_over_atol": [
+      {
+        "candidate_sums": [
+          5779.373047
+        ],
+        "explicit_sums": [
+          5777.26123
+        ],
+        "max_abs": 2.1118169999999736,
+        "name": "ffn_moe_gate_clamped-41"
+      },
+      {
+        "candidate_sums": [
+          49074.660156
+        ],
+        "explicit_sums": [
+          49061.433594
+        ],
+        "max_abs": 13.226561999996193,
+        "name": "ffn_moe_gate_clamped-42"
+      },
+      {
+        "candidate_sums": [
+          9.174387
+        ],
+        "explicit_sums": [
+          9.174395
+        ],
+        "max_abs": 8.000000001118224e-06,
+        "name": "ffn_moe_swiglu-0"
+      },
+      {
+        "candidate_sums": [
+          -40.430325
+        ],
+        "explicit_sums": [
+          -40.43034
+        ],
+        "max_abs": 1.4999999997655777e-05,
+        "name": "ffn_moe_swiglu-16"
+      },
+      {
+        "candidate_sums": [
+          44.525166
+        ],
+        "explicit_sums": [
+          44.525173
+        ],
+        "max_abs": 7.000000003642981e-06,
+        "name": "ffn_moe_swiglu-2"
+      },
+      {
+        "candidate_sums": [
+          104.649384
+        ],
+        "explicit_sums": [
+          104.649353
+        ],
+        "max_abs": 3.09999999927868e-05,
+        "name": "ffn_moe_swiglu-21"
+      },
+      {
+        "candidate_sums": [
+          -1783.472412
+        ],
+        "explicit_sums": [
+          -1783.473022
+        ],
+        "max_abs": 0.0006099999998241401,
+        "name": "ffn_moe_swiglu-40"
+      },
+      {
+        "candidate_sums": [
+          -4132.708496
+        ],
+        "explicit_sums": [
+          -4132.314941
+        ],
+        "max_abs": 0.39355500000056054,
+        "name": "ffn_moe_swiglu-41"
+      },
+      {
+        "candidate_sums": [
+          4030.224365
+        ],
+        "explicit_sums": [
+          4028.269775
+        ],
+        "max_abs": 1.9545899999998255,
+        "name": "ffn_moe_swiglu-42"
+      },
+      {
+        "candidate_sums": [
+          21.904037
+        ],
+        "explicit_sums": [
+          21.904053
+        ],
+        "max_abs": 1.6000000002236447e-05,
+        "name": "ffn_moe_swiglu-7"
+      },
+      {
+        "candidate_sums": [
+          -1010.967529
+        ],
+        "explicit_sums": [
+          -1010.354187
+        ],
+        "max_abs": 0.6133419999999887,
+        "name": "ffn_moe_up_clamped-41"
+      },
+      {
+        "candidate_sums": [
+          774.366516
+        ],
+        "explicit_sums": [
+          773.865967
+        ],
+        "max_abs": 0.5005490000000918,
+        "name": "ffn_moe_up_clamped-42"
+      }
+    ],
+    "explicit_records": 129,
+    "max_abs_sum_diff": 13.226561999996193,
+    "missing_candidate": [],
+    "missing_explicit": [],
+    "num_diffs_over_atol": 12,
+    "num_missing_candidate": 0,
+    "num_missing_explicit": 0,
+    "pass": false,
+    "record_names": 129
+  },
+  "constraints": {
+    "drop_caches_before_each_case": true,
+    "held_out_test_set_used": false,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "prompt": "Please introduce France in a short paragraph."
+  },
+  "decision": "reject_not_sota; no source change; do not benchmark-promote GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1 until a future patch makes layer-0 act parity exact.",
+  "interpretation": "X10-R correctly protects the default limited DS4 scaffold by returning explicit math. When GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1 deliberately reopens the real fused op, the old act-parity failure reproduces exactly. This opt-in path remains closed for token-rate benchmarking.",
+  "key_result": {
+    "candidate_records": 129,
+    "earliest_mismatch": "ffn_moe_swiglu-0 max_abs about 8e-6",
+    "explicit_records": 129,
+    "largest_mismatch": "ffn_moe_gate_clamped-42 max_abs 13.226561999996193",
+    "max_abs_sum_diff": 13.226561999996193,
+    "num_diffs_over_atol": 12,
+    "num_missing_candidate": 0
+  },
+  "model_stat": "path=/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf size=156148189760 mtime=2026-06-22 14:12:05.810122536 +0000",
+  "next_action": "Move performance work to exact explicit retained source/dataflow, or fix real fused op under the opt-in env with act parity as the first gate.",
+  "purpose": "Recheck on latest pushed head that explicitly opting into the real limited GGML_OP_MOE_FUSED_UP_GATE path is still not act-exact and must not be benchmark-promoted.",
+  "returncodes": {
+    "candidate": 0,
+    "explicit": 0
+  },
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-limited-upgate-allow-fused-recheck",
+  "runtime": {
+    "candidate": {
+      "elapsed": "0:39.66",
+      "exit_status": 0,
+      "major_page_faults": 200069,
+      "max_rss_kb": 15602752
+    },
+    "explicit": {
+      "elapsed": "0:34.51",
+      "exit_status": 0,
+      "major_page_faults": 197503,
+      "max_rss_kb": 15603104
+    }
+  },
+  "source_commit_from_probe": "4e60525e4426f9e6b985daf05c46ba976f50284e",
+  "status": "diagnostic_reject_not_sota_no_source_change",
+  "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-limited-upgate-allow-fused-recheck/summary.json"
+}

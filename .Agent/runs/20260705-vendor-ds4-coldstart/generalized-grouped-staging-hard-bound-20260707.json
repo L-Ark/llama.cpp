@@ -1,0 +1,3904 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-grouped-staging-hard-bound-20260707.json",
+  "assumptions": {
+    "expert_payload_bytes": 4456448,
+    "gate_cache_preserved_extra_pool_target_gib": "about 3.2 GiB from previous q80/top768 hard-bound; larger payloads risk evicting gate cache or exceeding VRAM margin",
+    "layer_count_sensitivity": [
+      40,
+      43
+    ],
+    "topk": 4,
+    "zero_overhead_projection": "Subtract selected decode fallback_ms from current decode window inferred from eval_tok_s and decode calls; this is an optimistic upper bound before GPU kernels, H2D/D2H, staging, synchronization, scatter, and gate-cache side effects."
+  },
+  "current_projection": {
+    "climate": {
+      "correctness_ok": true,
+      "decode_down_calls": 20150,
+      "decode_up_calls": 20150,
+      "eval_tok_s": 2.3,
+      "fallback_decode_ms": 31174.417999999965,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "sensitivity": [
+        {
+          "current_decode_ms": 54755.4347826087,
+          "decode_updown_fallback_ms": 31174.417999999965,
+          "estimated_decode_tokens": 125.9375,
+          "layers": 40,
+          "required_save_ms_for_5tok_s": 29567.934782608703,
+          "target5_decode_ms": 25187.5
+        },
+        {
+          "current_decode_ms": 50935.28816986856,
+          "decode_updown_fallback_ms": 31174.417999999965,
+          "estimated_decode_tokens": 117.15116279069767,
+          "layers": 43,
+          "required_save_ms_for_5tok_s": 27505.055611729025,
+          "target5_decode_ms": 23430.232558139534
+        }
+      ]
+    },
+    "fibonacci": {
+      "correctness_ok": true,
+      "decode_down_calls": 24830,
+      "decode_up_calls": 24830,
+      "eval_tok_s": 1.7,
+      "fallback_decode_ms": 48085.36200000023,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "sensitivity": [
+        {
+          "current_decode_ms": 91286.76470588236,
+          "decode_updown_fallback_ms": 48085.36200000023,
+          "estimated_decode_tokens": 155.1875,
+          "layers": 40,
+          "required_save_ms_for_5tok_s": 60249.264705882364,
+          "target5_decode_ms": 31037.5
+        },
+        {
+          "current_decode_ms": 84917.92065663474,
+          "decode_updown_fallback_ms": 48085.36200000023,
+          "estimated_decode_tokens": 144.36046511627907,
+          "layers": 43,
+          "required_save_ms_for_5tok_s": 56045.827633378925,
+          "target5_decode_ms": 28872.093023255813
+        }
+      ]
+    },
+    "france": {
+      "correctness_ok": true,
+      "decode_down_calls": 17940,
+      "decode_up_calls": 17940,
+      "eval_tok_s": 2.6,
+      "fallback_decode_ms": 23161.21400000004,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "sensitivity": [
+        {
+          "current_decode_ms": 43125.0,
+          "decode_updown_fallback_ms": 23161.21400000004,
+          "estimated_decode_tokens": 112.125,
+          "layers": 40,
+          "required_save_ms_for_5tok_s": 20700.0,
+          "target5_decode_ms": 22425.0
+        },
+        {
+          "current_decode_ms": 40116.27906976744,
+          "decode_updown_fallback_ms": 23161.21400000004,
+          "estimated_decode_tokens": 104.30232558139535,
+          "layers": 43,
+          "required_save_ms_for_5tok_s": 19255.813953488374,
+          "target5_decode_ms": 20860.46511627907
+        }
+      ]
+    },
+    "japan": {
+      "correctness_ok": true,
+      "decode_down_calls": 17550,
+      "decode_up_calls": 17550,
+      "eval_tok_s": 2.4,
+      "fallback_decode_ms": 24569.478000000006,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "sensitivity": [
+        {
+          "current_decode_ms": 45703.125,
+          "decode_updown_fallback_ms": 24569.478000000006,
+          "estimated_decode_tokens": 109.6875,
+          "layers": 40,
+          "required_save_ms_for_5tok_s": 23765.625,
+          "target5_decode_ms": 21937.5
+        },
+        {
+          "current_decode_ms": 42514.53488372093,
+          "decode_updown_fallback_ms": 24569.478000000006,
+          "estimated_decode_tokens": 102.03488372093024,
+          "layers": 43,
+          "required_save_ms_for_5tok_s": 22107.558139534885,
+          "target5_decode_ms": 20406.976744186046
+        }
+      ]
+    },
+    "quantum": {
+      "correctness_ok": true,
+      "decode_down_calls": 24830,
+      "decode_up_calls": 24830,
+      "eval_tok_s": 1.9,
+      "fallback_decode_ms": 49631.81100000018,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "sensitivity": [
+        {
+          "current_decode_ms": 81677.63157894737,
+          "decode_updown_fallback_ms": 49631.81100000018,
+          "estimated_decode_tokens": 155.1875,
+          "layers": 40,
+          "required_save_ms_for_5tok_s": 50640.131578947374,
+          "target5_decode_ms": 31037.5
+        },
+        {
+          "current_decode_ms": 75979.19216646267,
+          "decode_updown_fallback_ms": 49631.81100000018,
+          "estimated_decode_tokens": 144.36046511627907,
+          "layers": 43,
+          "required_save_ms_for_5tok_s": 47107.099143206855,
+          "target5_decode_ms": 28872.093023255813
+        }
+      ]
+    }
+  },
+  "date": "2026-07-07",
+  "decision": {
+    "best_3p2gib_paired_layer_expert_bound": {
+      "40": {
+        "max_zero_overhead_tok_s": 3.1464085566822733,
+        "mean_zero_overhead_tok_s": 2.6362983502982327,
+        "min_zero_overhead_tok_s": 1.9430807596697224
+      },
+      "43": {
+        "max_zero_overhead_tok_s": 3.196795765144991,
+        "mean_zero_overhead_tok_s": 2.6785027547827704,
+        "min_zero_overhead_tok_s": 1.9641445426489097
+      }
+    },
+    "next_allowed_work": "Do not implement generalized grouped staging as a direct route. Reopen only with a payload-reducing representation/top1 proof, a much larger gate-safe VRAM pool, or a verified dataflow that removes up/down bytes instead of just staging them.",
+    "reason": "The mechanism does not reduce expert payload; it only changes residency/staging/scheduling. The selected hot layer-expert set is still a long-tail, and the fallback saving available inside ~3.2GiB is insufficient for generalized 5 tok/s with margin.",
+    "source_edit_allowed_now": false,
+    "summary": "Under the gate-preserving ~3.2GiB extra-pool shape, paired up/down grouped staging cannot robustly reach 5 tok/s on calibration/dev even with zero overhead. It improves mean upper-bound but the min prompt remains below target in the sensitivity model, and any real implementation overhead would lower it."
+  },
+  "paired_layer_expert_payload_cap_bounds": [
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.813921030120211,
+          "mean_zero_overhead_tok_s": 2.377846774238417,
+          "min_zero_overhead_tok_s": 1.8140611128509294
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 2.8313929869793384,
+          "mean_zero_overhead_tok_s": 2.3941806553909055,
+          "min_zero_overhead_tok_s": 1.823235832322595
+        }
+      },
+      "calls_covered": 40548,
+      "cap_gib": 1.0,
+      "payload_bytes": 1069547520,
+      "payload_gib": 0.99609375,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 4681.710999999998,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 50073.72378260871,
+              "zero_overhead_tok_s": 2.5150416323488973
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 46253.577169868564,
+              "zero_overhead_tok_s": 2.532802216798372
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 5739.756999999996,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 85547.00770588237,
+              "zero_overhead_tok_s": 1.8140611128509294
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 79178.16365663474,
+              "zero_overhead_tok_s": 1.823235832322595
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 3278.4660000000003,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 39846.534,
+              "zero_overhead_tok_s": 2.813921030120211
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 36837.81306976744,
+              "zero_overhead_tok_s": 2.8313929869793384
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 3967.8810000000017,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 41735.244,
+              "zero_overhead_tok_s": 2.6281744033891354
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 38546.65388372093,
+              "zero_overhead_tok_s": 2.6470490546008647
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 8408.091999999995,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 73269.53957894738,
+              "zero_overhead_tok_s": 2.1180356924829127
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 67571.10016646268,
+              "zero_overhead_tok_s": 2.1364231862533587
+            }
+          ]
+        }
+      },
+      "rows_covered": 40548,
+      "selected_layer_experts": 120
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.9738244568065957,
+          "mean_zero_overhead_tok_s": 2.5051063504314115,
+          "min_zero_overhead_tok_s": 1.8890785031042578
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.0062419597187415,
+          "mean_zero_overhead_tok_s": 2.53350167533124,
+          "min_zero_overhead_tok_s": 1.904969181989122
+        }
+      },
+      "calls_covered": 60644,
+      "cap_gib": 2.0,
+      "payload_bytes": 2139095040,
+      "payload_gib": 1.9921875,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 7455.625,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 47299.8097826087,
+              "zero_overhead_tok_s": 2.662537134479238
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 43479.66316986856,
+              "zero_overhead_tok_s": 2.694389842281104
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 9136.923000000003,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 82149.84170588237,
+              "zero_overhead_tok_s": 1.8890785031042578
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 75780.99765663475,
+              "zero_overhead_tok_s": 1.904969181989122
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 5421.026000000005,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 37703.973999999995,
+              "zero_overhead_tok_s": 2.9738244568065957
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 34695.25306976744,
+              "zero_overhead_tok_s": 3.0062419597187415
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 6282.832000000005,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 39420.293,
+              "zero_overhead_tok_s": 2.7825135647774104
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 36231.70288372093,
+              "zero_overhead_tok_s": 2.8161768727347063
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 11697.006999999996,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 69980.62457894738,
+              "zero_overhead_tok_s": 2.217578092989554
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 64282.185166462674,
+              "zero_overhead_tok_s": 2.2457305199325255
+            }
+          ]
+        }
+      },
+      "rows_covered": 60644,
+      "selected_layer_experts": 240
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.1231579635221833,
+          "mean_zero_overhead_tok_s": 2.6161843888961798,
+          "min_zero_overhead_tok_s": 1.9352446240751973
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.171012007292556,
+          "mean_zero_overhead_tok_s": 2.656178903342027,
+          "min_zero_overhead_tok_s": 1.9555400780691399
+        }
+      },
+      "calls_covered": 74878,
+      "cap_gib": 3.0,
+      "payload_bytes": 3217555456,
+      "payload_gib": 2.99658203125,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 9522.651999999996,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 45232.78278260871,
+              "zero_overhead_tok_s": 2.7842085375393038
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 41412.636169868565,
+              "zero_overhead_tok_s": 2.828874798265939
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 11096.644000000002,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 80190.12070588236,
+              "zero_overhead_tok_s": 1.9352446240751973
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 73821.27665663474,
+              "zero_overhead_tok_s": 1.9555400780691399
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 7223.8380000000025,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 35901.162,
+              "zero_overhead_tok_s": 3.1231579635221833
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 32892.44106976744,
+              "zero_overhead_tok_s": 3.171012007292556
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 8145.175000000009,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 37557.94999999999,
+              "zero_overhead_tok_s": 2.9204868742836076
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 34369.35988372092,
+              "zero_overhead_tok_s": 2.968774631419864
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 14723.668000000003,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 66953.96357894737,
+              "zero_overhead_tok_s": 2.3178239450606073
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 61255.52416646267,
+              "zero_overhead_tok_s": 2.3566930016626366
+            }
+          ]
+        }
+      },
+      "rows_covered": 74878,
+      "selected_layer_experts": 361
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.1464085566822733,
+          "mean_zero_overhead_tok_s": 2.6362983502982327,
+          "min_zero_overhead_tok_s": 1.9430807596697224
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.196795765144991,
+          "mean_zero_overhead_tok_s": 2.6785027547827704,
+          "min_zero_overhead_tok_s": 1.9641445426489097
+        }
+      },
+      "calls_covered": 77414,
+      "cap_gib": 3.2,
+      "payload_bytes": 3431464960,
+      "payload_gib": 3.19580078125,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 9946.763999999994,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 44808.67078260871,
+              "zero_overhead_tok_s": 2.81056094279144
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 40988.524169868564,
+              "zero_overhead_tok_s": 2.858145423953022
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 11420.038000000002,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 79866.72670588236,
+              "zero_overhead_tok_s": 1.9430807596697224
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 73497.88265663474,
+              "zero_overhead_tok_s": 1.9641445426489097
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 7489.132000000004,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 35635.867999999995,
+              "zero_overhead_tok_s": 3.1464085566822733
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 32627.147069767438,
+              "zero_overhead_tok_s": 3.196795765144991
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 8410.78200000001,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 37292.34299999999,
+              "zero_overhead_tok_s": 2.94128743801375
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 34103.752883720925,
+              "zero_overhead_tok_s": 2.9918960552178864
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 15362.553000000009,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 66315.07857894736,
+              "zero_overhead_tok_s": 2.340154054333978
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 60616.639166462664,
+              "zero_overhead_tok_s": 2.381531986949044
+            }
+          ]
+        }
+      },
+      "rows_covered": 77414,
+      "selected_layer_experts": 385
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.2311297340733414,
+          "mean_zero_overhead_tok_s": 2.711236235468968,
+          "min_zero_overhead_tok_s": 1.99767780326863
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.2910454055628464,
+          "mean_zero_overhead_tok_s": 2.761888970983019,
+          "min_zero_overhead_tok_s": 2.0242621224681696
+        }
+      },
+      "calls_covered": 86340,
+      "cap_gib": 4.0,
+      "payload_bytes": 4287102976,
+      "payload_gib": 3.99267578125,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 11012.281999999994,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 43743.15278260871,
+              "zero_overhead_tok_s": 2.8790220180487287
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 39923.00616986857,
+              "zero_overhead_tok_s": 2.934427389867153
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 13602.815999999999,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 77683.94870588236,
+              "zero_overhead_tok_s": 1.99767780326863
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 71315.10465663474,
+              "zero_overhead_tok_s": 2.0242621224681696
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 8423.515000000012,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 34701.484999999986,
+              "zero_overhead_tok_s": 3.2311297340733414
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 31692.76406976743,
+              "zero_overhead_tok_s": 3.2910454055628464
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 9596.97900000001,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 36106.14599999999,
+              "zero_overhead_tok_s": 3.0379176996625454
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 32917.555883720925,
+              "zero_overhead_tok_s": 3.0997101996685807
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 17296.070000000007,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 64381.56157894737,
+              "zero_overhead_tok_s": 2.4104339222915954
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 58683.122166462665,
+              "zero_overhead_tok_s": 2.459999737348346
+            }
+          ]
+        }
+      },
+      "rows_covered": 86340,
+      "selected_layer_experts": 481
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.4716339408855266,
+          "mean_zero_overhead_tok_s": 2.901747150304978,
+          "min_zero_overhead_tok_s": 2.101281029166096
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.561173548607154,
+          "mean_zero_overhead_tok_s": 2.9759720071599256,
+          "min_zero_overhead_tok_s": 2.139151660633211
+        }
+      },
+      "calls_covered": 104486,
+      "cap_gib": 6.0,
+      "payload_bytes": 6435110912,
+      "payload_gib": 5.9931640625,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 13903.807999999999,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 40851.626782608706,
+              "zero_overhead_tok_s": 3.0828025691651018
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 37031.48016986856,
+              "zero_overhead_tok_s": 3.163556040787701
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 17433.006999999994,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 73853.75770588237,
+              "zero_overhead_tok_s": 2.101281029166096
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 67484.91365663474,
+              "zero_overhead_tok_s": 2.139151660633211
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 10827.527999999986,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 32297.472000000016,
+              "zero_overhead_tok_s": 3.4716339408855266
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 29288.75106976746,
+              "zero_overhead_tok_s": 3.561173548607154
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 12184.917000000005,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 33518.208,
+              "zero_overhead_tok_s": 3.272475067879524
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 30329.617883720926,
+              "zero_overhead_tok_s": 3.3641994472899803
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 21540.097999999954,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 60137.53357894742,
+              "zero_overhead_tok_s": 2.5805431444286415
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 54439.09416646272,
+              "zero_overhead_tok_s": 2.651779338481582
+            }
+          ]
+        }
+      },
+      "rows_covered": 104486,
+      "selected_layer_experts": 722
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.6737015197542076,
+          "mean_zero_overhead_tok_s": 3.0734106164549697,
+          "min_zero_overhead_tok_s": 2.2160066319306293
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.7911207141490193,
+          "mean_zero_overhead_tok_s": 3.1713069946742825,
+          "min_zero_overhead_tok_s": 2.2676292073611273
+        }
+      },
+      "calls_covered": 118764,
+      "cap_gib": 8.0,
+      "payload_bytes": 8583118848,
+      "payload_gib": 7.99365234375,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 16188.62099999999,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 38566.81378260871,
+              "zero_overhead_tok_s": 3.2654369819056757
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 34746.66716986857,
+              "zero_overhead_tok_s": 3.371579847297936
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 21256.51399999998,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 70030.25070588238,
+              "zero_overhead_tok_s": 2.2160066319306293
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 63661.40665663476,
+              "zero_overhead_tok_s": 2.2676292073611273
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 12604.011999999984,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 30520.988000000016,
+              "zero_overhead_tok_s": 3.6737015197542076
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 27512.26706976746,
+              "zero_overhead_tok_s": 3.7911207141490193
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 14100.107999999997,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 31603.017000000003,
+              "zero_overhead_tok_s": 3.4707920449493788
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 28414.426883720935,
+              "zero_overhead_tok_s": 3.590953431455188
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 25062.91499999991,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 56614.71657894747,
+              "zero_overhead_tok_s": 2.7411159037349564
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 50916.277166462765,
+              "zero_overhead_tok_s": 2.8352517731081406
+            }
+          ]
+        }
+      },
+      "rows_covered": 118764,
+      "selected_layer_experts": 963
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 4.053765017640244,
+          "mean_zero_overhead_tok_s": 3.3932555386299597,
+          "min_zero_overhead_tok_s": 2.421458583383405
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 4.231202744540927,
+          "mean_zero_overhead_tok_s": 3.5417506900671265,
+          "min_zero_overhead_tok_s": 2.5010651231190733
+        }
+      },
+      "calls_covered": 139582,
+      "cap_gib": 12.0,
+      "payload_bytes": 12879134720,
+      "payload_gib": 11.99462890625,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 20063.92199999998,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 34691.51278260873,
+              "zero_overhead_tok_s": 3.6302106739817352
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 30871.36616986858,
+              "zero_overhead_tok_s": 3.7948162755764554
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 27198.326000000037,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 64088.43870588233,
+              "zero_overhead_tok_s": 2.421458583383405
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 57719.594656634705,
+              "zero_overhead_tok_s": 2.5010651231190733
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 15465.527999999962,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 27659.472000000038,
+              "zero_overhead_tok_s": 4.053765017640244
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 24650.75106976748,
+              "zero_overhead_tok_s": 4.231202744540927
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 16873.835,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 28829.29,
+              "zero_overhead_tok_s": 3.8047242925510827
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 25640.699883720932,
+              "zero_overhead_tok_s": 3.979411021682421
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 30898.360999999953,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 50779.27057894742,
+              "zero_overhead_tok_s": 3.056119125593332
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 45080.83116646272,
+              "zero_overhead_tok_s": 3.2022582854167543
+            }
+          ]
+        }
+      },
+      "rows_covered": 139582,
+      "selected_layer_experts": 1445
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 4.39399422794729,
+          "mean_zero_overhead_tok_s": 3.686961199523167,
+          "min_zero_overhead_tok_s": 2.5966587139327055
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 4.633792202914677,
+          "mean_zero_overhead_tok_s": 3.889741567213618,
+          "min_zero_overhead_tok_s": 2.7036093713698643
+        }
+      },
+      "calls_covered": 156648,
+      "cap_gib": 16.0,
+      "payload_bytes": 17175150592,
+      "payload_gib": 15.99560546875,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 23045.160999999993,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 31710.27378260871,
+              "zero_overhead_tok_s": 3.9715046569250876
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 27890.127169868567,
+              "zero_overhead_tok_s": 4.200452800992006
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 31522.461000000047,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 59764.30370588232,
+              "zero_overhead_tok_s": 2.5966587139327055
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 53395.459656634695,
+              "zero_overhead_tok_s": 2.7036093713698643
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 17607.214999999986,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 25517.785000000014,
+              "zero_overhead_tok_s": 4.39399422794729
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 22509.064069767457,
+              "zero_overhead_tok_s": 4.633792202914677
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 18941.536000000022,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 26761.588999999978,
+              "zero_overhead_tok_s": 4.098691598619204
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 23572.99888372091,
+              "zero_overhead_tok_s": 4.32846428340493
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 35681.93300000007,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 45995.698578947304,
+              "zero_overhead_tok_s": 3.3739568001915483
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 40297.2591664626,
+              "zero_overhead_tok_s": 3.582389177386612
+            }
+          ]
+        }
+      },
+      "rows_covered": 156648,
+      "selected_layer_experts": 1927
+    }
+  ],
+  "paired_layer_expert_topn_bounds": [
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.7651757283047456,
+          "mean_zero_overhead_tok_s": 2.315550214042486,
+          "min_zero_overhead_tok_s": 1.7708829912792612
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 2.7784139943156063,
+          "mean_zero_overhead_tok_s": 2.3264144417911132,
+          "min_zero_overhead_tok_s": 1.7764382526249511
+        }
+      },
+      "calls_covered": 28026,
+      "payload_bytes": 570425344,
+      "payload_gib": 0.53125,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 3535.6999999999994,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 51219.734782608706,
+              "zero_overhead_tok_s": 2.4587690766950474
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 47399.58816986856,
+              "zero_overhead_tok_s": 2.4715649927348835
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 3653.928000000001,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 87632.83670588236,
+              "zero_overhead_tok_s": 1.7708829912792612
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 81263.99265663474,
+              "zero_overhead_tok_s": 1.7764382526249511
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 2576.04,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 40548.96,
+              "zero_overhead_tok_s": 2.7651757283047456
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 37540.23906976744,
+              "zero_overhead_tok_s": 2.7784139943156063
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 2698.1229999999987,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 43005.002,
+              "zero_overhead_tok_s": 2.55057539585744
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 39816.41188372093,
+              "zero_overhead_tok_s": 2.5626338209206523
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 5318.9029999999975,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 76358.72857894738,
+              "zero_overhead_tok_s": 2.0323478780759356
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 70660.28916646268,
+              "zero_overhead_tok_s": 2.043021148359474
+            }
+          ]
+        }
+      },
+      "rows_covered": 28026,
+      "top_n_layer_experts": 64
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.8255862918303323,
+          "mean_zero_overhead_tok_s": 2.387547145294541,
+          "min_zero_overhead_tok_s": 1.8205845881749516
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 2.8440936535879597,
+          "mean_zero_overhead_tok_s": 2.4047552746069614,
+          "min_zero_overhead_tok_s": 1.8303217319517935
+        }
+      },
+      "calls_covered": 42064,
+      "payload_bytes": 1140850688,
+      "payload_gib": 1.0625,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 4820.199999999999,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 49935.234782608706,
+              "zero_overhead_tok_s": 2.5220167792995167
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 46115.08816986856,
+              "zero_overhead_tok_s": 2.540408517905509
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 6046.2869999999975,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 85240.47770588237,
+              "zero_overhead_tok_s": 1.8205845881749516
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 78871.63365663475,
+              "zero_overhead_tok_s": 1.8303217319517935
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 3442.9700000000003,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 39682.03,
+              "zero_overhead_tok_s": 2.8255862918303323
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 36673.30906976744,
+              "zero_overhead_tok_s": 2.8440936535879597
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 4248.337000000002,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 41454.788,
+              "zero_overhead_tok_s": 2.6459549135795846
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 38266.19788372093,
+              "zero_overhead_tok_s": 2.666449487116083
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 8599.838999999996,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 73077.79257894738,
+              "zero_overhead_tok_s": 2.12359315358832
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 67379.35316646268,
+              "zero_overhead_tok_s": 2.1425029824734634
+            }
+          ]
+        }
+      },
+      "rows_covered": 42064,
+      "top_n_layer_experts": 128
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.913830451735846,
+          "mean_zero_overhead_tok_s": 2.4581360321324217,
+          "min_zero_overhead_tok_s": 1.8601676827765021
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 2.9404497597088066,
+          "mean_zero_overhead_tok_s": 2.4819351636654696,
+          "min_zero_overhead_tok_s": 1.8734055811959462
+        }
+      },
+      "calls_covered": 53306,
+      "payload_bytes": 1711276032,
+      "payload_gib": 1.59375,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 6516.03,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 48239.404782608704,
+              "zero_overhead_tok_s": 2.6106769054787975
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 44419.25816986856,
+              "zero_overhead_tok_s": 2.6373957516959656
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 7860.145999999995,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 83426.61870588237,
+              "zero_overhead_tok_s": 1.8601676827765021
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 77057.77465663475,
+              "zero_overhead_tok_s": 1.8734055811959462
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 4644.724000000007,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 38480.27599999999,
+              "zero_overhead_tok_s": 2.913830451735846
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 35471.55506976743,
+              "zero_overhead_tok_s": 2.9404497597088066
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 5480.678000000005,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 40222.44699999999,
+              "zero_overhead_tok_s": 2.727022053133665
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 37033.856883720924,
+              "zero_overhead_tok_s": 2.755178431490402
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 10457.481999999996,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 71220.14957894737,
+              "zero_overhead_tok_s": 2.178983067537299
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 65521.710166462675,
+              "zero_overhead_tok_s": 2.2032462942362283
+            }
+          ]
+        }
+      },
+      "rows_covered": 53306,
+      "top_n_layer_experts": 192
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.991972707338372,
+          "mean_zero_overhead_tok_s": 2.5208923552492344,
+          "min_zero_overhead_tok_s": 1.8976662970215983
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.0261895450953946,
+          "mean_zero_overhead_tok_s": 2.550873906893963,
+          "min_zero_overhead_tok_s": 1.9143606164725748
+        }
+      },
+      "calls_covered": 62640,
+      "payload_bytes": 2281701376,
+      "payload_gib": 2.125,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 7707.739000000001,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 47047.6957826087,
+              "zero_overhead_tok_s": 2.676804844639238
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 43227.54916986856,
+              "zero_overhead_tok_s": 2.7101042053144435
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 9508.688000000004,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 81778.07670588235,
+              "zero_overhead_tok_s": 1.8976662970215983
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 75409.23265663473,
+              "zero_overhead_tok_s": 1.9143606164725748
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 5649.725000000005,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 37475.274999999994,
+              "zero_overhead_tok_s": 2.991972707338372
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 34466.55406976744,
+              "zero_overhead_tok_s": 3.0261895450953946
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 6675.918000000007,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 39027.206999999995,
+              "zero_overhead_tok_s": 2.810539324528143
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 35838.616883720926,
+              "zero_overhead_tok_s": 2.84706533324052
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 12008.051000000001,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 69669.58057894737,
+              "zero_overhead_tok_s": 2.227478602718821
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 63971.14116646267,
+              "zero_overhead_tok_s": 2.256649834346883
+            }
+          ]
+        }
+      },
+      "rows_covered": 62640,
+      "top_n_layer_experts": 256
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.0737683009491796,
+          "mean_zero_overhead_tok_s": 2.5803995474088484,
+          "min_zero_overhead_tok_s": 1.9177391761539697
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.116357670527519,
+          "mean_zero_overhead_tok_s": 2.616559099038088,
+          "min_zero_overhead_tok_s": 1.9363399288389447
+        }
+      },
+      "calls_covered": 70600,
+      "payload_bytes": 2852126720,
+      "payload_gib": 2.65625,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 8726.493000000002,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 46028.9417826087,
+              "zero_overhead_tok_s": 2.7360503005868253
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 42208.79516986856,
+              "zero_overhead_tok_s": 2.7755154422016752
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 10364.654999999997,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 80922.10970588237,
+              "zero_overhead_tok_s": 1.9177391761539697
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 74553.26565663474,
+              "zero_overhead_tok_s": 1.9363399288389447
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 6646.974000000005,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 36478.026,
+              "zero_overhead_tok_s": 3.0737683009491796
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 33469.30506976744,
+              "zero_overhead_tok_s": 3.116357670527519
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 7696.082000000007,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 38007.04299999999,
+              "zero_overhead_tok_s": 2.8859782646074317
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 34818.45288372092,
+              "zero_overhead_tok_s": 2.930482984458962
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 13864.611000000004,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 67813.02057894737,
+              "zero_overhead_tok_s": 2.2884616947468364
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 62114.58116646267,
+              "zero_overhead_tok_s": 2.3240994691633396
+            }
+          ]
+        }
+      },
+      "rows_covered": 70600,
+      "top_n_layer_experts": 320
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.1454124821693337,
+          "mean_zero_overhead_tok_s": 2.63537526341459,
+          "min_zero_overhead_tok_s": 1.9425294497957033
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.195690447336447,
+          "mean_zero_overhead_tok_s": 2.6774780719296727,
+          "min_zero_overhead_tok_s": 1.963538980468592
+        }
+      },
+      "calls_covered": 77362,
+      "payload_bytes": 3422552064,
+      "payload_gib": 3.1875,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 9940.752999999993,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 44814.681782608706,
+              "zero_overhead_tok_s": 2.810183961829954
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 40994.53516986857,
+              "zero_overhead_tok_s": 2.857726336089915
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 11397.371000000003,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 79889.39370588236,
+              "zero_overhead_tok_s": 1.9425294497957033
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 73520.54965663474,
+              "zero_overhead_tok_s": 1.963538980468592
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 7477.847000000003,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 35647.153,
+              "zero_overhead_tok_s": 3.1454124821693337
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 32638.43206976744,
+              "zero_overhead_tok_s": 3.195690447336447
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 8380.794000000013,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 37322.33099999999,
+              "zero_overhead_tok_s": 2.938924152406237
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 34133.74088372092,
+              "zero_overhead_tok_s": 2.9892675422983817
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 15353.263000000008,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 66324.36857894737,
+              "zero_overhead_tok_s": 2.3398262708717215
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 60625.929166462665,
+              "zero_overhead_tok_s": 2.3811670534550267
+            }
+          ]
+        }
+      },
+      "rows_covered": 77362,
+      "top_n_layer_experts": 384
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.2786885245901654,
+          "mean_zero_overhead_tok_s": 2.7383460329773253,
+          "min_zero_overhead_tok_s": 2.0106304399187724
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.3441589761728685,
+          "mean_zero_overhead_tok_s": 2.7921733213895354,
+          "min_zero_overhead_tok_s": 2.0385675487931443
+        }
+      },
+      "calls_covered": 89260,
+      "payload_bytes": 4563402752,
+      "payload_gib": 4.25,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 11393.751999999999,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 43361.6827826087,
+              "zero_overhead_tok_s": 2.9043499218279973
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 39541.53616986856,
+              "zero_overhead_tok_s": 2.9627367608436317
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 14103.262000000002,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 77183.50270588236,
+              "zero_overhead_tok_s": 2.0106304399187724
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 70814.65865663474,
+              "zero_overhead_tok_s": 2.0385675487931443
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 8926.875000000011,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 34198.124999999985,
+              "zero_overhead_tok_s": 3.2786885245901654
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 31189.40406976743,
+              "zero_overhead_tok_s": 3.3441589761728685
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 9978.796000000008,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 35724.32899999999,
+              "zero_overhead_tok_s": 3.070386570451751
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 32535.738883720922,
+              "zero_overhead_tok_s": 3.136086261498208
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 17753.293000000005,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 63924.33857894737,
+              "zero_overhead_tok_s": 2.427674708097941
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 58225.89916646267,
+              "zero_overhead_tok_s": 2.4793170596398237
+            }
+          ]
+        }
+      },
+      "rows_covered": 89260,
+      "top_n_layer_experts": 512
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.5167496394802322,
+          "mean_zero_overhead_tok_s": 2.936743334977557,
+          "min_zero_overhead_tok_s": 2.1227875526721363
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.6122751769664054,
+          "mean_zero_overhead_tok_s": 3.015605594901779,
+          "min_zero_overhead_tok_s": 2.1631351984059455
+        }
+      },
+      "calls_covered": 107630,
+      "payload_bytes": 6845104128,
+      "payload_gib": 6.375,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 14406.651000000005,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 40348.7837826087,
+              "zero_overhead_tok_s": 3.121221712122141
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 36528.637169868554,
+              "zero_overhead_tok_s": 3.207104668206247
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 18181.238999999976,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 73105.52570588239,
+              "zero_overhead_tok_s": 2.1227875526721363
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 66736.68165663477,
+              "zero_overhead_tok_s": 2.1631351984059455
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 11241.865999999978,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 31883.13400000002,
+              "zero_overhead_tok_s": 3.5167496394802322
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 28874.413069767463,
+              "zero_overhead_tok_s": 3.6122751769664054
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 12616.626,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 33086.498999999996,
+              "zero_overhead_tok_s": 3.3151739626486325
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 29897.90888372093,
+              "zero_overhead_tok_s": 3.4127765964424044
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 22168.288999999953,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 59509.34257894742,
+              "zero_overhead_tok_s": 2.6077838079646436
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 53810.90316646272,
+              "zero_overhead_tok_s": 2.682736334487892
+            }
+          ]
+        }
+      },
+      "rows_covered": 107630,
+      "top_n_layer_experts": 768
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.7278230683576172,
+          "mean_zero_overhead_tok_s": 3.116346083858577,
+          "min_zero_overhead_tok_s": 2.2440380370213258
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.8531799501155013,
+          "mean_zero_overhead_tok_s": 3.2205301370830264,
+          "min_zero_overhead_tok_s": 2.2992232534393375
+        }
+      },
+      "calls_covered": 121740,
+      "payload_bytes": 9126805504,
+      "payload_gib": 8.5,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 16823.363999999965,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 37932.07078260874,
+              "zero_overhead_tok_s": 3.3200797478670836
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 34111.924169868595,
+              "zero_overhead_tok_s": 3.434317050170347
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 22131.29699999998,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 69155.46770588239,
+              "zero_overhead_tok_s": 2.2440380370213258
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 62786.623656634765,
+              "zero_overhead_tok_s": 2.2992232534393375
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 13047.123999999982,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 30077.87600000002,
+              "zero_overhead_tok_s": 3.7278230683576172
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 27069.15506976746,
+              "zero_overhead_tok_s": 3.8531799501155013
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 14494.87899999999,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 31208.24600000001,
+              "zero_overhead_tok_s": 3.51469608384912
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 28019.65588372094,
+              "zero_overhead_tok_s": 3.641546639415054
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 25756.091999999906,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 55921.53957894747,
+              "zero_overhead_tok_s": 2.7750934821977387
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 50223.10016646277,
+              "zero_overhead_tok_s": 2.874383792274893
+            }
+          ]
+        }
+      },
+      "rows_covered": 121740,
+      "top_n_layer_experts": 1024
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 4.1234575510593405,
+          "mean_zero_overhead_tok_s": 3.4500210225872947,
+          "min_zero_overhead_tok_s": 2.4563380148140563
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 4.312996002834543,
+          "mean_zero_overhead_tok_s": 3.6084121976982986,
+          "min_zero_overhead_tok_s": 2.5411300709879696
+        }
+      },
+      "calls_covered": 142994,
+      "payload_bytes": 13690208256,
+      "payload_gib": 12.75,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 20731.053999999986,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 34024.380782608714,
+              "zero_overhead_tok_s": 3.701389918148692
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 30204.234169868574,
+              "zero_overhead_tok_s": 3.8786337747164747
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 28108.367000000013,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 63178.39770588235,
+              "zero_overhead_tok_s": 2.4563380148140563
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 56809.55365663473,
+              "zero_overhead_tok_s": 2.5411300709879696
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 15933.013999999965,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 27191.986000000034,
+              "zero_overhead_tok_s": 4.1234575510593405
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 24183.265069767476,
+              "zero_overhead_tok_s": 4.312996002834543
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 17218.043000000012,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 28485.081999999988,
+              "zero_overhead_tok_s": 3.850699815433217
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 25296.49188372092,
+              "zero_overhead_tok_s": 4.033558652715512
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 31909.651999999947,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 49767.97957894743,
+              "zero_overhead_tok_s": 3.118219813481167
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 44069.54016646273,
+              "zero_overhead_tok_s": 3.2757424872369905
+            }
+          ]
+        }
+      },
+      "rows_covered": 142994,
+      "top_n_layer_experts": 1536
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 4.468499796391834,
+          "mean_zero_overhead_tok_s": 3.7560685217298313,
+          "min_zero_overhead_tok_s": 2.648764934857555
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 4.723068626191349,
+          "mean_zero_overhead_tok_s": 3.9726128279909694,
+          "min_zero_overhead_tok_s": 2.7644784748627744
+        }
+      },
+      "calls_covered": 160520,
+      "payload_bytes": 18253611008,
+      "payload_gib": 17.0,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 23698.422000000013,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 31057.01278260869,
+              "zero_overhead_tok_s": 4.055042282447799
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 27236.866169868546,
+              "zero_overhead_tok_s": 4.301198311878443
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 32698.13800000004,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 58588.62670588233,
+              "zero_overhead_tok_s": 2.648764934857555
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 52219.78265663471,
+              "zero_overhead_tok_s": 2.7644784748627744
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 18032.68599999999,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 25092.31400000001,
+              "zero_overhead_tok_s": 4.468499796391834
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 22083.593069767452,
+              "zero_overhead_tok_s": 4.723068626191349
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 19444.99400000004,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 26258.13099999996,
+              "zero_overhead_tok_s": 4.177277506917768
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 23069.540883720892,
+              "zero_overhead_tok_s": 4.422926500151181
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 36443.460000000116,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 45234.17157894726,
+              "zero_overhead_tok_s": 3.4307580880341986
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 39535.732166462556,
+              "zero_overhead_tok_s": 3.651392226871099
+            }
+          ]
+        }
+      },
+      "rows_covered": 160520,
+      "top_n_layer_experts": 2048
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 4.9324621113225415,
+          "mean_zero_overhead_tok_s": 4.242392887262173,
+          "min_zero_overhead_tok_s": 3.0274611455015497
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 5.288270492830795,
+          "mean_zero_overhead_tok_s": 4.568754067212725,
+          "min_zero_overhead_tok_s": 3.215792291953225
+        }
+      },
+      "calls_covered": 184530,
+      "payload_bytes": 27380416512,
+      "payload_gib": 25.5,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 27463.79700000009,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 27291.637782608614,
+              "zero_overhead_tok_s": 4.614508700546096
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 23471.49116986847,
+              "zero_overhead_tok_s": 4.991210909560381
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 40026.817000000054,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 51259.94770588231,
+              "zero_overhead_tok_s": 3.0274611455015497
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 44891.10365663469,
+              "zero_overhead_tok_s": 3.215792291953225
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 20392.945000000025,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 22732.054999999975,
+              "zero_overhead_tok_s": 4.9324621113225415
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 19723.334069767418,
+              "zero_overhead_tok_s": 5.288270492830795
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 21945.974000000046,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 23757.150999999954,
+              "zero_overhead_tok_s": 4.617030888931093
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 20568.560883720886,
+              "zero_overhead_tok_s": 4.960720601589895
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 43078.59200000021,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 38599.039578947166,
+              "zero_overhead_tok_s": 4.0205015900095855
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 32900.600166462464,
+              "zero_overhead_tok_s": 4.3877760401293315
+            }
+          ]
+        }
+      },
+      "rows_covered": 184530,
+      "top_n_layer_experts": 3072
+    }
+  ],
+  "prompt_scope": "calibration_dev_set_v1 only; held_out_test_set_v1_locked not used",
+  "role_tensor_topn_bounds": [
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.7535778092940157,
+          "mean_zero_overhead_tok_s": 2.3158533540530515,
+          "min_zero_overhead_tok_s": 1.7809558678455815
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 2.7658307968321525,
+          "mean_zero_overhead_tok_s": 2.3267389282366744,
+          "min_zero_overhead_tok_s": 1.7873394981488464
+        }
+      },
+      "calls_covered": 26816,
+      "payload_bytes": 570425344,
+      "payload_gib": 0.53125,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 3566.8539999999994,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 51188.580782608704,
+              "zero_overhead_tok_s": 2.460265513803563
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 47368.43416986856,
+              "zero_overhead_tok_s": 2.4731905295957297
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 4149.568999999999,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 87137.19570588236,
+              "zero_overhead_tok_s": 1.7809558678455815
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 80768.35165663474,
+              "zero_overhead_tok_s": 1.7873394981488464
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 2405.2499999999995,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 40719.75,
+              "zero_overhead_tok_s": 2.7535778092940157
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 37711.02906976744,
+              "zero_overhead_tok_s": 2.7658307968321525
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 2683.7599999999993,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 43019.365,
+              "zero_overhead_tok_s": 2.549723827862173
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 39830.77488372093,
+              "zero_overhead_tok_s": 2.561709733712273
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 5408.813999999998,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 76268.81757894738,
+              "zero_overhead_tok_s": 2.0347437514599243
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 70570.37816646267,
+              "zero_overhead_tok_s": 2.0456240828943697
+            }
+          ]
+        }
+      },
+      "rows_covered": 26816,
+      "top_n_pairs": 128
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.8486128608220724,
+          "mean_zero_overhead_tok_s": 2.3997469725337615,
+          "min_zero_overhead_tok_s": 1.8183915656255656
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 2.869189323300124,
+          "mean_zero_overhead_tok_s": 2.418069755999766,
+          "min_zero_overhead_tok_s": 1.8279391795077826
+        }
+      },
+      "calls_covered": 40439,
+      "payload_bytes": 1140850688,
+      "payload_gib": 1.0625,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 5314.3240000000005,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 49441.1107826087,
+              "zero_overhead_tok_s": 2.547222301572955
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 45620.96416986856,
+              "zero_overhead_tok_s": 2.5679238683884047
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 5943.484999999996,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 85343.27970588236,
+              "zero_overhead_tok_s": 1.8183915656255656
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 78974.43565663474,
+              "zero_overhead_tok_s": 1.8279391795077826
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 3763.7369999999996,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 39361.263,
+              "zero_overhead_tok_s": 2.8486128608220724
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 36352.54206976744,
+              "zero_overhead_tok_s": 2.869189323300124
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 4443.661000000001,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 41259.464,
+              "zero_overhead_tok_s": 2.658480972995674
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 38070.87388372093,
+              "zero_overhead_tok_s": 2.6801298029715115
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 8683.502999999997,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 72994.12857894738,
+              "zero_overhead_tok_s": 2.126027161652539
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 67295.68916646267,
+              "zero_overhead_tok_s": 2.145166605831005
+            }
+          ]
+        }
+      },
+      "rows_covered": 40439,
+      "top_n_pairs": 256
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 2.9191231451331796,
+          "mean_zero_overhead_tok_s": 2.4675624272511856,
+          "min_zero_overhead_tok_s": 1.8640278716262093
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 2.9462447283265143,
+          "mean_zero_overhead_tok_s": 2.492279610943753,
+          "min_zero_overhead_tok_s": 1.8776152791840368
+        }
+      },
+      "calls_covered": 50995,
+      "payload_bytes": 1711276032,
+      "payload_gib": 1.59375,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 6617.330999999997,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 48138.103782608705,
+              "zero_overhead_tok_s": 2.6161707691838623
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 44317.95716986856,
+              "zero_overhead_tok_s": 2.6434242521978843
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 8032.912999999992,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 83253.85170588238,
+              "zero_overhead_tok_s": 1.8640278716262093
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 76885.00765663476,
+              "zero_overhead_tok_s": 1.8776152791840368
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 4714.493000000005,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 38410.507,
+              "zero_overhead_tok_s": 2.9191231451331796
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 35401.78606976744,
+              "zero_overhead_tok_s": 2.9462447283265143
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 5774.4420000000055,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 39928.683,
+              "zero_overhead_tok_s": 2.747085347142554
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 36740.09288372093,
+              "zero_overhead_tok_s": 2.7772081046137096
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 10861.192,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 70816.43957894738,
+              "zero_overhead_tok_s": 2.191405003170123
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 65118.000166462676,
+              "zero_overhead_tok_s": 2.2169056903966187
+            }
+          ]
+        }
+      },
+      "rows_covered": 50995,
+      "top_n_pairs": 384
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.016303858778712,
+          "mean_zero_overhead_tok_s": 2.533184802255179,
+          "min_zero_overhead_tok_s": 1.8971431900531335
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.05296621306389,
+          "mean_zero_overhead_tok_s": 2.564427313454001,
+          "min_zero_overhead_tok_s": 1.913788352148535
+        }
+      },
+      "calls_covered": 60224,
+      "payload_bytes": 2281701376,
+      "payload_gib": 2.125,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 7793.500999999995,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 46961.93378260871,
+              "zero_overhead_tok_s": 2.681693232288448
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 43141.78716986856,
+              "zero_overhead_tok_s": 2.71549164918507
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 9486.139000000005,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 81800.62570588235,
+              "zero_overhead_tok_s": 1.8971431900531335
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 75431.78165663473,
+              "zero_overhead_tok_s": 1.913788352148535
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 5952.021000000004,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 37172.97899999999,
+              "zero_overhead_tok_s": 3.016303858778712
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 34164.25806976744,
+              "zero_overhead_tok_s": 3.05296621306389
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 6822.373000000008,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 38880.75199999999,
+              "zero_overhead_tok_s": 2.821125990567261
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 35692.161883720924,
+              "zero_overhead_tok_s": 2.858747644744602
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 12694.916000000014,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 68982.71557894736,
+              "zero_overhead_tok_s": 2.2496577395883386
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 63284.27616646266,
+              "zero_overhead_tok_s": 2.2811427081279083
+            }
+          ]
+        }
+      },
+      "rows_covered": 60224,
+      "top_n_pairs": 512
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.0933435770710593,
+          "mean_zero_overhead_tok_s": 2.5936762262848996,
+          "min_zero_overhead_tok_s": 1.933631627121278
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.138000667674187,
+          "mean_zero_overhead_tok_s": 2.6312256286276603,
+          "min_zero_overhead_tok_s": 1.9537696736451275
+        }
+      },
+      "calls_covered": 67989,
+      "payload_bytes": 2852126720,
+      "payload_gib": 2.65625,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 8900.162999999991,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 45855.27178260871,
+              "zero_overhead_tok_s": 2.7464126828654774
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 42035.12516986857,
+              "zero_overhead_tok_s": 2.7869826084084903
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 11029.751000000004,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 80257.01370588236,
+              "zero_overhead_tok_s": 1.933631627121278
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 73888.16965663474,
+              "zero_overhead_tok_s": 1.9537696736451275
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 6877.814000000006,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 36247.185999999994,
+              "zero_overhead_tok_s": 3.0933435770710593
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 33238.46506976744,
+              "zero_overhead_tok_s": 3.138000667674187
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 7848.654000000008,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 37854.47099999999,
+              "zero_overhead_tok_s": 2.8976101660488145
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 34665.88088372092,
+              "zero_overhead_tok_s": 2.943380670555692
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 14127.94800000002,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 67549.68357894736,
+              "zero_overhead_tok_s": 2.2973830783178677
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 61851.24416646265,
+              "zero_overhead_tok_s": 2.3339945228548054
+            }
+          ]
+        }
+      },
+      "rows_covered": 67989,
+      "top_n_pairs": 640
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.1462488422014716,
+          "mean_zero_overhead_tok_s": 2.6472700828862044,
+          "min_zero_overhead_tok_s": 1.9742516818800258
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.1966185298228806,
+          "mean_zero_overhead_tok_s": 2.6906362342983074,
+          "min_zero_overhead_tok_s": 1.998431380433216
+        }
+      },
+      "calls_covered": 74547,
+      "payload_bytes": 3422552064,
+      "payload_gib": 3.1875,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 9863.055000000004,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 44892.379782608696,
+              "zero_overhead_tok_s": 2.8053202037818497
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 41072.23316986856,
+              "zero_overhead_tok_s": 2.852320259923003
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 12681.032000000001,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 78605.73270588236,
+              "zero_overhead_tok_s": 1.9742516818800258
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 72236.88865663474,
+              "zero_overhead_tok_s": 1.998431380433216
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 7487.323000000006,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 35637.676999999996,
+              "zero_overhead_tok_s": 3.1462488422014716
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 32628.95606976744,
+              "zero_overhead_tok_s": 3.1966185298228806
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 8650.110000000015,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 37053.014999999985,
+              "zero_overhead_tok_s": 2.9602854180692186
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 33864.424883720916,
+              "zero_overhead_tok_s": 3.0130405010946983
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 15647.26100000002,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 66030.37057894736,
+              "zero_overhead_tok_s": 2.3502442684984546
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 60331.93116646265,
+              "zero_overhead_tok_s": 2.3927705002177397
+            }
+          ]
+        }
+      },
+      "rows_covered": 74547,
+      "top_n_pairs": 768
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.275604881158134,
+          "mean_zero_overhead_tok_s": 2.7554127170536633,
+          "min_zero_overhead_tok_s": 2.0363175065598047
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.3407106628021577,
+          "mean_zero_overhead_tok_s": 2.811231041430415,
+          "min_zero_overhead_tok_s": 2.0669864952737727
+        }
+      },
+      "calls_covered": 86264,
+      "payload_bytes": 4563402752,
+      "payload_gib": 4.25,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 11845.605000000001,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 42909.8297826087,
+              "zero_overhead_tok_s": 2.934933572051649
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 39089.68316986856,
+              "zero_overhead_tok_s": 2.9969841986593826
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 15076.891000000007,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 76209.87370588236,
+              "zero_overhead_tok_s": 2.0363175065598047
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 69841.02965663474,
+              "zero_overhead_tok_s": 2.0669864952737727
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 8894.681000000004,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 34230.318999999996,
+              "zero_overhead_tok_s": 3.275604881158134
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 31221.59806976744,
+              "zero_overhead_tok_s": 3.3407106628021577
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 10109.911000000006,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 35593.21399999999,
+              "zero_overhead_tok_s": 3.081696977406986
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 32404.623883720924,
+              "zero_overhead_tok_s": 3.1487754367113454
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 18297.265999999992,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 63380.365578947385,
+              "zero_overhead_tok_s": 2.4485106480917422
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 57681.92616646268,
+              "zero_overhead_tok_s": 2.502698413705416
+            }
+          ]
+        }
+      },
+      "rows_covered": 86264,
+      "top_n_pairs": 1024
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.5239971081380417,
+          "mean_zero_overhead_tok_s": 2.958681822006864,
+          "min_zero_overhead_tok_s": 2.162353260057275
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.6204969755050374,
+          "mean_zero_overhead_tok_s": 3.0404115676221237,
+          "min_zero_overhead_tok_s": 2.207379244913234
+        }
+      },
+      "calls_covered": 104163,
+      "payload_bytes": 6845104128,
+      "payload_gib": 6.375,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 14680.705000000004,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 40074.7297826087,
+              "zero_overhead_tok_s": 3.1425664173699137
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 36254.58316986856,
+              "zero_overhead_tok_s": 3.2313476682877114
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 19518.889000000003,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 71767.87570588235,
+              "zero_overhead_tok_s": 2.162353260057275
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 65399.03165663474,
+              "zero_overhead_tok_s": 2.207379244913234
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 11307.436999999987,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 31817.563000000013,
+              "zero_overhead_tok_s": 3.5239971081380417
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 28808.842069767456,
+              "zero_overhead_tok_s": 3.6204969755050374
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 12822.342999999992,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 32880.78200000001,
+              "zero_overhead_tok_s": 3.3359151859587763
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 29692.191883720938,
+              "zero_overhead_tok_s": 3.4364214040012304
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 22639.03699999993,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 59038.59457894744,
+              "zero_overhead_tok_s": 2.6285771385103107
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 53340.15516646274,
+              "zero_overhead_tok_s": 2.7064125454034063
+            }
+          ]
+        }
+      },
+      "rows_covered": 104163,
+      "top_n_pairs": 1536
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 3.7562500734918474,
+          "mean_zero_overhead_tok_s": 3.1484601244882375,
+          "min_zero_overhead_tok_s": 2.274223192316462
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 3.885856472488788,
+          "mean_zero_overhead_tok_s": 3.257417076607743,
+          "min_zero_overhead_tok_s": 2.3333344311003614
+        }
+      },
+      "calls_covered": 118578,
+      "payload_bytes": 9126805504,
+      "payload_gib": 8.5,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 17220.01299999997,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 37535.42178260873,
+              "zero_overhead_tok_s": 3.355164109501243
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 33715.27516986859,
+              "zero_overhead_tok_s": 3.4747206481469237
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 23049.178999999986,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 68237.58570588237,
+              "zero_overhead_tok_s": 2.274223192316462
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 61868.74165663475,
+              "zero_overhead_tok_s": 2.3333344311003614
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 13274.750999999986,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 29850.249000000014,
+              "zero_overhead_tok_s": 3.7562500734918474
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 26841.528069767457,
+              "zero_overhead_tok_s": 3.885856472488788
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 14792.478000000003,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 30910.646999999997,
+              "zero_overhead_tok_s": 3.5485345874513725
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 27722.05688372093,
+              "zero_overhead_tok_s": 3.680638999801188
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 26413.95999999991,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 55263.67157894746,
+              "zero_overhead_tok_s": 2.8081286596802637
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 49565.23216646276,
+              "zero_overhead_tok_s": 2.9125348315014543
+            }
+          ]
+        }
+      },
+      "rows_covered": 118578,
+      "top_n_pairs": 2048
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 4.162567674440537,
+          "mean_zero_overhead_tok_s": 3.4930830938104327,
+          "min_zero_overhead_tok_s": 2.4871152522912796
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 4.359047684129951,
+          "mean_zero_overhead_tok_s": 3.6591458950760627,
+          "min_zero_overhead_tok_s": 2.5765890404969434
+        }
+      },
+      "calls_covered": 141297,
+      "payload_bytes": 13690208256,
+      "payload_gib": 12.75,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 21138.586999999967,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 33616.84778260873,
+              "zero_overhead_tok_s": 3.74626142267724
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 29796.701169868593,
+              "zero_overhead_tok_s": 3.9316823068039755
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 28890.179000000026,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 62396.58570588234,
+              "zero_overhead_tok_s": 2.4871152522912796
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 56027.74165663472,
+              "zero_overhead_tok_s": 2.5765890404969434
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 16188.50099999997,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 26936.499000000033,
+              "zero_overhead_tok_s": 4.162567674440537
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 23927.778069767475,
+              "zero_overhead_tok_s": 4.359047684129951
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 17644.56,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 28058.565,
+              "zero_overhead_tok_s": 3.909234132251596
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 24869.97488372093,
+              "zero_overhead_tok_s": 4.10273368581964
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 32571.345999999914,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 49106.285578947456,
+              "zero_overhead_tok_s": 3.160236987391509
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 43407.846166462754,
+              "zero_overhead_tok_s": 3.3256767581298035
+            }
+          ]
+        }
+      },
+      "rows_covered": 141297,
+      "top_n_pairs": 3072
+    },
+    {
+      "aggregate": {
+        "40": {
+          "max_zero_overhead_tok_s": 4.4870166447608195,
+          "mean_zero_overhead_tok_s": 3.7951452504814034,
+          "min_zero_overhead_tok_s": 2.702048796676061
+        },
+        "43": {
+          "max_zero_overhead_tok_s": 4.745319435923146,
+          "mean_zero_overhead_tok_s": 4.019610309268394,
+          "min_zero_overhead_tok_s": 2.8270260642889715
+        }
+      },
+      "calls_covered": 158326,
+      "payload_bytes": 18253611008,
+      "payload_gib": 17.0,
+      "prompt_projection": {
+        "climate": {
+          "saved_decode_fallback_ms": 24025.207000000002,
+          "sensitivity": [
+            {
+              "current_decode_ms": 54755.4347826087,
+              "estimated_decode_tokens": 125.9375,
+              "layers": 40,
+              "zero_overhead_decode_ms": 30730.2277826087,
+              "zero_overhead_tok_s": 4.098163570114257
+            },
+            {
+              "current_decode_ms": 50935.28816986856,
+              "estimated_decode_tokens": 117.15116279069767,
+              "layers": 43,
+              "zero_overhead_decode_ms": 26910.081169868557,
+              "zero_overhead_tok_s": 4.353430301870393
+            }
+          ]
+        },
+        "fibonacci": {
+          "saved_decode_fallback_ms": 33853.49399999996,
+          "sensitivity": [
+            {
+              "current_decode_ms": 91286.76470588236,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 57433.2707058824,
+              "zero_overhead_tok_s": 2.702048796676061
+            },
+            {
+              "current_decode_ms": 84917.92065663474,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 51064.42665663478,
+              "zero_overhead_tok_s": 2.8270260642889715
+            }
+          ]
+        },
+        "france": {
+          "saved_decode_fallback_ms": 18136.23599999999,
+          "sensitivity": [
+            {
+              "current_decode_ms": 43125.0,
+              "estimated_decode_tokens": 112.125,
+              "layers": 40,
+              "zero_overhead_decode_ms": 24988.76400000001,
+              "zero_overhead_tok_s": 4.4870166447608195
+            },
+            {
+              "current_decode_ms": 40116.27906976744,
+              "estimated_decode_tokens": 104.30232558139535,
+              "layers": 43,
+              "zero_overhead_decode_ms": 21980.043069767453,
+              "zero_overhead_tok_s": 4.745319435923146
+            }
+          ]
+        },
+        "japan": {
+          "saved_decode_fallback_ms": 19560.914000000048,
+          "sensitivity": [
+            {
+              "current_decode_ms": 45703.125,
+              "estimated_decode_tokens": 109.6875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 26142.210999999952,
+              "zero_overhead_tok_s": 4.195800424072784
+            },
+            {
+              "current_decode_ms": 42514.53488372093,
+              "estimated_decode_tokens": 102.03488372093024,
+              "layers": 43,
+              "zero_overhead_decode_ms": 22953.620883720883,
+              "zero_overhead_tok_s": 4.44526309107489
+            }
+          ]
+        },
+        "quantum": {
+          "saved_decode_fallback_ms": 37245.633000000154,
+          "sensitivity": [
+            {
+              "current_decode_ms": 81677.63157894737,
+              "estimated_decode_tokens": 155.1875,
+              "layers": 40,
+              "zero_overhead_decode_ms": 44431.99857894722,
+              "zero_overhead_tok_s": 3.492696816783096
+            },
+            {
+              "current_decode_ms": 75979.19216646267,
+              "estimated_decode_tokens": 144.36046511627907,
+              "layers": 43,
+              "zero_overhead_decode_ms": 38733.55916646252,
+              "zero_overhead_tok_s": 3.727012653184572
+            }
+          ]
+        }
+      },
+      "rows_covered": 158326,
+      "top_n_pairs": 4096
+    }
+  ],
+  "source_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+  "status": "rejected_as_direct_5tok_route_before_source_change"
+}

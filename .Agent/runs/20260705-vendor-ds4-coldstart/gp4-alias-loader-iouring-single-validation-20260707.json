@@ -1,0 +1,119 @@
+{
+  "artifact": "gp4-alias-loader-iouring-single-validation-20260707",
+  "status": "accepted_infrastructure_not_sota",
+  "date": "2026-07-07",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_base_commit": "de2378988",
+  "source_state": "dirty_before_commit; ggml/src/ggml-cuda/moe_stream_batch.cu contains default-off GP4 alias source loader and aligned alias read support",
+  "run_root": "/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-results-top1-smoke",
+  "main_validation_run": "/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-results-top1-smoke/alias-mxfp4-probe1-iouring-single-mem",
+  "baseline_run": "/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-results-top1-smoke/baseline-all",
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "alias_tsv": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv",
+  "sha256": {
+    "llama_results": "e53664b92ac2ec2d682e4175432460d53d60beb8b92b8d0b4d19b2c4ea35c87f",
+    "libggml_cuda": "88d6b87c8a1fe5d97d4c23152ef8ef42e51451ec1da3d8ce64ec1d0174fa1874",
+    "alias_tsv": "6e0b291f5b471c8414f2aee916086381600368f771c1752330356e52aa8ffe0c"
+  },
+  "implemented": [
+    "default-off GGML_MOE_EXPERT_GGUF_ALIAS_TSV loader for source_path/tensor/expert/model_offset/nbytes rows",
+    "alias source open path with direct/io_uring fd support",
+    "alias_source flag on expert_pack_entry",
+    "default-off GGML_MOE_IO_ALIGNED_ALIAS_BATCH support in batched expert_pack_iouring_copy_jobs",
+    "default-off aligned alias support in single expert_pack_read_entry_iouring and direct read fallback path"
+  ],
+  "command_shape": {
+    "wrapper": "systemd-run --wait --collect --quiet",
+    "memory": "MemoryMax=16000000000 MemorySwapMax=0",
+    "binary": "build-ds4-moe-stream-batch-on/bin/llama-results",
+    "args": "-m DeepSeek-V4-Flash-FP4-FP8-native.gguf -f fixed-france-text.txt --sequential-logits -c 256 -b 16 -ub 16 -t 20 -tb 20 -ngl all --fit on -fa auto --n-cpu-moe 40 --defer-experts --check -o baseline-all/result.gguf --top1-report top1-check.json --top1-fail-on-mismatch"
+  },
+  "env": {
+    "GGML_MOE_EXPERT_GGUF_ALIAS_TSV": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv",
+    "GGML_MOE_IO_ALIGNED_ALIAS_BATCH": "1",
+    "GGML_MOE_IO_BACKEND": "iouring",
+    "GGML_MOE_IO_URING_SINGLE": "1",
+    "GGML_MOE_IO_BYTES": "8388608",
+    "GGML_MOE_IO_DEPTH": "8",
+    "GGML_MOE_IO_REFILL_BATCH": "4",
+    "GGML_MOE_STAGE_PINNED": "1",
+    "GGML_MOE_STAGE_PINNED_SLOTS": "8",
+    "GGML_MOE_STREAM": "1",
+    "GGML_MOE_STREAM_DOWN_BATCH": "1",
+    "GGML_MOE_STREAM_BATCH_ONLY": "1",
+    "GGML_MOE_STREAM_DOWN_MXFP4_PROBE": "parity",
+    "GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_CALLS": "1",
+    "GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE": "1",
+    "GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_COLS": "16",
+    "GGML_MOE_STREAM_DECLINE_DEBUG": "1"
+  },
+  "correctness": {
+    "top1_exit_status": 0,
+    "top1_stdout": "OK",
+    "n_tokens": 145,
+    "same_top1": 145,
+    "same_top1_ratio": 1.0,
+    "first_mismatch_pos": -1,
+    "max_abs": 0,
+    "mean_abs": 0
+  },
+  "memory": {
+    "memory_peak_bytes": 16000000000,
+    "memory_current_bytes": 14965194752,
+    "memory_file_bytes": 14759301120,
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 87891,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "ram_ok": true,
+    "swap_ok": true
+  },
+  "alias_loader_result": {
+    "alias_source_open": "io_uring direct reads enabled",
+    "entries_loaded": 33024,
+    "sources": 1,
+    "bad_rows": 0,
+    "expert_pack_total_entries": 33024
+  },
+  "read_counters": {
+    "hits": 6,
+    "misses": 0,
+    "read_failures": 0,
+    "direct_reads": 0,
+    "direct_fallbacks": 0,
+    "iouring_reads": 6,
+    "iouring_bytes": 26738688,
+    "iouring_fallbacks": 0,
+    "iouring_submit_us": 1021,
+    "iouring_wait_us": 7700,
+    "iouring_h2d_enqueues": 0,
+    "entries": 33024
+  },
+  "mxfp4_probe": {
+    "tensor": "blk.0.ffn_down_exps.weight",
+    "status": "ok",
+    "active": 6,
+    "compared": 16,
+    "max_abs": 0.00337298296,
+    "mean_abs": 0.00130869935,
+    "max_rel": 0.0190681965,
+    "mean_rel": 0.0286569366,
+    "stage_jobs_done_ms": 106.419292,
+    "sync_done_ms": 107.062166
+  },
+  "not_sota_reason": [
+    "This is fixed-text correctness and source-path validation, not llama-cli token-rate benchmarking.",
+    "Only one MXFP4 down batch call is enabled; remaining calls decline with mxfp4_probe_limit.",
+    "It proves full-source alias and aligned alias io_uring single reads work under 16GB, but does not yet improve generalized token rate."
+  ],
+  "next_steps": [
+    "Move from single-entry io_uring reads to real batched alias copy for MXFP4 down/up source staging.",
+    "Lift mxfp4_probe_limit only after expanded parity/top1 validation.",
+    "Run calibration_dev_set_v1 token-rate benchmark only after the batch path consumes alias entries beyond diagnostic probes."
+  ]
+}

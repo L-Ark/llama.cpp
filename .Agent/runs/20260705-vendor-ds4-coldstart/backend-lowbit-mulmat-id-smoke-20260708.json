@@ -1,0 +1,222 @@
+{
+  "attempt_id": "20260708-backend-lowbit-mulmat-and-id-smoke",
+  "created_at_local": "2026-07-08",
+  "status": "generic_backend_correctness_smoke_pass_not_moe_stream_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "b687fe0226ddacbb4b0e11f41cad74f4f8f909da",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Before writing a type-specific MoE stream patch, verify existing generic CUDA backend correctness for lowbit types appearing in compact target candidates.",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat",
+  "binary": "./build-ds4-moe-stream-batch-probe/bin/test-backend-ops",
+  "env": "GGML_CUDA_FORCE_MMQ=1",
+  "ops_tested": [
+    "MUL_MAT",
+    "MUL_MAT_ID"
+  ],
+  "types_tested": [
+    "iq1_s",
+    "iq1_m",
+    "q2_K"
+  ],
+  "summary_by_op_type": {
+    "MUL_MAT_ID type_a=iq1_m": {
+      "count": 1,
+      "pass": 1
+    },
+    "MUL_MAT_ID type_a=iq1_s": {
+      "count": 1,
+      "pass": 1
+    },
+    "MUL_MAT_ID type_a=q2_K": {
+      "count": 1,
+      "pass": 1
+    },
+    "MUL_MAT type_a=iq1_m": {
+      "count": 3,
+      "pass": 3
+    },
+    "MUL_MAT type_a=iq1_s": {
+      "count": 3,
+      "pass": 3
+    },
+    "MUL_MAT type_a=q2_K": {
+      "count": 3,
+      "pass": 3
+    }
+  },
+  "checks": [
+    {
+      "csv": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/MUL_MAT_ID_type_a_iq1_m_type_b_f32_n_mats_4_n_used_2_b_0_m_512_n_1_k_256_.csv",
+      "stderr": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/MUL_MAT_ID_type_a_iq1_m_type_b_f32_n_mats_4_n_used_2_b_0_m_512_n_1_k_256_.stderr",
+      "rows": 1,
+      "all_supported": true,
+      "error_messages": [],
+      "cases": [
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT_ID",
+          "params": "type_a=iq1_m,type_b=f32,n_mats=4,n_used=2,b=0,m=512,n=1,k=256",
+          "mode": "test",
+          "supported": "1"
+        }
+      ]
+    },
+    {
+      "csv": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/MUL_MAT_ID_type_a_iq1_s_type_b_f32_n_mats_4_n_used_2_b_0_m_512_n_1_k_256_.csv",
+      "stderr": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/MUL_MAT_ID_type_a_iq1_s_type_b_f32_n_mats_4_n_used_2_b_0_m_512_n_1_k_256_.stderr",
+      "rows": 1,
+      "all_supported": true,
+      "error_messages": [],
+      "cases": [
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT_ID",
+          "params": "type_a=iq1_s,type_b=f32,n_mats=4,n_used=2,b=0,m=512,n=1,k=256",
+          "mode": "test",
+          "supported": "1"
+        }
+      ]
+    },
+    {
+      "csv": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/MUL_MAT_ID_type_a_q2_K_type_b_f32_n_mats_4_n_used_2_b_0_m_512_n_1_k_256_.csv",
+      "stderr": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/MUL_MAT_ID_type_a_q2_K_type_b_f32_n_mats_4_n_used_2_b_0_m_512_n_1_k_256_.stderr",
+      "rows": 1,
+      "all_supported": true,
+      "error_messages": [],
+      "cases": [
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT_ID",
+          "params": "type_a=q2_K,type_b=f32,n_mats=4,n_used=2,b=0,m=512,n=1,k=256",
+          "mode": "test",
+          "supported": "1"
+        }
+      ]
+    },
+    {
+      "csv": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_iq1_m_type_b_f32_m_16_n_1_k_256_.csv",
+      "stderr": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_iq1_m_type_b_f32_m_16_n_1_k_256_.stderr",
+      "rows": 2,
+      "all_supported": true,
+      "error_messages": [],
+      "cases": [
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT",
+          "params": "type_a=iq1_m,type_b=f32,m=16,n=1,k=256,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1",
+          "mode": "test",
+          "supported": "1"
+        },
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT",
+          "params": "type_a=iq1_m,type_b=f32,m=16,n=1,k=256,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1",
+          "mode": "test",
+          "supported": "1"
+        }
+      ]
+    },
+    {
+      "csv": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_iq1_m_type_b_f32_m_16_n_8_k_256_.csv",
+      "stderr": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_iq1_m_type_b_f32_m_16_n_8_k_256_.stderr",
+      "rows": 1,
+      "all_supported": true,
+      "error_messages": [],
+      "cases": [
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT",
+          "params": "type_a=iq1_m,type_b=f32,m=16,n=8,k=256,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1",
+          "mode": "test",
+          "supported": "1"
+        }
+      ]
+    },
+    {
+      "csv": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_iq1_s_type_b_f32_m_16_n_1_k_256_.csv",
+      "stderr": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_iq1_s_type_b_f32_m_16_n_1_k_256_.stderr",
+      "rows": 2,
+      "all_supported": true,
+      "error_messages": [],
+      "cases": [
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT",
+          "params": "type_a=iq1_s,type_b=f32,m=16,n=1,k=256,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1",
+          "mode": "test",
+          "supported": "1"
+        },
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT",
+          "params": "type_a=iq1_s,type_b=f32,m=16,n=1,k=256,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1",
+          "mode": "test",
+          "supported": "1"
+        }
+      ]
+    },
+    {
+      "csv": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_iq1_s_type_b_f32_m_16_n_8_k_256_.csv",
+      "stderr": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_iq1_s_type_b_f32_m_16_n_8_k_256_.stderr",
+      "rows": 1,
+      "all_supported": true,
+      "error_messages": [],
+      "cases": [
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT",
+          "params": "type_a=iq1_s,type_b=f32,m=16,n=8,k=256,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1",
+          "mode": "test",
+          "supported": "1"
+        }
+      ]
+    },
+    {
+      "csv": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_q2_K_type_b_f32_m_16_n_1_k_256_.csv",
+      "stderr": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_q2_K_type_b_f32_m_16_n_1_k_256_.stderr",
+      "rows": 2,
+      "all_supported": true,
+      "error_messages": [],
+      "cases": [
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT",
+          "params": "type_a=q2_K,type_b=f32,m=16,n=1,k=256,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1",
+          "mode": "test",
+          "supported": "1"
+        },
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT",
+          "params": "type_a=q2_K,type_b=f32,m=16,n=1,k=256,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1",
+          "mode": "test",
+          "supported": "1"
+        }
+      ]
+    },
+    {
+      "csv": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_q2_K_type_b_f32_m_16_n_8_k_256_.csv",
+      "stderr": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat/type_a_q2_K_type_b_f32_m_16_n_8_k_256_.stderr",
+      "rows": 1,
+      "all_supported": true,
+      "error_messages": [],
+      "cases": [
+        {
+          "backend": "CUDA0",
+          "op": "MUL_MAT",
+          "params": "type_a=q2_K,type_b=f32,m=16,n=8,k=256,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1",
+          "mode": "test",
+          "supported": "1"
+        }
+      ]
+    }
+  ],
+  "decision": {
+    "accepted_sota_changed": false,
+    "source_patch_now": false,
+    "full_download_now": false,
+    "what_this_proves": "Generic CUDA MUL_MAT and MUL_MAT_ID smoke cases for IQ1_S/IQ1_M/Q2_K agree with CPU according to test-backend-ops.",
+    "what_this_does_not_prove": "This does not prove DeepSeek MoE stream batch fast-path correctness or performance for compact target candidates, because moe_stream_type_supported and slot batch dispatch still exclude IQ1_S/IQ1_M/Q2_K.",
+    "next_action": "Either get cleanup approval and run real candidate load/correctness first, or implement a default-off synthetic MoE stream parity harness for these types before any stream fast-path patch."
+  }
+}

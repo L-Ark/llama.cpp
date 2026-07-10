@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstring>
+#include <cstdlib>
 #include <forward_list>
 #include <limits>
 #include <map>
@@ -1800,7 +1801,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
             special_mask_id = 103;
 
             add_sep = true;
-        } else if (tokenizer_model == "gpt2") {
+        } else if (tokenizer_model == "gpt2" || tokenizer_model == "bpe") {
             type = LLAMA_VOCAB_TYPE_BPE;
 
             // read bpe merges and populate bpe ranks
@@ -2211,6 +2212,11 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
         scores = (const float * ) gguf_get_arr_data(ctx, score_idx);
     }
 
+    const bool token_type_undefined_as_normal = []() {
+        const char * env = std::getenv("LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL");
+        return env && std::strcmp(env, "0") != 0;
+    }();
+
     const int * toktypes = nullptr;
     const int toktype_idx = gguf_find_key(ctx, kv(LLM_KV_TOKENIZER_TOKEN_TYPE).c_str());
     if (toktype_idx != -1) {
@@ -2246,7 +2252,9 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
                 case LLAMA_TOKEN_TYPE_CONTROL:      token_data.attr = LLAMA_TOKEN_ATTR_CONTROL;      break;
                 case LLAMA_TOKEN_TYPE_USER_DEFINED: token_data.attr = LLAMA_TOKEN_ATTR_USER_DEFINED; break;
                 case LLAMA_TOKEN_TYPE_BYTE:         token_data.attr = LLAMA_TOKEN_ATTR_BYTE;         break;
-                case LLAMA_TOKEN_TYPE_UNDEFINED:    token_data.attr = LLAMA_TOKEN_ATTR_UNDEFINED;    break;
+                case LLAMA_TOKEN_TYPE_UNDEFINED:
+                    token_data.attr = token_type_undefined_as_normal ? LLAMA_TOKEN_ATTR_NORMAL : LLAMA_TOKEN_ATTR_UNDEFINED;
+                    break;
                 default:                            token_data.attr = LLAMA_TOKEN_ATTR_UNDEFINED;    break;
             }
         }

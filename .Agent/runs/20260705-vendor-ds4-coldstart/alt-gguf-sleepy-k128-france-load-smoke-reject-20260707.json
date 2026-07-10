@@ -1,0 +1,55 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-france-load-smoke-reject-20260707.json",
+  "attempt_id": "20260707-sleepy-k128-alt-gguf-france-load-smoke",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "created_utc": "2026-07-06T17:51:55Z",
+  "decision": {
+    "accepted_sota_changed": false,
+    "reason": "REAP K128 changes gate input shape. This is not a simple tensor alias; direct load fails before inference.",
+    "runtime_source_patch_allowed_from_this_smoke": false,
+    "strict_token_rate_benchmark_allowed": false
+  },
+  "env": {
+    "GGML_MOE_STREAM": "0",
+    "LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS": "1",
+    "LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS": "1",
+    "LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL": "1"
+  },
+  "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16",
+  "header_shape_followup": {
+    "antirez_iq2xxs_gate_inp": "all probed layers are [4096,256], so antirez becomes next header-compatible candidate",
+    "sleepy_gate_inp": "layers 0-2 are [4096,256], layers >=3 are [4096,128] due REAP K128 structure"
+  },
+  "loader_failure_excerpt": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\nllama_model_load: error loading model: check_tensor_dims: tensor 'blk.3.ffn_gate_inp.weight' has wrong shape; expected   4096,    256, got   4096,    128,      1,      1\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: check_tensor_dims: tensor 'blk.3.ffn_gate_inp.weight' has wrong shape; expected   4096,    256, got   4096,    128,      1,      1\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf'\nsrv    load_model: failed to load model, '/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf'\nCommand exited with non-zero status 1\n\tCommand being timed: \"/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf -p Please introduce France in a short paragraph. -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-",
+  "metrics": {
+    "correctness_ok": false,
+    "correctness_reason": "too_short,missing_france,missing_europe,missing_expected_context",
+    "elapsed_seconds": 1.96,
+    "eval_tok_s": null,
+    "exit_status": 1,
+    "prompt_tok_s": null,
+    "ttft_estimate_ms": null
+  },
+  "model_path": "/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+  "model_sha256": "54927e791ae4e0fbc848e5f2574681b0d8c32721fddd1da82918ece04c0d928b",
+  "next_allowed_work": [
+    "Delete rejected sleepy local model after record is pushed to free disk.",
+    "Download antirez IQ2XXS chat-v2 candidate because header has output_hc aliases and gate_inp [4096,256].",
+    "Do not use held-out prompts."
+  ],
+  "prompt_scope": "France smoke only; calibration_dev_set_v1 and held_out_test_set_v1_locked were not used",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T174958Z-20260707-sleepy-k128-alt-gguf-france-strict-smoke/france-sleepy-k128-alt-cpu40-vram0gb-cpu40-vram0gb",
+  "source_head_before_artifact": "1ecd1bf38a3ff6a99604f5d11d5ca74356cd47b7",
+  "status": "rejected_load_incompatible_not_sota",
+  "stderr_key_error": "check_tensor_dims: tensor 'blk.3.ffn_gate_inp.weight' has wrong shape; expected 4096,256, got 4096,128",
+  "strict_16gb": {
+    "drop_caches": true,
+    "memory_file_bytes": 204972032,
+    "memory_max_bytes": 16000000000,
+    "oom_seen": false,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "ram_peak_bytes": 393523200
+  }
+}

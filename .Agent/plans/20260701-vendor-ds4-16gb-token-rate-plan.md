@@ -3,12 +3,317 @@
 ## 目标
 
 - 在 `vendor` 实现上继续优化 DeepSeek V4 Flash cold-start 解码速度；最终结果必须体现在 `vendor`，`ik_llama` 只能作为参考。
+- 任务背景：最终部署目标是一台只有 `16GB host RAM` 和 `32GB RTX 5090 VRAM` 的机器；真实用户会随机输入 prompt，因此优化目标是让随机/泛化 prompt 的输出稳定达到 `>5 tok/s`，而不是让某个固定 prompt 达到高 token rate。
+- 最终验收口径：在 strict cold-start、16GB cgroup（含 page cache）、32GB 5090 VRAM 约束下，一个与调优 prompt 分离的 evaluation prompt set 必须稳定达到 `eval_tok_s > 5`。至少固定五 prompt baseline 中每个 prompt 都要接近或超过该线；若扩展为更大随机 prompt holdout，则以 per-prompt 明细和低分位数为准，不能只报平均值或 France 单项。
 - 当前分支已回退到 accepted O_DIRECT expert-pack SOTA 记录点 `5d65239a7`，后续优化必须从该点重新设计和推进。
 - 严格保持：
   - Host RAM（含 page cache、进程 RSS、cgroup 内所有 file/anon memory）`<= 16 GB`；
   - 尽可能用满 VRAM，但不能造成 CUDA OOM、cache 插入失败或正确率退化；
   - France prompt: `Please introduce France in a short paragraph.` 必须语义正确、连贯、非重复、非截断；
+  - 优化目标必须面向泛化 prompt，而不是 prompt-specific。任何 accepted 新 SOTA 不得依赖目标评测 prompt 本身生成的专用 trace、pack、admission profile、专家热集或参数；如需 profile/pack，只能来自与评测 prompt 分离的 calibration set，或来自 prompt-agnostic 的静态模型/张量信息；
+  - 在继续实现新的 token-rate 优化前，必须先跑出当前配置的 strict cold 泛化 baseline。baseline 至少覆盖固定五个 prompt：France、quantum computing、Python Fibonacci、Japan、climate change，并逐条记录 token rate、TTFT、16GB cgroup memory/page cache、输出文本和 correctness；
   - accepted SOTA 的 TTFT 不得高于当前 accepted baseline 的 `20%`；若 TTFT 超过 20% 但 token rate 有参考价值，只能标记为 `not accepted`，不得替代 SOTA。
+
+
+## 2026-07-06 新增限制：先建立泛化 prompt baseline
+
+- `constraint_id`: `20260706-general-prompt-first`
+- `status`: active_blocker_before_more_optimization
+- `reason`: 之前 accepted France-pack 路径使用 France-derived gate miss pack/profile，已证明对 France 单 prompt 可以达到 SOTA envelope，但不能代表泛化 prompt token rate。后续目标改为泛化 prompt 后，继续围绕 France trace 做优化会得到 prompt-specific 结果，不能作为 accepted SOTA。
+- `generalization_rule`: 后续 accepted 优化必须提升跨 prompt 的稳定表现。禁止把单个评测 prompt 的 route trace、answer trace、miss order、expert hot set、prompt-specific O_DIRECT pack、prompt-specific cache admit profile 用作 promoted 配置。任何 prompt-derived artifact 必须来自固定 calibration set，且 evaluation prompt set 必须分离；否则只能标为 diagnostic/prompt-specific，不得替代 accepted generalized SOTA。
+- `machine_target`: `16GB host RAM + 32GB RTX 5090 VRAM`; all optimization, profiling, caching, packing, prefetching, and kernel work serves the product requirement that arbitrary user prompts should generate at a stable `>5 tok/s` under this hardware envelope.
+- `not_a_goal`: France-only SOTA、prompt-specific expert pack、单 prompt cache hotset、不可泛化 route trace、warm page-cache steady-state、或只在某个演示 prompt 上有效的 token-rate 提升，都不能算完成任务。
+- `baseline_prompt_set`:
+  1. `Please introduce France in a short paragraph.`
+  2. `Explain quantum computing briefly.`
+  3. `Write a short Python function for Fibonacci.`
+  4. `Introduce Japan in a short paragraph.`
+  5. `Summarize climate change in one paragraph.`
+- `prompt_split_rule`: 为了避免继续过拟合少数 prompt，后续 prompt 必须分成 `calibration/dev` 和 `held-out test`。`held-out test` 在优化期间不能用于 trace、expert pack、cache admission profile、hotset 选择、参数 sweep、kernel shape 筛选或人工针对性调参；只能在候选方案冻结后用于最终验收。最终 SOTA 必须报告 `held-out test` 指标，不能用 calibration/dev 或 France 单项替代。
+- `calibration_dev_set_v1`:
+  1. `Please introduce France in a short paragraph.`
+  2. `Explain quantum computing briefly.`
+  3. `Write a short Python function for Fibonacci.`
+  4. `Introduce Japan in a short paragraph.`
+  5. `Summarize climate change in one paragraph.`
+- `held_out_test_set_v1_locked`: locked before further optimization. Do not use these prompts for design, tracing, packing, profiling, or parameter search.
+  1. `Describe photosynthesis in a short paragraph.`
+  2. `Give three practical tips for organizing a small home office.`
+  3. `Write a concise JavaScript function that checks whether a string is a palindrome.`
+  4. `Explain why regular exercise is important in one paragraph.`
+  5. `Introduce Brazil in a short paragraph.`
+- `sota_metric_update`: A future accepted generalized SOTA requires `held_out_test_set_v1_locked` per-prompt metrics after the candidate is frozen. The acceptance summary must include min/mean eval tok/s, every prompt's TTFT/RAM/page-cache/correctness, and exact outputs. The product target is not met until held-out test prompts are stable at `>5 tok/s` under the 16GB RAM + 32GB 5090 envelope.
+- `baseline_required_before_next_code_change`: run the current pushed source/config under strict cold `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`, page-cache accounting inside cgroup, and record each prompt's `eval_tok_s`, `prompt_tok_s`, `TTFT`, elapsed time, `memory_peak_bytes`, `memory_file_bytes`, OOM/swap status, exact env/CLI, answer text, and manual/automatic correctness note.
+- `promotion_update`: A future accepted generalized SOTA must beat the baseline on prompt-set aggregate and must not introduce a severe regression on any individual prompt. France correctness remains a mandatory sentinel, but France alone is no longer sufficient evidence for promotion.
+- `next_action`: pause W2/W3 implementation until the generalized baseline artifact is produced, written into this plan, committed, and pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- `baseline_result_20260706_dev_reference`: completed no-prompt-specific strict cold baseline on `calibration_dev_set_v1`, not held-out SOTA. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`. Config excludes `GGML_MOE_STREAM_ONE_EXPERT_PACK`, `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE`, `GGML_MOE_STREAM_ONE_PREFILL_PROFILE`, and prompt-derived packs/profiles. Results: France `2.7 tok/s`, quantum `1.8 tok/s`, Fibonacci `1.8 tok/s`, Japan `2.4 tok/s`, climate `2.2 tok/s`; mean `2.18 tok/s`, min `1.8 tok/s`, all runs `memory_peak_bytes=16000000000`, all `ram_ok=true`, no prompt-specific env detected. This is a dev/reference baseline only; final SOTA must be measured on `held_out_test_set_v1_locked`.
+- `invalidated_result`: `/root/lfz/runs/vendor-ds4-16gb/20260706T105534Z-general-prompt-baseline-current-config-20260706` used France-derived gate pack/profile and is invalid as a generalized baseline. It must not be used for SOTA or target progress.
+
+## 2026-07-06 下一步主线：泛化 CPU fallback 修正
+
+- `next_focus`: CPU fallback 修正仍然是下一步主线。之前的 n96 profile 已显示 `ffn_up_exps`/`ffn_down_exps` CPU fallback 是最大瓶颈；新增泛化要求后，执行方式改为先在 `calibration_dev_set_v1` 上证明它是跨 prompt 共同瓶颈，再修通用 GPU path。
+- `why_not_prompt_pack`: 当前目标是随机用户 prompt 稳定 `>5 tok/s`。France-derived gate pack/profile 可以提高 France 单 prompt，但不能泛化；因此后续不得用 prompt-specific pack/profile 作为主要优化方向，也不得用 held-out test prompt 生成任何 hotset。
+- `step_1_dev_fallback_profile`:
+  - 使用当前 no-prompt-specific baseline 配置；
+  - 只使用 `calibration_dev_set_v1`，禁止使用 `held_out_test_set_v1_locked`；
+  - 开启 default-off profile：fallback reason、CPU fallback time、name profile、component timing；
+  - 每个 prompt 记录 `per-token total time`, `expert read/page fault`, `gate stream`, `up CPU fallback`, `down CPU fallback`, `H2D/D2H`, `CUDA kernel`, `memory_file_bytes`, `workingset_refault_file`；
+  - 输出按 prompt 和 aggregate 汇总，确认 up/down fallback 是否是共同主瓶颈。
+- `step_1_result_20260706`: completed on `calibration_dev_set_v1` only; held-out test was not used. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json`.
+- `step_1_config`: no prompt-specific pack/profile; excluded `GGML_MOE_STREAM_ONE_EXPERT_PACK`, `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE`, `GGML_MOE_STREAM_ONE_PREFILL_PROFILE`; strict cold `drop_caches`; `MemoryMax=16000000000`; `MemorySwapMax=0`; `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`; `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`; `KEEP_TOPK_UPDOWN=4`; `KEEP_TOPK_LAYER_RANGE=10-39`; `KEEP_TOPK_LAYER_VALUE=3`.
+- `step_1_metrics`: France `2.6 tok/s`, TTFT `37516.648734ms`, fallback total `31233.213ms` (`up=17327.240ms`, `down=13905.973ms`); quantum `1.9 tok/s`, TTFT `36335.945769ms`, fallback total `56352.754ms` (`up=31869.984ms`, `down=24482.770ms`); Fibonacci `1.7 tok/s`, TTFT `39047.801183ms`, fallback total `56350.986ms` (`up=33298.269ms`, `down=23052.717ms`); Japan `2.4 tok/s`, TTFT `38760.496441ms`, fallback total `32981.767ms` (`up=18715.830ms`, `down=14265.937ms`); climate `2.3 tok/s`, TTFT `39247.277955ms`, fallback total `39616.585ms` (`up=22262.710ms`, `down=17353.875ms`).
+- `step_1_memory`: all five runs had `memory_peak_bytes=16000000000`, `ram_ok=true`, no cgroup OOM/kill; file/page-cache was inside the same 16GB cgroup. Workingset file refaults ranged from `3459278` to `14017152`.
+- `step_1_conclusion`: up/down CPU fallback is a prompt-general bottleneck. Across the five dev prompts, up fallback totals `123474.033ms`, down fallback totals `93061.272ms`, and gate fallback is `0ms`. All up/down fallback is still blocked by `batch_env_missing` plus `one_name_filter` under the no-prompt-specific config. This validates proceeding to `step_2_down_mxfp4_fallback_fix` before any held-out test run.
+- `step_2_down_mxfp4_fallback_fix`:
+  - 先修 `ffn_down_exps` 的明确 eligibility mismatch：CPU 侧 `ggml_cuda_moe_stream_supports_down_batch()` 允许 MXFP4/type39，但 CUDA batch wrapper 的 `moe_stream_type_supported()` / `launch_moe_mmvq_compact_batch()` 拒绝 MXFP4，导致 `unsupported_type` 后回到 CPU；
+  - 实现必须 default-off，例如 `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=1`；
+  - 先做 compact-row CPU vs GPU parity/row-mapping 验证，记录 `max_abs`, `mean_abs`, `max_rel`, active experts, dst/token row mapping；
+  - parity 通过后才跑 `calibration_dev_set_v1` performance probe；
+  - promoted 条件：down fallback 时间下降、输出正确、16GB RAM/page cache 合规、TTFT 不超 gate、dev set token rate 有稳定提升。否则 revert source，只保留 rejected 记录。
+- `step_2_implementation_20260706`: added default-off `GGML_MOE_STREAM_DOWN_MXFP4_PROBE` in `ggml/src/ggml-cuda/moe_stream_batch.cu`. Mode `1` is parity-only: it attempts MXFP4/type39 `ffn_down_exps` compact batch, writes CPU/GPU error rows, then returns `false` so CPU fallback remains the final output. Mode `perf` is reserved for later performance testing after parity passes. Default unset behavior is unchanged.
+- `step_2_multirow_fix`: down batch route collection now expands `matrix_row_counts[e]` multirow experts into compact active rows, and sizes temporary dst rows as `max(max_dst_id+1,n_active)`. This fixes the previous `multirow_not_supported` blocker exposed by the MXFP4 probe.
+- `step_2_parity_smoke`: diagnostic only, calibration France prompt, `n=16`, no held-out test. Clean run: `/root/lfz/runs/vendor-ds4-16gb/20260706T115617Z-down-mxfp4-probe-parity-clean-smoke-20260706/france-cpu40-vram0gb`. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/down-mxfp4-defaultoff-parity-smoke-20260706.json`.
+- `step_2_parity_result`: clean smoke exited `0`, stayed in 16GB cgroup (`memory_peak_bytes=16000000000`, `ram_ok=true`), and generated `8` MXFP4 down parity rows. Error maxima: `max_abs=0.0451961701`, `mean_abs=0.0067439112`, `max_rel=0.0323935935`, `mean_rel=0.0711474475`. Output correctness is intentionally false because `n=16` truncates the answer; this run is not a performance or SOTA run.
+- `step_2_vram_note`: with `GGML_MOE_STREAM_ONE_CACHE_MIB=13568` plus `GGML_MOE_VRAM_CACHE_MIB=512`, parity rows were produced but later CUDA allocation OOMed due VRAM pressure. Clean parity used a conservative diagnostic split (`GGML_MOE_STREAM_ONE_CACHE_MIB=8192`, `GGML_MOE_VRAM_CACHE_MIB=512`). The next perf probe must sweep VRAM split conservatively and may not promote a result unless correctness/RAM/TTFT/dev-set metrics all pass.
+- `step_2_current_head_correctness_20260708`: current pushed head `ba360b9a7` was rebuilt with `GGML_CUDA_MOE_STREAM_BATCH=ON` and revalidated under strict `MemoryMax=16000000000`, `MemorySwapMax=0`, cold `drop_caches`, using the fixed France text top1 correctness gate. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-down-q80-correctness-repro-20260708.json`; run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T163626Z-current-head-down-q80-correctness-repro`.
+- `step_2_current_head_correctness_result`: default baseline vs full `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1` + `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1` matched exactly: `same_top1=145/145`, `first_mismatch_pos=-1`, `max_abs_top12_logit_diff=0`, `mean_abs_top12_logit_diff=0`. Full-down accepted all down batch calls (`batch_accept=5800`, `batch_decline=0`) while default accepted none (`batch_accept=0`, `batch_decline=5800`). Both cases stayed in the 16GB cgroup (`memory_peak_bytes=16000000000`, `oom_kill=0`, `ram_ok=true`; full-down `memory_file_bytes=14924996608`).
+- `step_2_current_head_decision`: down GPU Q8_0 CPU-order correctness is fixed/reproducible on current head, but this is not a token-rate SOTA. The naive full-down path remains a correctness scaffold because earlier n96 performance timed out/regressed; promotion still requires a faster row-tiled/grouped implementation, full France semantic correctness, generalized prompt-set metrics, TTFT gate, and 16GB RAM evidence.
+- `step_2_current_head_lane8_shared_20260708`: after recording the base Q8_0 correctness, current head `a06aced1c` was also checked with the performance-intended lane8/shared switches: `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1` and `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-down-q80-lane8-shared-correctness-20260708.json`; run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T164651Z-current-head-down-q80-lane8-shared-correctness`. Result: `same_top1=145/145`, `first_mismatch_pos=-1`, `max_abs_top12_logit_diff=0`, `batch_accept=5800`, `batch_decline=0`, `memory_peak_bytes=16000000000`, `oom_kill=0`, `ram_ok=true`. Runtime is still not acceptable (`down total=9.535 ms/call`, `cuda_batch=4.643 ms/call`, elapsed `3:24.78` fixed-text check), so the next bottleneck is lane8/shared batch performance rather than down math correctness.
+- `step_3_up_fallback_fix`:
+  - `ffn_up_exps` 当前主要因 `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps` 被排除而回到 CPU；
+  - 不能简单把 up 加进 France gate cache 或复用 France route hotset；
+  - 需要设计 prompt-general DS4 up sparse/grouped GPU decode path，或 up/gate grouped path；
+  - 第一版只在 `calibration_dev_set_v1` 上调试和验证，不碰 held-out test；
+  - 只有 up fallback 下降且 dev set end-to-end 提升后，才冻结候选跑 held-out test。
+- `step_4_candidate_freeze_and_heldout_test`:
+  - 当 down/up fallback 修正候选在 calibration/dev set 上稳定后，冻结源码、env、profile/calibration artifacts 和参数；
+  - 之后才运行 `held_out_test_set_v1_locked`；
+  - final SOTA 必须报告 held-out test 的 per-prompt metrics、min/mean tok/s、TTFT、RAM/page-cache、正确性和完整输出；
+  - 若 held-out test 未稳定 `>5 tok/s`，该结果只能算阶段性 dev improvement，不算最终任务完成。
+
+## 2026-07-06 最新执行计划：消灭 up/down CPU fallback
+
+- `basis`: 当前有效优化方向来自 2026-07-06 重新 profile 当前 SOTA 配置，以及 Wafer/GLM-5.2 blog 的方法论复盘。Wafer 的可移用结论不是照搬 AMD/sglang/MTP，而是系统性识别 MoE fp4 路径是否 silently fallback 到慢路径，并为具体 shape 做 kernel mapping/tuning。当前 DeepSeek vendor 的同构问题更直接：decode 阶段 `ffn_up_exps`/`ffn_down_exps` 仍主要落在 CPU fallback。注意：该 profile 来自 France/n96 诊断，只能指导瓶颈方向；W2/W3 的 promoted 目标必须在泛化 prompt baseline 上验证。
+- `profile_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T084029Z-20260706-current-sota-n96-component-profile/france-n96-profile-cpu40-vram0gb`。
+- `profile_artifacts`:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-n96-component-profile-bottleneck-20260706.json`;
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-n96-cpu-chunk-analysis-20260706.json`;
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-n96-name-profile-analysis-20260706.json`.
+- `profile_status`: diagnostic only, not accepted SOTA。`n96` 截断 France 输出，结尾停在 `European Union and`，因此 `correctness_ok=false`。该 run 只用于瓶颈拆分，不替代当前 accepted SOTA。
+- `profile_metrics`: `eval_tok_s=4.2`, `prompt_tok_s=1.8`, `TTFT=32484.00542ms`, `elapsed=54.80s`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15126450176`, `ram_ok=true`, VRAM peak 约 `31874MiB`。
+- `decode_gap`: 首 token 后 decode window 约 `22315.995ms`。若 `n96` 达到 `10 tok/s`，decode 目标时间为 `9600ms`，差额约 `12715.995ms`。
+- `component_breakdown`:
+  - decode up/down CPU fallback：`13958.513ms`，其中 `up=7088.894ms`, `down=6869.619ms`；这是最大瓶颈，单项已经大于距离 `10 tok/s` 的差额。
+  - gate one-stream excluding first prefill marker：`2445.603ms`；其中 gate expert read/cache handling `1506.058ms`，activation pinned staging/H2D `113.851ms`，gate kernel `225.747ms`，D2H/sync/scatter/dontneed 合计 `596.260ms`。
+  - cold gate prefill：`4654.732ms`，主要影响 TTFT，不是 decode token rate 的主瓶颈。
+  - gate pack/cache 状态：expert pack `hits=4308 misses=0 reads=4308 bytes=19198377984 direct_reads=4308`；VRAM cache `hits=23523 misses=1308 hit_rate=94.7%`。
+  - CPU chunk trace：`sum_chunk_ms=398898.148`, 20 线程理想摊平 `19944.907ms`, `max_thread_ms=21156.170ms`，尾部不均衡约 `1.2s`，不是主要矛盾。
+- `current_conclusion`: gate O_DIRECT pack、gate VRAM cache 和 activation H2D 已不是优先瓶颈。要接近 `10 tok/s`，必须正面解决 decode up/down CPU fallback；继续只优化 gate read、page cache 或 H2D 的理论收益不足。
+
+### Wafer/GLM 方法可移用点
+
+- `applicable`: 采用 Wafer 式的 MoE fp4 slow-path audit：逐条记录 up/down 为什么没有进入 GPU path，确认是否存在 silently fallback、guard 误判、kernel selection 缺失或 shape mapping 缺失。
+- `not_directly_applicable`: AMD MI355X、ROCm preprocessor guard、sglang、TP/DP、allreduce fusion、FP8 KV cache、MTP/spec decode 不能直接移用到当前 CUDA/vendor/单卡/16GB host RAM 约束。MTP 必须排在 up/down GPU path 跑通之后，否则会放大 CPU fallback。
+- `main_transfer`: 对 DeepSeek DS4 的 MXFP4/F8 up/down shape 做类似 GLM fp4 MoE kernel mapping/tuning，避免合法的 fp4 MoE 路径落回 CPU 或慢 kernel。
+
+### Phase W1：up/down fallback reason profile（先做，禁止跳过）
+
+- `attempt_id`: `20260706-wafer-style-updown-fallback-reason-profile`
+- `attempt_kind`: `measurement-design`
+- `hypothesis`: 当前 `13.958s/n96` decode up/down fallback 中，可能混有三类：必须 CPU 算的 fallback、本应走 GPU 但被 eligibility/guard 拒绝的 fallback、以及 GPU path 存在但由于 cache/shape/kernel selection 不满足而 silently fallback 的路径。只有先定量分类，后续代码优化才不会硬猜。
+- `required_output`: 对每次 up/down fallback 记录并汇总：`tensor`, `layer`, `role`, `expert_id`, `src0_type`, `phase`, `cne1`, `expert_bytes`, `fallback_ms`, `GPU eligible?`, `decline_reason`, `cache status`, `kernel path`, `row mapping mode`。
+- `minimum_summary`: 按 role/layer/reason 输出 calls、fallback_ms、bytes、decode/prompt split；标出 top fallback reasons 和 top tensors。
+- `implementation_rule`: 所有 instrumentation 必须 default-off；trace run 不替代 SOTA。不得改变默认计算路径。
+- `result_20260706`: implemented default-off `GGML_MOE_FALLBACK_REASON_PROFILE_OUT` in `ggml/src/ggml-cpu/ggml-cpu.c`. It records final CPU fallback rows by role/tensor/phase/expert/type, batch eligibility reason, one-stream reason, final reason, rows/calls/fallback time, and attempt counters. Default behavior is unchanged when the env is unset.
+- `validation_short`: `/root/lfz/runs/vendor-ds4-16gb/20260706T103131Z-20260706-wafer-updown-fallback-reason-short/france-n32-fallback-reason-cpu40-vram0gb`; `eval_tok_s=3.5`, `TTFT=33651.457186ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `correctness_ok=false` because `n32` truncates the answer. This run verified CSV generation.
+- `validation_n96`: `/root/lfz/runs/vendor-ds4-16gb/20260706T103309Z-20260706-wafer-updown-fallback-reason-n96/france-n96-fallback-reason-cpu40-vram0gb`; `eval_tok_s=4.4`, `prompt_tok_s=1.8`, `TTFT=30986.922549ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15119908864`, `ram_ok=true`, `correctness_ok=false` because `n96` truncates the answer. Diagnostic only, not accepted SOTA.
+- `result_artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/wafer-updown-fallback-reason-n96-20260706.json`.
+- `reason_result`: all recorded up/down fallback in the n96 diagnostic is classified as `batch_env_missing + one_name_filter -> one_name_filter`. Decode split: `up=6348.759ms`, `down=6201.186ms`; prompt split: `up=3091.818ms`, `down=4490.175ms`. Total classified fallback: `20131.938ms`, `27042` calls, `112.235GiB` logical expert-call bytes.
+- `interpretation`: `batch_env_missing` means `GGML_MOE_STREAM_DOWN_BATCH` is not enabled in the accepted SOTA env. `one_name_filter` means `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps` intentionally prevents `ffn_up_exps` and `ffn_down_exps` from entering the one-stream path. Therefore the current bottleneck is not an unknown page-cache issue; it is an explicit routing/policy gap: up/down have no accepted GPU path under the SOTA config. The next step is W2/W3: enable or implement a correct up/down GPU path with numerical validation, not broaden one-stream naively.
+
+### Phase W2：修复可修的 eligibility / guard / kernel selection
+
+- `attempt_id`: `20260706-updown-gpu-eligibility-fix`
+- `attempt_kind`: `implementation-probe`
+- `hypothesis`: 如果 Phase W1 显示大量 up/down 是因为 name filter、type allowlist、kernel switch、cache lookup、shape guard、Kimi/DeepSeek guard 或 row mapping 判定而 fallback，则先修这些明确原因。Wafer blog 的核心启发是不要接受 fp4 MoE silently 走慢路径。
+- `theoretical_bound`: `n96` decode fallback 总计 `13958.513ms`。若修复 eligibility 后能把其中 `X ms` 迁到 GPU，decode tok/s 上界约为 `96 / ((22315.995 - X + gpu_overhead_ms)/1000)`。要达到 `10 tok/s`，净减少量需要约 `12716ms`，所以小于数秒的修复只能算阶段性收益。
+- `safety`: 任何 allowlist/switch 改动都必须先做数值对齐，再做性能 run。不能只让 batch_accept 增加；必须证明 CPU fallback profile 下降、输出正确且 token rate 不退化。
+- `correctness`: 对同一 expert/row 做 CPU vs GPU `max_abs/mean_abs/max_rel` 对齐；France 输出必须完整、语义正确、连贯。
+- `rollback`: 正确性失败、token rate 退化、TTFT 超 gate、RAM 超 16GB、或 fallback 未下降，全部 revert source，只保留 rejected 记录。
+- `result_20260706_down_batch_decline_probe`: ran a default-off diagnostic with batch build plus `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_STREAM_DECLINE_DEBUG=1`, and `GGML_MOE_FALLBACK_REASON_PROFILE_OUT`. Run dir: `/root/lfz/runs/vendor-ds4-16gb/20260706T104039Z-20260706-w2-down-batch-decline-n16/france-n16-down-batch-decline-cpu40-vram0gb`. Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/w2-down-batch-decline-n16-20260706.json`.
+- `result_status`: diagnostic only, not accepted SOTA. `n16` truncates the France answer (`correctness_ok=false`) and is used only to classify the down-batch rejection path. Metrics: `eval_tok_s=3.6`, `prompt_tok_s=1.8`, `TTFT=32971.884727ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15161106432`, `ram_ok=true`, `oom_seen=false`.
+- `decline_result`: stderr reported `720` CUDA batch declines with `reason=unsupported_type`, `src0_type=39` for `ffn_down_exps`. The fallback reason CSV classifies down fallback as `eligible + not_attempted_batch_path_selected + batch_declined_internal_no_single_retry`, with prompt down `4493.635ms` and decode down `1375.815ms` in the short n16 run.
+- `w2_finding`: CPU-side eligibility and CUDA-side support disagree. `ggml-cpu.c` permits MXFP4/type39 for down batch through `ggml_cuda_moe_stream_supports_down_batch()`, but `ggml/src/ggml-cuda/moe_stream_batch.cu::moe_stream_type_supported()` and `launch_moe_mmvq_compact_batch()` exclude `GGML_TYPE_MXFP4`, so every attempted MXFP4 down batch is rejected internally before compute.
+- `w2_next_action`: do not promote naive MXFP4 allowlist changes. Historical large down-pack/batch probes regressed token rate despite correctness fixes. The next implementation must be default-off and guarded: first enable an MXFP4 down-batch probe behind an env flag, then add CPU-vs-GPU numerical validation/row-mapping checks for compact rows before any strict performance run. Only if fallback time falls and end-to-end France correctness/RAM/TTFT gates pass can it be considered for SOTA promotion.
+
+
+### 2026-07-06 up one-stream 诊断（rejected）
+
+- `attempt_id`: `20260706-up-one-stream-gpuonly-diagnostic`
+- `attempt_kind`: calibration-only diagnostic; held-out test set was not used.
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-one-stream-diagnostics-20260706.json`.
+- `question`: 普通 `ffn_up_exps` 是否可以简单加入 `GGML_MOE_STREAM_ONE_NAME_FILTER`，从而消灭 up CPU fallback。
+- `gate_only_reference_n32`: `/root/lfz/runs/vendor-ds4-16gb/20260706T153652Z-20260706-upgate-decline-diagnostic-n32/france-upgate-decline-cpu40-vram0gb`; no prompt-specific pack/profile; `eval_tok_s=1.9`, `prompt_tok_s=0.9`, `TTFT=38349.266845ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, truncated answer so not correctness/SOTA; fallback aggregate: up decode `4583.853ms`, up prompt `3893.623ms`, down decode `2980.180ms`, down prompt `4347.132ms`; VRAM cache hit rate `69.0%`.
+- `up_cached_gpuonly_n16`: `/root/lfz/runs/vendor-ds4-16gb/20260706T153940Z-20260706-up-one-gpuonly-diagnostic-n16/france-up-one-gpuonly-cpu40-vram0gb`; `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps`, `GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER=ffn_up_exps`; run exited `0`, proving up one-stream can take all up rows in this short calibration path; `eval_tok_s=1.6`, `prompt_tok_s=0.8`, `TTFT=38811.285754ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, truncated answer; remaining fallback is down only; VRAM cache hit rate fell to `56.7%`.
+- `up_no_cache_admit_n32`: `/root/lfz/runs/vendor-ds4-16gb/20260706T154122Z-20260706-up-one-no-cache-admit-diagnostic-n32/france-up-one-nocache-cpu40-vram0gb`; same up GPU-only fail-fast, plus `GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER=ffn_gate_exps` so up does not occupy cache slots; run exited `0`, `eval_tok_s=1.5`, `prompt_tok_s=0.8`, `TTFT=40705.368092ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, truncated answer; remaining fallback is down only; VRAM cache hit rate `44.6%`, showing no-cache up still pays too much per-expert H2D/sync cost.
+- `conclusion`: simple widening of `GGML_MOE_STREAM_ONE_NAME_FILTER` to include `ffn_up_exps` is rejected. It eliminates up CPU fallback under fail-fast, but worsens end-to-end token rate because one-stream up performs many per-expert H2D/cuda sync/cache operations and either pollutes the gate cache or repeatedly copies up experts. This path must not be promoted and should not be repeated as a SOTA attempt.
+- `next_plan_update`: move W3 priority from simple one-stream up to grouped/batched MXFP4 up decode or true fused/grouped up-gate path. Required next design must compute rows/expert bytes/H2D bytes/launch count and prove CPU-vs-GPU parity before performance runs. Down-only MXFP4 remains rejected unless paired with an up solution because previous down perf removed down fallback but did not improve token rate.
+
+### Phase W3：DS4 shape-specific up/down sparse GPU decode path
+
+- `attempt_id`: `20260706-ds4-updown-sparse-gpu-decode-path`
+- `attempt_kind`: `kernel-design-then-implementation`
+- `hypothesis`: 当前 gate 的 DS4 one-stream GPU path 已能数值对齐并高命中；up/down 需要按 DeepSeek DS4 的实际 decode shape 做专用 sparse MMV/grouped dispatch，而不是泛化地把全部 up/down expert 加进 gate stream cache。
+- `scope_first`: 第一版只覆盖当前 SOTA decode 的跨 prompt 共同热路径：`cpu_moe=40`, `KEEP_TOPK_UPDOWN=4`, `KEEP_TOPK_LAYER_RANGE=10-39`, `KEEP_TOPK_LAYER_VALUE=3`, DS4 MXFP4/F8 native GGUF，以及 fixed prompt-set baseline 中共同出现的 up/down fallback shape。prompt 阶段可先保留 CPU fallback，但 TTFT 不得超过 gate。
+- `must_not_repeat`: 不重复 rejected 的 naive gate+up/gate+down 全量 streaming；历史上该路径造成 cache inserts 暴涨、page/refault 恶化和 token rate 下跌。
+- `design_requirements`: 写清 tensor size、per-expert bytes、active rows、row mapping、kernel choice、H2D/D2H bytes、workspace、sync 点、理论 IO/compute 上界后才能改代码。
+- `success_metric`: decode up/down fallback 在 prompt set 上明显下降，France 正确且五个 baseline prompts 的语义/代码输出不退化，RAM 合规，TTFT gate 合规。若只提升单个 prompt 或 trace 局部但 prompt-set end-to-end token rate 不升，不能 promoted。
+
+
+### 2026-07-06 up MXFP4 batch probe（rejected, source reverted）
+
+- `attempt_id`: `20260706-up-mxfp4-batch-probe`
+- `attempt_kind`: default-off implementation probe; calibration-only; held-out test set was not used.
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-batch-probe-rejected-20260706.json`.
+- `source_status`: rejected source diff was saved inside the artifact and then reverted. No promoted code path remains from this attempt.
+- `design`: temporarily added `GGML_MOE_STREAM_UP_BATCH_PROBE` to allow ordinary `ffn_up_exps` MXFP4 tensors through the existing compact batch wrapper. `parity` mode ran GPU batch and returned `false` so CPU fallback remained final output; `perf` mode returned GPU output.
+- `cache_get_finding`: without `GGML_MOE_VRAM_CACHE_MIB`, batch cache is disabled by runner `--vram-cache-gb 0`; up batch declined with `cache_get`. Batch cache is separate from one-stream `GGML_MOE_STREAM_ONE_CACHE_MIB`.
+- `parity_vram512_n16`: `/root/lfz/runs/vendor-ds4-16gb/20260706T155054Z-20260706-up-batch-parity-probe-vram512-n16/france-up-batch-parity-vram512-cpu40-vram0gb`; `GGML_MOE_VRAM_CACHE_MIB=512`, `GGML_MOE_STREAM_ONE_CACHE_MIB=8192`, `GGML_MOE_STREAM_UP_BATCH_PROBE=parity`; first 8 up batch calls wrote parity rows with `max_abs` range about `0.0138201907..0.0305707154`, `mean_abs` about `0.00246..0.00362`; RAM stayed at `16000000000`, no cgroup kill. This validates the small sampled math path only, not promotion.
+- `perf_vram512_n32`: `/root/lfz/runs/vendor-ds4-16gb/20260706T155257Z-20260706-up-batch-perf-probe-vram512-n32/france-up-batch-perf-vram512-cpu40-vram0gb`; `eval_tok_s=1.3`, `prompt_tok_s=0.8`, `TTFT=42110.430142ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, but `correctness_ok=false` with incoherent/repetitive output (`that: France is a nation of independent...`). Batch cache hit rate was only `10.6%` (`hits=621 misses=5229`); up fallback disappeared, but cache churn/H2D/sync and/or insufficient parity coverage made the result slower and incorrect.
+- `conclusion`: removing up CPU fallback with this simple compact batch wrapper is not enough and is rejected. The next design must avoid small up batch cache churn and must not D2H/scatter intermediate up results if it can be fused with gate. Candidate directions are prompt-general up hot admission/ranking with a proven gate-cache budget, true fused up/gate grouped compute, or larger grouped schedule with expanded parity before any perf run.
+
+### Phase W4：up/down hot cache / pack / grouped dispatch
+
+- `attempt_id`: `20260706-updown-hot-cache-pack-grouped-dispatch`
+- `attempt_kind`: `optimization-after-gpu-path`
+- `precondition`: 只有 W2/W3 证明 up/down GPU 计算数值正确且能减少 fallback 后，才进入本阶段。
+- `hypothesis`: 如果 GPU up/down path 跑通后被 IO/H2D/launch/sync 卡住，则用 profile-selected hot expert cache、O_DIRECT pack、pinned staging 和 grouped dispatch 降低搬运及 launch overhead。
+- `ranking_rule`: up/down cache 不能按 calls 粗排，必须按 `fallback_ms_saved_per_byte` 排序，并验证不会破坏 gate cache hit rate。需要 sweep gate cache 让出 `0.5/1/2GiB` 给 up/down 的代价。
+- `theoretical_check`: 每个 up/down expert 约 `4.25MiB`；若仍按每次 miss 读，`n96` decode up/down logical calls `24700` 对应 `~102.5GiB` logical expert bytes，单靠直接读取不可能接近 `10 tok/s`。必须依赖缓存、复用、grouped dispatch 或减少 CPU fallback 工作量。
+- `acceptance`: 同 SOTA gate；accepted 新 SOTA 必须立即记录完整复现信息、commit、push 到 `ssd/vendor/deepseek-token-rate-16gb`，并从 pushed commit clean rebuild/rerun。
+
+### 当前执行优先级覆盖
+
+1. 先补跑当前 pushed source/config 的 fixed five-prompt strict cold 泛化 baseline，并写入本计划。
+2. 已完成的 W1 fallback reason profile 保留为瓶颈方向证据，但不作为泛化 SOTA 证据。
+3. 若 baseline 也显示 up/down fallback 是跨 prompt 共同瓶颈，则继续 W2，小步修复 guard/eligibility/kernel-selection 并做数值对齐。
+4. 若 fallback 主要是缺少正确 GPU compute path，进入 W3，做 DS4 shape-specific sparse GPU decode path，但 promoted 验证必须基于 prompt set。
+5. 只有 GPU path 正确并在 prompt set 上减 fallback 后，才做 W4 的 cache/pack/grouped dispatch。
+6. 暂不优先做 MTP/spec decode、KV cache、TP/DP、allreduce、prompt-specific pack，除非 up/down fallback 已被压下且 prompt-set baseline 证明收益泛化。
+
+
+## 2026-07-08 当前 HEAD correctness 继承与 compact target 审计
+
+- `current_head_after_demo`: `139085ee7bc842eb1a8656fe62f9fcd6826e308b` (`vendor-ds4: rewrite generalized sota demo`)。
+- `down_q80_correctness_status`: 当前 HEAD 继承已验证的 down Q8_0 lane8/shared correctness。最近一次完整 correctness artifact 是 `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-after-demo-down-q80-lane8-shared-correctness-20260708.json`，结果为 `same_top1=145/145`、`first_mismatch_pos=-1`、`max_abs_top2_logit_diff=0.0`，full-down path `batch_accept=5800, batch_decline=0`，两侧均 `memory_peak_bytes=16000000000` 且 `ram_ok=true`。
+- `inheritance_reason`: 从该 correctness 源码点 `d5ce9ecb0` 到当前 HEAD 的 diff 只包含 plan、实验记录、guarded compact runner 和 demo 脚本；没有 `ggml/`、`src/`、`include/`、`common/`、`examples/` 或 build 配置计算源码变更。因此当前 HEAD 的计算路径继承该 down correctness 证据，但它仍不是性能 SOTA，因为 naive full-down GPU path 比 CPU fallback 慢。
+- `inheritance_artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/0xsero-header-inventory-and-current-head-correctness-inheritance-20260708.json`。
+- `0xsero_header_inventory`: 对 cleanup-gated compact candidate `0xSero/DeepSeek-V4-Flash-162B-GGUF` / `DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf` 的 16MiB header 做了非破坏性 inventory。Header 显示 `architecture=deepseek4`、`block_count=43`、`expert_count=144`、`expert_used_count=6`、`n_tensors=1328`。
+- `0xsero_expert_coverage`: expert roles 覆盖完整：`ffn_gate_exps=43` tensors (`IQ2_XXS`)、`ffn_up_exps=43` tensors (`IQ2_XXS`)、`ffn_down_exps=43` tensors (`Q2_K`)。总体 type counts: `IQ2_XXS=86`、`Q2_K=43`、`Q8_0=345`、`F16=359`、`F32=492`、`I32=3`。
+- `0xsero_risk`: 该候选是 144-expert / Q2_K+IQ2_XXS compact representation，不是当前 native FP4/FP8 SOTA 模型。通用 CUDA 有 Q2_K/IQ2_XXS 支持，但 DS4 MoE stream fast path 未证明覆盖该组合；完整 load/generation correctness 和 token rate 都还未验证。
+- `next_action`: 在用户明确允许删除 rejected IQ2_S 文件释放空间之前，不执行 destructive cleanup 或完整下载。若允许，使用 `.Agent/run-tools/run_compact_target_after_cleanup.sh --execute-download --confirm-delete-rejected-iq2s` 做严格 16GB load/correctness smoke。该步骤仅是候选可行性验证；只有在泛化 dev set 提升、RAM/TTFT/correctness 通过，并最终冻结后跑 held-out test，才可能成为 accepted generalized SOTA。
+
+- `down_empty_fast_exit_probe_20260708`: 尝试了 default-off `GGML_MOE_STREAM_DOWN_EMPTY_FAST_EXIT=1`，逻辑是在 down batch 已接受且 `matrix_row_counts` 全清零时跳过后续 CPU fallback 框架。该源码改动只用于诊断，未提交，实验后已回退并重建。
+- `down_empty_fast_exit_result`: Artifact `.Agent/runs/20260705-vendor-ds4-coldstart/down-empty-fast-exit-rejected-20260708.json`；run dir `/root/lfz/runs/vendor-ds4-16gb/20260707T203206Z-down-empty-fast-exit-probe`。Top1 correctness 与 previous default 完全一致：`same_top1=145/145`、`first_mismatch=-1`，`memory_peak_bytes=16000000000`、`ram_ok=true`。
+- `down_empty_fast_exit_decision`: rejected。runtime `3min26.308s`，比 previous full-down lane8/shared `3min22.80s` 更慢；profile 仍为 `total=9.527 ms/call`, `cuda_batch=4.682 ms/call`, `fallback_t0=4.809 ms/call`。进一步解析显示 `fallback_reason.csv` 中 true down CPU fallback rows 已为 0，剩余 `fallback_t0` 主要来自 ordinary MoE `gate/up` fallback 或统计桶覆盖范围，而不是 down CPU dot。因此 down-only 空 fallback fast-exit 不是有效优化方向。
+- `next_direction_after_fast_exit`: 不再继续做 down-only 框架微调；除非能显著降低 `cuda_batch` 本身或把 up/gate 一并迁到 GPU/融合，否则 full-down path 的额外 CUDA batch 开销会抵消 down CPU fallback 消除收益。下一步应优先设计 prompt-general up/gate/down grouped/fused GPU path，或执行 compact target load/correctness probe（需明确 cleanup approval）。
+
+- `fused_retained_next_source_gate_20260708`: completed artifact-only gate `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-retained-next-source-gate-20260708.json`，未跑模型、未改源码、未使用 held-out prompts。该 artifact 汇总 generalized baseline、fallback profile、simultaneous reduction bound、exact hotset bound、handoff profiler 和 down empty fast-exit rejected 结果，给出下一次源码编辑前的硬门槛。
+- `source_gate_result`: 若目标是 dev-set `min >= 5.5 tok/s`（给最终 `>5 tok/s` 留余量），最差 prompt 需要从 `gate source movement + up/down fallback` 中净省约 `89%` 量级；`min >= 5 tok/s` 也需要约 `82%` 量级。单独 down-only、单独 hotset residency、plain fused up/gate env toggle、或 default graph 上的 `GGML_MOE_GPU_HANDOFF` toggle 都已关闭，不应重复作为下一步。
+- `next_source_edit_requirements`: 下一次源码实现必须 default-off，先证明 DS4 decode graph 真的构造 fused/retained producer；必须复用当前 one-stream gate cache 语义或避免 duplicate gate expert VRAM copy；必须产生 GPU-resident fused activation 并通过 correctness-checked handoff 喂给 down；必须在 microbench 中证明 per-layer fused/down consume path 比对应 CPU up+down fallback 快，而不是仅证明 batch_accept 增加。通过 fixed-text top1/logit parity、France semantic correctness、calibration/dev metrics、16GB RAM/page-cache、TTFT gate 后，才允许冻结候选跑 held-out。
+
+- `upgate_producer_parity_audit_20260708`: completed source/evidence audit `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-upgate-producer-parity-source-audit-20260708.json`，未跑模型、未改源码、未使用 held-out prompts。结论：DS4 producer 入口 `DS4_FUSED_UP_GATE_REF=1` 默认关闭；对带 swiglu clamp limit 的 DS4 层，`ggml_moe_up_gate_limit()` 默认走 explicit `mul_mat_id + clamp + swiglu_split`，只有 `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` 才会打开真实 `GGML_OP_MOE_FUSED_UP_GATE`。
+- `upgate_parity_gate`: 真实 fused op 当前仍不允许 benchmark：历史 artifact 证明即使 `GGML_MOE_STREAM=0`，CPU fused fallback 也和 explicit graph 不一致（`max_abs_sum_diff=13.22656`）；forced-explicit 则 `max_abs_sum_diff=0.0`。因此下一步源码若触碰真实 fused op，第一 gate 必须是 `DS4_FUSED_UP_GATE_REF=1 + DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1 + GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` act parity exact；否则只能做 explicit-retained dataflow，不能用真实 fused op 做 token-rate 路径。
+- `preferred_next_impl`: 优先实现 default-off explicit-retained producer/consumer scaffold：保留 explicit 数学作为 correctness reference，避免 duplicate gate expert storage，产生 GPU-resident activation，并通过 correctness-checked down handoff 消除 D2H/scatter 与 down CPU fallback。该 scaffold 先做 parity/top1，不进入 SOTA benchmark，直到满足上一条 source gate 和 `min>=5.5 tok/s` hard-bound。
+
+- `explicit_swiglu_down_split_profile_rerun_20260708`: completed diagnostic rerun after the upgate parity audit; artifact `.Agent/runs/20260705-vendor-ds4-coldstart/explicit-swiglu-down-split-profile-rerun-rejected-20260708.json`. This used only short calibration France runs, no held-out prompts, and no prompt-specific pack/profile.
+- `explicit_split_profile_result`: rejected as an implementation route. Enabling `GGML_KIMI_SPLIT_PROFILE=1` exposes scheduler split timing, but the assignment profiler produced zero reliable `ffn_moe_swiglu -> ffn_moe_down` node-level records. The visible decode CPU split at scheduler level is `ffn_moe_gate -> ffn_scores`; up/down fallback is not exposed as a simple named CPU split suitable for a local scheduler handoff patch.
+- `temporary_profiler_source_status`: temporary default-off profiler edits (`SCAN_ALL`, entry trace, CUDA split node dump) were used only to debug the route and then reverted; no compute or profiler source diff remains from this diagnostic. It is not SOTA and not accepted performance evidence.
+- `next_impl_after_split_reject`: do not continue the naive scheduler split-local retained producer/consumer path. Use the existing DeepSeek4 and `ggml-cpu.c` retained instrumentation instead: `GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT`, `GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT`, `deepseek4_sparse_retained_graph_probe`, and `deepseek4_native_retained_down_probe`. The next code change should be at the MoE stream/helper level where up/down fallback is actually observed, with default-off guards and a microbench/parity gate before any performance run.
+
+- `retained_handoff_glu_act_marker_20260708`: implemented and validated a default-off/profile-only marker for explicit DS4 `ffn_moe_swiglu-*` GLU outputs. Artifact `.Agent/runs/20260705-vendor-ds4-coldstart/retained-handoff-glu-act-marker-probe-20260708.json`; probe run `/root/lfz/runs/vendor-ds4-16gb/20260707T225500Z-retained-handoff-glu-act-marker-probe`; default no-profile smoke `/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T211329Z-verify-default-after-glu-marker-20260708`.
+- `retained_handoff_marker_result`: before this marker, existing handoff profile had `shape_ok=0/720` and `nonzero_up_serial=0/720` because the current explicit gate/up path never calls the fused up_gate marker. After marking GLU act outputs, the same handoff profile reports `shape_ok=720/720`, `ptr_match=720/720`, `layer_match=720/720`, `width_match=720/720`, `nonzero_up_serial=720/720`. Native graph probe also reports `down_src1_is_act=1118/1118`, `act_src0_is_gate=1118/1118`, `act_src1_is_up=1118/1118`.
+- `retained_handoff_marker_scope`: not a token-rate SOTA and not a promoted performance path. It only fixes the evidence/profiler layer so the next retained down consume microbench can use the real explicit `ffn_moe_swiglu` producer instead of relying on fused up_gate.
+- `next_impl_after_marker`: implement default-off retained down consume microbench/path at the MoE helper level. Required gates: CPU-vs-GPU row parity for marked act -> down, fixed-text top1/logit parity, France semantic correctness, then calibration/dev performance under 16GB cgroup. Do not run held-out prompts until a candidate is frozen.
+
+
+## 2026-07-08 下一步实现任务：prompt-general up/down paired read 与 down prefetch
+
+- `attempt_id`: `20260708-updown-paired-read-prefetch`
+- `status`: planned_before_source_edit
+- `motivation`: 当前 accepted generalized SOTA 已经把 `ffn_up_exps` 和 `ffn_down_exps` 的主要 CPU fallback 移到 GPU Q80 batch 路径，但 n96 profile 显示剩余瓶颈从 CPU dot 转成了 expert source IO / pinned staging / H2D / cache scheduling。当前 accepted profile 中 `iouring_wait_us≈7.87s`、`iouring_submit_us≈1.76s`、`iouring_reads=6716`、`iouring_bytes≈29.93GB`，且 read batch 很小：`batch_hist=1:4030,2-4:726,5-8:136,9-16:28`、`inflight_avg≈1.67`。这说明当前 up/down 虽然共享 Q80 batch/cache 机制，但 misses 仍按单个 tensor/op 分批提交，SSD/io_uring 队列深度没有被充分利用。
+- `current_behavior`: up 和 down 不是同一个 read batch。`ffn_up_exps.weight` 进入 Q80 batch 路径时只处理 up tensor 的 cache miss；随后 `ffn_down_exps.weight` 在独立 MoE op 中再处理 down tensor 的 miss。gate 仍走 one-stream gate cache，不与 up/down 合读。up/down 共用 9GB Q80 VRAM cache，但调度粒度仍是 per-op/per-tensor。
+- `hypothesis`: 对 DeepSeek DS4 decode，同一层的 up/down active experts 来自同一 routing/topk 集合。若在 up op 阶段提前识别同层 down tensor 与相同 active experts，并把 down misses 与 up misses 合并提交到 io_uring，或至少异步预取 down misses 到同一个 Q80 VRAM cache，down op 到达时可减少小 batch read、提升 inflight depth、降低 `iouring_wait_us`。该方案不改变数学计算顺序；down compute 仍在原 down op 执行，只改变 expert weight 读取/缓存时机。
+- `expected_bound`: 本优化只作用在 IO/read scheduling，不降低 CUDA kernel 本身或 dense/attention 时间。按当前 n96 profile，理论可压缩上限主要来自 `iouring_wait_us≈7.9s` 与部分 submit/staging 开销；即使把 wait 降低 30%-50%，整体 token rate 预计也只是阶段性提升，可能把 held-out mean 从当前 `2.56 tok/s` 推向约 `2.7-2.9 tok/s`。它不是单独达到 `>5 tok/s` 的方案；后续仍需要 fused/retained producer-consumer 或更强的 GPU-resident path。
+- `generalization_rule`: 该实现必须 prompt-general。只能基于静态 tensor name、layer id、expert id、active routing结果和 cache state 做 paired prefetch；不得使用 France trace、held-out prompt trace、prompt-specific hotset、prompt-specific pack 或手工为某个 prompt 排序。`held_out_test_set_v1_locked` 仍不得用于设计、调参或 profile。
+- `implementation_guard`: 所有源码改动必须 default-off，例如 `GGML_MOE_PREFETCH_PAIRED_DOWN=1` 或 `GGML_MOE_UPDOWN_PAIRED_READ=1`；默认 unset 时现有 accepted SOTA 路径和 Kimi 功能必须不变。Kimi 相关 alias/io_uring batch 逻辑不得删减或退化。
+- `phase_0_static_audit`:
+  - 阅读 `ggml/src/ggml-cuda/moe_stream_batch.cu` 当前 Q80 up/down batch/cache/staging 代码；确认 up 与 down active experts 是否同源、row mapping 是否一致，以及 cache insert/lookup 是否可被提前调用；
+  - 记录当前 accepted n96 profile 的 `iouring_wait_us`, `iouring_submit_us`, `iouring_reads`, `iouring_bytes`, `inflight_avg/max`, `batch_hist`, per-call batch stage/total 作为对照；
+  - 不改源码、不跑 held-out。
+- `phase_1_profile_only_pair_predictor`:
+  - 先实现 default-off 只记录、不改变行为的 predictor：在 up Q80 batch op 中由 tensor name 推导同层 down tensor（`ffn_up_exps` -> `ffn_down_exps`），用当前 active experts 估算 down miss 数、bytes、可合并 job 数；
+  - 在实际 down op 到来时记录 predictor 命中率：predicted down entries 是否等于实际需要的 down entries、提前预取会不会污染/挤出 up/gate cache；
+  - 验收门槛：`prediction_coverage >= 95%`、无错误 layer/tensor mapping、默认关闭时二进制行为不变。若 coverage 不足，停止实现 prefetch，改回 retained/fused 主线。
+- `phase_2_paired_down_prefetch`:
+  - 在 up op 阶段对预测出的 down cache misses 发起异步 io_uring read + pinned staging + H2D cache insert；down op 仍按原路径读取 cache 并计算；
+  - 第一版只允许预取同层、同 active experts、同 Q80 cache source 中确定存在的 down entries；不得跨 prompt、不得跨未来 layer 做 speculation；
+  - 限制预取额度，避免挤占 gate one-stream 4GB cache或导致 Q80 9GB cache thrash；记录 evict/insert/hit/miss 变化；
+  - 若出现 RAM 超限、CUDA OOM、cache insert fail、correctness mismatch 或 TTFT 超 gate 20%，立即 reject 并回退源码。
+- `phase_3_perf_gate_dev_only`:
+  - 只用 `calibration_dev_set_v1` 做 strict cold `drop_caches` + `MemoryMax=16000000000` + `MemorySwapMax=0` 性能评估；
+  - 必须记录每个 prompt 的 exact output、correctness、TTFT、eval_tok_s、prompt_tok_s、elapsed、memory_peak_bytes、memory_file_bytes、oom/swap、iouring counters、cache counters、batch_hist；
+  - 对照当前 accepted SOTA：dev mean `2.54 tok/s`、dev min `2.1 tok/s`，TTFT 约 `31.9-34.2s`，held-out mean `2.56 tok/s`、held-out min `2.3 tok/s`。
+- `promotion_rule`: 只有 dev set 明显超过当前 generalized SOTA，且 France 输出语义正确、所有 dev prompt correctness 通过、16GB cgroup/page cache 合规、TTFT 不超过 accepted gate 20%，才允许冻结 candidate。冻结后才能运行 `held_out_test_set_v1_locked`。若 held-out min/mean 也超过当前 SOTA 且无单项严重退化，立即写完整复现 artifact、commit、push 到 `ssd/vendor/deepseek-token-rate-16gb`，并从 pushed commit clean rebuild/rerun 证明可复现。
+- `rejection_rule`: 若只是 France 或某个 dev prompt 提升，或依赖 prompt-specific trace/hotset，或仅提高 batch_accept 但 token rate/TTFT/correctness 不达标，必须标记 `rejected/not_accepted`，源码回退到上一 accepted SOTA，仅保留 artifact 和文档记录。
+- `next_action`: 先执行 phase 0/1，不直接改性能路径；拿到 predictor coverage 与理论收益后，再决定是否进入 phase 2 paired down prefetch。
+
+
+## 2026-07-08 accepted generalized SOTA：up/down paired read
+
+- `record_rule`: this section is committed and pushed together with the source, artifact, and demo updates for reproducibility.
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-paired-read-generalized-sota-20260708.json`.
+- `implementation`: default-off `GGML_MOE_UPDOWN_PAIRED_READ=1`. In the Q80 single-tensor `ffn_up_exps` op, same-layer `ffn_down_exps` active experts are predicted from static tensor name plus current routing. Their cache misses are inserted into the shared 9GB Q80 VRAM cache and appended to the same staging/io_uring job vectors. The later down op computes unchanged and observes cache hits. No prompt-specific trace, hotset, route profile, or held-out-derived artifact is used.
+- `diagnostic_n96_control`: same dirty binary strict cold France n96, no paired read: `eval_tok_s=2.9`, `TTFT=34350.465ms`, `actual_down_misses=3358`, `iouring_batches=4920`, `submit_calls=4995`, `inflight_avg=1.66`, `batch_hist=1:4030,2-4:726,5-8:136,9-16:28`.
+- `diagnostic_n96_paired`: same dirty binary strict cold France n96 with paired read: `eval_tok_s=3.2`, `TTFT=31861.113ms`, `actual_down_misses=0`, `paired_down_plan_jobs=3358`, `iouring_batches=3660`, `submit_calls=4129`, `inflight_avg=2.31`, `batch_hist=1:2400,2-4:1142,5-8:30,9-16:72,17-32:16`.
+- `mechanism_result`: predictor coverage was exact on smoke/profile (`up_predict_down` matched actual down by tensor/hash/n_active), expert source pack coverage was 100%, and paired read removed actual down cache misses in the measured n96 path.
+- `dev_set_result_n192`: strict cold, 16GB cgroup, page cache included, `MemorySwapMax=0`. Results: France `3.2`, quantum `2.5`, Fibonacci `2.2`, Japan `3.1`, climate `2.9` tok/s. Aggregate: min `2.2`, mean `2.78`, max `3.2`. Previous accepted dev aggregate was min `2.1`, mean `2.54`, max `3.0`.
+- `held_out_v1_result_n192`: candidate was frozen before held-out. Results: photosynthesis `2.8`, office `2.6`, palindrome_js `2.4`, exercise `3.0`, Brazil `3.0` tok/s. Aggregate: min `2.4`, mean `2.76`, max `3.0`. Previous accepted held-out aggregate was min `2.3`, mean `2.56`, max `2.8`.
+- `correctness`: all dev and held-out outputs were manually reviewed as semantically correct/coherent for the task. France n192 output is complete and correct. Fibonacci includes a valid generator function before later optional/truncated text; office has minor markdown/truncation but satisfies the three-tip task.
+- `ram_ttft`: all accepted candidate runs exited 0, had `memory_peak_bytes=16000000000`, `ram_ok=true`, and page cache in `memory_file_bytes` inside the same cgroup. Held-out max TTFT `35776.237ms` remains within the +20% gate; dev max TTFT `35446.659ms` also passes.
+- `decision`: accepted as new generalized SOTA, but product target is still not met. Current held-out min/mean `2.4/2.76 tok/s` remains far below the required stable `>5 tok/s` for random prompts on `16GB host RAM + 32GB RTX 5090`.
+- `next_after_acceptance`: commit and push source + artifact + plan + demo to `ssd/vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from pushed commit to prove reproducibility. After that, continue with higher-impact retained/fused producer-consumer work because paired read alone cannot close the remaining gap to `>5 tok/s`.
+- `post_push_repro_052e9699d`: completed after clean rebuild from pushed commit. Run dir `/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260708T040217Z-pushed-052e9699-france-n192-repro`; France n192 `eval_tok_s=3.2`, `prompt_tok_s=1.3`, `TTFT=31374.558ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15087902720`, `ram_ok=true`, output complete and semantically correct.
+
+
+## 2026-07-08 下一步计划：gate/up/down cross-cache co-submit 评估
+
+- `attempt_id`: `20260708-gate-updown-cross-cache-cosubmit`
+- `status`: planned_after_updown_paired_read_sota
+- `basis`: 当前 accepted generalized SOTA `up/down paired read` 已证明同层 down 可以在 up 阶段预测并合批读取：n96 中 actual down cache misses `3358 -> 0`，`iouring_batches 4920 -> 3660`，`inflight_avg 1.66 -> 2.31`，France n96 `2.9 -> 3.2 tok/s`。下一步要评估 gate 是否也能参与更大的读取批次，但不能破坏现有 gate one-stream cache 和 up/down Q80 cache 的分工。
+- `current_behavior`: gate 仍走独立 one-stream gate cache（4GB，`GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`）；up/down 走共享 Q80 VRAM cache（9GB）和 paired-read。gate、up、down 的数学计算顺序不应改变；gate 是 `SwiGLU(up, gate)` 的输入，不能因为合批读取而延迟 gate compute。
+- `hypothesis`: 如果同层 gate miss、up miss、down miss 在时间上接近，且 expert source 都来自同一个 static GGUF alias source，那么可以在不合并 cache 的前提下，把 gate one-stream read jobs 与 up/down Q80 read jobs co-submit 到同一批 io_uring/pinned staging 调度里，提升 read batch 大小和 queue depth，减少小 batch overhead。该方案的安全版本是 `cross-cache co-submit`: gate 仍写入 gate cache，up/down 仍写入 Q80 cache，只合并提交/等待策略，不合并缓存池。
+- `risk`: 直接把 gate 放入 up/down 9GB cache 可能让三类 tensor 竞争 slots，降低 gate hit rate 或破坏 down paired-read 的 cache hit；直接把 up/down 放进 gate one-stream cache 历史上已导致 token rate 下降。因此下一步禁止先做 shared-cache 合并，必须先 profile-only 和 cross-cache co-submit。
+- `theoretical_bound`: gate 剩余收益预计小于 up/down paired-read。当前 up/down paired-read 后 held-out mean 是 `2.76 tok/s`，距 `>5 tok/s` 仍有大差距；gate co-submit 只可能压缩 expert read/submit/wait 和部分 staging 等待，不会减少 dense/attention、kernel compute 或 token sampling。预期若成功，阶段性目标是 held-out mean 小幅提升到约 `2.85-3.05 tok/s`，不是完成产品目标。
+- `phase_0_profile_only`:
+  - 实现 default-off `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT`，只记录、不改变行为；
+  - 在 gate one-stream op 中记录每层 gate active experts、cache hit/miss、pack/source 覆盖、read jobs、wait/submit/H2D；
+  - 在 up Q80 op 中记录同层 gate 是否已经 cache hit、是否仍 pending、up/down paired jobs 数、是否可与 gate job 同批；
+  - 输出按 layer/token 聚合：gate miss 与 up/down miss 的重叠率、可 co-submit jobs、可减少 batch 数、潜在 inflight depth；
+  - 禁止使用 held-out prompts，只用 calibration/dev。
+- `phase_1_cross_cache_cosubmit_probe`:
+  - 只有 phase 0 证明 gate miss 与 up/down miss 有足够重叠，才实现 default-off `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`；
+  - gate cache 和 Q80 cache 保持独立；job 结构需要携带目标 cache/ring/stream/slot 信息，允许同一 io_uring 批次读取不同 tensor，但完成后分别 H2D 到各自 cache；
+  - 不改变 gate/up/down compute order；如果 gate compute 需要某个 slot，必须能等待该 gate slot ready；down op 仍通过 cache hit 等待 paired down slot ready；
+  - 必须保留 Kimi alias/io_uring batch 行为，不删除或退化 Kimi 功能。
+- `phase_2_correctness_and_perf_gate`:
+  - 先跑 France fixed text/top1 or semantic correctness，再跑 calibration/dev set；
+  - 每次 strict cold `drop_caches`，`MemoryMax=16000000000`，`MemorySwapMax=0`，page cache included；
+  - 记录 per prompt output、correctness、TTFT、eval_tok_s、prompt_tok_s、elapsed、memory_peak_bytes、memory_file_bytes、iouring counters、gate/up/down cache counters、batch hist；
+  - 与 current SOTA 对照：dev min/mean/max `2.2/2.78/3.2`，held-out min/mean/max `2.4/2.76/3.0`。
+- `promotion_rule`: 只有 calibration/dev 明显超过 current SOTA，且没有个别 prompt 严重退化、France 输出正确、16GB RAM/page cache 合规、TTFT 不超过 +20%，才冻结 candidate 跑 held-out。held-out 也必须 min/mean 超过 current SOTA 才能 accepted；否则 source 回退，仅保留 rejected artifact。
+- `stop_rule`: 如果 phase 0 显示 gate miss 与 up/down miss 重叠率低，或 gate cache hit rate 已高、剩余 gate read 时间不足以带来明显收益，则停止 gate 合批方向，转回更高收益的 retained/fused producer-consumer 路径，因为产品目标 `>5 tok/s` 需要更大幅度减少 GPU/CPU handoff 与 per-token expert movement。
+- `next_action`: 先实现 phase 0 profile-only，不改性能路径；用 calibration France/quantum/Fibonacci/Japan/climate 跑 n96/n192 诊断后，再决定是否进入 cross-cache co-submit probe。
 
 ## 二次回退状态（2026-07-02）
 
@@ -3627,3 +3932,5436 @@
 - `P5_strict_cold_benchmark`: Run the exact cold-start benchmark under `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches`, page-cache accounting, no OOM/swap, and the same TTFT gate. Record token rate, prompt rate, TTFT, elapsed time, memory.peak, memory.stat file, faults/refaults, counters, answer, env, CLI, commit, binary hash, model hash, and pack/profile hashes.
 - `P6_promote_or_reject`: If `eval_tok_s > 4.4` and all gates pass, immediately commit and push source/records, then rerun from the pushed commit and record pushed-source reproduction. If token rate regresses, correctness fails, RAM exceeds 16GB, TTFT exceeds the accepted gate, or evidence is incomplete, mark the run rejected and keep `4.4 tok/s` as accepted SOTA.
 - `P7_fallback_if_4expert_underperforms_or_stays_blocked`: Return to native SOTA bottleneck work only after recording the 4Expert blocker. The next native work should focus on measured CPU fallback/page-refault cost and must avoid previously rejected large buffered down-pack or accidental batch enablement paths unless a new hard-bound analysis shows a clear ceiling above `4.4 tok/s`.
+
+
+## 2026-07-06 执行记录：down MXFP4 perf probe rejected
+
+- `attempt_id`: `20260706-down-mxfp4-perf-france-probe`
+- `status`: `rejected_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/down-mxfp4-perf-france-probe-rejection-20260706.json`
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T120136Z-down-mxfp4-perf-france-probe-20260706/france-cpu40-vram0gb`
+- `prompt_scope`: calibration/dev France only. `held_out_test_set_v1_locked` was not used.
+- `config`: no prompt-specific pack/profile; strict cold `drop_caches`; `MemoryMax=16000000000`; `MemorySwapMax=0`; `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=perf`; `GGML_MOE_STREAM_DOWN_BATCH=1`; conservative VRAM split with gate one-stream cache `8192MiB` and batch/down cache `512MiB`.
+- `metrics`: `eval_tok_s=1.7`, `prompt_tok_s=0.9`, `TTFT=38553.15988ms`, `elapsed_seconds=127.07`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15004889088`, `pgmajfault=156746`, `workingset_refault_file=8071289`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
+- `local_success`: down batch was accepted and down CPU fallback disappeared from `fallback_reason_profile`; remaining fallback rows were only `up`. Down profile printed `batch_accept=6320`, `batch_decline=0`.
+- `remaining_bottleneck`: up fallback still dominated (`up decode=19954.796ms`, `up prompt=4304.180ms`). Down batch also added staging/cache cost and required reducing gate cache headroom, so local down fallback removal did not translate into end-to-end gain.
+- `decision`: reject. This is slower than the no-prompt-specific calibration France baseline/profile (`~2.6-2.7 tok/s`) and cannot be promoted. Do not run held-out or claim generalized SOTA from this path.
+- `next_design`: prioritize prompt-general `ffn_up_exps` fallback reduction, or redesign down/offload only if it avoids sacrificing gate cache and has a hard-bound above the generalized baseline. Any future candidate must first improve the calibration/dev aggregate, then freeze before held-out testing.
+
+
+## 2026-07-06 执行记录：up one-stream comma filter probe rejected
+
+- `attempt_id`: `20260706-up-one-stream-comma-filter-n64`
+- `status`: `rejected_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-one-stream-comma-filter-n64-rejection-20260706.json`
+- `source_change`: added default-compatible comma/colon matching for `GGML_MOE_STREAM_ONE_NAME_FILTER` in CPU/CUDA one-stream checks, plus default-off `GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER` in CPU `mul_mat_id` to abort if a matched tensor silently falls back to CPU.
+- `default_safety`: when `GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER` is unset and the name filter is a single substring, behavior remains equivalent to the previous path. This is a diagnostic/config capability, not an accepted optimization.
+- `candidate_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T121537Z-20260706T-up-one-stream-comma-filter-n64-dev-smoke/france-up-one-stream-comma-cpu40-vram0gb`.
+- `candidate_config`: calibration France only, no held-out, no prompt-specific pack/profile, `n=64`, strict 16GB cgroup, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`.
+- `candidate_metrics`: `eval_tok_s=1.9`, `prompt_tok_s=0.8`, `TTFT=38614.208237ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15063433216`, `ram_ok=true`, `oom_seen=false`, heuristic France correctness `true` despite short output.
+- `candidate_fallback`: up fallback was removed from fallback profile; remaining fallback was down only (`down decode=8205.193ms`, `down prompt=4904.790ms`). VRAM cache reported `hits=19629`, `misses=6884`, `hit_rate=74.0%`.
+- `control_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T121752Z-20260706T-gate-only-n64-dev-control-after-filter-patch/france-gate-only-n64-control-cpu40-vram0gb` with gate-only filter under the same `n=64` constraints.
+- `control_metrics`: `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `TTFT=37992.446775ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`; correctness false only because `n=64` truncates the answer.
+- `control_fallback`: gate-only retained `up decode=7469.804ms`, `up prompt=3772.828ms`, `down decode=5037.867ms`, `down prompt=4480.035ms`; VRAM cache `hits=13435`, `misses=3716`, `hit_rate=78.3%`.
+- `decision`: reject naive `gate+up` one-stream shared-cache path. It proves `ffn_up_exps` can be routed through one-stream, but end-to-end speed regresses from `2.2` to `1.9 tok/s` on the matched `n=64` control. The local up fallback win is outweighed by cache/staging overhead and remaining down fallback.
+- `next_design`: a valid up/down fallback fix must avoid stealing enough gate cache residency to create more misses. Prioritize either a separate hard-bounded up/offload path with better residency policy, or a combined design that reduces total expert movement instead of simply adding up experts to the existing gate cache. Continue using only calibration/dev prompts until a candidate is frozen.
+
+
+## 2026-07-06 执行记录：up stream with gate-only cache rejected
+
+- `attempt_id`: `20260706-up-stream-gate-cache-only-n64`
+- `status`: `rejected_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-stream-gate-cache-only-n64-rejection-20260706.json`
+- `source_change`: added default-off `GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER` in `moe_stream.cu`. When unset, cache admission behavior is unchanged. When set, one-stream GPU execution can still run for allowed tensors, but VRAM cache insertion is limited to matching tensor names.
+- `theoretical_test`: If the previous `gate+up` regression was mainly from up evicting gate experts, then allowing `ffn_up_exps` to run through GPU while only admitting `ffn_gate_exps` into cache should have recovered some of the `~11.24s` n64 up fallback from the gate-only control without destroying gate residency.
+- `candidate_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T122248Z-20260706T-up-stream-gate-cache-only-n64-dev-probe/france-up-stream-gate-cache-only-cpu40-vram0gb`.
+- `candidate_config`: calibration France only, no held-out, no prompt-specific pack/profile, strict 16GB cgroup, `n=64`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps`, `GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_CACHE_MIB=13568`.
+- `candidate_metrics`: `eval_tok_s=1.7`, `prompt_tok_s=0.8`, `TTFT=39585.19629ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15086202880`, `ram_ok=true`, `oom_seen=false`, heuristic France correctness `true` despite short output.
+- `candidate_fallback`: up fallback was again removed; remaining fallback was down only (`down decode=8142.154ms`, `down prompt=5160.372ms`). VRAM cache reported `hits=13392`, `misses=13121`, `hit_rate=50.5%` because uncached up routes still count as misses and pay repeated transfer/staging.
+- `matched_controls`: gate-only `n64` control was `2.2 tok/s`; `gate+up` shared-cache probe was `1.9 tok/s`; gate-cache-only up stream was worse at `1.7 tok/s`.
+- `decision`: reject. The bottleneck is not just up evicting gate cache; naive up GPU streaming has too much repeated expert movement/synchronization cost and leaves down fallback untouched.
+- `next_design`: stop simple up one-stream/admission sweeps. The next credible path needs a hard-bound design that reduces total expert movement, e.g. prompt-general persistent residency, combined up/down scheduling with bounded VRAM footprint, or a kernel path that reuses already-staged expert data across projections. Continue using calibration/dev prompts only until a candidate is frozen.
+
+
+## 2026-07-06 下一阶段计划：up/down 总搬运 hard-bound
+
+- `plan_id`: `20260706-updown-total-movement-hard-bound`
+- `status`: `next_active_plan`
+- `push_target`: `https://github.com/wici-ai/ssd-llama.git` branch `vendor/deepseek-token-rate-16gb`
+- `why_new_plan`: 最近三组实验证明，单点把 `ffn_up_exps` 或 `ffn_down_exps` 搬到现有 GPU stream 路径并不能提升泛化 token rate。down MXFP4 batch 能消掉 down fallback 但端到端 `1.7 tok/s`；gate+up shared cache 消掉 up fallback 但 `n64` 从 gate-only `2.2` 掉到 `1.9`；gate-only cache + uncached up stream 进一步掉到 `1.7`。问题不是单个 eligibility guard，而是总 expert movement/cache/staging 成本超过 CPU fallback savings。
+- `closed_paths_now`:
+  - naive `ffn_up_exps` one-stream with shared gate cache: rejected;
+  - naive `ffn_up_exps` one-stream with `ffn_gate_exps`-only cache admission: rejected;
+  - down MXFP4 batch with small separate cache: rejected;
+  - promptset union gate pack: historical best non-France only about `2.8 tok/s`, France regresses to `3.1-3.2`, not enough for generalized `>5`;
+  - extra full MoE GPU layers via lower `cpu_moe`: rejected by existing hard-bound and historical `cpu_moe=39/38` regressions.
+- `next_measurement_required`: Build a prompt-general up/down route inventory from `calibration_dev_set_v1` only, not held-out. For each prompt and aggregate, record unique `(tensor,expert)` for up/down, call counts, rows, fallback ms, expert bytes, repeated bytes, and overlap between gate/up/down. This must estimate how much data must move if we try to stream, cache, pack, or persist up/down experts.
+- `hard_bound_questions`:
+  1. What is the minimum unique up/down payload needed to cover 50/70/90 percent of fallback time across the calibration set?
+  2. How much of that payload can fit in available VRAM after reserving enough gate cache to avoid the observed miss cliff?
+  3. If not resident, what is the repeated H2D/direct-read lower bound per output token, and is it mathematically compatible with `>5 tok/s`?
+  4. Is there meaningful overlap between gate and up/down experts that permits a combined pack/read to reuse one disk read or one pinned staging buffer?
+  5. Can a calibration-derived artifact improve dev set min/mean without using held-out prompts?
+- `implementation_candidates_after_bound`:
+  - `candidate_A`: prompt-general small persistent up/down hotset, capped by VRAM after gate reservation. Only attempt if the bound shows hotset payload is small enough and covers enough fallback time.
+  - `candidate_B`: combined gate/up/down pack/read for overlapping experts, but only if overlap is high and pack size/page-cache behavior remains valid under 16GB cgroup.
+  - `candidate_C`: grouped up/down compute with a staging reuse window that batches multiple active rows per tensor without inserting every up/down expert into the long-lived gate cache.
+  - `candidate_D`: alternate GGUF / smaller expert model route remains blocked by disk unless explicit cleanup/storage approval is available.
+- `acceptance_rule`: Before held-out testing, a candidate must improve `calibration_dev_set_v1` min/mean token rate versus no-prompt-specific baseline (`mean=2.18`, `min=1.8`) without correctness regression and with all runs inside 16GB including page cache. After candidate freeze, run `held_out_test_set_v1_locked`; only held-out metrics can be claimed as generalized SOTA.
+- `next_action`: produce the calibration up/down movement bound artifact from existing `dev-fallback-profile-no-prompt-specific-20260706` data if sufficient; otherwise run only the missing calibration profiles. Do not run held-out or build another large pack before the bound proves a plausible route above `5 tok/s`.
+
+
+## 2026-07-06 执行记录：up/down 总搬运 hard-bound
+
+- `attempt_id`: `20260706-updown-total-movement-hard-bound`
+- `status`: `completed_measurement_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-total-movement-hard-bound-20260706.json`
+- `source`: existing `calibration_dev_set_v1` fallback profiles from `.Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json`; no held-out prompt was used.
+- `aggregate_updown`: `13366` unique `(role,tensor,expert)` pairs, `55.474GiB` unique payload, `946.372GiB` repeated logical expert bytes, `216535.305ms` fallback across the five calibration prompts.
+- `by_role`: up has `6683` unique pairs, `27.737GiB` unique payload, `473.186GiB` repeated bytes, `123474.033ms` fallback; down has the same unique/repeated byte footprint and `93061.272ms` fallback.
+- `coverage_50`: top fallback rows covering `50.01%` of fallback still require `1857` unique pairs, `7.707GiB` unique payload, and account for `482.022GiB` repeated logical bytes.
+- `coverage_70`: `3587` unique pairs, `14.887GiB` unique payload, `657.937GiB` repeated logical bytes.
+- `coverage_90`: `6881` unique pairs, `28.559GiB` unique payload, `836.885GiB` repeated logical bytes.
+- `transfer_lower_bound`: if all repeated up/down bytes were moved over H2D every time, the pure transfer lower bound is `59.15s @16GiB/s`, `29.57s @32GiB/s`, `19.72s @48GiB/s`, or `14.79s @64GiB/s`, before kernel, synchronization, D2H/scatter, page faults, and cache bookkeeping.
+- `overlap_up_down`: all observed up layer/expert pairs also appear in down (`6683/6683`). This supports investigating paired up/down scheduling, but does not by itself solve payload size or transfer cost.
+- `missing_gate_overlap`: the source dev fallback runs did not include gate per-expert trace, so this artifact cannot claim gate/up/down overlap. A calibration gate trace is justified only if the next design needs combined gate/up/down pack/read evidence.
+- `decision`: simple persistent up/down hotset is not a credible immediate path unless capped to a very small payload and proven to preserve gate cache. Even 50% fallback coverage needs `7.7GiB`, which would steal too much of the `13.2GiB` observed gate cache or exceed available 32GB VRAM headroom; prior reduced-gate-cache probes already regressed.
+- `closed_by_bound`: do not run another naive up/down one-stream, small down-batch cache, or broad up/down resident-hotset sweep without a new mechanism that reduces total movement. The data explains why the previous probes regressed: they removed CPU fallback locally but replaced it with repeated expert movement and cache pressure.
+- `next_design_choice`: focus on `candidate_C grouped staging / paired up-down scheduling` before source implementation. The design must show how it reduces repeated movement versus `946GiB` logical bytes, how much temporary workspace it needs, and why it will not evict gate cache. If combined gate/up/down pack is considered, first run a calibration-only gate trace to measure overlap; do not use held-out.
+
+
+## 2026-07-06 设计：hotset-gated up/down stream
+
+- `attempt_id`: `20260706-hotset-gated-updown-stream-design`
+- `status`: `ready_for_default_off_implementation`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/hotset-gated-stream-design-20260706.json`
+- `reason`: full up/down movement is too large (`55.474GiB` unique, `946.372GiB` repeated logical bytes). But a bounded calibration hotset might recover a small part of fallback without the huge regression seen when every up/down expert streams through GPU.
+- `cap_bound`: top `0.5GiB` covers only `8.8%` fallback; top `1.0GiB` covers `14.0%`; top `2.0GiB` covers `22.0%`; top `3.0GiB` covers `28.4%`; top `8.0GiB` covers `51.1%`. Therefore this is an incremental probe, not a complete `>5 tok/s` solution.
+- `implementation`: add two default-off controls in `moe_stream.cu`:
+  - `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE_APPLIES_FILTER=<names>`: cache admission profile applies only to matching tensor names; nonmatching tensors keep default admission. This preserves gate cache while using a hotset profile for up/down.
+  - `GGML_MOE_STREAM_ONE_REQUIRE_CACHE_ADMIT_FILTER=<names>`: for matching tensors, if a `(tensor,expert)` is not admitted by the profile and not already cached, one-stream returns `false`, leaving that route on CPU fallback instead of uncached GPU streaming.
+- `first_probe`: generate calibration-only top hotset TSV from existing dev fallback CSVs, start with `0.5-1.0GiB`, and test only calibration/dev prompts. Do not use held-out and do not promote unless dev-set min/mean improves over no-prompt-specific baseline (`mean=2.18`, `min=1.8`) with correctness/RAM/TTFT gates.
+- `rollback`: if default-off guard changes existing gate-only behavior, if hotset profile causes gate cache miss cliff, or if end-to-end token rate regresses, reject and keep only diagnostic records if default-off behavior is proven safe.
+
+
+## 2026-07-06 执行记录：up hot1g gated stream rejected/tie
+
+- `attempt_id`: `20260706-up-hot1g-gated-stream-n64`
+- `status`: `rejected_tie_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-hot1g-gated-stream-n64-rejection-20260706.json`
+- `source_change`: implemented default-off `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE_APPLIES_FILTER` and `GGML_MOE_STREAM_ONE_REQUIRE_CACHE_ADMIT_FILTER` in `moe_stream.cu`. Unset behavior is unchanged; default-off gate-only control matched prior `n64` behavior.
+- `profile`: `.Agent/profiles/vendor-ds4/calib-dev-up-hot1g-20260706.tsv`, derived only from `calibration_dev_set_v1`, no held-out. It selects `240` up `(tensor,expert)` pairs, `0.996GiB` payload, covering `26574.059ms` or `21.5%` of aggregate up fallback.
+- `candidate_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T123541Z-20260706T-up-hot1g-gated-stream-n64-smoke/france-up-hot1g-gated-cpu40-vram0gb`.
+- `candidate_metrics`: `eval_tok_s=2.2`, `prompt_tok_s=1.0`, `TTFT=36769.252077ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15074291712`, `ram_ok=true`, `correctness_ok=true` for short n64 smoke.
+- `candidate_effect`: up fallback decreased versus default-off control (`up decode 7643.444ms -> 7201.154ms`, `up prompt 3953.053ms -> 3271.456ms`), but VRAM cache hit rate dropped from `78.3%` to `58.5%`, so end-to-end token rate only tied.
+- `defaultoff_control`: `/root/lfz/runs/vendor-ds4-16gb/20260706T123731Z-20260706T-hotset-gated-defaultoff-gate-only-n64-control/france-defaultoff-gate-only-n64-cpu40-vram0gb`, `eval_tok_s=2.2`, `prompt_tok_s=1.0`, `memory_peak_bytes=16000000000`, `ram_ok=true`; correctness false only due n64 truncation.
+- `decision`: reject 1GiB up hotset as performance candidate and do not expand to full dev set. The mechanism is useful as default-off diagnostic/control, but a small resident up hotset still steals enough cache/movement budget to erase fallback savings.
+- `next_design`: do not try larger up hotsets unless a gate-cache partition or separate pool prevents hit-rate collapse. The next credible route is a cache-partitioned experiment or a non-cache grouped staging design; both need a hard bound before another full cold benchmark.
+
+
+## 2026-07-06 设计：one-stream cache tail partition
+
+- `attempt_id`: `20260706-one-stream-cache-tail-partition`
+- `status`: `ready_for_default_off_implementation`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/one-stream-cache-tail-partition-design-20260706.json`
+- `reason`: `up hot1g gated stream` only tied because it reduced up fallback but dropped shared VRAM cache hit rate from `78.3%` to `58.5%`. The cache is a single LRU pool, so up hotset inserts can evict gate entries.
+- `implementation`: add default-off tail partition controls in `moe_stream.cu`: `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_FILTER=<names>` and `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_SLOTS=<N>`. Matching tensors evict only in the tail slot range; nonmatching tensors evict only in the main range. Lookup still scans all slots. Unset env keeps existing behavior.
+- `first_probe`: use existing calibration-only `up hot1g` profile with `tail_slots=240` under strict `n64` France smoke. Total slots are about `3192`; this leaves about `2952` gate slots and gives up hotset about `1.0GiB`. Do not use held-out.
+- `acceptance`: proceed to full calibration/dev only if the n64 smoke beats the gate-only `2.2 tok/s` control and does not break RAM/TTFT/correctness. If it ties or regresses, record rejected and do not expand.
+
+
+## 2026-07-06 执行记录：up hot1g tail partition rejected/tie
+
+- `attempt_id`: `20260706-up-hot1g-tailpart240-n64`
+- `status`: `rejected_tie_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-hot1g-tailpart240-n64-rejection-20260706.json`
+- `source_change`: implemented default-off `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_FILTER` and `GGML_MOE_STREAM_CACHE_PARTITION_TAIL_SLOTS` in `moe_stream.cu`. Matching tensors insert only into the tail slot range; nonmatching tensors insert only into the main range; lookup still scans all slots.
+- `candidate_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T124712Z-20260706T-up-hot1g-tailpart240-n64-smoke/france-up-hot1g-tailpart240-cpu40-vram0gb`.
+- `candidate_config`: calibration France n64 only, no held-out, existing `up hot1g` profile, `tail_filter=ffn_up_exps`, `tail_slots=240`, strict 16GB cgroup.
+- `candidate_metrics`: `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `TTFT=37196.590433ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15083732992`, `ram_ok=true`, `correctness_ok=true` for short n64 smoke.
+- `candidate_effect`: fallback moved in the expected direction (`up decode=6781.241ms`, `up prompt=3493.415ms`) but total VRAM cache counter still reported `hits=15512`, `misses=10997`, `hit_rate=58.5%`, and token rate only tied.
+- `defaultoff_control`: `/root/lfz/runs/vendor-ds4-16gb/20260706T124907Z-20260706T-tailpart-defaultoff-gate-only-n64-control/france-tailpart-defaultoff-gate-only-n64-cpu40-vram0gb`, `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `memory_peak_bytes=16000000000`, `ram_ok=true`, cache `hits=13435`, `misses=3716`, `hit_rate=78.3%`; correctness false only due n64 truncation.
+- `decision`: reject/tie. Tail partition is safe as a default-off diagnostic but does not create a measurable speed improvement. Do not expand to full dev set.
+- `next_design`: stop cache-based up hotset experiments unless a new metric separates gate hits from denied up misses and shows a strong path. The remaining credible route is non-cache grouped staging or a model/representation change; both require hard-bound proof before another cold benchmark.
+
+
+## 2026-07-06 设计：up hot3g tail partition smoke
+
+- `attempt_id`: `20260706-up-hot3g-tailpart-n64`
+- `status`: `planned_before_smoke`
+- `profile`: `.Agent/profiles/vendor-ds4/calib-dev-up-hot3g-20260706.tsv`, calibration/dev only, no held-out.
+- `profile_summary`: selects `722` up pairs, payload `2.997GiB`, covers `51854.272ms` or `42.0%` of aggregate up fallback.
+- `theory`: 1GiB up hotset tied because fallback savings were too small. With tail partition active, 3GiB may recover more up fallback while bounding up entries to the tail partition. It sacrifices about `722` gate slots, so promote only if n64 smoke clearly beats the `2.2 tok/s` gate-only control.
+- `scope`: run only calibration France `n64` smoke first; no held-out; do not expand to full dev set unless it beats control and remains RAM/TTFT/correctness safe.
+
+
+## 2026-07-06 执行记录：up hot3g tail partition rejected/tie
+
+- `attempt_id`: `20260706-up-hot3g-tailpart722-n64`
+- `status`: `rejected_tie_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/up-hot3g-tailpart722-n64-rejection-20260706.json`
+- `profile`: `.Agent/profiles/vendor-ds4/calib-dev-up-hot3g-20260706.tsv`, calibration/dev only, no held-out; selects `722` up pairs, payload `2.997GiB`, covering `42.0%` of aggregate up fallback.
+- `candidate_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T125410Z-20260706T-up-hot3g-tailpart722-n64-smoke/france-up-hot3g-tailpart722-cpu40-vram0gb`.
+- `candidate_metrics`: `eval_tok_s=2.2`, `prompt_tok_s=0.9`, `TTFT=39035.413654ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15063531520`, `ram_ok=true`; correctness false only because n64 truncates the answer.
+- `candidate_effect`: up fallback dropped materially (`up decode=5879.531ms`, `up prompt=2520.818ms`) and cache hit rate was `65.9%`, but end-to-end token rate still tied the `2.2 tok/s` gate-only control while TTFT worsened.
+- `decision`: reject and do not expand to full dev set. Larger up hotsets still fail to convert fallback savings into token-rate improvement; stream/cache overhead and remaining down fallback cancel the gain.
+- `next_design`: close cache/hotset up streaming as a near-term path. Continue only with a non-cache grouped staging design if it can reduce launch/staging overhead by construction, or switch to model/representation/disk route.
+
+
+## 2026-07-06 执行记录：dev gate/up/down overlap trace
+
+- `attempt_id`: `20260706-dev-gate-updown-overlap-trace`
+- `status`: `completed_measurement_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/dev-gate-updown-overlap-trace-20260706.json`
+- `prompt_scope`: only `calibration_dev_set_v1`; `held_out_test_set_v1_locked` was not used.
+- `purpose`: Fill the missing gate overlap evidence called out by `updown-total-movement-hard-bound`. This measurement checks whether combined gate/up/down pack/read or staging can reuse route locality instead of repeating unrelated expert movement.
+- `runs`: strict cold 16GB cgroup with `GGML_MOE_STREAM_ONE_TRACE_OUT={case_dir}/one_trace.csv`, gate-only one-stream filter `ffn_gate_exps`, no prompt-specific pack/profile. France `2.5 tok/s`, quantum `1.9 tok/s`, Fibonacci `1.8 tok/s`, Japan `2.4 tok/s`, climate `2.2 tok/s`; all five had `memory_peak_bytes=16000000000`, `ram_ok=true`, `ram_limit_killed=false`, and heuristic correctness pass. These token rates include trace overhead and are not SOTA claims.
+- `aggregate_gate_trace`: gate unique `(layer,expert)` pairs `8621`, gate unique payload `35.781GiB`, calls `204420`, rows `210480`, gate cache hit rate `83.5%`, gate source-load time `167285.982ms` across the traced calibration runs.
+- `aggregate_updown_reference`: existing up/down fallback profile has `6683` unique `(layer,expert)` pairs but `55.474GiB` tensor payload because up and down are distinct tensors; calls `222040`, rows `228020`, fallback `216535.305ms`.
+- `overlap_result`: all observed up/down `(layer,expert)` pairs also appear in the gate trace: `6683/6683` up/down pairs, covering `100.0%` of up/down fallback time. These pairs are `77.52%` of gate pairs. The overlapping full gate+up+down tensor payload is `83.211GiB` (`27.737GiB` gate + `55.474GiB` up/down), far above VRAM and 16GB host RAM budgets.
+- `decision`: structural overlap is high enough to consider combined sequential pack/read or staging-window designs, but it is not evidence for another resident-cache attempt. A resident combined cache is impossible under the current payload size and would destroy gate cache. Any next implementation must preserve current gate cache residency and reduce scattered read/page-fault/staging overhead without storing full up/down tensors long-term.
+- `next_design`: draft a combined sequential pack/read hard-bound: for each routed `(layer,expert)`, estimate whether reading gate/up/down together from a compact pack can reduce page-cache refaults and source-load time while still streaming only the needed tensors. If the bound cannot beat the calibration baseline without gate-cache loss, reject before source changes. Continue to keep held-out prompts unused until a candidate is frozen.
+
+
+## 2026-07-06 hard-bound：combined gate/up/down pack-read rejected
+
+- `attempt_id`: `20260706-combined-gate-updown-pack-read-hard-bound`
+- `status`: `rejected_before_source_change`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/combined-gate-updown-pack-read-hard-bound-20260706.json`
+- `prompt_scope`: uses only calibration/dev artifacts and the new calibration gate traces; held-out test set was not used.
+- `basis`: gate/up/down overlap is structurally high (`100%` of up/down `(layer,expert)` pairs appear in gate trace), but full overlapping gate+up+down tensor payload is `83.211GiB`, so it cannot be resident in VRAM or host RAM under the target machine.
+- `streaming_lower_bound`: estimated gate miss source movement from the trace is `139.989GiB`; up/down repeated logical payload is `946.372GiB`; combined gate-miss + up/down stream amount is `1086.361GiB`. Pure transfer lower bound is `67.898s @16GiB/s`, `33.949s @32GiB/s`, `22.633s @48GiB/s`, `16.974s @64GiB/s`, or `11.316s @96GiB/s`, before GPU kernel, synchronization, D2H/scatter, page faults, and cache bookkeeping.
+- `decision`: reject combined sequential pack/read as a standalone generalized `>5 tok/s` route. It may improve locality for a narrower gate-miss problem, but it does not reduce up/down bytes or compute enough; if implemented naively it repeats the same failure pattern as up/down streaming and hotset cache probes.
+- `next_allowed_work`: do not write a runtime source patch for combined gate/up/down pack-read from current evidence. The next credible work must either reduce representation/payload, change dataflow so repeated up/down movement is avoided, or empirically validate a smaller model/representation route without using held-out prompts for tuning.
+
+## 2026-07-06 执行记录：4Expert 磁盘释放与真实下载启动
+
+- `attempt_id`: `20260706-4expert-disk-release-download-start`
+- `status`: `download_in_progress_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-disk-release-download-start-20260706.json`
+- `prompt_scope`: 未运行任何 prompt，未使用 held-out test set。
+- `action`: 按此前已授权的 GLM 实验清理，只删除 `/root/lfz/models/GLM-5.2-UD-IQ3_XXS`，释放完整 4Expert GGUF 所需磁盘空间；未触碰 DeepSeek SOTA native GGUF、gate pack、SOTA run 目录或 pushed-source repro run。
+- `disk_after_cleanup`: 根分区可用空间从约 `1.9GB` 提升到约 `265GB`；aria2 目标文件预分配后当前根分区仍保留约 `112GB` 可用空间。
+- `candidate_4expert_url`: `https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf`
+- `expected_size_bytes`: `164465760544`
+- `head_etag`: `96bcd717ee6a3715d4ba1fd7946d9ee8a1eabb1247737afd009931f0318f000b`
+- `download_path`: `/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf`
+- `download_service`: `ds4-4expert-download.service`，使用单个 systemd transient service 运行 `aria2c -c -x8 -s8 -k16M --file-allocation=none`，避免 SSH 断开导致下载中断。
+- `completion_gate`: `.aria2` sidecar 消失，且 `stat size == 164465760544`；随后必须计算并记录 `sha256`，再做 load/correctness/perf。由于 aria2 会预分配文件，不能用 `ls -lh` 判断下载完成。
+- `decision`: 当前没有任何正确性或性能结论，不能作为 SOTA。下载完成后继续执行 plan 中 `P3_load_validation_before_benchmark`、`P4_correctness_smoke`、`P5_strict_cold_benchmark`。
+
+## 2026-07-06 执行记录：4Expert load 前置源码检查
+
+- `attempt_id`: `20260706-4expert-load-preflight-source-check`
+- `status`: `completed_preflight_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-load-preflight-source-check-20260706.json`
+- `prompt_scope`: 未运行任何 prompt，未使用 held-out test set。
+- `tid2eid_alias`: 当前分支在 `src/llama-model.cpp` 中已有 default-off `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`；当原始 `blk.%d.ffn_gate_tid2eid` metadata 不存在而 `.weight` alias 存在时，会选择 `.weight` tensor 创建 `layer.ffn_gate_tid2eid`。
+- `q4k_stream_one`: 当前分支在 `ggml/src/ggml-cpu/ggml-cpu.c` 和 `ggml/src/ggml-cuda/moe_stream.cu` 中已有 default-off `GGML_MOE_STREAM_ONE_Q4K=1` admission；未设置时不改变原 MXFP4/F8_E4M3_B128 SOTA 路径。
+- `decision`: 前置源码条件已满足，但这不是正确性或性能结果。完整真实 GGUF 下载完成后，必须先记录 size/sha256，再用 `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` 和 `GGML_MOE_STREAM_ONE_Q4K=1` 做 P3 load validation；通过后才允许进入严格 16GB correctness/perf benchmark。
+
+## 2026-07-06 执行记录：4Expert ready validator 工具与未完成门禁
+
+- `attempt_id`: `20260706-4expert-ready-validator-tool`
+- `status`: `completed_tooling_download_incomplete_not_sota`
+- `tool`: `.Agent/run-tools/validate_4expert_ready.py`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-ready-validation-incomplete-20260706.json`
+- `prompt_scope`: 未运行任何 prompt，未使用 held-out test set。
+- `purpose`: 为 P3 load validation 前增加硬门禁，避免把 aria2 预分配但未完成的 GGUF 当成完整模型跑 benchmark。
+- `completion_gate_enforced`: 默认要求 `.aria2` sidecar 不存在、`stat size == 164465760544`；下载完成后可加 `--sha256` 计算完整文件 hash。若 `.aria2` 存在，工具会输出 `complete_and_ready_for_load_validation=false` 并返回非通过状态，除非显式 `--allow-incomplete` 只做诊断记录。
+- `current_incomplete_result`: 当前文件 header 可解析，但 `.aria2` 仍存在，所以 `complete_and_ready_for_load_validation=false`，`failures=[aria2_sidecar_present]`。
+- `header_observation`: `general.architecture=deepseek4`，`deepseek4.block_count=43`，`deepseek4.expert_count=256`，`deepseek4.expert_used_count=4`；type counts 为 `Q4_K=129`、`Q8_0=366`、`F16=338`、`F32=492`、`I32=3`。
+- `alias_observation`: `tid2eid_plain=0`，`tid2eid_weight=3`，这正是后续必须启用 `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` 的原因。
+- `expert_tensor_observation`: Q4_K expert tensors 共 `129`，其中 gate/up/down 各 `43`，符合 43 层每层 gate/up/down 的预期。
+- `decision`: 这只是下载未完成状态下的门禁和 metadata 预检，不是 correctness/perf 结果。下载完成后先运行该工具的非 `--allow-incomplete` + `--sha256` 模式，并把通过结果作为 P3 load validation 的前置证据。
+
+## 2026-07-06 执行记录：4Expert 下载完成后的固定验证入口
+
+- `attempt_id`: `20260706-4expert-after-download-wrapper`
+- `status`: `tooling_ready_not_run_download_incomplete`
+- `tool`: `.Agent/run-tools/run_4expert_validation_after_download.sh`
+- `prompt_scope`: 工具尚未执行；未运行任何 prompt，未使用 held-out test set。
+- `reason`: 当前可用 binary 是 `build-ds4-moe-stream-batch/bin/llama-cli`，而 `strict_ds4_runner.py` 的默认 binary 路径不存在；为了避免下载完成后参数错配，新增固定 wrapper 显式传入 binary/model/env。
+- `pre_gate`: wrapper 首先运行 `.Agent/run-tools/validate_4expert_ready.py --sha256`；只有 `.aria2` 不存在、size 等于 `164465760544`、metadata 符合 4Expert 预期并且 sha256 记录完成，才允许进入后续 load/correctness smoke。
+- `first_smoke_config`: `cpu_moe=40`，`vram_cache_gb=0`，`ONE_CACHE_MIB=13568`，strict `drop_caches`，`MemoryMax=16000000000`，`MemorySwapMax=0`，France prompt，`LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`，`GGML_MOE_STREAM_ONE_Q4K=1`，`GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`，`GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`。
+- `claim_rule`: 该 first smoke 只证明完整 4Expert GGUF 能否在严格 16GB 下加载并输出正确 France 回答；不能作为 generalized SOTA。若 smoke 通过，再按 calibration/dev set 评估候选；candidate freeze 后才允许使用 held-out test set。
+
+## 2026-07-06 设计/执行准备：4Expert 下载完成自动验证 watcher
+
+- `attempt_id`: `20260706-4expert-download-watch-tool`
+- `status`: `tooling_ready_not_yet_launched`
+- `tool`: `.Agent/run-tools/watch_4expert_download_then_validate.sh`
+- `prompt_scope`: 工具准备阶段未运行任何 prompt，未使用 held-out test set。
+- `purpose`: 当前完整 4Expert GGUF 下载仍在进行，手动等待容易错过完成窗口；新增 watcher 在 `.aria2` sidecar 消失后自动执行 readiness gate、sha256 和 strict France smoke，并把日志固定落盘。
+- `safety_gate`: watcher 在 `.aria2` 存在时只轮询，不会运行 load/correctness/perf；若下载 service 非 active 但 `.aria2` 仍存在，会直接失败并记录状态，避免对损坏/未完成文件做 benchmark。
+- `post_download_steps`: 先运行 `.Agent/run-tools/validate_4expert_ready.py --sha256`，通过后才调用 `.Agent/run-tools/run_4expert_validation_after_download.sh`。该 wrapper 内部还会再次执行 readiness gate，形成双重门禁。
+- `log_location`: 默认 `/root/lfz/runs/vendor-ds4-16gb/<stamp>-4expert-download-watch/watch.log`，同时记录 `ready-validation.json`、`ready_exit_status.txt`、`validation_exit_status.txt`。
+- `claim_rule`: watcher 的 first smoke 只用于确认完整 4Expert GGUF 是否能在严格 16GB 下加载并输出正确 France 回答；不是 generalized SOTA。若通过，后续仍需 calibration/dev，再 freeze 后跑 held-out test set。
+
+
+## 2026-07-06 执行记录：4Expert 下载完成自动验证 watcher 已启动
+
+- `attempt_id`: `20260706-4expert-download-watch-launch`
+- `status`: `watcher_running_download_incomplete_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-download-watch-launch-20260706.json`
+- `unit`: `ds4-4expert-watch-20260706T131914Z.service`
+- `log_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch`
+- `watch_log`: `/root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch/watch.log`
+- `prompt_scope`: 启动 watcher 本身未运行任何 prompt，未使用 held-out test set；只有下载完成且 readiness gate 通过后才会自动运行 France strict smoke。
+- `source_commit`: `fabb6036d1271b464c6056ab1c51d436928ec6a3`
+- `current_download_status`: 下载 service 仍为 `active`，`.aria2` sidecar 仍存在，watcher 仅轮询等待。
+- `automatic_next_steps`: `.aria2` 消失后执行 `validate_4expert_ready.py --sha256`；通过后执行 `run_4expert_validation_after_download.sh`，产生 strict 16GB France correctness smoke 记录。
+- `claim_rule`: 当前没有任何 correctness/perf/SOTA 结论。只有 watcher 产出完整 `ready-validation.json` 和 strict runner `summary.json`，并确认 RAM/page cache/TTFT/correctness 后，才允许进入后续 decision 和提交记录。
+
+## 2026-07-06 执行记录：4Expert load compatibility 诊断
+
+- `attempt_id`: `20260706-4expert-load-compat-diagnostic`
+- `status`: `diagnostic_not_accepted`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-load-compat-diagnostic-20260706.json`
+- `prompt_scope`: 只使用 France smoke；未使用 `calibration_dev_set_v1` 做调参，未使用 `held_out_test_set_v1_locked`。该结果不能作为 generalized SOTA。
+- `source_scope`: 本轮实现为 4Expert load compatibility 和 CUDA type coverage 诊断；不改变当前 accepted native DeepSeek SOTA。
+- `implemented`:
+  - default-off GGUF metadata compatibility：`LLAMA_GGUF_ALLOW_U64_TO_U32=1` 和 `LLAMA_GGUF_ALLOW_F64_TO_F32=1`；
+  - `tokenizer.ggml.model=bpe` 进入现有 BPE tokenizer 路径；
+  - default-off 4Expert tensor aliases：`LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`，覆盖 `output_hc_* -> hc_head_*`、layer `.weight` 后缀、`attn_kv_latent -> attn_kv`、`compress -> compressor`、`exp_probs_b.bias`；
+  - default-off diagnostics：`LLAMA_DUMP_UNCREATED_TENSORS=1`、`GGML_CUDA_BINBCAST_DEBUG=1`、`GGML_CUDA_CONCAT_DEBUG=1`；
+  - CUDA `binbcast` 修复 `f32 + f16 -> f32` 分支，避免把 f16 src1 当作 float；
+  - CUDA `concat` 增加 pure f16 concat 支持。
+- `debug_findings`:
+  - readiness gate 已证明完整 4Expert 文件存在，sha256 为 `e9e7e22ba585f83330d08235de39e8dcd8cbb513fd9fad6103764da74a4e64bc`；
+  - 初始 blocker 依次为 metadata `u64/f64` type mismatch、`tokenizer.ggml.model=bpe` unknown、`output_hc_*`/layer tensor 命名差异、`attn_kv`/compressor 命名差异、以及 `exp_probs_b.bias` 未消费；
+  - `LLAMA_DUMP_UNCREATED_TENSORS=1` 定位最后 40 个未消费 tensor 全部为 `blk.3..42.exp_probs_b.bias`；
+  - `GGML_CUDA_BINBCAST_DEBUG=1` 定位 `blk.2.attn_compressor_ape.weight` f16 view 参与 f32 ADD 时触发 stride assert；
+  - `GGML_CUDA_CONCAT_DEBUG=1` 定位同一 tensor 的两个 f16 view 做 dim=1 concat，原 CUDA concat 只支持 f32。
+- `best_4expert_run_after_fixes`:
+  - `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T152334Z-4expert-concat-f16-fix-streamoff-france-strict-smoke/france-4expert-concat-f16-fix-streamoff-cpu40-vram0gb-cpu40-vram0gb`
+  - `env`: `LLAMA_GGUF_ALLOW_U64_TO_U32=1`, `LLAMA_GGUF_ALLOW_F64_TO_F32=1`, `LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`, `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`, `GGML_MOE_STREAM=0`
+  - `metrics`: `eval_tok_s=2.0`, `prompt_tok_s=1.4`, `elapsed_seconds=136.6`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14895955968`, `ram_ok=true`, `ram_limit_killed=false`, `exit_status=0`
+  - `correctness`: `false`; answer was empty, missing France/Europe/semantic content.
+  - `decision`: rejected / not accepted. It is slower than the native path target and fails correctness, so it cannot replace any SOTA.
+- `native_regression_after_changes`:
+  - `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T152707Z-native-regression-after-4expert-compat-france-strict-smoke/france-native-regression-cpu40-vram0gb-cpu40-vram0gb`
+  - `metrics`: `eval_tok_s=1.6`, `prompt_tok_s=0.7`, `TTFT=46905.717439ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14978998272`, `ram_ok=true`, `correctness_ok=true`
+  - `note`: 该回归 smoke 未使用 accepted SOTA pack/profile，因此不能与 `4.4 tok/s` France SOTA 比较；只证明当前源码没有让 native DeepSeek 路径崩溃。
+- `next_decision`:
+  - 4Expert 当前不是短期 SOTA 路径，除非先解决空输出/正确率问题；
+  - 当前 accepted native DeepSeek SOTA 不变；
+  - 后续 token-rate 主线仍回到 plan 中的 generalized prompt CPU fallback / up-down GPU path，而不是继续把 4Expert 空输出结果作为性能优化对象。
+
+## 2026-07-07 执行记录：4Expert token_type 空输出诊断与 reject
+
+- `attempt_id`: `20260707-4expert-token-type-zero-normal-diagnostic`
+- `status`: `diagnostic_rejected_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-token-type-zero-normal-diagnostic-20260707.json`
+- `prompt_scope`: 只使用 France smoke 和 native default-off 回归；未使用 `calibration_dev_set_v1` 调参，未使用 `held_out_test_set_v1_locked`；该结果不能作为 generalized SOTA。
+- `source_change`:
+  - 新增 default-off `LLAMA_DEBUG_SAMPLE_TOKENS=1`，只在诊断时把 sampled token id 与 `token_to_piece(..., special=true)` 打到 stderr；默认关闭，不改变采样行为。
+  - 新增 default-off `LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1`，只在显式设置时把 GGUF `tokenizer.ggml.token_type=0` 当作 normal token；默认关闭，不影响 native DeepSeek 路径。
+- `root_cause`: 4Expert 之前不是没有生成 token，而是 sampled token id 正常但 piece 全为空。原因是 4Expert GGUF 中大量正常 token 的 `token_type` 为 `0`，当前 loader 将其解释为 `LLAMA_TOKEN_TYPE_UNDEFINED` 并覆盖默认 normal attr，导致 BPE `token_to_piece` 抑制输出。
+- `before_fix_evidence`: `/root/lfz/runs/vendor-ds4-16gb/20260706T162828Z-20260707-4expert-sample-token-debug-completion-n16/france-4expert-sample-debug-n16-cpu40-vram0gb`，sample debug 显示 `id=20/16/2619/...` 但 `piece=""`；stdout 只有换行；`token to piece cache size` 约 `0.0001 MB`。
+- `after_token_type_fix_evidence`: `/root/lfz/runs/vendor-ds4-16gb/20260706T163214Z-20260707-4expert-token-type-zero-normal-completion-n16/france-4expert-ttype0normal-n16-cpu40-vram0gb`，sample debug 显示 `id=20 piece="2"`, `id=2619 piece=" **"`, `id=71343 piece="Identify"`；`token to piece cache size` 约 `1.0267 MB`，证明空输出问题被 tokenizer attr 层修复。
+- `correctness_full_smoke`: `/root/lfz/runs/vendor-ds4-16gb/20260706T163339Z-20260707-4expert-token-type-zero-normal-cli-france-n192/france-4expert-ttype0normal-cli-cpu40-vram0gb`，`eval_tok_s=2.0`、`prompt_tok_s=1.4`、`TTFT=42943.682616 ms`、`memory_peak_bytes=16000000000`、`memory_file_bytes=14923116544`、`ram_ok=true`，但 `correctness_ok=false`，原因 `degenerate_text,truncated_or_corrupt_landmark`；输出前半段有 France 语义，但随后 markdown/code-fence 重复并出现 `Eiff Tower` 截断。
+- `template_probe`: `/root/lfz/runs/vendor-ds4-16gb/20260706T163647Z-20260707-4expert-ttype0normal-deepseek3-template-france-n128/france-4expert-deepseek3-template-n128-cpu40-vram0gb`，显式 `--chat-template deepseek3 --reasoning off` 后 `eval_tok_s=1.6`、`ram_ok=true`、`correctness_ok=false`，输出时间戳/Chat 噪声；模板不能修复正确性。
+- `native_defaultoff_regression`: `/root/lfz/runs/vendor-ds4-16gb/20260706T163913Z-20260707-native-defaultoff-regression-after-token-debug-n64/france-native-defaultoff-regression-n64-cpu40-vram0gb`，新 env 默认关闭时 native DeepSeek gate-only n64 smoke `eval_tok_s=1.5`、`TTFT=47080.892513 ms`、`memory_peak_bytes=16000000000`、`ram_ok=true`、`correctness_ok=true`。
+- `decision`: 4Expert 从空输出推进到可见文本，但仍未通过正确性，且速度低于 native generalized baseline，不是 accepted SOTA。短期 token-rate 主线不要基于 4Expert 做性能 benchmark；如果之后继续 4Expert，必须先定位剩余 tensor alias / 数值路径 / 模板不匹配导致的退化，再进入性能实验。
+- `next_allowed_work`: 回到 native generalized prompt 的主线。下一步优先选择能够减少 up/down fallback payload 或改变数据流的方案；不要把 4Expert 作为 token-rate 候选，除非 correctness 先过。
+
+## 2026-07-07 hard-bound：generalized grouped up/down staging rejected
+
+- `attempt_id`: `20260707-generalized-grouped-staging-hard-bound`
+- `status`: `rejected_before_source_change`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-grouped-staging-hard-bound-20260707.json`
+- `prompt_scope`: 只使用 `calibration_dev_set_v1` 的 no-prompt-specific fallback profile；未使用 `held_out_test_set_v1_locked`。
+- `purpose`: 重新按当前任务背景评估 native generalized prompt 路线：16GB host RAM + 32GB 5090、随机 prompt 稳定 `>5 tok/s`。该 bound 不沿用 France-only 4.4/10 tok/s 结论，而是基于 generalized calibration baseline (`mean=2.18`, `min=1.7/1.8`) 估算 paired up/down grouped staging 的上限。
+- `method`: 从每个 calibration prompt 的 decode up/down fallback profile 聚合 `(layer, expert)`，把 up/down 同一 expert 作为 paired staging 单元；用 `eval_tok_s` 和 decode calls 反推 decode window，并在 zero-overhead 模型中扣除被选 hot set 覆盖的 decode fallback ms。该结果是乐观上限，不包含 H2D/D2H、GPU kernel、launch/sync、scatter、cache bookkeeping 或 gate-cache 退化。
+- `gate_preserving_pool_bound`: 沿用之前 top768/Q8 hard-bound 中可保留 gate cache 的约 `3.2GiB` extra pool。`3.2GiB` paired layer-expert hot set 选择 `385` 个 layer-expert，payload `3.196GiB`；zero-overhead 上限约为 `mean=2.64-2.68 tok/s`、`min=1.94-1.96 tok/s`。
+- `large_payload_sensitivity`: `8GiB` 上限约 `mean=3.07`、`min=2.22`；`16GiB` 上限约 `mean=3.69`、`min=2.60`；`25.5GiB` 上限约 `mean=4.24`、`min=3.03`。这些 payload 已经会挤压 gate cache/VRAM，且仍不到 generalized `5 tok/s`。
+- `decision`: reject grouped up/down staging as a direct route before source change. 它只改变 staging/scheduling，不减少 expert payload，也不能在 gate-cache-safe VRAM budget 内覆盖足够 generalized fallback；任何真实实现开销都会低于 zero-overhead 上限。
+- `next_allowed_work`: 不写 grouped staging runtime patch。后续必须转向能减少 payload/改变数据流的路线：例如有 top1 proof 的表示压缩/非 native representation、能完全消除 up/down bytes 的 graph/dataflow 证明，或者先解决 4Expert correctness 后再重新评估 smaller representation。继续保持 held-out set 未使用，直到 candidate freeze。
+
+## 2026-07-07 执行记录：4Expert correctness follow-up rejected
+
+- `attempt_id`: `20260707-4expert-correctness-followup-reject`
+- `status`: `rejected_not_sota_correctness_still_fails`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-correctness-followup-reject-20260707.json`
+- `prompt_scope`: 只使用 France smoke；未使用 calibration prompt 调参，未使用 `held_out_test_set_v1_locked`。
+- `purpose`: 在 `LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1` 修复空输出后，做低成本 follow-up，判断 4Expert 是否只是模板/漏 tensor 问题。
+- `uncreated_check`: `/root/lfz/runs/vendor-ds4-16gb/20260706T164826Z-20260707-4expert-token-type-uncreated-dump-n1/france-4expert-ttype-uncreated-n1-cpu40-vram0gb`，启用 `LLAMA_DUMP_UNCREATED_TENSORS=1` 后没有出现 uncreated/unused tensor dump；`memory_peak_bytes=16000000000`、`ram_ok=true`。
+- `template_check_deepseek`: `/root/lfz/runs/vendor-ds4-16gb/20260706T165001Z-20260707-4expert-ttype0normal-deepseek-template-france-n128/france-4expert-deepseek-template-n128-cpu40-vram0gb`，`eval_tok_s=1.7`、`TTFT=32685.844057 ms`、`ram_ok=true`、`correctness_ok=false`，输出 malformed `deep2` version-map 风格文本，缺少 France/Europe/context。
+- `template_check_deepseek3`: 之前的 `/root/lfz/runs/vendor-ds4-16gb/20260706T163647Z-20260707-4expert-ttype0normal-deepseek3-template-france-n128/france-4expert-deepseek3-template-n128-cpu40-vram0gb`，同样 `correctness_ok=false`，输出 timestamp/Chat 噪声。
+- `decision`: 4Expert 不是短期 token-rate 候选。tokenizer attr 层已修复空输出，但 default/deepseek/deepseek3 模板都无法通过 France correctness，且没有明显未消费 tensor；剩余问题更可能是 tensor alias / numerical / route compatibility，需要单独的 layer-output parity 计划。除非 France correctness 先过，否则不要对 4Expert 做性能 benchmark 或 generalized SOTA claim。
+- `next_allowed_work`: 回到 native generalized path；若未来重开 4Expert，先写 dedicated numerical parity plan，而不是继续试模板或 token-rate 参数。
+
+## 2026-07-07 hard-bound：generalized full up/down removal still insufficient alone
+
+- `attempt_id`: `20260707-generalized-full-updown-removal-bound`
+- `status`: `completed_bound_no_source_change`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json`
+- `prompt_scope`: 只使用 `calibration_dev_set_v1`；未使用 `held_out_test_set_v1_locked`。
+- `purpose`: 在关闭 grouped staging 后，重新回答一个核心问题：如果理想地移除 native decode up/down CPU fallback，本任务要求的 randomized/generalized `>5 tok/s` 是否自然成立。
+- `method`: 从 no-prompt-specific fallback profile 中用 decode up calls 反推 decode token 数，按 `40` 和 `43` 层做 sensitivity；用当前 `eval_tok_s` 反推 decode window，然后 zero-overhead 扣除 measured decode up/down fallback ms。
+- `result_40_layer`: mean upper-bound `4.916 tok/s`，min `3.592 tok/s`；`quantum` 和 `fibonacci` 即使理想移除 decode up/down fallback 仍低于 `5 tok/s`。
+- `result_43_layer`: mean upper-bound `5.433 tok/s`，min `3.919 tok/s`；`fibonacci` 仍低于 `5 tok/s`。
+- `decision`: up/down fallback 是大瓶颈，但“只做 up/down exact path”不足以保证 generalized `>5 tok/s`。后续候选必须同时处理 gate/source/residual decode cost，或者在表示/模型层减少整体 payload。
+
+## 2026-07-07 hard-bound：generalized residual bottleneck after up/down removal
+
+- `attempt_id`: `20260707-generalized-residual-bottleneck-after-updown`
+- `status`: `completed_measurement_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-residual-bottleneck-after-updown-bound-20260707.json`
+- `prompt_scope`: 只使用 calibration/dev artifacts；未使用 held-out。
+- `inputs`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json` 和 `.Agent/runs/20260705-vendor-ds4-coldstart/dev-gate-updown-overlap-trace-20260706.json`。
+- `observation`: gate/source trace 与 up/down fallback 同量级。示例：`fibonacci` 的 gate `src0_ms` trace total 为 `48157.035 ms`，decode up/down fallback 为约 `48085.4 ms`；`quantum` gate `src0_ms=38041.296 ms`，decode up/down fallback 约 `49631.8 ms`。注意 gate trace 未按 phase 分离且有 instrumentation，只能作为 bottleneck 量级，不直接从 eval decode window 扣除。
+- `decision`: 不允许写只替换 up/down fallback 的 runtime patch 来 claim generalized `>5 tok/s`。下一步必须先做 joint hard-bound：要么 exact graph/dataflow 证明可以同时减少/隐藏 gate source + up/down movement，要么 representation/top1 proof 证明能整体减少 payload 并保持 correctness。
+- `next_allowed_work`: 评估 current graph 是否能保留 gate results 并避免 up/down repeated source movement；若当前 graph 不具备该数据流，则记录为 generalized 5 的 blocker。另一条可重开路线是 representation，但必须先有 fixed-text top1/correctness proof；4Expert 已因 correctness 失败暂时关闭。
+
+## 2026-07-07 hard-bound：generalized exact graph/dataflow recheck rejected
+
+- `attempt_id`: `20260707-generalized-exact-graph-dataflow-recheck`
+- `status`: `rejected_before_source_change`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-exact-graph-dataflow-recheck-20260707.json`
+- `prompt_scope`: 未运行新 prompt；使用 calibration-only generalized bounds 和 source audit；未使用 held-out。
+- `why_recheck`: 当前目标是随机/generalized prompt 在 16GB RAM + 32GB 5090 上稳定 `>5 tok/s`，不是 France-only 10 tok/s。新的 generalized bound 证明 up/down-only removal 不足，因此 graph/dataflow 若要重开，必须同时减少/隐藏 gate source 和 up/down movement。
+- `source_audit`: `src/models/deepseek4.cpp` 仍然 hardcode `graph_gate_output_input_available=false`，`build_expert_mix` 接收的是 `selected_experts` 和 `weights`，不是可复用 retained gate output；当前 `DS4_HOT_DISPATCH` 会重新计算 gate/up/down，并通过 hot tensor subset 增加 payload/VRAM 压力。
+- `decision`: 不允许从当前证据写 exact graph/dataflow runtime patch。因为 generalized 5 需要 joint gate/source + up/down reduction，而当前图缺少 retained-gate/source-reuse 接口；这不是调参问题，而是数据流 blocker。
+- `reopen_condition`: 需要先有 source/dataflow probe 证明 accepted graph 中存在 retained CUDA gate/topk/weights path，或者新增接口后有 hard-bound 证明所有 calibration prompt 在计入 overhead、16GB page cache、gate cache、workspace 后仍 `>5 tok/s`，并且 fixed-text top1/correctness 先过。
+- `next_allowed_work`: 剩余可行类别转为 external verifier/speculative decoding 高接受率路线，或 representation/model 路线的 correctness/top1 proof。若这些也没有证据，则应记录 generalized `>5 tok/s` 需要新的 dataflow interface，而不是继续 stream/cache 局部调优。
+
+## 2026-07-07 route triage：转向 alternate low-bit DeepSeek GGUF 候选
+
+- `attempt_id`: `20260707-generalized-route-triage-alt-gguf-plan`
+- `status`: `plan_recorded_before_download_no_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-route-triage-alt-gguf-plan-20260707.json`
+- `prompt_scope`: 未运行新 prompt；未使用 `held_out_test_set_v1_locked`。
+- `why_now`: 当前 native 路线的局部优化已被 generalized hard-bound 限制住：up/down grouped staging、up/down-only fallback removal、当前 exact graph/dataflow、DFlash/MTP verifier、native exact compact representation、4Expert 都没有足够证据能在 `16GB RAM + 32GB 5090` 下让随机/泛化 prompt 稳定 `>5 tok/s`。
+- `closed_route_summary`:
+  - up/down grouped staging：gate-preserving `3.2GiB` zero-overhead 上限只有 `mean≈2.64-2.68 tok/s`, `min≈1.94-1.96 tok/s`；更大 payload 会挤压 gate cache 且仍不到 generalized `5 tok/s`。
+  - up/down-only removal：理想 zero-overhead 40-layer 上限 `mean≈4.916`, `min≈3.592 tok/s`；43-layer sensitivity 仍有 Fibonacci 低于 `5 tok/s`。
+  - exact graph/dataflow：当前 source 没有 retained gate output/source-reuse 接口，不能从现有证据直接写 runtime patch。
+  - DFlash/MTP/speculative：oracle target verifier 的 W=2/4/8 speedup 只有 `1.010x/1.013x/1.002x`，低于 reopen gate；vendor 也没有 source-ready DFlash/MTP runtime。
+  - native exact compact representation：MXFP4 hotset 实测/entropy reduction 只有约 `1.04x-1.085x`，远低于 `4x-5.33x` 需求。
+  - 4Expert：空输出 token_type 问题已定位并 default-off 修复，但 France correctness 仍失败，约 `2.0 tok/s`，不是短期 token-rate 候选。
+- `reopened_candidate`: alternate low-bit DeepSeek GGUF，优先 `0xSero/DeepSeek-V4-Flash-162B-GGUF` 的 `DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`。该路线必须标注为 alternate model/quantization candidate，不能混同 native GGUF SOTA；只有 correctness 和泛化 prompt-set 都过关后才可作为任务候选。
+- `disk_and_head_audit`: 当前 `/root` 可用约 `111G`，不删除 native SOTA evidence 也足够下载一个 `52,593,532,000 bytes` 的 0xSero candidate；HEAD 当前返回 `x-linked-size=52593532000`，`x-linked-etag=e917278028d7a9e25dfc9d04bf5848375dad7573c5aeab1720d6a83714352406`，final `ETag=7f4deb0dc07cdbc01ff88ae11e616fd8d2d1d8263efec15b034c5d731fe83070`。
+- `next_action`: 先记录并 push 本计划；之后只下载这一条 candidate，记录 size/sha256 和 metadata/header validation。France strict 16GB correctness 通过前禁止 token-rate SOTA claim；calibration/dev 通过并 freeze 前禁止使用 held-out test。
+- `promotion_rule`: 如果 alternate candidate 在 `calibration_dev_set_v1` 上形成候选，必须冻结 model sha256、source commit、env/CLI 和参数后，再运行 `held_out_test_set_v1_locked`。accepted generalized SOTA 必须报告 held-out per-prompt `eval_tok_s`、TTFT、RAM/page-cache、correctness 和完整输出，并立即 commit/push 到 `ssd/vendor/deepseek-token-rate-16gb` 后从 pushed commit 复现。
+
+## 2026-07-07 执行记录：0xSero alternate GGUF 下载启动
+
+- `attempt_id`: `20260707-0xsero-alt-gguf-download-start`
+- `status`: `download_started_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-0xsero-download-start-20260707.json`
+- `prompt_scope`: 未运行任何 prompt；未使用 `held_out_test_set_v1_locked`。
+- `candidate`: `0xSero/DeepSeek-V4-Flash-162B-GGUF` / `DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`。
+- `download_path`: `/root/lfz/models/DeepSeek-V4-Flash-162B-GGUF/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`。
+- `expected_size_bytes`: `52593532000`。
+- `download_unit`: `ds4-0xsero-alt-gguf-download-20260706T170631Z.service`。
+- `download_log`: `/root/lfz/runs/vendor-ds4-16gb/20260706T170631Z-0xsero-alt-gguf-download/download.log`。
+- `completion_gate`: `.aria2` sidecar 消失、`stat size == 52593532000`、记录 sha256、GGUF header/metadata validation 通过后，才允许进入 France strict 16GB correctness smoke。
+- `claim_rule`: 当前只是下载启动记录，没有 correctness、token-rate 或 SOTA 结论。France correctness 通过前禁止 benchmark/SOTA claim；calibration/dev 候选 freeze 前禁止使用 held-out test。
+
+## 2026-07-07 执行记录：0xSero alternate GGUF ready validation 通过
+
+- `attempt_id`: `20260707-0xsero-alt-gguf-ready-validation`
+- `status`: `ready_for_france_strict_smoke`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-0xsero-ready-validation-20260707.json`
+- `prompt_scope`: 未运行任何 prompt；未使用 `held_out_test_set_v1_locked`。
+- `model_path`: `/root/lfz/models/DeepSeek-V4-Flash-162B-GGUF/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`。
+- `size_and_sha256`: size `52593532000` bytes；sha256 `e917278028d7a9e25dfc9d04bf5848375dad7573c5aeab1720d6a83714352406`。
+- `download_correction`: aria2 起初因 `systemd --same-dir` 写入 repo root；下载完成后已把完整文件移动到 canonical `model_path`，repo root 的 partial file 和 `.aria2` sidecar 均已清理，未加入 git。
+- `header_validation`: GGUF version `3`，`n_kv=58`，`n_tensors=1328`，`general.architecture=deepseek4`，`general.file_type=19`，`deepseek4.block_count=43`，`deepseek4.expert_count=144`，`deepseek4.expert_used_count=6`，`deepseek4.nextn_predict_layers=1`。
+- `tensor_validation`: type counts 为 `F32=492`, `F16=359`, `Q8_0=345`, `IQ2_XXS=86`, `Q2_K=43`, `I32=3`；gate/up expert tensors 各 `43` 个，type `IQ2_XXS`，down expert tensors `43` 个，type `Q2_K`；`ffn_gate_tid2eid.weight` 为 `3` 个。
+- `next_action`: 运行 France strict 16GB correctness smoke。若 load 或 France correctness 失败，立即 reject，不做 calibration/dev token-rate benchmark；若通过，才进入 `calibration_dev_set_v1` strict cold no-prompt-specific baseline。
+- `claim_rule`: 当前只有下载和 metadata ready 结论，没有 correctness、token-rate 或 SOTA 结论。
+
+## 2026-07-07 执行记录：0xSero alternate GGUF France load smoke rejected
+
+- `attempt_id`: `20260707-0xsero-alt-gguf-france-load-smoke`
+- `status`: `rejected_load_incompatible_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-0xsero-france-load-smoke-reject-20260707.json`
+- `prompt_scope`: 只运行 France smoke；未使用 `calibration_dev_set_v1` 调参，未使用 `held_out_test_set_v1_locked`。
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T172636Z-20260707-0xsero-alt-gguf-france-strict-smoke/france-0xsero-alt-cpu40-vram0gb-cpu40-vram0gb`。
+- `config`: strict 16GB cgroup、drop_caches、`cpu_moe=40`、`vram_cache=0`、`LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`、`GGML_MOE_STREAM=0`、无 prompt-specific pack/profile。
+- `result`: exit status `1`，`eval_tok_s=None`，`prompt_tok_s=None`，`TTFT=None`，`memory_peak_bytes=387440640`，`memory_file_bytes=196919296`，`ram_ok=true`；没有进入真实推理。
+- `loader_error`: stderr 明确报 `missing tensor 'hc_head_base'`。0xSero header 中有 per-layer `blk.N.hc_attn_*` / `blk.N.hc_ffn_*`，但没有 vendor 当前期望的 global `hc_head_base/hc_head_fn/hc_head_scale`，也没有现有 alias 支持的 `output_hc_*`。
+- `decision`: reject，不进入 token-rate benchmark，不作为 SOTA。该问题是模型/loader/dataflow compatibility blocker，不是 RAM、TTFT 或 cache 参数问题。
+- `next_allowed_work`: 不使用 held-out。若继续 alternate GGUF 路线，必须先用 header-only probe 筛掉缺少 global `hc_head_*`/`output_hc_*` 或其他必需 tensor 的 candidate；或者单独写 loader/dataflow correctness 计划，证明 per-layer hc tensor 如何等价替代当前 global hc_head 后再改 source。
+
+## 2026-07-07 header triage：选择 sleepy K128 alternate GGUF 作为下一候选
+
+- `attempt_id`: `20260707-alt-gguf-header-compat-triage`
+- `status`: `completed_header_only_no_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-header-compat-triage-20260707.json`
+- `prompt_scope`: 未运行 prompt；未使用 `calibration_dev_set_v1` 或 `held_out_test_set_v1_locked`。
+- `method`: 对 sleepy、teamblobfish、antirez、tarruda 候选只做 `curl --range 0-16777215 --max-filesize 20000000` header probe；没有下载完整模型。
+- `key_finding`: 0xSero 失败的根因是缺 global `output_hc_*`/`hc_head_*`；sleepy 和 antirez 单文件候选都带 `output_hc_*`、`.weight` tensor aliases、`attn_kv.weight` 和 `compressor` 命名，理论上可用现有 default-off `LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1` + `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1` 先做 load smoke。
+- `candidate_comparison`:
+  - sleepy `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`: size `50439361920`，single file，`expert_count=256`，`expert_used_count=6`，gate/up `IQ2_XXS`，down `Q2_K`，`output_hc=3`，作为下一候选。
+  - antirez IQ2XXS chat-v2: size `86720111200`，header-compatible，但更大，磁盘/下载成本更高，作为 fallback。
+  - teamblobfish IQ1_M split: part1 size `49882725408`，split_count `2`，header-compatible，但 split 加载和 IQ1_M path 风险更高，暂不优先。
+  - tarruda Q2_K split: first shard是 metadata-only，`n_tensors=0`，需要更多 split 处理，不作为下一步。
+- `next_action`: 删除已 rejected 的本地 0xSero 大文件释放磁盘（记录和 sha256 已 push），下载 sleepy K128 uniform，完成 size/sha256/header validation 后才允许 France strict 16GB smoke。
+- `claim_rule`: header triage 不是 correctness/token-rate/SOTA。sleepy 若 load 或 France correctness 失败，立即 reject，不进入 calibration/dev；若通过，才跑 calibration/dev，freeze 后才可使用 held-out。
+
+## 2026-07-07 执行记录：sleepy K128 alternate GGUF 下载启动
+
+- `attempt_id`: `20260707-sleepy-k128-alt-gguf-download-start`
+- `status`: `download_started_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-download-start-20260707.json`
+- `prompt_scope`: 未运行 prompt；未使用 `held_out_test_set_v1_locked`。
+- `cleanup`: 已删除本地 rejected 0xSero GGUF 大文件 `/root/lfz/models/DeepSeek-V4-Flash-162B-GGUF/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf` 释放磁盘；该 candidate 的 sha256、ready validation、reject 记录已 push。
+- `candidate`: `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF` / `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`。
+- `download_path`: `/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf`。
+- `expected_size_bytes`: `50439361920`。
+- `download_unit`: `ds4-sleepy-k128-alt-gguf-download-20260706T173353Z.service`。
+- `download_log`: `/root/lfz/runs/vendor-ds4-16gb/20260706T173353Z-sleepy-k128-alt-gguf-download/download.log`。
+- `working_directory`: `/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF`，本次不使用 `systemd-run --same-dir`，避免写入 repo root。
+- `completion_gate`: `.aria2` sidecar 消失、`stat size == 50439361920`、sha256/header validation 通过后，才允许 France strict 16GB smoke。
+- `claim_rule`: 当前只有下载启动记录，没有 correctness/token-rate/SOTA 结论。
+
+## 2026-07-07 执行记录：sleepy K128 alternate GGUF ready validation 通过
+
+- `attempt_id`: `20260707-sleepy-k128-alt-gguf-ready-validation`
+- `status`: `ready_for_france_strict_smoke`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-ready-validation-20260707.json`
+- `prompt_scope`: 未运行 prompt；未使用 `held_out_test_set_v1_locked`。
+- `model_path`: `/root/lfz/models/DeepSeek-V4-Flash-REAP-K128-uniform-GGUF/DeepSeek-V4-Flash-REAP-K128-uniform.gguf`。
+- `size_and_sha256`: size `50439361920` bytes；sha256 `54927e791ae4e0fbc848e5f2574681b0d8c32721fddd1da82918ece04c0d928b`。
+- `header_validation`: GGUF version `3`，`n_kv=64`，`n_tensors=1328`，`general.architecture=deepseek4`，`general.file_type=19`，`expert_count=256`，`expert_used_count=6`，`nextn_predict_layers=1`。
+- `tensor_validation`: type counts 为 `F32=492`, `F16=359`, `Q8_0=345`, `IQ2_XXS=86`, `Q2_K=43`, `I32=3`；`output_hc=3`、`tid2eid_weight=3`、gate/up/down expert tensors 各 `43` 个。
+- `first_smoke_env`: `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`、`LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`、`GGML_MOE_STREAM=0`。
+- `next_action`: 运行 France strict 16GB load/correctness smoke；如果 load 或 correctness 失败，立即 reject，不进入 token-rate benchmark。
+- `claim_rule`: 当前只有下载和 metadata ready 结论，没有 correctness/token-rate/SOTA 结论。
+
+## 2026-07-07 执行记录：sleepy K128 France load smoke rejected
+
+- `attempt_id`: `20260707-sleepy-k128-alt-gguf-france-load-smoke`
+- `status`: `rejected_load_incompatible_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-france-load-smoke-reject-20260707.json`
+- `prompt_scope`: 只运行 France smoke；未使用 `calibration_dev_set_v1` 调参，未使用 `held_out_test_set_v1_locked`。
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T174958Z-20260707-sleepy-k128-alt-gguf-france-strict-smoke/france-sleepy-k128-alt-cpu40-vram0gb-cpu40-vram0gb`。
+- `config`: strict 16GB cgroup、drop_caches、`cpu_moe=40`、`vram_cache=0`、`LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`、`LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`、`LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1`、`GGML_MOE_STREAM=0`。
+- `result`: exit status `1`，`eval_tok_s=None`，`prompt_tok_s=None`，`TTFT=None`，`memory_peak_bytes=393523200`，`ram_ok=true`；未进入真实推理。
+- `loader_error`: `blk.3.ffn_gate_inp.weight` shape mismatch，vendor 期望 `[4096,256]`，sleepy REAP K128 从 layer 3 开始是 `[4096,128]`。
+- `decision`: reject，不进入 token-rate benchmark。该问题是 REAP K128 gate/dataflow 结构差异，不是简单 alias、RAM 或 cache 参数问题。
+- `next_action`: 记录并 push 后删除本地 sleepy 大文件释放磁盘；下一候选改为 antirez IQ2XXS chat-v2，因为 header probe 显示其 `output_hc` alias 存在且 `ffn_gate_inp` 为 `[4096,256]`。
+
+## 2026-07-07 执行记录：antirez IQ2XXS alternate GGUF 下载启动
+
+- `attempt_id`: `20260707-antirez-iq2xxs-alt-gguf-download-start`
+- `status`: `download_started_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-download-start-20260707.json`
+- `prompt_scope`: 未运行 prompt；未使用 `held_out_test_set_v1_locked`。
+- `cleanup`: 已删除本地 rejected sleepy K128 GGUF 大文件释放磁盘；该 candidate 的 sha256、ready validation、reject 记录已 push。
+- `candidate`: `antirez/deepseek-v4-gguf` / `DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf`。
+- `download_path`: `/root/lfz/models/DeepSeek-V4-Flash-antirez-IQ2XXS-chat-v2-GGUF/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf`。
+- `expected_size_bytes`: `86720111200`。
+- `download_unit`: `ds4-antirez-iq2xxs-alt-gguf-download-20260706T175230Z.service`。
+- `download_log`: `/root/lfz/runs/vendor-ds4-16gb/20260706T175230Z-antirez-iq2xxs-alt-gguf-download/download.log`。
+- `why_this_candidate`: header probe 显示 `output_hc=3`、`tid2eid_weight=3`、`ffn_gate_inp=[4096,256]`，避免了 0xSero 的 missing `hc_head_base` 和 sleepy 的 K128 gate shape mismatch。
+- `completion_gate`: `.aria2` sidecar 消失、`stat size == 86720111200`、sha256/header validation 通过后，才允许 France strict 16GB smoke。
+- `claim_rule`: 当前只有下载启动记录，没有 correctness/token-rate/SOTA 结论。
+
+## 2026-07-07 执行记录：antirez IQ2XXS alternate GGUF ready validation 通过
+
+- `attempt_id`: `20260707-antirez-iq2xxs-alt-gguf-ready-validation`
+- `status`: `ready_for_france_strict_smoke`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-ready-validation-20260707.json`
+- `prompt_scope`: 未运行 prompt；未使用 `held_out_test_set_v1_locked`。
+- `model_path`: `/root/lfz/models/DeepSeek-V4-Flash-antirez-IQ2XXS-chat-v2-GGUF/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf`。
+- `size_and_sha256`: size `86720111200` bytes；sha256 `31598c67c8b8744d3bcebcd19aa62253c6dc43cef3b8adf9f593656c9e86fd8c`。
+- `header_validation`: GGUF version `3`，`n_kv=58`，`n_tensors=1328`，`general.architecture=deepseek4`，`general.file_type=19`，`expert_count=256`，`expert_used_count=6`，`nextn_predict_layers=1`。
+- `tensor_validation`: type counts 为 `F32=492`, `F16=359`, `Q8_0=345`, `IQ2_XXS=86`, `Q2_K=43`, `I32=3`；`output_hc=3`、`tid2eid_weight=3`、gate/up/down expert tensors 各 `43` 个，全部 `ffn_gate_inp=[4096,256]`。
+- `first_smoke_env`: `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`、`LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`、`LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1`、`GGML_MOE_STREAM=0`。
+- `next_action`: 运行 France strict 16GB load/correctness smoke；如果 load 或 correctness 失败，立即 reject，不进入 token-rate benchmark。
+- `claim_rule`: 当前只有下载和 metadata ready 结论，没有 correctness/token-rate/SOTA 结论。
+
+## 2026-07-07 执行记录：antirez IQ2XXS France correctness rejected
+
+- `attempt_id`: `20260707-antirez-iq2xxs-alt-gguf-france-correctness`
+- `status`: `rejected_correctness_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-france-correctness-reject-20260707.json`
+- `prompt_scope`: 只运行 France smoke；未使用 `calibration_dev_set_v1` 调参，未使用 `held_out_test_set_v1_locked`。
+- `model_sha256`: `31598c67c8b8744d3bcebcd19aa62253c6dc43cef3b8adf9f593656c9e86fd8c`。
+- `default_smoke`: `/root/lfz/runs/vendor-ds4-16gb/20260706T181656Z-20260707-antirez-iq2xxs-alt-gguf-france-strict-smoke/france-antirez-iq2xxs-alt-cpu40-vram0gb-cpu40-vram0gb`；`eval_tok_s=2.7`，`prompt_tok_s=1.2`，`TTFT=25684.853561ms`，`memory_peak_bytes=16000000000`，`ram_ok=true`，但输出混合中文 thinking、重复 token 和不完整英文，`correctness_ok=false`。
+- `template_smoke`: `/root/lfz/runs/vendor-ds4-16gb/20260706T181941Z-20260707-antirez-iq2xxs-alt-gguf-france-deepseek3-reasonoff-smoke/france-antirez-iq2xxs-deepseek3-reasonoff-cpu40-vram0gb-cpu40-vram0gb`；`--chat-template deepseek3 --reasoning off --single-turn` 后 `eval_tok_s=3.4`，`prompt_tok_s=0.9`，`TTFT=25495.83811ms`，`memory_peak_bytes=16000000000`，`ram_ok=true`，但输出模型名/数字噪声，缺少 France/Europe/context，`correctness_ok=false`。
+- `decision`: reject，不进入 calibration/dev 或 held-out。虽然 token-rate 数字看起来接近/超过当前 dev baseline，但 France 正确率失败，不能作为 SOTA 或下一阶段泛化候选。
+- `cleanup`: 已删除本地 antirez 86.7GB GGUF 释放磁盘；sha256、ready validation、run dir、完整输出和 reject 记录已保留。
+- `next_direction`: alternate low-bit route 已连续暴露 load/correctness blocker（0xSero 缺 global hc、sleepy K128 gate shape、antirez correctness 失败）。下一步不应继续盲下大模型；若继续 alternate，需要先做 header+小样本 correctness proof 或回到 native source/dataflow 设计。
+
+## 2026-07-07 hard-bound：generalized sparse pair hotset route rejected
+
+- `attempt_id`: `20260707-generalized-sparse-pair-hard-bound`
+- `status`: `rejected_by_generalized_zero_overhead_bound_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-sparse-pair-profile-hard-bound-20260707.json`
+- `prompt_scope`: 只使用 `calibration_dev_set_v1` 五个 prompt 的 fallback CSV；没有使用 `held_out_test_set_v1_locked`，没有使用 prompt-specific France profile。
+- `generated_profiles`: 已生成 generalized top48/top64/top128/top256/top512 sparse pair profile、TSV 和 offset manifest，路径位于 `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top{N}-updown-20260707.*`。这些 profile 只作为可复现 hard-bound 输入，不是 SOTA。
+- `method`: 对五个 calibration/dev prompt 的 decode fallback CSV 按完整 `(layer, expert)` up/down pair 聚合，按总 decode fallback time 排序；对每个 topN 计算“选中 pair 的 fallback time 可零开销完全消失”时的 token-rate 上界。该上界忽略 staging、H2D/D2H、kernel launch、indexing、同步和 prompt/TTFT 开销，因此是乐观上界。
+- `topN_bound_43_layer_sensitivity`:
+  - top512：payload `4352.0 MiB`，mean `2.792 tok/s`，min `2.039 tok/s`，五个 dev prompt 全部低于 5。
+  - top1024：payload `8704.0 MiB`，mean `3.221 tok/s`，min `2.299 tok/s`，五个 dev prompt 全部低于 5。
+  - top2048：payload `17408.0 MiB`，mean `3.973 tok/s`，min `2.764 tok/s`，五个 dev prompt 全部低于 5。
+  - top3072：payload `26112.0 MiB`，mean `4.569 tok/s`，min `3.216 tok/s`，只有 France 超过 5；quantum/fibonacci/Japan/climate 仍低于 5。
+  - top4096：payload `34816.0 MiB`，mean `4.997 tok/s`，min `3.559 tok/s`，payload 本身已超过 32GB 5090 可用 VRAM 预算，quantum/fibonacci 仍低于 5。
+  - all 6485 observed complete pairs：payload `55122.5 MiB`，mean `5.433 tok/s`，min `3.919 tok/s`，Fibonacci 仍低于 5；这与 full up/down removal bound 中 Fibonacci 仍低于 5 的结论一致。
+- `decision`: generalized sparse pair/hotset staging 不能作为主路线。原因不是实现细节，而是 expert 命中在泛化 prompt 上过于分散：在可承受 VRAM payload 内覆盖不够；超过可承受 VRAM 后即使零开销也无法让最差 prompt 达到 5 tok/s。
+- `source_edit_allowed_by_this_artifact`: `false`。不能因为 France-only 或小 topN profile 看起来可行就写 runtime 行为改动；这会违反“不能 prompt-specific、必须泛化”的任务背景。
+- `next_plan`: 回到精确通用 dataflow，目标是消除/大幅压缩所有 prompt 的 up/down CPU fallback，而不是缓存少量历史热 expert。
+  1. 定位当前 fallback 的精确触发点：`batch_env_missing + one_name_filter`，确认 `selected_experts`/`weights` 已在 graph 中作为 tensor 传入 `build_expert_mix`，但当前 fused/hot route 没有使用这些 graph tensor 直接完成精确 gather/compute。
+  2. 设计 default-off probe：记录每层 decode 时 selected_experts/weights tensor 的 backend、shape、lifetime、是否可在 CUDA kernel 内读取；同时记录 up/down source tensor backend 和 fallback source path。probe 不能改变默认行为、输出或 token-rate。
+  3. 若 probe 证明 selected_experts/weights 可被 CUDA path 使用，则实现 compact exact-gather 原型：每 token 每层只为 topK selected experts 建立 compact id list，在 GPU 上直接对 up/down selected experts 做 MMVQ/compute，避免 CPU fallback 和全 expert/hotset staging。
+  4. 若 graph tensor 不能直接供 CUDA kernel 使用，则先实现最小 D2H selected id copy hard-bound：每层 topK id/weight 的数据量极小，计算 id copy 和调度开销上限，再决定是否把 selected ids 显式传给 vendor CUDA path。
+  5. 每个 source 改动前必须先写 plan；每个实验只用 calibration/dev；held-out locked test set 只在最终 candidate freeze 后运行。出现新的合规 generalized SOTA 时，必须详细记录复现信息并立刻 commit/push 到 `ssd/vendor/deepseek-token-rate-16gb`，随后从 pushed commit 复现。
+
+## 2026-07-07 implementation plan：default-off MUL_MAT_ID exact dataflow probe
+
+- `attempt_id`: `20260707-ds4-exact-mmid-dataflow-probe`
+- `status`: `planned_before_source_edit`
+- `purpose`: 验证通用 exact up/down CPU fallback 修正是否可行，不做 prompt-specific hotset，不使用 held-out。
+- `source_scope`: 只在 `ggml/src/ggml-cuda/ggml-cuda.cu::ggml_cuda_mul_mat_id` 增加 default-off CSV probe；不改变默认路径、kernel 选择、logits、fallback 行为或 token-rate。
+- `env`: `DS4_EXACT_MMID_DATAFLOW_PROBE_OUT=<csv>`。未设置或为 `0` 时完全不写文件。
+- `csv_fields`: 记录每个 `GGML_OP_MUL_MAT_ID` 的 selected ids/source tensors 信息，包括 tensor name、role(gate/up/down)、chosen CUDA path(`mmvq/mmq/mmf/slow_sync`)、src0/src1/ids/dst backend buffer、type、shape、nbytes、ids bytes、ids 是否在 CUDA buffer、dst tokens/picks、是否 quantized、是否满足 CUDA graph fast path。
+- `success_gate`: 用 France calibration/dev smoke 打开 probe，输出必须正确、默认关闭时 build 不变；probe CSV 应能回答 selected experts ids 是否已在 CUDA 可读 buffer 内，以及 up/down fallback 是因为 source tensor placement/type/path 还是 ids/dataflow 不可用。
+- `claim_rule`: 该 probe 是诊断提交，不是 SOTA；若输出/性能异常则回退 probe 或标为 rejected。后续任何行为改变必须基于该 probe 的证据重新写 plan。
+
+## 2026-07-07 执行记录：exact MMID + CPU fallback source probe
+
+- `attempt_id`: `20260707-ds4-exact-mmid-cpu-source-probe-france-smoke`
+- `status`: `completed_probe_smoke_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/exact-mmid-cpu-source-probe-france-smoke-20260707.json`
+- `source_change`: 增加两个 default-off probe，不改变默认 logits/path：
+  - `DS4_EXACT_MMID_DATAFLOW_PROBE_OUT=<csv>`：记录 CUDA backend `GGML_OP_MUL_MAT_ID` 的 path、src0/src1/ids/dst backend/type/shape。
+  - `GGML_MOE_FALLBACK_SOURCE_PROBE_OUT=<csv>`：记录 CPU fallback 残留 rows 的 src0/src1/ids/dst backend/type/shape/reason，不改变既有 `fallback_reason_profile.csv` 格式。
+- `validation_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T184846Z-20260707-exact-mmid-cpu-source-probe-france/france-exact-mmid-cpu-source-probe-cpu40-vram0gb`
+- `config`: vendor DeepSeek native GGUF、strict cold 16GB cgroup、`cpu_moe=40`、`vram_cache=0`、gate one-stream cache only、`-n 96` France smoke；这是 calibration diagnostic，不是 SOTA，不使用 held-out。
+- `result`: exit `0`，`eval_tok_s=2.5`，`prompt_tok_s=0.9`，`TTFT=36704.18 ms`，`memory_peak_bytes=16000000000`，`memory_file_bytes=15062511616`，`ram_ok=true`，`correctness_ok=true`。France 输出语义正确但因 `-n 96` 被截断在一句中部；该 run 只验证 probe，不作为 SOTA。
+- `cuda_mmid_probe`: `882` rows，全部 `path=mmvq`，角色为 gate/up/down 各 `294`；所有观测到的 `src0_buft=CUDA0`、`ids_buft=CUDA0`。这说明 CUDA backend 只看到了已经被调度到 CUDA 的 MMID，不能代表 CPU fallback 残留。
+- `fallback_source_probe`: `6176` rows，残留耗时为 `up/decode=9880.61 ms`、`down/decode=6639.33 ms`、`up/prompt=3782.40 ms`、`down/prompt=4247.47 ms`；所有残留 rows 的 `src0_buft=CPU_Mapped`，`src1_buft=CUDA_Host`，`ids_buft=CUDA_Host`，`dst_buft=CUDA_Host`。
+- `bottleneck_update`: 当前合规路径的 up/down CPU fallback 不是因为 selected ids 在 CUDA graph 内完全不可得，而是因为这些 up/down tensor 没有被允许进入 one-stream CUDA path：`single_reason=one_name_filter`，`batch_reason=batch_env_missing`。gate 已通过 name_filter/cache 路线覆盖，up/down 被 name_filter 排除后落在 CPU_Mapped + CUDA_Host staging 的 CPU fallback。
+- `next_plan`: 先做 default-off up/down one-stream enablement hard-bound，而不是 prompt-specific hotset。
+  1. 在 calibration/dev 上用 `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps,ffn_down_exps` 或等价 role filter 运行小 smoke，观察 `fallback_source_probe` 是否显著下降，以及 correctness/TTFT/RAM 是否受影响。
+  2. 若 up/down 进入 one-stream 后 correctness 正常但 token-rate 不升或下降，继续拆分 one-stream 内部时间：CPU_Mapped expert read、H2D、src1 staging、kernel、D2H/scatter，确认是不是每 expert 单独搬运导致吞吐差。
+  3. 如果单 expert one-stream 对 up/down 太慢，再设计 compact exact gather/batched route：同一 layer 同一 token 的 topK up/down 统一处理，减少 per-expert launch/copy/scatter；理论上限按 fallback_source_probe 的 up/down decode ms 计算。
+  4. 所有实验仍只用 calibration/dev；held-out locked test set 只在 candidate freeze 后测试。若产生合规 generalized SOTA，必须完整记录复现信息并立刻 push 到 `ssd/vendor/deepseek-token-rate-16gb`。
+
+## 2026-07-07 执行记录：up/down one-stream filter smoke rejected
+
+- `attempt_id`: `20260707-updown-one-stream-filter-france-smoke`
+- `status`: `rejected_slower_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-one-stream-filter-france-smoke-reject-20260707.json`
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T185243Z-20260707-updown-one-stream-filter-smoke-france/france-updown-one-stream-filter-cpu40-vram0gb`
+- `prompt_scope`: France calibration smoke only；未使用 held-out。该 run 只验证 route，不是 SOTA。
+- `config_delta`: `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps,ffn_down_exps`，strict cold 16GB cgroup，`cpu_moe=40`，`vram_cache=0`，`-n 96`。
+- `result`: exit `0`，`eval_tok_s=1.7`，`prompt_tok_s=0.7`，`TTFT=43048.10 ms`，`memory_peak_bytes=16000000000`，`memory_file_bytes=15062183936`，`ram_ok=true`，`correctness_ok=true`。
+- `fallback_result`: `fallback_source_probe_rows=0`，即 up/down CPU fallback 被 name_filter 扩展消除；但性能从 gate-only probe smoke 的 `2.5 tok/s` 降到 `1.7 tok/s`，wall runtime 也更长。
+- `decision`: reject，不扩大到 calibration/dev。该路线证明“up/down 可以进入 one-stream”，但 per-expert one-stream 搬运/同步/散写开销超过 CPU fallback 收益。不能把它当作 SOTA 或泛化候选。
+- `next_plan`: 用 `GGML_MOE_STREAM_Q80_SKIP_PROFILE=1` / `GGML_MOE_STREAM_Q80_SKIP_PROFILE_OUT=<file>` 或等价 one-stream timing profile 拆分 up/down one-stream 内部时间：host_src0、q80、cuda_alloc、H2D、kernel_sync、D2H、scatter、cuda_free。若主要时间在每 expert H2D/D2H/free/sync，则下一步应做 layer-level compact/batched exact route，而不是继续扩大 single-expert one-stream。
+
+## 2026-07-07 执行记录：up/down one-stream trace 定位
+
+- `attempt_id`: `20260707-updown-one-stream-trace-france`
+- `status`: `completed_trace_rejected_route_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-one-stream-trace-france-20260707.json`
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T185809Z-20260707-updown-one-stream-trace-france/france-updown-one-stream-trace-cpu40-vram0gb`
+- `prompt_scope`: France calibration trace only，`-n 64`，未使用 held-out，不是 SOTA。
+- `config`: up/down one-stream filter + `GGML_MOE_STREAM_ONE_TRACE_OUT`，strict cold 16GB cgroup，`cpu_moe=40`，`vram_cache=0`。
+- `result`: exit `0`，`eval_tok_s=1.7`，`prompt_tok_s=0.8`，`TTFT=42062.01 ms`，`memory_peak_bytes=16000000000`，`ram_ok=true`，`correctness_ok=true`。
+- `trace_rows`: `35863` one-stream calls。按 role 聚合：gate `17149` calls，up `9357` calls，down `9357` calls；平均 `cne1≈1.07`，说明当前 one-stream 基本是 per-expert/per-row 小调用。
+- `time_breakdown`: 所有 role 汇总中 `src0_ms` 占 `93.94%`，`dontneed_ms` 占 `3.95%`，`kernel_ms` 占 `0.81%`，`sync_ms` 占 `0.62%`，`src1_ms` 占 `0.38%`，`d2h_ms` 占 `0.21%`。up/down 每个 role 各约 `15.17 s` total，gate 约 `25.08 s` total。
+- `key_finding`: up/down one-stream 变慢的根因不是 CUDA kernel 算慢，也不是 D2H/sync 主导，而是每个 expert call 都在 `src0` source movement / cache insert / host copy 上付出约 `1.37-1.52 ms`。打开 up/down 后 call 数从 gate-only 扩大到 gate+up+down，source movement 成为绝对瓶颈。
+- `decision`: reject 单 expert one-stream 扩展路线。下一步不能继续简单扩大 name_filter 或 hotset；必须做 layer-level compact/batched exact route，让同一 layer/token 的 selected up/down experts 批量搬运/计算，或把输出留在 GPU，减少 per-expert source movement 次数。
+- `next_plan`: 设计 compact exact route 的硬上界：以当前 trace 的 up/down calls、平均 cne1、expert bytes 计算，如果把每层 selected experts 合并为一次 batched transfer/compute，理论上可减少多少 src0 movement 次数和时间；只有硬上界能接近/超过 5 tok/s，才写 runtime 原型。
+
+## 2026-07-07 执行记录：up/down direct-H2D gate-cache smoke rejected
+
+- `attempt_id`: `20260707-updown-direct-h2d-gate-cache-france-smoke`
+- `status`: `rejected_slower_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-direct-h2d-gate-cache-france-smoke-reject-20260707.json`
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T190300Z-20260707-updown-direct-h2d-gate-cache-smoke-france/france-updown-direct-h2d-gate-cache-cpu40-vram0gb`
+- `prompt_scope`: France calibration trace only，`-n 64`，未使用 held-out，不是 SOTA。
+- `config_delta`: one-stream 允许 gate/up/down，但 `GGML_MOE_STREAM_CACHE_ADMIT_NAME_FILTER=ffn_gate_exps`，因此 up/down 不插入 VRAM cache、只走 direct H2D；开启 `GGML_MOE_STREAM_ONE_TRACE_OUT` 和 fallback source probe。
+- `result`: exit `0`，`eval_tok_s=1.4`，`prompt_tok_s=0.7`，`TTFT=43201.89 ms`，`memory_peak_bytes=16000000000`，`ram_ok=true`，`correctness_ok=true`，`fallback_source_rows=0`。
+- `trace`: up/down `cache_hit=0`、`cache_inserted=0`，但 `src0_ms` 仍为主因：up 平均 `2.057 ms/call`、down 平均 `2.058 ms/call`；总 stage share 中 `src0_ms=91.61%`。
+- `decision`: reject。禁止 up/down cache insert 没有改善，反而从 all-cache up/down 的 `1.7 tok/s` 降到 `1.4 tok/s`。瓶颈不是单纯 cache 抖动，而是每 expert source movement 本身太贵。
+- `next_plan`: 只剩 compact/batched exact route 值得继续：同一 layer/token 的 topK experts 必须合并搬运/计算，减少 `9357 up + 9357 down` 这类 per-expert calls；否则即使 CPU fallback 归零，token rate 也会下降。
+
+## 2026-07-07 hard-bound：compact/batched updown transfer alone insufficient
+
+- `attempt_id`: `20260707-compact-batched-updown-transfer-hard-bound`
+- `status`: `completed_hard_bound_no_source_edit_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-batched-updown-transfer-hard-bound-20260707.json`
+- `prompt_scope`: 只使用 `calibration_dev_set_v1`；未使用 held-out。
+- `method`: 基于 `generalized-full-updown-removal-bound-20260707.json` 和 dev fallback logical GiB，假设一个理想 compact/batched route：decode up/down CPU fallback 完全消失；所有 up/down logical expert bytes 只按一次 batched H2D 传输；kernel、调度、D2H、scatter、alloc 全部零开销。这是乐观上界。
+- `aggregate_43_layer_bound`:
+  - 16 GiB/s H2D：mean `3.641 tok/s`，min `2.904 tok/s`，五个 dev prompt 全部低于 5。
+  - 24 GiB/s H2D：mean `4.089 tok/s`，min `3.178 tok/s`，五个 dev prompt 全部低于 5。
+  - 32 GiB/s H2D：mean `4.358 tok/s`，min `3.336 tok/s`，五个 dev prompt 全部低于 5。
+  - 48 GiB/s H2D：mean `4.665 tok/s`，min `3.510 tok/s`，quantum/fibonacci/Japan 低于 5。
+  - 64 GiB/s H2D：mean `4.836 tok/s`，min `3.604 tok/s`，quantum/fibonacci 低于 5。
+- `decision`: compact/batched updown transfer alone 不足以达成“随机 prompt 稳定 >5 tok/s”的任务目标。原因是之前零开销 full up/down removal bound 已经显示 Fibonacci 仍低于 5；加入任何真实 H2D 成本后，更多 prompt 低于 5。
+- `implication`: 不能现在就写 compact up/down runtime 原型作为主 SOTA 路线。它最多是组合优化的一部分；必须同时解决 non-updown decode cost，或找到避免从 host streaming full expert bytes 的表示/驻留方案。
+- `next_plan`: 回到全 decode bottleneck 拆解：在 calibration/dev 上记录 gate one-stream、remaining CPU fallback、dense/attention、sampling/graph overhead 的分段时间，找除 up/down 外还能压缩的秒数；同时评估 VRAM-resident low-bit/partial representation 是否能在 32GB 显存内容纳更大比例的 random-prompt expert payload。
+
+## 2026-07-07 执行记录：full decode bottleneck profile（France-specialized vs generalized quantum）
+
+- `attempt_id`: `20260707-full-decode-bottleneck-profile-france-vs-quantum`
+- `status`: `completed_diagnostic_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/full-decode-bottleneck-profile-france-specialized-vs-quantum-generalized-20260707.json`
+- `single_case_artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-full-decode-profile-france-20260707.json`
+- `push_target`: 后续所有源码、计划和可复现实验记录继续 push 到 `ssd/vendor/deepseek-token-rate-16gb`；出现合规 generalized SOTA 时必须立刻提交、push，并从 pushed commit 复现一次。
+- `held_out_policy`: held-out test set 未使用。本轮只使用 France calibration 和 quantum calibration/dev；不能把本轮结果当 held-out SOTA。
+
+### Run A: France-specialized 4.4 路径复现 + profile
+
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T191504Z-20260707-current-sota-full-decode-profile-rerun/france-full-decode-profile-cpu40-vram0gb`
+- `config`: strict cold 16GB cgroup、`MemorySwapMax=0`、vendor DeepSeek native GGUF、`cpu_moe=40`、`vram_cache=0`、gate-only one-stream、`ONE_CACHE_MIB=13568`、France-derived expert pack/profile/prefill、`KEEP_TOPK_UPDOWN=4`、layer `10-39 => 3`、`-n192 -c256 -b16 -ub16`。
+- `result`: `eval_tok_s=4.4`，`prompt_tok_s=1.9`，`TTFT=32262.47 ms`，`memory_peak_bytes=16000000000`，`memory_file_bytes=15065071616`，`ram_ok=true`，`correctness_ok=true`。
+- `decode_profile`: graph 记录 `138` decode tokens；按 eval rate 反推 decode wall `31363.64 ms`，约 `227.27 ms/token`。
+- `fallback_decode`: up/down CPU fallback 计数器合计 `18223.24 ms`，约 `132.05 ms/token`。source probe 仍显示 `src0_buft=CPU_Mapped`、`src1/ids/dst=CUDA_Host`，reason 是 `batch_env_missing + one_name_filter`。
+- `gate_one_stream`: gate one-stream trace 合计 `8348.02 ms`，主要是 `src0_ms` source movement/cache path；这部分是 France-specific pack/profile 帮忙压低后的结果。
+- `graph_overhead`: `LLAMA_KIMI_GRAPH_PROFILE` 显示 decode sync `109.16 ms`，约 `0.79 ms/token`。CUDA graph/sync 不是当前主瓶颈。
+
+### Run B: generalized no-prompt-specific quantum profile
+
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T191925Z-20260707-generalized-quantum-full-decode-profile/quantum-full-decode-profile-cpu40-vram0gb`
+- `config`: strict cold 16GB cgroup、`MemorySwapMax=0`、vendor DeepSeek native GGUF、`cpu_moe=40`、`vram_cache=0`、gate-only one-stream、`ONE_CACHE_MIB=13568`、`KEEP_TOPK_UPDOWN=4`、layer `10-39 => 3`、不使用 `GGML_MOE_STREAM_ONE_EXPERT_PACK`、不使用 `GGML_MOE_STREAM_CACHE_ADMIT_PROFILE`、不使用 `GGML_MOE_STREAM_ONE_PREFILL_PROFILE`，即 no-prompt-specific generalized config。
+- `result`: `eval_tok_s=1.9`，`prompt_tok_s=0.9`，`TTFT=37988.80 ms`，`memory_peak_bytes=16000000000`，`memory_file_bytes=14957862912`，`ram_ok=true`，`correctness_ok=true`。
+- `decode_profile`: graph 记录 `191` decode tokens；按 eval rate 反推 decode wall `100526.32 ms`，约 `526.32 ms/token`。
+- `fallback_decode`: up/down CPU fallback 计数器合计约 `259.29 ms/token`。
+- `gate_one_stream`: gate one-stream trace 合计 `40706.16 ms`，比 France-specialized 的 `8348.02 ms` 大很多，说明 prompt-specific pack/profile 主要是在减少 cold gate source movement；这不能作为随机 prompt 产品 SOTA。
+- `graph_overhead`: decode sync 仍约 `0.81 ms/token`，远小于要补的 `>300 ms/token` gap。
+
+### Bottleneck conclusion
+
+- 当前真实产品目标是：16GB host RAM（含 page cache）+ 32GB RTX 5090 上，用户随机/generalized prompt 稳定 `>5 tok/s`。因此主要 baseline 是 no-prompt-specific generalized baseline，而不是 France-specialized `4.4 tok/s`。
+- generalized quantum 从 `1.9 tok/s` 到 `5 tok/s` 需要把 decode 从约 `526 ms/token` 压到 `<=200 ms/token`，至少减少约 `326 ms/token`。
+- 单独消除 up/down CPU fallback 的理论上限不够：quantum fallback 约 `259 ms/token`，即使完全消失，剩余 source movement/其他 decode 仍接近或超过 `267 ms/token`，达不到稳定 `>5 tok/s`。
+- 单独做 CUDA graph 不值得作为主线：sync overhead 只有约 `0.8 ms/token`。
+- 单独把 up/down 加入 one-stream 已经验证为 rejected：CPU fallback 可归零，但 per-expert source movement 变成更大的瓶颈，token rate 下降。
+
+## 2026-07-07 下一阶段计划：generalized cold-start source movement + up/down fallback 组合优化
+
+### 新限制重申
+
+- 所有优化必须服务于随机/generalized prompt，不允许 prompt-specific hotset、France-specific expert pack、France-specific prefill/admit profile 作为 SOTA 条件。
+- calibration/dev set 可用于设计和调参；held-out test set 只能在 candidate freeze 后测试，最终 SOTA 必须报告 held-out 指标。
+- 每个 candidate 必须在 strict 16GB cgroup 内运行，page cache 计入 RAM；`MemorySwapMax=0`。
+- TTFT 接受门槛仍是相对 accepted generalized baseline 不升高超过 `20%`；超过可作为 rejected/diagnostic 提交，但不能 promotion。
+- 一旦出现合规 generalized SOTA，必须详细记录：commit、branch、exact command、env、run_dir、artifact、answer、TTFT、eval_tok_s、prompt_tok_s、memory.current/peak/stat/events、page cache、correctness、held-out prompt set 结果；随后立刻 push 到 `ssd/vendor/deepseek-token-rate-16gb` 并从 pushed commit 复现。
+
+### Step 1: generalized source-movement hard bound
+
+- `goal`: 用 quantum generalized profile 和现有 calibration/dev baseline，计算 gate source movement、up/down fallback、non-MoE graph submit 的可压缩空间。
+- `expected_output`: hard-bound artifact，给出在不同假设下的 tok/s 上限：
+  - 仅消除 up/down fallback；
+  - 仅消除 gate cold source movement；
+  - 同时消除两者；
+  - 保留 16GB host RAM、32GB VRAM 下可实际容纳的 generalized resident payload。
+- `decision_rule`: 只有组合上界能覆盖 held-out `>5 tok/s` 所需空间，才写 runtime prototype。
+
+### Step 2: prompt-independent VRAM residency / representation 方案
+
+- `candidate`: 不再使用单 prompt 派生 pack；改用 calibration/dev 聚合或模型结构派生的 prompt-independent manifest。候选包括：
+  - gate-only generalized hotset prefill/admit，不含 held-out 信息；
+  - role-aware split residency：gate hotset + 少量 up/down resident low-bit/exact rows；
+  - tail/layer placement：把少数 late layers 的完整 MoE 或低位表示放入 VRAM，同时减少 gate cache。
+- `theory_required_before_code`: 对每个候选先算 payload GiB、预计 page-cache/refault 减少、预计 decode ms/token、TTFT 影响和 VRAM headroom。
+- `correctness_gate`: 任何 low-bit/partial representation 输出写回前，先用 fixed-text/top1 或等价一致性校验；France prompt 仍必须语义正确，但最终 promotion 以 held-out generalized set 为准。
+
+### Step 3: compact/batched up/down fallback 只作为组合项
+
+- `reason`: previous hard-bound 已证明 compact/batched up/down transfer alone 不能稳定到 `>5 tok/s`。
+- `allowed_scope`: 只有在 Step 1/2 显示 gate/source movement 已经被足够压缩时，才实现 compact exact/batched up/down route。
+- `reject_rule`: 如果新 route 只是把 CPU fallback 换成 per-expert one-stream H2D，或 token rate/TTFT/correctness/RAM 任一不合格，立即标记 rejected，不作为 SOTA。
+
+### Step 4: candidate freeze and held-out test
+
+- `calibration_gate`: 先在 calibration/dev 至少覆盖 France、quantum、Fibonacci、Japan、climate；不得使用 held-out 调参。
+- `held_out_gate`: freeze 后只跑 held-out test set，一次性记录 photosynthesis、home office tips、JavaScript palindrome、exercise、Brazil。
+- `promotion_rule`: held-out min token rate 必须 `>5 tok/s`，所有 prompt correctness pass，TTFT 合格，RAM/page cache 合格，才允许 promotion 并立刻 push + pushed commit rerun。
+
+## 2026-07-07 hard-bound：generalized source movement + up/down fallback combination
+
+- `attempt_id`: `20260707-generalized-source-movement-combination-hard-bound`
+- `status`: `completed_hard_bound_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-source-movement-combination-hard-bound-20260707.json`
+- `prompt_scope`: calibration/dev only；held-out 未使用。
+- `input_profile`: generalized no-prompt-specific quantum profile `/root/lfz/runs/vendor-ds4-16gb/20260706T191925Z-20260707-generalized-quantum-full-decode-profile/quantum-full-decode-profile-cpu40-vram0gb`。
+- `observed`: quantum generalized `eval_tok_s=1.9`，decode 约 `526.32 ms/token`，up/down fallback 约 `259.29 ms/token`，gate one-stream/source movement 上界约 `213.12 ms/token`，graph sync 约 `0.81 ms/token`。
+- `bound_results`:
+  - 仅完美消除 up/down fallback：`267.03 ms/token`，约 `3.74 tok/s`，不足 5。
+  - 仅完美消除 gate source movement：`313.19 ms/token`，约 `3.19 tok/s`，不足 5。
+  - 两者同时零开销消除：`53.91 ms/token`，约 `18.55 tok/s`，这是极乐观组合上界，不含替代 H2D/kernel/scatter 成本。
+  - 同时削减 `50% + 50%`：约 `3.45 tok/s`，不足 5。
+  - 同时削减 `70% + 70%`：约 `5.11 tok/s`，刚过线但几乎没有真实实现 overhead 余量。
+  - 同时削减 `80% + 80%`：约 `6.74 tok/s`，才有较合理 overhead 余量。
+- `vram_constraints`: native gate/up/down 每个 role 各约 `45.69 GiB`，全部 experts 约 `137.06 GiB`；当前 accepted gate cache budget 约 `13.25 GiB`，只能容纳约 `29%` 的 exact gate role，或约 `4` 个完整 MoE layer 的 gate+up+down。32GB 5090 不可能 exact resident 全部 experts。
+- `decision`: 下一步不能只修 up/down fallback，也不能只做 generalized gate hotset；必须选择能同时压缩 gate cold source movement 和 up/down fallback 的方案。CUDA graph/sync 不是主线。
+
+## 2026-07-07 下一步实现选择：prompt-independent residency/representation probe
+
+- `objective`: 设计一个 default-off、prompt-independent 的 residency/representation probe，在不使用 held-out 和不使用单 prompt pack 的情况下，验证是否能同时减少：
+  1. gate one-stream cold source movement/page-cache refault；
+  2. up/down CPU fallback 的 per-token 耗时。
+- `first_candidate_to_design`: calibration/dev 聚合的 role-aware resident manifest，而不是 France-specific profile：
+  - gate: calibration/dev aggregate hotset，用于 prefill/admit，预算先以 `8-10 GiB` exact gate 为上限；
+  - up/down: 不做 per-expert one-stream 直接替换，先做 payload/coverage bound，判断 `3-5 GiB` exact 或 low-bit resident rows 是否能覆盖 quantum/Fibonacci 慢路径的主要 fallback；
+  - layer/tail: 单独算 late-layer full MoE exact residency，如果牺牲部分 gate cache，哪些 layer 的 combined saving 最大。
+- `implementation_gate`: 只有 hard-bound 显示某个 prompt-independent manifest 在 calibration/dev slow prompts 上有 `>5 tok/s` 且保留 overhead 余量，才写 runtime prototype。否则只记录 rejected bound。
+- `validation_sequence`:
+  1. 先写 manifest/coverage/bound artifact，不改 runtime；
+  2. 若 bound 通过，写 default-off runtime probe；
+  3. calibration/dev 全集跑 strict 16GB；
+  4. freeze 后才跑 held-out；
+  5. 合规 generalized SOTA 立即 commit/push 到 `ssd/vendor/deepseek-token-rate-16gb`，并从 pushed commit 复现。
+
+## 2026-07-07 hard-bound：prompt-independent exact residency coverage rejected
+
+- `attempt_id`: `20260707-generalized-role-aware-residency-coverage-bound`
+- `status`: `completed_hard_bound_rejected_exact_hotset_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-role-aware-residency-coverage-bound-20260707.json`
+- `prompt_scope`: calibration/dev only；held-out 未使用。
+- `method`: 使用五个 no-prompt-specific calibration/dev traces：gate 用 `one_trace.csv` 的 `src0_ms`，up/down 用 decode `fallback_profile.csv` 的 `fallback_us`；按 aggregate ms/byte 贪心选择 prompt-independent manifest。总 payload 固定为当前可用约 `13.25 GiB`，在 gate exact entries 和 up/down exact entries 之间扫分配。projection 是极乐观零开销：被选中的 gate source movement 和 up/down fallback 完全消失，不计替代 H2D/kernel/scatter。
+- `inventory`: calibration/dev 中 gate unique entries `8621`，exact payload 约 `35.78 GiB`；up/down unique entries `12970`，exact payload 约 `53.83 GiB`。两者远超当前可用 `13.25 GiB`。
+- `best_split`: gate `6 GiB` + up/down `7.25 GiB`，zero-overhead projection 的 calibration min 只有 `2.77 tok/s`，mean `3.19 tok/s`。
+- `other_splits`: gate-only `13.25 GiB` min 约 `2.31 tok/s`；gate `8 GiB` + up/down `5.25 GiB` min 约 `2.75 tok/s`；均远低于 `>5 tok/s`。
+- `decision`: reject prompt-independent exact hotset/residency 作为主路线。它的 coverage 太低，即使零开销也达不到目标；不能写 exact hotset runtime 原型。
+- `implication`: 下一步必须提高同样 VRAM payload 下的 coverage density：低位/压缩 representation、partial-row representation、或 layer-level 结构性放置。任何方案必须先给出 payload GiB、coverage 和 ms/token bound，再允许 runtime source edit。
+
+## 2026-07-07 下一步计划：low-bit / partial representation bound before code
+
+- `objective`: 在不使用 held-out、不使用 prompt-specific pack 的情况下，评估是否存在可在 32GB VRAM 中覆盖足够专家 payload 的低位/partial representation，使 generalized slow prompts 的 bound 至少达到 `>5 tok/s` 且有 overhead 余量。
+- `candidate_bounds`:
+  1. `gate_lowbit_resident`: gate experts 使用低位或 source-layout 变换表示驻留，目标是在 `8-10 GiB` 内覆盖接近全部 calibration/dev gate unique entries，减少 cold `src0_ms`。
+  2. `updown_lowbit_resident`: up/down selected experts 或 rows 用低位/partial representation 驻留，目标是在 `3-5 GiB` 内覆盖慢 prompt 的主要 fallback rows；必须先做 fixed-text/top1 correctness bound。
+  3. `late_layer_full_or_lowbit`: late layers 的 gate/up/down 同层放置，优先选择 aggregate saving/byte 最大的 layer；如果 exact 只能放 4 层且 bound 不足，则只保留为 rejected exact layer bound。
+- `math_required`: 对每个 candidate 先计算：compression ratio、covered bytes/entries、estimated saved ms/token、replacement compute/H2D overhead、TTFT 增量、VRAM headroom、16GB cgroup page-cache影响。
+- `source_edit_gate`: 只有某 candidate 的 calibration/dev min bound 明显超过 `5 tok/s`（建议 `>=6 tok/s` 作为 overhead buffer），才进行 default-off runtime prototype。否则仅提交 rejected bound。
+
+## 2026-07-07 hard-bound：generalized low-bit representation coverage
+
+- `attempt_id`: `20260707-generalized-lowbit-representation-coverage-bound`
+- `status`: `completed_hard_bound_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-lowbit-representation-coverage-bound-20260707.json`
+- `prompt_scope`: calibration/dev only；held-out 未使用。
+- `method`: 复用五个 no-prompt-specific calibration/dev gate traces 和 fallback profiles，假设 gate source movement 与 up/down fallback 可通过低位/压缩 representation 驻留后零开销消失。总 compressed payload budget 固定为 `13.25 GiB`，扫描 gate/updown budget split 和 compression ratio。这只是容量/coverage 上界，不代表数值正确性或 kernel overhead 已解决。
+- `inventory`: gate unique entries `8621`，exact payload `35.78 GiB`；up/down unique entries `12970`，exact payload `53.83 GiB`。
+- `family_bounds`:
+  - gate `4x` + up/down `4x`：最佳 split gate `8 GiB` + up/down `5.25 GiB`，calibration min bound `5.74 tok/s`，mean `6.90 tok/s`。刚过线，真实 overhead 后风险高。
+  - gate `8x` + up/down `4x`：最佳 split gate `4 GiB` + up/down `9.25 GiB`，min `6.29 tok/s`，mean `8.96 tok/s`。
+  - gate `4x` + up/down `8x`：最佳 split gate `8 GiB` + up/down `5.25 GiB`，min `6.37 tok/s`，mean `9.38 tok/s`。
+  - gate `8x` + up/down `8x`：最佳 split gate `6 GiB` + up/down `7.25 GiB`，min `6.54 tok/s`，mean `10.41 tok/s`。
+- `decision`: low-bit/partial representation 是目前唯一在 prompt-independent coverage 上有可能达到 generalized `>5 tok/s` 的路线；exact hotset 已被 hard-bound reject。下一步应先做 default-off correctness/overhead probe，而不是直接改 accepted path。
+- `risk`: 低位 up/down 直接参与输出，数值正确性风险高；gate 低位若只服务 source movement/cache，仍需验证 router/gate MMVQ 输出是否 token-stable。任何近似写回必须先通过 fixed-text/top1 或等价 logits 一致性，再跑性能。
+
+## 2026-07-07 下一步 source-edit 前计划：default-off low-bit correctness probe
+
+- `objective`: 用最小范围 default-off probe 验证 low-bit/partial representation 是否能在 DeepSeek vendor 路径上保持输出正确；不改变默认 SOTA 路径。
+- `probe_scope`:
+  1. 从单层/单 tensor 开始，优先 `ffn_gate_exps` 或已做过 Q8_0 CPU-compatible scaffold 的 up/down；
+  2. 只做 correctness/top1/profiling，不做 promotion；
+  3. 如果 gate 低位 token-stable，再扩展到 calibration/dev aggregate manifest；
+  4. 如果 up/down 低位 top1 不稳定，停止该表示路线，回到 exact/partial row 或 layer-level 方案。
+- `required_metrics`: same_top1/n_tokens、first_mismatch_pos、max_abs/mean_abs、affected tensor/expert rows、extra VRAM、extra TTFT、strict cgroup memory peak、France semantic output（仅 smoke）。
+- `promotion_blocker`: 在 held-out freeze 前，所有 low-bit probe 都只能是 diagnostic/rejected/candidate；不得作为 SOTA。
+
+## 2026-07-07 practice plan：current-head Q8_0 CPU-compatible correctness revalidation
+
+- `attempt_id`: `20260707-current-head-q80-cpucompat-all-updown-revalidation`
+- `status`: `planned_before_practice`
+- `why_now`: low-bit coverage bound 显示只有压缩/低位 representation 有足够 generalized coverage；在写任何新的 low-bit runtime 前，必须确认当前 head 上已有 Q8_0 CPU-compatible pre-fallback skip 仍 token-stable。
+- `source_change`: none；只使用已有 default-off env，不改变默认路径。
+- `prompt_scope`: fixed France text correctness verifier only；不是 SOTA，不使用 held-out，不用于 prompt-specific 优化。
+- `run_method`: 在 strict 16GB/no-swap cgroup 内先生成 current-head baseline `result.gguf`，再用 `GGML_MOE_STREAM_Q80_CPU_COMPAT=1`、`GGML_MOE_STREAM_Q80_ALLOW_DOWN=1`、`GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER=ffn_`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1=1`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS=0` 运行 `llama-results --check --top1-report --top1-fail-on-mismatch`。
+- `pass_gate`: `llama-results` exit `0`，`same_top1 == n_tokens`，`first_mismatch_pos == -1`，`memory.peak <= 16000000000`，no OOM/no swap；记录 skip report、top1 report、memory.stat/events、exact command/env。
+- `decision_rule`: 通过则作为下一步 low-bit/partial representation correctness scaffold 的 current-head 证据；失败则停止 Q8_0 skip 扩展，转向 exact/partial-row 或重新定位数值差异。
+
+## 2026-07-07 执行记录：current-head Q8_0 CPU-compatible correctness revalidation
+
+- `attempt_id`: `20260707-current-head-q80-cpucompat-all-updown-revalidation`
+- `status`: `passed_correctness_probe_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-q80-cpucompat-all-updown-revalidation-20260707.json`
+- `run_dir`: `/root/lfz/runs/vendor-ds4-16gb/20260706T193647Z-20260707-current-head-q80-cpucompat-all-updown-revalidation/top1`
+- `source_head`: `b3b1cbddf` at build/run time。
+- `build`: `cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2` passed；final lookup optimization 后复跑验证。
+- `prompt_scope`: fixed France text top1 verifier only；held-out 未使用；不是 token-rate benchmark，不是 SOTA。
+- `config`: baseline 与 check 均在 strict `MemoryMax=16000000000`、`MemorySwapMax=0` cgroup 内运行；check 增加 `GGML_MOE_STREAM_Q80_CPU_COMPAT=1`、`GGML_MOE_STREAM_Q80_ALLOW_DOWN=1`、`GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER=ffn_`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1=1`、`GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS=0`。
+- `top1_result`: baseline exit `0`，check exit `0`，`same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`mean_abs=0`。
+- `q80_coverage`: skip report `37700` records：up `18850`、down `18850`，unique tensor/expert pairs `5790`。fallback reason profile check-side entries `0`，说明 fixed-text verifier 中 up/down fallback 被 Q80 skip 覆盖。
+- `memory`: `memory_peak_bytes=16000000000`，`oom=0`，`oom_kill=0`；page cache 计入 cgroup。
+- `overhead_profile`: Q80 per-call skip 总 `127592.615 ms`，其中 `host_src0_ms=76458.769`、`h2d_ms=12125.037`、`kernel_sync_ms=30674.175`、`cuda_alloc_ms=4320.181`、`cuda_free_ms=3190.559`。这证明该 per-call path 是 correctness scaffold，不是性能路线。
+- `decision`: current head 上 Q8_0 CPU-compatible all-up/all-down arithmetic/token-stability 通过，可作为下一步 resident/batched low-bit/partial representation 设计的 correctness 起点；禁止把现有 per-call Q80 skip 当 SOTA 或直接跑性能 promotion。
+
+## 2026-07-07 下一步计划：resident/batched Q80 或 partial representation 设计
+
+- `objective`: 基于已通过的 Q8_0 CPU-compatible correctness scaffold，设计能避免 per-call host src0 copy、cuda alloc/free、sync 的 resident/batched representation；目标是把 low-bit coverage bound 中的理论余量转成可运行候选。
+- `must_reduce`: 当前 per-call Q80 skip 的主要成本是 `host_src0_ms` 和 `kernel_sync_ms`。下一步必须：
+  1. 让 selected low-bit/expert representation 常驻 VRAM 或一次性 batched H2D；
+  2. 同一 layer/token 的 up/down selected rows 批量处理；
+  3. 避免每 expert `cudaMalloc/cudaFree/cudaDeviceSynchronize`；
+  4. 保留 fixed-text top1 gate。
+- `first_design_artifact`: 写 resident/batched Q80 design hard-bound，量化需要的 VRAM payload、workspace、expected kernel launches、expected H2D/D2H、与 generalized calibration min `>5 tok/s` 的 overhead margin。
+- `source_edit_gate`: 只有 design hard-bound 显示 calibration/dev min `>=6 tok/s` 且 top1 correctness path 明确，才写 default-off runtime prototype。
+
+## 2026-07-07 hard-bound：resident/batched Q80 design constraints
+
+- `attempt_id`: `20260707-resident-batched-q80-design-hard-bound`
+- `status`: `completed_design_hard_bound_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/resident-batched-q80-design-hard-bound-20260707.json`
+- `prompt_scope`: calibration/dev bounds + fixed France correctness profile；held-out 未使用；不是 SOTA。
+- `input_correctness_profile`: current-head Q80 CPU-compatible all-up/all-down revalidation。
+- `current_per_call_cost`: fixed-text verifier 中 Q80 skip 约 `260` records/token；每 token 约 `1.079 GiB` repeated `src0` copy、`0.809 MiB` q80 activation、`3.047 MiB` output；总 `879.95 ms/token`，其中 `host_src0_ms=527.30`、`kernel_sync_ms=211.55`、`h2d_ms=83.62`、`alloc_free_ms=51.80`。
+- `key_constraint`: 当前 per-call Q80 path 只能证明 arithmetic/top1 correctness，不能证明性能。任何 runtime candidate 必须消除 repeated host src0 copy、per-call malloc/free 和 per-expert sync，并改成 resident/batched layout。
+- `overhead_budget_from_lowbit_bound`:
+  - gate `4x` + up/down `4x`: zero-overhead min `5.74 tok/s`，只剩约 `25.87 ms/token` overhead；在 8 launches/token、0.10ms launch、32GiB/s transfer 假设下，kernel budget 约 `24.95 ms/token`，需要比当前 kernel_sync 快 `8.48x`，余量太小，reject as first runtime target。
+  - gate `8x` + up/down `4x`: min `6.29 tok/s`，kernel budget 约 `40.15 ms/token`，需要 `5.27x` kernel speedup。
+  - gate `4x` + up/down `8x`: min `6.37 tok/s`，kernel budget 约 `42.21 ms/token`，需要 `5.01x` speedup。
+  - gate `8x` + up/down `8x`: min `6.54 tok/s`，kernel budget 约 `46.19 ms/token`，需要 `4.58x` speedup。
+- `decision`: 不直接写 per-call Q80 performance path；下一步只允许写 default-off resident/batched microprobe 的 source plan，且目标 family 应至少是 `8x` on gate or up/down，最好 `8x/8x`。4x/4x 因 overhead margin 不足，不作为首个 runtime target。
+- `correctness_caveat`: Q80 CPU-compatible 证明的是 MXFP4 weight x Q8_0 activation 替代 CPU fallback 的 token-stability；它不证明 8x weight compression 或 partial representation 正确。任何压缩/partial 写回仍必须重新跑 fixed-text top1。
+
+## 2026-07-07 下一步 source-edit plan：resident/batched low-bit microprobe skeleton
+
+- `objective`: 写一个 default-off microprobe skeleton，只记录/验证 resident/batched layout 的 feasibility，不改变默认输出。
+- `scope_before_code`: microprobe 先支持一个小 bounded manifest（例如单层或 top-N tensor/expert pairs），做以下事情：
+  1. 解析 prompt-independent manifest，计算 compressed/resident payload 和 VRAM request；
+  2. 在启动时或首次使用时把 selected representation 放入 persistent CUDA buffer，而不是每 call copy `src0`；
+  3. 对同一 layer/token/role 的 selected rows 做 batched probe，记录 launches、H2D/D2H bytes、kernel ms、coverage；
+  4. 默认不写回 logits；如果未来启用写回，必须先 fixed-text top1 pass。
+- `source_edit_gate`: 先写更细的 source-edit plan 并确认 code insertion point；只允许 default-off env，例如 `GGML_MOE_RESIDENT_Q80_PROBE_MANIFEST` / `GGML_MOE_RESIDENT_Q80_PROBE_OUT`。未设置 env 时默认路径必须 bit-for-bit 不变。
+- `validation_gate`: build `llama-cli llama-results`，default-off top1 self-check，probe-on fixed-text report；strict 16GB/no-swap；不跑 SOTA benchmark。
+
+## 2026-07-07 practice plan：current-head resident hot-batch probe smoke
+
+- `attempt_id`: `20260707-current-head-q80-hot-batch-top48-smoke`
+- `status`: `planned_before_practice`
+- `source_change`: none；现有 `GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_OUT`、`GGML_MOE_STREAM_ONE_DIRECT_MANIFEST`、hot pool 和 row-tile compare skeleton 已存在。本轮只验证 current head 可运行性。
+- `prompt_scope`: fixed France text verifier only；使用 calibration-derived `calib-dev-sparse-pair-top48-updown` manifest；held-out 未使用；不是 SOTA。
+- `manifest`: 由 `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.offset_manifest.csv` 转成 direct-manifest 兼容格式 `tensor,expert,model_offset,nbytes`。
+- `run_method`: strict 16GB/no-swap cgroup，`llama-results --check --top1-report --top1-fail-on-mismatch`，开启 `GGML_MOE_STREAM_ONE_DIRECT_POOL_MIB`、`GGML_MOE_STREAM_ONE_DIRECT_PREFILL_LIMIT`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_OUT`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE=1`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_ROW_TILE=1`、`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_TRANSPOSE=1`，compare record limit 小范围 smoke。
+- `pass_gate`: check exit `0`，top1 `same_top1 == n_tokens`，probe CSV 有 `compare_ran>0` 且 `diff_count=0` for compared rows，memory peak <=16GB，无 OOM/swap。
+- `decision_rule`: 通过则说明 existing skeleton 可作为下一步 resident/batched low-bit prototype base；若性能/coverage 不足仍不可 promotion。失败则先修 skeleton/manifest，而不是进入性能 benchmark。
+
+## 2026-07-07 执行记录：current-head Q80 hot-batch top48 smoke
+
+- `attempt_id`: `20260707-current-head-q80-hot-batch-top48-smoke`
+- `status`: `passed_probe_smoke_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-q80-hot-batch-top48-smoke-20260707.json`
+- `direct_manifest`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.direct_manifest.csv`，由 calibration/dev top48 up/down offset manifest 转换，`96` entries，payload `427819008` bytes。
+- `prompt_scope`: fixed France text verifier；manifest 来自 calibration/dev aggregate；held-out 未使用；不是 SOTA。
+- `first_run_note`: `/root/lfz/runs/vendor-ds4-16gb/20260706T194743Z-20260707-current-head-q80-hot-batch-top48-smoke/top48-smoke` 中 compare limit 设为 `96`，前 96 个 probe seq 都没有 ready rows，因此 `compare_ran=0`；同时 512MiB hot pool 抢占显存导致 `ONE_CACHE_MIB=13568` gate cache cudaMalloc 失败。该 run 只作为配置诊断。
+- `accepted_probe_run`: `/root/lfz/runs/vendor-ds4-16gb/20260706T195132Z-20260707-current-head-q80-hot-batch-top48-compareall/top48-compareall`
+- `config_fix`: `ONE_CACHE_MIB=13056` 给 408MiB hot pool 留显存；`GGML_MOE_STREAM_Q80_HOT_BATCH_PROBE_COMPARE_MAX_RECORDS=0` 让所有 ready rows compare。
+- `result`: check exit `0`，top1 `same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`mean_abs=0`；strict cgroup `memory_peak_bytes=16000000000`，`oom=0`，`oom_kill=0`。
+- `hot_pool`: direct O_DIRECT reads enabled；hot pool allocated `408.00 MiB`，prefill `96/96` inserted，elapsed `215.968 ms`，read `194.635 ms`，H2D `15.841 ms`，transpose `3.949 ms`。
+- `gate_cache`: with reduced budget, gate cache allocated `12.8 GiB` / `3072` slots and hit rate `85.9%` in verifier。
+- `probe_coverage`: `rows_total=37700`，`ready_rows=4246`，`not_in_manifest_rows=33454`；compare ran `3786` records, `compare_ok=3786`，`diff_count=0`。
+- `probe_timing`: for compared ready rows, aggregate `kernel_us=349894`，`h2d_us=49007`，`d2h_us=38138`，`alloc_us=62015`，`free_us=36296`。This confirms row-tile hot-batch correctness but also shows exact top48 coverage is too small for performance。
+- `decision`: existing hot-batch skeleton is usable on current head; no duplicate source path should be written. Next source work should extend this skeleton with compressed/partial representation support and maintain the same top1/compare gates. Exact top48/top512 hotsets remain non-SOTA due coverage hard bounds。
+
+## 2026-07-07 下一步 source-edit direction：compressed/partial manifest layer
+
+- `objective`: 在现有 hot-batch skeleton 上增加 default-off representation layer，而不是新建 per-call path。
+- `required_design_before_edit`:
+  1. 明确 compressed/partial manifest 格式，包含 tensor、expert、row/block range、compressed offset、compressed bytes、原始 nbytes、representation type；
+  2. 定义 loader 如何把 compressed/partial payload 放入 hot pool，并如何映射到 row-tile kernel；
+  3. 定义 compare-only mode：不写回 logits，只和 CPU fallback dst 比较；
+  4. 定义 writeback mode 的 top1 gate，默认关闭；
+  5. 给出 VRAM split：gate cache + resident payload + workspace 必须在 32GB 5090 下同时成功。
+- `first_edit_allowed`: 只允许先写 manifest parser + report-only loader/probe，不允许默认写回；未设置 env 时默认路径必须保持不变。
+
+## 2026-07-07 source-edit plan：compressed/partial manifest report-only parser
+
+- `attempt_id`: `20260707-compressed-partial-manifest-report-only-parser`
+- `status`: `planned_before_source_edit`
+- `why_now`: exact prompt-independent hotset 已被 hard-bound reject；Q80 hot-batch skeleton 已证明 compare-only row-tile 路径可用。下一步需要在不改 logits 的情况下，让 runtime 能读取 compressed/partial manifest 元信息并统计 coverage/VRAM payload，为后续真正 compressed/partial resident 表示做准备。
+- `source_scope`: 只改 `ggml/src/ggml-cuda/moe_stream.cu` 的 manifest/parser/report 层；复用现有 `GGML_MOE_STREAM_ONE_DIRECT_*` hot pool，不新建 per-call compute path。
+- `new_default_off_env`:
+  - `GGML_MOE_STREAM_ONE_DIRECT_REPR_MANIFEST`: 可选 extended manifest；未设置时完全沿用旧 `tensor,expert,model_offset,nbytes` direct manifest。
+  - `GGML_MOE_STREAM_ONE_DIRECT_REPR_REPORT`: 可选 report-only CSV/summary；只记录 manifest 与 probe coverage，不参与输出。
+- `manifest_format`: header 建议为 `tensor,expert,row0,row_count,model_offset,compressed_offset,compressed_nbytes,original_nbytes,repr_type,flags`；本轮 parser 同时兼容旧 4 列 exact manifest。`repr_type=exact_mxfp4` 可映射到现有 exact hot pool；其他 `q80/partial/lowbit` 类型只统计 payload 和 coverage，暂不写入 hot pool、暂不写回。
+- `runtime_behavior`: 默认路径 bit-for-bit 不变；开启 repr manifest 时仅加载/排序/统计 metadata，probe CSV 增加 ready rows 中 exact/partial/compressed 覆盖计数。compare-only mode 仍以 CPU fallback dst 为真值，不清空 fallback counts。
+- `validation_gate`: build `llama-cli` + `llama-results`；跑 default-off fixed-text top1 self-check；跑 repr-manifest report-only smoke，要求 strict 16GB/no-swap、top1 `same_top1 == n_tokens`、无 OOM、report 能证明 parser 生效且 logits 未变。
+- `promotion_rule`: 本轮不是 SOTA，不允许性能 promotion；通过后才进入 compressed payload 生成与 kernel/compare 设计。
+
+## 2026-07-07 执行记录：compressed/partial manifest report-only parser
+
+- `attempt_id`: `20260707-compressed-partial-manifest-report-only-parser`
+- `status`: `passed_report_only_probe_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/compressed-partial-manifest-parser-validation-20260707.json`
+- `source_change`: 在 `ggml/src/ggml-cuda/moe_stream.cu` 增加 default-off `GGML_MOE_STREAM_ONE_DIRECT_REPR_MANIFEST` 与 `GGML_MOE_STREAM_ONE_DIRECT_REPR_REPORT`；只解析/统计 representation metadata，不改变旧 direct manifest/hot pool lookup，不写回 logits。
+- `manifest`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-20260707.repr_manifest.csv`，由 calibration/dev top48 up/down manifest 派生，`96` entries，`q80_report_only`，compressed payload proxy `106954752` bytes，original bytes `427819008`。held-out 未使用。
+- `build`: `cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2` passed；final lookup optimization 后复跑验证。
+- `default_off_gate`: strict 16GB/no-swap cgroup 内 fixed France top1 check exit `0`，`same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`mean_abs=0`，`memory_peak_bytes=16000000000`，无 OOM。
+- `repr_report_gate`: strict 16GB/no-swap cgroup 内开启旧 exact hot pool compare + 新 repr manifest/report，top1 exit `0`，`same_top1=145/145`，`max_abs=0`，`memory_peak_bytes=7547629568`，无 OOM。
+- `probe_result`: hot-batch compare `compare_ran=3786`，`compare_ok=3786`，`diff_count=0`，`max_abs=0`；repr metadata hit/coverage rows `4246/37700`，`repr_src0_bytes_projected=18922078208`，`repr_resident_original_bytes=18922078208`，`repr_resident_compressed_bytes=4730519552` in aggregate probe records。
+- `decision`: 该改动只是 compressed/partial representation 的 parser/report scaffold，不是 SOTA，也不允许 promotion。下一步必须生成真实 compressed/partial payload，并在 compare-only mode 下验证 loader/kernel mapping 后，才能考虑写回或性能 benchmark。
+
+## 2026-07-07 下一步 source-edit plan：partial exact row-range compare probe
+
+- `attempt_id`: `20260707-partial-exact-rowrange-compare-probe`
+- `status`: `planned_before_source_edit`
+- `why_now`: report-only parser 已证明 extended manifest 可以在 strict 16GB 内不改 logits 地统计 coverage。下一步需要验证真正小 payload resident 的 loader/kernel 映射；由于 DeepSeek expert 权重已经是 MXFP4，不能直接假设 4x/8x 低位压缩正确，先用 exact row-range partial payload 建立正确的 row offset、pool、kernel、compare 基础设施。
+- `scope`: diagnostic only，不是 SOTA，不允许 promotion；不写回 logits，不清空 CPU fallback counts。默认关闭，未设置新 env 时默认路径必须保持不变。
+- `candidate_env`:
+  - `GGML_MOE_STREAM_ONE_DIRECT_REPR_POOL_MIB`: partial/exact repr pool 预算；未设置则只做 metadata report。
+  - `GGML_MOE_STREAM_ONE_DIRECT_REPR_PREFILL_LIMIT`: 限制 prefill entry 数量，先小范围 smoke。
+  - `GGML_MOE_STREAM_Q80_PARTIAL_REPR_PROBE_OUT`: partial compare CSV。
+- `manifest_semantics`: 使用现有 extended manifest；`repr_type=exact_mxfp4_partial` 表示 `model_offset` 已指向 partial row payload 起点，`row0/row_count` 表示输出列范围，`compressed_nbytes == original_nbytes == row_count * nb01`。本轮不做 q80/lowbit payload 写回。
+- `kernel_mapping`: 对每个命中的 expert/token row，只计算 `row_count` 个输出列；GPU 输出的 local col `c` 对应 CPU fallback dst 的 global col `row0 + c`。compare-only 只比较该范围，`max_abs` 必须为 `0`。
+- `validation_gate`: build `llama-results`；default-off fixed-text top1 pass；partial exact repr smoke strict 16GB/no-swap，top1 `same_top1=145/145`，partial compare `diff_count=0`，memory peak <=16GB，无 OOM。
+- `decision_rule`: 如果 partial exact compare 失败，先修 row stride/offset/transpose 映射；如果通过，再设计真实 compressed payload 或 lowbit approximation 的 op-level correctness gate。partial exact 本身不用于 token-rate benchmark，因为它不能替代完整 up/down fallback。
+
+## 2026-07-07 执行记录：partial exact row-range compare probe
+
+- `attempt_id`: `20260707-partial-exact-rowrange-compare-probe`
+- `status`: `passed_compare_probe_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/partial-exact-rowrange-compare-probe-20260707.json`
+- `source_change`: 在 `ggml/src/ggml-cuda/moe_stream.cu` 增加 default-off partial/exact repr CUDA pool、`exact_mxfp4_partial` row-range loader、`GGML_MOE_STREAM_Q80_PARTIAL_REPR_PROBE_OUT` compare-only CSV，以及 local-col -> `dst[row0 + col]` 的 partial exact kernel。默认 env 未设置时不改变路径。
+- `manifest`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row0-16-20260707.partial_exact_manifest.csv`，由 calibration/dev top48 direct manifest 派生，`96` entries，每个 selected expert 只取 `row0=0,row_count=16`，payload `2506752` bytes。held-out 未使用。
+- `build`: `cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2` passed。
+- `default_off_gate`: strict 16GB/no-swap cgroup 内 fixed France top1 check exit `0`，`same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`mean_abs=0`，`memory_peak_bytes=989667328`，无 OOM。
+- `partial_smoke_gate`: strict 16GB/no-swap cgroup 内开启 old exact hot pool + new partial repr pool，top1 exit `0`，`same_top1=145/145`，`max_abs=0`，`memory_peak_bytes=1000108032`，无 OOM。
+- `repr_pool`: allocated `16 MiB`，attempted `96`，inserted `96`，payload bytes `2506752`，read `42.784 ms`，H2D `0.786 ms`，direct I/O enabled。
+- `partial_probe_result`: aggregate records `4246`，nonzero CSV rows `3786`，`compare_ran=3786`，`compare_ok=3786`，`diff_count=0`，`max_abs=0`，`src0_bytes=110871552`，`q80_bytes=13858944`，`out_bytes=271744`。
+- `decision`: row-range loader/kernel/compare 映射已通过 fixed-text correctness gate；但 partial exact 只验证局部输出列，不能替代完整 up/down fallback，不是 token-rate SOTA。下一步只能在此 compare-only 基础上测试真实 compressed/approx payload 的数值正确性，再决定是否进入性能路径。
+
+## 2026-07-07 执行记录：partial exact nonzero row offset smoke
+
+- `attempt_id`: `20260707-partial-exact-row128-offset-smoke`
+- `status`: `passed_nonzero_row_offset_compare_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/partial-exact-row128-offset-smoke-20260707.json`
+- `manifest`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.partial_exact_manifest.csv`，`96` entries，`row0=128,row_count=16`，payload `2506752` bytes；`model_offset` 使用 full expert offset + `row0 * nb01`，用于验证非零 row offset。held-out 未使用。
+- `result`: strict 16GB/no-swap cgroup 内 top1 exit `0`，`same_top1=145/145`，`first_mismatch_pos=-1`，`max_abs=0`，`memory_peak_bytes=1000103936`，无 OOM。
+- `partial_probe_result`: aggregate records `4246`，nonzero CSV rows `3786`，`compare_ran=3786`，`compare_ok=3786`，`diff_count=0`，`max_abs=0`。
+- `decision`: row0=0 与 row0=128 均通过，说明 partial exact loader 的 model offset、local column kernel 和 `dst[row0+col]` compare 映射可信。该结果仍只是 correctness/infrastructure 证据，不是 SOTA。
+
+## 2026-07-07 下一步 source-edit plan：sidecar repr payload correctness gate
+
+- `attempt_id`: `20260707-sidecar-repr-payload-correctness-gate`
+- `status`: `planned_before_source_edit`
+- `why_now`: partial exact row0/row128 已证明 row-range loader/kernel/compare 映射正确；但当前 repr pool 只能从 GGUF `model_offset` 读取原始 MXFP4 bytes，无法测试真实 compressed/approx payload。下一步先支持 sidecar payload 文件，才能在不改模型文件、不影响默认路径的前提下验证候选表示。
+- `scope`: diagnostic only，不是 SOTA，不允许 promotion；不写回 logits，不清空 CPU fallback counts。默认关闭，未设置新 env 时默认路径必须保持不变。
+- `new_env`:
+  - `GGML_MOE_STREAM_ONE_DIRECT_REPR_PAYLOAD`: 可选 sidecar payload 文件；设置后 repr pool 从 `compressed_offset` 读取 payload，否则保持从 `GGML_MOE_STREAM_ONE_DIRECT_MODEL` 的 `model_offset` 读取。
+  - 复用 `GGML_MOE_STREAM_ONE_DIRECT_REPR_MANIFEST`、`GGML_MOE_STREAM_ONE_DIRECT_REPR_POOL_MIB`、`GGML_MOE_STREAM_Q80_PARTIAL_REPR_PROBE_OUT`。
+- `validation_sequence`:
+  1. 生成 row128 exact sidecar payload 和 manifest，payload bytes 与 GGUF partial bytes 相同，只把来源换成 sidecar；strict 16GB top1 和 partial compare 必须仍 `diff_count=0`。
+  2. 再生成一个明确 lossy/approx sidecar payload（例如 MXFP4 nibble/coarse variant），只跑 compare-only，不写回；预期局部 `diff_count>0`，作为 rejected correctness baseline，证明 gate 能发现数值错误。
+- `pass_gate`: exact sidecar check exit `0`，top1 `same_top1=145/145`，partial compare `compare_ran>0` 且 `diff_count=0`，memory peak <=16GB，无 OOM。
+- `reject_gate`: lossy sidecar 如果 `diff_count>0`，必须记录为 rejected，不得进入 writeback 或 token-rate benchmark。
+- `decision_rule`: sidecar exact 通过后，下一步才允许针对具体 compressed format 设计 decode kernel；任何 approx format 必须先通过 op-level compare 和 fixed-text top1，再考虑性能。
+
+## 2026-07-07 执行记录：sidecar repr payload correctness gate
+
+- `attempt_id`: `20260707-sidecar-repr-payload-correctness-gate`
+- `status`: `passed_exact_sidecar_and_rejected_zero_sidecar_not_sota`
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/sidecar-repr-payload-correctness-gate-20260707.json`
+- `source_change`: 在 `ggml/src/ggml-cuda/moe_stream.cu` 增加 default-off `GGML_MOE_STREAM_ONE_DIRECT_REPR_PAYLOAD`；设置时 repr pool 从 sidecar payload 的 `compressed_offset` 读取，未设置时保持原来的 GGUF `model_offset` 读取。
+- `exact_sidecar`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.partial_exact_payload.bin` + sidecar manifest；payload bytes `2506752`。strict 16GB/no-swap cgroup 内 top1 `same_top1=145/145`，partial compare `compare_ran=3786`，`diff_count=0`，`max_abs=0`，`memory_peak_bytes=1001168896`。
+- `zero_sidecar_reject`: `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.zero_payload.bin` + sidecar manifest；top1 仍 `145/145` 因为 compare-only 不写回，但 partial compare `diff_count=67936`，`max_abs=5.71276379`，因此该 payload 明确 rejected，不能 writeback 或 benchmark。
+- `decision`: sidecar exact 证明 payload 文件与 `compressed_offset` 路径正确；zero payload 证明 compare gate 能发现错误表示。下一步必须针对具体 compressed/approx format 设计 decode/compute kernel，并先通过 compare/top1，再谈性能。
+
+## 2026-07-07 下一步 source-edit plan：q2 ternary partial compressed candidate
+
+- `attempt_id`: `20260707-q2ternary-partial-compressed-candidate`
+- `status`: `planned_before_source_edit`
+- `why_now`: sidecar payload gate 已证明 exact sidecar 能 `diff_count=0`，zero sidecar 会被 compare gate 拒绝。下一步需要测试一个真实压缩 payload，而不是 same-size corrupted payload。由于 `block_mxfp4` 是 `1 byte e + 16 packed nibbles`，每 32 weights 共 `17 bytes`，任何进一步压缩都必须有新的 decode/compute kernel。
+- `candidate_format`: `mxfp4_q2tern_partial`，每个原 MXFP4 block 保留 `e`，把 32 个 4-bit value 压成 32 个 2-bit ternary codes（`0 -> 0`，positive -> `+4`，negative -> `-4`，第 4 个 code reserved），payload 从 `17 bytes/block` 降到 `9 bytes/block`，约 `1.89x` 压缩。该压缩比还不足 4x/8x，只作为 first correctness probe，不是最终性能路线。
+- `source_scope`: default-off，只支持 partial row-range sidecar manifest；不写回 logits，不清空 CPU fallback counts。复用 `GGML_MOE_STREAM_ONE_DIRECT_REPR_PAYLOAD` 和 `GGML_MOE_STREAM_Q80_PARTIAL_REPR_PROBE_OUT`，新增/识别 `repr_type=mxfp4_q2tern_partial`。
+- `math/correctness_expectation`: q2 ternary 会丢失 magnitude 信息，预期局部 `diff_count>0`，很可能 rejected。若 rejected，则证明 naive 2-bit ternary 不可作为 up/down replacement；下一步应转向更高精度或结构性方案，而不是硬跑 token-rate。
+- `validation_gate`: strict 16GB/no-swap fixed France verifier；top1 应保持 `145/145` 因为 compare-only 不写回；partial compressed compare 必须记录 `compare_ran`、`diff_count`、`max_abs`。如果 `diff_count>0`，标记 rejected，不允许 writeback/benchmark。
+
+
+## 2026-07-07 执行记录：q2 ternary partial compressed candidate
+
+- attempt_id: 20260707-q2ternary-partial-compressed-candidate
+- status: rejected_correctness_probe_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/q2ternary-partial-compressed-candidate-20260707.json
+- source_change: 在 ggml/src/ggml-cuda/moe_stream.cu 增加 default-off mxfp4_q2tern_partial resident candidate 识别、q2 ternary sidecar pool 命中分流、q2 row-range CUDA compare kernel，以及 q2 compressed payload 的 compare-only 汇总。未设置相关 env 时默认路径不变；本轮不写回 logits、不清空 CPU fallback counts。
+- candidate_payload: .Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.q2tern_payload.bin，1327104 bytes；manifest .q2tern_manifest.csv，96 entries。格式为 MXFP4 17 bytes/block -> q2 ternary 9 bytes/block，压缩比约 1.889x。
+- validation: build llama-results llama-cli passed；strict 16GB/no-swap cgroup run exit 0，top1 checker same_top1=145/145、first_mismatch_pos=-1、max_abs=0。注意 top1 不变是因为 compare-only 不写回 logits。
+- memory: memory_peak_bytes=1008803840，memory_current_bytes=7364608，oom=0，oom_kill=0，因此 strict RAM gate pass。
+- partial_compare_result: records 4246，compare rows 3786，diff_count=67936，max_abs=9.40296984，mean_abs_max=2.49075008；q2 payload 的 src0 compressed bytes aggregate 58696704，q80 bytes 13858944。
+- decision: reject。naive q2 ternary 丢失 magnitude 信息，op-level partial compare 出现大量非零误差，不能进入 writeback 或 token-rate benchmark，也不能作为 generalized SOTA。后续 compressed candidate 必须先在 compare-only gate 下证明数值误差可接受，再谈性能。
+
+
+## 2026-07-07 下一步 design-analysis plan：post-q2 MXFP4 codebook feasibility
+
+- attempt_id: 20260707-post-q2-mxfp4-codebook-feasibility
+- status: planned_before_experiment
+- why_now: q2 ternary partial compressed candidate 已被 op-level compare 拒绝，说明盲目压低到 2-bit 会破坏 up/down 数值。继续写 q3/q4 kernel 前，必须先用现有 exact sidecar payload 量化 MXFP4 nibble/value 分布、候选 codebook 的理论误差和可达压缩比，避免继续做低收益 source edit。
+- scope: analysis only，不改源码、不写回 logits、不跑 token-rate promotion；只读取 calibration/dev derived exact partial sidecar payload，held-out locked test set 仍不使用。
+- input_payload: .Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.partial_exact_payload.bin
+- candidate_metrics: 统计 nibble/value 频率、zero/nonzero 比例、按 up/down tensor 分组；评估 q2 ternary、q3 small-codebook、q3 magnitude-codebook、sparse-zero/keep-top-magnitude 等候选的 per-weight absolute/squared error proxy 和 payload bytes/block。
+- decision_rule: 若低位候选的 value-level 误差仍明显大，不能再进入 writeback 或 token-rate benchmark；只有当理论误差显著小于 q2 且压缩比足以减少 CPU fallback/host movement，才允许写下一轮 default-off compare kernel。否则转向非 lossy 路线，例如更高覆盖的 exact resident layout、CPU fallback batching/fusion、或减少 fallback 次数的 routing/cache 策略。
+- push_rule: 该 analysis 结果也必须记录 artifact 和 plan，并 push 到 ssd/vendor/deepseek-token-rate-16gb。
+
+
+## 2026-07-07 执行记录：post-q2 MXFP4 codebook feasibility
+
+- attempt_id: 20260707-post-q2-mxfp4-codebook-feasibility
+- status: analysis_complete_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/post-q2-mxfp4-codebook-feasibility-20260707.json
+- input: calibration/dev derived exact row128 partial sidecar payload，4718592 weights，147456 MXFP4 blocks，held-out 未使用。
+- distribution: zero_ratio=0.11597，nonzero_ratio=0.88403。该 payload 不稀疏；简单 sparse-zero/mask 编码在低误差区间没有有效压缩，threshold_abs_ge=2 只有约 1.023x 压缩，threshold_abs_ge=4 虽有 1.464x 但 mean_abs_error=0.895、rmse=1.403。
+- q2_result: fixed ternary +-4 的 1.889x 压缩对应 mean_abs_error=1.567、rmse=2.319、max_abs_error=8，和实际 compare reject 一致。
+- q3_result: q3_sym_large 约 1.308x 压缩，mean_abs_error=0.656、rmse=1.159、max_abs_error=4；q3_opt7 约 1.308x 压缩，mean_abs_error=0.706、rmse=0.941、max_abs_error=2。虽然比 q2 好，但仍有系统性非零误差，且压缩比太低，不足以单独把 generalized token rate 推到目标。
+- decision: 暂不写 q3/q4 lossy writeback 或 token-rate benchmark。后续应优先转向非 lossy 或减少 fallback 次数/开销的路线，例如 CPU fallback batching/fusion、larger generalized exact resident coverage、prefetch/admission 改进，或带 correction 的表示；任何 lossy 表示必须先有 compare-only 数值证据，再进入性能路径。
+
+
+## 2026-07-07 下一步 config-profile plan：generalized up/down batch eligibility probe
+
+- attempt_id: 20260707-generalized-updown-batch-eligibility-probe
+- status: planned_before_experiment
+- why_now: post-q2 分析表明 naive lossy payload 不适合继续写回；历史 no-prompt fallback profile 显示 up/down fallback 的主要原因是 batch env missing 和 one_name_filter。当前代码中已经存在 Kimi merge 带来的 up_gate_batch、down_batch 和 MXFP4 probe/decline debug，因此下一步先用 default-off 配置实验确认它们在 DeepSeek vendor MXFP4 上是 accepted、declined 还是 accepted 后性能/正确率失败。
+- scope: config/profile only，不改源码；只用 calibration/dev prompt，不使用 held-out；不作为 SOTA。strict 16GB/no-swap，保持 no prompt-specific pack/profile。
+- env_under_test: 在 generalized baseline 基础上开启 GGML_MOE_STREAM_DOWN_BATCH=1、GGML_MOE_STREAM_DECLINE_DEBUG=1、GGML_KIMI_CPU_MOE_PROFILE=1、GGML_KIMI_CPU_MOE_NAME_PROFILE=1，并记录 fallback reason/profile；如果 up_gate batch 需要 prompt env，只作为诊断记录，不直接 promotion。
+- success_signal: profile 显示 up/down batch accepted 且 residual fallback 明显下降，同时输出正确、RAM 合格、TTFT 不异常；否则记录 decline reason 或 regression，作为下一步 source plan 输入。
+- reject_rule: 如果正确率失败、OOM、TTFT/性能明显退化，或 batch 全部 declined，则不进入 SOTA；只记录原因并回到具体 source fix 计划。
+
+
+## 2026-07-07 执行记录：generalized up/down batch eligibility probe
+
+- attempt_id: 20260707-generalized-updown-batch-eligibility-probe
+- status: rejected_timeout_and_batch_decline_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/generalized-updown-batch-eligibility-probe-20260707.json
+- run: /root/lfz/runs/vendor-ds4-16gb/20260707T-generalized-updown-batch-eligibility-probe/france-n96-batch-env
+- scope: France calibration diagnostic only，strict 16GB/no-swap，no prompt-specific pack/profile，held-out 未使用，不是 SOTA。
+- result: run 超过 4min 仍未完成 n96，被手动终止；systemd status 终止前显示 Memory 约 14.8G under 16GB max。stdout 497MB 未纳入 git。
+- fallback_profile: up/decode batch_unsupported + one_name_filter，calls=12350，fallback_us=9589467；up/prompt calls=1171，fallback_us=3654414。down/decode eligible but batch_accepts=0，calls=12350，fallback_us=6558052；down/prompt eligible but batch_accepts=0，calls=1171，fallback_us=4459693。
+- decision: reject。仅打开 GGML_MOE_STREAM_DOWN_BATCH 不会给 DeepSeek vendor generalized 路径带来可接受提升；down batch 进入 eligible 但内部 declined 且无 single retry，up 仍未被 batch 支持/被 gate-only name_filter 排除。下一步不能直接 promotion，必须先写 source-level decline reason/parity probe plan，定位 MXFP4 down batch 为什么 0 accept；up/gate 需要独立支持计划。
+
+
+## 2026-07-07 下一步 config-profile plan：down MXFP4 existing parity probe
+
+- attempt_id: 20260707-down-mxfp4-existing-parity-probe
+- status: planned_before_experiment
+- why_now: generalized up/down batch eligibility probe 显示 down 在 CPU 侧 eligible 但 batch_accepts=0。代码检查发现 CPU supports_down_batch 把 MXFP4 视为 supported，而 CUDA batch 的普通 moe_stream_type_supported 不包含 MXFP4；现有 GGML_MOE_STREAM_DOWN_MXFP4_PROBE 可以绕过 unsupported_type、执行 MXFP4 down batch kernel、和 CPU 结果做 parity report，然后故意 return false。必须先用它验证数值，再决定是否写 source edit 让 MXFP4 down batch 可写回。
+- scope: config/profile only，不改源码；只用 France calibration fixed smoke，不使用 held-out；probe 返回 false，不写回 logits，不作为 SOTA。
+- env_under_test: GGML_MOE_STREAM_DOWN_BATCH=1，GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity，GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_CALLS=4，GGML_MOE_STREAM_DOWN_MXFP4_PROBE_OUT 指向 run artifact，同时开启 fallback/profile 记录。
+- pass_signal: probe CSV status=ok，compared>0，max_abs/mean_abs 足够接近 CPU reference；top-level run 输出仍由 CPU fallback 完成且正确，strict 16GB/no-swap。
+- decision_rule: 若 parity 失败，不能写 writeback；若 parity 通过，再写下一轮 source-edit plan：default-off 允许 MXFP4 down batch writeback，并先跑 fixed-text correctness gate，再跑 calibration/dev generalized performance。
+
+
+## 2026-07-07 执行记录：down MXFP4 existing parity probe
+
+- attempt_id: 20260707-down-mxfp4-existing-parity-probe
+- status: rejected_build_config_stub_timeout_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/down-mxfp4-existing-parity-probe-20260707.json
+- run: /root/lfz/runs/vendor-ds4-16gb/20260707T-down-mxfp4-existing-parity-probe/france-n16-mxfp4-down-parity
+- result: -n16 strict run 超过 2min19s，被手动终止；没有生成 down_mxfp4_probe.csv，不能证明 MXFP4 down batch 数值正确。
+- root_cause: 当前 build-ds4-moe-stream 的 CMakeCache 为 GGML_CUDA_MOE_STREAM_BATCH:BOOL=OFF，moe_stream_batch.cu 编译的是 stub path；llama-cli strings 中没有 mxfp4_down_probe，moe_stream_batch.cu.o 只有约 4.9KB。因此本次 env probe 实际没有进入真实 batch implementation。
+- fallback_profile: 仍显示 down eligible but batch_accepts=0，up batch_unsupported + one_name_filter；该结果解释为 build config/stub mismatch，而不是 MXFP4 kernel parity 失败。
+- decision: reject，不作为 SOTA。下一步必须先单独创建 GGML_CUDA_MOE_STREAM_BATCH=ON 的实验 build，确认 binary 包含真实 mxfp4_down_probe，再重跑 parity；若 parity 通过，才允许写 default-off MXFP4 down batch writeback source plan。
+
+
+## 2026-07-07 下一步 build-config plan：batch=ON down MXFP4 parity build
+
+- attempt_id: 20260707-batch-on-down-mxfp4-parity-build
+- status: planned_before_experiment
+- why_now: down MXFP4 existing parity probe 失败的根因是当前 build-ds4-moe-stream 配置 GGML_CUDA_MOE_STREAM_BATCH=OFF，真实 moe_stream_batch.cu implementation 没有进入 binary。要判断 Kimi batch 优化是否能迁移到 DeepSeek，必须先用独立 build 打开该 flag，而不是修改默认 SOTA build。
+- scope: build/config experiment only，不改源码，不改变当前 pushed SOTA/rejected artifacts；新 build 目录为 build-ds4-moe-stream-batch-on。held-out 不使用，不作为 SOTA。
+- build_command: cmake -S . -B build-ds4-moe-stream-batch-on with GGML_CUDA=ON, GGML_CUDA_MOE_STREAM=ON, GGML_CUDA_MOE_STREAM_BATCH=ON, matching existing build options where practical；then cmake --build build-ds4-moe-stream-batch-on --target llama-cli llama-results -j2。
+- validation: binary strings 必须包含 mxfp4_down_probe；CMakeCache 必须 GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON。之后才允许 rerun GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity strict 16GB smoke。
+- decision_rule: 若 batch=ON 编译失败或 binary 仍为 stub，记录 reject 并不写 source edit；若 parity 通过，再写下一轮 source-edit plan 允许 default-off MXFP4 down batch writeback；若 parity 失败，记录数值错误并停止该路线。
+
+
+## 2026-07-07 执行记录：batch=ON down MXFP4 parity build
+
+- attempt_id: 20260707-batch-on-down-mxfp4-parity-build
+- status: build_passed_probe_active_full_parity_timeout_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/batch-on-down-mxfp4-parity-build-20260707.json
+- build: build-ds4-moe-stream-batch-on configured with GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON；moe_stream_batch.cu.o 约 6.2MB；libggml-cuda.so strings 包含 mxfp4_down_probe，说明真实 batch implementation 已编译。
+- run: /root/lfz/runs/vendor-ds4-16gb/20260707T-batch-on-down-mxfp4-parity-build/france-n1-mxfp4-down-parity，strict 16GB/no-swap，France n1 calibration only，不是 SOTA。
+- result: stderr 证明真实 probe 触发：MXFP4 down batch probe active mode=parity，blk.0-3 ffn_down_exps call=0..3 active=8 ne01=4096 ne00=2048，并进入 batched decode path。run 3min53s 未写出 down_mxfp4_probe.csv，被手动终止。
+- interpretation: batch=ON build route 可用，但现有 mxfp4_down_probe_report 做全量 CPU reference compare，4 calls * active8 * 4096 columns * 2048 inputs 太重，不能作为快速 correctness gate。
+- decision: 不作为 SOTA，不写 writeback。下一步 source edit 必须先给 probe 加 compare 限制，例如 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE 和 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_COLS，默认保持全量；用 limited parity 先拿到 max_abs/mean_abs 证据。
+
+
+## 2026-07-07 下一步 source-edit plan：limited down MXFP4 parity probe
+
+- attempt_id: 20260707-limited-down-mxfp4-parity-probe
+- status: planned_before_source_edit
+- why_now: batch=ON build 已证明真实 MXFP4 down batch probe 可以触发，但现有 mxfp4_down_probe_report 全量比较过重，3min53s 无 CSV。为了判断 down MXFP4 batch kernel 是否数值正确，需要先把 parity gate 做成可快速运行的 limited compare。
+- source_scope: 只改 ggml/src/ggml-cuda/moe_stream_batch.cu 的 diagnostic probe；新增 env GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE 和 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_COLS。默认不设置时保持现有全量 compare 行为；不写回 logits，不改变默认 SOTA runtime。
+- implementation: 在 mxfp4_down_probe_report 中限制 active rows 和 output columns 的 compare loop；CSV 增加的 compared 字段自然反映实际比较量，不需要改 schema。invalid args 和原有 max_calls 行为保持不变。
+- validation: rebuild build-ds4-moe-stream-batch-on llama-cli llama-results；strict 16GB/no-swap run with GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity, MAX_CALLS=4, MAX_ACTIVE=1, MAX_COLS=128；要求 down_mxfp4_probe.csv 生成且 status=ok、compared>0，并记录 max_abs/mean_abs。held-out 不使用，不是 SOTA。
+- decision_rule: 若 limited parity max_abs 接近 0 或足够小，再写下一步 default-off MXFP4 down writeback plan；若误差大或仍 timeout，停止 down batch writeback 路线并记录 reject。
+
+
+## 2026-07-07 执行记录：limited down MXFP4 parity probe
+
+- attempt_id: 20260707-limited-down-mxfp4-parity-probe
+- status: rejected_probe_still_times_out_before_csv_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/limited-down-mxfp4-parity-probe-20260707.json
+- source_change: ggml/src/ggml-cuda/moe_stream_batch.cu 的 mxfp4_down_probe_report 新增 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE 与 GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_COLS；默认未设置时保持原 full compare 行为。该改动只影响 diagnostic probe，不写回 logits。
+- validation_build: build-ds4-moe-stream-batch-on rebuild llama-cli llama-results passed。
+- run: /root/lfz/runs/vendor-ds4-16gb/20260707T-limited-down-mxfp4-parity-probe/france-n1-active1-cols128，strict 16GB/no-swap，MAX_CALLS=4，MAX_ACTIVE=1，MAX_COLS=128，France n1 calibration only，不是 SOTA。
+- result: stderr 仍显示 blk.0-3 down probe active、active=8，但 2min36s 无 down_mxfp4_probe.csv，被手动终止；fallback profile 仍 batch_accept=0。
+- interpretation: 慢点不在 CPU reference full compare loop；即使限制 compare rows/cols，也没有进入 report 写 CSV。问题更早，可能在 staging、launch_moe_mmvq_compact_batch、D2H 或 cudaStreamSynchronize。
+- decision: reject，不做 writeback。下一步若继续该路线，必须先写 stage-level timing/early-return probe，定位 batch=ON 在 report 前卡在哪里。
+
+
+## 2026-07-07 下一步 source-edit plan：down MXFP4 batch stage trace probe
+
+- attempt_id: 20260707-down-mxfp4-batch-stage-trace-probe
+- status: planned_before_source_edit
+- why_now: limited down MXFP4 parity probe 证明 slow point 不在 CPU reference compare；probe active 后在 report 前超时，说明需要定位 staging、H2D/meta copy、kernel launch、D2H enqueue 或 cudaStreamSynchronize 哪一段占用时间。
+- source_scope: 只改 ggml/src/ggml-cuda/moe_stream_batch.cu 的 diagnostic path；新增 default-off env GGML_MOE_STREAM_DOWN_MXFP4_STAGE_TRACE_OUT。未设置时无行为变化；设置时只在 mxfp4_down_probe_candidate 期间写阶段 CSV，不写回 logits、不改变 SOTA 默认路径。
+- implementation: 在 down batch path 中围绕 ensure_buffers/cache_get/stage_jobs/H2D enqueue/kernel launch/D2H enqueue/sync/report 前后写 wall-clock elapsed_ms、n_active、src0_bytes、src1/dst bytes、cache hit/miss 等。每行立即 close/flush，保证即使 run 被 timeout kill 也保留最后阶段。
+- validation: rebuild build-ds4-moe-stream-batch-on llama-cli llama-results；strict 16GB/no-swap France n1 calibration run with GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity, MAX_CALLS=1, MAX_ACTIVE=1, MAX_COLS=16, and STAGE_TRACE_OUT。目标是拿到 stage trace CSV，明确最后成功阶段和耗时；held-out 不使用，不是 SOTA。
+- decision_rule: 如果 trace 显示卡在 kernel/sync，下一步检查 MXFP4 mmvq batch kernel launch/support；如果卡在 staging/cache copy，则转向 staging/pool path；只有 parity 能快速完成且数值正确后，才允许 writeback/performance plan。
+
+
+## 2026-07-07 执行记录：down MXFP4 batch stage trace probe
+
+- attempt_id: 20260707-down-mxfp4-batch-stage-trace-probe
+- status: diagnostic_complete_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/down-mxfp4-batch-stage-trace-probe-20260707.json
+- source_change: ggml/src/ggml-cuda/moe_stream_batch.cu 增加 default-off GGML_MOE_STREAM_DOWN_MXFP4_STAGE_TRACE_OUT；仅在 mxfp4_down_probe_candidate 下写 stage CSV，未设置 env 时默认路径不变，不写回 logits。
+- validation_build: build-ds4-moe-stream-batch-on rebuild llama-cli llama-results passed，GGML_CUDA_MOE_STREAM_BATCH=ON。
+- run: /root/lfz/runs/vendor-ds4-16gb/20260707T-down-mxfp4-stage-trace-probe/france-n1-stage-trace，strict 16GB/no-swap，cold drop_caches，France n1 calibration diagnostic only，held-out 未使用，不是 SOTA。
+- stage_trace: first MXFP4 down batch call active=12，src0_all_bytes=53477376，cache hits=6/misses=6；sizes->pre_report 总耗时约 33.004 ms，其中 stage_jobs_done 约 32.371 ms，kernel_enqueued 约 32.943 ms，sync_done 约 32.996 ms。
+- parity_probe: down_mxfp4_probe.csv 已生成，status=ok，compared=16，max_abs=0.00176076227，mean_abs=0.00069679527，worst expert=35 col=14。该误差不是 exact zero，因此 writeback 前必须扩大 compare/top1 correctness gate。
+- memory: memory_peak_bytes=16000000000，memory.events oom=0/oom_kill=0，page cache/进程内存仍在 16GB cgroup 内；本 run 因 90s diagnostic timeout exit=124，不是性能或正确率 benchmark。
+- interpretation: previous limited/full parity “无 CSV”不能解释为 MXFP4 down batch kernel/sync 卡死；首个 batch probe 能在约 33ms 到达 pre_report 并写 CSV。当前 batch_accept=0 是因为 probe path 故意 return false，CPU fallback 仍然执行。
+- decision: 不 promotion。下一步从“定位卡点”转为“default-off MXFP4 down batch writeback correctness gate”：先让 down batch 可选择写回，再用 fixed-text top1、语义输出和更大 compare coverage 证明不破坏正确率；只有通过后才允许 generalized token-rate benchmark。
+
+## 2026-07-07 下一步 source-edit plan：default-off MXFP4 down batch writeback correctness gate
+
+- attempt_id: 20260707-mxfp4-down-batch-writeback-correctness-gate
+- status: planned_before_source_edit
+- why_now: stage trace 证明 down MXFP4 batch 的首个 staging/kernel/sync 不是主要阻塞，且 limited parity 有小误差但可运行；当前 CPU fallback 的直接原因是 probe path 始终 return false，batch_accept=0。因此下一步必须在默认关闭 env 下验证“真正写回”是否保持 top1/语义正确。
+- product_scope: 仍服务于最终目标：16GB RAM + 32GB 5090 上随机/泛化 prompt 稳定 >5 tok/s。不得基于 France 或任何单 prompt 做 prompt-specific 优化；held-out test set 继续锁定，调试阶段只用 calibration/dev prompt。
+- source_scope: 只改 ggml/src/ggml-cuda/moe_stream_batch.cu 和必要 CPU 调用侧 gate；新增 default-off env（建议 GGML_MOE_STREAM_DOWN_MXFP4_WRITEBACK=1）允许 MXFP4 down batch 成功时返回 true 并写回 dst。未设置时保持当前 probe/fallback 行为。
+- correctness_gate: 先跑 fixed-text llama-results/top1（France calibration）和 expanded parity compare（至少 MAX_ACTIVE>=4、MAX_COLS>=512 或多 call 覆盖），记录 max_abs/mean_abs；若 top1 不全等、语义输出不正确、或误差放大导致输出不稳，立即 reject/回退。
+- performance_gate: correctness 通过后，只在 calibration/dev generalized prompt set 上跑 strict cold 16GB/no-swap benchmark；记录每个 prompt eval_tok_s、prompt_tok_s、TTFT、memory_peak/file bytes、answer。不得用 held-out test set 调参；最终 SOTA 必须再用 held-out test set 报告。
+- TTFT/RAM_gate: MemoryMax=16000000000、MemorySwapMax=0、page cache 计入 cgroup；TTFT 相对 accepted generalized baseline 不能升高超过 20%。超过 TTFT 可作为 rejected diagnostic commit，但不能 promotion。
+- push_rule: 若只是 diagnostic/reject，也要记录 artifact/plan 并 push；若出现符合所有要求的新 generalized SOTA，必须详细记录复现信息、立即 commit+push 到 ssd/vendor/deepseek-token-rate-16gb，并从 pushed commit 重新复现。
+
+
+## 2026-07-07 执行记录：default-off MXFP4 down batch writeback correctness gate
+
+- attempt_id: 20260707-mxfp4-down-batch-writeback-correctness-gate
+- status: rejected_top1_failed_source_reverted
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/mxfp4-down-batch-writeback-correctness-gate-20260707.json
+- source_attempt: 临时增加 default-off GGML_MOE_STREAM_DOWN_MXFP4_WRITEBACK 和可选 GGML_MOE_STREAM_DOWN_MXFP4_WRITEBACK_TENSOR，使 MXFP4 down batch 在 env 打开时不再 probe-return-false，而是进入已有 scatter/writeback/return true。该源码尝试因 correctness 失败已回退，未保留在最终分支。
+- build: build-ds4-moe-stream-batch-on rebuild llama-cli llama-results passed。
+- full_writeback_run: /root/lfz/runs/vendor-ds4-16gb/20260707T-mxfp4-down-writeback-correctness/top1-france，strict 16GB/no-swap，cold drop_caches，France fixed-text top1 calibration only，held-out 未使用。baseline exit=0，writeback check exit=1。
+- full_writeback_result: same_top1=141/145，first_mismatch_pos=9，max_abs=4.5455，mean_abs=0.159527；expanded parity probe 4 calls、每 call compared=2048，max_abs 范围约 0.002567-0.009435。结论：不能 promotion，不能 benchmark。
+- blk0_only_run: /root/lfz/runs/vendor-ds4-16gb/20260707T-mxfp4-down-writeback-correctness/top1-blk0-only，只设置 GGML_MOE_STREAM_DOWN_MXFP4_WRITEBACK_TENSOR=blk.0.ffn_down_exps.weight。check exit=1，same_top1=140/145，first_mismatch_pos=10，max_abs=5.79487，mean_abs=0.146093。
+- memory: 两个 run 均在 MemoryMax=16000000000、MemorySwapMax=0 下运行，oom=0/oom_kill=0，page cache 计入 cgroup；这是 rejected correctness diagnostic，不是 SOTA。
+- interpretation: 问题不是全层累积才出现；单层 blk.0 down writeback 已改变 top1。当前 MXFP4 down batch kernel/writeback 与 CPU fallback 数值语义不一致，必须先修算子数学/layout/parity，不能继续做 token-rate promotion。
+- rollback: 按准确率失败回退规则，writeback source edit 已撤销；分支只保留之前已 push 的 stage trace diagnostic。
+
+## 2026-07-07 下一步 design plan：MXFP4 down math/layout parity root-cause
+
+- attempt_id: 20260707-mxfp4-down-math-layout-parity-root-cause
+- status: planned_before_experiment
+- why_now: stage trace 说明 staging/kernel/sync 能跑通，writeback top1 说明数值不稳定；下一步 bottleneck 已不是 I/O，而是 GPU MXFP4 down kernel 与 CPU fallback 的数学/layout 一致性。
+- scope: diagnostic only；不写回 logits，不跑 token-rate benchmark，不使用 held-out。先在 deterministic small harness 或 one-call tensor compare 中缩小到单 expert、单 row、固定 col/k，比较 CPU dequant dot 与 launch_moe_mmvq_compact_batch 的同一输出。
+- checks: 验证 MXFP4 block layout、nb01/nb02 stride、col-major/row-major 解释、scale/exponent handling、accumulation order、src1 quantization path（d_src1_q8）是否与 CPU fallback 等价。优先找到导致 blk.0-only top1 失败的 >5 logit 差异来源。
+- pass_gate: small harness/op-level compare 必须能解释并修正当前 0.002-0.009 local dot error以及 top1 max_abs>5 的放大；只有 fixed-text top1 恢复 same_top1=145/145 后，才允许重新进入 writeback benchmark。
+- push_rule: root-cause analysis 和任何 rejected probe 都要记录 artifact/plan 并 push；出现 correctness pass 但性能未达标也需记录，不得使用 held-out 调参。
+
+
+## 2026-07-07 执行记录：MXFP4 down math/layout parity root-cause
+
+- attempt_id: 20260707-mxfp4-down-math-layout-parity-root-cause
+- status: analysis_complete_not_sota
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/mxfp4-down-math-layout-parity-root-cause-20260707.json
+- method: static source audit after rejected writeback top1 failure；不改源码，不使用 held-out，不是 SOTA。
+- root_cause: CPU fallback 对 GGML_TYPE_MXFP4 的 type_traits 使用 vec_dot_type=GGML_TYPE_Q8_0 和 ggml_vec_dot_mxfp4_q8_0；而 moe_stream_batch down path 调用 ggml_cuda_moe_stream_mmvq_dev，内部 quantize_row_q8_1_cuda(src1_f32) 并使用 vec_dot_mxfp4_q8_1。因此当前 down batch writeback 不是 CPU fallback 的同一数学路径。
+- why_this_matches_results: expanded parity 只有局部 0.002-0.009 误差，但 fixed-text top1 已漂移；这符合 Q8_1 vs Q8_0 量化/scale/accumulation 差异在多层传播后改变 logits 的现象。单层 blk.0 也失败，说明不是仅全层累积问题。
+- reusable_code: ggml/src/ggml-cuda/moe_stream.cu 已有 Q8_0 CPU-compatible MXFP4 kernels/probes（GGML_MOE_STREAM_Q80_CPU_COMPAT、Q80_WRITE、hot-batch probes），可以作为 correctness scaffold；缺口是 moe_stream_batch.cu 的 runtime batch API 当前只接 src1_f32，未接 CPU fallback 已经生成的 src1_q8_0/wdata。
+- decision: 不再尝试 Q8_1 MXFP4 down writeback promotion；下一步必须做 CPU-compatible Q8_0 down batch path，或先证明 Q8_1 近似在 top1/语义上稳定（当前证据已否定）。
+
+## 2026-07-07 下一步 source-design plan：CPU-compatible Q8_0 MXFP4 down batch
+
+- attempt_id: 20260707-cpucompat-q80-mxfp4-down-batch-design
+- status: planned_before_source_edit
+- goal: 在不牺牲正确率的前提下减少 down CPU fallback。正确路径必须与 CPU fallback 的 MXFP4 x Q8_0 数学一致，而不是当前 Q8_1 mmvq path。
+- source_scope: default-off。扩展 CPU 调用侧和 ggml_cuda_moe_stream_batch API，使 down batch 可接收 src1_q8_0/wdata row pointer、row_size、src1_ne1；在 CUDA 侧新增/复用 Q8_0 CPU-compatible batched kernel。未设置 env 时现有 SOTA/stage-trace 路径不变。
+- correctness_sequence: 先 one-call/op-level compare against CPU dst，要求 max_abs=0 或 fixed-text top1 证明可接受；再 fixed France llama-results same_top1=145/145；最后才允许 calibration/dev generalized prompts。held-out 仍只用于最终 SOTA 测试。
+- performance_risk: Q8_0 path 可能需要从 CPU wdata/H2D 传 src1_q8_0，每 row 约 ne00 bytes 级别；必须批量/复用，不能退化为 per-expert serial copy。理论上 down expert 读仍是主成本，Q8_0 src1 copy 相对 expert bytes 小，但实现不当会吞掉收益。
+- promotion_gate: strict 16GB RAM including page cache、MemorySwapMax=0、TTFT <= generalized baseline * 1.2、correctness pass、泛化 calibration/dev 与最终 held-out test set；出现新 SOTA 立即详细记录复现信息并 push 到 ssd/vendor/deepseek-token-rate-16gb。
+
+
+## 2026-07-07 执行记录：CPU-compatible Q8_0 MXFP4 down batch v1
+
+- attempt_id: 20260707-cpucompat-q80-mxfp4-down-batch-design
+- status: rejected_performance_timeout_source_reverted
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/cpucompat-q80-mxfp4-down-batch-20260707.json
+- source_attempt: 扩展 CPU batch API，把 src1 Q8_0 wdata/row_size/ne1 传给 ggml_cuda_moe_stream_batch；在 moe_stream_batch.cu 增加 default-off GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH 路径，用 CPU-compatible MXFP4 x Q8_0 数学直接写 batch dst。该源码因性能失败已回退，不保留在最终分支。
+- build: build-ds4-moe-stream-batch-on rebuild llama-cli llama-results passed。
+- correctness_blk0: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-correctness/top1-blk0-only，strict 16GB/no-swap，France fixed-text top1，check exit=0，same_top1=145/145，first_mismatch_pos=-1，max_abs=0，mean_abs=0，batch_accept=145。
+- correctness_full_down: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-correctness/top1-full-down，strict 16GB/no-swap，France fixed-text top1，check exit=0，same_top1=145/145，first_mismatch_pos=-1，max_abs=0，mean_abs=0，batch_accept=5800，batch_decline=0。
+- performance_probe: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-down-batch-perf/france-n96，strict cold drop_caches，16GB/no-swap，France n96；exit=124 after 420s timeout，未完成 generation timing，memory_peak_bytes=16000000000，oom=0/oom_kill=0。
+- decision: correctness breakthrough but performance reject。该 v1 证明 Q8_0 math/API 方向正确，但 naive one-thread-per-output-col kernel 和每 call Q8_0 H2D staging 太慢，不能 promotion，也不能进入 generalized benchmark。
+- rollback: 按性能严重下降规则，v1 source edit 已撤销；只保留 artifact/plan。下一步必须做 optimized Q8_0 down batch v2，而不是提交慢速 correctness scaffold。
+
+## 2026-07-07 下一步 source-design plan：optimized Q8_0 MXFP4 down batch v2
+
+- attempt_id: 20260707-optimized-q80-mxfp4-down-batch-v2
+- status: planned_before_source_edit
+- why_now: v1 full down fixed-text top1 已证明 CPU-compatible Q8_0 数学路径正确，但 n96 timeout 证明 naive kernel 性能不可接受。
+- source_scope: default-off，继续复用 v1 的 API 思路，但 kernel 必须改为 tiled/warp/rowtile 形式，参考 ggml/src/ggml-cuda/moe_stream.cu 里已有的 q80 hot-batch cpu_compat_warp2/rowtile kernels。未设置 env 时现有 SOTA/stage-trace 路径不变。
+- bottleneck_to_fix: v1 每个 output col 单线程串行 2048 dot，导致 GPU 并行度/访存效率差；还需要控制 active rows 的 Q8_0 H2D staging，避免 per-expert 小拷贝吞掉收益。
+- validation_sequence: build -> blk0 top1 -> full down top1 same_top1=145/145/max_abs=0 -> strict cold France n96 performance。只有 France n96 不 timeout且不明显低于 baseline，才继续 calibration/dev generalized prompt set；held-out 仍只用于最终 SOTA。
+- rejection_rule: 若 top1 失败或 n96 仍 timeout/明显慢于 CPU fallback，则回退源码并记录 artifact；不得 promotion。
+
+## 2026-07-07 实施前计划补充：optimized Q8_0 MXFP4 down batch v2 rowtile
+
+- attempt_id: 20260707-optimized-q80-mxfp4-down-batch-v2-rowtile
+- status: planned_before_source_edit
+- task_context: 目标仍是 vendor DeepSeek 在 16GB host RAM（含 page cache）+ 32GB RTX 5090 上，对用户随机/泛化 prompt 稳定达到 >5 tok/s；不得做 prompt-specific 优化，调试只用 calibration/dev prompt，held-out 仅用于最终 SOTA 验证。
+- bottleneck_target: 当前 DS4 的 MXFP4 down 在 cache miss/unsupported writeback 时仍会走 CPU fallback；v1 证明 CPU-compatible Q8_0 数学可保持 fixed-text top1 全等，但 naive one-thread-per-output-col kernel 使 n96 超时。因此 v2 只解决 down CPU fallback 的计算内核并行度，不改变 up/gate/Kimi 既有功能。
+- source_scope: default-off env `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=2`。扩展 `ggml_cuda_moe_stream_batch` ABI 传入 CPU fallback 已生成的 `src1_q8_0`、row_size、ne1；在 CUDA batch path 中复用现有 workspace：`bc.d_src0` 做 device pointer array、`bc.d_src1_q8` 做 Q8_0 rows、`bc.h_src1` 做 pinned Q8_0 staging；新增 MXFP4 x Q8_0 rowtile kernel。未设置 env 时必须保持当前 SOTA 路径和 Kimi 功能不变。
+- theory: 每个 active route 的 down expert 约 `ne01 * nb01` 字节，Q8_0 src1 row 约 `ne00 * sizeof(block_q8_0)/QK8_0`，Q8_0 row 相比 expert bytes 小得多；只要 rowtile kernel 不串行 2048 dot，理论瓶颈应回到 expert H2D/cache 与 output D2H，而不是 CPU fallback compute。若 full down fallback 秒数可被 GPU rowtile 覆盖，token rate 有机会从当前 generalized 2 tok/s 级向 5 tok/s 接近。
+- validation_sequence: build `llama-cli llama-results` -> France fixed-text blk0-only top1 -> full down top1 same_top1=145/145/max_abs=0 -> strict cold France n96 performance under 16GB/no-swap -> calibration/dev prompt set。held-out test set 不参与调参。
+- accept_gate: RAM peak <=16000000000 including page cache, MemorySwapMax=0, correctness semantic/top1 pass, TTFT <= generalized accepted baseline * 1.2, generalized prompt metrics improve. 新 SOTA 必须详细记录复现信息并立即 commit/push 到 `ssd/vendor/deepseek-token-rate-16gb`，再从 pushed commit 复现。
+- reject_rule: 任一 correctness 失败、n96 timeout、明显慢于现有 CPU fallback、TTFT 超限或 RAM 超限，立即回退源码，仅保留 rejected artifact/plan 并 push 记录。
+
+## 2026-07-07 执行记录：optimized Q8_0 MXFP4 down batch v2 rowtile
+
+- attempt_id: 20260707-optimized-q80-mxfp4-down-batch-v2-rowtile
+- status: rejected_correctness_crash_source_reverted
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/optimized-q80-mxfp4-down-batch-v2-rowtile-reject-20260707.json
+- source_attempt: 扩展 batch ABI 传入 CPU fallback 已生成的 Q8_0 wdata，并新增 default-off `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=2` MXFP4 x Q8_0 rowtile kernel；第一次复用 `bc.d_src0` 做 pointer array，第二次改为独立 `d_src0_rows` workspace。
+- build: `cmake --build build-ds4-moe-stream-batch-on --target llama-cli llama-results -j2` passed。
+- correctness_blk0_r1: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-rowtile-v2-correctness/top1-blk0-only，strict 16GB/no-swap，France fixed-text，`GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR=blk.0.ffn_down_exps.weight`，exit_status=139，signal 11，未写出 top1-check.json。
+- correctness_blk0_r2: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-compat-rowtile-v2-correctness/top1-blk0-only-r2，独立 `d_src0_rows` 后复跑，仍 exit_status=139，未写出 top1-check.json。
+- memory: 两次 run 的 cgroup `memory.peak=16000000000`，`memory.events` 中 `oom=0`、`oom_kill=0`；page cache 计入 cgroup。崩溃不是可接受结果，不能进入 full-down top1 或 performance benchmark。
+- decision: v2 rowtile 方向目前没有通过最小 correctness gate。按规则回退源码，只保留 rejected artifact/plan。下一步不应继续堆性能测试，应先做小型 op-level harness/cuda-memcheck，定位 signal 11 是 Q8_0 wdata layout、kernel bounds、还是 CUDA async error 在 host 侧延迟爆出。
+
+## 2026-07-07 下一步 diagnostic plan：Q8_0 rowtile v2 signal 11 最小化定位
+
+- attempt_id: 20260707-q80-rowtile-v2-crash-root-cause
+- status: planned_before_experiment
+- why_now: v1 证明 Q8_0 数学正确但慢；v2 rowtile 在最小 blk.0 fixed-text gate 中 signal 11，且 cgroup `oom=0/oom_kill=0`，说明不能继续做 full-down 或 token-rate benchmark，必须先定位崩溃根因。
+- task_scope: 仍服务于最终任务：vendor DeepSeek 在 16GB host RAM（含 page cache）+ 32GB 5090 上对随机/泛化 prompt 稳定 >5 tok/s；不得使用 held-out prompt 调参，不得引入 prompt-specific 优化。
+- diagnostic_sequence: 1) 检查 `compute-sanitizer`/CUDA memcheck 是否可用；2) 复盘 v2 source diff 与 crash stderr，确认 crash 是 host signal 11 还是 CUDA async error 延迟；3) 若需要源码，做 default-off minimal debug path，只在 `GGML_MOE_STREAM_DOWN_Q80_COMPAT_DEBUG=*` 下启用，并把 batch size/cols/calls 限到极小；4) 用 blk.0 fixed-text 或更小 one-call probe 复现，收集 backtrace/sanitizer/decline reason。
+- source_rule: 默认路径必须保持当前稳定 SOTA/Kimi 功能不变；任何 debug source 如果不能证明安全且有价值，实验后回退，只提交 artifact/plan。若 debug helper default-off 且不改变默认行为，可在通过 build 后作为诊断工具提交，但不能视作性能优化。
+- expected_root_causes: Q8_0 wdata row layout/stride 与 batch route mapping 不一致；rowtile kernel bounds 或 shared-memory/shuffle 使用错误；device pointer array 指向 cache slot 时机错误；CUDA kernel illegal access 被后续 host API/sync 暴露；host-side dst scatter 使用未完整写出的 rows。
+- pass_gate: 只有明确定位 signal 11，并给出下一步可验证修复方案，才进入下一轮 source fix。任何 fixed-text top1 必须 same_top1=145/145 且 RAM<=16GB/no-swap，才能继续 full-down 或性能测试。
+- push_rule: root-cause artifact 和计划更新必须 push 到 `ssd/vendor/deepseek-token-rate-16gb`；若出现可接受新 SOTA，必须详细记录复现信息并立即 push 源码，再从 pushed commit 复现。
+
+## 2026-07-07 执行记录修正：Q8_0 rowtile v2 crash root-cause 与有效 correctness/perf gate
+
+- attempt_id: 20260707-q80-rowtile-v2-crash-root-cause
+- status: correctness_passed_performance_timeout_source_not_retained
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/q80-rowtile-v2-correctness-pass-perf-timeout-20260707.json
+- important_correction: 之前 v2 `exit_status=139` 不是 CUDA rowtile kernel 崩溃证据。gdb 显示 backtrace 为 `gguf_get_n_kv -> gguf_find_key -> main`，stderr 中有 `gguf_init_from_file: failed to open GGUF file 'result.gguf'`；原因是新 run 目录没有先放 baseline `result.gguf`，`llama-results --check` 对空 gguf ctx 解引用导致 segfault。
+- valid_blk0_check: 复制 v1 baseline `result.gguf` 后复跑 /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-check-with-baseline/top1-blk0-copy-baseline，strict 16GB/no-swap，exit=0，same_top1=145/145，first_mismatch_pos=-1，max_abs=0，mean_abs=0。
+- valid_full_down_check: 复制 v1 full-down baseline `result.gguf` 后复跑 /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-check-with-baseline/top1-full-down-copy-baseline，strict 16GB/no-swap，exit=0，same_top1=145/145，first_mismatch_pos=-1，max_abs=0，mean_abs=0，batch_accept=5800，batch_decline=0。
+- perf_probe: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-perf/france-n96，strict cold 16GB/no-swap，France n96，`GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=2`，exit=124 after 520s timeout；未完成 eval token timing。profile: down total=9.985 ms/call，cuda_batch=4.647 ms/call，fallback_t0=5.295 ms/call，batch_accept=3920，batch_decline=0。
+- memory: corrected checks and perf all recorded `memory.peak=16000000000`，`oom=0`，`oom_kill=0`；page cache included in cgroup。
+- decision: v2 rowtile 数学/正确率可行，但性能仍不可接受，不能 promotion，源码仍不保留。下一步 bottleneck 是 rowtile kernel/runtime performance，而不是 Q8_0 math parity。后续若继续该方向，必须先用 microbench/profile 降低 `cuda_batch` 和 timeout 风险，再重新进入 n96/generalized gate。
+
+## 2026-07-07 执行记录：Q8_0 rowtile v2 performance root-cause
+
+- attempt_id: 20260707-q80-rowtile-v2-performance-root-cause
+- status: diagnostic_complete_rowtile_slower_than_cpu_fallback
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/q80-rowtile-v2-performance-root-cause-20260707.json
+- stdout_noise_check: raw n96 probe 的 stdout 可达 0.9-1.2GB，主要是 loading spinner/重复输出，会污染 wall time；但这不是 timeout 的主因。当前稳定源码在同类 vram2/down-batch 配置下把 stdout 丢到 `/dev/null` 后仍 300s timeout。
+- stable_stdout_devnull_run: /root/lfz/runs/vendor-ds4-16gb/20260707T-runner-stdout-noise-baseline/france-n96-stable-stdout-devnull，strict 16GB/no-swap，exit=124，memory_peak=16000000000，oom=0，profile: down total=7.553 ms/call，cuda_batch=0，fallback_t0=7.542，batch_accept=0，batch_decline=3920。
+- rowtile_v2_perf_comparison: /root/lfz/runs/vendor-ds4-16gb/20260707T-q80-rowtile-v2-perf/france-n96，strict 16GB/no-swap，exit=124 after 520s，profile: down total=9.985 ms/call，cuda_batch=4.647，fallback_t0=5.295，batch_accept=3920，batch_decline=0。
+- conclusion: full-output Q8_0 rowtile 虽然 correctness 通过，但把 CPU fallback 转成 GPU rowtile 后 down total 反而从约 7.55 ms/call 增至约 9.99 ms/call；当前 rowtile 映射不是 5 tok/s 方向。后续不要继续以该 full-output rowtile 做 n96 试错。
+- next_direction: 若继续替换 down CPU fallback，必须设计全新 kernel/storage：例如 coalesced/transposed expert layout、tensor-core-friendly dequant/accumulate、或能显著减少 4096 输出列读写的结构化方法；否则应转向更高收益 bottleneck。所有后续 perf run 必须避免多 GB stdout artifact（stdout devnull 或 strict runner 控制）。
+
+## 2026-07-07 低比特 sidecar / q2tern 可行性复盘与下一步计划
+
+- attempt_id: 20260707-lowbit-sidecar-generalization-feasibility-audit
+- status: diagnostic_complete_no_runtime_patch_allowed
+- artifact: .Agent/runs/20260705-vendor-ds4-coldstart/lowbit-sidecar-generalization-feasibility-audit-20260707.json
+- task_context: 目标仍是 vendor DeepSeek 在 `16GB host RAM`（含 page cache）+ `32GB RTX 5090 VRAM` 上，对随机/泛化 prompt 稳定达到 `>5 tok/s`。后续 accepted SOTA 必须在冻结候选后跑 `held_out_test_set_v1_locked`，不能基于 France、dev prompt trace、prompt-specific pack 或 prompt-specific hotset promotion。
+- evidence_reviewed:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/sidecar-repr-payload-correctness-gate-20260707.json`: exact sidecar payload gate passed (`diff_count=0`, fixed-text `same_top1=145/145`), zero sidecar produced nonzero local diffs and was rejected. 结论是 sidecar loader/compare gate 可用，但不代表近似 payload 可写回。
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/q2ternary-partial-compressed-candidate-20260707.json`: q2 ternary partial 表示 `1.8889x` 压缩，但 compare 有 `diff_count=67936`, `max_abs=9.40296984`, `mean_abs_max=2.49075008`，因此 rejected；不能 enable writeback，也不能进入 token-rate benchmark。
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/post-q2-mxfp4-codebook-feasibility-20260707.json`: q3/codebook 方案误差下降但压缩比只有约 `1.31x` 且仍有非零 magnitude error；不足以支撑 runtime source patch。
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-lowbit-representation-coverage-bound-20260707.json`: 只有假设 `4x/8x/16x` 低比特压缩且零 runtime overhead 时，dev set bound 才能跨过 `>5 tok/s`；这只是 hard bound，不证明正确性或实现可行。
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/non-native-representation-next-hard-bound.json`: 已明确 non-native/approx representation 没有 source-ready 路径；任何新近似表示必须先做 offline/compare-only fixed-text top1 和误差门，再谈性能。
+- decision: 当前 q2tern / 简单 codebook / approximate sidecar 方向不允许继续做 runtime patch 或 strict cold token-rate benchmark。exact sidecar 只能作为验证框架，不带压缩收益；lossy sidecar 在 op-level compare 失败前不能写回模型输出。该方向不产生新 SOTA，accepted SOTA 不变。
+- bottleneck_update: 当前泛化 dev baseline 距 `>5 tok/s` 的主要差距仍来自两类 prompt-general source movement：gate src0 read/cache handling 与 up/down CPU fallback。已验证 full-output Q8_0 rowtile 会变慢；已验证 naive up one-stream/cache 会变慢；已验证 lossy lowbit sidecar 不满足正确性。因此下一步不能继续单点试错，要转为 exact prompt-general dataflow 设计。
+
+### 下一步 Phase X1：prompt-general exact retained dataflow / source-movement bound
+
+- attempt_id: 20260707-exact-retained-dataflow-source-movement-plan
+- status: planned_before_experiment
+- hypothesis: 如果不使用 prompt-specific pack，也不使用未通过正确性门的 lossy representation，要接近 `>5 tok/s`，需要减少 source movement 和 CPU fallback 的重复工作，而不是把同样的 full-output down 计算迁到更慢的 GPU kernel。候选方向是 exact retained dataflow：在 calibration/dev set 上识别 prompt-agnostic 的 shared hot expert rows/blocks、保留 gate/up/down 可复用中间数据或 expert layout，并用严格预算证明不会挤坏 gate cache、不会超 32GB VRAM、不会增加 TTFT 超过 20%。
+- first_experiment: 不改源码，先做 artifact-only hard-bound 与 profile 汇总：从 `general-prompt-baseline-no-prompt-specific-20260706.json`、`dev-fallback-profile-no-prompt-specific-20260706.json`、gate traces 和 fallback reason CSV 中计算每个 prompt 的 `gate_src0_ms/token`、`up_fallback_ms/token`、`down_fallback_ms/token`、expert-call bytes、unique expert coverage、跨 prompt overlap、按 `ms_saved_per_byte` 排序的 exact hotset 上界；输出每个 VRAM budget (`2/4/6/8/10/12/13.25 GiB`) 的 min/mean bound。
+- first_experiment_result_20260707: completed, artifact `.Agent/runs/20260705-vendor-ds4-coldstart/exact-retained-dataflow-source-movement-bound-20260707.json`。该结果复用 calibration/dev artifact，不使用 held-out prompts，不跑模型，不改源码。
+- exact_hotset_result: prompt-agnostic exact hotset residency 在可用 `13.25GiB` payload 预算下不达标；最优 split 为 gate `6GiB` + up/down `7.25GiB`，zero-overhead bound 只有 `min=2.7706693327 tok/s`, `mean=3.1860363950 tok/s`。因此 exact hotset residency alone 不允许进入源码实现，也不能作为 `>5 tok/s` 产品方向。
+- combined_bottleneck_result: 已有 source-movement combination bound 仍然成立：必须同时减少 gate/source movement 和 up/down fallback，单独 exact residency 或单独 full-output down GPU rowtile 都不够。下一步若写源码，必须是 fused/retained dataflow 或新的结构化 kernel/storage，并先给出 `min >= 5.5 tok/s` 的 hard-bound。
+- simultaneous_reduction_threshold_20260707: completed, artifact `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-simultaneous-reduction-thresholds-20260707.json`。基于 dev baseline 与 prompt-independent gate/updown component，zero-overhead grid 显示：同时削减 gate source movement 与 up/down fallback 约 `82.5%` 才能让 dev-set `min >= 5 tok/s`；要有实现余量到 `min >= 5.5 tok/s` 需要约 `89.5%`；`min >= 6 tok/s` 需要约 `95.0%`。例如 `0.8/0.8` 只有 `min=4.863 tok/s`，`0.9 gate / 0.8 updown` 才到 `min=5.203 tok/s`，`1.0/1.0` 理想上界 `min=6.540 tok/s`。
+- required_bound_for_source_edit: 只有当 exact/prompt-agnostic retained-dataflow bound 在 dev set 上给出 `min >= 5.5 tok/s` 或明确指出某个可实现子路径能净减少至少 `150 ms/token` 且不会伤害 TTFT/RAM，才允许进入 default-off source edit。否则只记录 close artifact，不改源码。
+- updated_source_edit_gate: 下一次源码实现不能只承诺“小幅减少 fallback”或“扩大 hot cache”；必须有设计证据说明能同时压低 gate source movement 和 up/down fallback 约 `90%`，或用等效 exact dataflow 一次性消除相同量级的重复搬运/CPU fallback。低于这个量级的实现只允许做 microbench/diagnostic，不允许进入 SOTA promotion。
+- source_edit_candidates_after_bound:
+  - exact top hotset residency with prompt-agnostic calibration only，不使用 held-out，不使用单 prompt route trace promotion；
+  - fused/grouped up-gate 或 retained gate activation dataflow，目标是减少 per-expert H2D/sync/D2H，而不是扩大 naive one-stream；
+  - 新 down path 必须先有 microbench 证明 `cuda_batch_ms/call < CPU fallback_ms/call`，否则不再进入 n96 strict cold run。
+- validation_gates: 每次 source edit 必须 default-off；先 fixed-text top1/parity，再 France semantic correctness，再 calibration/dev prompt set；候选冻结后才跑 held-out。所有 run 必须 strict `MemoryMax=16000000000`, `MemorySwapMax=0`, page cache inside cgroup, stdout 控制，记录 TTFT/token rate/输出/正确性。
+- push_rule: 任何符合要求的新 SOTA 必须详细记录复现信息并立即 push 源码到 `ssd/vendor/deepseek-token-rate-16gb`；rejected/closed 诊断也必须记录 artifact 并 push，确保未来回顾不会重复无效路线。
+
+## 2026-07-07 Phase X2：现有 fused up/gate path 对 DeepSeek DS4 的准入诊断
+
+- attempt_id: 20260707-existing-fused-upgate-ds4-probe
+- status: diagnostic_complete_no_rerun_existing_path_rejected
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/existing-fused-upgate-ds4-evidence-review-20260707.json`
+- why_now: 源码已存在 `GGML_MOE_STREAM_FUSED_UP_GATE` graph path 和 `ggml_cuda_moe_stream_up_gate_batch()`；`llama-graph.cpp` 在 decode `n_tokens == 1`、up/gate 同 type/shape、无 bias/scale、SILU 时可构造 `GGML_OP_MOE_FUSED_UP_GATE`。当前计划要求下一步必须同时压 gate source movement 和 up/down fallback，现有 fused up/gate 是最小风险候选：它可能让 gate 与 up 在同一 fused op 中被调度，减少 separate gate/up graph 和 up CPU fallback。
+- constraints: 仅使用 `calibration_dev_set_v1`，先只跑 France short probe；禁止使用 `held_out_test_set_v1_locked`；不改源码；不作为 SOTA；strict `MemoryMax=16000000000`, `MemorySwapMax=0`，page cache 计入 cgroup；stdout 必须控制，避免多 GB artifact。
+- experiment: 用当前 pushed source，设置 `GGML_MOE_STREAM_FUSED_UP_GATE=1`、`GGML_MOE_STREAM_DECLINE_DEBUG=1`、`GGML_MOE_UP_GATE_PROFILE_OUT=<run>/up-gate-profile.csv`、`LLAMA_KIMI_MOE_GRAPH_PROFILE=1`（若 env 名在源码/runner中可用则开启），跑 France `n=16` 或 `n=32` short probe。记录 fused graph 是否构造、`up_gate batch accepted/declined`、decline reason、fallback reason profile、RAM/page-cache、TTFT、输出片段。
+- result_20260707: no new model run performed, because historical strict-16GB DeepSeek4 fused-upgate evidence already answers this probe. Prior runs showed CUDA fused-upgate acceptance but severe regression: `20260702T084212Z` with 512MiB batch cache had `eval_tok_s=0.5`, `TTFT=47854ms`, `ram_ok=true`, `correctness_ok=true`; `20260702T091648Z` with 13056MiB batch cache had `eval_tok_s=0.8`, `TTFT=45519ms`, `ram_ok=true`, `correctness_ok=true`, batch cache `3072 slots`, hit rate about `76%`. Both are far below accepted SOTA and violate/approach TTFT gates.
+- decision_update: Do not rerun plain `GGML_MOE_STREAM_FUSED_UP_GATE` and do not rerun one-stream gate+up sharing. Existing evidence shows the failure is structural: tiny batch cache gives zero hits; large batch cache consumes the gate-cache budget and still runs serial up then gate compute; one-stream gate+up sharing destroys gate hit rate. A future DS4 up/gate source edit must reuse accepted one-stream gate cache or avoid duplicating gate storage, then prove a DS4-specific parallel/fused compute microbench and a hard-bound near the simultaneous `~90%` reduction threshold.
+- expected_outcomes:
+  - 如果 graph 未构造：记录阻塞条件（type/shape/env/bias/scale/n_tokens）并决定是否需要 default-off graph allowlist source edit。
+  - 如果 graph 构造但 CUDA batch declined：记录 exact reason；若是 DS4 type guard 或 mixed/type-specific branch 限制，再设计 default-off DS4 fused path。
+  - 如果 CUDA batch accepted 但慢/错误：只保留 diagnostic，分析 stage/cache/H2D/kernel/D2H 结构，不能 promotion。
+  - 只有 short probe 证明 accepted 且正确性/性能方向合理，才允许写下一步 source plan 或 calibration/dev performance probe。
+- source_edit_gate_after_probe: 不得直接把 Kimi 的 IQ2/IQ3 fast path 扩展到 DS4。若需要源码，必须先写清 DS4 MXFP4/F8 up/gate tensor type、expert bytes、active rows、cache slot budget、H2D bytes、kernel path、预期节省的 up fallback 与 gate source movement，并证明它能接近 simultaneous `~90%` reduction 的总目标。
+
+## 2026-07-07 Phase X3：sparse fused MMVQ membership probe（no-logit-change）
+
+- attempt_id: 20260707-sparse-fused-mmvq-membership-probe
+- status: timeout_partial_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-fused-mmvq-membership-probe-timeout-20260707.json`
+- why_now: DFlash/MTP、普通 fused up/gate、one-stream gate+up、exact hotset、q2tern sidecar、Q8_0 full-output rowtile 都已经关闭或退回。剩余仍有 hard-bound 支持的路线是 `mmvq-fused-compact-sparse` / `sparse-retained-gpu-path`，但它要求先证明 hot pair 覆盖、图放置、拷贝路径和 correctness。当前源码已有 default-off `GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT` 诊断，只记录 up/down fallback 中命中 calibration-derived top pair 的比例，不改变 logits，适合作为第一步。
+- experiment_scope: 不改源码；不使用 held-out；只用 calibration France short probe；strict `MemoryMax=16000000000`, `MemorySwapMax=0`，page cache 计入 cgroup；不作为 SOTA；stdout 控制。profile 使用 `.Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top64-updown-20260707.tsv`，该 profile 来自 calibration/dev，不来自 held-out。
+- command_shape: 当前 pushed source `a8ba89213`，no-prompt-specific baseline env（不设置 France pack/profile），额外设置 `GGML_DS4_SPARSE_FUSED_MMVQ_MEMBERSHIP_OUT=<run>/membership.csv` 和 `GGML_DS4_SPARSE_FUSED_MMVQ_PROFILE=<top64.tsv>`，跑 France `n=32`。记录 output correctness/truncation note、membership summary、decode/prompt hit rows、hit fallback us、hit source bytes、RAM/page-cache/OOM。
+- result_20260707: first n32 attempt was killed because stdout grew to `576MiB`; stdout was deleted and this run is invalid. Rerun with France `n=16` and stdout redirected to `/dev/null` timed out at `240s`, so it is not a correctness/token-rate result and not SOTA. The partial membership data is still useful as a coverage diagnostic: `records=6242`, `rows=7540`, `hit_rows=578`, `hit_row_ratio=7.67%`, `source_bytes=27.817GB`, `hit_source_bytes=2.273GB`, `hit_source_ratio=8.17%`, `fallback_us=13.224s`, `hit_fallback_us=0.732s`, `hit_fallback_ratio=5.53%`.
+- decision_update: Top64 calibration sparse pairs cover too little of the observed up/down fallback in this probe to justify any logit-changing sparse MMVQ implementation or strict-cold performance benchmark. Do not proceed to SOTA/performance for sparse MMVQ from this evidence. If this class is reopened, it needs either a stronger profile/representation hard-bound or a graph placement/copy-count compare probe that proves much higher effective coverage without hidden D2H/H2D or gate-cache loss.
+- pass_gate: 只要求诊断能稳定产出且不改变输出/RAM。若 top64 hit coverage 低或 hit_fallback_us 占比不足，说明 compact sparse route 对当前 generalized path margin 不够，后续应关闭或改 profile/representation hard-bound。若 coverage 可观，下一步仍不能 benchmark，必须进入 graph/backend placement probe，证明 hot branch 不发生 D2H/H2D 中间拷贝、不破坏 gate cache、fixed-text top1 不变。
+- push_rule: 诊断 artifact 和计划更新必须 push 到 `ssd/vendor/deepseek-token-rate-16gb`。任何后续 source edit 仍必须 default-off，先 compare/top1，再 dev set，候选冻结后才跑 held-out。
+
+## 2026-07-07 stale route cleanup：DFlash/MTP planned probe superseded
+
+- status: closed_by_existing_evidence
+- reason: `.Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe-plan.json` 仍显示 `planned`，但后续 `.Agent/runs/20260705-vendor-ds4-coldstart/dflash-oracle-verifier-window-probe.json` 已完成并关闭该 probe：W=2/4/8 exact top1 passed, but elapsed speedup was only about `1.010x/1.013x/1.002x`, below the `1.128x` minimum independence gate and far below practical DFlash verifier needs. `.Agent/runs/20260705-vendor-ds4-coldstart/latest-hf-refresh-hard-bound-20260706.json` also records DFlash as closed because current vendor target verifier lacks sublinear gain and DFlash artifacts are not vendor-loadable.
+- decision: Do not implement DFlash/EAGLE/MTP loader or runtime from the stale planned artifact. Reopen only if a new vendor-loadable draft/verifier artifact appears or a new target-verifier probe proves materially sublinear verification under the same 16GB RAM/page-cache, TTFT, and correctness gates.
+
+## 2026-07-07 Phase X4：sparse-pair generalized bound audit after membership probe
+
+- attempt_id: 20260707-sparse-pair-generalized-bound-audit-after-membership
+- status: diagnostic_complete_route_closed_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-generalized-bound-audit-after-membership-20260707.json`
+- task_context: 真实目标仍是 vendor DeepSeek 在 `16GB host RAM`（含 page cache）+ `32GB RTX 5090` 上，对用户随机/generalized prompt 稳定达到 `>5 tok/s`；不得做 prompt-specific 优化。该审计只使用 `calibration_dev_set_v1` 与既有 profile，不使用 held-out，不跑模型，不改源码。
+- method: 将 no-prompt-specific generalized baseline (`general-prompt-baseline-no-prompt-specific-20260706.json`) 与 calibration/dev sparse-pair profiles (`top64/128/256/512`) 结合，计算“理想零开销地完全消除这些 topN pair 的 up/down decode fallback”后的 per-prompt token-rate 上界；并结合最新 membership probe 的 timeout/low coverage 结果判断是否允许继续 runtime。
+- zero_overhead_bounds:
+  - top64, payload `544MiB`: mean `2.267 tok/s`, min `1.864 tok/s`.
+  - top128, payload `1088MiB`: mean `2.313 tok/s`, min `1.908 tok/s`.
+  - top256, payload `2176MiB`: mean `2.394 tok/s`, min `1.976 tok/s`.
+  - top512, payload `4352MiB`: mean `2.519 tok/s`, min `2.074 tok/s`.
+- membership_cross_check: X3 runtime membership probe timed out at 240s and partial data only showed `hit_row_ratio=7.67%`, `hit_source_ratio=8.17%`, `hit_fallback_ratio=5.53%`; this is weaker than the already-insufficient profile-only ideal bound.
+- decision: close sparse retained hot-pair runtime work for `top64/top128/top256/top512` under the generalized product target. Do not implement sparse-pair writeback, hot branch, or strict-cold SOTA benchmark from current evidence. The accepted SOTA is unchanged.
+- next_allowed_work:
+  - Native source work may reopen only with a new hard-bound showing simultaneous gate-source and up/down fallback reduction near the previously measured `~90%` threshold, or `min >= 5.5 tok/s` on calibration/dev before coding.
+  - Payload/representation work must first prove prompt-general correctness and effective payload reduction that fits 32GB VRAM without destroying gate cache; lossy sidecar/writeback remains blocked until compare/top1 passes.
+  - External quantized GGUF/model variants require a no-prompt-specific load/correctness plan, frozen candidate metadata, calibration/dev validation, then held-out only after candidate freeze.
+  - Continue to push all diagnostic artifacts and plan updates to `ssd/vendor/deepseek-token-rate-16gb`; any accepted generalized SOTA must include full reproduction details and pushed-source reproduction.
+
+## 2026-07-07 Phase X5：external prompt-general quantized GGUF candidate plan
+
+- attempt_id: 20260707-external-quantized-gguf-candidate-selection
+- status: planned_before_download_or_model_run
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-quantized-gguf-candidate-selection-20260707.json`
+- why_now: Native exact/dataflow routes now have hard-bound or correctness/performance rejections: exact hotset, sparse top64-512, fused up/gate, one-stream up/down, Q8_0 full-output rowtile, q2tern/codebook sidecars, and DFlash/MTP are not currently credible generalized `>5 tok/s` paths. A prompt-general lower-bit GGUF can change cold source/page-cache pressure without prompt-specific packs, but must pass load/correctness before any performance claim.
+- selected_candidate: `bullerwins/DeepSeek-V4-Flash-GGUF` file `DeepSeek-V4-Flash.IQ2_S.gguf`; HEAD on 2026-07-07 reports `content-length=88019539296` and etag `4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0`. Current `/root` free space is about `106GB`, so this is feasible but leaves limited run headroom.
+- not_sota: This candidate is not an optimization result and not an accepted SOTA. It is a validation candidate only. No held-out prompt may be used until after load, France calibration correctness, and calibration/dev generalized validation pass and the candidate is frozen.
+- protected_assets: Do not delete accepted native GGUF, accepted SOTA run dirs, accepted packs/profiles, or pushed-source reproduction artifacts. Existing local `cloudyu` 4Expert is not a performance candidate because prior France smoke failed correctness.
+- validation_sequence:
+  - Stage 1: resumable download into isolated model directory; verify size and sha256/etag where practical; record exact URL, file size, checksum, disk state.
+  - Stage 2: strict `MemoryMax=16000000000`, `MemorySwapMax=0` load/header smoke with no prompt-specific env and stdout controlled; stop on load/tensor/type errors.
+  - Stage 3: France calibration semantic check only if load passes; record output, TTFT, eval_tok_s, prompt_tok_s, memory_peak/file bytes and page-cache accounting. Still not SOTA.
+  - Stage 4: calibration/dev prompt set only if France correctness passes; compare min/mean against no-prompt-specific generalized baseline, not France-only 4.4.
+  - Stage 5: held-out locked test set only after candidate freeze; accepted generalized SOTA must be held-out-backed, strict 16GB/page-cache, TTFT compliant, correctness pass, and immediately pushed/reproduced from pushed commit.
+- reject_rule: If load fails, correctness fails, output degenerates, RAM/page-cache exceeds 16GB, or TTFT rises beyond gate before an accepted candidate exists, record artifact/plan and stop this model route. Do not tune prompt-specific profiles or packs for this candidate.
+- push_rule: Candidate selection plan and all download/load/correctness artifacts must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Any future source changes remain default-off and must preserve Kimi functionality.
+
+### X5 Stage 1 result：IQ2_S download complete
+
+- status: download_complete_not_model_validated
+- artifacts:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-download-stage1-started-20260707.json`
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-download-stage1-complete-20260707.json`
+- model_path: `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+- size: expected and actual `88019539296` bytes.
+- sha256: `817627eb3aa7b42e73264b653218fc1a1f27659fb999aa52840c17469415e809`.
+- download_log: aria2 completed at `2026-07-07T01:00:17Z`, avg speed about `79MiB/s`; `.aria2` control file disappeared.
+- note: HF/Xet HEAD etag `4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0` did not equal local file sha256, so use local `sha256 + size` for reproducibility.
+- next_step: Stage 2 strict `16GB/no-swap` load smoke with no prompt-specific env and stdout controlled. This is still not SOTA and must not use held-out.
+
+### X5 Stage 2 result：default IQ2_S load failed
+
+- status: default_load_failed_missing_hc_head_base_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage2-default-load-smoke-failed-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-load-smoke/france-n1-load`
+- command_scope: strict `MemoryMax=16000000000`, `MemorySwapMax=0`, France calibration `n=1`, no prompt-specific pack/profile, no tensor alias env, stdout controlled.
+- result: exit status `1`; stderr reports `missing tensor 'hc_head_base'` and model load failed before inference. `memory_peak_bytes=375943168`, `oom=0`, `oom_kill=0`.
+- interpretation: This is a vendor/external-GGUF tensor naming compatibility failure, not a token-rate or correctness result. Since the current source already contains DeepSeek4 tensor alias flags used for other external DS4 variants, one controlled follow-up is allowed with those alias flags only.
+- Stage 2b allowed_env:
+  - `LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS=1`
+  - `LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1`
+  - `LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1`
+- Stage 2b constraints: still strict `16GB/no-swap`, still no prompt-specific pack/profile, still no held-out, stdout controlled, calibration France only. If alias load fails, output degenerates, or correctness fails, reject the IQ2_S route and do not proceed to calibration/dev benchmark.
+
+### X5 Stage 2b result：alias load reached prompt, wrapper invalid
+
+- status: alias_load_reached_prompt_but_timeout_due_interactive_wrapper_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage2b-alias-load-smoke-timeout-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-load-smoke/france-n1-alias-load`
+- result: Existing DeepSeek4 alias envs made the IQ2_S GGUF load far enough to enter the prompt loop, but the run omitted `--single-turn`; `llama-cli` generated one token and then waited for another interactive turn until `RuntimeMaxSec=420` killed it. This run is invalid for correctness and performance.
+- memory: wrapper was killed before saving cgroup files, but live polling repeatedly showed `memory.current≈15.997GB` and `memory.peak=16000000000`; page cache/process memory were inside the 16GB cgroup during the run.
+- cleanup: original stdout grew to about `1.3GB` due spinner/interactive prompt output; `stdout_head_excerpt.txt` and `stdout_tail_excerpt.txt` were preserved, and `stdout.txt` was removed to avoid artifact bloat.
+- Stage 3 plan: rerun France calibration semantic smoke with the same alias env plus `--single-turn`, strict `MemoryMax=16000000000`, `MemorySwapMax=0`, no prompt-specific pack/profile, stdout bounded, and a real token budget. If output degenerates or RAM/TTFT fails, reject IQ2_S. Only if France correctness passes may calibration/dev run.
+
+### X5 Stage 3 result：IQ2_S single-turn correctness failed
+
+- status: load_passed_correctness_failed_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage3-france-singleturn-correctness-failed-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-france-correctness/france-n192-singleturn`
+- result: exit `0`, alias env made model load and generate under strict `16GB/no-swap`; `memory_peak_bytes=16000000000`, `oom=0`, `oom_kill=0`.
+- metrics: observed stdout summary `Prompt: 1.2 t/s | Generation: 2.7 t/s`, wall time `1:37.87`; this is below the generalized `>5 tok/s` target and not a SOTA.
+- correctness: failed. Output stayed in `[Start thinking]` and degenerated into repeated `geography` text instead of a coherent short paragraph introducing France.
+- interpretation: IQ2_S is vendor-loadable with existing alias envs, but default template/reasoning behavior is not acceptable. Because this may be an interface/template mismatch rather than only quantization quality, one controlled Stage 3b compatibility check is allowed.
+- Stage 3b allowed: rerun France calibration with the same alias env plus `--chat-template deepseek3 --reasoning off --single-turn`; still no prompt-specific pack/profile, strict 16GB/no-swap, stdout bounded, no held-out. If Stage 3b also fails correctness, degenerates, or remains far below target, close IQ2_S and do not run calibration/dev.
+
+### X5 Stage 3b result：IQ2_S rejected
+
+- status: rejected_correctness_failed_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage3b-reasonoff-correctness-reject-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-france-correctness/france-n192-deepseek3-reasonoff`
+- config: same alias env, plus `--chat-template deepseek3 --reasoning off --single-turn`; no prompt-specific pack/profile; strict `MemoryMax=16000000000`, `MemorySwapMax=0`; held-out not used.
+- result: exit `0`, `memory_peak_bytes=16000000000`, `oom=0`, `oom_kill=0`; observed stdout summary `Prompt: 0.9 t/s | Generation: 2.9 t/s`, wall time `1:24.67`.
+- correctness: failed. Output was malformed JSON/unknown metadata text, not a coherent France paragraph.
+- decision: Reject IQ2_S route. It is vendor-loadable with existing alias envs but fails the required France correctness check and remains far below the generalized `>5 tok/s` target. Do not run calibration/dev or held-out for this candidate. Accepted SOTA unchanged.
+- cleanup_note: downloaded model remains on disk for now for auditability; because it is a rejected 88GB candidate and `/root` has limited free space, future large-model work should either explicitly approve removal or choose a small/header-only probe.
+
+## 2026-07-07 Phase X6：post-IQ2 route audit and disk-gated next step
+
+- attempt_id: 20260707-post-iq2-route-audit
+- status: planned_before_artifact_audit
+- why_now: IQ2_S was the smallest single-file external GGUF candidate and has now been rejected for France correctness despite strict 16GB load success. Native sparse/exact/dataflow routes have also been closed by hard-bound or correctness/performance gates. `/root` has only about `24GB` free because the rejected IQ2_S file remains on disk, so another full GGUF download is not safe without an explicit cleanup decision.
+- scope: artifact-only audit; no model run, no held-out, no source edit, no large download, and no deletion. Use tracked evidence only: `payload-artifact-breakthrough-refresh-after-membership.json`, `latest-hf-refresh-hard-bound-20260706.json`, IQ2_S rejection artifact, generalized baseline/bounds, and local disk/model inventory.
+- questions_to_answer:
+  - Are any remaining known external GGUF candidates both vendor-loadable and plausibly correct without a large download?
+  - Is there any metadata/header-only candidate with a hard-bound above generalized `>5 tok/s` and enough correctness evidence to justify download?
+  - Does the current disk state itself block empirical candidate testing until rejected IQ2_S is removed or relocated?
+  - What is the next allowed work that still serves the product target: random/generalized prompt `>5 tok/s` on `16GB host RAM` including page cache + `32GB RTX 5090`?
+- expected_decision: If no source/model candidate passes these gates, record that the next step must be either explicit cleanup approval for rejected IQ2_S before another large candidate, or a new small/header-only proof, or a fundamentally new hard-bound/source design that reaches `min >= 5.5 tok/s` on calibration/dev before coding.
+- push_rule: The audit artifact and plan result must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Accepted SOTA remains unchanged unless a future candidate passes all strict RAM/page-cache, correctness, TTFT, generalized dev, and held-out gates.
+
+### X6 result：route audit complete, no benchmark/download allowed now
+
+- status: diagnostic_complete_no_new_candidate_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/post-iq2-route-audit-20260707.json`
+- disk_state: `/root` free space is about `24GiB`; rejected IQ2_S occupies about `82GiB`. If that rejected model were explicitly removed/relocated, free space would be about `106GiB`, but no deletion was performed in this audit.
+- route_matrix:
+  - Native exact/sparse/dataflow hotset: closed. Exact hotset and sparse-pair bounds are far below generalized `>5 tok/s`; runtime source edit still requires a new `min >= 5.5 tok/s` hard-bound or credible simultaneous `~90%` gate+up/down reduction.
+  - Q8_0 full-output down rowtile: closed. Correctness can pass, but measured down path was slower than CPU fallback.
+  - DFlash/MTP/speculator: closed. Current artifacts are not vendor-loadable and verifier speedup is below gate.
+  - cloudyu 4Expert local: deferred, correctness failed in prior smoke; only correctness root-cause/template/tensor-alias diagnostics are allowed before any benchmark.
+  - bullerwins IQ2_S local: rejected, loadable with aliases but France correctness failed and speed was only `2.7-2.9 tok/s`.
+  - bullerwins larger IQ3/IQ4/Q8 and tarruda split Q2/IQ3/Q3: blocked by disk and lack of correctness/load proof; no full download from metadata alone.
+  - sidecar/lowbit q2tern/codebook: closed by compare/top1/error evidence.
+- decision: accepted SOTA unchanged. No new source edit, strict-cold benchmark, held-out run, or large model download is allowed from the current evidence.
+- next_allowed_work:
+  - Record explicit cleanup decision before deleting/relocating rejected IQ2_S; only after cleanup may another large candidate be planned.
+  - Or run only a small/header-only proof for a new external candidate.
+  - Or produce a new native hard-bound/source design that reaches `min >= 5.5 tok/s` on calibration/dev before coding.
+  - Or debug cloudyu 4Expert correctness only, with no performance claim until France correctness passes.
+
+## 2026-07-07 Phase X7：cloudyu 4Expert correctness root-cause audit
+
+- attempt_id: 20260707-4expert-correctness-root-cause-audit
+- status: planned_before_artifact_audit
+- why_now: X6 leaves cloudyu 4Expert as the only local large candidate that does not require a new download. It is not a performance/SOTA candidate because France correctness failed, but it may still inform a smaller prompt-general representation route if the remaining correctness issue can be localized.
+- scope: artifact/source audit first; no benchmark, no held-out, no prompt-specific profile/pack, no new large file, no destructive cleanup. Use existing 4Expert artifacts (`4expert-load-compat-diagnostic`, `4expert-token-type-zero-normal-diagnostic`, `4expert-correctness-followup-reject`, tensor-map/header artifacts) plus static source inspection.
+- known_facts:
+  - Full model is local and readiness previously passed with sha256 `e9e7e22ba585f83330d08235de39e8dcd8cbb513fd9fad6103764da74a4e64bc`.
+  - `LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1` fixed the original empty-token output issue.
+  - Default/deepseek/deepseek3 template checks still failed France correctness; no obvious uncreated tensor dump was observed.
+- questions_to_answer:
+  - Is the remaining failure more likely tensor alias/route mapping, tokenizer/template, quantization quality, or 4Expert model quality?
+  - Is there a small no-logit-change parity probe worth implementing next, such as per-layer tensor presence/map audit, selected expert id route audit, or fixed-token logits/top1 comparison against native?
+  - Would any follow-up be able to preserve Kimi functionality and remain default-off?
+- decision_rule: If audit cannot identify a narrow correctness probe, keep 4Expert closed and do not run more France/template attempts. If it identifies a narrow probe, write a separate default-off plan before any source edit/model run.
+- push_rule: Audit artifact and plan result must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Accepted SOTA unchanged unless a future candidate passes all correctness/RAM/TTFT/generalized/held-out gates.
+
+### X7 result：4Expert remains closed for performance; only narrow route dump could be justified
+
+- status: diagnostic_complete_no_benchmark_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/4expert-correctness-root-cause-audit-20260707.json`
+- evidence:
+  - Empty-output root cause was token_type handling; `LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL=1` made sampled pieces visible, but generated France text remained degenerate.
+  - Default, `deepseek`, and `deepseek3` template probes all failed correctness, so continuing template smokes is not useful.
+  - `LLAMA_DUMP_UNCREATED_TENSORS=1` follow-up showed no obvious uncreated/unused tensor lines after current aliases, so the failure is not explained by a simple missing tensor.
+  - 4Expert differs structurally from native: tokenizer `bpe/joyai-llm` vs native `gpt2`, context length, `expert_used_count=4` vs native `6`, many common tensors with different quantization types, and 638 cloudyu-only non-expert tensor names.
+- assessment: remaining issue is most likely model/interface or numerical compatibility after loading, not a simple missing-tensor or chat-template issue. Native logits/top1 are not a valid exact parity oracle because the 4Expert computation is intentionally different.
+- decision: no 4Expert performance benchmark, generalized run, or SOTA claim is allowed. Accepted SOTA unchanged.
+- only_possible_reopen: A separate default-off plan could add a route-dump diagnostic for `ffn_gate_tid2eid` / hash-layer semantics and selected expert ids under France `n=1`; this would be diagnostic only and would not prove correctness without a known-good reference. Otherwise keep 4Expert closed until a trusted reference runtime/output for this exact GGUF exists.
+
+## 2026-07-07 Phase X8：non-destructive disk cleanup candidate audit
+
+- attempt_id: 20260707-disk-cleanup-candidate-audit-after-iq2
+- status: planned_before_artifact_audit
+- why_now: X6/X7 show no safe benchmark/source route remains, and `/root` free space is about `24GiB` because rejected IQ2_S and local 4Expert/native models occupy most disk. Any further external GGUF validation requires explicit cleanup/removal/relocation decisions. Before asking for or taking cleanup action, produce a precise non-destructive candidate list.
+- scope: no deletion, no model run, no source edit, no held-out, no large download. Inspect disk usage and classify files as protected, rejected-removable-with-approval, or unknown/do-not-touch.
+- protected_assets: accepted native GGUF, accepted SOTA run dirs, pushed-source repro artifacts, plan/artifacts, local 4Expert if future correctness work remains possible.
+- expected_output: artifact listing top disk consumers, rejected IQ2_S removal potential, any large stdout/log artifacts already superseded, and exact free-space impact. The artifact must explicitly say that no files were deleted.
+- push_rule: Push artifact and plan update to `ssd/vendor/deepseek-token-rate-16gb`. Any actual cleanup must be a separate explicit decision.
+
+### X8 result：cleanup candidates recorded, no files deleted
+
+- status: diagnostic_complete_no_cleanup_performed
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/disk-cleanup-candidate-audit-after-iq2-20260707.json`
+- current_disk: `/root` free space about `24GiB`.
+- protected_do_not_delete:
+  - `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF` (`~286GiB`), accepted/native model dependency.
+  - `/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF` (`~154GiB`), local candidate for possible correctness-only root-cause.
+  - historical expert packs tied to SOTA/repro records, unless a separate explicit cleanup decision says otherwise.
+- rejected_removable_with_explicit_approval:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins` (`~82GiB`), rejected for France correctness and below-target speed. Removing it would restore free space to about `106GiB`.
+- additional_candidates: several superseded `stdout.txt/stdout.log` files from rejected probes are hundreds of MiB to ~1.7GiB each. These can be cleaned only after preserving required excerpts and with explicit cleanup approval; expert packs and accepted model assets are not included.
+- decision: No files were deleted. Further large external GGUF validation remains disk-blocked unless cleanup is explicitly approved. Small/header-only probes remain allowed.
+
+## 2026-07-07 Phase X9：current compact/header-only external candidate refresh
+
+- attempt_id: 20260707-current-compact-header-only-refresh
+- status: planned_before_external_metadata_probe
+- why_now: X8 blocks full downloads without cleanup approval, but small/header-only probes remain allowed. Prior artifacts include many alternate GGUF/REAP/sidecar candidates, but after IQ2_S correctness rejection we need a current, compact refresh focused on candidates that might fit the `24GiB` free-space limit or prove a hard-bound without full download.
+- scope: no full model download, no deletion, no model run, no source edit, no held-out. Use Hugging Face API metadata plus HTTP Range reads limited to small header slices for selected GGUF files. Persist only small metadata/header artifacts.
+- target_filter:
+  - Prefer single-file or split candidates whose total size is plausibly `<=24GiB`, or sidecar/draft artifacts whose header/metadata can prove a new hard-bound.
+  - Include compact REAP/K variants and sidecar/MTP names only as metadata/header candidates; do not treat metadata as correctness.
+  - Exclude already rejected IQ2_S and already-closed DFlash/MTP verifier routes unless new metadata materially changes their loadability/hard-bound.
+- success_gate: A candidate can move to a future download/load plan only if header metadata indicates `general.architecture=deepseek4` or a clearly vendor-loadable DS4-compatible architecture, expected size fits disk or cleanup plan, and there is no obvious tokenizer/tensor-layout red flag already known from rejected IQ2/4Expert routes. Correctness still must be proven later before any benchmark.
+- push_rule: Plan and artifact must be pushed to `ssd/vendor/deepseek-token-rate-16gb`. Accepted SOTA unchanged.
+
+### X9 result：header-compatible candidates exist, but no standalone candidate can be promoted under current disk
+
+- status: metadata_header_probe_complete_no_download_no_benchmark
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-compact-header-only-refresh-20260707.json`
+- scope_confirmed: no full model download, no deletion, no model run, no source edit, no held-out prompt. Each GGUF probe used Hugging Face API metadata plus at most a `16MiB` HTTP Range read.
+- search_scope: current HF search plus historical candidate repos for REAP, sidecar, IQ1/Q1/Q2, 4Expert, MTP, compact GGUF.
+- result:
+  - `17` repos considered; `12` GGUF headers probed.
+  - `11` candidates parsed as `general.architecture=deepseek4` with `tokenizer.ggml.model=gpt2`, so they are header-compatible enough to keep as future load/correctness candidates.
+  - One file fits current `~24GiB` free disk: `shreyvish5678/deepseek-v4-flash-284b-a13b-reap-162b-sidecar-iq2_xxs/dense/model-dense.gguf` (`~8.8GiB`), but it appears to be a sidecar/dense component, not a complete standalone DS4 GGUF, so it cannot be promoted directly.
+  - Standalone-looking header-compatible candidates are about `50-105GiB` (`eouya2` REAP25/50, `sleepyeldrazi` REAP K128/K150/K180, `persadian` IQ1_S-XL, `antirez` mixed expert GGUF), so they require explicit cleanup/relocation before full validation.
+  - `Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF` parses as `qwen35`, not DS4, and is not a DeepSeek runtime candidate.
+- decision: no candidate promoted to download, load, correctness test, or benchmark. Accepted generalized SOTA unchanged; France-only SOTA unchanged.
+- next_allowed_work:
+  - If cleanup/relocation is approved, select one standalone header-compatible candidate and write a separate staged plan: download -> load smoke -> France correctness -> calibration/dev correctness -> only then benchmark.
+  - Without cleanup approval, continue native/dataflow work only if a prompt-general hard-bound shows `>=5.5 tok/s` calibration/dev min after realistic overhead.
+
+## 2026-07-07 Standing Rule：generalized no-prompt-specific baseline is the promotion baseline
+
+- status: active_rule
+- baseline_artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`
+- baseline_scope: prompt-general / no prompt-specific expert pack / calibration-dev prompts only. France-only SOTA (`4.4-4.5 tok/s`) is useful as a regression reference for that single prompt, but it is not the optimization baseline for the product task.
+- product_task: on a `16GB` host-RAM machine (including page cache) plus `32GB` RTX 5090, a random user prompt should produce stable `>5 tok/s` output without prompt-specific tuning.
+- baseline_metrics:
+  - France: `2.7 eval_tok_s`, `0.9 prompt_tok_s`, `ram_ok=true`, correctness recorded pass.
+  - Quantum: `1.8 eval_tok_s`, `0.9 prompt_tok_s`, `ram_ok=true`, correctness recorded pass.
+  - Fibonacci: `1.8 eval_tok_s`, `0.9 prompt_tok_s`, `ram_ok=true`, correctness recorded pass.
+  - Japan: `2.4 eval_tok_s`, `0.9 prompt_tok_s`, `ram_ok=true`, correctness recorded pass.
+  - Climate: `2.2 eval_tok_s`, `0.9 prompt_tok_s`, `ram_ok=true`, correctness recorded pass.
+  - Current generalized baseline summary: `min_eval_tok_s=1.8`, `mean_eval_tok_s=2.18`, `max_eval_tok_s=2.7`.
+- promotion_rule:
+  - A new configuration is a generalized improvement if it is not prompt-specific and improves the no-prompt-specific baseline on calibration/dev with all required gates satisfied.
+  - Primary comparison is `min_eval_tok_s` across the calibration/dev prompt set, because the product target is stable random-prompt speed. Mean and per-prompt values must still be recorded.
+  - A result with a higher mean but a lower prompt-set minimum is not accepted as generalized SOTA unless explicitly marked as a diagnostic tradeoff and followed by a separate decision.
+  - Correctness, TTFT, 16GB cgroup RAM including page cache, OOM/kill status, exact command, git commit, run directory, and output text for every prompt must be recorded.
+  - Held-out prompts remain unused during tuning and are only run after a candidate is frozen from calibration/dev evidence.
+- immediate_record_push_rule:
+  - If any configuration exceeds the generalized no-prompt-specific baseline while passing RAM, correctness, and TTFT gates, immediately write a detailed artifact and plan update, then commit and push to `ssd/vendor/deepseek-token-rate-16gb`.
+  - If a configuration improves token rate but fails correctness, RAM, TTFT, or generalization, record it as rejected and push the rejected artifact/plan update; do not promote it.
+
+## 2026-07-07 Phase X10：evaluate Kimi GP4 alias/full-source strategy for DeepSeek
+
+- attempt_id: `20260707-gp4-alias-full-source-transfer-audit`
+- status: planned_before_source_port
+- trigger: Kimi GP4 reported its SOTA path from full expert-source coverage, not only expert packs: `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` maps GGUF shards as expert sources, and `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1` lets aligned aliases use batch/io_uring reads. Reported Kimi counters: `entries=69120`, `misses=0`, `direct_reads=0`, `host_stage=0.000 ms`, `memory.peak=15899996160`.
+- DeepSeek current evidence:
+  - Current DeepSeek branch contains `GGML_MOE_EXPERT_PACK`, `GGML_MOE_EXPERT_PACK_OVERLAY`, `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA`, `GGML_MOE_EXPERT_PACK_LIST`, and `GGML_MOE_IO_BACKEND=iouring` support in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+  - Current DeepSeek branch does **not** contain `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` or `GGML_MOE_IO_ALIGNED_ALIAS_BATCH` symbols, so GP4 cannot be enabled by environment variables alone.
+  - Recent no-prompt-specific diagnostic runs still show VRAM-cache misses (`db-index`: `4650`, `what-to-eat`: `6504`) instead of the GP4 target `misses=0`; this keeps full-source coverage relevant.
+- applicability_assessment:
+  - The transferable idea is strong: make the expert source table complete by treating native GGUF tensor offsets as expert-pack entries, then feed those entries through the same batch/io_uring/pinned/H2D path.
+  - It may help DeepSeek if current misses/direct CPU fallback come from source coverage gaps or non-batched source reads. It will not solve cases where the bottleneck is GPU compute, routing shape mismatch, or up/down kernel inefficiency after source bytes are available.
+  - DeepSeek native GGUF is a single large file rather than Kimi split shards, so the alias generator should parse the native GGUF tensor table and emit `tensor,expert_idx,source_path,offset,nbytes` equivalent entries without duplicating payload files.
+  - Correctness should be exact if offsets and tensor names are correct, because the bytes are read from the original GGUF backing store. The main risks are offset alignment, tensor-name/expert-id mapping, O_DIRECT/io_uring alignment, and cgroup page-cache/RSS accounting.
+- planned_sequence:
+  1. Artifact-only coverage audit: compute native DeepSeek expert tensor count/bytes from the GGUF header and compare against current pack entries/hits/misses on `calibration_dev_set_v1`; no model run, no source edit, no held-out.
+  2. If coverage audit says GP4-style alias can cover all gate/up/down expert tensors, write a source-port plan for a default-off `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` loader and aligned alias batch path. Preserve existing Kimi/pack behavior when envs are unset.
+  3. Implement minimum default-off loader only after the plan is committed. First run metadata loader self-check: entries expected, duplicate resolution, offset alignment, no payload copy, no RAM growth.
+  4. Correctness gate: fixed-text top1/parity or France semantic smoke before any token-rate claim.
+  5. Calibration/dev gate: compare against no-prompt-specific baseline (`min=1.8`, `mean=2.18`), strict 16GB/page-cache, TTFT gate, full outputs. If improved, immediately record and push.
+  6. Held-out remains locked until a candidate is frozen after calibration/dev.
+- success_metrics_for_first_runtime_probe:
+  - Expert source entries substantially increase versus current pack-only entries.
+  - Pack/source misses approach zero for the tensors covered by alias.
+  - `direct_reads`/host staging decrease or move to batched `iouring_reads` with recorded low wait/host times.
+  - `memory_peak_bytes <= 16000000000`, no OOM/kill/swap, correctness pass.
+  - Generalized calibration/dev `min_eval_tok_s` improves over `1.8` without prompt-specific artifacts.
+- push_rule: every audit, rejected probe, or accepted improvement must be recorded and pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+
+### X10 result A：native GGUF full-source alias coverage is complete; source-port allowed
+
+- status: coverage_audit_complete_before_source_edit
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gp4-alias-full-source-coverage-audit-20260707.json`
+- generated_static_alias_tsv: `.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv`
+- scope_confirmed: static GGUF tensor-table audit only; no model run, no source edit, no held-out prompt.
+- coverage:
+  - Alias rows: `33024`, exactly `43 layers * 3 roles * 256 experts`.
+  - Roles: `gate=11008`, `up=11008`, `down=11008`.
+  - Payload represented by aliases: `147169738752 bytes` (`137.0625 GiB`), matching the existing full native expert-pack payload exactly.
+  - Per-entry bytes: `4456448`, all entries same size.
+  - This proves that a GP4-style alias source can represent the complete native DeepSeek gate/up/down expert source without copying payload files.
+- alignment:
+  - All entries are `32B` aligned and `nbytes` is `512/4096` aligned.
+  - Raw `model_offset` is **not** `512B` or `4096B` aligned for any entry (`offset_mod_4096` sample `2816`), so a direct/O_DIRECT alias loader cannot simply submit the raw `(offset,nbytes)` pair.
+  - A DeepSeek port needs an aligned-read wrapper equivalent to Kimi GP4's aligned alias batch: read from `floor(offset, alignment)` into a padded pinned slot, then copy the interior payload to the expected expert buffer/H2D range, or use buffered/mmap fallback for unaligned entries.
+- decision:
+  - Proceed to a default-off source-port plan/implementation for `GGML_MOE_EXPERT_GGUF_ALIAS_TSV`.
+  - The first implementation must be metadata/self-check first, then correctness. No token-rate promotion is allowed from static coverage alone.
+  - Runtime success must show lower pack/source misses or staged/direct-read overhead and must beat the no-prompt-specific generalized baseline on calibration/dev before held-out.
+
+### X10-B plan：port Kimi GP4 full-source alias as a DeepSeek generalized source path
+
+- status: planned_next
+- core_idea:
+  - Kimi GP4 的可迁移点不是 Kimi prompt pack 本身，而是把完整 GGUF expert tensor table 暴露成统一 expert source table，让 gate/up/down expert 都能通过同一套 batch/io_uring/pinned/H2D 路径读取。
+  - 对 DeepSeek native GGUF，这应通过静态 alias TSV 实现：每一行映射 `source_path + tensor + expert_id + model_offset + nbytes`，不复制 137GiB payload，不依赖任何 prompt trace 或 hotset。
+  - 因为 DeepSeek expert `model_offset` 不是 512/4096 对齐，必须实现 aligned alias batch：从 `floor(offset, alignment)` 开始读到 padded pinned slot，再从 `payload_shift` 处把真实 expert payload 交给后续 H2D/compute。
+- why_this_is_general:
+  - alias TSV 来自模型 GGUF tensor table，是 prompt-agnostic 静态元数据；
+  - 不使用 France route、AI infra route、held-out prompt route、answer trace、miss order、expert hot set；
+  - 可接受性必须由 `calibration_dev_set_v1` 的多 prompt 指标证明，最终 SOTA 才能跑 locked held-out。
+- theoretical_limit:
+  - 每个 DeepSeek native expert alias payload 为 `4456448 bytes`，共 `33024` 个 gate/up/down entries，覆盖约 `137.0625 GiB` expert bytes。
+  - aligned-read 额外读取最多约 `4095 bytes`/entry，相比 `4.25MiB` expert payload 小于 `0.1%`，因此 alignment 本身不应成为主要吞吐瓶颈。
+  - 该策略的直接收益上限只来自 source miss、direct read syscall、host staging、pinned copy、H2D 调度和 batch/io_uring 重排；如果当前主要时间仍是 up/down CPU compute fallback，alias source 本身不能单独达到 `>5 tok/s`，必须与 up/down GPU/batch path 联动。
+  - 因此 runtime profile 必须同时记录 `source entries/misses/direct_reads/iouring_reads/host_stage/H2D` 和 `up/down CPU fallback`。如果 misses 归零但 fallback 时间不降，结论应是“source coverage 有效但不是主瓶颈”，不能 promoted。
+
+#### Stage X10-B1：default-off source port validation
+
+- implementation_scope:
+  - Add default-off `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` loader to append alias entries into the existing expert-pack/source table.
+  - Add default-off `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1` for unaligned alias offsets in the batch/io_uring copy path.
+  - Existing pack/list/overlay/Kimi behavior must remain unchanged when both envs are unset.
+  - Duplicate handling must be explicit. Initial DeepSeek run should be alias-only or use existing replace-duplicates flag deliberately; accidental duplicate tensor/expert entries are rejected.
+- validation_before_benchmark:
+  - Build both normal and batch-enabled binaries.
+  - Run a metadata/loader self-check that proves `33024` alias rows load, source file opens once, offsets/nbytes match the audit TSV, and no payload file is created.
+  - Run a short fixed-text/top1 or parity smoke before any token-rate claim. Correctness must pass or the source port is rejected.
+  - If `llama-cli` does not enter the batch path, run `llama-results` fixed-text diagnostic with fallback-reason profile to identify whether the blocker is `batch_env_missing`, type support, row mapping, cache_get, or a wrapper path issue.
+- required_logs:
+  - `expert alias source` / `expert alias tsv loaded` counts;
+  - total expert source entries, alias source entries, duplicate count;
+  - batch/iouring counters, read offsets, payload shifts, read sizes;
+  - fallback-reason CSV for up/down/gate;
+  - cgroup `memory.current`, `memory.peak`, `memory.stat file`, `memory.events`, and OOM/swap status.
+- reject_if:
+  - alias loader is not invoked in the intended runtime path;
+  - O_DIRECT/io_uring rejects unaligned reads without aligned wrapper;
+  - output correctness fails on the pre-benchmark smoke;
+  - RAM/page cache exceeds the strict 16GB cgroup;
+  - env unset changes old SOTA behavior.
+
+#### Stage X10-B2：calibration/dev runtime probe
+
+- candidate_config:
+  - no prompt-specific pack/profile/hotset;
+  - strict cold `drop_caches`;
+  - `MemoryMax=16000000000`, `MemorySwapMax=0`;
+  - native DeepSeek GGUF alias TSV generated from static tensor metadata;
+  - `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=<ds4-native-full-gguf-alias-source.tsv>`;
+  - `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`;
+  - batch/io_uring/pinned flags only if the batch path actually consumes the alias entries;
+  - held-out prompts remain unused.
+- measurement:
+  - Run all `calibration_dev_set_v1` prompts with exact outputs captured.
+  - Record per prompt: `prompt_tok_s`, `eval_tok_s`, TTFT, elapsed, output correctness, `memory_peak_bytes`, `memory_file_bytes`, OOM/swap, entries/misses, direct reads, io_uring reads, host stage time, H2D time, up/down CPU fallback time, and fallback reasons.
+  - Compare against generalized no-prompt-specific baseline: min `1.8 tok/s`, mean `2.18 tok/s`, France `2.7`, quantum `1.8`, Fibonacci `1.8`, Japan `2.4`, climate `2.2`.
+- promotion_gate:
+  - A candidate is accepted only if calibration/dev `min_eval_tok_s` improves without severe per-prompt regression, all outputs are semantically/code correct, RAM/page cache stay inside 16GB, and TTFT is within the accepted `+20%` gate.
+  - If accepted, immediately write a full artifact, update this plan, commit source + docs, push to `ssd/vendor/deepseek-token-rate-16gb`, then clean rebuild/rerun from the pushed commit to prove reproducibility.
+  - If it improves only some counters but not generalized token rate, record as diagnostic/rejected and push the record, but do not replace SOTA.
+
+#### Stage X10-B3：combine source coverage with up/down fallback removal
+
+- decision_rule:
+  - If alias full-source makes misses/staging close to zero but token rate remains below target because `ffn_up_exps`/`ffn_down_exps` still fall back to CPU, move back to W2/W3 and use alias source only as the backing source for grouped/batched up/down GPU paths.
+  - Prioritize the part with the largest measured seconds per token: if CPU fallback remains dominant, optimize kernels/row mapping; if host staging/read time becomes dominant, tune io_uring depth, refill batch, pinned slots, and VRAM split.
+- combined_target:
+  - The product target is stable random-prompt `>5 tok/s` on `16GB host RAM + 32GB 5090`.
+  - The first milestone is calibration/dev min above the current `1.8 tok/s` baseline with no correctness/TTFT/RAM regression.
+  - The second milestone is a frozen candidate tested once on `held_out_test_set_v1_locked`; final SOTA is based on held-out metrics, not on France or any prompt used during tuning.
+
+#### Stage X10-B4：recording and branch discipline
+
+- branch: all code, artifacts, and plan updates for this line must be pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- identity: commits should use `L-Ark <fliangae@connect.ust.hk>`.
+- artifact_required_for_every_run:
+  - source commit and dirty status;
+  - build command and binary/library sha256;
+  - exact env/CLI;
+  - model path and alias TSV sha256;
+  - run directory;
+  - full prompt outputs;
+  - token-rate/TTFT/elapsed metrics;
+  - cgroup memory/page-cache/OOM/swap metrics;
+  - source/batch/fallback counters.
+- reproducibility_rule:
+  - Any new accepted SOTA must be committed and pushed immediately, and then reproduced from the pushed commit. A result that cannot be reproduced from the remote branch is not accepted.
+
+### X10-B1 result：full-source alias loader and aligned alias single io_uring path validated
+
+- status: accepted_infrastructure_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gp4-alias-loader-iouring-single-validation-20260707.json`
+- run_root: `/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-results-top1-smoke`
+- main_validation_run: `/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-results-top1-smoke/alias-mxfp4-probe1-iouring-single-mem`
+- source_scope:
+  - Added default-off `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` loader for static GGUF alias rows.
+  - Added `alias_source` tracking for expert source entries.
+  - Added default-off `GGML_MOE_IO_ALIGNED_ALIAS_BATCH` support for unaligned alias offsets.
+  - Added aligned alias support to single `expert_pack_read_entry_iouring()` / direct-read path, gated by the same env.
+  - Existing behavior is unchanged when the alias envs are unset.
+- validation_config:
+  - strict `MemoryMax=16000000000`, `MemorySwapMax=0`, cold `drop_caches`;
+  - `llama-results` fixed France text, `--sequential-logits`, `--check`, `--top1-fail-on-mismatch`;
+  - `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv`;
+  - `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_URING_SINGLE=1`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`;
+  - `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=parity`, `MAX_CALLS=1`, `MAX_ACTIVE=1`, `MAX_COLS=16`.
+- correctness_result:
+  - top1 check passed: `same_top1=145/145`, `first_mismatch_pos=-1`, `max_abs=0`, `mean_abs=0`, stdout `OK`.
+  - MXFP4 down parity sample passed for `blk.0.ffn_down_exps.weight`: `active=6`, `compared=16`, `max_abs=0.00337298296`, `mean_abs=0.00130869935`, `max_rel=0.0190681965`.
+- memory_result:
+  - `memory_peak_bytes=16000000000`;
+  - `memory_current_bytes=14965194752`;
+  - `memory_file_bytes=14759301120`;
+  - cgroup `oom=0`, `oom_kill=0`, `oom_group_kill=0`.
+- alias_result:
+  - alias source opened with io_uring-capable direct fd;
+  - `expert alias tsv: loaded 33024 entries`, `sources=1`, `bad_rows=0`;
+  - `expert pack: total entries=33024 sources=1`.
+- read_path_result:
+  - Before the aligned single-read fix, the same probe loaded aliases but ended with `direct_fallbacks=6`, `iouring_reads=0`.
+  - After the fix and `GGML_MOE_IO_URING_SINGLE=1`, counters are `hits=6`, `misses=0`, `direct_reads=0`, `direct_fallbacks=0`, `iouring_reads=6`, `iouring_bytes=26738688`, `iouring_fallbacks=0`, `iouring_submit_us=1021`, `iouring_wait_us=7700`.
+  - Stage trace improved from about `stage_jobs_done=147.944ms` in the direct-fallback diagnostic to `stage_jobs_done=106.419ms` in the io_uring-single validation, but this is a one-call diagnostic and not a token-rate claim.
+- decision:
+  - This validates that the Kimi GP4-style full-source alias table can be consumed by DeepSeek and can read unaligned native GGUF expert payloads through aligned io_uring single reads under the 16GB cgroup.
+  - This is not a SOTA and does not replace the generalized baseline, because only one MXFP4 down probe call is enabled and all remaining down calls are declined by `mxfp4_probe_limit`.
+  - Next optimization must turn this from single-entry diagnostic reads into real batched alias copy for down/up source staging, then expand parity/top1 coverage before any calibration/dev token-rate benchmark.
+
+### X10-B2 result：MXFP4 down perf writeback rejected; source path works but math/writeback is not token-stable
+
+- status: rejected_correctness_failure
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gp4-alias-down-mxfp4-perf-rejected-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-down-perf-top1/perf1`
+- source_commit: `bb8a127e3`
+- scope: fixed-text `llama-results` top1 diagnostic only; calibration/dev and held-out prompts were not used.
+- config:
+  - `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv`;
+  - `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_URING_SINGLE=1`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`;
+  - `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_STREAM_BATCH_ONLY=1`;
+  - `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=perf`.
+- correctness_result:
+  - top1 failed: `same_top1=141/145`, `first_mismatch_pos=9`, `max_abs=4.5455`, `mean_abs=0.159527`;
+  - stdout reported `FAIL`;
+  - therefore this path is rejected before any token-rate benchmark.
+- important_finding:
+  - Although correctness failed, the GP4 alias source path worked at scale: `expert alias tsv loaded 33024 entries`, `hits=5123`, `misses=0`, `direct_fallbacks=0`, `iouring_reads=5123`, `iouring_bytes=22830383104`, `iouring_fallbacks=0`.
+  - Stage trace shows `5800` MXFP4 down batch calls reached GPU stages through `sync_done`.
+  - Therefore the current blocker is no longer source coverage for down perf; it is MXFP4 down numerical parity / row mapping / writeback correctness.
+- decision:
+  - Do not run token-rate benchmark or calibration/dev with `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=perf`.
+  - Keep GP4 alias source infrastructure because it is default-off and validated by top1 in parity mode.
+  - Next work must debug down GPU output against CPU for the exact rows that flip top1, then fix math/row mapping/writeback before expanding perf coverage.
+
+### X10-B3 result：MXFP4 perf limit fixed; first failing down call isolated
+
+- status: diagnostic_progress_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gp4-alias-down-perf-limitfix-sweep-20260707.json`
+- source_change: `GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_CALLS` now applies to both `parity` and `perf` modes. Before this fix, `perf` ignored the limit and replaced all down calls, which made incremental correctness debugging impossible.
+- run_root: `/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-down-perf-top1`
+- fixed_text_top1_sweep:
+  - `MAX_CALLS=1`: pass, `same_top1=145/145`, `iouring_reads=6`, last GPU call `0:blk.0.ffn_down_exps.weight`.
+  - `MAX_CALLS=2`: pass, `same_top1=145/145`, `iouring_reads=12`, last GPU call `1:blk.1.ffn_down_exps.weight`.
+  - `MAX_CALLS=3`: pass, `same_top1=145/145`, `iouring_reads=18`, last GPU call `2:blk.2.ffn_down_exps.weight`.
+  - `MAX_CALLS=4`: fail, `same_top1=141/145`, `first_mismatch_pos=3`, `max_abs=7.26641`, last GPU call `3:blk.3.ffn_down_exps.weight`.
+  - `MAX_CALLS=8`: fail, `same_top1=142/145`, `first_mismatch_pos=3`, last GPU call `7:blk.7.ffn_down_exps.weight`.
+- conclusion:
+  - The GP4 full-source alias path stays healthy through the sweep: all runs have `misses=0`, `direct_fallbacks=0`, and positive `iouring_reads`.
+  - The current correctness boundary is not source IO; it is the MXFP4 down GPU math/writeback for `call=3`, tensor `blk.3.ffn_down_exps.weight`.
+  - Do not run token-rate or calibration/dev with broader down perf yet. The next implementation must add targeted compare/debug for call 3, including active experts, dst/token rows, CPU row output, GPU row output, and final writeback placement.
+
+### X10-B4 result：standalone `blk.3.ffn_down_exps.weight` down perf reproduces the top1 failure
+
+- status: diagnostic_boundary_not_sota
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gp4-alias-down-blk3-debug-20260707.json`
+- run_root: `/root/lfz/runs/vendor-ds4-16gb/20260707T-gp4-alias-down-call3-debug`
+- target_tensor: `blk.3.ffn_down_exps.weight`
+- parity_result:
+  - targeted parity, full active/full columns: `active=6`, `compared=24576`;
+  - direct CPU-vs-GPU row compare: `max_abs=0.00697596481`, `mean_abs=0.0009336933`, `max_rel=0.0324131084`;
+  - worst location: `active=5`, `expert=201`, `col=3342`, `gpu=0.208244517`, `cpu=0.215220481`;
+  - final top1 remains exact because parity mode does not write back GPU output: `same_top1=145/145`.
+- perf_result:
+  - targeted perf for only `blk.3.ffn_down_exps.weight` fails top1: `same_top1=141/145`, `first_mismatch_pos=3`, `max_abs=7.26641`, `mean_abs=0.126753`;
+  - mismatch preview positions: `3`, `71`, `78`, `134`;
+  - source IO remains healthy: `hits=6`, `misses=0`, `iouring_reads=6`, `iouring_bytes=26738688`, `direct_fallbacks=0`.
+- conclusion:
+  - The standalone `blk.3` down GPU writeback is sufficient to flip token top1, so the blocker is not the prefix combination of calls `0..3`.
+  - The full-source alias/io_uring path is not the correctness problem; it consistently loads the right entries with misses zero.
+  - Next work must compare the exact `dst` rows after writeback/scatter, not only sampled raw row MMV output. The likely bug class is row placement, accumulation semantics, or tolerance amplification from replacing CPU down output with the current GPU down output.
+
+### X10-C next plan：make Down expert GPU compute token-stable before any new token-rate benchmark
+
+- status: planned_next
+- priority: highest
+- reason:
+  - Gate already has an accepted GPU/VRAM-cache path, and GP4-style full-source alias/io_uring now loads DeepSeek expert bytes correctly with `misses=0`.
+  - The next blocker is not VRAM fullness or source IO; it is `ffn_down_exps` GPU writeback correctness.
+  - `MAX_CALLS=1/2/3` down perf passes fixed-text top1, but `MAX_CALLS=4` fails, and standalone `blk.3.ffn_down_exps.weight` perf reproduces the same top1 failure.
+  - No calibration/dev token-rate benchmark may be run with broader down perf until this correctness boundary is fixed.
+
+#### X10-C1：capture exact `blk.3` CPU-vs-GPU writeback rows
+
+- goal: Determine whether the `blk.3` failure is from raw MXFP4 MMV math, row placement, dst/token mapping, scatter/writeback, accumulation semantics, or downstream amplification.
+- implementation:
+  - Add default-off debug output for `GGML_MOE_STREAM_DOWN_MXFP4_DEBUG_TENSOR=blk.3.ffn_down_exps.weight`.
+  - For the failing perf call, record active experts, `dst_ids`, `token_ids`, `rows_stride`, `dst_cols`, `ne00`, `ne01`, and whether GPU handoff/down q8k is active.
+  - Capture full CPU reference down rows and GPU down rows for every active route before writeback.
+  - Capture the final `dst` rows after scatter/writeback, not only raw row MMV output.
+  - Report per active row `max_abs`, `mean_abs`, `max_rel`, top-N worst columns, and row norm ratios.
+- required_validation:
+  - Run fixed-text `llama-results` with `blk.3` targeted parity and perf under strict 16GB/no-swap.
+  - Parity/debug path must not change logits: `same_top1=145/145`.
+  - Perf path may fail during diagnosis, but the artifact must identify the exact row/column/writeback mismatch class.
+- reject_if:
+  - Debug instrumentation changes default behavior when env is unset.
+  - Debug path exceeds 16GB cgroup or uses held-out prompts.
+
+#### X10-C2：fix the identified down writeback bug
+
+- possible_fix_areas:
+  - row mapping: verify `dst_ids`, `token_ids`, `flat dst row`, and `matrix_row_counts` for decode vs prompt;
+  - accumulation semantics: verify whether CPU path accumulates multiple experts into the same dst row while GPU path overwrites, scatters, or zeros incorrectly;
+  - scaling: verify expert weights, DS4 expert scale, gate weights, and any post-MMV scaling/clamp applied by CPU but missing in GPU path;
+  - output layout: verify `dst_nb1`, `dst_nb2`, `dst_cols`, and D2H layout match CPU `ggml_compute_forward_mul_mat_id`;
+  - numeric tolerance: if layout/semantics are correct, measure whether MXFP4 GPU approximation alone can flip top1 and whether a more exact kernel/accumulation type is required.
+- validation_sequence:
+  1. targeted `blk.3` parity full rows passes;
+  2. targeted `blk.3` perf top1 passes;
+  3. prefix sweep passes at least `MAX_CALLS=4`, then `8`, then a larger bounded value;
+  4. full fixed-text top1 passes with the intended down perf scope;
+  5. only then run a short semantic France smoke;
+  6. only after that run `calibration_dev_set_v1` token-rate benchmark.
+- promotion_gate:
+  - No accepted SOTA until generalized calibration/dev improves over no-prompt-specific baseline and all correctness/RAM/TTFT gates pass.
+  - Held-out test remains locked until a candidate is frozen.
+
+#### X10-C3：token-rate path after down correctness
+
+- first_perf_candidate:
+  - Use prompt-agnostic full-source alias TSV, aligned io_uring reads, and corrected down GPU path.
+  - Keep up fallback unchanged initially, so the measurement isolates down improvement.
+  - Run `calibration_dev_set_v1` under strict cold 16GB cgroup and record per prompt token rate, TTFT, memory_file, exact output, fallback counters, and source read counters.
+- expected_outcome:
+  - If down fallback time drops but token rate still misses target, proceed to up GPU path with the same correctness-first method.
+  - If source IO becomes dominant after down correctness, move from single-entry io_uring to true batched alias copy and tune `IO_DEPTH`, refill batch, pinned slots, and cache split.
+  - If token rate improves under all gates, immediately record full reproduction info, commit, push to `ssd/vendor/deepseek-token-rate-16gb`, and reproduce from the pushed commit.
+
+## 2026-07-07 X10-C execution：Down GPU correctness fixed with CPU-order Q8_0 path
+
+- attempt_id: `20260707-q80-cpuorder-down-gpu-correctness-pass`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/q80-cpuorder-down-gpu-correctness-pass-20260707.json`
+- status: `correctness_pass_not_sota`
+- branch_target: `ssd/vendor/deepseek-token-rate-16gb`
+- task_context:
+  - 真实目标仍是 vendor DeepSeek 在 `16GB host RAM`（含 page cache）+ `32GB RTX 5090` 上，对用户随机/generalized prompt 稳定达到 `>5 tok/s`。
+  - 本阶段只解决 `ffn_down_exps` GPU writeback correctness，不能作为 token-rate SOTA promotion。
+- root_cause_update:
+  - 前一轮 `batch_accept=0` 不是 Q80 kernel 错误，而是当前 `build-ds4-moe-stream` 的 CMake cache 里 `GGML_CUDA_MOE_STREAM_BATCH=OFF`，导致 `moe_stream_batch.cu` 导出的是 `#ifndef GGML_CUDA_MOE_STREAM_BATCH` 下的 stub；CPU 侧 batch_attempts 很多，但 CUDA batch 函数直接返回 false。
+  - 重新配置 `cmake -S . -B build-ds4-moe-stream -DGGML_CUDA_MOE_STREAM_BATCH=ON` 后，真实 `ggml_cuda_moe_stream_batch` 生效。
+  - 真实接管后，naive scalar-order Q8_0 GPU kernel 的 op-level error 只有约 `1e-7`，但仍能在后续层传播后造成 fixed-text top1 翻转（`141/145`）。所以 correctness gate 需要 CPU accumulation order，而不是只看局部误差阈值。
+- source_fix:
+  - 扩展 `ggml_cuda_moe_stream_batch` ABI，传入 CPU fallback 已生成的 Q8_0 activation rows：`src1_q8_0`, `src1_q8_0_row_size`, `src1_q8_0_ne1`。
+  - 新增 default-off `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`，用于 MXFP4 down tensor 的 Q8_0-compatible GPU path。
+  - 新增 `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`，按 x86 AVX2/VNNI 的 8-lane `accum1/accum2 + hsum_float_8` 顺序累加，使 GPU output 与 CPU fallback bitwise 对齐。
+  - 新增 `GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR=<tensor>` target-only guard；指定 target 时，非 target MXFP4 down 直接 fallback，便于单 tensor correctness。
+  - 新增 batch success compare hook，仍由 `GGML_MOE_STREAM_COMPARE_CPU_OUT` 控制，默认不改变行为。
+- validation:
+  - build: `build-ds4-moe-stream` with `GGML_CUDA_MOE_STREAM_BATCH=ON`，`llama-results` 编译通过。
+  - strict_memory: all probes used `systemd-run --property=MemoryMax=16000000000 --property=MemorySwapMax=0` and completed without OOM/cgroup kill.
+  - op-level compare: `/root/lfz/runs/vendor-ds4-16gb/20260707T080626Z-q80-cpuorder-blk3-compare/blk3-report`, `compare_cpu.csv` first 20 records all `max_abs=0`, `mean_abs=0`.
+  - targeted `blk.3`: `/root/lfz/runs/vendor-ds4-16gb/20260707T080733Z-q80-cpuorder-fresh-default-vs-blk3`, `batch_accept=145`, `batch_decline=5655`, fresh default top1 compare `same_top1=145/145`, `first_mismatch_pos=-1`.
+  - full down: `/root/lfz/runs/vendor-ds4-16gb/20260707T080846Z-q80-cpuorder-full-down-top1`, `batch_accept=5800`, `batch_decline=0`, fresh default top1 compare `same_top1=145/145`, `first_mismatch_pos=-1`.
+- performance_observation:
+  - fixed-text full-down probe shows correctness path is slower: default down `0.519 ms/call`, full-down Q80 CPU-order `0.955 ms/call`.
+  - Therefore this is accepted only as a correctness scaffold, not as a token-rate SOTA or generalized performance improvement.
+- decision:
+  - Down GPU correctness is now fixed for the CPU-compatible Q8_0 path under fixed-text top1 gates.
+  - Do not run generalized SOTA promotion from this kernel as-is. Next work must optimize the CPU-order kernel/dataflow or use it as a reference while building a faster down/up path.
+  - Any future accepted generalized SOTA must still beat `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`, pass strict `16GB` RAM/page-cache, correctness, TTFT, and then locked held-out after candidate freeze.
+
+## 2026-07-07 X10-C performance diagnostic：lane8/shared Q8_0 down kernel
+
+- attempt_id: `20260707-q80-lane8-down-gpu-diagnostic`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/q80-lane8-down-gpu-diagnostic-20260707.json`
+- status: `diagnostic_correctness_pass_performance_reject`
+- source_scope:
+  - 新增 default-off `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`：8 个 CUDA lanes 共同计算一个 output column，每个 lane 对应 CPU AVX 的一个 accumulator lane，并按 `hsum_float_8` 顺序归约。
+  - 新增 default-off `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`：在 lane8 基础上，把当前 active row 的 Q8_0 activation row 缓存在 shared memory，减少同一 block 内重复 global read。
+  - 已通过的 scalar `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1` correctness reference 保持不变；默认 env unset 行为不变。
+- validation:
+  - `blk.3` lane8 op-level compare: `/root/lfz/runs/vendor-ds4-16gb/20260707T081819Z-q80-lane8-blk3-compare/blk3-report`, first 20 compare records `max_abs=0`, `mean_abs=0`.
+  - full-down lane8 top1: `/root/lfz/runs/vendor-ds4-16gb/20260707T081917Z-q80-lane8-full-down-top1`, `same_top1=145/145`, `batch_accept=5800`, `batch_decline=0`.
+  - `blk.3` lane8+shared op-level compare: `/root/lfz/runs/vendor-ds4-16gb/20260707T082240Z-q80-lane8-shared-blk3-compare/blk3-report`, first 20 compare records `max_abs=0`, `mean_abs=0`.
+  - full-down lane8+shared top1: `/root/lfz/runs/vendor-ds4-16gb/20260707T082335Z-q80-lane8-shared-full-down-top1`, `same_top1=145/145`, `batch_accept=5800`, `batch_decline=0`.
+  - invalid transient OOM: `/root/lfz/runs/vendor-ds4-16gb/20260707T082559Z-q80-lane8-shared256-full-down-top1` failed before model load for both default/case; not a kernel result.
+  - shared256 rerun: `/root/lfz/runs/vendor-ds4-16gb/20260707T083245Z-q80-lane8-shared256-full-down-top1-rerun`, top1 passed but performance regressed badly; source reverted to 128-thread shared.
+- performance:
+  - scalar CPU-order correctness reference: full-down `0.955 ms/call`, `cuda_batch=0.674 ms/call`.
+  - lane8: full-down `0.881 ms/call`, `cuda_batch=0.558 ms/call`.
+  - lane8+shared: full-down `0.832 ms/call`, `cuda_batch=0.550 ms/call`.
+  - fresh default CPU fallback in comparable fixed-text probes is still around `0.465-0.519 ms/call`, so all Q80 full-down GPU variants remain slower than CPU fallback.
+- decision:
+  - Commit as default-off diagnostic/correctness-preserving improvement over the scalar reference.
+  - Do not promote as token-rate SOTA and do not run generalized benchmark from this path alone.
+  - Next source work must target structural overhead outside the per-output dot loop: Q8_0 staging/H2D, D2H output writeback, retained/fused down dataflow, or avoiding full-output down materialization. More tuning of this full-output Q80 row kernel is unlikely to reach generalized `>5 tok/s` alone.
+
+## 2026-07-07 X10-C profile follow-up：full-down GPU path still blocked by source movement and non-down fallback
+
+- attempt_id: `20260707-q80-full-down-stage-profile-and-empty-fallback-skip-reject`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/q80-full-down-stage-profile-and-empty-fallback-skip-reject-20260707.json`
+- status: `diagnostic_profile_patch_reverted_not_sota`
+- purpose:
+  - After down GPU correctness was fixed, re-profile the corrected lane8/shared full-down path under strict `16GB` cgroup to locate the remaining bottleneck before writing another optimization.
+  - Test the hypothesis that the reported `fallback_t0` after `batch_accept=5800` was mostly empty CPU fallback bookkeeping after down GPU batch success.
+- strict_profile_run:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T092325Z-q80-lane8-shared-stage-profile/full-down-lane8-shared-profile`
+  - command_scope: fixed-text `llama-results`, `--sequential-logits`, `--n-cpu-moe 40`, `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`, strict `MemoryMax=16000000000`, `MemorySwapMax=0`, cold `drop_caches`.
+  - result: completed without OOM/cgroup kill; top1 report produced.
+  - profile_overhead_note: enabling CSV copy/profile tracing increased wall time, so it is only used for decomposition, not token-rate promotion.
+- profile_result:
+  - `VRAM cache down`: `hits=18255`, `misses=16545`, hit rate `52.5%`, slots `481`, slot size `4.25 MiB`.
+  - `copy_profile.csv`: `16545` runtime-load records, total bytes `73731932160` (`68.67 GiB`), summed copy wall `80107.99 ms`, average `4.842 ms/job`, no pack/iouring hits in this run.
+  - `kimi_cpu_moe_profile`: `down calls=17400`, `total=9.529 ms/call`, `cuda_batch=4.727 ms/call`, `fallback_t0=4.754 ms/call`, `batch_accept=5800`, `batch_decline=0`.
+  - Interpretation: only about one third of the profiled MoE calls are the corrected down batch path (`5800/17400`). The remaining two thirds are still non-down/up-gate style CPU fallback work in this profile bucket, so `fallback_t0` is not just empty bookkeeping after down batch success.
+- rejected_patch:
+  - Tried a minimal CPU-side control-flow patch that returned early when all `matrix_row_counts` were zero after GPU batch/single attempts, to skip empty fallback prepare/barriers.
+  - validation_run: `/root/lfz/runs/vendor-ds4-16gb/20260707T093051Z-q80-skip-empty-fallback-full-down/full-down-lane8-shared-skip-empty-report`
+  - result: no improvement; wall time remained `3min 25.687s`, profile still showed `fallback_t0=4.758 ms/call`, `batch_accept=5800`, `batch_decline=0`.
+  - decision: patch was reverted and not committed because it did not improve the measured bottleneck.
+- updated_bottleneck:
+  - Down GPU correctness is solved, but the corrected full-down GPU path is not a token-rate improvement because it still pays large down source movement/cache-miss cost and because non-down/up-gate fallback remains large.
+  - Further tuning of the full-output Q8_0 down kernel or empty-fallback control flow is low priority.
+- next_action:
+  - Return to the required design/execute loop with a new bottleneck decomposition that separates `ffn_gate_exps`, `ffn_up_exps`, and `ffn_down_exps` by tensor role on generalized calibration/dev prompts.
+  - Any next implementation must target prompt-general simultaneous reduction of gate/source movement and up/down fallback, or provide a hard-bound showing `min >= 5.5 tok/s` before coding.
+  - Do not use held-out prompts until a candidate is frozen.
+
+## 2026-07-07 X10-D generalized role profile：gate is cached, up/down fallback dominates compute gap
+
+- attempt_id: `20260707-generalized-role-profile-database-indexing`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-role-profile-database-indexing-20260707.json`
+- status: `diagnostic_profile_not_sota`
+- purpose:
+  - Run a no-prompt-specific generalized profile after down correctness work to split the bottleneck by tensor role.
+  - Prompt was `Describe database indexing in one concise paragraph.`, already used for demo validation and not part of the locked held-out set.
+- run:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T093826Z-role-profile-generalized-20260707/database-indexing-role-profile-cpu40-vram0gb`
+  - config: vendor DeepSeek, `cpu_moe=40`, `vram_cache=0`, gate one-stream cache `13568 MiB`, no prompt-specific pack/profile/alias, `GGML_KIMI_CPU_MOE_PROFILE=1`, `GGML_KIMI_CPU_MOE_NAME_PROFILE=1`, strict cold `MemoryMax=16000000000`, `MemorySwapMax=0`.
+  - metrics: `eval_tok_s=1.9`, `prompt_tok_s=0.9`, `TTFT=39074.880991 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15044132864`, `ram_ok=true`, `correctness_ok=true`.
+- profile_summary:
+  - `VRAM cache`: `hits=19825`, `misses=5042`, hit rate `79.7%`.
+  - aggregate line: `down calls=11760`, `total=4.930 ms/call`, `cuda_single=2.404 ms/call`, `fallback_t0=2.498 ms/call`, `single_accept=24867`, `single_decline=27068`.
+  - top120 role aggregation:
+    - gate: avg total `7.262 ms/call`, avg decode total `5.320 ms/call`, avg decode fallback `0.001 ms/call`; gate is expensive but is already almost entirely outside CPU fallback, matching the gate cache path.
+    - up: avg total `4.241 ms/call`, avg decode fallback `3.349 ms/call`, avg prompt fallback `32.033 ms/call`; up remains CPU fallback dominated.
+    - down: avg total `3.288 ms/call`, avg decode fallback `2.246 ms/call`, avg prompt fallback `35.601 ms/call`; down remains CPU fallback dominated in the generalized baseline path.
+- interpretation:
+  - The current generalized baseline is not blocked primarily by gate CPU fallback; gate source/cache movement still costs time, but fallback for gate is near zero.
+  - The largest exact-compute opportunity is now prompt-general `ffn_up_exps` first, then `ffn_down_exps`, while preserving correctness. This agrees with the failed full-output Q8_0 down GPU result: fixing only down is not enough.
+- next_design_target:
+  - Design a prompt-general up/down GPU path or fused retained dataflow with a hard-bound showing enough reduction in up/down fallback to beat the generalized baseline with margin.
+  - The first candidate should target `ffn_up_exps` because it has higher decode fallback than down on this generalized profile.
+  - Any implementation must remain prompt-general, pass strict `16GB` RAM including page cache, preserve correctness, and not use held-out prompts before candidate freeze.
+
+## 2026-07-07 X10-E up-first hard-bound：up alone is not a valid SOTA route
+
+- attempt_id: `20260707-up-first-exact-route-hard-bound`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/up-first-exact-route-hard-bound-20260707.json`
+- status: `design_bound_no_source_edit`
+- purpose:
+  - Before implementing another `ffn_up_exps` path, calculate whether up-only or up+down-only exact compute can meet the product target on generalized prompts.
+  - Inputs are existing calibration/dev no-prompt-specific fallback profiles and simultaneous reduction bounds; held-out prompts are not used.
+- hard_bound_result:
+  - `up-only` zero-overhead removal: dev-set min `2.598 tok/s`, mean `3.364 tok/s`; not a viable SOTA route.
+  - `down-only` zero-overhead removal: dev-set min `2.181 tok/s`, mean `2.888 tok/s`; not viable and already had slower exact GPU kernel evidence.
+  - `up+down` zero-overhead removal: dev-set min `3.919 tok/s`, mean `5.433 tok/s`; still fails the generalized min target because Fibonacci remains below `5 tok/s`.
+  - Joint reduction grid: a viable `>5 tok/s` dev-set min requires roughly `gate/source >=75%` cut with `up/down >=90%` cut, or equivalent combinations such as `gate >=85%` with `up/down >=80%`.
+- existing_source_audit:
+  - Baseline no-prompt-specific path does not use the old DeepSeek fused up/gate path; gate is accelerated by the one-stream gate cache and up/down remain ordinary MoE matmul fallback.
+  - Existing fused up/gate DeepSeek path is already rejected by `.Agent/runs/20260705-vendor-ds4-coldstart/existing-fused-upgate-ds4-evidence-review-20260707.json`: it was correct but only `0.5-0.8 tok/s` with TTFT regressions, because it duplicated/competed with gate cache and did not give DS4 a true parallel fast path.
+  - Existing one-stream up/down trace is rejected by `.Agent/runs/20260705-vendor-ds4-coldstart/updown-one-stream-trace-france-20260707.json`: per-expert calls were dominated by source movement (`src0_ms` about `94%` of traced time), not compute.
+- decision:
+  - Do not implement an up-only kernel or rerun old fused up/gate envs as a SOTA attempt.
+  - A source edit is allowed only if it is a prompt-general joint dataflow route that credibly cuts both gate/source movement and up/down fallback at the required scale, or if it first lands as a default-off correctness/microbench scaffold explicitly marked not SOTA.
+  - Next practical design target is `grouped-retained up/down + gate-cache-aware source path`: reuse or preserve the current gate cache behavior, batch active up/down experts by layer, avoid per-expert `src0` staging, and avoid D2H/writeback unless the next CPU op actually needs it.
+
+## 2026-07-07 X10-F next implementation plan：default-off grouped-retained route/source profiler first
+
+- attempt_id: `20260707-grouped-retained-scaffold-plan`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/grouped-retained-scaffold-plan-20260707.json`
+- status: `planned_next_source_scaffold`
+- background:
+  - Down GPU correctness is fixed, but the full-output Q8_0 down GPU path is slower than CPU fallback.
+  - Up-only and down-only hard bounds are not enough for generalized `>5 tok/s`.
+  - Existing fused up/gate and one-stream up/down paths are rejected; repeating them is forbidden.
+  - Existing `g_handoff` can retain fused up/gate output on GPU and feed down, but it is tied to the old fused up/gate route that regresses DeepSeek performance. It cannot be used as-is for SOTA.
+- objective:
+  - Implement the smallest default-off no-logit-change scaffold that measures whether a grouped-retained joint route has enough real prompt-general coverage and source-movement reduction before writing kernels.
+  - This scaffold must not change model outputs, accepted SOTA behavior, or held-out state.
+- source_edit_scope:
+  - Add `GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT=<csv>` as a default-off profiler.
+  - Record per MoE call: role (`gate`, `up`, `down`, `up_gate`), layer, phase (`prompt`/`decode`), tensor name/type, active experts, rows, unique experts, expert bytes, logical source bytes, whether current one-stream/batch cache already contains each expert, and whether the call is eligible for grouped-retained handling.
+  - For `ggml_compute_forward_moe_up_gate`, record both the fused op view and the underlying up/gate expert sets; for normal `mul_mat_id`, record up/down/gate separately.
+  - Do not allocate new GPU buffers, do not alter `matrix_row_counts`, do not change cache admission, and do not change logits.
+- metrics_to_compute_from_profiler:
+  - Per prompt and per decode token: active unique up/down/gate experts by layer; total logical bytes; duplicate source movement that grouped staging could remove; number of current per-expert calls that could become one grouped layer call.
+  - Upper bound if grouped-retained removes only launch/source duplication but still streams full expert payload.
+  - Upper bound if grouped-retained uses existing gate cache unchanged and reduces up/down fallback by `80%`, `90%`, `95%`.
+  - Required VRAM cache slots for grouped up/down active experts without evicting the current gate cache; reject if it would violate the `16GB` host RAM/page-cache or `32GB` VRAM constraints.
+- validation_sequence:
+  1. Build only; confirm default behavior unchanged when env unset.
+  2. Run one calibration prompt already used before (`Describe database indexing in one concise paragraph.` or France) under strict `16GB` with profiler enabled; verify `eval_tok_s`, output, RAM, and cache behavior remain within normal diagnostic variance.
+  3. Parse CSV into `.Agent/runs/.../grouped-retained-route-profile-*.json`.
+  4. Only if the profile shows a credible path to at least `gate/source >=75%` and `up/down >=90%` effective reduction on calibration/dev should a real grouped-retained GPU dataflow implementation be planned.
+- rejection_conditions:
+  - If route coverage is low, logical bytes remain close to current full expert streaming, or required VRAM slots collide with gate cache, close this route before writing kernels.
+  - If the profiler itself changes correctness, RAM, or TTFT materially, revert and record as rejected.
+- branch_policy:
+  - All scaffold source and artifacts must be committed and pushed to `ssd/vendor/deepseek-token-rate-16gb` with full reproduction details.
+  - Any later performance SOTA must still be prompt-general, strict `16GB` including page cache, correctness passing, TTFT compliant, then held-out tested only after candidate freeze.
+
+## 2026-07-07 X10-F execution result：grouped-retained profiler validated, one-stream cache visibility fixed
+
+- attempt_id: `20260707-grouped-retained-onecache-profiler-validation`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/grouped-retained-onecache-profiler-validation-20260707.json`
+- status: `profiler_validated_not_sota`
+- source_scope:
+  - Added default-off `GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT=<csv>` route profiler in `ggml/src/ggml-cpu/ggml-cpu.c`.
+  - Added read-only `ggml_cuda_moe_stream_one_cache_contains()` in `ggml/src/ggml-cuda/moe_stream.cu` so the profiler can query the existing one-stream cache without changing LRU, hit counters, miss counters, logits, cache admission, or default behavior.
+  - CPU route builders now pass `src0->data` plus expert stride so cache queries use the same key as execution (`one_cache_key_for(src0_name, expert, expert_host_ptr)`).
+- build_validation:
+  - command: `cmake --build build-ds4-moe-stream -j20 --target llama-cli llama-results`
+  - result: passed.
+  - binary sha256: `c3aa016da81aee65db5b65fbb79a19604ef212e5897840c93dad3c9b8f1eab78`.
+- profiler_validation_run:
+  - prompt scope: calibration/dev only; `held_out_test_set_v1_locked` was not used.
+  - prompt: `Describe database indexing in one concise paragraph.`
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T101116Z-20260707-grouped-retained-onecache-profile-rerun/database-indexing-grouped-onecache-profile-cpu40-vram0gb`
+  - profile CSV: `/root/lfz/runs/vendor-ds4-16gb/20260707T101116Z-20260707-grouped-retained-onecache-profile-rerun/database-indexing-grouped-onecache-profile-cpu40-vram0gb/grouped_route_profile.csv`
+  - config: no prompt-specific pack/profile/alias; `cpu_moe=40`; `vram_cache=0`; gate one-stream cache `13568 MiB`; strict cold `drop_caches`; `MemoryMax=16000000000`; `MemorySwapMax=0`; `n=96`.
+  - metrics: `eval_tok_s=1.9`, `prompt_tok_s=0.9`, `TTFT=38884.836529 ms`, `elapsed=87.06 s`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15034089472`, `ram_ok=true`, `oom_seen=false`.
+  - quality note: this profiler run is diagnostic only. Its `n=96` answer is semantically coherent but truncated, so it is not used as a correctness/SOTA promotion run.
+- profile_summary:
+  - CSV records: `11760` rows plus header.
+  - gate: `records=3920`, `unique_experts=24867`, `rows=26160`, `logical_bytes=110818492416`, `cache_contains=19825`, `cache_missing=5042`.
+  - up: `records=3920`, `unique_experts=13534`, `rows=14170`, `logical_bytes=60313567232`, `cache_contains=0`, `cache_missing=13534`.
+  - down: `records=3920`, `unique_experts=13534`, `rows=14170`, `logical_bytes=60313567232`, `cache_contains=0`, `cache_missing=13534`.
+  - decode-only gate: `cache_contains=19305`, `cache_missing=3495`, proving the one-stream gate cache is visible to the profiler.
+  - decode-only up/down: `cache_contains=0`, `cache_missing=12350` for each role, confirming up/down still have no retained/cache source path in the generalized baseline.
+- default_off_guard:
+  - prompt: `Please introduce France in a short paragraph.`
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T101343Z-20260707-defaultoff-profiler-guard/defaultoff-france-after-profiler-cpu40-vram0gb`
+  - profiler env: unset.
+  - metrics: `eval_tok_s=2.5`, `prompt_tok_s=0.9`, `TTFT=39044.30398 ms`, `elapsed=91.31 s`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15033208832`, `ram_ok=true`, `oom_seen=false`, `correctness_ok=true`.
+  - output: complete, coherent France paragraph; no logit/correctness regression observed with profiler default-off.
+- interpretation:
+  - The prior profiler-v1 all-zero cache counts were a measurement bug caused by only querying the batch cache. This is now fixed for one-stream gate cache.
+  - The current prompt-general path already has effective gate cache retention; the missing path is up/down retained/grouped GPU source and compute.
+  - A future implementation should not spend effort on gate-only cache work. It must target joint source/fallback reduction: preserve current gate cache behavior, reduce up/down per-expert source movement, and avoid D2H/writeback unless needed.
+- next_action:
+  - Commit and push this default-off profiler scaffold plus artifact to `ssd/vendor/deepseek-token-rate-16gb`.
+  - Use the new CSV to calculate grouped-retained source-movement upper bounds on the calibration/dev set before writing the next GPU dataflow patch.
+  - Do not run held-out prompts until a prompt-general candidate is frozen.
+
+## 2026-07-07 X10-G execution result：calibration/dev detail inventory rejects naive up/down hot cache
+
+- attempt_id: `20260707-grouped-retained-calib-dev-detail-bound`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/grouped-retained-calib-dev-detail-bound-20260707.json`
+- status: `detail_profiler_validated_bound_rejects_naive_hot_cache_not_sota`
+- prompt_scope:
+  - Used only `calibration_dev_set_v1`: France, quantum, Fibonacci, Japan, climate.
+  - `held_out_test_set_v1_locked` was not used.
+  - Runs were strict cold, no prompt-specific pack/profile/alias, `MemoryMax=16000000000`, `MemorySwapMax=0`, page cache inside cgroup.
+- source_update:
+  - Added default-off `GGML_DS4_GROUPED_RETAINED_ROUTE_DETAIL_OUT=<csv>` in `ggml-cpu.c`.
+  - It writes one row per active expert with `seq, role, layer, phase, tensor, expert_id, rows, expert_bytes, cache_contains, eligibility`.
+  - It requires `GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT` to be enabled and remains fully off by default.
+- build_validation:
+  - command: `cmake --build build-ds4-moe-stream -j20 --target llama-cli llama-results`
+  - result: passed.
+- detail_smoke:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T103645Z-20260707-grouped-retained-detail-smoke-france/france-detail-smoke-cpu40-vram0gb`
+  - result: detail CSV generated; `memory_peak_bytes=16000000000`, `ram_ok=true`; `n=16` diagnostic only.
+- calibration_dev_detail_runs:
+  - France: `/root/lfz/runs/vendor-ds4-16gb/20260707T103823Z-20260707-grouped-retained-calib-dev-detail-france/calib-france-grouped-retained-detail-cpu40-vram0gb`, `eval_tok_s=2.5`, `TTFT=38785.291728 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, diagnostic `n=96` truncated.
+  - Quantum: `/root/lfz/runs/vendor-ds4-16gb/20260707T103944Z-20260707-grouped-retained-calib-dev-detail-quantum/calib-quantum-grouped-retained-detail-cpu40-vram0gb`, `eval_tok_s=1.7`, `TTFT=38843.857037 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`.
+  - Fibonacci: `/root/lfz/runs/vendor-ds4-16gb/20260707T104121Z-20260707-grouped-retained-calib-dev-detail-fibonacci/calib-fibonacci-grouped-retained-detail-cpu40-vram0gb`, `eval_tok_s=1.8`, `TTFT=39735.273142 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, diagnostic `n=96` truncated.
+  - Japan: `/root/lfz/runs/vendor-ds4-16gb/20260707T104258Z-20260707-grouped-retained-calib-dev-detail-japan/calib-japan-grouped-retained-detail-cpu40-vram0gb`, `eval_tok_s=2.3`, `TTFT=39081.738699 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, diagnostic `n=96` truncated.
+  - Climate: `/root/lfz/runs/vendor-ds4-16gb/20260707T104422Z-20260707-grouped-retained-calib-dev-detail-climate/calib-climate-grouped-retained-detail-cpu40-vram0gb`, `eval_tok_s=2.1`, `TTFT=39084.609883 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`.
+- aggregate_route_inventory:
+  - gate: `unique_pairs=7833`, `unique_payload=32.510 GiB`, `cache_hit_rate=80.9216%`, `logical=514.731 GiB`.
+  - up: `unique_pairs=5824`, `unique_payload=24.171875 GiB`, `cache_hit_rate=0%`, `logical=280.027 GiB`.
+  - down: `unique_pairs=5824`, `unique_payload=24.171875 GiB`, `cache_hit_rate=0%`, `logical=280.027 GiB`.
+  - up+down combined observed unique payload is about `48.34 GiB`, before any duplication for staging/workspace. This cannot fit alongside the current model and useful gate cache on a `32GB` RTX 5090.
+- hotset_bound_from_existing_fallback_profile:
+  - Source timing artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json`.
+  - Total up/down fallback in that baseline: `216535.305 ms`.
+  - Top `1 GiB` up/down hotset covers only `14.01%` of fallback time.
+  - Top `4 GiB` covers `33.95%`.
+  - Top `8 GiB` covers `51.05%`.
+  - Top `12 GiB` covers `63.19%`.
+  - Top `16 GiB` covers `72.32%`.
+  - These budgets would compete directly with the existing gate cache, which the new profiler shows is already useful.
+- hard_bound:
+  - If up/down fallback were reduced by `80%`, calibration/dev projected min/mean/max token rate is `2.829/3.496/3.930 tok/s`.
+  - If reduced by `90%`, projected min/mean/max is `3.086/3.786/4.198 tok/s`.
+  - If reduced by `95%`, projected min/mean/max is `3.232/3.950/4.346 tok/s`.
+  - Even impossible `100%` up/down fallback removal only projects `min=3.393`, `mean=4.131`, `max=4.506 tok/s`, still below the product target of stable `>5 tok/s`.
+- default_off_guard_after_detail:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T104801Z-20260707-defaultoff-detail-profiler-guard/defaultoff-france-after-detail-profiler-cpu40-vram0gb`
+  - profiler env unset; default path.
+  - metrics: `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=38185.447499 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15027335168`, `ram_ok=true`, `correctness_ok=true`.
+  - France output was complete, semantic, coherent.
+- decision:
+  - Accept the detail profiler as a default-off measurement scaffold.
+  - Reject naive up/down hot cache, naive up/down expert pack, and any route that only spends VRAM on up/down hot experts while evicting gate cache.
+  - Do not claim new SOTA; all detail runs are diagnostic and `n=96` may truncate outputs.
+- next_action:
+  - Commit/push the detail profiler, artifact, and this plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+  - Next source work must be planned as a broader grouped-retained dataflow microbench, not a cache-only patch: preserve current gate cache, batch active up/down by layer, avoid per-expert source staging and D2H/writeback where possible, and include a mechanism to reduce gate/source or other non-updown decode cost.
+  - Before any held-out test, a candidate must first beat the calibration/dev no-prompt-specific baseline on min/mean token rate without correctness/RAM/TTFT regression.
+
+## 2026-07-07 X10-H execution result：default graph has no existing up_gate handoff producer
+
+- attempt_id: `20260707-grouped-retained-handoff-eligibility-profile`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/grouped-retained-handoff-eligibility-profile-20260707.json`
+- status: `handoff_profiler_validated_default_graph_has_no_upgate_handoff_not_sota`
+- purpose:
+  - Test whether the current no-prompt-specific default graph already creates an `up_gate` output that `ffn_down_exps` could consume through existing `g_handoff`.
+  - This matters because if the producer does not exist, simply enabling `GGML_MOE_GPU_HANDOFF` cannot help.
+- source_update:
+  - Added default-off `GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT=<csv>` in `ggml-cpu.c`.
+  - It records the last `moe_up_gate` dst pointer and compares each down op's `src1->data`, layer, and width against that producer.
+  - It does not enable GPU handoff, allocate GPU buffers, change route counts, change cache admission, or change logits.
+- build_validation:
+  - command: `cmake --build build-ds4-moe-stream -j20 --target llama-cli llama-results`
+  - result: passed.
+- profile_run:
+  - prompt scope: calibration prompt only; held-out was not used.
+  - prompt: `Please introduce France in a short paragraph.`
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T105726Z-20260707-grouped-retained-handoff-profile-france/france-handoff-profile-cpu40-vram0gb`
+  - handoff CSV: `/root/lfz/runs/vendor-ds4-16gb/20260707T105726Z-20260707-grouped-retained-handoff-profile-france/france-handoff-profile-cpu40-vram0gb/handoff_profile.csv`
+  - metrics: `eval_tok_s=2.4`, `prompt_tok_s=0.9`, `TTFT=37437.770123 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15049195520`, `ram_ok=true`, diagnostic `n=96` truncated.
+- handoff_summary:
+  - records: `3920` down calls.
+  - `shape_ok=0`, `ptr_match=0`, `width_match=0`.
+  - `up_gate_serial_max=0`, `up_rows_observed_by_profiler=0`, `up_active_experts_observed_by_profiler=0`.
+  - Interpretation: the default generalized graph did not call the `moe_up_gate` producer path at all, so current `g_handoff` cannot be reused by toggling `GGML_MOE_GPU_HANDOFF`.
+- default_off_guard:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T105924Z-20260707-defaultoff-handoff-profiler-guard/defaultoff-france-after-handoff-profiler-cpu40-vram0gb`
+  - profiler env unset.
+  - metrics: `eval_tok_s=2.5`, `prompt_tok_s=0.9`, `TTFT=36971.998157 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15020609536`, `ram_ok=true`, `correctness_ok=true`.
+  - France output was complete, semantic, coherent.
+- decision:
+  - Accept the handoff profiler as a default-off measurement scaffold.
+  - Reject any next attempt that only toggles `GGML_MOE_GPU_HANDOFF` on the current graph; there is no matching producer.
+  - Do not rerun the old plain `GGML_MOE_STREAM_FUSED_UP_GATE` SOTA attempt. It is already rejected because it duplicates/competes with gate cache and was too slow.
+- next_action:
+  - Commit/push the handoff profiler, artifact, and this plan update to `ssd/vendor/deepseek-token-rate-16gb`.
+  - Next implementation must start from a default-off DS4 fused up/gate retained microbench:
+    - keep current one-stream gate cache semantics or explicitly avoid duplicate gate storage;
+    - produce a GPU-resident fused activation buffer;
+    - feed down through a correctness-checked handoff path;
+    - first validate on calibration/dev only, then freeze before held-out.
+
+## 2026-07-07 X10-C current-head repro：down GPU correctness remains fixed on pushed branch
+
+- attempt_id: `20260707-current-head-down-q80-correctness-repro2`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-down-q80-correctness-repro-20260707.json`
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T112729-current-head-down-q80-correctness-repro2`
+- source_commit: `8ddf900a338f54599068a0863505170058ee4936` (`vendor-ds4: add generalized sota demo script`)
+- build: `cmake --build build-ds4-moe-stream --target llama-results llama-cli -j20` passed; `build-ds4-moe-stream/CMakeCache.txt` has `GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON`.
+- constraint: both cases ran with `systemd-run --property=MemoryMax=16000000000 --property=MemorySwapMax=0`; `drop_caches` was executed before each case; held-out prompts were not used.
+- baseline case: default down CPU fallback under `GGML_MOE_STREAM_DOWN_BATCH=1`; stderr shows `batch_accept=0`, `batch_decline=5800`.
+- full-down GPU case: added `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1` and `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`; stderr shows `batch_accept=5800`, `batch_decline=0`, so all fixed-text down batch calls used the corrected GPU path.
+- correctness result: `same_top1=145/145`, `first_mismatch_pos=-1`, `max_abs_top12_logit_diff=0.0`, `mean_abs_top12_logit_diff=0.0`, baseline and full-down both have `top1_matches_next_token=122`.
+- decision: down GPU correctness is reproduced on current pushed-source lineage, but this is still `not_sota`; the plan remains to use this CPU-compatible Q8_0 CPU-order path as the correctness reference while pursuing a faster prompt-general up/down retained/batched dataflow. Do not promote the slow full-down path as token-rate SOTA.
+
+## 2026-07-07 X10-I next design plan：DS4 native gate_up retained down microbench
+
+- attempt_id: `20260707-ds4-native-gateup-retained-down-microbench`
+- objective: After down GPU correctness is reproduced, start the next performance route from the actual DeepSeek4 graph, not the generic `llama-graph.cpp` MoE path.
+- current_code_fact:
+  - DeepSeek4 default MoE graph is in `src/models/deepseek4.cpp::build_expert_mix`.
+  - When `layer.ffn_gate_up_exps` exists, the graph calls `build_lora_mm_id(layer.ffn_gate_up_exps, cur_experts_in, selected_experts)`, then splits the result with two `ggml_view_3d` tensors into gate and up.
+  - It then applies optional clamp, `ggml_swiglu_split`, `build_lora_mm_id(layer.ffn_down_exps, act, selected_experts)`, multiplies by weights, permutes, and sums.
+  - Therefore the generic `ggml_moe_up_gate` producer is absent; X10-H correctly found no existing `g_handoff` producer. Re-editing `src/llama-graph.cpp` is not a DeepSeek4 fix unless the DS4 builder is explicitly routed through that path.
+- correctness baseline to preserve:
+  - Current pushed lineage includes `2b01c0a41 vendor-ds4: fix down q80 gpu correctness` and current-head repro artifact `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-down-q80-correctness-repro-20260707.json`.
+  - Any new retained/down path must first match the fixed-text top1 gate: `same_top1=145/145`, `first_mismatch_pos=-1`, and no RAM/cgroup failure.
+- design constraints:
+  - Prompt-general only: no France-derived expert pack, no prompt-specific admission profile, no held-out prompts during tuning.
+  - Default-off source changes only; Kimi and existing GP4/full-source alias behavior must remain functional when envs are unset.
+  - Strict 16GB cgroup including page cache, `MemorySwapMax=0`; TTFT and semantic correctness gates still apply before any SOTA claim.
+- implementation sketch:
+  1. Add a DS4-specific default-off graph/dataflow probe in `src/models/deepseek4.cpp`, around the `gate_up -> view(gate/up) -> swiglu -> down` block, to record tensor names, shapes, buffer types, view offsets, selected expert dimensions, and whether down consumes the exact `act` tensor produced by `ggml_swiglu_split`.
+  2. Add a CUDA/CPU-side retained activation eligibility probe for this real DS4 path, distinct from old `ggml_moe_up_gate` handoff. It should answer whether `act` can be kept GPU-resident and passed to corrected Q8_0 down without host D2H/writeback.
+  3. Only after the probe proves shape/lifetime eligibility, implement a default-off microbench path that fuses or retains `gate_up`/`swiglu` output and feeds down through the already-correct Q8_0 CPU-order down reference path.
+  4. First validation must be fixed-text top1 against baseline and must show full equality before any token-rate run.
+  5. If fixed-text passes, run calibration/dev generalized prompts only; promote only if min/mean token rate beats the no-prompt-specific baseline with RAM/correctness/TTFT passing. Use held-out prompts only after a candidate is frozen.
+- hard-bound requirement before coding the performance path:
+  - The probe artifact must estimate removable seconds/token for `gate_up source movement`, `up/gate compute`, `down source movement`, `down compute`, D2H/writeback, and remaining CPU fallback.
+  - If the hard-bound cannot plausibly exceed the current no-prompt-specific baseline by a useful margin, stop after recording the probe and redesign instead of writing a large kernel.
+- immediate next action:
+  - Implement only the default-off DS4 graph/dataflow probe first, build, run one strict 16GB calibration prompt, and push the source/probe artifact if default-off guard passes.
+
+## 2026-07-07 X10-I execution result：DS4 native retained-down probe validated
+
+- attempt_id: `20260707-ds4-native-gateup-retained-down-microbench`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-native-retained-down-probe-20260707.json`
+- source_update:
+  - Added default-off `DS4_NATIVE_RETAINED_DOWN_PROBE_OUT=<csv>` in `src/models/deepseek4.cpp`.
+  - The probe records the actual DeepSeek4 default graph dataflow around gate/up, clamp, `ggml_swiglu_split`, and raw down `build_lora_mm_id` before weights are multiplied.
+  - Env unset is a no-op and does not alter logits or Kimi paths.
+- build_validation:
+  - `cmake --build build-ds4-moe-stream --target llama-cli llama-results -j20` passed.
+- probe_run:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T114132Z-20260707-ds4-native-retained-down-probe-france-r2/france-native-retained-down-probe-cpu40-vram0gb`
+  - csv: `native_retained_down_probe.csv`, `1806` records, strict `16GB` cgroup, `drop_caches`, held-out unused.
+  - n32 output was intentionally short and marked `unfinished_sentence`; this run is probe-only, not correctness/SOTA promotion.
+- default_off_guards:
+  - n96 guard: `/root/lfz/runs/vendor-ds4-16gb/20260707T114339Z-20260707-defaultoff-native-retained-down-probe-guard/defaultoff-native-retained-down-probe-guard-cpu40-vram0gb`, `eval_tok_s=2.4`, `ram_ok=true`, truncated at n96.
+  - n192 semantic guard: `/root/lfz/runs/vendor-ds4-16gb/20260707T114521Z-20260707-defaultoff-native-retained-down-probe-guard-n192/defaultoff-native-retained-down-probe-guard-n192-cpu40-vram0gb`, `eval_tok_s=2.5`, `TTFT=37199.507438 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15031795712`, `ram_ok=true`, `correctness_ok=true`.
+- probe_findings:
+  - `gate_up_present=0/1806`: this GGUF does not use combined `ffn_gate_up_exps` on the measured default path.
+  - The actual path is separate `ffn_gate_exps` and `ffn_up_exps`, both clamped: `gate_was_clamped=1806`, `up_was_clamped=1806`.
+  - Dataflow is clean and retained-eligible at graph level: `act_src0_is_gate=1806`, `act_src1_is_up=1806`, `down_src0_is_down_weight=1806`, `down_src1_is_act=1806`, `down_src2_is_selected=1806`.
+  - Each down expert payload is `4456448` bytes, type `mxfp4`; active expert count is `selected_ne0=6` for all records.
+- decision:
+  - Accept this default-off probe and source as a diagnostic scaffold.
+  - Do not implement a combined `gate_up` retained microbench for this GGUF; it would target a non-used path.
+  - Next implementation must target a prompt-general separate `gate/up -> clamp -> swiglu -> down` retained or fused activation path, preserving the existing gate cache and using Q8_0 CPU-order down as the correctness reference.
+  - Still not SOTA; no token-rate promotion.
+
+## 2026-07-07 X10-J design gate：separate gate/up retained path must first add MXFP4 CPU-compatible fused op
+
+- attempt_id: `20260707-ds4-separate-gate-up-retained-design-gate`
+- why_now:
+  - X10-I proved the actual DeepSeek4 graph is separate `ffn_gate_exps` + `ffn_up_exps`, not combined `ffn_gate_up_exps`.
+  - Existing `ggml_cuda_moe_stream_up_gate_batch` is only reached from `GGML_OP_MOE_UP_GATE`; current DS4 graph emits two independent `GGML_OP_MUL_MAT_ID` nodes plus `ggml_swiglu_split`, so toggling runtime env cannot create a retained producer.
+  - Directly swapping DS4 to the existing generic fused op is not safe: DeepSeek4 applies clamp to raw gate/up before `swiglu`, while existing CPU fused op has no clamp parameter and current CPU caller passes CUDA `limit=0.0f`.
+  - Existing CUDA batch type gate also excludes `GGML_TYPE_MXFP4` in `moe_stream_type_supported`; adding MXFP4 to the generic Q8_1 path would likely repeat the rejected down-Q8_1 correctness failure.
+- source facts to preserve:
+  - `ggml/src/ggml-cpu/ggml-cpu.c::ggml_compute_forward_moe_up_gate` asserts SILU and calls `ggml_cuda_moe_stream_up_gate_batch(..., limit=0.0f, ...)`.
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu::moe_stream_type_supported` excludes `GGML_TYPE_MXFP4`.
+  - The CUDA fuse kernel has a `limit` argument but its current SILU limit semantics clamp `silu(g)` rather than exactly reproducing DS4 clamp semantics: `silu(clamp(g, -inf, limit)) * clamp(up, -limit, limit)`.
+  - Down correctness reference is the Q8_0 CPU-order path, not the older Q8_1 mmvq path.
+- required next implementation order:
+  1. Add a new default-off graph option in `src/models/deepseek4.cpp` only after adding an exact/compatible fused op form that can express DS4 clamp semantics.
+  2. Extend or add a fused up/gate CPU reference path that matches current separate graph at fixed-text top1 and op-level compare before any CUDA writeback.
+  3. Add an MXFP4 Q8_0 CPU-compatible CUDA fused up/gate probe/writeback path; do not use generic Q8_1 MXFP4 mmvq as accepted output.
+  4. Validate in this order: default-off guard -> fused CPU/reference top1 -> targeted CUDA fused up/gate top1 -> full fused up/gate top1 -> only then combine with corrected down handoff/Q8_0 path.
+  5. Only after correctness passes, benchmark calibration/dev generalized prompts under strict 16GB; held-out remains unused until candidate freeze.
+- hard-bound implication:
+  - A retained activation path that fixes only down is already known insufficient and slower. A credible route must remove repeated separate gate/up source movement and avoid D2H/writeback into down.
+  - Therefore the next source edit should be a correctness scaffold for exact DS4 fused gate/up semantics, not a performance benchmark.
+- decision:
+  - Do not implement a one-line DS4 graph switch to `ggml_moe_up_gate`; it is mathematically incomplete for DS4 clamp and lacks MXFP4 CPU-compatible CUDA support.
+  - Next concrete source work should introduce a default-off DS4 fused gate/up correctness scaffold with explicit clamp semantics and MXFP4 Q8_0 parity instrumentation.
+
+## 2026-07-07 X10-K execution result：DS4 fused up/gate CPU reference scaffold rejected
+
+- attempt_id: `20260707-ds4-fused-upgate-ref-correctness-scaffold`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-ref-correctness-reject-20260707.json`
+- rejected_source_diff: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-ref-rejected-source-diff-20260707.patch`
+- source_change_tested:
+  - Added `ggml_moe_up_gate_limit()` with explicit DS4 raw clamp semantics.
+  - Updated CPU fused up/gate fallback to compute `silu(min(raw_gate, limit)) * clamp(raw_up, -limit, limit)`.
+  - Updated CUDA fused up/gate helper limit semantics to match raw-gate clamp instead of clamping `silu(gate)`.
+  - Added default-off `DS4_FUSED_UP_GATE_REF=1` path in `src/models/deepseek4.cpp` for separate `ffn_up_exps`/`ffn_gate_exps`.
+- build: `cmake --build build-ds4-moe-stream --target llama-cli llama-results -j20` passed.
+- default_off_guard:
+  - case_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T122502Z-20260707T-defaultoff-fused-upgate-guard/france-defaultoff-fused-upgate-guard-cpu40-vram0gb`
+  - env: `DS4_FUSED_UP_GATE_REF` unset.
+  - metrics: `eval_tok_s=2.4`, `prompt_tok_s=0.9`, `TTFT=39081.059658 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15004102656`, `ram_ok=true`, `correctness_ok=true`.
+  - decision: default-off behavior was not broken.
+- correctness_result_sota_env:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T123900Z-fused-upgate-ref-top1-current`
+  - compared default SOTA-style graph against `DS4_FUSED_UP_GATE_REF=1` on fixed France text.
+  - result: `same_top1=142/145`, `first_mismatch_pos=78`, `top1_pass=false`, `max_abs_top2_logit_diff=1.1980000000000004`.
+  - batch counters: both default and fused-ref had `up_gate batch_accept=0`, `batch_decline=5800` for this fixed-text run, so the failure is not a promoted CUDA up/gate batch path.
+- correctness_result_cpu_explicit:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T124700Z-fused-upgate-ref-cpu-top1-current`
+  - repeated the comparison with stream env disabled to compare explicit CPU gate/up graph against fused CPU reference.
+  - result remained `same_top1=142/145`, `first_mismatch_pos=78`, `top1_pass=false`, `max_abs_top2_logit_diff=1.1980000000000004`.
+- interpretation:
+  - The fused CPU op is not numerically equivalent enough to the explicit `MUL_MAT_ID(gate) + MUL_MAT_ID(up) + clamp + swiglu_split` graph.
+  - The gap is not explained by gate one-stream GPU vs CPU, because no-stream CPU explicit comparison produced the same mismatches.
+  - Likely remaining causes are fused-op accumulation/order or src1 quantization/work-buffer differences; final-logit top1 is too late to localize the exact layer.
+- decision:
+  - Reject this source path and revert the source diff. It must not be promoted and must not remain as an active default-off implementation because the correctness scaffold itself failed the top1 parity gate.
+  - Keep only the rejected artifact and plan record.
+- next_action:
+  - Before any new fused up/gate implementation, add a default-off act-level parity probe that compares per-layer `gate`, `up`, and `act` tensors for explicit vs candidate fused op before down/logits.
+  - Only if act-level max/mean error is understood and fixed should a future candidate retry fixed-text top1 and then token-rate benchmarking.
+
+## 2026-07-07 X10-C3 latest-head repro：down GPU correctness passes after clean rebuild
+
+- attempt_id: `20260707-latest-head-down-q80-correctness-repro`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-down-q80-correctness-repro-20260707.json`
+- status: `latest_head_down_gpu_correctness_reproduced_not_sota`
+- purpose:
+  - After reverting the failed fused up/gate candidate, prove that the current pushed head still has the corrected down GPU Q8_0 CPU-order path.
+  - Avoid relying on an older binary or an older source commit for the down correctness claim.
+- source/build:
+  - source commit: `656f0b6e5b1d2e886af65383a732bd922aa7560c` (`vendor-ds4: refresh generalized sota demo rerun`)
+  - clean rebuild command: `cmake --build build-ds4-moe-stream --target llama-cli llama-results -j20`
+  - build result: passed
+  - build option: `GGML_CUDA_MOE_STREAM_BATCH:BOOL=ON`
+  - `llama-results` sha256: `1f36414b6c54ddf244dd7562bb39edac892aa0f87be17fb1bbf4349c8b401f10`
+- run:
+  - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T132051Z-latest-head-down-q80-correctness-repro`
+  - prompt scope: fixed France correctness text only; `held_out_test_set_v1_locked` was not used.
+  - memory: both cases ran through `systemd-run --wait --collect` with `MemoryMax=16000000000` and `MemorySwapMax=0`; `drop_caches` was executed before each case.
+- config:
+  - common env: `CUDA_VISIBLE_DEVICES=0`, `GGML_CUDA_DISABLE_GRAPHS=1`, `GGML_MOE_STREAM=1`, `GGML_MOE_STREAM_DONTNEED=1`, `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_VRAM_CACHE_GB=2`, `GGML_KIMI_CPU_MOE_PROFILE=1`.
+  - full-down env delta: `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`.
+- correctness:
+  - default case: `batch_accept=0`, `batch_decline=5800`, `n_tokens=145`, `top1_matches_next_token=122`.
+  - full-down GPU case: `batch_accept=5800`, `batch_decline=0`, `n_tokens=145`, `top1_matches_next_token=122`.
+  - comparison: `same_top1=145/145`, `first_mismatch_pos=-1`, `max_abs_top12_logit_diff=0.0`, `mean_abs_top12_logit_diff=0.0`, `top1_pass=true`.
+- runtime notes:
+  - default systemd result: success; service runtime `2min 40.704s`; max RSS `15603628 KB`; exit status `0`.
+  - full-down systemd result: success; service runtime `3min 29.005s`; max RSS `15603096 KB`; exit status `0`.
+  - full-down stderr confirmed `MXFP4 down Q8_0-compatible batch path active`.
+- decision:
+  - Down GPU correctness is now fixed and reproducible on the latest pushed head after a clean rebuild.
+  - This closes the down correctness gate needed before further retained/fused dataflow work.
+  - This is still not a token-rate SOTA: the full-down correctness path remains slower than the default CPU fallback in this sequential-logits gate and must not be promoted as an accepted performance result.
+- next_action:
+  - Continue with the plan after X10-K: add an act-level parity probe for separate `gate/up -> clamp -> swiglu` before retrying any fused up/gate or retained down handoff.
+  - Do not use held-out prompts until a prompt-general candidate is frozen.
+
+## 2026-07-07 X10-L execution result：act-level parity probe scaffold validated
+
+- attempt_id: `20260707-ds4-act-parity-probe-scaffold`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-act-parity-probe-identity-20260707.json`
+- status: `act_level_parity_probe_scaffold_validated_identity_not_sota`
+- purpose:
+  - Implement the X10-K next action before retrying any fused up/gate path.
+  - Provide a strict 16GB tool that compares explicit and candidate per-layer `gate_clamped`, `up_clamped`, and `swiglu` tensor sums before down/logits.
+- source_update:
+  - Added `.Agent/run-tools/run_ds4_act_parity_probe.py`.
+  - The script creates explicit/candidate cases, runs `llama-debug` under `systemd-run --wait --collect` with `MemoryMax=16000000000`, `MemorySwapMax=0`, and `drop_caches` before each case.
+  - It captures tensors matching `.*ffn_moe_(gate_clamped|up_clamped|swiglu).*`, parses per-layer `sum = ...` values, compares common names, reports missing tensors, and fails if no tensor records are found.
+  - It accepts candidate-only env via repeated `--candidate-env KEY=VALUE`, so the next fused up/gate candidate can be checked without changing the probe.
+  - Updated `common/debug.cpp` so `common_debug_cb_eval` respects `--tensor-filter` during `ask=true`; with a filter, it only retrieves matching tensors instead of copying every graph tensor. This affects only debug/eval-callback tooling, not default `llama-cli` inference.
+- build_validation:
+  - command: `cmake --build build-ds4-moe-stream --target llama-debug -j20`
+  - result: passed.
+- identity_probe:
+  - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-identity-smoke-v2`
+  - prompt: `Please introduce France in a short paragraph.`
+  - prompt scope: calibration fixed prompt only; `held_out_test_set_v1_locked` was not used.
+  - candidate env: empty, so this validates probe mechanics by comparing explicit path against itself.
+  - result: `explicit_records=129`, `candidate_records=129`, `record_names=129`, `max_abs_sum_diff=0.0`, `num_diffs_over_atol=0`, `status=pass`.
+  - runtime: explicit `0:34.12`, candidate `0:33.18`; max RSS about `15.6GB`; both exited `0` under strict 16GB/no-swap cgroup.
+- decision:
+  - Accept this as a default-off diagnostic scaffold for act-level parity.
+  - This is not a fused up/gate candidate and not a token-rate SOTA.
+  - Any future fused/refactored `gate/up -> clamp -> swiglu` path must pass this act-level probe with nonzero records before fixed-text top1 or token-rate benchmarking.
+- next_action:
+  - Re-attempt the DS4 fused up/gate correctness scaffold only after wiring it through this probe.
+  - First compare `gate_clamped`, `up_clamped`, and `swiglu` sums per layer; if act-level differences appear, debug the earliest differing layer before running final-logit top1.
+
+## 2026-07-07 X10-M execution result：fused up/gate vecswiglu rejected by act-level parity
+
+- attempt_id: `20260707-ds4-fused-upgate-vecswiglu-act-parity`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-act-parity-fused-vecswiglu-reject-20260707.json`
+- candidate source patch: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-vecswiglu-rejected-source-diff-20260707.patch`
+- status: `rejected_reverted_not_sota`
+
+Purpose:
+- Continue from X10-L by testing the previously rejected `DS4_FUSED_UP_GATE_REF=1` vecswiglu fused up/gate candidate with the new act-level parity probe before doing any more token-rate benchmarking.
+- This used only the fixed France calibration prompt; `held_out_test_set_v1_locked` was not used.
+
+Run:
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-vecswiglu`
+- env delta: `DS4_FUSED_UP_GATE_REF=1`
+- tensor filter: `.*ffn_moe_(gate_clamped|up_clamped|swiglu).*`
+- constraints: strict `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+- returncodes: explicit `0`, candidate `0`.
+- runtime: explicit `0:34.93`, candidate `0:39.72`.
+
+Result:
+- explicit records: `129`
+- candidate records: `43`
+- missing candidate records: `86`; the candidate does not emit the separate `ffn_moe_gate_clamped-*` and `ffn_moe_up_clamped-*` records, so it is not yet observable as a drop-in replacement for the explicit graph.
+- diffs over atol: `8`
+- max swiglu sum diff: `1.9545899999998255`
+- largest late-layer diffs include `ffn_moe_swiglu-41` around `0.393555` and `ffn_moe_swiglu-42` around `1.95459`.
+
+Decision:
+- Reject and keep reverted. This candidate is not a SOTA and must not be benchmark-promoted.
+- The candidate source was removed with reverse patch and a clean `llama-debug` rebuild passed after revert (`/tmp/ds4-clean-debug-rebuild-after-fused-probe.exit = 0`).
+- Down GPU correctness remains the fixed reference path; the next fused/retained attempt must first expose matching gate/up clamped debug records and pass act-level parity before fixed-text top1 or generalized calibration/dev benchmarks.
+
+## 2026-07-07 X10-N execution result：debug-visible fused up/gate still fails act parity
+
+- attempt_id: `20260707-ds4-fused-upgate-debug-zero-act-parity`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-upgate-debug-zero-act-parity-reject-20260707.json`
+- candidate source diff: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-debug-zero-rejected-source-diff-20260707.patch`
+- status: `rejected_reverted_not_sota`
+
+Purpose:
+- Follow X10-M by separating two issues in the fused up/gate scaffold: missing act-level debug records versus real numerical mismatch.
+- This used only the fixed France calibration prompt; `held_out_test_set_v1_locked` was not used.
+
+Implementation tested:
+- Added a default-off diagnostic env `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1` on top of `DS4_FUSED_UP_GATE_REF=1`.
+- First variant built explicit gate/up debug tensors but left them disconnected; this still produced only `43` candidate records and `86` missing candidate records, proving graph pruning skipped disconnected debug tensors.
+- Second variant added a zero-value dependency from explicit `gate_dbg/up_dbg` into fused `act`, preserving mathematical output while forcing debug tensors into the graph.
+
+Strict probe result:
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-debug-zero`
+- constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+- candidate env: `DS4_FUSED_UP_GATE_REF=1`, `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`.
+- records: explicit `129`, candidate `129`, missing candidate `0`.
+- result: act-level parity still failed with `12` diffs over atol and max sum diff `13.226561999996193`.
+- earliest swiglu mismatch remains `ffn_moe_swiglu-0` at about `8e-6`; later hidden-state divergence appears in `ffn_moe_gate_clamped-41`, `ffn_moe_up_clamped-41`, `ffn_moe_gate_clamped-42`, `ffn_moe_up_clamped-42`, and `ffn_moe_swiglu-42`.
+
+Decision:
+- Reject and keep reverted. This candidate is not a SOTA and must not be benchmark-promoted.
+- The zero-dependency trick is useful only as a diagnostic pattern for future probes; it does not fix fused math parity.
+- The candidate source was removed and clean `llama-debug` rebuild passed after revert (`/tmp/ds4-clean-debug-rebuild-after-zero-probe.exit = 0`).
+- Next fused/retained attempt should stop replacing explicit gate/up math with the current fused CPU op. It must either exactly reuse the explicit dot/dequant/accumulation order or retain the explicit act dataflow while reducing source movement; otherwise layer-0 act drift will keep propagating to final logits.
+
+## 2026-07-07 X10-O execution result：force-explicit up/gate parity isolates fused-op bug
+
+- attempt_id: `20260707-ds4-fused-upgate-force-explicit-parity`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-upgate-force-explicit-parity-pass-20260707.json`
+- candidate source diff: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-force-explicit-parity-pass-source-diff-20260707.patch`
+- status: `diagnostic_pass_reverted_not_sota`
+
+Purpose:
+- Narrow the X10-N layer-0 `swiglu` mismatch by testing the same DS4 fused branch while forcing `ggml_moe_up_gate_limit` to return the explicit `mul_mat_id + clamp + swiglu_split` subgraph instead of `GGML_OP_MOE_FUSED_UP_GATE`.
+- This used only the fixed France calibration prompt; `held_out_test_set_v1_locked` was not used.
+
+Implementation tested:
+- Added default-off diagnostic env `GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT=1` on top of `DS4_FUSED_UP_GATE_REF=1` and `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`.
+- The source was not kept; it was saved as a rejected/pass diagnostic patch and reverted after the run.
+
+Strict probe result:
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-force-explicit`
+- constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+- records: explicit `129`, candidate `129`, missing candidate `0`.
+- result: pass; `num_diffs_over_atol=0`, `max_abs_sum_diff=0.0`.
+
+Decision:
+- This proves the DS4 branch wiring, clamp semantics, debug visibility, and explicit fallback graph are correct.
+- The act mismatch from X10-N is isolated to the real `GGML_OP_MOE_FUSED_UP_GATE` execution path, likely row mapping, wdata preparation, quantization/dequantization, or accumulation/order inside `ggml_compute_forward_moe_up_gate` and its CUDA helper.
+- Do not benchmark or promote fused up/gate until layer-0 act parity is exact.
+- Clean `llama-debug` rebuild after revert passed (`/tmp/ds4-clean-debug-rebuild-after-force-explicit.exit = 0`).
+
+## 2026-07-07 X10-P execution result：fused up/gate CPU fallback also fails act parity
+
+- attempt_id: `20260707T-act-parity-fused-cpu-fallback`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-upgate-cpu-fallback-parity-reject-20260707.json`
+- candidate source diff: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-cpu-fallback-parity-reject-source-diff-20260707.patch`
+- status: `diagnostic_reject_reverted_not_sota`
+
+Purpose:
+- Follow X10-O by checking whether the act mismatch is only in the CUDA stream-batch fused up/gate helper.
+- Disable `GGML_MOE_STREAM` for both explicit and candidate runs, then test the same default-off fused branch with debug-visible explicit gate/up tensors.
+- This used only the fixed France calibration prompt; `held_out_test_set_v1_locked` was not used.
+
+Strict probe result:
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-cpu-fallback`
+- common env delta: `GGML_MOE_STREAM=0`
+- candidate env: `DS4_FUSED_UP_GATE_REF=1`, `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`
+- constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+- returncodes: explicit `0`, candidate `0`.
+- records: explicit `129`, candidate `129`, missing candidate `0`.
+- result: act-level parity still failed with `12` diffs over atol and max sum diff `13.226561999996193`.
+- earliest mismatch remains `ffn_moe_swiglu-0` at about `8e-6`; largest late mismatch is `ffn_moe_gate_clamped-42` at `13.226561999996193`.
+
+Decision:
+- Reject and keep reverted. This candidate is not a SOTA and must not be benchmark-promoted.
+- Disabling stream did not restore parity, so the bug is not only in CUDA stream batch. The CPU fused fallback behind `GGML_OP_MOE_FUSED_UP_GATE` also diverges from the explicit `mul_mat_id + clamp + swiglu_split` graph.
+- X10-O force-explicit remains the correctness reference: DS4 graph wiring and explicit fallback are correct; the remaining gap is inside the real fused op execution path, likely row mapping, `wdata` preparation, quant/dequant, or accumulation/order in `ggml_compute_forward_moe_up_gate` and its CUDA helper.
+- The source diff was saved and removed with reverse patch. Clean `llama-debug` rebuild after revert passed (`/tmp/ds4-clean-debug-rebuild-after-cpu-fallback-probe.exit = 0`).
+
+Next action:
+- Do not continue token-rate benchmarking for fused up/gate until layer-0 act parity is exact.
+- Either fix the fused op to match the explicit path exactly, or avoid replacing explicit math and instead optimize source movement / retained dataflow around the explicit gate/up/clamp/swiglu outputs.
+- The broader token-rate path remains prompt-general: no France-specific traces, prompt profiles, or packs may be used for promotion; accepted improvements must beat the no-prompt-specific generalized baseline and then be recorded and pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+
+## 2026-07-07 X10-Q execution result：default-off force-explicit fused up/gate scaffold accepted
+
+- attempt_id: `20260707-ds4-fused-upgate-force-explicit-scaffold`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-fused-upgate-force-explicit-scaffold-accepted-20260707.json`
+- source diff: `.Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-force-explicit-scaffold-source-diff-20260707.patch`
+- status: `accepted_default_off_diagnostic_scaffold_not_sota`
+
+Purpose:
+- Keep the useful X10-O force-explicit diagnostic as a permanent default-off scaffold, instead of leaving it only as a temporary rejected/pass patch.
+- This gives future fused up/gate work an exact in-branch reference switch: the same DS4 fused branch can be forced back to explicit `mul_mat_id + clamp + swiglu_split` via `GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT=1`.
+- This is not a performance path and must not be treated as token-rate SOTA.
+
+Implementation kept:
+- Added `ggml_moe_up_gate_limit(...)` so DS4 can pass the per-layer `swiglu_clamp_exp` limit into a fused/ref scaffold.
+- Added default-off DS4 envs:
+  - `DS4_FUSED_UP_GATE_REF=1`: route separate `ffn_up_exps` + `ffn_gate_exps` through the scaffold.
+  - `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`: also materialize explicit gate/up clamped tensors for act-level parity.
+  - `GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT=1`: force the scaffold to return the explicit subgraph instead of `GGML_OP_MOE_FUSED_UP_GATE`.
+- Default accepted path is unchanged because all envs are off by default.
+
+Validation:
+- Build passed: `cmake --build build-ds4-moe-stream --target llama-debug -j20`.
+- Build passed: `cmake --build build-ds4-moe-stream --target llama-cli -j20`.
+- Strict act parity run:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-force-explicit-scaffold-current`
+  - candidate env: `DS4_FUSED_UP_GATE_REF=1`, `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`, `GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT=1`
+  - constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+  - result: pass, explicit records `129`, candidate records `129`, missing `0`, `num_diffs_over_atol=0`, `max_abs_sum_diff=0.0`.
+- Default-off generalized smoke:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T151023Z-demo-generalized-sota/describe-vector-databases-in-one-short-paragraph-cpu40-vram0gb`
+  - prompt: `Describe vector databases in one short paragraph.`
+  - result: `eval_tok_s=1.8`, `prompt_tok_s=0.9`, `TTFT=39298.263597 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15111622656`, `ram_ok=true`, `correctness_ok=true`.
+  - This is only a fast-smoke guard (`n_predict=32`), not a comparable SOTA metric.
+
+Decision:
+- Accept and push the scaffold because it is default-off, strict parity passes when force-explicit is enabled, and default prompt-general execution still runs under the 16GB cgroup.
+- Do not claim any token-rate improvement from this commit.
+- The next implementation step remains the real fused-op fix: make `GGML_OP_MOE_FUSED_UP_GATE` itself match layer-0 act parity, or keep explicit math and optimize retained source/dataflow around it.
+
+## 2026-07-07 X10-R execution result：limited up/gate defaults to exact explicit math
+
+- attempt_id: `20260707-ds4-limited-upgate-explicit-default`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-explicit-default-accepted-20260707.json`
+- source diff: `.Agent/runs/20260705-vendor-ds4-coldstart/limited-upgate-explicit-default-source-diff-20260707.patch`
+- status: `accepted_default_off_correctness_guard_not_sota`
+
+Purpose:
+- X10-P proved the real limited `GGML_OP_MOE_FUSED_UP_GATE` path is not act-exact.
+- X10-Q added a force-explicit reference, but still required a force env to avoid the bad fused op.
+- This step makes the safe behavior the default for limited DS4 up/gate: if `limit > 1e-6`, `ggml_moe_up_gate_limit(...)` returns the explicit `mul_mat_id + clamp + swiglu_split` graph unless `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` is explicitly set.
+
+Implementation:
+- Changed only `ggml/src/ggml.c`.
+- Added opt-in env `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1`.
+- Default accepted SOTA path remains unchanged because it does not set `DS4_FUSED_UP_GATE_REF` and normal `ggml_moe_up_gate(...)` still passes `limit=0`.
+- Future real fused-op debugging can still deliberately reopen the old path with `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1`, but that path remains disallowed for benchmark promotion until act parity is exact.
+
+Validation:
+- Build passed: `cmake --build build-ds4-moe-stream --target llama-debug -j20`.
+- Build passed: `cmake --build build-ds4-moe-stream --target llama-cli -j20`.
+- Strict act parity run without `GGML_MOE_UP_GATE_LIMIT_FORCE_EXPLICIT`:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-limited-upgate-explicit-default`
+  - candidate env: `DS4_FUSED_UP_GATE_REF=1`, `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`
+  - constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+  - result: pass, explicit records `129`, candidate records `129`, missing `0`, `num_diffs_over_atol=0`, `max_abs_sum_diff=0.0`.
+- Default-off France guard:
+  - run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T152842Z-demo-generalized-sota/please-introduce-france-in-a-short-paragraph-cpu40-vram0gb`
+  - result: `eval_tok_s=2.6`, `prompt_tok_s=0.9`, `TTFT=38126.413486 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15026626560`, `ram_ok=true`, `correctness_ok=true`.
+  - output: semantically correct, coherent, complete short paragraph about France.
+  - This is a correctness/default-path guard, not a new SOTA claim.
+- Truncation observation:
+  - `/root/lfz/runs/vendor-ds4-16gb/20260707T152709Z-demo-generalized-sota/please-introduce-france-in-a-short-paragraph-cpu40-vram0gb` was semantically correct but cut by the `n_predict=96` cap, so it was replaced by the `n_predict=192` France guard above.
+  - `/root/lfz/runs/vendor-ds4-16gb/20260707T152222Z-demo-generalized-sota/explain-message-queues-in-one-short-paragraph-cpu40-vram0gb` also completed under strict 16GB, but the 32-token cap cut the sentence, so the heuristic marked `correctness_ok=false`. This is not a SOTA or quality metric.
+
+Decision:
+- Accept and push as a correctness guard, not as a token-rate optimization.
+- Do not benchmark-promote real limited fused up/gate unless `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` first passes layer-0 act parity with `max_abs_sum_diff=0.0`.
+- Next performance work should either:
+  - keep explicit math and optimize retained source/dataflow around the exact gate/up/clamp/swiglu outputs; or
+  - fix the real fused op under the explicit opt-in env and only then benchmark.
+
+## 2026-07-07 X10-S execution result：`ALLOW_FUSED` opt-in still rejected on latest head
+
+- attempt_id: `20260707-ds4-limited-upgate-allow-fused-recheck`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-allow-fused-recheck-reject-20260707.json`
+- status: `diagnostic_reject_not_sota_no_source_change`
+
+Purpose:
+- After X10-R, recheck on the latest pushed head that deliberately setting `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` still reopens the known bad real fused op.
+- This prevents future work from treating the opt-in env as benchmark-safe.
+- This used only the fixed France calibration prompt; `held_out_test_set_v1_locked` was not used.
+
+Strict probe result:
+- run_dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-limited-upgate-allow-fused-recheck`
+- candidate env: `DS4_FUSED_UP_GATE_REF=1`, `DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT=1`, `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1`
+- constraints: `MemoryMax=16000000000`, `MemorySwapMax=0`, `drop_caches` before each case.
+- returncodes: explicit `0`, candidate `0`.
+- records: explicit `129`, candidate `129`, missing `0`.
+- result: fail, `num_diffs_over_atol=12`, `max_abs_sum_diff=13.226561999996193`.
+- earliest mismatch remains `ffn_moe_swiglu-0` at about `8e-6`; largest mismatch remains `ffn_moe_gate_clamped-42` at `13.226561999996193`.
+
+Decision:
+- Reject as not SOTA; no source change.
+- X10-R remains valid: limited DS4 up/gate must default to explicit math.
+- `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` is only a deliberate debugging switch. It must not be used for token-rate benchmarking or promotion until a future source patch makes layer-0 act parity exact.
+- Next performance work should avoid the real fused op for now and focus on exact explicit retained source/dataflow, or fix the real fused op behind this opt-in env before benchmarking.
+
+## 2026-07-07 X10-T plan update：post-down-correctness generalized route selection
+
+- attempt_id: `20260707-post-x10s-next-route-selection`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/post-x10s-next-route-selection-20260707.json`
+- branch/push target: `ssd/vendor/deepseek-token-rate-16gb`
+- status: `plan_recorded_no_source_change_not_sota`
+
+Current verified state:
+- Down GPU Q8_0 CPU-order correctness has already been fixed and reproduced on latest branch history:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-down-q80-correctness-repro-20260707.json`
+  - status: `latest_head_down_gpu_correctness_reproduced_not_sota`
+  - decision: correctness gate only; not token-rate SOTA.
+- Limited DS4 up/gate now defaults to exact explicit math:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-explicit-default-accepted-20260707.json`
+  - accepted as a correctness guard only.
+- Reopening the real fused op with `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` still fails act parity:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/ds4-limited-upgate-allow-fused-recheck-reject-20260707.json`
+  - failure: `num_diffs_over_atol=12`, `max_abs_sum_diff=13.226561999996193`
+  - decision: forbidden for token-rate benchmarking until layer-0 act parity is exact.
+- Current no-prompt-specific generalized baseline remains:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`
+  - min/mean/max `eval_tok_s`: `1.8 / 2.18 / 2.7`
+  - all runs strict 16GB RAM including page cache.
+
+Closed or insufficient routes from current evidence:
+- Exact hotset/source residency alone is closed:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/exact-retained-dataflow-source-movement-bound-20260707.json`
+  - best prompt-agnostic min bound only `2.7707 tok/s`, mean `3.1860 tok/s`
+  - source edit not allowed by this bound.
+- Sparse retained top64/top128/top256/top512 is closed for the generalized target:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-generalized-bound-audit-after-membership-20260707.json`
+  - best listed min bound stays around `2.07 tok/s` even for top512 zero-overhead.
+- Current graph/dataflow route is not allowed as a runtime patch:
+  - artifacts:
+    - `.Agent/runs/20260705-vendor-ds4-coldstart/exact-graph-dataflow-current-hard-bound.json`
+    - `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-exact-graph-dataflow-recheck-20260707.json`
+  - reason: accepted graph still lacks a retained gate output usable by `build_expert_mix`; DS4_HOT recomputes gate and adds payload.
+- Current-head duplicate/nonduplicate screening found no existing vendor mechanism with a credible 10 tok/s bound:
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-nonduplicate-next-screening-after-mmvq.json`
+  - decision: future runtime patch must start from a new hard-bound artifact.
+
+Next implementation rule:
+- Do not write another token-rate runtime source patch until one of the following has a new hard-bound artifact showing generalized calibration/dev `min_eval_tok_s >= 5.5` before coding:
+  1. an exact retained-gate/up/down dataflow interface that removes or hides both gate source movement and most up/down CPU fallback without changing logits;
+  2. a correctness-verified compact representation/model route that fits 32GB VRAM and strict 16GB host RAM/page cache while preserving fixed-text top1/correctness;
+  3. a fixed real fused up/gate op where `GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1` first passes act parity with `max_abs_sum_diff=0.0`, followed by a separate generalized hard-bound that still clears the >5 tok/s target after overhead.
+- Held-out test prompts remain reserved until a candidate configuration is frozen. Development may use only calibration/dev prompts and the France correctness guard.
+- Any accepted generalized improvement must immediately record exact reproduction details and push source plus records to `ssd/vendor/deepseek-token-rate-16gb`.
+
+Immediate next action:
+- Build a new hard-bound/proof artifact for the most plausible remaining path before source editing:
+  - preferred first: retained-gate interface feasibility, because full up/down removal alone is not enough for the worst generalized prompts unless gate source movement is also removed/hidden;
+  - fallback: compact representation feasibility if retained-gate proof cannot clear the target.
+
+## 2026-07-07 X10-U feasibility bound：retained-gate interface reopen gate
+
+- attempt_id: `20260707-retained-gate-interface-feasibility-bound`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/retained-gate-interface-feasibility-bound-20260707.json`
+- status: `feasibility_bound_recorded_no_source_change_not_sota`
+
+Purpose:
+- Turn the existing generalized bottleneck evidence into a concrete pre-source-edit gate for the retained-gate path.
+- The goal is not to claim SOTA, but to define what a retained-gate/up/down implementation must prove before any token-rate runtime patch.
+
+Evidence used:
+- `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-source-movement-combination-hard-bound-20260707.json`
+- `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-residual-bottleneck-after-updown-bound-20260707.json`
+- `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-exact-graph-dataflow-recheck-20260707.json`
+- `.Agent/runs/20260705-vendor-ds4-coldstart/exact-graph-dataflow-current-hard-bound.json`
+
+Key numbers:
+- Quantum/generalized observed baseline: `1.9 tok/s`
+- Zero-overhead up/down fallback removal only: `3.7449 tok/s`
+- Zero-overhead gate one-stream/source removal only: `3.1929 tok/s`
+- Zero-overhead removal of both fallback and gate source: `18.5499 tok/s`
+- Symmetric 50% fallback + 50% gate source cut: `3.4469 tok/s`
+- Symmetric 70% fallback + 70% gate source cut: `5.1117 tok/s`
+- Symmetric 80% fallback + 80% gate source cut: `6.7390 tok/s`
+- Symmetric 90% fallback + 90% gate source cut: `9.8864 tok/s`
+
+Interpretation:
+- 70%/70% barely clears the 5 tok/s product target in a zero-overhead bound, so it is not enough margin for a source implementation.
+- 80%/80% is the first symmetric reduction with enough margin above the required pre-source gate (`min_eval_tok_s >= 5.5`).
+- Up/down-only remains insufficient for worst generalized prompts; gate source/cache time and up/down fallback are same-order bottlenecks:
+  - aggregate gate `src0` trace time: `167285.982 ms`
+  - aggregate up/down decode fallback time: `176622.283 ms`
+
+Current blocker:
+- Current accepted graph does not expose a retained gate output usable by `build_expert_mix`.
+- `DS4_HOT` recomputes gate and adds payload, so it cannot be promoted as the retained-gate path without a new dataflow proof.
+
+Implementation rule:
+- Do not write a SOTA candidate runtime patch for retained gate yet.
+- A future retained-gate source patch is allowed only after a new hard-bound/probe shows one of:
+  - `>=80%` gate source cut and `>=80%` up/down fallback cut on calibration/dev; or
+  - another measured cut pair whose generalized calibration/dev `min_eval_tok_s >= 5.5` after estimated overhead.
+- The proof must stay prompt-general: no prompt-specific packs, traces, or admission profiles; held-out prompts remain unused until the candidate is frozen.
+
+Next action:
+- Design/instrument the smallest retained-gate interface probe that can show whether gate/topk/weights can be made available to the expert mix path without recomputing gate and without large payload.
+- If the probe cannot plausibly hit the 80/80 cut under 32GB VRAM and strict 16GB host RAM including page cache, close this path and switch to compact representation feasibility.
+
+## 2026-07-07 X10-V source audit：retained-gate probe insertion point
+
+- attempt_id: `20260707-retained-gate-probe-insertion-audit`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/retained-gate-probe-insertion-audit-20260707.json`
+- status: `source_location_audit_recorded_no_source_change_not_sota`
+
+Purpose:
+- Locate the smallest safe source insertion point for the retained-gate feasibility probe required by X10-U.
+- This is not a performance patch and not a SOTA claim.
+
+Findings:
+- DeepSeek4 uses a model-specific graph builder in `src/models/deepseek4.cpp`, not only the generic `llama-graph.cpp` MoE path.
+- Existing probe code already records the core blocker:
+  - `src/models/deepseek4.cpp:418-420`
+  - `build_expert_mix` receives selected IDs and weights, not a retained gate output; `graph_gate_output_input_available` is currently hardcoded false.
+- Expert mix entry:
+  - `src/models/deepseek4.cpp:1175-1421`
+  - signature shape: `build_expert_mix(cur_ffn, selected_experts, weights, layer, il)`
+  - current inputs are only `cur_ffn`, `selected_experts`, `weights`, `layer`, and `il`.
+- DeepSeek4 gate route:
+  - `src/models/deepseek4.cpp:1436-1470`
+  - `build_moe_v4` computes `scores`, `selected_experts`, and `weights`, then immediately calls `build_expert_mix(cur_ffn, selected_experts, weights, layer, il)`.
+- Default single-path expert compute:
+  - `src/models/deepseek4.cpp:1350-1418`
+  - computes gate/up, swiglu, down, weight multiply, and sum; it already has native retained down probe coverage.
+- Generic MoE reference:
+  - `src/llama-graph.cpp:1390-1527`
+  - useful for comparison, but not the DeepSeek4 primary route.
+
+Next diagnostic probe design:
+- Add a default-off env, proposed name: `DS4_RETAINED_GATE_INTERFACE_PROBE_OUT`.
+- The probe must be non-logit-changing and should only emit graph-construction facts.
+- Minimum fields:
+  - layer, `moe_tokens`, `n_expert_used`
+  - tensor shape/stride/type/buffer for `scores`, `selection`, `selected_experts`, `weights`, and `cur_ffn`
+  - whether `build_expert_mix` can receive an optional retained-gate context without recomputing gate
+  - whether `selected_experts` and `weights` are already the exact retained data needed by expert mix
+
+Decision:
+- A default-off diagnostic source probe is allowed next because it does not claim token-rate improvement and does not alter logits.
+- A SOTA candidate runtime patch is still not allowed until the probe plus a new hard-bound show generalized calibration/dev `min_eval_tok_s >= 5.5`.
+
+## 2026-07-07 X10-W execution result：retained-gate interface probe accepted
+
+- attempt_id: `20260707-retained-gate-interface-probe`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/retained-gate-interface-probe-accepted-20260707.json`
+- status: `accepted_default_off_diagnostic_probe_not_sota`
+
+Source update:
+- File: `src/models/deepseek4.cpp`
+- Added default-off env: `DS4_RETAINED_GATE_INTERFACE_PROBE_OUT`
+- The probe writes CSV rows at the DeepSeek4 `build_moe_v4 -> build_expert_mix` handoff.
+- It records tensor name/type/buffer/shape/stride/size for `cur_ffn`, `scores`, `selection`, `selected_experts`, and `weights`, plus handoff booleans.
+- It does not change logits and is not a token-rate path.
+
+Build validation:
+- `cmake --build build-ds4-moe-stream --target llama-cli llama-debug -j20`
+- result: passed.
+
+Probe-enabled strict smoke:
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T155914Z-retained-gate-interface-probe-smoke-v2/retained-gate-probe-smoke-cpu40-vram0gb`
+- prompt: `Explain database indexes briefly.`
+- `n_predict=32`
+- strict cgroup: `MemoryMax=16000000000`, `MemorySwapMax=0`, drop caches before case; page cache counted.
+- result:
+  - `eval_tok_s=1.5`
+  - `prompt_tok_s=0.9`
+  - `TTFT=34433.814523 ms`
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15080050688`
+  - `ram_ok=true`
+  - `correctness_ok=true`
+  - probe CSV rows: `1806`
+
+Probe observation:
+- `graph_gate_output_input_available=0` for all sampled rows.
+- `build_expert_mix_receives_scores=0`.
+- `selected_weights_retained_available=1`.
+- `selected_src0_is_selection=1`.
+- `weights_src0_is_scores=0`, `weights_src1_is_selected=0`.
+- Interpretation:
+  - The current handoff already retains `selected_experts` and `weights`.
+  - The missing interface is not top-k/weights availability; it is a retained gate/source context that can avoid recomputing/restaging gate-side expert source while also reducing up/down fallback.
+
+Default-off strict smoke:
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T160042Z-retained-gate-probe-default-off-smoke/introduce-canada-in-a-short-paragraph-cpu40-vram0gb`
+- prompt: `Introduce Canada in a short paragraph.`
+- result:
+  - `eval_tok_s=1.9`
+  - `prompt_tok_s=0.9`
+  - `TTFT=40122.589339 ms`
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15125778432`
+  - `ram_ok=true`
+  - `correctness_ok=true`
+  - status: `RUN_COMPLETED_STRICT_16GB`
+
+Decision:
+- Accept and push as a diagnostic scaffold only.
+- SOTA unchanged.
+- Next step remains hard-bound-driven: use the probe facts to design a retained gate/source context only if a new generalized bound clears `min_eval_tok_s >= 5.5`; otherwise close this path and switch to compact representation feasibility.
+
+## 2026-07-08 X10-X route selection：retained-gate handoff closes, lowbit correctness gate next
+
+- attempt_id: `20260708-post-retained-gate-lowbit-route-selection`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/post-retained-gate-lowbit-route-selection-20260708.json`
+- status: `route_selection_recorded_no_source_change_not_sota`
+
+Retained-gate handoff conclusion:
+- Probe artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/retained-gate-interface-probe-accepted-20260707.json`
+- Probe CSV: `/root/lfz/runs/vendor-ds4-16gb/20260707T155914Z-retained-gate-interface-probe-smoke-v2/retained-gate-probe-smoke-cpu40-vram0gb/retained_gate_interface_probe.csv`
+- rows: `1806`
+- observations:
+  - `selected_weights_retained_available=1`
+  - `selected_src0_is_selection=1`
+  - `graph_gate_output_input_available=0`
+  - `build_expert_mix_receives_scores=0`
+  - total selected/weights handoff payload in the smoke run is tiny (`103200` bytes).
+- decision:
+  - Current DeepSeek4 already passes `selected_experts` and `weights` into `build_expert_mix`.
+  - Passing only top-k/weights is not a new source-movement reduction.
+  - The missing piece would be a retained gate/source context that avoids expert gate-source movement and reduces up/down fallback, but current evidence does not prove an `80%/80%` generalized cut.
+
+Current-head sparse fused MMVQ placement probe:
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T160551Z-sparse-fused-mmvq-placement-probe-current-head/sparse-fused-mmvq-placement-cpu40-vram0gb`
+- prompt: `Explain database indexes briefly.`
+- strict 16GB/no-swap/drop-caches result:
+  - `eval_tok_s=1.5`
+  - `prompt_tok_s=0.8`
+  - `TTFT=34350.127534 ms`
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=15106654208`
+  - `ram_ok=true`
+  - `correctness_ok=true`
+- probe CSV rows: `1806`
+- profile loaded:
+  - `top_n=48`
+  - `profile_payload_bytes=427819008`
+  - `profile_active_layers=32`
+  - `profile_max_pairs_per_layer=3`
+  - placement candidate rows: `1344`
+  - rows requiring runtime membership probe: `1344`
+- decision:
+  - The default-off placement/proof skeleton still works on current head.
+  - This top48 profile is not a generalized SOTA path.
+  - Existing generalized sparse top64/top128/top256/top512 bounds remain closed, so do not implement sparse-pair writeback/hot branch from current evidence.
+
+Closed routes reconfirmed:
+- Generalized sparse retained topN:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-generalized-bound-audit-after-membership-20260707.json`
+  - decision: closed for generalized target.
+- Compact/batched updown transfer alone:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/compact-batched-updown-transfer-hard-bound-20260707.json`
+  - decision: not sufficient for generalized 5 tok/s.
+- q2ternary / simple lowbit sidecars:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/q2ternary-partial-compressed-candidate-20260707.json`
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/lowbit-sidecar-generalization-feasibility-audit-20260707.json`
+  - decision: failed op-level correctness; exact sidecar has no compression benefit.
+- external IQ2/IQ2_S GGUF:
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-france-correctness-reject-20260707.json`
+  - `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage3b-reasonoff-correctness-reject-20260707.json`
+  - decision: vendor-loadable but France correctness failed; do not run calibration/dev or held-out.
+
+Remaining viable direction:
+- Artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-lowbit-representation-coverage-bound-20260707.json`
+- best zero-overhead family:
+  - gate compression: `8x`
+  - up/down compression: `8x`
+  - gate compressed payload: `4.4726 GiB`
+  - up/down compressed payload: `6.7288 GiB`
+  - generalized min bound: `6.5404 tok/s`
+  - generalized mean bound: `10.4135 tok/s`
+- interpretation:
+  - A real 8x-ish gate + up/down representation has enough zero-overhead generalized margin.
+  - No currently tested lowbit representation has passed fixed-text top1/op-level correctness.
+
+Next implementation rule:
+- Do not write a token-rate runtime source patch now.
+- Do not run strict cold SOTA benchmark for lowbit routes until correctness is proven.
+- Allowed next work:
+  - offline or compare-only correctness gate for a stronger lowbit representation;
+  - it must prove fixed-text top1 and France semantic correctness before any performance run.
+- Fallback:
+  - if no correctness-verified representation appears, switch to external high-acceptance draft/verifier artifact search instead of more local cache/source tuning.
+
+## 2026-07-08 X10-Y external lowbit header refresh
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-lowbit-header-refresh-20260708.json`
+- status: `metadata_refresh_not_sota`
+
+Purpose:
+- Check whether newly observed external lowbit DeepSeek-V4-Flash GGUF candidates can immediately enter the offline correctness gate without downloading full models.
+
+Metadata-only range check:
+- `unsloth/DeepSeek-V4-Flash-GGUF`
+  - `UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00001-of-00004.gguf`
+  - `UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00001-of-00003.gguf`
+  - `UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00001-of-00004.gguf`
+- `tarruda/DeepSeek-V4-Flash-GGUF`
+  - `IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00001-of-00004.gguf`
+
+Result:
+- All checked first shards identify as:
+  - `general.architecture=deepseek4`
+  - `deepseek4.block_count=43`
+  - `deepseek4.expert_count=256`
+  - `deepseek4.expert_used_count=6`
+- All checked first shards reported `n_tensors=0` in the header range parse, so they are metadata-only first shards.
+- They cannot provide expert payload/header tensor statistics from the first shard alone; a real correctness gate would require full multi-shard acquisition and a load/alias plan.
+
+Decision:
+- No new SOTA and no runtime source patch.
+- Do not download full external multi-shard candidates without an explicit disk/RAM/time plan.
+- Keep the next allowed work as correctness-first representation: acquire only a candidate with a credible correctness path, then run fixed-text top1 and France correctness before any performance benchmark.
+
+## 2026-07-08 X10-Z external lowbit full-shard size admission
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-lowbit-full-shard-size-admission-20260708.json`
+- status: `full_shard_size_admission_not_sota`
+
+Purpose:
+- Before any full external lowbit model download, estimate total shard sizes using HTTP range `bytes=0-0`.
+- This avoids accidentally consuming disk with multi-shard downloads before a correctness gate can run.
+
+Current disk state:
+- Filesystem `/` available: about `33.22 GiB`.
+
+Candidate size results:
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF`
+  - `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`: `46.98 GiB`
+- `eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4`
+  - `DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf`: `63.87 GiB`
+- `teamblobfish/DeepSeek-V4-Flash-GGUF`
+  - `IQ2_XXS-XL`: `73.13 GiB`
+  - `IQ2_XS-XL`: `81.03 GiB`
+- `unsloth/DeepSeek-V4-Flash-GGUF`
+  - `UD-IQ2_XXS`: `84.62 GiB`
+  - `UD-IQ2_M`: `84.68 GiB`
+  - `UD-IQ3_XXS`: `95.93 GiB`
+  - `UD-Q3_K_M`: `120.44 GiB`
+- `tarruda/DeepSeek-V4-Flash-GGUF`
+  - `Q2_K`: `90.30 GiB`
+  - `IQ3_XXS`: `104.41 GiB`
+  - `Q3_K`: `116.51 GiB`
+
+Decision:
+- Full download is not allowed now: every checked candidate exceeds available disk.
+- No correctness gate can run on these full external candidates until disk is freed or a smaller candidate is found.
+- No runtime source patch and no token-rate benchmark.
+- Next allowed actions:
+  - identify explicit, safe disk cleanup candidates and ask before deletion; or
+  - search for a smaller correctness-capable candidate/artifact; or
+  - switch to external draft/verifier artifact search that does not require full lowbit target-model download.
+
+## 2026-07-08 X10-AA disk cleanup admission for lowbit correctness
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/disk-cleanup-admission-for-lowbit-correctness-20260708.json`
+- status: `cleanup_candidates_recorded_no_deletion_not_sota`
+
+Purpose:
+- Identify disk cleanup candidates before any external lowbit full-model correctness gate download.
+- This is read-only; no files were deleted.
+
+Current disk state:
+- `/` available: about `33.22 GiB`
+- smallest checked full external lowbit candidate:
+  - `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF`
+  - `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`
+  - size: `46.98 GiB`
+- minimum extra free space before any safety margin: about `13.75 GiB`
+- recommended extra free space with margin: at least `25 GiB`
+
+Major cleanup candidates:
+- likely safe after confirming no active download:
+  - `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/.cache/huggingface/download/...incomplete`
+  - size: `2.76 GiB`
+- possible but may affect historical reproduction:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - size: `81.97 GiB`
+  - route was previously rejected for correctness.
+- possible but may affect historical pack-based reproduction:
+  - `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack`
+  - size: `35.78 GiB`
+  - `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+  - size: `19.09 GiB`
+  - current generalized route must not rely on France-specific packs, but historical runs may.
+
+Decision:
+- No deletion performed.
+- Full external lowbit download remains disallowed until disk is freed or a smaller candidate is found.
+- Any deletion must be explicitly approved or have a replacement archival/reproduction plan, because the project requires SOTA/rejected runs to remain reproducible.
+
+## 2026-07-08 X10-AB external lowbit new-candidate size admission
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/external-lowbit-new-candidate-size-admission-20260708.json`
+- status: `new_candidate_size_admission_not_sota_no_download`
+
+Purpose:
+- Continue the X10-AA allowed path without deleting anything: search for newly visible DeepSeek-V4-Flash compact/lowbit GGUF candidates that might fit current disk and enter a correctness-first gate.
+- This is metadata/HTTP-header only; no model body was downloaded, no source was changed, and no token-rate benchmark was run.
+
+Method:
+- Hugging Face search for DeepSeek-V4-Flash GGUF candidates, then per-file `HEAD`/`Range: bytes=0-0` admission using `x-linked-size` or redirected `Content-Length`.
+- Current `/` free space during the check: about `33.20 GiB`.
+
+New candidate size results:
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF`
+  - `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`: `46.975 GiB`
+- `0xSero/DeepSeek-V4-Flash-162B-GGUF`
+  - `DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`: `48.982 GiB`
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF`
+  - `DeepSeek-V4-Flash-REAP-K128.gguf`: `52.038 GiB`
+- `0xSero/DeepSeek-V4-Flash-180B-GGUF`
+  - `DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf`: `53.522 GiB`
+- `0xSero/DeepSeek-V4-Flash-Spark-Mini-GGUF`
+  - `DeepSeek-V4-Flash-Spark-Mini-Q3-Dynamic-REAP-ds4.gguf`: `69.864 GiB`
+- `0xSero/DeepSeek-V4-Flash-Spark-GGUF`
+  - `DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf`: `76.725 GiB`
+- `ssweens/DeepSeek-V4-Flash-GGUF-YMMV`
+  - `IQ1_M`: `62.870 GiB`
+  - `IQ2_XXS` combined shards: `72.558 GiB`
+  - `IQ3_XXS` combined shards: `104.154 GiB`
+- `persadian/DeepSeek-V4-Flash-GGUF`
+  - `IQ1_S-XL` appears potentially interesting but is gated/401 from this environment, so it cannot enter an unauthenticated correctness gate.
+
+Decision:
+- No newly checked accessible candidate fits current disk.
+- The smallest accessible candidate is still `46.975 GiB`, which exceeds current free disk before any safety margin.
+- Do not download or benchmark these candidates until disk is freed or a smaller accessible artifact is found.
+- No runtime source patch is allowed from this evidence.
+
+Next allowed actions:
+- If deletion is explicitly approved, free space from already rejected or prompt-specific artifacts first, while preserving reproduction records.
+- If deletion is not approved, continue external artifact search for a genuinely smaller correctness-capable representation or switch to a draft/verifier path that does not require downloading a full lowbit target model.
+- Any candidate that becomes downloadable must still pass fixed-text top1 / France semantic correctness before any calibration/dev token-rate benchmark; held-out prompts remain reserved until candidate freeze.
+
+## 2026-07-08 X10-AC draft/verifier route admission refresh
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/draft-verifier-route-admission-refresh-20260708.json`
+- status: `draft_verifier_route_screened_no_download_not_sota`
+
+Purpose:
+- Follow X10-AB's fallback path: if no compact target model fits current disk, check whether a smaller external draft/MTP/verifier artifact can reopen exact speculative decoding without downloading a full lowbit target model.
+- This is metadata/source audit only. No full draft model was downloaded, no runtime source was changed, and no token-rate benchmark was run.
+
+Current framework support:
+- Current build exposes speculative binaries and options:
+  - `build-ds4-moe-stream/bin/llama-speculative`
+  - `build-ds4-moe-stream/bin/llama-speculative-simple`
+  - `llama-cli` / `llama-server` options include `--spec-draft-model`, `--spec-draft-n-max`, and no-draft `--spec-type ngram-*`.
+- This only proves runtime support exists. A draft-model route still requires tokenizer/vocab compatibility with the target plus exact target-verification semantics.
+
+Target tokenizer facts:
+- Target model: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`
+- metadata:
+  - `general.architecture=deepseek4`
+  - `tokenizer.ggml.model=gpt2`
+  - `tokenizer.ggml.pre=joyai-llm`
+  - `deepseek4.vocab_size=129280`
+  - `bos_token_id=0`, `eos_token_id=1`
+
+External draft candidates checked:
+- `Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-GGUF`
+  - downloadable GGUF sizes: `4.306-8.873 GiB`
+  - source config: `model_type=qwen3_5`, `Qwen3_5ForConditionalGeneration`, `eos_token_id=248046`, `pad_token_id=248055`
+  - decision: reject for target speculative route due tokenizer/vocab mismatch.
+- `Jackrong/Qwen3.5-9B-DeepSeek-V4-Flash-MTP-GGUF`
+  - downloadable MTP GGUF sizes: `3.646-17.143 GiB`
+  - source/readme points to the same Qwen3.5-family model/fallback.
+  - decision: reject for current target route due tokenizer/vocab mismatch and no DS4 MTP verifier runtime.
+- `mradermacher/Qwen3.5-9B-DeepSeek-V4-Flash-i1-GGUF`
+  - downloadable small GGUF sizes: `2.554-5.046 GiB` for checked variants.
+  - source model is Jackrong's Qwen3.5-family distill.
+  - decision: reject for target speculative route due tokenizer/vocab mismatch.
+
+No-draft n-gram speculative status:
+- Historical artifacts already cover this family:
+  - `.Agent/runs/20260703-vendor-ds4-coldstart/ngram-simple-spec-probe-summary.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/ngram-map-k4v-probe-result.json`
+  - `.Agent/runs/20260704-vendor-ds4-coldstart/server-spec-partial-fallback-result.json`
+- Summary:
+  - `ngram-simple` completed under strict RAM/correctness but regressed to `3.7 tok/s` on the older France SOTA path.
+  - `ngram-map-k4v` timed out with runaway prompt output.
+  - server partial fallback completed but still only reached `3.7 tok/s`.
+- Decision: do not re-run no-draft n-gram speculative as a generalized SOTA candidate without new evidence or instrumentation proving high accepted draft rate on calibration/dev prompts.
+
+Decision:
+- Small Qwen3.5-derived draft/MTP files are disk-feasible, but they are not tokenizer-compatible DeepSeek4/joyai-llm drafts for exact target verification.
+- Do not download full draft files or run speculative token-rate benchmarks from these candidates.
+- Do not write a source patch from this evidence.
+- SOTA unchanged.
+
+Next allowed actions:
+- Continue searching only for tokenizer-compatible DeepSeek4/joyai-llm draft/verifier artifacts, or return to compact target representations gated by disk/correctness.
+- Any future draft candidate must first prove tokenizer/vocab compatibility and exact target-verification semantics; only then may it run France correctness and calibration/dev token-rate benchmarks.
+- If no such artifact appears, the project needs either approved disk cleanup for compact target correctness gates or a new dataflow/interface hard-bound with generalized `min_eval_tok_s >= 5.5` before implementation.
+
+## 2026-07-08 X10-AD compatible MTP refresh and cleanup/repro manifest
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compatible-mtp-refresh-and-cleanup-repro-manifest-20260708.json`
+- status: `metadata_and_cleanup_manifest_recorded_no_deletion_not_sota`
+
+Purpose:
+- Re-check the one public DeepSeek4-family small MTP GGUF that is not Qwen-tokenizer-based, then prepare a cleanup/repro manifest that can unlock compact target correctness gates if deletion is explicitly approved.
+- No full model was downloaded, no file was deleted, no runtime source was changed, and no token-rate benchmark was run.
+
+Antirez MTP refresh:
+- Candidate:
+  - repo: `antirez/deepseek-v4-gguf`
+  - file: `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf`
+  - size: `3,807,602,400 bytes` (`3.546 GiB`)
+- Metadata probe:
+  - used only a `128 MiB` range slice; temporary slice removed after reading metadata.
+  - `magic=GGUF`, `version=3`, `tensor_count=32`, `kv_count=5`
+  - `general.architecture=deepseek4_mtp_support`
+  - `general.name=DeepSeek V4 Flash MTP support`
+  - `deepseek4.nextn_predict_layers=1`
+  - `deepseek4.mtp_layer_count=1`
+  - `deepseek4.expert_count=256`
+  - no tokenizer metadata is present in the sidecar; it is not a standalone draft model.
+- Source support:
+  - current vendor source still has no loader/runtime for `general.architecture=deepseek4_mtp_support`.
+  - current vendor source still has no `mtp.0.*` tensor runtime path.
+  - existing generic `nextn_predict_layers` handling only preserves/skips tensors in some model loaders; it is not a DS4 verifier implementation.
+- Decision:
+  - Do not download full MTP or implement a loader now.
+  - The sidecar remains a possible future research input only if a new materially sublinear verifier proof appears. Existing MTP hard-bound/design artifacts keep N=2 closed for the current objective.
+
+Cleanup/repro manifest:
+- Current free space during this audit: about `33.07 GiB`.
+- Must preserve:
+  - `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`
+  - `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`, `20,495,904,768 bytes`, sha256 `7ad26d8b14c20dccd4106a8abbffc9f846eb2fedff4fd00a5af7060941204076`
+- Recommended first deletion if explicitly approved:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - size: `88,019,539,296 bytes` (`81.975 GiB`)
+  - reason: previously rejected for France correctness, not used by current generalized route or current SOTA.
+  - restore URL: `https://huggingface.co/bullerwins/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - observed restore etag: `4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0`
+- Small likely-safe cleanup if approved, but insufficient alone:
+  - incomplete HF download under `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/.cache/huggingface/download/...incomplete`
+  - size: `2,965,889,623 bytes`
+- Avoid deleting without extra approval:
+  - `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-promptset-gate-union-firstorder-20260702.pack`, `38,420,348,928 bytes`
+  - reason: historical prompt-set diagnostic pack with no external restore URL recorded.
+
+Unlocked correctness gates if the rejected IQ2_S file is deleted:
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF`
+  - `DeepSeek-V4-Flash-REAP-K128-uniform.gguf`, `50,439,361,920 bytes` (`46.975 GiB`)
+  - next gate: load compatibility -> fixed-text top1 / France semantic correctness -> only then calibration/dev token-rate.
+- `antirez/deepseek-v4-gguf`
+  - `DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf`, `86,720,111,200 bytes` (`80.764 GiB`)
+  - next gate: correctness-first only; higher disk pressure than sleepy.
+
+Decision:
+- No deletion performed in this step.
+- No runtime source patch is allowed from this evidence.
+- If cleanup is explicitly approved later, delete only the rejected IQ2_S file first, then download exactly one compact target candidate and run load/correctness gates before any token-rate benchmark.
+
+## 2026-07-08 X10-AE compact target cleanup manifest correction
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-cleanup-manifest-correction-20260708.json`
+- status: `correction_recorded_no_deletion_not_sota`
+
+Purpose:
+- Correct X10-AD's cleanup wording so it does not imply already-rejected compact targets should be downloaded or tested again after disk cleanup.
+- No file was deleted, no full model was downloaded, no runtime source was changed, and no token-rate benchmark was run.
+
+Still valid from X10-AD:
+- The best cleanup candidate remains:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - size: `88,019,539,296 bytes`
+  - reason: already rejected for correctness, not used by current SOTA or generalized route, and restore URL/etag are recorded.
+- Must still preserve:
+  - `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf`
+  - `/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack`
+- Antirez MTP refresh remains valid:
+  - `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` is a small `deepseek4_mtp_support` sidecar, but current vendor has no loader/runtime and no new verifier bound.
+
+Correction:
+- Do not re-download or re-test `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF` from the current evidence.
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-france-load-smoke-reject-20260707.json`
+  - status: `rejected_load_incompatible_not_sota`
+  - reason: REAP K128 changes `ffn_gate_inp` shape; direct load failed at `blk.3.ffn_gate_inp.weight`, expected `[4096,256]`, got `[4096,128]`.
+- Do not re-download or re-test `antirez/deepseek-v4-gguf` IQ2XXS chat-v2 from the current evidence.
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-france-correctness-reject-20260707.json`
+  - status: `rejected_correctness_not_sota`
+  - reason: loaded under strict RAM, but France output was degenerate/semantically incorrect in both default and deepseek3 reasoning-off modes.
+- Do not re-download or re-test `0xSero/DeepSeek-V4-Flash-162B-GGUF` Spark Mini Q2 from the current evidence.
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-0xsero-france-load-smoke-reject-20260707.json`
+  - status: `rejected_load_incompatible_not_sota`
+  - reason: missing global `hc_head_base/hc_head_fn/hc_head_scale`; current loader cannot use its per-layer HC tensors without a new correctness-proven compatibility plan.
+- Do not rebenchmark local bullerwins IQ2_S.
+  - artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage3b-reasonoff-correctness-reject-20260707.json`
+  - status: `rejected_correctness_failed_not_sota`
+  - reason: vendor-loadable with alias envs but produced malformed non-France output and only `2.9 tok/s`.
+
+Updated cleanup decision:
+- Deleting the rejected IQ2_S file, if explicitly approved later, is useful only to recover disk for future searches or new candidates.
+- It must not be treated as approval to re-download sleepy K128, antirez IQ2XXS, 0xSero Spark Mini Q2, or rebenchmark IQ2_S.
+- After cleanup, download only a newly discovered or newly corrected compact target candidate whose metadata/load/correctness route is not already rejected.
+- A loader compatibility patch for REAP K128 or 0xSero-style HC tensors requires its own hard-bound and correctness design before implementation.
+
+## 2026-07-08 X10-AF compact target variant classification correction and next gate
+
+- raw artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/hf-compact-target-classification-refresh-20260708.json`
+- corrected artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/hf-compact-target-variant-classification-correction-20260708.json`
+- status: `variant_level_correction_recorded_no_download_not_sota`
+
+Purpose:
+- Continue the compact/lowbit target route after X10-AE, but correct the admission method before making any download or benchmark decision.
+- The raw HF scan checked individual GGUF files/shards and found many apparent `fits_now` rows. That is not sufficient for sharded GGUF models: the unit of admission must be the complete model variant, not one shard.
+- No model body was downloaded, no runtime source was changed, and no token-rate benchmark was run.
+
+Corrected scan result:
+- raw scan scope:
+  - `repo_count=51`
+  - `row_count=296`
+  - raw classes included `fits_now_needs_header_gate=76` and `fits_after_iq2s_cleanup_needs_header_gate=86`, but these were file-level rows and include single shards.
+- corrected variant-level classes:
+  - `closed_or_contains_closed_file=5`
+  - `variant_fits_after_iq2s_cleanup_needs_header_gate=32`
+  - `variant_too_large=36`
+  - `not_original_target=33`
+  - `not_target=73`
+  - `sidecar_or_auxiliary_not_full_target=3`
+  - `metadata_tiny_or_suspicious_needs_header_gate=3`
+  - `incomplete_variant_scan_needs_rescan=1`
+
+Decision:
+- Do not treat the raw file-level `fits_now` rows as usable candidates.
+- Current-disk usable full-target candidates are not ready for promotion:
+  - tiny/suspicious rows require a GGUF header/load gate before they can be considered real target models;
+  - sidecar/auxiliary rows require a separate loader/reconstruction design;
+  - real compact target variants generally require explicit cleanup of the previously rejected local IQ2_S file before download.
+- SOTA unchanged.
+- No source patch is allowed from this evidence.
+
+Priority after explicit cleanup only:
+- If cleanup is approved, delete only the already-rejected IQ2_S file first:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - size: `88,019,539,296 bytes`
+  - restore URL and etag are recorded in X10-AD.
+- Then choose exactly one not-previously-closed complete variant from the corrected artifact and run gates in this order:
+  1. Header/metadata gate:
+     - architecture must be compatible with current vendor DeepSeek4 loader or have a prewritten loader-correctness plan;
+     - tokenizer/vocab must match target semantics closely enough for exact correctness evaluation;
+     - tensor names/shapes must pass a dry load or metadata shape check before downloading more than required.
+  2. Strict 16GB load gate:
+     - `MemoryMax=16000000000`, `MemorySwapMax=0`;
+     - page cache included in the cgroup;
+     - no prompt-specific expert pack or trace.
+  3. Correctness gate:
+     - fixed-text top1/logit parity where applicable;
+     - France prompt must be semantically correct and coherent;
+     - calibration/dev prompts only after correctness passes;
+     - held-out test prompts remain unused until a candidate is frozen.
+  4. Performance gate:
+     - compare against the no-prompt-specific generalized baseline;
+     - promote only if generalized metrics improve under strict RAM and TTFT stays within the accepted bound, or record as rejected if TTFT is intentionally over-bound for diagnosis.
+  5. Reproducibility gate:
+     - every accepted new SOTA must record exact command/env/model hashes/output/metrics and immediately push source plus records to `ssd/vendor/deepseek-token-rate-16gb`.
+
+Initial corrected priority list after cleanup:
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF`, `DeepSeek-V4-Flash-REAP-K128.gguf`, `52.038 GiB`
+  - caveat: related REAP K128 uniform was already closed for `ffn_gate_inp` shape mismatch, so this needs metadata shape proof before a full download.
+- `0xSero/DeepSeek-V4-Flash-180B-GGUF`, `DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf`, `53.522 GiB`
+  - caveat: related 0xSero Spark Mini Q2 was already closed for missing global HC tensors, so this needs metadata proof before a full download.
+- `teamblobfish/DeepSeek-V4-Flash-GGUF`, `IQ1_S-XL`, `57.314 GiB`
+  - caveat: newly classified complete sharded candidate; header and correctness gates required.
+- `teamblobfish/DeepSeek-V4-Flash-GGUF`, `IQ1_M`, `60.078 GiB`
+  - caveat: newly classified complete sharded candidate; header and correctness gates required.
+- `ssweens/DeepSeek-V4-Flash-GGUF-YMMV`, `deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf`, `62.870 GiB`
+  - caveat: YMMV repo; correctness-first only.
+- `ssweens/DeepSeek-V4-Flash-GGUF-YMMV`, `deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS`, `72.557 GiB`
+  - caveat: YMMV repo; correctness-first only.
+
+Immediate next action:
+- Do not implement another down/up runtime patch until the compact target gate above either:
+  - proves a correctness-valid compact target can load under strict 16GB and plausibly reaches the generalized `>5 tok/s` target; or
+  - is closed due to loader/correctness failure.
+- If cleanup is not approved, return to retained gate/source dataflow only after producing a new hard-bound artifact showing a generalized calibration/dev `min_eval_tok_s >= 5.5` before coding.
+
+## 2026-07-08 X10-AG compact target priority header gate
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-priority-header-gate-20260708.json`
+- status: `header_gate_recorded_no_full_download_not_sota`
+
+Purpose:
+- Execute the first cheap gate from X10-AF without deleting files or downloading full model bodies.
+- For each priority candidate, fetch only `Range: bytes=0-268435455` from the first/single GGUF file, parse GGUF metadata/tensor tables, then delete the temporary slice immediately.
+- This step is metadata-only. It does not run the model, does not claim SOTA, and does not change source.
+
+Direct metadata-pass candidates after post-audit:
+- `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF`, `DeepSeek-V4-Flash-REAP-K128.gguf`, `52.038 GiB`
+  - metadata: `general.architecture=deepseek4`, `tokenizer.ggml.model=gpt2`, `tokenizer.ggml.pre=joyai-llm`, `deepseek4.expert_count=256`, `ffn_gate_inp=[4096,256]`.
+  - caveat: related REAP K128 uniform was previously closed for a shape mismatch; this mixed file has a better header, but still needs strict load and correctness proof before any benchmark.
+- `teamblobfish/DeepSeek-V4-Flash-GGUF`, `IQ1_S-XL`, `57.314 GiB`
+  - metadata: `general.architecture=deepseek4`, `tokenizer.ggml.model=gpt2`, `tokenizer.ggml.pre=joyai-llm`, `deepseek4.expert_count=256`, `ffn_gate_inp=[4096,256]`.
+  - caveat: first shard only was parsed; full download requires explicit cleanup and then strict load/correctness gates.
+- `teamblobfish/DeepSeek-V4-Flash-GGUF`, `IQ1_M`, `60.078 GiB`
+  - metadata: `general.architecture=deepseek4`, `tokenizer.ggml.model=gpt2`, `tokenizer.ggml.pre=joyai-llm`, `deepseek4.expert_count=256`, `ffn_gate_inp=[4096,256]`.
+  - caveat: first shard only was parsed; full download requires explicit cleanup and then strict load/correctness gates.
+
+Downgraded / not direct-priority:
+- `0xSero/DeepSeek-V4-Flash-180B-GGUF`, `DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf`, `53.522 GiB`
+  - reject/direct-load block: `deepseek4.expert_count=160`, `ffn_gate_inp=[4096,160]`.
+  - decision: requires a loader/shape plan; do not download as a direct compact target candidate.
+- `ssweens/DeepSeek-V4-Flash-GGUF-YMMV`, `IQ1_M`, `62.870 GiB`
+  - shape metadata passes, but `tokenizer.ggml.pre=deepseek-v3` instead of target `joyai-llm`.
+  - decision: correctness-first fallback only; not priority over joyai-metadata candidates.
+- `ssweens/DeepSeek-V4-Flash-GGUF-YMMV`, `IQ2_XXS`, `72.557 GiB`
+  - shape metadata passes, but `tokenizer.ggml.pre=deepseek-v3` instead of target `joyai-llm`.
+  - decision: correctness-first fallback only; not priority over joyai-metadata candidates.
+
+Next execution plan:
+1. Do not delete any file unless explicitly approved.
+2. If deletion is approved, remove only the already-rejected local IQ2_S cleanup candidate recorded in X10-AD/X10-AF.
+3. Download exactly one direct metadata-pass candidate, in this order:
+   - `teamblobfish IQ1_S-XL` first, because it is the smallest newly classified standard-shape sharded candidate;
+   - `teamblobfish IQ1_M` second;
+   - `sleepyeldrazi REAP-K128 Q2-Q4 Mixed` only if the teamblobfish candidates fail or if a separate REAP loader-risk review clears it.
+4. For the chosen candidate, run:
+   - strict 16GB load smoke;
+   - fixed-text/logit or top1 correctness where applicable;
+   - France semantic correctness;
+   - calibration/dev generalized prompt benchmark only after correctness passes.
+5. Promote only if the result beats the no-prompt-specific generalized baseline with RAM/page-cache and TTFT constraints satisfied, then immediately commit and push to `ssd/vendor/deepseek-token-rate-16gb`.
+
+## 2026-07-08 X10-AH compact target loader/compute support audit
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-loader-compute-support-audit-20260708.json`
+- status: `source_support_audit_recorded_no_source_change_not_sota`
+
+Purpose:
+- Before any full download, check whether the X10-AG direct metadata-pass candidates are likely to use the current vendor loader and DeepSeek MoE stream fast paths.
+- This is source/header-artifact audit only. No source change, no full download, no model run, no SOTA claim.
+
+Source audit:
+- Generic GGML/loader support exists for the relevant lowbit types:
+  - `GGML_TYPE_IQ2_XXS=16`, `GGML_TYPE_IQ1_S=19`, `GGML_TYPE_IQ1_M=29`, `GGML_TYPE_Q2_K=10`.
+  - `ggml/src/ggml-cuda/mmvq.cu` has generic CUDA vector matmul support for `IQ2_XXS`, `IQ1_S`, `IQ1_M`.
+  - `ggml/src/ggml-cuda/ggml-cuda.cu` device buffer support includes `IQ1_M`, `IQ1_S`, `IQ2_XS`, `IQ2_XXS`.
+- Current DeepSeek MoE stream fast path is narrower:
+  - `moe_stream_type_supported(...)` currently allows `IQ3_XXS`, `IQ3_S`, `IQ2_S`, `Q3_K`, `IQ4_XS`.
+  - `launch_moe_stream_mmvq_slot_loop(...)` currently allows `Q4_0`, `Q3_K`, `IQ3_XXS`, `IQ3_S`, `IQ2_S`, `IQ4_XS`, `MXFP4`.
+  - `launch_moe_mmq_slot_batch(...)` currently dispatches `IQ3_XXS`, `IQ2_S`, `Q3_K`, `IQ4_XS`.
+
+Candidate support result:
+- `sleepyeldrazi REAP-K128 Q2-Q4 Mixed`
+  - sampled expert types include `IQ2_XXS` for gate/up and `Q2_K` for down.
+  - decision: load may work, but current MoE stream fast path is not covered.
+- `teamblobfish IQ1_S-XL`
+  - sampled expert types include `IQ1_S` for gate/up and `Q2_K` for down.
+  - decision: load may work, but current MoE stream fast path is not covered.
+- `teamblobfish IQ1_M`
+  - sampled expert types include `IQ1_M` for gate/up and `Q2_K` for down.
+  - decision: load may work, but current MoE stream fast path is not covered.
+
+Decision:
+- Do not assume compact target download will immediately produce a generalized token-rate SOTA.
+- The compact target route remains valuable because it may reduce target size, IO pressure, and host page-cache pressure, but performance still needs actual strict load/correctness and likely a separate type-specific MoE stream support plan.
+- No source patch is allowed from this audit alone.
+
+Updated next execution order:
+1. If explicit cleanup is approved, still download only one direct metadata-pass candidate first.
+2. Prefer `teamblobfish IQ1_S-XL` only as a correctness/load candidate, not as a guaranteed performance candidate.
+3. If it loads and passes France/generalized correctness but is slow, do not tune blindly:
+   - profile per-token time again under strict 16GB;
+   - confirm whether misses are now compact-target IO, generic CPU fallback, or missing MoE stream type support;
+   - only then design a type-specific stream patch for `IQ1_S/Q2_K` or choose the next candidate.
+4. A type-specific stream patch must first have:
+   - exact type/operator correctness parity against current CPU/generic CUDA output;
+   - a hard-bound showing generalized calibration/dev `min_eval_tok_s >= 5.5`;
+   - strict RAM/page-cache and TTFT gates.
+5. Accepted improvements must record full reproduction details and immediately push to `ssd/vendor/deepseek-token-rate-16gb`.
+
+## 2026-07-08 X10-AI compact target exact download manifest
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-exact-download-manifest-20260708.json`
+- status: `download_manifest_recorded_no_download_not_sota`
+
+Purpose:
+- Preserve exact reproducibility inputs for the compact target route before any cleanup or download.
+- This step records per-file URLs, sizes, and etags for the priority candidates selected by X10-AG/X10-AH.
+- No model body was downloaded, no file was deleted, no source was changed, and no SOTA changed.
+
+Recorded candidates:
+- `teamblobfish-iq1-s-xl`
+  - repo: `teamblobfish/DeepSeek-V4-Flash-GGUF`
+  - files: `2`
+  - total size: `57.314 GiB`
+  - shard etags recorded for both shards.
+  - current role: first candidate only after explicit cleanup approval; correctness/load candidate, not guaranteed performance candidate.
+- `teamblobfish-iq1-m`
+  - repo: `teamblobfish/DeepSeek-V4-Flash-GGUF`
+  - files: `2`
+  - total size: `60.078 GiB`
+  - shard etags recorded for both shards.
+  - current role: second candidate only after IQ1_S-XL fails or is closed.
+- `sleepy-k128-q2q4-mixed`
+  - repo: `sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF`
+  - files: `1`
+  - total size: `52.038 GiB`
+  - etag recorded.
+  - current role: fallback only after a REAP loader-risk review, because related K128 variants have already failed shape/load checks.
+
+Current gate:
+- No full download is allowed on current disk state.
+- The required cleanup target, if explicitly approved, remains only:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - size: `88,019,539,296 bytes`
+  - reason: already rejected for correctness and not used by current SOTA.
+- Without cleanup approval, the next source-edit route must not use compact target assumptions. It must return to a non-download hard-bound route and prove generalized `min_eval_tok_s >= 5.5` before coding.
+
+Decision:
+- Use the manifest only to make future cleanup/download steps reproducible.
+- Do not implement `IQ1_S/IQ1_M/Q2_K` stream kernels until a candidate has actually loaded and passed correctness, or until a separate synthetic correctness harness can prove exact parity for the relevant MoE stream operators.
+
+## 2026-07-08 X10-AJ generic backend lowbit MUL_MAT/MUL_MAT_ID smoke
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/backend-lowbit-mulmat-id-smoke-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-backend-lowbit-mulmat`
+- status: `generic_backend_correctness_smoke_pass_not_moe_stream_not_sota`
+
+Purpose:
+- Continue the no-deletion route by checking whether the lowbit types seen in compact target candidates already work in the generic CUDA backend.
+- This is a small existing-test smoke using `test-backend-ops`; it is not a model run, not a DeepSeek MoE stream fast-path test, and not a SOTA claim.
+
+Command shape:
+- binary: `./build-ds4-moe-stream-batch-probe/bin/test-backend-ops`
+- env: `GGML_CUDA_FORCE_MMQ=1`
+- ops:
+  - `MUL_MAT`
+  - `MUL_MAT_ID`
+- types:
+  - `iq1_s`
+  - `iq1_m`
+  - `q2_K`
+
+Result:
+- Generic CUDA backend smoke passed against CPU reference for:
+  - `MUL_MAT type_a=iq1_s`: `3/3`
+  - `MUL_MAT type_a=iq1_m`: `3/3`
+  - `MUL_MAT type_a=q2_K`: `3/3`
+  - `MUL_MAT_ID type_a=iq1_s`: `1/1`
+  - `MUL_MAT_ID type_a=iq1_m`: `1/1`
+  - `MUL_MAT_ID type_a=q2_K`: `1/1`
+
+Interpretation:
+- This reduces the basic backend-risk for compact target candidates: the generic CUDA path can compute these lowbit types in small tests.
+- It does not prove that the current DeepSeek MoE stream batch fast path supports these types:
+  - X10-AH remains valid: `moe_stream_type_supported(...)` and slot-batch dispatch still exclude `IQ1_S`, `IQ1_M`, and `Q2_K`.
+- It also does not prove full-model correctness, France semantic correctness, generalized token rate, RAM compliance, or TTFT.
+
+Decision:
+- No source patch from this smoke alone.
+- If cleanup is approved, the next real step remains downloading exactly one candidate and running strict load/correctness first.
+- If cleanup is not approved, the next source-side step must be a default-off MoE stream parity harness for `IQ1_S/Q2_K` or `IQ1_M/Q2_K`, not a production stream writeback patch.
+
+## 2026-07-08 X10-AK MoE stream synthetic harness feasibility check
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-synthetic-harness-feasibility-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-harness-feasibility`
+- status: `existing_backend_test_not_sufficient_for_moe_stream_parity_not_sota`
+
+Purpose:
+- Check whether X10-AJ's existing `test-backend-ops` path can be reused as the default-off MoE stream parity harness required before any `IQ1_S/IQ1_M/Q2_K` stream patch.
+- This is still not a model run, not a source change, and not a SOTA claim.
+
+Probe:
+- command:
+  - `GGML_CUDA_FORCE_MMQ=1`
+  - `GGML_MOE_STREAM_BATCH=1`
+  - `GGML_MOE_STREAM_BATCH_ONLY=1`
+  - `GGML_MOE_STREAM_BATCH_DECLINE_DEBUG=1`
+  - `./build-ds4-moe-stream-batch-probe/bin/test-backend-ops test -o MUL_MAT_ID -p 'type_a=iq1_s,type_b=f32,n_mats=4,n_used=2,b=0,m=512,n=1,k=256' --output csv`
+- result:
+  - generic CUDA/CPU correctness passed;
+  - stderr contained CUDA init only;
+  - no `moe_stream_batch` decline/debug line was printed.
+
+Interpretation:
+- Existing backend tests cover generic `MUL_MAT` / `MUL_MAT_ID`, but they do not prove the vendor DeepSeek MoE stream fast path is entered.
+- Current stream batch source has gates that the generic test does not satisfy/prove:
+  - down batch requires `src0_name` containing `ffn_down_exps`;
+  - current stream type gate excludes `IQ1_S`, `IQ1_M`, and `Q2_K`.
+- Therefore X10-AJ cannot be promoted to MoE stream parity evidence.
+
+Decision:
+- Do not implement production stream writeback for compact target types from existing backend tests.
+- Valid next routes remain:
+  1. If explicit cleanup is approved, download one compact candidate and run real strict 16GB load/correctness first.
+  2. If cleanup is not approved, add a dedicated default-off synthetic MoE stream parity harness that either:
+     - constructs named `ffn_down_exps`/`ffn_up_exps` tensors and forces the stream hook through the graph, or
+     - calls `ggml_cuda_moe_stream_batch` directly with synthetic expert/source/destination buffers and compares against CPU/generic CUDA reference.
+- Any harness implementation must be default-off, not affect current SOTA, and must record exact parity thresholds before any fast-path source patch.
+
+## 2026-07-08 X10-AL expand backend smoke coverage for compact-target lowbit types
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/expanded-backend-ops-lowbit-smoke-filter-20260708.json`
+- changed file: `tests/CMakeLists.txt`
+- status: `source_test_coverage_added_pass_not_sota`
+
+Purpose:
+- Preserve the X10-AJ generic backend smoke evidence in normal test coverage so future changes do not silently break compact-target lowbit support.
+- This is a test coverage change only. It does not affect runtime behavior and is not a SOTA claim.
+
+Change:
+- Extended `LLAMA_BACKEND_OPS_SMOKE_FILTER` with:
+  - `MUL_MAT(type_a=iq1_s, ...)`
+  - `MUL_MAT(type_a=iq1_m, ...)`
+  - `MUL_MAT(type_a=q2_K, ...)`
+  - `MUL_MAT_ID(type_a=iq1_s, ...)`
+  - `MUL_MAT_ID(type_a=iq1_m, ...)`
+  - `MUL_MAT_ID(type_a=q2_K, ...)`
+
+Verification:
+- command:
+  - `./build-ds4-moe-stream-batch-probe/bin/test-backend-ops test -o <expanded LLAMA_BACKEND_OPS_SMOKE_FILTER> --output csv`
+- result:
+  - `rc=0`
+  - all expanded lowbit smoke cases passed.
+- summary:
+  - `MUL_MAT type_a=iq1_s`: pass
+  - `MUL_MAT type_a=iq1_m`: pass
+  - `MUL_MAT type_a=q2_K`: pass
+  - `MUL_MAT_ID type_a=iq1_s`: pass
+  - `MUL_MAT_ID type_a=iq1_m`: pass
+  - `MUL_MAT_ID type_a=q2_K`: pass
+
+Decision:
+- Keep this source change because it only broadens regression coverage for the compact-target route.
+- It still does not prove DeepSeek MoE stream fast-path correctness or performance; X10-AK remains the active gate before any stream writeback patch.
+
+## 2026-07-08 X10-AM direct MoE stream lowbit gate probe
+
+- source tool: `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-direct-lowbit-gate-probe-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-direct-probe`
+- status: `direct_harness_proves_lowbit_down_stream_gate_unsupported_not_sota`
+
+Purpose:
+- Move beyond generic backend tests and prove the dedicated vendor down-stream batch entry can be reached with synthetic compact-target lowbit types and a real `ffn_down_exps` tensor name.
+- This is a diagnostic harness only. It does not change runtime behavior, does not enable a new type, and is not a SOTA claim.
+
+Implementation:
+- Added a standalone run-tool source file, not wired into default builds.
+- The tool:
+  - constructs synthetic quantized expert data for `IQ1_S`, `IQ1_M`, and `Q2_K`;
+  - calls `ggml_cuda_moe_stream_batch(...)` directly;
+  - uses `src0_name="blk.0.ffn_down_exps.weight"` so the down-stream name gate is satisfied;
+  - sets `GGML_MOE_STREAM_DECLINE_DEBUG=1`;
+  - expects current source to return `false`.
+
+Important build note:
+- The first compile against `build-ds4-moe-stream-batch-probe` used a stale 2026-07-05 `libggml-cuda.so`, whose ABI no longer matched the current source.
+- The accepted probe uses `build-ds4-moe-stream/bin/libggml-cuda.so`, which contains the current q80 argument signature.
+
+Verification:
+- command shape:
+  - compile with `g++ ... -Lbuild-ds4-moe-stream/bin ... -lggml -lggml-base -lggml-cpu -lggml-cuda`
+  - run with `GGML_MOE_STREAM=1`
+- result:
+  - `rc=0`
+  - `IQ1_S`: `decline-ok`, stderr reason `unsupported_type`
+  - `IQ1_M`: `decline-ok`, stderr reason `unsupported_type`
+  - `Q2_K`: `decline-ok`, stderr reason `unsupported_type`
+- This proves:
+  - the synthetic direct-call harness can reach the vendor down-stream gate;
+  - the tensor-name gate is no longer the blocker for this harness;
+  - the current blocker for compact-target lowbit down-stream is the type allow-list / implementation gate.
+
+Decision:
+- No production stream type support is enabled.
+- No performance benchmark is allowed from this evidence.
+- The next source step, if cleanup is still not approved, may be a default-off diagnostic allow-list plus parity mode for `IQ1_S/IQ1_M/Q2_K`, but it must:
+  - compare against CPU/generic CUDA reference;
+  - report numerical error thresholds;
+  - return false unless parity mode explicitly passes;
+  - remain disabled by default.
+
+## 2026-07-08 X10-AN default-off lowbit down-stream parity probe
+
+- source changes:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`
+  - `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-lowbit-defaultoff-parity-probe-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-lowbit-probe`
+- status: `default_off_safe_probe_mode_rejected_correctness_not_sota`
+
+Purpose:
+- Execute the X10-AM next source step without changing production behavior:
+  - keep `IQ1_S/IQ1_M/Q2_K` down-stream support disabled by default;
+  - add an explicit diagnostic env gate, `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`;
+  - compare probe-mode GPU output against a CPU dequantized reference;
+  - reject non-finite or numerically divergent results.
+
+Implementation:
+- Added `lowbit_down_probe_candidate(...)` in `moe_stream_batch.cu`.
+- The candidate is true only when all conditions hold:
+  - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`;
+  - tensor name contains `ffn_down_exps`;
+  - type is one of `IQ1_S`, `IQ1_M`, `Q2_K`;
+  - optional `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE_TENSOR` matches the tensor name.
+- Added the three lowbit types to the compact batch launch switch only through the diagnostic candidate path.
+- Updated the direct probe tool to:
+  - expect default mode decline;
+  - expect probe mode accept;
+  - compute CPU reference via `ggml_get_type_traits(type)->to_float`;
+  - fail if either reference or GPU output contains `NaN`/`Inf`.
+
+Verification:
+- Build:
+  - `ninja -C build-ds4-moe-stream ggml-cuda -j2`: pass.
+  - direct probe compile against `build-ds4-moe-stream/bin`: pass.
+- Default-off run:
+  - env: `GGML_MOE_STREAM=1`
+  - `rc=0`
+  - `IQ1_S`, `IQ1_M`, `Q2_K` all return `decline-ok`
+  - stderr reason remains `unsupported_type`
+  - conclusion: production/default path is unchanged.
+- Probe-mode run:
+  - env: `GGML_MOE_STREAM=1 GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+  - `rc=1`
+  - stream accepts the synthetic lowbit down tensors, but parity fails:
+    - `IQ1_S`: `finite=0`, `first_gpu=nan`, `first_ref=inf`
+    - `IQ1_M`: `finite=0`, `first_gpu=inf`, `first_ref=inf`
+    - `Q2_K`: `finite=0`, `first_gpu=nan`, `first_ref=-nan`
+
+Decision:
+- This is not a SOTA improvement and must not be used for model runs.
+- Do not enable lowbit down-stream production support from this evidence.
+- The result narrows the next blocker:
+  - the name gate and type gate can be reached;
+  - the current synthetic lowbit layout/parity path is not correctness-valid.
+- Next step:
+  - either use a real compact target/expert pack layout for parity;
+  - or revise the synthetic harness to mirror real GGUF lowbit row layout before attempting any production lowbit down kernel enablement.
+  - Until then, generalized SOTA remains unchanged and the random-prompt `>5 tok/s` target is still unmet.
+
+## 2026-07-08 X10-AO latest-head q80 down GPU correctness reverify
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-down-q80-lane8-shared-correctness-reverify-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T184220Z-latest-head-down-q80-correctness-reverify`
+- source commit: `f4153fdbf vendor-ds4: record lowbit down stream parity probe`
+- status: `pass_latest_head_down_gpu_q80_lane8_shared_correctness_not_sota`
+
+Purpose:
+- After X10-AN's default-off lowbit diagnostic source change, re-run the accepted q80 down GPU correctness gate on latest HEAD.
+- This checks that the existing fixed down GPU path remains correct and that the lowbit diagnostic gate did not change default q80 behavior.
+
+Method:
+- Rebuilt `build-ds4-moe-stream/bin/llama-results`.
+- Used the same fixed France correctness prompt as the previous q80 down checks:
+  - prompt sha256: `6504bcedd48f2587016aeac360c1202241e4ccd3e989b7d91b67f1a67b0ef1c2`
+- Ran two strict 16GB systemd-cgroup cases with cold `drop_caches` before each case:
+  1. default down path:
+     - `GGML_MOE_STREAM=1`
+     - `GGML_MOE_STREAM_DOWN_BATCH=1`
+     - no q80 compat env.
+  2. full down q80 lane8 shared path:
+     - `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`
+     - `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`
+     - `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`
+     - `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`
+
+Results:
+- token/logit correctness:
+  - `n_base=145`
+  - `n_case=145`
+  - `same_top1=145`
+  - `first_mismatch_pos=-1`
+  - `max_abs_top12_logit_diff=0.0`
+  - `mean_abs_top12_logit_diff=0.0`
+- default memory:
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=14937509888`
+  - `oom_kill=0`
+  - `ram_ok=true`
+- full-down lane8 shared memory:
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=14925918208`
+  - `oom_kill=0`
+  - `ram_ok=true`
+- down batch routing:
+  - default: `batch_accept=0`, `batch_decline=5800`
+  - full-down lane8 shared: `batch_accept=5800`, `batch_decline=0`
+
+Decision:
+- The latest HEAD still satisfies the down GPU q80 correctness gate under the 16GB host-RAM cgroup.
+- This is not a SOTA performance claim; it is a correctness revalidation.
+- The next optimization step should not revisit q80 down correctness unless a later source change touches that path. Focus should shift back to generalized random-prompt throughput:
+  - real compact target/load/correctness if disk cleanup is approved;
+  - or real-layout lowbit parity harness before lowbit down GPU production enablement;
+  - or another bottleneck-directed plan that keeps the no-prompt-specific and 16GB constraints.
+
+## 2026-07-08 X10-AP lowbit synthetic pattern fix and parity pass
+
+- changed file: `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-lowbit-patternfix-parity-pass-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-lowbit-probe-patternfix`
+- status: `synthetic_lowbit_down_stream_parity_pass_default_off_not_sota`
+
+Purpose:
+- Re-check X10-AN before treating lowbit down-stream as a real blocker.
+- X10-AN showed `NaN/Inf` in both GPU and CPU reference outputs. That could have been a real kernel/layout issue, but the harness data generator needed audit first.
+
+Root cause:
+- The probe's `fill_pattern` used `size_t` arithmetic:
+  - `(i % 17) - 8`
+- For values below 8, unsigned subtraction underflowed and generated huge positive values.
+- Those invalid synthetic floats caused quant/dequant to produce `NaN`/`Inf`, so X10-AN's probe-mode correctness reject was not valid evidence against the lowbit kernel.
+
+Fix:
+- Cast to signed integer before subtracting:
+  - `const int centered = (int) (i % 17) - 8;`
+  - `data[i] = 0.125f + 0.01f * (float) centered;`
+- This keeps the synthetic values in the intended small range.
+
+Verification:
+- Direct probe rebuilt against `build-ds4-moe-stream/bin`.
+- Default-off mode:
+  - env: `GGML_MOE_STREAM=1`
+  - `rc=0`
+  - `IQ1_S`, `IQ1_M`, `Q2_K` all still return `decline-ok`
+  - stderr reason remains `unsupported_type`
+  - conclusion: production/default path is unchanged.
+- Probe mode:
+  - env: `GGML_MOE_STREAM=1 GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+  - `rc=0`
+  - `IQ1_S`: `finite=1`, `max_abs=0.00330495834`, `mean_abs=0.00118012726`
+  - `IQ1_M`: `finite=1`, `max_abs=0.00184059143`, `mean_abs=0.000628918409`
+  - `Q2_K`: `finite=1`, `max_abs=0.00194692612`, `mean_abs=0.000715896487`
+
+Decision:
+- X10-AN's probe-mode correctness rejection is superseded by this harness fix.
+- The lowbit direct down-stream path can produce numerically correct synthetic results for `IQ1_S/IQ1_M/Q2_K` when explicitly enabled by the diagnostic env gate.
+- This is still not a SOTA and not a production enablement:
+  - no full model was run;
+  - no real compact GGUF/expert-pack layout was tested;
+  - no prompt-general token rate, RAM, TTFT, or semantic correctness gate was executed.
+- Next step:
+  - obtain real compact-target tensor/layout evidence before enabling model runs;
+  - if disk cleanup is approved, download exactly one priority compact target and run strict load/correctness first;
+  - if disk cleanup is not approved, build a real-GGUF/expert-pack extraction parity harness using actual lowbit tensor bytes rather than synthetic quantized rows.
+
+## 2026-07-08 X10-AQ real GGUF IQ3_S down row parity probe
+
+- changed file: `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-real-gguf-iq3s-down-row-parity-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-real-rows-iq3s`
+- status: `real_gguf_iq3s_down_row_parity_pass_not_sota`
+
+Purpose:
+- Move from synthetic quantized rows toward real tensor-layout evidence without downloading a new compact target.
+- Use an already-local GGUF file that had been rejected as a full model, only as a source of real lowbit tensor bytes.
+
+Input tensor:
+- source file:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+- tensor:
+  - `blk.0.ffn_down_exps.weight`
+- type:
+  - `IQ3_S`
+- shape:
+  - `[2048, 4096, 256]`
+- byte layout observed by `gguf-py`:
+  - data shape `[256, 4096, 880]`
+  - extracted expert `0`, first `16` rows
+  - `ne00=2048`, `ne01=16`, `nb01=880`
+  - extracted bytes: `14080`
+
+Implementation:
+- Extended `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp` with optional env-driven real-row mode:
+  - `GGML_MOE_STREAM_REAL_ROWS_BIN`
+  - `GGML_MOE_STREAM_REAL_ROWS_TYPE`
+  - `GGML_MOE_STREAM_REAL_ROWS_NE00`
+  - `GGML_MOE_STREAM_REAL_ROWS_NE01`
+  - `GGML_MOE_STREAM_REAL_ROWS_NB01`
+- The tool reads raw row bytes, computes CPU reference via `ggml_get_type_traits(type)->to_float`, then calls `ggml_cuda_moe_stream_batch(...)`.
+
+Verification:
+- Env:
+  - `GGML_MOE_STREAM=1`
+  - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+  - `GGML_MOE_STREAM_REAL_ROWS_TYPE=21`
+  - `GGML_MOE_STREAM_REAL_ROWS_NE00=2048`
+  - `GGML_MOE_STREAM_REAL_ROWS_NE01=16`
+  - `GGML_MOE_STREAM_REAL_ROWS_NB01=880`
+- Result:
+  - `rc=0`
+  - real rows: `real-rows accept type=iq3_s ne00=2048 ne01=16 nb01=880 finite=1`
+  - `max_abs=0.00103905052`
+  - `mean_abs=0.000351050141`
+
+Decision:
+- This proves the dedicated down-stream entry can compute a real GGUF `IQ3_S` `ffn_down_exps` row slice correctly against CPU dequant reference.
+- It is still not a SOTA and not a model-run acceptance gate:
+  - only one tensor slice was tested;
+  - the source model was previously rejected for full-model correctness;
+  - no generation, prompt-general benchmark, TTFT, or 16GB model-run correctness gate was executed.
+- Next step:
+  - for compact-target path, parity evidence must cover the actual candidate types and real tensor bytes (`IQ1_S/IQ1_M/Q2_K` if those are the selected candidates);
+  - if no local real bytes exist for those exact types, disk cleanup/download approval is the practical path to continue.
+
+## 2026-07-08 X10-AR real GGUF IQ2_XS down row parity probe
+
+- changed files:
+  - `ggml/src/ggml-cuda/moe_stream_batch.cu`
+  - `.Agent/run-tools/ds4_moe_stream_direct_probe.cpp`
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-real-gguf-iq2xs-down-row-parity-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-real-rows-iq2xs-namefix`
+- status: `real_gguf_iq2xs_down_row_parity_pass_default_off_not_sota`
+
+Purpose:
+- Extend X10-AQ from a supported existing stream type (`IQ3_S`) to another real lowbit type present in the local GGUF (`IQ2_XS`).
+- This still avoids new downloads and does not delete any files.
+
+Input tensor:
+- source file:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+- tensor:
+  - `blk.5.ffn_down_exps.weight`
+- type:
+  - `IQ2_XS`
+- shape:
+  - `[2048, 4096, 256]`
+- byte layout observed by `gguf-py`:
+  - data shape `[256, 4096, 592]`
+  - extracted expert `0`, first `16` rows
+  - `ne00=2048`, `ne01=16`, `nb01=592`
+  - extracted bytes: `9472`
+
+Implementation:
+- Added `IQ2_XS` to `lowbit_down_probe_candidate(...)`, still gated by:
+  - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+  - tensor name containing `ffn_down_exps`
+  - optional target-name filter.
+- Added `IQ2_XS` to the compact mmvq down launch type gate.
+- Updated the direct probe to:
+  - include synthetic `IQ2_XS`;
+  - use type-suffixed synthetic tensor names, avoiding cache-key reuse across different quant types in a single process;
+  - use env-provided real GGUF row bytes for real-layout parity.
+
+Verification:
+- Build:
+  - `ninja -C build-ds4-moe-stream ggml-cuda -j2`: pass.
+  - direct probe compile: pass.
+- Default-off mode:
+  - env: `GGML_MOE_STREAM=1`
+  - `rc=0`
+  - `IQ2_XS`, `IQ1_S`, `IQ1_M`, `Q2_K` all return `decline-ok`
+  - stderr reason remains `unsupported_type`
+  - conclusion: production/default path is unchanged.
+- Probe mode:
+  - env:
+    - `GGML_MOE_STREAM=1`
+    - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+    - `GGML_MOE_STREAM_REAL_ROWS_TYPE=17`
+    - `GGML_MOE_STREAM_REAL_ROWS_NE00=2048`
+    - `GGML_MOE_STREAM_REAL_ROWS_NE01=16`
+    - `GGML_MOE_STREAM_REAL_ROWS_NB01=592`
+  - `rc=0`
+  - synthetic parity:
+    - `IQ2_XS`: `finite=1`, `max_abs=0.00187444687`
+    - `IQ1_S`: `finite=1`, `max_abs=0.00330495834`
+    - `IQ1_M`: `finite=1`, `max_abs=0.00184059143`
+    - `Q2_K`: `finite=1`, `max_abs=0.00194692612`
+  - real GGUF row parity:
+    - `IQ2_XS`: `finite=1`, `max_abs=0.00131262094`, `mean_abs=0.000492808991`
+
+Decision:
+- This strengthens down-stream lowbit correctness evidence:
+  - synthetic `IQ2_XS/IQ1_S/IQ1_M/Q2_K` parity passes;
+  - real GGUF `IQ2_XS` down row parity passes.
+- This is still not a SOTA and not production enablement:
+  - no full-model load/generation correctness was run;
+  - no prompt-general token-rate, TTFT, or strict 16GB model-run gate was executed;
+  - no local real `IQ1_S/IQ1_M/Q2_K` full candidate bytes are available without disk cleanup/download.
+- Next step:
+  - if disk cleanup/download is approved, fetch exactly one priority compact candidate and run strict load/correctness first;
+  - otherwise, the current local evidence route is close to exhausted and should not be mistaken for token-rate progress.
+
+## 2026-07-08 X10-AS remote-range teamblobfish IQ1_M down row parity
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-remote-range-teamblobfish-iq1m-down-row-parity-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-remote-range-teamblobfish-iq1m`
+- status: `remote_range_real_candidate_q2k_iq1m_down_row_parity_pass_not_sota`
+
+Purpose:
+- Avoid full model download while obtaining real bytes from a priority compact candidate.
+- Use HTTP Range reads against teamblobfish `IQ1_M` shard1 to fetch only tiny `ffn_down_exps` row slices.
+- This directly tests candidate bytes for two down tensor types found in the `IQ1_M` candidate: `Q2_K` and `IQ1_M`.
+
+Header/offset source:
+- header file:
+  - `/root/lfz/models/_gguf_header_probe/20260707-alt-candidates/teamblobfish_iq1m_part1.head16m`
+- source URL:
+  - `https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf`
+- header parser found:
+  - architecture: `deepseek4`
+  - type counts include `Q2_K=5`, `IQ1_M=329`
+  - down tensors include early `Q2_K` and later `IQ1_M`.
+
+Range-fetched row slices:
+- `Q2_K`:
+  - tensor: `blk.0.ffn_down_exps.weight`
+  - absolute shard byte range: `772629024-772639775`
+  - fetched bytes: `10752`
+  - `ne00=2048`, `ne01=16`, `nb01=672`
+- `IQ1_M`:
+  - tensor: `blk.3.ffn_down_exps.weight`
+  - absolute shard byte range: `5880581088-5880588255`
+  - fetched bytes: `7168`
+  - `ne00=2048`, `ne01=16`, `nb01=448`
+- total downloaded bytes:
+  - `17920`
+
+Verification:
+- Probe mode env:
+  - `GGML_MOE_STREAM=1`
+  - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+- `Q2_K` real rows:
+  - `rc=0`
+  - `finite=1`
+  - `max_abs=0.00108321384`
+  - `mean_abs=0.000358266465`
+- `IQ1_M` real rows:
+  - `rc=0`
+  - `finite=1`
+  - `max_abs=0.000894099474`
+  - `mean_abs=0.000409348926`
+
+Decision:
+- Real candidate down tensor bytes from teamblobfish `IQ1_M` pass stream-vs-CPU parity for `Q2_K` and `IQ1_M`.
+- This is useful correctness evidence for the compact-target path, but still not a SOTA or production model enablement:
+  - only small row slices were tested;
+  - no full model load/generation correctness was run;
+  - no prompt-general token-rate, TTFT, or strict 16GB model-run gate was executed.
+- Next step:
+  - repeat the same remote-range method for primary `teamblobfish IQ1_S-XL` if a parseable header is available or can be range-fetched;
+  - otherwise, further progress toward actual token-rate improvement requires disk cleanup/download approval for one compact candidate.
+
+## 2026-07-08 X10-AT remote-range teamblobfish IQ1_S-XL down row parity
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/moe-stream-remote-range-teamblobfish-iq1sxl-down-row-parity-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-remote-range-teamblobfish-iq1sxl`
+- status: `remote_range_real_candidate_q2k_iq1s_down_row_parity_pass_not_sota`
+
+Purpose:
+- Apply the X10-AS remote-range method to the primary compact candidate, teamblobfish `IQ1_S-XL`.
+- Fetch only header plus tiny row slices, avoiding full model download and avoiding any file deletion.
+
+Header/offset source:
+- source URL:
+  - `https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf`
+- fetched header:
+  - first `16 MiB`
+- parsed header:
+  - architecture: `deepseek4`
+  - tensors: `1066`
+  - type counts include:
+    - `Q2_K=5`
+    - `IQ1_S=203`
+    - `Q8_0=423`
+    - `F32=430`
+- down tensors include early `Q2_K` and later `IQ1_S`.
+
+Range-fetched row slices:
+- `Q2_K`:
+  - tensor: `blk.0.ffn_down_exps.weight`
+  - absolute shard byte range: `847170240-847180991`
+  - fetched bytes: `10752`
+  - `ne00=2048`, `ne01=16`, `nb01=672`
+- `IQ1_S`:
+  - tensor: `blk.3.ffn_down_exps.weight`
+  - absolute shard byte range: `5884959744-5884966143`
+  - fetched bytes: `6400`
+  - `ne00=2048`, `ne01=16`, `nb01=400`
+
+Verification:
+- Probe mode env:
+  - `GGML_MOE_STREAM=1`
+  - `GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1`
+- `Q2_K` real rows:
+  - `rc=0`
+  - `finite=1`
+  - `max_abs=0.00108321384`
+  - `mean_abs=0.000358266465`
+- `IQ1_S` real rows:
+  - `rc=0`
+  - `finite=1`
+  - `max_abs=0.00194969773`
+  - `mean_abs=0.00115161485`
+
+Decision:
+- Real candidate down tensor bytes from primary teamblobfish `IQ1_S-XL` pass stream-vs-CPU parity for `Q2_K` and `IQ1_S`.
+- Together with X10-AS, the priority teamblobfish compact candidates now have real-byte down-row parity evidence for their key lowbit down types:
+  - `IQ1_S-XL`: `Q2_K`, `IQ1_S`
+  - `IQ1_M`: `Q2_K`, `IQ1_M`
+- This still is not a SOTA or production model enablement:
+  - only row slices were tested;
+  - no full model load/generation correctness was run;
+  - no prompt-general token-rate, TTFT, RAM, or semantic correctness benchmark was run.
+- Next step:
+  - the correctness risk for down lowbit row math is now reduced enough that the practical blocker is full compact target execution;
+  - to make token-rate progress, either approve disk cleanup/download for exactly one priority compact target, or design a no-full-download execution path that can stream all required tensors by range/alias with strict correctness gates.
+
+## 2026-07-08 X10-AU no-full-download compact execution feasibility
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-no-full-download-execution-feasibility-20260708.json`
+- status: `no_full_download_execution_not_currently_feasible_not_sota`
+
+Purpose:
+- Decide whether X10-AS/X10-AT HTTP Range row parity can be extended directly into a runnable compact-target model path without deleting files or downloading a full shard.
+
+Source evidence:
+- Current `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` runtime requires columns:
+  - `source_path`
+  - `tensor`
+  - `expert`
+  - `model_offset`
+  - `nbytes`
+- `expert_pack_open_alias_source(...)` opens `source_path` with:
+  - `fopen(path, "rb")`
+  - optionally `open(path, O_RDONLY | O_DIRECT)`
+- `expert_pack_read_entry(...)` reads from local `FILE`/`pread`/`io_uring`.
+- Therefore current alias runtime does not support `https://...` source paths or HTTP Range callbacks.
+
+Disk context:
+- Current free disk: about `34G`.
+- Local rejected IQ2_S cleanup candidate:
+  - `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - `du -sh`: `82G`
+- It must not be deleted without explicit approval.
+
+Feasibility conclusion:
+- Current no-full-download execution is not feasible as a small next patch.
+- Reasons:
+  - the model loader still needs a coherent local GGUF for dense tensors, metadata, tokenizer, and graph construction;
+  - expert alias sources are local files only;
+  - sparse local files with missing ranges read zeros and will not pass correctness;
+  - compact candidate expert tensor sizes/types differ from the currently loaded native model, so aliasing only a few compact experts into the native model is not a valid model execution path.
+
+Possible paths:
+- Practical path:
+  - explicit approval to delete the already-rejected local IQ2_S file;
+  - download exactly one priority compact target;
+  - run strict load/correctness/token-rate/TTFT/16GB gates.
+- Larger source project:
+  - implement remote HTTP Range-backed sources for alias/runtime reads;
+  - still solve model-loader/dense tensor access, cache accounting under 16GB, retries, redirects, auth, and correctness gates.
+- Sparse-file path:
+  - unsafe unless all accessed ranges are populated or a FUSE/userfaultfd-like backing layer supplies data on read.
+
+Decision:
+- Stop treating remote-row parity as token-rate progress.
+- The down lowbit math correctness risk is reduced, but full compact execution remains the practical blocker.
+- No SOTA changed; no production enablement.
+
+## 2026-07-08 X10-AV current pushed HEAD down q80 correctness reverify after demo refresh
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-after-demo-down-q80-lane8-shared-correctness-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T193822Z-latest-head-down-q80-correctness-reverify-after-demo`
+- source commit: `d5ce9ecb01f45650b125a18ac800b45c91531297`
+- source commit oneline: `d5ce9ecb0 vendor-ds4: record generalized demo validation`
+- status: `pass_current_pushed_head_down_gpu_q80_lane8_shared_correctness_not_sota`
+
+Purpose:
+- Reverify that the current pushed source still preserves the fixed down GPU q80 correctness after the generalized demo script and validation artifact commits.
+- This is a correctness guard only. It is not a token-rate SOTA run and must not be promoted as performance evidence.
+
+Method:
+- Rebuilt `build-ds4-moe-stream/bin/llama-results` from current HEAD.
+- Ran two strict cold `llama-results --sequential-logits --top1-report` cases under `MemoryMax=16000000000` and `MemorySwapMax=0`, using the fixed France text from the prior down-q80 gate:
+  - default case: `GGML_MOE_STREAM_DOWN_BATCH=1`, no q80 down GPU compatibility env.
+  - full-down GPU case: default case plus `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, and `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`.
+- Compared the generated `top1-check.json` files over all fixed-text positions.
+
+Results:
+- `n_base=145`, `n_case=145`, `n_compare=145`
+- `same_top1=145`
+- `first_mismatch_pos=-1`
+- `top1_pass=true`
+- `max_abs_top2_logit_diff=0.0`
+- `mean_abs_top2_logit_diff=0.0`
+- baseline `top1_matches_next_token=122`
+- full-down GPU `top1_matches_next_token=122`
+- default memory:
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=14910865408`
+  - `oom_kill=0`
+  - `ram_ok=true`
+  - profile: `batch_accept=0`, `batch_decline=5800`
+- full-down GPU memory:
+  - `memory_peak_bytes=16000000000`
+  - `memory_file_bytes=14931202048`
+  - `oom_kill=0`
+  - `ram_ok=true`
+  - profile: `batch_accept=5800`, `batch_decline=0`
+
+Interpretation:
+- Current pushed HEAD still has bit-identical top1/top2 logits between default CPU-fallback down and the q80 lane8/shared full-down GPU path on the fixed-text correctness gate.
+- The down GPU q80 correctness requirement remains satisfied for the current source.
+- The q80 lane8/shared full-down path remains slower in this correctness probe (`elapsed_raw=3:22.80`) than the default fallback case (`elapsed_raw=2:42.07`), so this is not a SOTA candidate.
+- Next performance work should not revisit q80 correctness unless later source changes touch this path. Continue with generalized throughput work:
+  - if explicit disk cleanup is approved, download exactly one priority compact target and run load/correctness before token-rate;
+  - otherwise continue no-download lowbit/compact evidence or a new hard-bound route that can plausibly exceed the generalized baseline and move toward `>5 tok/s` random-prompt target.
+
+## 2026-07-08 X10-AW guarded compact-target after-cleanup runner
+
+- script: `.Agent/run-tools/run_compact_target_after_cleanup.sh`
+- dry-run artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-after-cleanup-dryrun-20260707T194931Z.json`
+- status: `guarded_dryrun_pass_no_delete_no_download_not_sota`
+
+Purpose:
+- Prepare the next compact-target correctness gate so that a future explicit cleanup approval can be executed reproducibly.
+- Preserve the existing safety rule: do not delete the rejected local IQ2_S file unless the command includes an explicit confirmation flag.
+
+Script behavior:
+- Default invocation is dry-run only. It prints and records:
+  - selected candidate: `teamblobfish-iq1-s-xl`
+  - candidate total size: `61540805344` bytes (`57.314 GiB`)
+  - two exact Hugging Face URLs, sizes, and etags from `compact-target-exact-download-manifest-20260708.json`
+  - cleanup candidate: `/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf`
+  - current available bytes and projected available bytes after cleanup
+  - destination: `/root/lfz/models/DeepSeek-V4-Flash-compact-targets/teamblobfish-iq1-s-xl`
+- Real execution requires both:
+  - `--execute-download`
+  - `--confirm-delete-rejected-iq2s`
+- The script refuses `--execute-download` without `--confirm-delete-rejected-iq2s` and exits `2`; this refusal path was tested and performed no deletion or download.
+- If explicitly executed later, it will:
+  1. delete only the already-rejected IQ2_S cleanup file;
+  2. download exactly one manifest-selected compact target;
+  3. validate downloaded file sizes;
+  4. optionally run a strict `16GB` France correctness smoke using `strict_ds4_runner.py`.
+
+Dry-run result:
+- command: `.Agent/run-tools/run_compact_target_after_cleanup.sh`
+- `available_bytes_now=35550629888`
+- `cleanup_candidate_bytes_now=88019539296`
+- `projected_available_after_cleanup_bytes=123570169184`
+- `candidate_total_size_bytes=61540805344`
+- `execute_download_requested=false`
+- `confirm_delete_rejected_iq2s=false`
+- decision: no files were deleted, downloaded, or executed.
+
+Next:
+- Do not run the destructive path without explicit approval from the user.
+- If approval is given, run the guarded script with both flags and treat the result as a load/correctness gate first, not as a SOTA claim.
+- If no cleanup approval is given, continue with no-download lowbit/compact evidence or a new hard-bound route toward generalized `>5 tok/s`.
+
+## 2026-07-08 X10-AX no-delete next-route audit after current down q80 correctness
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/no-delete-next-route-audit-after-q80-correctness-20260708.json`
+- status: `no_delete_route_audit_complete_not_sota`
+
+Purpose:
+- After latest pushed HEAD reverified down q80 correctness, choose the next plan-aligned route without deleting the rejected local IQ2_S file and without using held-out prompts.
+- Avoid spending another cycle on small down-only GPU patches if the hard bound cannot move generalized prompt performance toward the `>5 tok/s` product target.
+
+Inputs:
+- generalized no-prompt-specific baseline: `.Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json`
+- calibration/dev fallback profile: `.Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json`
+- current down q80 correctness reverify: `.Agent/runs/20260705-vendor-ds4-coldstart/latest-head-after-demo-down-q80-lane8-shared-correctness-20260708.json`
+- compact target guarded dry-run: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-after-cleanup-dryrun-20260707T194931Z.json`
+- no-full-download compact feasibility: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-no-full-download-execution-feasibility-20260708.json`
+
+Bound summary:
+- current generalized dev min/mean: `1.8 / 2.18 tok/s`
+- total dev up fallback: `123474.033 ms`
+- total dev down fallback: `93061.272 ms`
+- total estimated decode saving required to reach `5 tok/s`: `218.704 s`
+- conservative min ideal if all down fallback vanished: `2.299 tok/s`
+- conservative min ideal if all up fallback vanished: `2.623 tok/s`
+- conservative min ideal if all up+down fallback vanished: `3.837 tok/s`
+- Therefore, a down-only GPU path is not enough for the generalized `>5 tok/s` target, and even a perfect native up+down fallback removal is not enough under this conservative estimate unless other decode costs, page/refault pressure, or model representation are also changed.
+
+Route decisions:
+- Current q80 down GPU lane8/shared:
+  - correctness: pass, `same_top1=145/145`, logits diff `0.0`, full-down `batch_accept=5800`.
+  - performance: rejected as-is; the correctness probe was slower than default fallback.
+  - decision: do not revisit q80 correctness unless a later source change touches that path.
+- Compact target full execution:
+  - best remaining route with plausible representation/page-cache upside.
+  - blocked by explicit cleanup approval because the current disk has about `34G` free and the selected `teamblobfish-iq1-s-xl` target is `57.314 GiB`.
+  - the guarded runner is ready but must not be executed destructively without explicit user approval.
+- No-full-download HTTP range execution:
+  - not feasible as a small patch because current loader and alias source require local files and coherent GGUF metadata/dense tensors.
+- Native no-delete up/down work:
+  - do not implement small down-only patches.
+  - any source work must first produce a larger hard-bound/design that includes more than up/down fallback removal: resident/fused dataflow, activation staging, H2D/D2H, row grouping, page/refault reduction, and possibly representation change.
+
+Next:
+- If explicit cleanup approval is given, run `.Agent/run-tools/run_compact_target_after_cleanup.sh --execute-download --confirm-delete-rejected-iq2s` and treat the result as a strict load/correctness gate first.
+- If cleanup approval is not given, the next useful no-delete task is a hard-bound/design for a combined resident/fused dataflow route. It must prove a credible lower-bound above generalized `5 tok/s` before any new source patch.
+- No SOTA changed.
+
+## 2026-07-08 X10-AY native fused/resident route bound after no-delete audit
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/native-fused-resident-route-bound-after-no-delete-audit-20260708.json`
+- status: `native_up_down_only_bound_insufficient_not_sota`
+
+Purpose:
+- Quantify whether a no-delete native fused/resident up/down route can reach generalized `5 tok/s` after q80 down correctness is fixed.
+- This uses only calibration/dev artifacts; held-out prompts remain unused.
+
+Result:
+- minimum ideal token rate after eliminating all native up+down fallback: `3.837 tok/s`
+- worst prompt after ideal up+down removal: `fibonacci`
+- additional decode saving still needed after ideal up+down removal for worst prompt: `11.580 s`
+- total additional decode saving still needed across dev prompts after ideal up+down removal: `18.603 s`
+- `all_native_up_down_only_sufficient=false`
+
+Interpretation:
+- A pure native up/down fallback removal is not sufficient for the generalized `>5 tok/s` target under the conservative decode-time estimate.
+- Small down-only, q80-only, or existing lane8/shared down patches are therefore not justified as the next implementation step.
+- A native no-delete source route would need to combine up/down removal with another savings source, such as:
+  - page/refault reduction outside the measured fallback bucket;
+  - persistent/resident dataflow that removes source movement and synchronization beyond the current q80 path;
+  - speculative acceptance with a compatible verifier/draft path;
+  - or representation-level changes.
+
+Decision:
+- Do not implement native fused/resident source changes until a design accounts for the extra post-up/down savings.
+- Compact target remains the only prepared route with plausible representation-level upside, but it requires explicit cleanup approval before execution.
+- No SOTA changed.
+
+## 2026-07-08 X10-AZ no-delete candidate refresh and 0xSero compact priority
+
+- broad metadata artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/hf-deepseek-v4-flash-no-delete-candidate-refresh-20260708.json`
+- targeted range artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/hf-targeted-no-delete-candidate-range-refresh-20260708.json`
+- refreshed manifest: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-exact-download-manifest-refresh-0xsero-20260708.json`
+- guarded dry-run artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/compact-target-after-cleanup-dryrun-20260707T200914Z.json`
+- status: `no_delete_still_blocked_0xsero_after_cleanup_priority_not_sota`
+
+Purpose:
+- Refresh external DeepSeek V4 Flash GGUF/compact metadata without downloading model bodies, to check whether cleanup is still required and whether a smaller cleanup-gated candidate exists.
+
+Method:
+- Used Hugging Face metadata plus targeted `curl -L --range 0-0 --max-time 12` checks. This downloaded at most one byte per targeted model file.
+- Fetched only the first `16MiB` range of the smallest promising candidate for GGUF header parsing.
+
+Findings:
+- No complete target candidate fits the current no-delete disk budget of about `34GB`.
+- The only file below the no-delete budget in the targeted set was a single teamblobfish shard, not a runnable complete model.
+- Smallest complete single-file candidate found:
+  - repo: `0xSero/DeepSeek-V4-Flash-162B-GGUF`
+  - file: `DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf`
+  - size: `52593532000` bytes (`48.982 GiB`)
+  - etag: `"7f4deb0dc07cdbc01ff88ae11e616fd8d2d1d8263efec15b034c5d731fe83070"`
+  - header range result: `architecture=deepseek4`, `block_count=43`, `expert_count=144`, `expert_used_count=6`, `n_tensors=1328`
+  - type counts include `Q2_K` type id `10`, `IQ2_XXS` type id `16`, `Q8_0`, `F16`, and `F32`.
+
+Decision:
+- Update the guarded compact-target runner default to `0xsero-spark-mini-q2-reap-ds4`, using the refreshed manifest.
+- This is not a SOTA and not a correctness claim. The model is smaller and header-pass `deepseek4`, but it differs from the native 256-expert target (`expert_count=144`) and must pass load/correctness before any token-rate benchmark.
+- Real execution still requires explicit cleanup approval:
+  - `.Agent/run-tools/run_compact_target_after_cleanup.sh --execute-download --confirm-delete-rejected-iq2s`
+- The updated runner dry-run passed and still performs no deletion, no download, and no model execution by default.
+- Refusal path was tested: `--execute-download` without `--confirm-delete-rejected-iq2s` exits `2` and performs no deletion/download.
+- No SOTA changed.
+
+## 2026-07-08 X10-BA 0xSero Spark Mini loader/support audit
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/0xsero-spark-mini-loader-support-audit-20260708.json`
+- status: `candidate_load_correctness_probe_worthwhile_after_cleanup_not_sota`
+
+Purpose:
+- Check whether the new smaller 0xSero candidate is obviously blocked by current vendor metadata/type handling before making it the cleanup-gated default candidate.
+
+Audit result:
+- Header gate says `architecture=deepseek4`, `block_count=43`, `expert_count=144`, `expert_used_count=6`.
+- `src/llama-model.cpp` reads expert count from metadata and uses `n_expert` for MoE tensor shapes in the audited snippets, so a 144-expert candidate is not obviously rejected by a hard-coded 256-expert assumption.
+- Generic CUDA support exists for the observed lowbit types:
+  - `GGML_TYPE_Q2_K` has CUDA MMQ/MMVQ instances and vec-dot dispatch.
+  - `GGML_TYPE_IQ2_XXS` has CUDA MMQ/MMVQ instances and vec-dot dispatch.
+- Risk remains:
+  - dedicated MoE stream fast paths are narrower than generic CUDA support;
+  - this candidate is a different 144-expert / 162B-style representation, not the native 256-expert target;
+  - correctness and quality are completely unproven until a full strict load/generation gate runs.
+
+Decision:
+- Keep `0xsero-spark-mini-q2-reap-ds4` as the guarded runner default because it is smaller and header-pass `deepseek4`.
+- Do not claim correctness, token-rate, or SOTA.
+- After explicit cleanup approval, first run strict `16GB` load plus France semantic correctness. Only if that passes should calibration/dev token-rate be measured.
+
+## 2026-07-08 X10-BB retained GLU upload handoff probe and MXFP4 generic down rejection
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/retained-glu-upload-handoff-safe-decline-20260708.json`
+- status: `diagnostic_probe_safe_default_off_not_sota`
+
+Purpose:
+- Continue the down GPU correctness work by testing whether explicit CPU `ffn_moe_swiglu-*` activations can be uploaded into the existing CUDA `g_handoff` buffer and consumed by the down batch path.
+- This used only calibration/dev prompts; held-out prompts remain unused.
+
+Findings:
+- The initial upload probe did not trigger because `ggml_ds4_grouped_retained_handoff_mark_glu_act()` was gated by `GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT`.
+- The marker is now default-off but can be triggered by `GGML_MOE_GPU_HANDOFF_UPLOAD_GLU=1` without requiring profile-file output.
+- With `GGML_MOE_VRAM_CACHE_GB=0`, down batch declined at `cache_get`; the SOTA gate-only one-stream cache is not the same as down batch `batch_vram_cache`.
+- With a 2GB down `batch_vram_cache`, a temporary unsafe MXFP4 generic handoff consume produced `GPU handoff consumed` but generated incorrect text (`reply, answer, comeback...`) for the France prompt.
+- Root cause: MXFP4 down is not in `moe_stream_type_supported()` for the generic compact MMVQ path. Forcing MXFP4+uploaded f32 activations into that path is not correct.
+
+Decision:
+- Reject the unsafe MXFP4 generic f32 handoff consume path.
+- Remove the MXFP4 handoff override so MXFP4 down safely declines with `unsupported_type` unless an explicitly correct MXFP4 route is enabled.
+- Keep only the default-off GLU upload marker/probe because it does not change default behavior and gives a reproducible producer for the next correctness implementation.
+- No SOTA changed.
+
+Next:
+- Do not attempt another performance run from this handoff route until correctness is proven.
+- For down GPU correctness, either:
+  - route MXFP4 down through the already-correct Q8_0-compatible path; or
+  - implement a dedicated MXFP4 + f32-activation down kernel and prove top1/logit parity before any token-rate benchmark.
+- Any future accepted path must pass semantic output, strict 16GB RAM including page cache, and TTFT gates before being recorded as SOTA.
+
+## 2026-07-08 X10-BC current-head Q80 down correctness reverify after GLU upload probe
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-head-after-glu-upload-down-q80-lane8-shared-correctness-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T214741Z-current-head-after-glu-upload-q80-correctness-reverify`
+- source: `3732f8664 vendor-ds4: add safe glu handoff upload probe`
+- status: `pass_current_head_after_glu_upload_down_gpu_q80_lane8_shared_correctness_not_sota`
+
+Purpose:
+- Reverify that the already-correct MXFP4 down Q8_0-compatible lane8/shared path still passes after adding the default-off GLU upload probe and rejecting unsafe MXFP4 generic f32 handoff.
+
+Method:
+- Fixed France text, `llama-results --sequential-logits --top1-report`.
+- Two strict `16GB` cgroup cases with drop_caches before each run:
+  - default down fallback case;
+  - full-down Q80 lane8/shared case with `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`.
+
+Result:
+- `n_compare=145`
+- `same_top1=145/145`
+- `first_mismatch_pos=-1`
+- `max_abs_top2_logit_diff=0.0`
+- default down profile: `batch_accept=0`, `batch_decline=5800`, `down total=6.578 ms/call`
+- full-down Q80 profile: `batch_accept=5800`, `batch_decline=0`, `down total=9.499 ms/call`, `cuda_batch=4.700 ms/call`
+- default memory: `memory_peak_bytes=16000000000`, `memory_file_bytes=14900539392`, `ram_ok=true`
+- full-down memory: `memory_peak_bytes=16000000000`, `memory_file_bytes=14929158144`, `ram_ok=true`
+
+Decision:
+- Down GPU Q80 lane8/shared correctness is still fixed on current pushed head.
+- It remains rejected as a SOTA/performance path because it is slower than default CPU fallback on this fixed-text reverify.
+- Next down work should not revisit correctness for Q80 lane8/shared unless that code changes; performance work must reduce Q8_0 staging/H2D/D2H/fallback overhead, or implement a dedicated MXFP4+f32 activation down kernel with parity before benchmarking.
+
+
+## 2026-07-08 X10-BD MXFP4 f32 exact down parity probe
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mxfp4-f32-exact-down-parity-probe-20260708.json`
+- status: `pass_default_off_down_gpu_mxfp4_f32_parity_probe_not_sota`
+
+Purpose:
+- Continue the down GPU correctness work after rejecting the unsafe generic MXFP4 handoff consume path.
+- Add a dedicated diagnostic MXFP4 down GPU kernel that consumes the original f32 activation rows and compares against the existing CPU probe reference before any writeback/performance path.
+- This uses only calibration/dev France prompt smoke runs. Held-out prompts remain unused.
+
+Source change:
+- `ggml/src/ggml-cuda/moe_stream_batch.cu` adds `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=f32`.
+- The mode is default-off. With the env unset, the default runtime does not enter the new path.
+- In f32 probe mode, the CUDA kernel dequantizes MXFP4 weights and computes dot products against f32 activations with double accumulation, matching the CPU reference semantics used by `mxfp4_down_probe_report`.
+- The probe remains diagnostic: after reporting CPU/GPU error rows it falls back to CPU output, so it is not a token-rate/SOTA path.
+
+Validation:
+- Build passed: `cmake --build build-ds4-moe-stream -j 8 --target llama-cli`.
+- Broad first-eight-layer parity run:
+  - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T221544Z-20260708-mxfp4-f32-exact-parity-broad-absbin`
+  - env: `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=f32`, `MAX_CALLS=8`, `MAX_ACTIVE=2`, `MAX_COLS=512`
+  - rows: `8/8 status=ok`, compared values: `8192`
+  - max abs error: `4.74309786e-07`; max relative error: `5.77317522e-08`
+  - strict RAM: `memory_peak_bytes=16000000000`, `memory_file_bytes=15101530112`, `ram_ok=true`
+- Last-layer full-column parity run:
+  - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T221715Z-20260708-mxfp4-f32-exact-parity-blk39-fullcols`
+  - env: `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=f32`, `TENSOR=blk.39.ffn_down_exps.weight`, `MAX_CALLS=1`, `MAX_ACTIVE=2`, `MAX_COLS=4096`
+  - rows: `1/1 status=ok`, compared values: `8192`
+  - max abs error: `2.38152396e-07`; max relative error: `4.88412371e-08`
+  - strict RAM: `memory_peak_bytes=16000000000`, `memory_file_bytes=15113187328`, `ram_ok=true`
+- Default-off smoke:
+  - run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T221843Z-20260708-after-mxfp4-f32-defaultoff-smoke`
+  - probe env unset; stderr contained no `MXFP4 down f32 exact probe path active` or `mxfp4_down_probe active`
+  - strict RAM: `memory_peak_bytes=16000000000`, `memory_file_bytes=15128662016`, `ram_ok=true`
+
+Decision:
+- Accept as a correctness diagnostic building block and commit/push because it is default-off and validated under strict 16GB cgroup.
+- Do not count as SOTA. The exact f32 kernel uses double accumulation and is expected to be too slow as-is.
+- Next step for down GPU correctness/performance: add a separate default-off writeback/top1/logit gate using this f32 path, or derive a faster production MXFP4+f32 kernel, and only then run token-rate benchmarks.
+
+
+## 2026-07-08 X10-BE planned MXFP4 f32 writeback/top1 gate
+
+Goal:
+- Turn the now-validated MXFP4+f32 exact down diagnostic kernel into a strictly default-off writeback candidate, then prove correctness with `llama-results` before any performance benchmark.
+- This is still a down GPU correctness step, not a SOTA step.
+
+Implementation plan:
+- Add a separate env gate, tentatively `GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH=1`, independent from `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=f32`.
+- Keep the probe behavior unchanged: `GGML_MOE_STREAM_DOWN_MXFP4_PROBE=f32` continues to report CPU/GPU parity and return `false` to CPU fallback.
+- The writeback candidate will use the same exact f32 kernel but skip `mxfp4_down_probe_report` and scatter the GPU rows into `dst`, returning `true`.
+- Add optional debug controls for correctness gating:
+  - `GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH_TENSOR` to target one tensor/layer;
+  - `GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH_MAX_CALLS` to allow partial replacement during top1 bisection;
+  - a one-time stderr marker so default-off smoke can prove the path did not trigger accidentally.
+
+Validation plan:
+- Rebuild `build-ds4-moe-stream`.
+- Default-off smoke: env unset, strict 16GB, confirm no f32 writeback marker and RAM OK.
+- Partial writeback top1 gate: compare default vs one-call or targeted tensor f32 writeback using `llama-results --sequential-logits --top1-report`; require same top1 for all compared positions before widening.
+- If partial gate passes, widen to full down f32 writeback on calibration/dev prompt only. Do not use held-out prompts.
+- Record all results and reject/revert any path with top1 mismatch, semantic corruption, RAM violation, or TTFT regression beyond allowed gates.
+
+Expected performance:
+- The exact f32 writeback path is likely too slow for SOTA because it uses double accumulation and full f32 activation H2D/D2H. Its purpose is correctness and routing proof; a later production kernel must reduce accumulation/staging cost.
+
+
+## 2026-07-08 X10-BF MXFP4 f32 writeback one-call top1 gate rejected
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/mxfp4-f32-writeback-onecall-rejected-20260708.json`
+- run dir: `/root/lfz/runs/vendor-ds4-16gb/20260707T222710Z-20260708-mxfp4-f32-writeback-top1-onecall`
+- status: `reject_revert_uncommitted_f32_writeback_source_not_sota`
+
+Purpose:
+- Test whether the X10-BD f32 exact MXFP4 down kernel can be used as a live writeback path for even one down call.
+
+Method:
+- Added a temporary default-off source edit for `GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH=1` with `GGML_MOE_STREAM_DOWN_MXFP4_F32_BATCH_MAX_CALLS=1`.
+- Ran strict cold `16GB` cgroup `llama-results --sequential-logits --top1-report` on the fixed France text.
+- Compared default CPU fallback against one-call f32 writeback.
+
+Result:
+- default: `memory_peak_bytes=16000000000`, `memory_file_bytes=14940905472`, `ram_ok=true`, `batch_accept=0`, `batch_decline=5800`
+- f32 one-call: `memory_peak_bytes=16000000000`, `memory_file_bytes=14923718656`, `ram_ok=true`, `batch_accept=1`, `batch_decline=5799`
+- top1 comparison: `same_top1=141/145`, `first_mismatch_pos=9`, `max_abs_top2_logit_diff=0.8885`
+- first mismatch: default top1 token ` a`, f32 one-call top1 token ` the`.
+
+Analysis:
+- This is not a RAM or routing failure; the path triggered exactly once and returned successfully.
+- The f32 exact kernel matches the CPU probe reference from X10-BD, but it does not match the live CPU fallback logits.
+- Therefore the live CPU fallback semantics are not pure MXFP4 dequantized weight times original f32 activation. They include quantization/accumulation/order behavior that the Q80 lane8/shared compatibility path reproduces and the f32 exact path does not.
+
+Decision:
+- Reject the temporary f32 writeback source and revert it before commit.
+- Keep the committed f32 parity probe as a diagnostic tool only.
+- Do not run token-rate benchmarks with f32 writeback.
+- Next down correctness work should continue from CPU-compatible Q80 semantics or first define a live-CPU-compatible reference for any new writeback route.
+
+
+## 2026-07-08 X10-BG Q80 lane8/shared VRAM cache stage profile
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/q80-lane8-shared-vram-cache-stage-profile-20260708.json`
+- status: `profile_down_q80_stage_bottleneck_no_sota`
+
+Purpose:
+- After rejecting f32 exact writeback, profile the currently correct Q80 lane8/shared down GPU path on current pushed head.
+- Test whether increasing down batch VRAM cache solves the Q80 stage bottleneck.
+- This used only a short France dev smoke prompt; held-out prompts remain unused.
+
+Method:
+- Strict cold `16GB` cgroup, `MemorySwapMax=0`.
+- Common env: `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`, `GGML_MOE_BATCH_PROFILE=1`, `GGML_KIMI_CPU_MOE_PROFILE=1`.
+- Compared batch VRAM cache sizes: `2GB`, `8GB`, `12GB`.
+
+Results:
+- `2GB`: `eval_tok_s=0.9`, `memory_peak_bytes=16000000000`, `ram_ok=true`, hit rate `44.6%`, down stage mean `31.96 ms/call`, kernel mean `0.376 ms/call`, D2H mean `0.011 ms/call`.
+- `8GB`: `eval_tok_s=1.0`, `memory_peak_bytes=16000000000`, `ram_ok=true`, hit rate `60.2%`, down stage mean `27.78 ms/call`, kernel mean `0.375 ms/call`, D2H mean `0.011 ms/call`.
+- `12GB`: `eval_tok_s=1.0`, `memory_peak_bytes=16000000000`, `ram_ok=true`, hit rate `60.3%`, down stage mean `27.14 ms/call`, kernel mean `0.376 ms/call`, D2H mean `0.011 ms/call`.
+- fallback reason aggregation still shows only `gate` and `up` fallback entries for the unresolved CPU side; down batch itself is accepted.
+
+Interpretation:
+- Q80 down math is fast enough; the down GPU bottleneck is source staging/cold first-touch miss cost, not kernel/D2H/scatter.
+- Bigger VRAM cache helps from `2GB` to `8GB`, but `8GB` to `12GB` is flat. The remaining misses are mostly unique cold first-touch down experts rather than eviction.
+- Down-only cache sizing cannot move generalized token rate near the `>5 tok/s` target and currently remains below the no-prompt-specific baseline.
+
+Decision:
+- Do not continue with more down-only VRAM cache/source micro-edits as a SOTA route.
+- Keep Q80 lane8/shared as the correct down GPU reference path.
+- Next optimization should target prompt-general up/gate/down grouped GPU execution or a general expert source/prefetch strategy that reduces cold source staging across all MoE tensors.
+
+## 2026-07-08 X10-BH generalized down alias split and non-France Q80 correctness reverify
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/generalized-gate-downalias-split-and-q80-nonfrance-reverify-20260708.json`
+- top1 artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/q80-down-nonfrance-top1-reverify-20260708.json`
+- status: `down_q80_correctness_strengthened_alias_split_profile_no_sota`
+
+Purpose:
+- Continue the plan requirement to fix `ffn_down_exps` GPU correctness before treating down GPU as a performance route.
+- Test whether the Kimi-style full-source alias idea helps DeepSeek down staging in a prompt-general way, without using prompt-specific expert packs/profiles or held-out prompts.
+- Reverify down Q80 lane8/shared correctness on a non-France fixed text so the correctness evidence is not limited to the France prompt.
+
+Method:
+- Strict cold `16GB` cgroup, `MemorySwapMax=0`, page cache counted in cgroup memory.
+- Existing correct down env: `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`.
+- Alias source: `.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv` with `GGML_MOE_EXPERT_GGUF_ALIAS_TSV` and `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`.
+- Split profiles compared gate one-stream VRAM and down batch VRAM. Short `n64` runs are profile-only because they truncate output; the complete `n192` France run is the quality check.
+
+Results:
+- Current generalized gate-only profile:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T224617Z-20260708-current-generalized-gate-up-fallback-profile/france-generalized-profile-cpu40-vram0gb`
+  - `eval_tok_s=2.1`, `TTFT=37484.65 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - fallback roles include both `up` and `down`.
+- Q80 down alias without gate cache:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T224913Z-20260708-q80-down-alias-iouring-vram12-profile/france-q80-alias-iouring-vram12-cpu40-vram12gb`
+  - `eval_tok_s=1.5`, `TTFT=37681.56 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - down stage mean improved to about `8.75 ms/call` versus about `27.14 ms/call` in the plain Q80 vram12 profile, but gate/up fallback dominated.
+- Gate8/down4 split:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T225104Z-20260708-generalized-gate8-downalias4-profile/france-gate8-downalias4-cpu40-vram4gb`
+  - `eval_tok_s=2.3`, `TTFT=35507.72 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - down stage mean about `2.38 ms/call`; fallback reason profile shows only `up` remains.
+- Gate10/down2 split:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T225300Z-20260708-generalized-gate10-downalias2-profile/france-gate10-downalias2-cpu40-vram2gb`
+  - `eval_tok_s=2.3`, `TTFT=37925.62 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - not better than gate8/down4.
+- Gate8/down4 complete quality check:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T225451Z-20260708-generalized-gate8-downalias4-france-n192/france-gate8-downalias4-n192-cpu40-vram4gb`
+  - `eval_tok_s=2.5`, `prompt_tok_s=1.0`, `TTFT=34980.39 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14907006976`, `ram_ok=true`, `correctness_ok=true`
+  - below the historical no-prompt-specific generalized France high-water mark `2.7 tok/s`, so not a new SOTA.
+- Non-France Q80 down top1 reverify:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T230600Z-20260708-q80-down-nonfrance-top1-reverify`
+  - prompt text: database-index explanation sentence, not France.
+  - default CPU fallback vs Q80 lane8/shared down GPU: `same_top1=29/29`, `first_mismatch_pos=-1`, strict RAM OK.
+
+Interpretation:
+- Down GPU Q80 lane8/shared correctness is now supported by both the earlier France top1 report and this non-France top1 report.
+- Alias source mapping is useful for reducing down staging, but this alone does not create a new generalized SOTA under the product constraints.
+- After gate+down split, the dominant remaining recorded fallback is `ffn_up_exps`; down math is no longer the main unresolved correctness issue.
+- The next optimization should target prompt-general `ffn_up_exps` GPU correctness/source handling, then re-run the calibration/dev prompt set before using held-out prompts.
+
+Decision:
+- Commit and push the diagnostics because they are reproducibility-critical and clarify the next bottleneck.
+- Do not mark a new SOTA.
+- Treat `ffn_down_exps` Q80 lane8/shared as the current correctness-fixed down reference path. Keep MXFP4 f32 writeback rejected until live CPU-compatible semantics are proven.
+
+## 2026-07-08 X10-BI up fallback debug and gate/up one-cache rejection
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gateup-one-filter-both-reject-and-upfallback-debug-20260708.json`
+- status: `up_fallback_cause_confirmed_filter_both_all_gpu_rejected_not_sota`
+
+Purpose:
+- Continue after down Q80 correctness was strengthened in X10-BH.
+- Confirm the current `ffn_up_exps` CPU fallback reason under the no-prompt-specific path.
+- Test a low-risk, prompt-general config idea: allow the existing one-stream MXFP4 path to handle both `ffn_gate_exps` and `ffn_up_exps`, while keeping `ffn_down_exps` on the correctness-fixed Q80 down batch path.
+
+Method:
+- All runs used strict cold `16GB` cgroup with page cache counted and `MemorySwapMax=0`.
+- Debug baseline: current gate-only one-stream config with `GGML_MOE_STREAM_DECLINE_DEBUG=1` and fallback reason CSV.
+- Debug split: gate8/down4 Q80 alias config with decline debug.
+- Candidate configs: `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps,ffn_up_exps` with down Q80 alias batch, varying one/down VRAM split.
+- These are calibration/dev France runs only; held-out prompts remain unused.
+
+Results:
+- Current gate-only debug:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T231310Z-20260708-upfallback-decline-debug-current-head/france-upfallback-debug-cpu40-vram0gb`
+  - `eval_tok_s=1.6`, `TTFT=37298.10 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - fallback roles: `up` and `down`; both show `batch_env_missing` plus `one_name_filter`.
+- Gate8/down4 Q80 split debug:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T231440Z-20260708-upfallback-decline-debug-gate8-down4/france-upfallback-gate8-down4-debug-cpu40-vram4gb`
+  - `eval_tok_s=1.9`, `TTFT=36670.12 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`
+  - log confirms `MXFP4 down Q8_0-compatible batch path active`.
+  - fallback CSV contains only `up`, with `batch_reason=batch_unsupported` and `single_reason=one_name_filter`.
+- Gate/up one filter with one13/down4:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T231652Z-20260708-gateup-one-downq80-filter-both-n64/france-gateup-one-downq80-filter-both-cpu40-vram4gb`
+  - rejected: exit `134`, CUDA OOM. One cache took `13.2 GiB`; down cache 4GB allocation failed and shrank to `0.2 GiB`, then GET_ROWS OOM.
+- Gate/up one filter with one8/down4:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T231749Z-20260708-gateup-one8-downq80-filter-both-n64/france-gateup-one8-downq80-filter-both-cpu40-vram4gb`
+  - `eval_tok_s=1.9`, `TTFT=40273.43 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `correctness_ok=true`
+  - fallback CSV empty, so gate/up/down all reached GPU expert paths.
+  - one-stream hit rate only `66.7%`; down hit rate `70.7%`.
+- Gate/up one filter with one10/down2:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T231943Z-20260708-gateup-one10-downq80-filter-both-n64/france-gateup-one10-downq80-filter-both-cpu40-vram2gb`
+  - `eval_tok_s=1.9`, `TTFT=39111.39 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `correctness_ok=true`
+  - fallback CSV empty; one hit `70.1%`, down hit `59.5%`.
+- Gate/up one filter with one12/down1:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T232130Z-20260708-gateup-one12-downq80-filter-both-n64/france-gateup-one12-downq80-filter-both-cpu40-vram1gb`
+  - `eval_tok_s=1.9`, `TTFT=38939.45 ms`, `memory_peak_bytes=16000000000`, `ram_ok=true`, `correctness_ok=true`
+
+Interpretation:
+- A prompt-general all-GPU expert route is reachable without source edits by allowing one-stream to handle both gate and up while down uses Q80 batch.
+- It is not a performance route: all successful split points are `1.9 tok/s`, slower than gate8/down4 `2.5 tok/s` and the historical no-prompt-specific France high-water mark `2.7 tok/s`.
+- The loss comes from cache competition and staging churn: adding `up` to the one-stream cache lowers gate/up cache hit rate and/or starves down cache. The up one-stream route also does not give the explicit retained dataflow needed to feed down without D2H/reload overhead.
+- Therefore the next implementation should not promote `ffn_gate_exps,ffn_up_exps` one-filter as SOTA. It should design an up-specific cache/source path or an explicit retained up/gate producer that preserves gate/down working sets and proves act/top1 parity before benchmarking.
+
+Decision:
+- Reject filter-both one-stream as SOTA.
+- Keep the result because it proves all-GPU expert execution is possible but currently slower under the 16GB RAM product constraint.
+- Next plan item: implement a default-off up-specific correctness probe or retained explicit up/gate producer. It must not reuse the previously rejected plain fused up/gate path unless act parity against explicit `mul_mat_id + clamp + swiglu_split` is proven first.
+
+## 2026-07-08 X10-BJ accepted generalized SOTA: up Q80 + down Q80 + pinned8
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/up-q80-pinned8-generalized-sota-20260708.json`
+- status: `accepted_generalized_sota_stage_not_product_target`
+- source change: add default-off `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1` support for MXFP4 `ffn_up_exps` in the existing Q8_0-compatible batch path.
+
+Purpose:
+- Continue after X10-BH fixed/verified `ffn_down_exps` Q80 GPU correctness and X10-BI showed that simply putting `up` into the gate one-stream cache is correctness-reachable but too slow.
+- Reduce prompt-general `ffn_up_exps` CPU fallback without evicting the gate one-stream cache.
+
+Implementation:
+- CPU eligibility: `ggml_cuda_moe_stream_supports_down_batch()` now allows `ffn_up_exps` only when tensor type is MXFP4 and `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1` is explicitly set. Default behavior is unchanged.
+- CUDA candidate gate: the existing MXFP4 Q8_0-compatible batch path now accepts `ffn_up_exps` only under `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1`; `ffn_down_exps` still uses `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`.
+- This is not the previously rejected fused up/gate route. It keeps the explicit graph and only accelerates the separate `ffn_up_exps` `mul_mat_id` using the same CPU-compatible Q80 semantics that fixed down.
+
+Correctness gates:
+- Build passed: `cmake --build build-ds4-moe-stream -j 8 --target llama-cli llama-results`.
+- Default-off smoke:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T232957Z-20260708-upq80-defaultoff-smoke/france-upq80-defaultoff-smoke-cpu40-vram4gb`
+  - new up env unset; fallback CSV still contains only `up`; strict RAM OK.
+- Enabled n16 smoke:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T233119Z-20260708-upq80-enabled-smoke-n16/france-upq80-enabled-smoke-cpu40-vram4gb`
+  - fallback CSV empty; strict RAM OK.
+- Non-France top1 reverify:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T233330Z-20260708-upq80-top1-reverify`
+  - default-off path vs `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1`: `same_top1=29/29`, `first_mismatch_pos=-1`, strict RAM OK.
+- France n192 quality:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260707T233711Z-20260708-upq80-gate8-down4-france-n192/france-upq80-gate8-down4-n192-cpu40-vram4gb`
+  - `eval_tok_s=2.7`, `TTFT=36102.95 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15031353344`, `ram_ok=true`, `correctness_ok=true`.
+
+Frozen accepted config:
+- `cpu_moe=40`, `--vram-cache-gb 4`, `-n 192 -c 256 -b 16 -ub 16`, strict cold `drop_caches`.
+- `GGML_MOE_STAGE_PINNED_SLOTS=8` to keep host RAM under the hard threshold.
+- Static prompt-general alias source: `.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv` with `GGML_MOE_EXPERT_GGUF_ALIAS_TSV`, `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`.
+- Gate cache: `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`, `GGML_MOE_STREAM_ONE_CACHE_MIB=8192`.
+- Up/down batch: `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`.
+- Retain top-k env: `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+
+Calibration/dev set v1 result:
+- France: `2.7 tok/s`, TTFT `35765.12 ms`, RAM/correctness OK.
+- Quantum: `2.2 tok/s`, TTFT `35807.15 ms`, RAM/correctness OK.
+- Fibonacci: `2.0 tok/s`, TTFT `37872.54 ms`, RAM/correctness OK.
+- Japan: `2.6 tok/s`, TTFT `38824.41 ms`, RAM/correctness OK.
+- Climate: `2.5 tok/s`, TTFT `37063.18 ms`, RAM/correctness OK.
+- Aggregate: min `2.0`, mean `2.40`, max `2.7`; improves dev baseline min `1.8` and mean `2.18`.
+- TTFT gate: pass versus corresponding dev baseline; all five TTFTs are lower than the 20260706 baseline values.
+
+Held-out test set v1 result after candidate freeze:
+- Photosynthesis: `2.4 tok/s`, TTFT `37269.41 ms`, RAM/correctness OK.
+- Home office: `2.3 tok/s`, TTFT `37576.32 ms`, RAM/correctness OK.
+- JavaScript palindrome: `2.2 tok/s`, TTFT `38341.60 ms`, RAM/correctness OK.
+- Exercise: `2.6 tok/s`, TTFT `40980.94 ms`, RAM/correctness OK.
+- Brazil: `2.6 tok/s`, TTFT `40201.03 ms`, RAM/correctness OK.
+- Aggregate: min `2.2`, mean `2.42`, max `2.6`.
+
+Decision:
+- Accept as the current generalized SOTA stage result because dev min/mean improve, held-out v1 passes RAM/correctness, TTFT gate passes on dev baseline, and no prompt-specific pack/profile/hotset is used.
+- Product target is still not met: held-out min/mean are far below stable `>5 tok/s`.
+- Immediately commit and push source, plan, demo script, and artifact to `ssd/vendor/deepseek-token-rate-16gb` so this result is reproducible.
+- Next bottleneck: Q80 batch accepted all up/down rows but still spends substantial `cuda_batch`/source staging time. Next work should optimize batch cache/source movement and reduce Q80 up/down staging cost without reintroducing CPU fallback or exceeding 16GB host RAM.
+
+## 2026-07-08 X10-BK accepted generalized SOTA: VRAM split gate4 / updown9
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/up-q80-one4-vram9-generalized-sota-20260708.json`
+- status: `accepted_generalized_sota_stage_not_product_target`
+- source change: none. This is a runtime configuration improvement on top of X10-BJ.
+- push target remains `ssd/vendor/deepseek-token-rate-16gb`; accepted SOTA records and demo updates must be committed and pushed immediately.
+
+Purpose:
+- Continue after X10-BJ showed up/down GPU Q80 correctness and removed CPU fallback.
+- Profile the current generalized SOTA to locate the next bottleneck before changing implementation.
+- Optimize for general prompts, not France-specific traces or prompt-specific packs.
+
+Bottleneck profile:
+- Reference current config `gate8 / updown4`, n96 cold France profile:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708T002217Z-20260708-current-upq80-pinned8-n96-profile-absbin/france-profile-cpu40-vram4gb`
+  - `eval_tok_s=2.6`, TTFT `36815.22 ms`, strict RAM OK.
+  - batch path: `calls=7840`, `stage=2.799 ms/call`, `kernel=0.221 ms/call`, `total=3.033 ms/call`.
+  - pinned staging: `copies=11179`, `host_stage=20485.067 ms`, `h2d=1868.220 ms`.
+  - batch cache hit rate `60.6%`; fallback profiles empty.
+- Interpretation: up/down GPU correctness is no longer the blocker. Kernel time is small; source/host staging dominates.
+
+VRAM split probes, n96 cold France:
+- `gate8 / updown6`: actual updown cache `5.2 GiB`, `2.7 tok/s`, host_stage `18256.121 ms`.
+- `gate7 / updown6`: `2.8 tok/s`, host_stage `16644.384 ms`.
+- `gate6 / updown7`: `2.9 tok/s`, host_stage `15256.213 ms`.
+- `gate5 / updown8`: `2.9 tok/s`, host_stage `14538.327 ms`.
+- `gate4 / updown9`: `2.9 tok/s`, host_stage `13147.380 ms`, TTFT `35330.50 ms`.
+- `gate3 / updown10`: `2.9 tok/s`, TTFT worsened to `37335.72 ms`.
+- Decision: freeze `gate4 / updown9` for generalized validation because it is tied for best n96 token rate, has the best TTFT among the top-rate splits, and keeps fallback empty.
+
+Frozen accepted config:
+- `cpu_moe=40`, strict cold `drop_caches`, `-n 192 -c 256 -b 16 -ub 16`.
+- `GGML_MOE_STREAM_ONE_CACHE_MIB=4096` for gate one-stream cache.
+- `GGML_MOE_VRAM_CACHE_GB=9` for up/down Q80 batch cache.
+- `GGML_MOE_STAGE_PINNED_SLOTS=8`.
+- Static prompt-general alias source: `.Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv` with `GGML_MOE_EXPERT_GGUF_ALIAS_TSV`, `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`.
+- Gate path: `GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4=1`, `GGML_MOE_STREAM_ONE_NAME_FILTER=ffn_gate_exps`.
+- Up/down path: `GGML_MOE_STREAM_DOWN_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8=1`, `GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED=1`.
+- Retain top-k env unchanged: `GGML_MOE_KEEP_TOPK_UPDOWN=4`, `GGML_MOE_KEEP_TOPK_LAYER_RANGE=10-39`, `GGML_MOE_KEEP_TOPK_LAYER_VALUE=3`.
+
+Calibration/dev set v1 result:
+- France: `3.0 tok/s`, TTFT `36978.29 ms`, RAM/correctness OK.
+- Quantum: `2.1 tok/s`, TTFT `33041.59 ms`, RAM/correctness OK.
+- Fibonacci: `2.0 tok/s`, TTFT `38902.10 ms`, RAM/correctness OK.
+- Japan: `2.8 tok/s`, TTFT `38627.40 ms`, RAM/correctness OK.
+- Climate: `2.6 tok/s`, TTFT `35429.72 ms`, RAM/correctness OK.
+- Aggregate: min `2.0`, mean `2.50`, max `3.0`; previous accepted dev aggregate was min `2.0`, mean `2.40`, max `2.7`.
+
+Held-out test set v1 result after candidate freeze:
+- Photosynthesis: `2.5 tok/s`, TTFT `36595.85 ms`, RAM/correctness OK.
+- Home office: `2.3 tok/s`, TTFT `38020.20 ms`, RAM/correctness OK.
+- JavaScript palindrome: `2.2 tok/s`, TTFT `35847.69 ms`, RAM/correctness OK.
+- Exercise: `2.7 tok/s`, TTFT `37484.98 ms`, RAM/correctness OK.
+- Brazil: `2.8 tok/s`, TTFT `35901.34 ms`, RAM/correctness OK.
+- Aggregate: min `2.2`, mean `2.50`, max `2.8`; previous accepted held-out aggregate was min `2.2`, mean `2.42`, max `2.6`.
+
+Decision:
+- Accept as the current generalized SOTA stage result. It improves held-out mean and max while preserving min, correctness, strict 16GB RAM including page cache, and TTFT gate.
+- Product target remains unmet: held-out mean `2.50 tok/s` is still below stable `>5 tok/s` for random prompts.
+- Next bottleneck remains source staging/read path: at `gate4 / updown9`, n96 still spends `13.1s` in batch host staging while kernel time is about `1.74s`. Further progress requires reducing cold source staging or changing dataflow/layout, not only increasing batch cache.
+
+## 2026-07-08 X10-BL accepted generalized SOTA: down parallel io_uring staging
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/up-q80-one4-vram9-downparallel-iouring-sota-20260708.json`
+- status: `accepted_generalized_sota_stage_not_product_target`
+- source change: none. This uses existing default-off runtime support.
+- push target remains `ssd/vendor/deepseek-token-rate-16gb`; accepted SOTA records and demo updates must be committed and pushed immediately.
+
+Purpose:
+- Continue after X10-BK showed the remaining bottleneck is source/host staging, not up/down GPU correctness or kernel time.
+- Test a prompt-general source staging optimization: enable the existing Q80 down/up batch path's parallel CPU staging so the existing `expert_pack_iouring_copy_jobs()` path is actually used.
+- This is not prompt-specific: it uses no route trace, prompt trace, expert hotset, or prompt-derived pack.
+
+Theory and upper bound:
+- X10-BK `gate4 / updown9` n96 profile still spent `13.147 s` in synchronous host staging, while kernel time was about `1.74 s`.
+- If io_uring batch staging removed all exposed host-stage cost, the n96 profile upper bound would be roughly `elapsed 66.6s - 13.1s = 53.5s`, or about `3.6 tok/s` for the same generated token count.
+- The realistic target is smaller because reads, H2D, CUDA enqueue, and gate one-stream misses still remain. A `3.0 tok/s` n96 result is consistent with reducing the batch exposed stage from `1.815 ms/call` to about `1.09 ms/call`.
+
+Diagnostic results:
+- Baseline X10-BK n96 `gate4 / updown9`:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708T003232Z-20260708-upq80-pinned8-one4-vram9-n96-profile/france-profile-cpu40-vram9gb`
+  - `eval_tok_s=2.9`, TTFT `35330.50 ms`, strict RAM OK.
+  - `direct_reads=6716`, `iouring_reads=0`, batch `stage=1.815 ms/call`, `total=2.049 ms/call`.
+- Planned host prefetch probe rejected:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708T010651Z-20260708-one4-vram9-planned-hostprefetch256-n96-profile/france-profile-cpu40-vram9gb`
+  - `eval_tok_s=2.9`, TTFT `36846.41 ms`; `planned_enqueued=0`, `hits=0`; no improvement.
+  - Interpretation: planned host prefetch is not wired into the Q80 down/up batch path, so it does not attack the current bottleneck.
+- Down parallel io_uring, refill default:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708T011123Z-20260708-one4-vram9-downparallel-iouring-n96-profile/france-profile-cpu40-vram9gb`
+  - `eval_tok_s=3.0`, TTFT `34802.86 ms`, strict RAM OK.
+  - `direct_reads=0`, `iouring_reads=6716`, batch `stage=1.107 ms/call`, `total=1.342 ms/call`.
+- Down parallel io_uring, `GGML_MOE_IO_REFILL_BATCH=4`:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708T011327Z-20260708-one4-vram9-downparallel-iouring-refill4-n96-profile/france-profile-cpu40-vram9gb`
+  - `eval_tok_s=3.0`, TTFT `31852.51 ms`, strict RAM OK.
+  - `direct_reads=0`, `iouring_reads=6716`, batch `stage=1.091 ms/call`, `total=1.326 ms/call`.
+
+Frozen accepted config delta from X10-BK:
+- Add `GGML_MOE_DOWN_PARALLEL_STAGE=1`.
+- Add `GGML_MOE_IO_REFILL_BATCH=4`.
+- Keep `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`, `GGML_MOE_STREAM_ONE_CACHE_MIB=4096`, `GGML_MOE_VRAM_CACHE_GB=9`, and all Q80 correctness flags unchanged.
+
+Calibration/dev set v1 result:
+- France: `3.0 tok/s`, TTFT `34240.04 ms`, RAM/correctness OK.
+- Quantum: `2.2 tok/s`, TTFT `31878.79 ms`, RAM/correctness OK.
+- Fibonacci: `2.1 tok/s`, TTFT `33848.94 ms`, RAM/correctness OK.
+- Japan: `2.8 tok/s`, TTFT `32885.10 ms`, RAM/correctness OK.
+- Climate: `2.6 tok/s`, TTFT `33003.87 ms`, RAM/correctness OK.
+- Aggregate: min `2.1`, mean `2.54`, max `3.0`; previous accepted dev aggregate was min `2.0`, mean `2.50`, max `3.0`.
+
+Held-out test set v1 result after candidate freeze:
+- Photosynthesis: `2.5 tok/s`, TTFT `33470.12 ms`, RAM/correctness OK.
+- Home office: `2.4 tok/s`, TTFT `35257.44 ms`, RAM/correctness OK.
+- JavaScript palindrome: `2.3 tok/s`, TTFT `35242.53 ms`, RAM/correctness OK.
+- Exercise: `2.8 tok/s`, TTFT `35217.08 ms`, RAM/correctness OK.
+- Brazil: `2.8 tok/s`, TTFT `34369.69 ms`, RAM/correctness OK.
+- Aggregate: min `2.3`, mean `2.56`, max `2.8`; previous accepted held-out aggregate was min `2.2`, mean `2.50`, max `2.8`.
+
+Decision:
+- Accept as the current generalized SOTA stage result. It improves held-out min and mean, preserves correctness, keeps strict 16GB RAM including page cache, and improves TTFT.
+- Product target remains unmet: held-out mean `2.56 tok/s` is still below stable `>5 tok/s` for random prompts.
+- Next bottleneck: even with io_uring, n96 still has `iouring_wait_us=7.87 s`, H2D about `1.17 s`, and gate one-stream misses. Further progress should target IO locality/batch size and real overlap, not CPU fallback correctness.
+
+
+## 2026-07-08 X10-BM accepted generalized SOTA: prompt-general full native gate source
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-fullpack-generalized-sota-20260708.json`
+- status: `accepted_generalized_sota_stage_not_product_target`
+- push target: `ssd/vendor/deepseek-token-rate-16gb`; accepted SOTA records and source/demo updates must be committed and pushed immediately, then reproduced from the pushed commit.
+- task background: the product target is arbitrary user prompts on a 16GB host-RAM machine, including page cache, plus a 32GB RTX 5090, with stable output above `5 tok/s`. The current result improves SOTA but still does not meet the product target.
+
+Purpose:
+- Continue after X10-BL showed up/down batch staging was improved but gate one-stream misses remained a large exposed cold-start cost.
+- Test a prompt-general gate source, not a France trace, hotset, route profile, or prompt-specific pack.
+- Prepare for true gate/up/down cross-cache co-submit by making gate misses sourceable from the same full native expert corpus used by generalized expert loading.
+
+Accepted config delta from X10-BL:
+- Add `GGML_MOE_STREAM_ONE_EXPERT_PACK=/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`.
+- Add `GGML_MOE_STREAM_ONE_EXPERT_PACK_IO=direct`.
+- Keep `GGML_MOE_UPDOWN_PAIRED_READ=1`, `GGML_MOE_DOWN_PARALLEL_STAGE=1`, `GGML_MOE_IO_BACKEND=iouring`, `GGML_MOE_IO_ALIGNED_ALIAS_BATCH=1`, `GGML_MOE_IO_REFILL_BATCH=4`, `GGML_MOE_STAGE_PINNED_SLOTS=8`, `GGML_MOE_STREAM_ONE_CACHE_MIB=4096`, and `GGML_MOE_VRAM_CACHE_GB=9`.
+- The full native expert-pack size is `147174760448` bytes. It is prompt-general: all native experts are available and the file is not derived from any prompt set.
+
+Profile basis:
+- Gate/up/down profile before this change showed n96 gate miss source time was still large: `gate_one cache_misses=8670`, gate miss `src0_ms` sum about `27.1s`, while up/down already used paired batch reads.
+- With the full native gate source enabled, manual France probes showed gate one-stream expert-pack hits and no one-stream pack misses:
+  - n32: `eval_tok_s=4.2`, `memory_peak_bytes=16000000000`, one expert pack `hits=4005`, `misses=0`, `direct_reads=4005`.
+  - n96: `eval_tok_s=4.6`, `memory_peak_bytes=16000000000`, one expert pack `hits=8670`, `misses=0`, `direct_reads=8670`.
+
+Calibration/dev set v1 result, n192 cold after candidate freeze:
+- France: `4.5 tok/s`, TTFT `23606.13 ms`, RAM/correctness OK.
+- Quantum: `3.7 tok/s`, TTFT `23052.59 ms`, RAM/correctness OK.
+- Fibonacci: `3.9 tok/s`, TTFT `25161.11 ms`, RAM/correctness OK.
+- Japan: `4.2 tok/s`, TTFT `24129.62 ms`, RAM/correctness OK.
+- Climate: `4.2 tok/s`, TTFT `23832.48 ms`, RAM/correctness OK.
+- Aggregate: min `3.7`, mean `4.10`, max `4.5`; previous accepted dev aggregate was min `2.2`, mean `2.78`, max `3.2`.
+
+Held-out test set v1 result after candidate freeze, n192 cold:
+- Photosynthesis: `4.1 tok/s`, TTFT `23265.95 ms`, RAM/correctness OK.
+- Home office: `3.9 tok/s`, TTFT `24730.54 ms`, RAM/correctness OK with formatting/truncation note.
+- JavaScript palindrome: `4.0 tok/s`, TTFT `25068.73 ms`, RAM/correctness OK.
+- Exercise: `4.2 tok/s`, TTFT `25759.91 ms`, RAM/correctness OK.
+- Brazil: `4.4 tok/s`, TTFT `25353.98 ms`, RAM/correctness OK with minor wording-typo note.
+- Aggregate: min `3.9`, mean `4.12`, max `4.4`; previous accepted held-out aggregate was min `2.4`, mean `2.76`, max `3.0`.
+
+Decision:
+- Accept as the current generalized SOTA stage result. It improves both dev and held-out min/mean/max, preserves strict 16GB cgroup RAM including page cache, and improves TTFT versus prior SOTA.
+- This is not the final requested gate/up/down cross-cache co-submit. It is a necessary gate-source improvement: gate misses now have a prompt-general direct expert source instead of falling back to slow raw tensor source reads.
+- Product target remains unmet: held-out mean `4.12 tok/s` is still below stable `>5 tok/s` for arbitrary random prompts.
+- Demo script now defaults to this current SOTA path. Use `--no-gate-fullpack` only to reproduce the previous paired-read path.
+
+## Next implementation plan: true gate/up/down cross-cache co-submit
+
+Goal:
+- Complete actual gate/up/down cross-cache co-submit and measure whether it moves held-out SOTA above the X10-BM `3.9/4.12/4.4 tok/s` range.
+- The implementation must remain prompt-general, default-off until validated, and must preserve Kimi functionality.
+
+Design step 1, bottleneck measurement:
+- Run X10-BM with `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT` on France n96 and one non-France prompt.
+- Break down per-token exposed time into gate direct reads, up/down io_uring reads, pinned staging, H2D, up/gate compute, down compute, and residual synchronization.
+- Acceptance for the measurement: strict cold `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`, and correctness pass.
+
+Design step 2, expected upper bound:
+- From the profile, compute the co-submit upper bound as the removable wait time from separately submitted gate and up/down read batches.
+- If gate direct-read wait remains exposed and overlaps poorly with up/down reads, the theoretical gain is bounded by that exposed wait. If the fullpack direct reads are already hidden, co-submit should be rejected unless it reduces wall time on held-out prompts.
+
+Execution step 1, implementation shape:
+- Add `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`, default `0`.
+- Build a per-layer/per-token read plan that includes gate, up, and down source entries before submission.
+- De-duplicate entries by source identity, file offset, size, and destination cache slot.
+- Submit the combined plan through the existing io_uring/aligned-alias batch path where possible; preserve the existing direct fullpack fallback when an entry cannot use alias batch.
+- Keep compute dependencies unchanged: gate/up computation order and down computation correctness must match the accepted path.
+
+Execution step 2, validation:
+- First run France n96/n192 for correctness and TTFT.
+- Then run the frozen dev set. Do not use held-out until the candidate config is frozen.
+- After candidate freeze, run held-out v1 exactly once for SOTA decision.
+- If held-out improves and all constraints pass, commit and push immediately to `ssd/vendor/deepseek-token-rate-16gb`, then rebuild/rerun from the pushed commit and record reproducibility.
+- If token rate regresses, correctness fails, TTFT rises over 20%, or RAM exceeds 16GB including page cache, reject and revert or leave the code default-off with the rejected artifact clearly recorded.
+
+Post-push reproducibility:
+- source commit: `8b4fce2bb5109983bf621939bf48f190c14194b0`, pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- clean worktree repro run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-postpush-repro/20260708T045123Z-pushed-8b4fce2-france-n192-repro`.
+- France n192 cold result: `eval_tok_s=4.6`, `prompt_tok_s=3.3`, TTFT `24268.87 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15117881344`, `ram_ok=true`, `source_dirty=false`.
+- Output was semantically correct and coherent.
+
+## 2026-07-08 X10-BN co-submit profile after full native gate source
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-fullpack-cosubmit-profile-20260708.json`
+- status: `diagnostic_profile_for_next_implementation`
+- source: `4b1a3fa2c` plus a demo-only profile env passthrough for `GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT`.
+
+Runs:
+- France n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-cosubmit-profile2/20260708T045723Z-france-n96-profile`, `eval_tok_s=4.5`, TTFT `23928.02 ms`, RAM OK.
+- Quantum n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-cosubmit-profile2/20260708T045811Z-quantum-n96-profile`, `eval_tok_s=3.5`, TTFT `24225.74 ms`, RAM OK.
+
+Breakdown:
+- France gate_one: `cache_hits=16161`, `cache_misses=8670`, `pack_hits=8670`, `pack_misses=0`, exposed `src0_ms=11578.23 ms`.
+- France up/down batch: `iouring_reads=6716`, `iouring_bytes=29929504768`, `iouring_submit_us=1537821`, `iouring_wait_us=8053500`, `inflight_avg=2.33`, `inflight_max=8`, many single-job batches.
+- Quantum gate_one: `cache_hits=14478`, `cache_misses=10127`, `pack_hits=10127`, `pack_misses=0`, exposed `src0_ms=13526.55 ms`.
+- Quantum up/down batch: `iouring_reads=9492`, `iouring_bytes=42300604416`, `iouring_submit_us=2331646`, `iouring_wait_us=11632059`, `inflight_avg=1.92`, `inflight_max=8`, many single-job batches.
+
+Interpretation:
+- Full native gate source fixed gate source coverage: gate pack misses are zero.
+- The remaining bottleneck is not CPU fallback. It is exposed source/read wait split across gate direct reads and up/down io_uring reads.
+- Current up/down batch depth is poor for general prompts: inflight average is about `1.9-2.3`, and the batch histogram is dominated by single-job and 2-4 job batches.
+- True gate/up/down cross-cache co-submit should first target common read planning and queue depth: combine gate misses with up/down miss jobs in one read plan, de-duplicate by source/offset/size, and submit through one io_uring queue where possible.
+- The rough n96 upper bound from perfect exposed IO overlap is large but not fully realizable: France has about `11.6s gate src + 8.1s up/down wait`, Quantum has about `13.5s gate src + 11.6s up/down wait`. If co-submit only hides half of the smaller component, expected gain is approximately `1.1-1.4x`, which is enough to test against the `5 tok/s` target but not guaranteed.
+
+Next action:
+- Implement `GGML_MOE_GATE_UPDOWN_COSUBMIT=1` as a default-off path.
+- Start with read-plan plumbing and stats only: collect gate/up/down miss jobs into one structure and report co-submit candidate job counts without changing execution.
+- Then switch eligible jobs to one io_uring submission path and validate France n96/n192 before touching held-out prompts.
+
+## 2026-07-08 X10-BO gate-triggered up/down co-submit experiment
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-updown-cosubmit-rejected-20260708.json`
+- status: `rejected_not_sota_default_off`
+- source state: default-off implementation on top of `86f904c50`; current SOTA default path remains X10-BM.
+
+Implementation:
+- Added `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`, default off.
+- Gate one-stream records same-layer/same-expert up/down preload candidates while processing `ffn_gate_exps`.
+- `ggml_cuda_moe_stream_sync()` flushes queued candidates once per gate op, so reads are submitted in larger io_uring batches instead of one small batch per expert.
+- Demo script now passes `GGML_MOE_GATE_UPDOWN_COSUBMIT` and `GGML_MOE_STREAM_DEFER` through `systemd-run` when explicitly set.
+
+Results:
+- Default-off smoke, France n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-defaultoff/20260708T052449Z-france-n32-defaultoff-after-cosubmit`, `eval_tok_s=4.4`, TTFT `23772.65 ms`, RAM OK. Default SOTA path is not broken.
+- Queued co-submit France n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-smoke2/20260708T051537Z-france-n32-cosubmit-queued`, `eval_tok_s=4.3`, TTFT `24936.13 ms`, RAM OK.
+- Queued co-submit France n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-n96/20260708T051640Z-france-n96-cosubmit-queued`, `eval_tok_s=4.6`, TTFT `25628.31 ms`, RAM OK.
+- Queued co-submit Quantum n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-n96/20260708T051742Z-quantum-n96-cosubmit-queued`, `eval_tok_s=3.6`, TTFT `24446.25 ms`, RAM OK.
+- Defer+cosubmit France n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-defer-n96/20260708T051945Z-france-n96-cosubmit-defer`, killed after `145.99s`, no answer, rejected.
+
+Diagnostics:
+- Queued co-submit did create larger batches: France n96 `up_aux` had `jobs=2168`, `batches=76`, `inflight_avg=6.97`, `inflight_max=8`.
+- However, it did not improve wall-clock token rate beyond current SOTA. It mostly moved up/down IO earlier, between gate and up, rather than overlapping it with gate direct reads/compute.
+- The no-evict slot policy limited planned jobs to available cache slots, which avoids cache thrash but caps coverage.
+
+Decision:
+- Reject as a new SOTA. Do not enable by default.
+- Keep the implementation default-off for further profiling because it is useful evidence: batching works, but real speedup requires overlapping gate source reads themselves with up/down reads, not only preloading after gate has already paid its source cost.
+
+Next direction:
+- Move gate source reads onto the shared batch expert source/io_uring path, or add a true background read worker so gate direct reads and up/down preloads can be in flight at the same time.
+- A pure gate-triggered preload is insufficient unless it overlaps with gate compute/read or uses a predictive window that does not add exposed TTFT.
+
+## 2026-07-08 X10-BP next plan: gate/up/down shared-source batch with cache preservation
+
+Task background and target:
+- The real product target is arbitrary user prompts on a 16GB host-RAM machine, including page cache, plus a 32GB RTX 5090, with stable decode above `5 tok/s`.
+- All optimization must be prompt-general. No France-specific trace, prompt route hotset, prompt-derived expert pack, or prompt-specific admission policy is acceptable as SOTA.
+- Held-out prompts remain reserved for final candidate validation only. Development/debug runs may use the dev prompts and ad hoc probes, but a new accepted SOTA must report held-out metrics after the candidate config is frozen.
+- Push target remains `ssd/vendor/deepseek-token-rate-16gb`. When a new compliant SOTA appears, record exact repro info, commit source plus artifacts immediately, push to this branch, then rerun from the pushed commit to prove reproducibility.
+
+Current accepted baseline:
+- Accepted generalized SOTA remains X10-BM / post-push repro, not the later default-off or rejected experiments.
+- Clean France n192 repro from pushed source: `eval_tok_s=4.6`, TTFT `24268.87 ms`, strict cgroup `memory_peak_bytes=16000000000`, `source_dirty=false`.
+- Held-out n192 accepted aggregate: min/mean/max `3.9/4.12/4.4 tok/s`.
+- Product target is still not met because held-out mean is below `5 tok/s`.
+
+Answer to the design question: should gate join the same batch as up/down?
+- Yes, it is worth testing, but only if gate misses still populate and reuse the one-stream gate VRAM cache.
+- The rejected X10-BO experiment batched up/down preloads but left gate source reads exposed, so it mostly moved IO earlier instead of overlapping/removing it.
+- A first shared-source probe sent gate through the batch expert source, but bypassed gate VRAM cache insertion. That produced `VRAM cache hits=0` and collapsed to about `1.8 tok/s`; this is not evidence against shared-source batching, only evidence that cache preservation is mandatory.
+- Gate+up+down in one source/batch path can help only if it reduces exposed source wait or increases effective queue depth without increasing TTFT, RAM, or cache thrash.
+
+Immediate design step, before more implementation:
+- Re-run X10-BM profile only if needed to confirm the current split:
+  - gate direct/fullpack source time,
+  - up/down io_uring wait time,
+  - pinned staging and H2D time,
+  - up/gate compute and down compute time,
+  - sync/residual time.
+- Use n96 cold start for France plus one non-France dev prompt.
+- Strict requirements for profile runs: `drop_caches`, `MemoryMax=16000000000`, `MemorySwapMax=0`, page cache counted inside cgroup, correctness pass.
+
+Implementation step 1: repair shared-source gate path without changing default behavior.
+- Keep `GGML_MOE_GATE_SHARED_SOURCE=0` by default.
+- When `GGML_MOE_GATE_SHARED_SOURCE=1`, load gate source through the existing batch expert source/io_uring helper where eligible.
+- After loading a gate expert to a temporary device buffer, insert it into the normal one-stream gate VRAM cache with a device-to-device copy.
+- Preserve the current cache key, cache admission rule, cache stats, eviction behavior, and correctness path.
+- Success criterion for this step is not token rate yet; first prove that gate shared-source has nonzero one-stream gate VRAM hits and does not break correctness.
+
+Implementation step 2: evaluate shared-source gate with cache preservation.
+- Run smoke first:
+  - France n32 with `GGML_MOE_GATE_SHARED_SOURCE=1`.
+  - Check output correctness, TTFT, RAM, and logs.
+  - Required log condition: one-stream gate VRAM cache hits must recover; `hits=0` is an automatic reject.
+- If smoke passes, run France n96 and one non-France dev prompt n96.
+- Compare against accepted X10-BM, not against rejected shared-source runs.
+- Reject if n96 token rate is below current default path, if TTFT rises over 20%, or if RAM exceeds 16GB including page cache.
+
+Implementation step 3: true gate/up/down co-submit after shared-source cache is correct.
+- Build one per-layer/per-token source plan containing eligible gate, up, and down miss jobs.
+- De-duplicate by source identity, file offset, size, tensor role, expert id, and destination cache slot.
+- Submit eligible entries through one io_uring/aligned-alias batch path where possible.
+- Keep compute order unchanged:
+  - gate/up mathematical order must match accepted path,
+  - down correctness must match accepted path,
+  - Kimi features and Kimi flags must remain functional.
+- Add counters before enabling any SOTA decision:
+  - gate jobs, up jobs, down jobs,
+  - merged jobs,
+  - de-duplicated jobs,
+  - batch size histogram,
+  - inflight average/max,
+  - direct reads vs io_uring reads,
+  - gate cache hit/miss after co-submit.
+
+Expected upper bound:
+- X10-BN showed France n96 had about `11.6s` exposed gate source time plus about `8.1s` up/down io_uring wait; Quantum n96 had about `13.5s` gate source plus about `11.6s` up/down wait.
+- Perfectly overlapping the smaller exposed component is unrealistic, but a partial overlap/reduction of `30-50%` of exposed source wait could plausibly move mean decode from roughly `4.1 tok/s` toward `5 tok/s`.
+- If the shared path only adds extra copies or destroys cache locality, the expected result is a slowdown; such runs must be recorded as rejected and left default-off or reverted.
+
+Validation sequence:
+- Stage A: default-off smoke after code changes; France n32 must match current behavior and pass correctness/RAM.
+- Stage B: shared-source gate with cache preservation; France n32, France n96, one non-France n96.
+- Stage C: co-submit counters only; no execution change, verify job accounting.
+- Stage D: co-submit enabled on dev prompts only; freeze config after dev results.
+- Stage E: held-out v1 final test exactly after candidate freeze.
+- Stage F: if and only if held-out improves accepted min/mean without violating constraints, commit and push immediately to `ssd/vendor/deepseek-token-rate-16gb`; then reproduce from pushed commit and record run path, command, commit, source dirty state, prompt outputs, TTFT, token rates, memory peak, and page-cache memory.
+
+Acceptance and rejection rules:
+- Accept only if all are true:
+  - strict host RAM <= 16GB including page cache,
+  - correctness passes for France and generalized prompt set,
+  - TTFT increase <= 20% versus accepted baseline,
+  - held-out min/mean improves over X10-BM or moves materially toward stable `>5 tok/s`,
+  - source and artifact are pushed and reproducible from the pushed commit.
+- Reject if any are true:
+  - prompt-specific behavior is introduced,
+  - one-stream gate cache is bypassed or hit rate collapses,
+  - correctness degrades,
+  - TTFT rises over 20% for an accepted candidate,
+  - memory exceeds 16GB including page cache,
+  - Kimi functionality is removed or regressed,
+  - token rate regression is not clearly offset by diagnostic value.
+
+## 2026-07-08 X10-BQ gate shared-source cache preservation diagnostic
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-shared-source-cache-rejected-20260708.json`
+- status: `rejected_not_sota_default_off_diagnostic`
+- source state: dirty experimental code on top of `d2f1f710c`; accepted SOTA remains X10-BM.
+
+Purpose:
+- Fix the first shared-source probe failure mode where `GGML_MOE_GATE_SHARED_SOURCE=1` bypassed the one-stream gate VRAM cache and produced `hits=0`, collapsing to about `1.8 tok/s`.
+- Test whether moving gate source through the batch expert source can be a useful base for gate/up/down cross-cache co-submit.
+
+Implementation:
+- Added a device-to-device one-stream cache insert path for gate experts loaded through the batch expert source.
+- When `GGML_MOE_GATE_SHARED_SOURCE=1`, a gate miss can load to `ctx.d_src0`, then insert into the normal one-stream gate cache with `cudaMemcpyDeviceToDevice`.
+- The path remains default-off and is not an accepted SOTA.
+
+Results:
+- Default-off France n32 after the code change:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-shared-source-cache-smoke/20260708T054339Z-france-n32-defaultoff-after-shared-cache`
+  - `eval_tok_s=4.3`, TTFT `24532.12 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+  - This shows the default accepted path was not broken.
+- Shared-source cache-preserving France n32:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-shared-source-cache-smoke/20260708T054427Z-france-n32-gate-shared-source-cache`
+  - `eval_tok_s=3.9`, TTFT `25784.44 ms`, RAM OK.
+  - Gate one-stream cache recovered: `hits=5466`, `misses=4005`, `hit_rate=57.7%`.
+  - Batch expert source stats: `direct_reads=4005`, `iouring_reads=3879`, `gate_aux copies=4005`.
+- Shared-source cache-preserving France n96:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-shared-source-cache-n96/20260708T054607Z-france-n96-gate-shared-source-cache`
+  - `eval_tok_s=4.1`, `prompt_tok_s=2.0`, TTFT `27518.13 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=14855278592`, RAM OK.
+  - Output was semantically correct but truncated by the n96 limit.
+  - Gate one-stream cache recovered: `hits=16161`, `misses=8670`, `hit_rate=65.1%`.
+  - Batch expert source stats: `direct_reads=8670`, `iouring_reads=6716`, `iouring_wait_us=7886297`, `gate_aux copies=8670`.
+
+Decision:
+- Reject as a new SOTA. It is below the accepted France n96/n192 range of about `4.5-4.6 tok/s`.
+- The cache fix solved the previous `hits=0` collapse, but shared-source gate alone still performs one direct read and pinned staging copy per gate miss.
+- This does not reduce read count, and it does not hide gate source wait behind up/down IO.
+
+Design conclusion for the next gate/up/down attempt:
+- Simply putting gate through the existing batch helper is not enough.
+- A naive `{gate, up, down}` group using the current `expert_pack_iouring_copy_jobs` helper is risky because that helper ties read completion and H2D enqueue to one CUDA stream. If gate, up, and down all use the gate stream, gate compute waits behind up/down preloads; if they all use the prefetch stream, gate compute must wait for prefetch stream completion.
+- The next viable implementation needs either:
+  - a true read-only io_uring stage that can co-submit gate/up/down reads, then copy gate on the gate stream and up/down on the prefetch/cache stream, or
+  - a background prefetch worker that submits up/down reads early without blocking the gate call while preserving the current direct gate fast path.
+- Until that exists, accepted SOTA remains X10-BM and the product target `>5 tok/s` remains unmet.
+
+## 2026-07-08 X10-BR accepted generalized SOTA: gate cache 6144 MiB
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-cache6144-generalized-sota-20260708.json`
+- status: `accepted_generalized_sota_stage_not_product_target`
+- prompt-specific optimization: none. The change is a prompt-general VRAM allocation shift.
+- push target: `ssd/vendor/deepseek-token-rate-16gb`.
+
+Purpose:
+- X10-BN/X10-BQ showed exposed gate source reads remained a major cost.
+- Instead of using a prompt route hotset, increase the one-stream gate VRAM cache from `4096 MiB` to `6144 MiB`.
+- Keep up/down batch cache requested at `9GB`; it may clamp downward after the larger gate cache, but the expected gain is fewer gate direct reads.
+
+Diagnostic probes:
+- France n96 with `GGML_MOE_STREAM_ONE_CACHE_MIB=6144`:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache-sweep/20260708T055222Z-france-n96-onecache6144-vram9`
+  - `eval_tok_s=5.0`, TTFT `24020.75 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+  - Gate cache improved to `hits=18358`, `misses=6473`, `hit_rate=73.9%`.
+  - Previous accepted/profiled gate cache was about `hits=16161`, `misses=8670`, `hit_rate=65.1%`.
+  - Batch up/down cache clamped from requested `9.0 GiB` to actual `6.9 GiB`, so this is a deliberate gate-vs-updown VRAM tradeoff.
+- Quantum n96 with the same config:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache-sweep/20260708T055401Z-quantum-n96-onecache6144-vram9`
+  - `eval_tok_s=3.9`, TTFT `23823.11 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+  - Output was semantically correct with a minor extra leading `and`.
+
+Calibration/dev set v1, n192, before candidate freeze:
+- France: `4.8 tok/s`, TTFT `24199.44 ms`, RAM/correctness OK.
+- Quantum: `3.8 tok/s`, TTFT `24354.95 ms`, RAM/correctness OK with minor leading-word note.
+- Fibonacci: `4.0 tok/s`, TTFT `26456.33 ms`, RAM/correctness OK; first generator function correct, later optional compact variant noisy/truncated.
+- Japan: `4.7 tok/s`, TTFT `24977.21 ms`, RAM/correctness OK.
+- Climate: `4.5 tok/s`, TTFT `23812.49 ms`, RAM/correctness OK.
+- Aggregate: min `3.8`, mean `4.36`, max `4.8`; previous accepted dev aggregate was min `3.7`, mean `4.10`, max `4.5`.
+
+Held-out v1, n192, after candidate freeze:
+- Photosynthesis: `4.3 tok/s`, TTFT `22558.75 ms`, RAM/correctness OK.
+- Office: `4.0 tok/s`, TTFT `25031.91 ms`, RAM/correctness OK with the same known leading `space` and n192 truncation style as previous SOTA.
+- Palindrome JS: `4.0 tok/s`, TTFT `25181.79 ms`, RAM/correctness OK.
+- Exercise: `4.6 tok/s`, TTFT `25628.56 ms`, RAM/correctness OK.
+- Brazil: `4.6 tok/s`, TTFT `25439.91 ms`, RAM/correctness OK.
+- Aggregate: min `4.0`, mean `4.30`, max `4.6`; previous accepted held-out aggregate was min `3.9`, mean `4.12`, max `4.4`.
+
+Decision:
+- Accept as the current generalized SOTA stage result.
+- It satisfies strict host RAM <= 16GB including page cache, preserves prompt-general behavior, improves held-out min/mean/max, and keeps TTFT within the allowed range.
+- It still does not meet the product target of stable `>5 tok/s` for arbitrary prompts; held-out mean is `4.30 tok/s`.
+- Demo script default should move to `GGML_MOE_STREAM_ONE_CACHE_MIB=6144`, while retaining environment override support for regression testing.
+- Post-push source commit: `b3c396c6a7cec3cdc4c113ddd1fface08e53b359`, pushed to `ssd/vendor/deepseek-token-rate-16gb`.
+- Post-push clean repro:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-postpush-repro/20260708T061235Z-france-n192-pushed-b3c396c-default6144-repro`
+  - `source_dirty=false`, default config `GGML_MOE_STREAM_ONE_CACHE_MIB=6144`, `GGML_MOE_VRAM_CACHE_GB=9`.
+  - `eval_tok_s=4.8`, `prompt_tok_s=3.3`, TTFT `24617.12 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15120154624`, RAM OK.
+  - Gate cache: `hits=26174`, `misses=8977`, `hit_rate=74.5%`; batch cache requested `9GB` and clamped to actual `6.9 GiB`.
+  - France output was complete, coherent, and semantically correct.
+
+## 2026-07-08 X10-BS rejected: gate-included up/down batch probe
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/gate-updown-gatebatch-rejected-20260708.json`
+- status: `rejected_not_sota_reverted`
+- source basis: dirty experimental code on top of `12a85c69a`; reverted after rejection.
+
+Purpose:
+- Test the literal gate/up/down co-submit idea: on a gate one-stream cache miss, submit one io_uring job group containing the gate expert plus eligible same-expert up/down cache misses.
+- Preserve correctness by inserting the loaded gate expert back into the normal one-stream gate VRAM cache.
+- Keep the feature default-off behind `GGML_MOE_GATE_UPDOWN_COSUBMIT_GATE_BATCH=1`.
+
+Results:
+- Default-off smoke:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T062818Z-france-n32-defaultoff-after-gatebatch`
+  - `eval_tok_s=4.4`, TTFT `23642.35 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+  - Default SOTA path was not broken.
+- Gate-included batch n32:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T062906Z-france-n32-gate-updown-gatebatch`
+  - `eval_tok_s=4.5`, TTFT `23309.83 ms`, RAM OK.
+  - True gate-included path triggered: `gate_batch_calls=3329`, `gate_jobs=3329`, `updown_jobs=1659`.
+  - However, batch quality was poor: `gate_aux inflight_avg=1.50`, histogram `1:2499,2-4:830,5-8:0,9-16:0,17-32:0,gt32:0`.
+- Gate-included batch n96, default `vram_cache=9GB` request:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T063019Z-france-n96-gate-updown-gatebatch`
+  - rejected: CUDA OOM in `ggml_cuda_compute_forward GET_ROWS`, exit code `134`.
+  - Host RAM still respected: `memory_peak_bytes=16000000000`, RAM OK.
+- Gate-included batch n96 with reduced `GGML_MOE_VRAM_CACHE_GB=6`:
+  - run: `/root/lfz/runs/vendor-ds4-16gb/20260708-gate-batch-cosubmit-probe/20260708T063126Z-france-n96-gate-updown-gatebatch-vram6`
+  - `eval_tok_s=4.8`, TTFT `25766.09 ms`, `memory_peak_bytes=15941677056`, RAM OK.
+  - Below the X10-BR France n96 probe of `5.0 tok/s`.
+  - It doubled source IO pressure: `iouring_reads=16133`, `iouring_wait_us=17623390`, while batching remained tiny: `gate_aux inflight_avg=1.27`.
+
+Decision:
+- Reject and revert the source experiment. Do not push this implementation as code.
+- The literal synchronous `{gate, up, down}` group is not the right implementation: it submits one tiny group per gate miss, often one read at a time, and it ties up/down H2D to the gate stream.
+- With full VRAM request it OOMs; with reduced batch cache it runs but loses token rate and raises TTFT.
+
+Next direction:
+- A useful gate/up/down co-submit needs a read-only aggregation layer or background worker:
+  - collect multiple gate/up/down file-read requests before H2D,
+  - submit larger io_uring batches,
+  - copy gate payloads onto the gate stream only when needed,
+  - copy up/down payloads onto the prefetch/cache stream without delaying gate compute,
+  - preserve one-stream gate cache and batch up/down cache correctness.
+- This should be designed as a two-stage IO pipeline, not by reusing `expert_pack_iouring_copy_jobs` synchronously on the gate stream.
+
+## 2026-07-08 X10-BT current SOTA IO granularity profile
+
+- artifact: `.Agent/runs/20260705-vendor-ds4-coldstart/current-sota-io-granularity-profile-20260708.json`
+- status: `diagnostic_profile_for_two_stage_read_aggregation`
+- source: `35866e206` with a default-off demo-script passthrough for IO profile env vars.
+
+Purpose:
+- Quantify the remaining up/down IO bottleneck under the accepted X10-BR `6144 MiB` gate-cache SOTA.
+- Determine whether the next co-submit implementation should target read batching, range coalescing, stream overlap, or cache admission.
+
+Profile env:
+- `GGML_MOE_IO_BATCH_PROFILE_OUT`
+- `GGML_MOE_IO_READ_TRACE_OUT`
+- `GGML_MOE_IO_LOCALITY_PROFILE_OUT`
+- `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`
+
+France n96 current SOTA profile:
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/20260708T064721Z-france-n96-current-sota-io-profile`
+- `eval_tok_s=5.0`, TTFT `24440.38 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+- Gate one-pack direct reads: `6473`; gate cache `hits=18358`, `misses=6473`.
+- Up/down runtime reads: `8194` read jobs in `4431` batches.
+- Average read jobs per batch: `1.849`; average inflight from CSV: `1.395`.
+- Batch histogram: `1:2752`, `2-4:1561`, `5-8:30`, `9-16:72`, `17-32:16`, `gt32:0`.
+- Batch wait sum: `9732.53 ms`; submit sum `2008.51 ms`; enqueue sum `167.38 ms`; wall sum `12294.05 ms`.
+
+Quantum n96 current SOTA profile:
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260708-io-profile-current-sota/20260708T064958Z-quantum-n96-current-sota-io-profile`
+- `eval_tok_s=3.9`, TTFT `23238.42 ms`, `memory_peak_bytes=16000000000`, RAM OK.
+- Up/down runtime reads: `10382` read jobs in `5583` batches.
+- Average read jobs per batch: `1.860`; average inflight from CSV: `1.425`.
+- Batch histogram: `1:2925`, `2-4:2514`, `5-8:90`, `9-16:54`, `17-32:0`, `gt32:0`.
+- Batch wait sum: `12567.49 ms`; submit sum `2533.47 ms`; enqueue sum `217.29 ms`; wall sum `15720.48 ms`.
+
+Interpretation:
+- The remaining up/down IO path is dominated by tiny batches. Most batches have one to four reads, despite configured depth 8.
+- Median locality span is one expert payload, so adjacent range coalescing is not the main win. The main win is reducing submit/wait cycles and keeping more reads in flight.
+- The rejected X10-BS gate-included batch failed because it also submitted one tiny group per gate miss and increased total iouring reads; it did not solve the granularity problem.
+
+Next implementation target:
+- Build a two-stage read aggregation path, default-off:
+  - Stage 1 reads multiple gate/up/down payloads into pinned host slots without immediately enqueueing H2D.
+  - Stage 2 copies gate payloads to the gate stream only when needed, and copies up/down payloads to the prefetch/cache stream.
+  - Cache slots are marked pending only after H2D is enqueued and get a ready event on the stream that owns the H2D.
+  - Gate one-stream cache must still be populated and reusable.
+- Initial target metrics:
+  - average read jobs per batch at least `8`, preferred `16+`;
+  - average inflight at least `6`;
+  - no increase in total iouring reads versus current SOTA;
+  - TTFT increase <= `20%`;
+  - strict 16GB host RAM including page cache and correctness unchanged.
+
+
+## 2026-07-08 diagnostic：main GGUF mmap decode residency / dense drop
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/main-gguf-mmap-drop-profile-20260708.json`.
+- `status`: diagnostic only, not accepted SOTA. This used France n192 after rebuilding the current build directory so `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT` was actually present in `libllama.so.0`.
+- `baseline_postrebuild`: `/root/lfz/runs/vendor-ds4-16gb/20260708-main-gguf-mmap-profile/20260708T091652Z-france-n192-postrebuild-baseline-monitor`; `eval_tok_s=4.8`, `TTFT=23900.174ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15123111936`, output correct. After `clear_refs`, smaps showed only `3556 KiB` of main GGUF mmap referenced during the next 20s of decode.
+- `drop_dense_after_prompt`: `/root/lfz/runs/vendor-ds4-16gb/20260708-main-gguf-mmap-profile/20260708T091830Z-france-n192-postrebuild-dropdense-monitor`; `/proc/$pid/environ` confirmed `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`; `eval_tok_s=4.9`, `TTFT=24186.066ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15122153472`, output correct. Main GGUF mmap RSS at the 28s sample dropped from about `2.84 GiB` to about `2 MiB`.
+- `page_detail`: `/root/lfz/runs/vendor-ds4-16gb/20260708-main-gguf-mmap-profile/20260708T092346Z-france-n192-postrebuild-baseline-pagemap-r2` captured two main GGUF mmap ranges before clear_refs: large data mapping at file offset `0x00514000`, plus a one-page tail mapping at `0x245b284000`. The pagemap/kpageflags referenced-page scan found `0` stable KPF_REFERENCED pages after clear_refs+10s, while smaps aggregate runs reported only about `3.5 MiB` referenced during decode; exact hot offsets are therefore not reliable from this method, but main GGUF mmap decode access is negligible.
+- `comparison`: dense drop reduces process-local main GGUF mmap RSS, but does not materially reduce cgroup `memory_file` (`15123111936 -> 15122153472`, less than `1 MiB` in summary) and does not reduce decode major faults/refaults. Baseline decode window `pgmajfault 1295 -> 1340`; dense-drop decode window `1298 -> 1343`; `workingset_refault_file` was flat within both windows.
+- `conclusion`: dense/attention/non-expert main GGUF pages appear effectively GPU-resident during decode, so direct deletion/dontneed of dense mmap after prompt is safe-looking for this France diagnostic but not a meaningful token-rate or RAM-cgroup optimization. Do not promote as SOTA. The bottleneck remains expert source IO/cache scheduling, especially up/down small-batch reads.
+
+
+## 2026-07-08 two-stage aggregation implementation attempt: rejected
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/two-stage-aggregation-reject-20260708.json`.
+- `status`: rejected; source experiment reverted after measurement. Do not promote to SOTA.
+- `scope`: default-off implementation attempt for gate-stage collection plus later flush of future up/down expert reads. Two variants were tested under the strict 16GB cgroup with page cache included, cold `drop_caches`, prompt-general full native gate expert-pack, and the France correctness smoke.
+
+Baseline/default-path reference for the same n32 smoke:
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T100455Z-france-n32-twostage-smoke`
+- `eval_tok_s=4.4`, `prompt_tok_s=3.1`, TTFT/first output `24503.15 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15122087936`, RAM OK, France output coherent.
+
+Full `{up,down}` two-stage result:
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T100743Z-france-n32-twostage-smoke-v2`
+- `eval_tok_s=3.7`, `prompt_tok_s=2.7`, TTFT/first output `25402.20 ms`, `memory_peak_bytes=16000000000`, RAM OK, France output coherent.
+- counters: `calls=9471`, `plans=8806`, `flushes=1222`, `jobs=8806`, `cache_hits=10136`, `missing_pack=0`, `failures=0`, `max_flush_jobs=78`.
+- batch expert IO increased to `iouring_reads=8819`, `iouring_bytes=39301414912`, versus default-path n32 batch expert IO `iouring_reads=4247`, `iouring_bytes=18926534656`.
+
+Down-only two-stage result:
+- run: `/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T101125Z-france-n32-twostage-downonly`
+- `eval_tok_s=3.7`, `prompt_tok_s=3.0`, TTFT/first output `25125.29 ms`, `memory_peak_bytes=16000000000`, RAM OK, France output coherent.
+- counters: `calls=9471`, `plans=3930`, `flushes=1184`, `jobs=3930`, `cache_hits=5541`, `missing_pack=0`, `failures=0`, `max_flush_jobs=39`.
+- batch expert IO was still high: `iouring_reads=6232`, `iouring_bytes=27772583936`, `iouring_wait_us=4846575`.
+
+Interpretation:
+- The existing `GGML_MOE_UPDOWN_PAIRED_READ=1` path already co-submits down reads from the up/down batch path and copies jobs on parallel streams.
+- The attempted gate-stage two-stage path duplicated or front-loaded expert IO instead of reducing total wait cycles. Full mode doubled batch expert reads; down-only reduced duplication but still serialized extra prefetch before compute and stayed below baseline.
+- This confirms the next useful implementation must be integrated into the existing up/down paired-read copy queues, not triggered by a synchronous flush before upgate/down compute.
+
+Decision:
+- Reject and revert the source changes. No code push as SOTA.
+- Keep current accepted generalized SOTA unchanged (`b3c396c6a` / current branch default gate cache 6144 path; product target >5 tok/s still unmet).
+
+Next implementation constraint:
+- Any future aggregation must prove `total iouring_reads <= current SOTA` while increasing average read jobs per batch/inflight. A candidate that improves cache hit rate by increasing total expert bytes read is not acceptable unless token rate and TTFT both beat the current generalized SOTA under 16GB RAM.
+
+
+## 2026-07-08 full native expert-pack as batch up/down source: rejected
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/full-native-pack-batch-updown-reject-20260708.json`.
+- `status`: rejected; no source change. This tested the idea of explicitly putting up/down on the native expert-pack source for batch reads.
+- `run`: `/root/lfz/runs/vendor-ds4-16gb/20260708-fullpack-updown-probe/20260708T102316Z-france-n32-fullpack-batch-updown`.
+- `config_delta`: wrapper exported `GGML_MOE_EXPERT_PACK=/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack` while keeping current generalized demo defaults.
+- Result: `eval_tok_s=1.4`, `prompt_tok_s=0.8`, TTFT/first output `40411.59 ms`, `memory_peak_bytes=16000000000`, `memory_file_bytes=15072530432`, RAM OK, France output coherent.
+- Baseline reference after source revert: `/root/lfz/runs/vendor-ds4-16gb/20260708-twostage-probe/20260708T101552Z-france-n32-post-revert-default`, `eval_tok_s=4.6`, `prompt_tok_s=3.5`, RAM OK.
+- Observed: batch path loaded `33024` native expert-pack entries, but immediately reported duplicate key across sources: `blk.0.ffn_down_exps.weight expert=0 bytes=4456448`.
+- Batch VRAM cache degraded to `hits=7453`, `misses=6889`, `hit_rate=52.0%`; gate one-pack remained `reads=3329`, `bytes=14835515392`, `hit_rate=64.9%`.
+
+Interpretation:
+- The current generalized path already exposes all `33024` expert keys to the batch reader through the prompt-general alias/source path; up/down are not missing from the expert source.
+- Simply adding the same full native expert-pack as another batch source duplicates keys and worsens cache/source behavior. The useful version would need to replace the alias source with a single canonical pack-backed source, or generate a dedicated up/down-only source with no duplicate keys, then prove total reads/bytes and TTFT improve.
+
+Decision:
+- Reject this wrapper/config experiment. Do not commit any code change as SOTA.
+- Next valid experiment, if pursuing this idea, is source selection rather than source addition: run a controlled A/B with alias disabled and only native pack as batch source, or build a no-duplicate up/down-only pack. Acceptance requires `eval_tok_s > current generalized SOTA`, TTFT within limit, RAM OK, correctness OK, and no duplicate-key diagnostics.
+
+
+## 2026-07-08 up/down source replacement and no-duplicate source filtering: rejected
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-source-replacement-reject-20260708.json`.
+- `status`: rejected as no new generalized SOTA. No source code change.
+- Purpose: test the proposed route of using native expert-pack / no-duplicate up/down source for batch up/down reads instead of stacking duplicate sources.
+
+Feasibility:
+- Full native expert-pack: `/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack`, about `138 GiB`.
+- Alias-derived payload split: `up=45.688 GiB`, `down=45.688 GiB`, `gate=45.688 GiB`; physical up/down-only pack would be about `91.4 GiB` payload plus index/padding.
+- Current filesystem free space observed: about `25 GiB`; physical full up/down-only pack is not currently feasible without cleanup.
+- Lightweight no-copy alternative created: `.Agent/profiles/vendor-ds4/ds4-native-updown-gguf-alias-source-20260708.tsv`, `22016` entries, `3.5M`, only up/down rows.
+
+Runs:
+- Native pack only, no GGUF alias, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-packonly-updown-probe/20260708T102708Z-france-n32-packonly-noalias`; `eval_tok_s=4.5`, `prompt_tok_s=3.6`, TTFT `24149.96 ms`, RAM OK, output coherent, no duplicate keys, batch `4247 reads / 18.93 GB`. Rejected: below default n32 `4.6`.
+- Native pack only, no GGUF alias, n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-packonly-updown-probe/20260708T102827Z-france-n96-packonly-noalias`; `eval_tok_s=5.0`, `prompt_tok_s=3.4`, TTFT `23628.99 ms`, RAM OK, output coherent, no duplicate keys, batch `8194 reads / 36.52 GB`, `4431` batches, `inflight_avg=2.23`, `iouring_wait_us=9964436`. Rejected: ties France n96 but does not exceed generalized SOTA.
+- Filtered up/down-only alias, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-updown-source-filter-probe/20260708T103059Z-france-n32-updown-alias-only`; `eval_tok_s=4.5`, TTFT `25307.12 ms`, RAM OK, output coherent. It loaded only `22016` batch entries, but runtime reads stayed `4247 reads / 18.93 GB`; token rate did not improve.
+- `GGML_MOE_IO_BYTES=8388608`, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-io-buffer-probe/20260708T103219Z-france-n32-io8m-default-source`; `eval_tok_s=4.4`, rejected slower.
+- `GGML_MOE_STAGE_PINNED_SLOTS=16`, `GGML_MOE_IO_DEPTH=16`, `GGML_MOE_IO_REFILL_BATCH=8`, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-io-depth-probe/20260708T103318Z-france-n32-depth16-refill8`; `eval_tok_s=4.6`, RAM OK, output coherent, `inflight_avg=3.22`, `inflight_max=16`, but `iouring_wait_us=4814786` did not improve. Rejected: ties default n32 only.
+- Same depth/refill, n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-io-depth-probe/20260708T103423Z-france-n96-depth16-refill8`; `eval_tok_s=5.0`, RAM OK, output coherent, batch `8194 reads / 36.52 GB`, `4431` batches, `inflight_avg=2.35`, `iouring_wait_us=9929904`. Rejected: ties France n96 only.
+
+Interpretation:
+- The current generalized path already has complete up/down expert source coverage. Source replacement can avoid duplicate keys and can tie the France n96 SOTA, but it does not reduce `iouring_reads`, `iouring_bytes`, or the small-batch histogram.
+- Reducing source entries from `33024` to `22016` changes index load only; decode read jobs and bytes are identical.
+- Increasing depth/pinned slots raises `inflight_max`, but actual `inflight_avg` remains low because jobs are still submitted as many tiny batches.
+
+Decision:
+- Do not promote any of these variants. Current generalized SOTA remains unchanged.
+- Next optimization should target scheduler-level aggregation/coalescing of existing up/down read jobs, with the hard gate: total reads/bytes must not increase, average jobs per batch must rise, wait cycles must fall, TTFT must stay within limit, RAM/correctness must pass, and token rate must beat current generalized SOTA.
+
+
+## 2026-07-08 up/down native expert-pack payload alias: rejected
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/updown-pack-payload-alias-reject-20260708.json`.
+- `status`: rejected; no source code change and no SOTA change.
+- Purpose: test a no-copy approximation of an up/down-only native pack by generating an alias TSV whose `source_path` is the native `.expert-pack` and whose offsets point directly to aligned pack payloads.
+- Generated TSV: `.Agent/profiles/vendor-ds4/ds4-native-updown-pack-payload-alias-20260708.tsv`, `22016` entries (`11008` up, `11008` down). Native pack offsets are 4096-byte aligned.
+
+Runs:
+- n32 France: `/root/lfz/runs/vendor-ds4-16gb/20260708-packpayload-alias-probe/20260708T103931Z-france-n32-updown-packpayload-alias`; `eval_tok_s=4.5`, `prompt_tok_s=3.3`, TTFT `24578.86 ms`, `memory_peak_bytes=16000000000`, RAM OK, output coherent, no duplicate keys. Batch source loaded `22016` entries from native expert-pack payload alias, but runtime stayed `4247 reads / 18.93 GB`, `1829` batches, `inflight_avg=2.90`, `iouring_wait_us=4837425`.
+- n96 France: `/root/lfz/runs/vendor-ds4-16gb/20260708-packpayload-alias-probe/20260708T104040Z-france-n96-updown-packpayload-alias`; `eval_tok_s=4.9`, `prompt_tok_s=3.6`, TTFT `23375.83 ms`, `memory_peak_bytes=16000000000`, RAM OK, output coherent, no duplicate keys. Batch runtime stayed `8194 reads / 36.52 GB`, `4431` batches, `inflight_avg=2.23`, `iouring_wait_us=10063230`.
+
+Interpretation:
+- This is the closest no-copy test of an up/down-only pack layout under current disk constraints. It proves the runtime can read up/down directly from native expert-pack payload offsets without duplicate-key failure.
+- It does not reduce read jobs, read bytes, or small-batch count, and n96 is below the current France n96 SOTA (`5.0 tok/s`).
+
+Decision:
+- Reject source-layout-only up/down pack variants as the next optimization path.
+- Continue with scheduler-level read aggregation/overlap work. The hard requirement remains: do not increase total reads/bytes, increase jobs per submitted batch or useful overlap, reduce wait cycles, and beat current generalized SOTA under strict 16GB RAM and correctness gates.
+
+
+## 2026-07-08 scheduler probes: single-ring reduces IO wait but does not improve token rate
+
+- `artifact`: `.Agent/runs/20260705-vendor-ds4-coldstart/scheduler-single-ring-probes-20260708.json`.
+- `status`: diagnostic only, no accepted SOTA and no source code change.
+- Purpose: test scheduler knobs that can reduce small up/down io_uring batches without changing source format or increasing reads/bytes.
+
+Rejected knobs:
+- `GGML_MOE_IO_SORT_OFFSET=1`, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T104352Z-france-n32-sort-offset`; `eval_tok_s=4.5`, batch still `4247 reads / 18.93 GB`, `1829` batches, `iouring_wait_us=4909288`. No improvement.
+- `GGML_MOE_IO_SQPOLL=1`, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T104505Z-france-n32-sqpoll`; `eval_tok_s=4.6`, submit dropped to `17504 us`, but wait increased to `5684264 us`. No SOTA.
+- SQPOLL + depth16/refill8, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T104738Z-france-n32-sqpoll-depth16-rerun`; `eval_tok_s=4.6`, `inflight_avg=3.39`, `iouring_wait_us=5823649`. No SOTA.
+
+Important signal:
+- `GGML_MOE_DOWN_STAGE_SINGLE_RING=1`, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T105011Z-france-n32-down-single-ring-rerun`; `eval_tok_s=4.5`, but batch count dropped from `1829` to `915`, `inflight_avg=3.95`, and `iouring_wait_us` dropped to `2177727` with unchanged `4247 reads / 18.93 GB`.
+- Same single-ring, n96: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T105142Z-france-n96-down-single-ring`; `eval_tok_s=5.0`, batch count dropped from `4431` to `2216`, `iouring_wait_us=4671714`, unchanged `8194 reads / 36.52 GB`.
+- Single-ring + SQPOLL, n32: `/root/lfz/runs/vendor-ds4-16gb/20260708-scheduler-probe/20260708T105319Z-france-n32-single-ring-sqpoll`; `eval_tok_s=4.6`, batch count `915`, `inflight_avg=4.03`, `iouring_submit_us=10474`, `iouring_wait_us=3042790`.
+
+Interpretation:
+- Scheduler aggregation can materially reduce io_uring batch count and wait without increasing reads/bytes. This validates the bottleneck diagnosis.
+- The simple single-ring path does not improve token rate because it serializes H2D/copy work and loses the existing dual-stream overlap. The next implementation must separate disk read aggregation from CUDA H2D fanout.
+
+Next implementation target:
+- Default-off read-aggregate/H2D-fanout path for up/down batch jobs:
+  - aggregate read submissions into larger one-ring batches;
+  - preserve or reintroduce two CUDA streams for H2D/copy/compute overlap after reads complete;
+  - keep cache slot pending/ready semantics correct;
+  - require unchanged or lower `iouring_reads/bytes`, lower batch count/wait, TTFT within limit, RAM OK, correctness OK, and token rate above current generalized SOTA before accepting.

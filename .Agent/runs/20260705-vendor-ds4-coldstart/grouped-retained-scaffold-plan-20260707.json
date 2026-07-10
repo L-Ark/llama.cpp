@@ -1,0 +1,87 @@
+{
+  "artifact_id": "20260707-grouped-retained-scaffold-plan",
+  "created_at_utc": "2026-07-07T10:25:00Z",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit": "0ddce54ab167fcabab2dcbaec7103ce452b63040",
+  "status": "planned_next_source_scaffold",
+  "purpose": "Define the next safe source step after down GPU correctness: a default-off no-logit-change profiler for a grouped-retained up/down plus gate-cache-aware source path.",
+  "context": {
+    "down_correctness": "Fixed for CPU-compatible Q8_0 path, but full-output GPU down is slower than CPU fallback.",
+    "up_first_bound": "Up-only zero-overhead removal is not a viable SOTA route; up+down-only also fails generalized min >5 tok/s.",
+    "required_joint_reduction": "Generalized dev min >5 needs roughly gate/source >=75% plus up/down >=90% reduction, or an equivalent joint dataflow saving.",
+    "rejected_routes": [
+      "historical DS4 fused up/gate path: correct but 0.5-0.8 tok/s with TTFT regression",
+      "one-stream up/down path: dominated by src0 movement and not SOTA",
+      "full-output Q8_0 down GPU path: correctness pass but slower than CPU fallback"
+    ]
+  },
+  "next_source_edit": {
+    "env": "GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT=<csv>",
+    "default_off": true,
+    "logit_change_allowed": false,
+    "behavior_when_env_unset": "No behavior change from current pushed branch.",
+    "files_expected": [
+      "ggml/src/ggml-cpu/ggml-cpu.c",
+      "possibly a small parser under .Agent/run-tools if needed"
+    ],
+    "record_fields": [
+      "seq",
+      "role",
+      "layer",
+      "phase",
+      "tensor_name",
+      "src0_type",
+      "active_experts",
+      "unique_experts",
+      "rows",
+      "expert_bytes",
+      "logical_source_bytes",
+      "cache_contains_count",
+      "cache_missing_count",
+      "eligible_grouped_retained",
+      "reason_if_ineligible"
+    ],
+    "implementation_constraints": [
+      "Do not allocate GPU buffers in the profiler.",
+      "Do not change matrix_row_counts or routing.",
+      "Do not change cache admission or eviction.",
+      "Do not use held-out prompts.",
+      "Do not run generalized SOTA benchmark from the profiler alone."
+    ]
+  },
+  "metrics_to_compute": {
+    "per_prompt": [
+      "unique active up/down/gate experts by layer",
+      "logical expert bytes by role and phase",
+      "duplicate source movement that grouped staging could remove",
+      "number of current per-expert calls replaceable by one grouped layer call",
+      "estimated required VRAM slots without evicting current gate cache"
+    ],
+    "bounds": [
+      "source-only grouped staging bound if full expert payload is still streamed",
+      "joint gate/source + up/down reduction grid using measured route coverage",
+      "eligibility against required gate/source >=75% and up/down >=90% reductions"
+    ]
+  },
+  "validation_sequence": [
+    "Build llama-cli and llama-results.",
+    "Run env-unset smoke or inspect that profiler code is fully env-gated.",
+    "Run one already-used calibration prompt under strict MemoryMax=16000000000 and MemorySwapMax=0 with profiler enabled.",
+    "Verify output correctness, ram_ok, memory_file_bytes, TTFT, and no OOM/cgroup kill.",
+    "Parse profiler CSV into a JSON artifact and update the plan before any real GPU dataflow source edit."
+  ],
+  "promotion_rules": {
+    "profiler_can_be_committed": "Yes, if default-off, no-logit-change, build passes, and strict diagnostic run passes correctness/RAM.",
+    "profiler_is_sota": false,
+    "next_gpu_dataflow_allowed_if": "Profiler shows a credible path to required joint reduction on calibration/dev without violating 16GB host RAM/page-cache and 32GB VRAM constraints.",
+    "held_out_use": "Only after a future candidate is frozen."
+  },
+  "rejection_conditions": [
+    "Route coverage too low to support the joint reduction bound.",
+    "Logical bytes remain close to current full expert streaming.",
+    "Required VRAM slots collide with the current gate cache budget.",
+    "Profiler changes correctness, RAM behavior, or TTFT materially."
+  ],
+  "branch_policy": "Commit and push scaffold source, plan update, and diagnostic artifacts to ssd/vendor/deepseek-token-rate-16gb using L-Ark identity. Accepted SOTA remains unchanged unless a later candidate passes all generalized, RAM, correctness, and TTFT gates."
+}

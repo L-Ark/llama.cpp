@@ -1,0 +1,107 @@
+{
+  "artifact_id": "moe-stream-real-gguf-iq2xs-down-row-parity-20260708",
+  "date_local": "2026-07-08",
+  "purpose": "Add default-off IQ2_XS down-stream diagnostic support and verify synthetic plus real GGUF IQ2_XS ffn_down_exps row parity.",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head_before_commit": "3dc882d53e7ea3b29ebd59f06dfbffe5bdd3bd7b",
+  "changed_files": [
+    "ggml/src/ggml-cuda/moe_stream_batch.cu",
+    ".Agent/run-tools/ds4_moe_stream_direct_probe.cpp"
+  ],
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-real-rows-iq2xs-namefix",
+  "input_tensor": {
+    "source": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+    "tensor": "blk.5.ffn_down_exps.weight",
+    "tensor_type": "GGMLQuantizationType.IQ2_XS",
+    "shape": [
+      2048,
+      4096,
+      256
+    ],
+    "data_shape": [
+      256,
+      4096,
+      592
+    ],
+    "data_offset": 12656404576,
+    "n_bytes": 620756992,
+    "extracted": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-real-rows-iq2xs/blk5-down-exp0-first16-iq2xs.rows.bin",
+    "extracted_bytes": 9472,
+    "expert": 0,
+    "rows": 16,
+    "ne00": 2048,
+    "ne01": 16,
+    "nb01": 592
+  },
+  "implementation_notes": [
+    "IQ2_XS was added to lowbit_down_probe_candidate only behind GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1.",
+    "IQ2_XS was added to launch_moe_mmvq_compact_batch type gate for the diagnostic path.",
+    "The direct probe now gives each synthetic type a unique tensor name suffix to avoid cache-key reuse across different quant types in one process."
+  ],
+  "default_off_mode": {
+    "env": "GGML_MOE_STREAM=1",
+    "rc": 0,
+    "stdout": "decline-ok type=iq2_xs nb01=74 nb02=1184\ndecline-ok type=iq1_s nb01=50 nb02=800\ndecline-ok type=iq1_m nb01=56 nb02=896\ndecline-ok type=q2_K nb01=84 nb02=1344\n",
+    "stderr": "[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight.iq2_xs rows_stride=1 type=17 active=0 ne01=16 ne00=256\n[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight.iq1_s rows_stride=1 type=19 active=0 ne01=16 ne00=256\n[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight.iq1_m rows_stride=1 type=29 active=0 ne01=16 ne00=256\n[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight.q2_K rows_stride=1 type=10 active=0 ne01=16 ne00=256\n",
+    "decision": "pass_default_off_safe; IQ2_XS/IQ1_S/IQ1_M/Q2_K all decline as unsupported_type without diagnostic env."
+  },
+  "probe_mode": {
+    "env": {
+      "GGML_MOE_STREAM": "1",
+      "GGML_MOE_STREAM_DOWN_LOWBIT_PROBE": "1",
+      "GGML_MOE_STREAM_REAL_ROWS_BIN": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-real-rows-iq2xs/blk5-down-exp0-first16-iq2xs.rows.bin",
+      "GGML_MOE_STREAM_REAL_ROWS_TYPE": "17",
+      "GGML_MOE_STREAM_REAL_ROWS_NE00": "2048",
+      "GGML_MOE_STREAM_REAL_ROWS_NE01": "16",
+      "GGML_MOE_STREAM_REAL_ROWS_NB01": "592"
+    },
+    "rc": 0,
+    "stdout": "accept type=iq2_xs nb01=74 nb02=1184 finite=1 max_abs=0.00187444687 mean_abs=0.000706717372 first_gpu=4.67988873 first_ref=4.67941236\naccept type=iq1_s nb01=50 nb02=800 finite=1 max_abs=0.00330495834 mean_abs=0.00118012726 first_gpu=4.75261307 first_ref=4.75274944\naccept type=iq1_m nb01=56 nb02=896 finite=1 max_abs=0.00184059143 mean_abs=0.000628918409 first_gpu=4.79929638 first_ref=4.7991128\naccept type=q2_K nb01=84 nb02=1344 finite=1 max_abs=0.00194692612 mean_abs=0.000715896487 first_gpu=4.55068064 first_ref=4.55053616\nreal-rows accept type=iq2_xs ne00=2048 ne01=16 nb01=592 finite=1 max_abs=0.00131262094 mean_abs=0.000492808991 first_gpu=0.282592148 first_ref=0.282339275\n",
+    "stderr": "[moe_stream] batched decode path active: experts=1 ne01=16 ne00=256\n[moe_stream_batch] VRAM cache budget: requested=16384 MiB actual=16384 MiB free=31290 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\nggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\n[moe_stream_batch] VRAM cache: 0.1 GiB, 16384 slots (0.01 MiB each)\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.01 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n",
+    "decision": "pass_probe_synthetic_and_real_rows_parity"
+  },
+  "parsed_results": {
+    "synthetic_iq2_xs": {
+      "finite": true,
+      "max_abs": 0.00187444687,
+      "mean_abs": 0.000706717372
+    },
+    "synthetic_iq1_s": {
+      "finite": true,
+      "max_abs": 0.00330495834,
+      "mean_abs": 0.00118012726
+    },
+    "synthetic_iq1_m": {
+      "finite": true,
+      "max_abs": 0.00184059143,
+      "mean_abs": 0.000628918409
+    },
+    "synthetic_q2_K": {
+      "finite": true,
+      "max_abs": 0.00194692612,
+      "mean_abs": 0.000715896487
+    },
+    "real_iq2_xs": {
+      "finite": true,
+      "max_abs": 0.00131262094,
+      "mean_abs": 0.000492808991,
+      "ne00": 2048,
+      "ne01": 16,
+      "nb01": 592
+    }
+  },
+  "decision": {
+    "sota_changed": false,
+    "production_enable": false,
+    "meaning": "The vendor down-stream entry can compute correct synthetic IQ2_XS and a real GGUF IQ2_XS ffn_down_exps row slice when explicitly enabled by the diagnostic env gate. Default production behavior remains unchanged.",
+    "limitations": [
+      "Only a small real tensor slice was tested.",
+      "No full-model load/generation correctness was run.",
+      "No prompt-general token-rate, TTFT, or 16GB model-run gate was executed.",
+      "This does not cover IQ1_S/IQ1_M/Q2_K real GGUF bytes because no local full candidate with those exact tensors is currently available without disk cleanup/download."
+    ],
+    "next_step": "To move from parity evidence to performance, either enable an explicit candidate model run only after full load/correctness gates, or obtain/download a priority compact target with exact IQ1_S/IQ1_M/Q2_K real tensors."
+  },
+  "committed_source_head": "062a32302412d2a4e5527cc25abac6c05eb8da61",
+  "source_head_note": "source_head_before_commit records the tree used for the run before committing this artifact; committed_source_head records the commit storing the probe source, artifact, and plan update."
+}

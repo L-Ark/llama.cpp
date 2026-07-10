@@ -1,0 +1,29 @@
+{
+  "attempt_id": "20260706-4expert-download-watch-launch",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "claim_rule": "no SOTA/correctness/perf claim until watcher produces completed ready-validation and strict smoke summary under 16GB cgroup",
+  "commit": "fabb6036d1271b464c6056ab1c51d436928ec6a3",
+  "download_service": "ds4-4expert-download.service",
+  "download_service_status": "active",
+  "expected_size_bytes": 164465760544,
+  "log_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch",
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf",
+  "next_automatic_steps": [
+    "validate_4expert_ready.py --sha256",
+    "run_4expert_validation_after_download.sh",
+    "strict 16GB France correctness smoke if readiness passes"
+  ],
+  "prompt_scope": "watcher launch only; no prompt run yet unless download completes later and gates pass",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "ready_exit_status_file": "/root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch/ready_exit_status.txt",
+  "ready_validation_json": "/root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch/ready-validation.json",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "sidecar_rule": "watcher waits until /root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf.aria2 is absent before readiness or benchmark",
+  "status": "watcher_running_download_incomplete_not_sota",
+  "timestamp_utc": "2026-07-06T13:19:48Z",
+  "unit": "ds4-4expert-watch-20260706T131914Z.service",
+  "validation_exit_status_file": "/root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch/validation_exit_status.txt",
+  "watch_log": "/root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch/watch.log",
+  "watch_log_tail": "watch_start_utc=2026-07-06T13:19:14Z\nrepo=/root/lfz/vendor/llama.cpp-deepseek-v4\ncommit=fabb6036d1271b464c6056ab1c51d436928ec6a3\nmodel=/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf\ndownload_service=ds4-4expert-download.service\nlog_dir=/root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch\npoll_utc=2026-07-06T13:19:14Z elapsed=0s service=active sidecar=1 progress=\n/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf size=164465760544 blocks=321222280 block_size=512\n/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf.aria2 size=19984 blocks=40 block_size=512",
+  "watcher_status_head": "\u25cf ds4-4expert-watch-20260706T131914Z.service - /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/run-tools/watch_4expert_download_then_validate.sh\n     Loaded: loaded (/run/systemd/transient/ds4-4expert-watch-20260706T131914Z.service; transient)\n  Transient: yes\n     Active: active (running) since Mon 2026-07-06 13:19:14 UTC; 33s ago\n   Main PID: 1757203 (bash)\n      Tasks: 4 (limit: 106158)\n     Memory: 1.1M\n        CPU: 50ms\n     CGroup: /system.slice/ds4-4expert-watch-20260706T131914Z.service\n             \u251c\u25001757203 bash /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/run-tools/watch_4expert_download_then_validate.sh\n             \u251c\u25001757210 bash /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/run-tools/watch_4expert_download_then_validate.sh\n             \u251c\u25001757212 tee -a /root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch/watch.log\n             \u2514\u25001757223 sleep 60\n\nJul 06 13:19:14 ubuntu systemd[1]: Started /root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/run-tools/watch_4expert_download_then_validate.sh.\nJul 06 13:19:14 ubuntu watch_4expert_download_then_validate.sh[1757212]: watch_start_utc=2026-07-06T13:19:14Z\nJul 06 13:19:14 ubuntu watch_4expert_download_then_validate.sh[1757212]: repo=/root/lfz/vendor/llama.cpp-deepseek-v4\nJul 06 13:19:14 ubuntu watch_4expert_download_then_validate.sh[1757212]: commit=fabb6036d1271b464c6056ab1c51d436928ec6a3\nJul 06 13:19:14 ubuntu watch_4expert_download_then_validate.sh[1757212]: model=/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf\nJul 06 13:19:14 ubuntu watch_4expert_download_then_validate.sh[1757212]: download_service=ds4-4expert-download.service\nJul 06 13:19:14 ubuntu watch_4expert_download_then_validate.sh[1757212]: log_dir=/root/lfz/runs/vendor-ds4-16gb/20260706T131914Z-4expert-download-watch\nJul 06 13:19:14 ubuntu watch_4expert_download_then_validate.sh[1757212]: poll_utc=2026-07-06T13:19:14Z elapsed=0s service=active sidecar=1 progress=\nJul 06 13:19:14 ubuntu watch_4expert_download_then_validate.sh[1757212]: /root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf size=164465760544 blocks=321222280 block_size=512\nJul 06 13:19:14 ubuntu watch_4expert_download_then_validate.sh[1757212]: /root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf.aria2 size=19984 blocks=40 block_size=512"
+}

@@ -1,0 +1,67 @@
+{
+  "artifact_id": "20260707-q80-cpuorder-down-gpu-correctness-pass",
+  "created_at_utc": "2026-07-07T08:12:00Z",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_base_commit": "ee8840bba",
+  "status": "correctness_pass_not_sota",
+  "scope": "vendor DeepSeek V4 MXFP4 down expert GPU correctness scaffold",
+  "build_requirement": {
+    "build_dir": "build-ds4-moe-stream",
+    "cmake_option": "GGML_CUDA_MOE_STREAM_BATCH=ON",
+    "reason": "Without this option moe_stream_batch.cu exports the stub under #ifndef GGML_CUDA_MOE_STREAM_BATCH and all down batch calls return false."
+  },
+  "source_changes": [
+    "Extend ggml_cuda_moe_stream_batch ABI to pass CPU fallback Q8_0 activation rows (src1_q8_0, row_size, ne1).",
+    "Add default-off GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH path for MXFP4 down tensors.",
+    "Add GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER=1 kernel mode that reproduces the x86 AVX2/VNNI lane accumulation order and reaches op-level max_abs=0 against CPU fallback.",
+    "Add target-only guard so GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR can isolate one down tensor while non-target MXFP4 down falls back to CPU.",
+    "Add batch success CPU-compare hook gated by GGML_MOE_STREAM_COMPARE_CPU_OUT."
+  ],
+  "strict_memory": {
+    "method": "systemd-run with MemoryMax=16000000000 and MemorySwapMax=0",
+    "result": "all correctness probes completed without cgroup kill or OOM"
+  },
+  "targeted_blk3_gate": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T080733Z-q80-cpuorder-fresh-default-vs-blk3",
+    "config": {
+      "GGML_MOE_STREAM_DOWN_BATCH": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR": "blk.3.ffn_down_exps.weight",
+      "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1"
+    },
+    "batch_accept": 145,
+    "batch_decline": 5655,
+    "top1_same": "145/145",
+    "top1_pass": true
+  },
+  "op_level_compare": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T080626Z-q80-cpuorder-blk3-compare/blk3-report",
+    "compare_file": "compare_cpu.csv",
+    "records_checked": 20,
+    "max_abs": 0.0,
+    "max_mean_abs": 0.0,
+    "note": "Previous scalar-order GPU Q80 had ~1e-7 local error and flipped top1; CPU-order mode removed the local error."
+  },
+  "full_down_gate": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T080846Z-q80-cpuorder-full-down-top1",
+    "config": {
+      "GGML_MOE_STREAM_DOWN_BATCH": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR": "unset"
+    },
+    "batch_accept": 5800,
+    "batch_decline": 0,
+    "top1_same": "145/145",
+    "top1_pass": true,
+    "fresh_default_down_ms_per_call": 0.519,
+    "full_down_q80_cpuorder_down_ms_per_call": 0.955
+  },
+  "decision": {
+    "accepted_as_correctness_scaffold": true,
+    "accepted_as_token_rate_sota": false,
+    "reason_not_sota": "Full-down CPU-order Q80 GPU path is token-stable but slower than CPU fallback in the fixed-text probe.",
+    "next_step": "Use this correctness-stable down GPU path as the reference while optimizing kernel/dataflow performance; do not promote to generalized token-rate SOTA until strict cold generalized prompts improve over the no-prompt-specific baseline."
+  }
+}

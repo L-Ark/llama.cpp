@@ -1,0 +1,211 @@
+{
+  "artifact_id": "ds4-fused-upgate-debug-zero-act-parity-reject-20260707",
+  "attempts": {
+    "debug_explicit_unconnected": {
+      "candidate_env": {
+        "DS4_FUSED_UP_GATE_REF": "1",
+        "DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT": "1"
+      },
+      "candidate_records": 43,
+      "explicit_records": 129,
+      "interpretation": "debug-only gate/up tensors were not connected to output graph, so graph pruning skipped them",
+      "max_abs_sum_diff": 1.9545899999998255,
+      "num_missing_candidate": 86,
+      "pass": false,
+      "returncodes": {
+        "candidate": 0,
+        "explicit": 0
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-debug-explicit",
+      "runtime": {
+        "candidate": {
+          "elapsed": "0:40.32",
+          "exit_status": 0,
+          "major_page_faults": 197676,
+          "max_rss_kb": 15603048
+        },
+        "explicit": {
+          "elapsed": "0:37.07",
+          "exit_status": 0,
+          "major_page_faults": 198502,
+          "max_rss_kb": 15601640
+        }
+      }
+    },
+    "debug_explicit_zero_dependency": {
+      "candidate_env": {
+        "DS4_FUSED_UP_GATE_REF": "1",
+        "DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT": "1"
+      },
+      "candidate_records": 129,
+      "constraints": {
+        "drop_caches_before_each_case": true,
+        "memory_max_bytes": 16000000000,
+        "memory_swap_max": 0
+      },
+      "diffs_over_atol": [
+        {
+          "candidate_sums": [
+            5779.373047
+          ],
+          "explicit_sums": [
+            5777.26123
+          ],
+          "max_abs": 2.1118169999999736,
+          "name": "ffn_moe_gate_clamped-41"
+        },
+        {
+          "candidate_sums": [
+            49074.660156
+          ],
+          "explicit_sums": [
+            49061.433594
+          ],
+          "max_abs": 13.226561999996193,
+          "name": "ffn_moe_gate_clamped-42"
+        },
+        {
+          "candidate_sums": [
+            9.174387
+          ],
+          "explicit_sums": [
+            9.174395
+          ],
+          "max_abs": 8.000000001118224e-06,
+          "name": "ffn_moe_swiglu-0"
+        },
+        {
+          "candidate_sums": [
+            -40.430325
+          ],
+          "explicit_sums": [
+            -40.43034
+          ],
+          "max_abs": 1.4999999997655777e-05,
+          "name": "ffn_moe_swiglu-16"
+        },
+        {
+          "candidate_sums": [
+            44.525166
+          ],
+          "explicit_sums": [
+            44.525173
+          ],
+          "max_abs": 7.000000003642981e-06,
+          "name": "ffn_moe_swiglu-2"
+        },
+        {
+          "candidate_sums": [
+            104.649384
+          ],
+          "explicit_sums": [
+            104.649353
+          ],
+          "max_abs": 3.09999999927868e-05,
+          "name": "ffn_moe_swiglu-21"
+        },
+        {
+          "candidate_sums": [
+            -1783.472412
+          ],
+          "explicit_sums": [
+            -1783.473022
+          ],
+          "max_abs": 0.0006099999998241401,
+          "name": "ffn_moe_swiglu-40"
+        },
+        {
+          "candidate_sums": [
+            -4132.708496
+          ],
+          "explicit_sums": [
+            -4132.314941
+          ],
+          "max_abs": 0.39355500000056054,
+          "name": "ffn_moe_swiglu-41"
+        },
+        {
+          "candidate_sums": [
+            4030.224365
+          ],
+          "explicit_sums": [
+            4028.269775
+          ],
+          "max_abs": 1.9545899999998255,
+          "name": "ffn_moe_swiglu-42"
+        },
+        {
+          "candidate_sums": [
+            21.904037
+          ],
+          "explicit_sums": [
+            21.904053
+          ],
+          "max_abs": 1.6000000002236447e-05,
+          "name": "ffn_moe_swiglu-7"
+        },
+        {
+          "candidate_sums": [
+            -1010.967529
+          ],
+          "explicit_sums": [
+            -1010.354187
+          ],
+          "max_abs": 0.6133419999999887,
+          "name": "ffn_moe_up_clamped-41"
+        },
+        {
+          "candidate_sums": [
+            774.366516
+          ],
+          "explicit_sums": [
+            773.865967
+          ],
+          "max_abs": 0.5005490000000918,
+          "name": "ffn_moe_up_clamped-42"
+        }
+      ],
+      "explicit_records": 129,
+      "max_abs_sum_diff": 13.226561999996193,
+      "num_diffs_over_atol": 12,
+      "num_missing_candidate": 0,
+      "pass": false,
+      "returncodes": {
+        "candidate": 0,
+        "explicit": 0
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-debug-zero",
+      "runtime": {
+        "candidate": {
+          "elapsed": "0:39.62",
+          "exit_status": 0,
+          "major_page_faults": 198369,
+          "max_rss_kb": 15602684
+        },
+        "explicit": {
+          "elapsed": "0:33.76",
+          "exit_status": 0,
+          "major_page_faults": 198078,
+          "max_rss_kb": 15601676
+        }
+      }
+    }
+  },
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "candidate_source_diff": ".Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-debug-zero-rejected-source-diff-20260707.patch",
+  "candidate_source_diff_sha256": "a44c8fc4d4cff5f77b90b4728e572935700b6a590117651fa76bb884341f024d",
+  "clean_rebuild_after_revert": {
+    "exit": "0",
+    "log": "/tmp/ds4-clean-debug-rebuild-after-zero-probe.log",
+    "target": "llama-debug"
+  },
+  "created_utc": "2026-07-07T14:26:52.941349+00:00",
+  "decision": "reject_candidate_reverted_not_sota",
+  "git_status_after_revert": "?? .Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-debug-zero-rejected-source-diff-20260707.patch\n?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json\n?? prof.nsys-rep",
+  "head_commit_after_revert": "3646858eb4e6439d78c33383dac8fca29f9427cb",
+  "head_oneline_after_revert": "3646858eb vendor-ds4: record fused upgate act parity rejection",
+  "next_action": "Stop benchmarking this fused CPU-reference scaffold. If fused up/gate is retried, it must first match explicit swiglu at layer 0; the likely fix is exact reuse of explicit dot/dequant/accumulation order or a retained dataflow that preserves explicit ops rather than replacing them with a new fused op.",
+  "prompt_scope": "fixed France calibration prompt only; held-out prompts unused",
+  "reason": "Zero-dependency debug wiring fixed probe visibility but not numerical parity. Candidate records reached 129/129 with no missing tensors, yet swiglu layer 0 already differed by 8e-6 and late-layer gate/up/swiglu sums diverged. The fused op is therefore not an act-level equivalent replacement for the explicit DS4 graph.",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4"
+}

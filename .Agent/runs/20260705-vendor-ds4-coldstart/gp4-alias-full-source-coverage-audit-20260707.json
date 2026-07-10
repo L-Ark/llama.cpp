@@ -1,0 +1,415 @@
+{
+  "accepted_sota_changed": false,
+  "alias_tsv": ".Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv",
+  "alias_tsv_rows": 33024,
+  "alignment_stats": {
+    "2097152": {
+      "both_aligned": 0,
+      "nbytes_aligned": 0,
+      "offset_aligned": 0
+    },
+    "32": {
+      "both_aligned": 33024,
+      "nbytes_aligned": 33024,
+      "offset_aligned": 33024
+    },
+    "4096": {
+      "both_aligned": 0,
+      "nbytes_aligned": 33024,
+      "offset_aligned": 0
+    },
+    "512": {
+      "both_aligned": 0,
+      "nbytes_aligned": 33024,
+      "offset_aligned": 0
+    }
+  },
+  "assessment": {
+    "all_entries_4096_aligned": false,
+    "all_entries_512_aligned": false,
+    "direct_4096_aligned_entries": 0,
+    "full_source_alias_can_cover_native_gate_up_down_experts": true,
+    "important_caveat": "This proves static source coverage only. It does not prove token-rate improvement; runtime still must show misses/host staging/direct reads decrease and correctness/RAM/TTFT pass on calibration/dev.",
+    "payload_copy_needed": false,
+    "source_payload_size_same_as_full_pack": true,
+    "source_port_recommendation": "proceed_to_default_off_loader_plan"
+  },
+  "attempt_id": "20260707-gp4-alias-full-source-coverage-audit",
+  "created_at_utc": "2026-07-07T03:22:32.128873+00:00",
+  "entries_expected_formula": "43 layers * 3 roles * 256 experts = 33024",
+  "entry_bytes_distribution": {
+    "4456448": 33024
+  },
+  "expert_idx_count_expected": 256,
+  "first_alias_rows": [
+    {
+      "expert": 0,
+      "layer": 0,
+      "model_offset": 1172200192,
+      "n_expert": 256,
+      "nbytes": 4456448,
+      "role": "down",
+      "shape": "2048x4096x256",
+      "source_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "tensor": "blk.0.ffn_down_exps.weight"
+    },
+    {
+      "expert": 1,
+      "layer": 0,
+      "model_offset": 1176656640,
+      "n_expert": 256,
+      "nbytes": 4456448,
+      "role": "down",
+      "shape": "2048x4096x256",
+      "source_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "tensor": "blk.0.ffn_down_exps.weight"
+    },
+    {
+      "expert": 2,
+      "layer": 0,
+      "model_offset": 1181113088,
+      "n_expert": 256,
+      "nbytes": 4456448,
+      "role": "down",
+      "shape": "2048x4096x256",
+      "source_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "tensor": "blk.0.ffn_down_exps.weight"
+    },
+    {
+      "expert": 3,
+      "layer": 0,
+      "model_offset": 1185569536,
+      "n_expert": 256,
+      "nbytes": 4456448,
+      "role": "down",
+      "shape": "2048x4096x256",
+      "source_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "tensor": "blk.0.ffn_down_exps.weight"
+    },
+    {
+      "expert": 4,
+      "layer": 0,
+      "model_offset": 1190025984,
+      "n_expert": 256,
+      "nbytes": 4456448,
+      "role": "down",
+      "shape": "2048x4096x256",
+      "source_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "tensor": "blk.0.ffn_down_exps.weight"
+    },
+    {
+      "expert": 5,
+      "layer": 0,
+      "model_offset": 1194482432,
+      "n_expert": 256,
+      "nbytes": 4456448,
+      "role": "down",
+      "shape": "2048x4096x256",
+      "source_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "tensor": "blk.0.ffn_down_exps.weight"
+    },
+    {
+      "expert": 6,
+      "layer": 0,
+      "model_offset": 1198938880,
+      "n_expert": 256,
+      "nbytes": 4456448,
+      "role": "down",
+      "shape": "2048x4096x256",
+      "source_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "tensor": "blk.0.ffn_down_exps.weight"
+    },
+    {
+      "expert": 7,
+      "layer": 0,
+      "model_offset": 1203395328,
+      "n_expert": 256,
+      "nbytes": 4456448,
+      "role": "down",
+      "shape": "2048x4096x256",
+      "source_path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "tensor": "blk.0.ffn_down_exps.weight"
+    }
+  ],
+  "known_full_native_expert_pack": {
+    "bytes_by_role": {
+      "down": 49056579584,
+      "gate": 49056579584,
+      "up": 49056579584
+    },
+    "data_start": 5021696,
+    "entry_nbytes": 4456448,
+    "expert_idx_count": 256,
+    "expert_idx_range": "0..255",
+    "file_size_bytes": 147174760448,
+    "header_size": 40,
+    "layer_count": 43,
+    "layer_range": "0..42",
+    "magic": "GGMLMOEPACKv1",
+    "n_entries": 33024,
+    "path": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+    "payload_bytes": 147169738752,
+    "roles": {
+      "down": 11008,
+      "gate": 11008,
+      "up": 11008
+    },
+    "unique_tensors": 129,
+    "version": 1
+  },
+  "layer_count": 43,
+  "layer_range": [
+    0,
+    42
+  ],
+  "matches_known_full_native_expert_pack": true,
+  "misaligned_samples": {
+    "2097152": [
+      {
+        "expert": 0,
+        "layer": 0,
+        "nbytes_mod": 262144,
+        "offset_mod": 1989376,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 1,
+        "layer": 0,
+        "nbytes_mod": 262144,
+        "offset_mod": 154368,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 2,
+        "layer": 0,
+        "nbytes_mod": 262144,
+        "offset_mod": 416512,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 3,
+        "layer": 0,
+        "nbytes_mod": 262144,
+        "offset_mod": 678656,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 4,
+        "layer": 0,
+        "nbytes_mod": 262144,
+        "offset_mod": 940800,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 5,
+        "layer": 0,
+        "nbytes_mod": 262144,
+        "offset_mod": 1202944,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 6,
+        "layer": 0,
+        "nbytes_mod": 262144,
+        "offset_mod": 1465088,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 7,
+        "layer": 0,
+        "nbytes_mod": 262144,
+        "offset_mod": 1727232,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      }
+    ],
+    "32": [],
+    "4096": [
+      {
+        "expert": 0,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 2816,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 1,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 2816,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 2,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 2816,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 3,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 2816,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 4,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 2816,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 5,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 2816,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 6,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 2816,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 7,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 2816,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      }
+    ],
+    "512": [
+      {
+        "expert": 0,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 256,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 1,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 256,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 2,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 256,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 3,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 256,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 4,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 256,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 5,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 256,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 6,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 256,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      },
+      {
+        "expert": 7,
+        "layer": 0,
+        "nbytes_mod": 0,
+        "offset_mod": 256,
+        "role": "down",
+        "tensor": "blk.0.ffn_down_exps.weight"
+      }
+    ]
+  },
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "payload_bytes": 147169738752,
+  "payload_gib": 137.0625,
+  "recent_no_prompt_specific_counters": [
+    {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T025306Z-20260707-user-db-index-diagnostic-no-prompt-specific/db-index-user-diagnostic-cpu40-vram0gb",
+      "correctness_ok": true,
+      "eval_tok_s": 2.4,
+      "memory_file_bytes": 15000047616,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "vram_cache_hit_rate_pct": 82.3,
+      "vram_cache_hits": 21551,
+      "vram_cache_misses": 4650
+    },
+    {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T025616Z-20260707-user-what-to-eat-diagnostic-no-prompt-specific/what-to-eat-user-diagnostic-cpu40-vram0gb",
+      "correctness_ok": true,
+      "eval_tok_s": 2.3,
+      "memory_file_bytes": 14986838016,
+      "memory_peak_bytes": 16000000000,
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "vram_cache_hit_rate_pct": 86.3,
+      "vram_cache_hits": 40799,
+      "vram_cache_misses": 6504
+    }
+  ],
+  "role_entry_counts": {
+    "down": 11008,
+    "gate": 11008,
+    "up": 11008
+  },
+  "role_payload_bytes": {
+    "down": 49056579584,
+    "gate": 49056579584,
+    "up": 49056579584
+  },
+  "scope": "artifact-only static GGUF tensor table audit; no model run, no source edit, no held-out prompt",
+  "shape_counts": {
+    "2048x4096x256": 43,
+    "4096x2048x256": 86
+  },
+  "type_counts_expert_tensors": {
+    "MXFP4": 129
+  },
+  "unique_expert_tensors": 129
+}

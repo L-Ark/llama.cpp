@@ -12,6 +12,8 @@
 #include <climits>
 #include <cmath>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 #include <unordered_map>
 #include <vector>
 
@@ -517,6 +519,37 @@ void common_perf_print(const struct llama_context * ctx, const struct common_sam
     }
 }
 
+static bool common_debug_sample_tokens_enabled() {
+    static const bool enabled = []() {
+        const char * env = std::getenv("LLAMA_DEBUG_SAMPLE_TOKENS");
+        return env && std::strcmp(env, "0") != 0;
+    }();
+    return enabled;
+}
+
+static void common_debug_sample_token(const struct llama_context * ctx, llama_token id) {
+    if (!common_debug_sample_tokens_enabled()) {
+        return;
+    }
+
+    const std::string piece = common_token_to_piece(ctx, id, true);
+    std::fprintf(stderr, "[sample_debug] id=%d piece=\"", id);
+    for (unsigned char c : piece) {
+        if (c == '\n') {
+            std::fprintf(stderr, "\\n");
+        } else if (c == '\r') {
+            std::fprintf(stderr, "\\r");
+        } else if (c == '\t') {
+            std::fprintf(stderr, "\\t");
+        } else if (std::isprint(c)) {
+            std::fputc(c, stderr);
+        } else {
+            std::fprintf(stderr, "\\x%02x", (unsigned)c);
+        }
+    }
+    std::fprintf(stderr, "\"\n");
+}
+
 struct llama_sampler * common_sampler_get(const struct common_sampler * gsmpl) {
     if (!gsmpl) {
         return nullptr;
@@ -554,6 +587,7 @@ llama_token common_sampler_sample(struct common_sampler * gsmpl, struct llama_co
             gsmpl->cur[0] = { id, 0.0f, 1.0f };
             cur_p = { gsmpl->cur.data(), gsmpl->cur.size(), 0, true };
 
+            common_debug_sample_token(ctx, id);
             return id;
         }
     }
@@ -572,6 +606,7 @@ llama_token common_sampler_sample(struct common_sampler * gsmpl, struct llama_co
     id = cur_p.data[cur_p.selected].id;
 
     if (grammar_first || !grammar_should_apply(gsmpl)) {
+        common_debug_sample_token(ctx, id);
         return id;
     }
 
@@ -584,6 +619,7 @@ llama_token common_sampler_sample(struct common_sampler * gsmpl, struct llama_co
 
         const bool is_valid = single_token_data_array.data[0].logit != -INFINITY;
         if (is_valid) {
+            common_debug_sample_token(ctx, id);
             return id;
         }
     }
@@ -604,6 +640,7 @@ llama_token common_sampler_sample(struct common_sampler * gsmpl, struct llama_co
 
     id = cur_p.data[cur_p.selected].id;
 
+    common_debug_sample_token(ctx, id);
     return id;
 }
 

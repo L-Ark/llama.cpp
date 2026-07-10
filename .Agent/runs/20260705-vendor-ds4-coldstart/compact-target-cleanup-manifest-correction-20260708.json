@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260708-compact-target-cleanup-manifest-correction",
+  "created_at_local": "2026-07-08",
+  "status": "correction_recorded_no_deletion_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "ffe8f073b843a47ecd0402c43c8f3e57d56dda94",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Correct the previous cleanup manifest so it does not imply already-rejected compact target candidates should be downloaded again after disk cleanup.",
+  "supersedes_or_refines": ".Agent/runs/20260705-vendor-ds4-coldstart/compatible-mtp-refresh-and-cleanup-repro-manifest-20260708.json cleanup_manifest_no_deletion.unlocked_candidates_after_recommended_delete",
+  "disk_state": {
+    "available_bytes": 35633733632,
+    "available_gib": 33.186500549316406
+  },
+  "still_valid_from_previous_manifest": {
+    "recommended_first_delete_if_approved": {
+      "path": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+      "size_bytes": 88019539296,
+      "reason": "Rejected for France correctness, not used by current SOTA or generalized route, restore URL/etag recorded. Deleting it is still the cleanest way to recover disk if explicit cleanup approval is given."
+    },
+    "must_preserve": [
+      "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "/root/lfz/runs/vendor-ds4-16gb/expert-packs/ds4-france-gate-miss-firstorder-20260702.pack"
+    ],
+    "antirez_mtp_refresh": "Still valid: antirez MTP sidecar is deepseek4_mtp_support but no current vendor loader/runtime, so no implementation/benchmark now."
+  },
+  "correction": {
+    "do_not_redownload_sleepy_k128": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-sleepy-k128-france-load-smoke-reject-20260707.json",
+      "status": "rejected_load_incompatible_not_sota",
+      "reason": "REAP K128 changes ffn_gate_inp shape; loader fails before inference: expected [4096,256], got [4096,128] at blk.3.ffn_gate_inp.weight. This is not a simple alias or correctness gate candidate."
+    },
+    "do_not_redownload_antirez_iq2xxs_chat_v2": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-france-correctness-reject-20260707.json",
+      "status": "rejected_correctness_not_sota",
+      "reason": "Model loads and stays within strict RAM, but France output is degenerate/semantically incorrect in both default and deepseek3 reasoning-off modes."
+    },
+    "do_not_redownload_0xsero_spark_mini_q2": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-0xsero-france-load-smoke-reject-20260707.json",
+      "status": "rejected_load_incompatible_not_sota",
+      "reason": "Missing global hc_head_base/hc_head_fn/hc_head_scale; current loader cannot use per-layer hc tensors without a new correctness-proven model compatibility change."
+    },
+    "do_not_rebenchmark_bullerwins_iq2s": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage3b-reasonoff-correctness-reject-20260707.json",
+      "status": "rejected_correctness_failed_not_sota",
+      "reason": "Vendor-loadable with alias envs but generated malformed metadata/JSON-like output, not a coherent France paragraph; 2.9 tok/s below target."
+    }
+  },
+  "updated_cleanup_decision": {
+    "delete_iq2s_if_explicitly_approved": "allowed as disk cleanup for future searches/downloads, not as a prerequisite for rerunning sleepy/antirez/0xSero/IQ2S closed candidates",
+    "after_cleanup_allowed_downloads": "only a newly discovered or newly corrected compact target candidate whose metadata/load-compat route is not already rejected, or an explicitly user-approved re-test with a new source compatibility plan",
+    "source_patch_allowed_now": false,
+    "benchmark_allowed_now": false,
+    "accepted_sota_changed": false
+  },
+  "next_allowed_actions": [
+    "Continue metadata-only search for new compact target candidates not already rejected.",
+    "If explicit cleanup approval is given, delete rejected IQ2_S to create space, but select a non-closed candidate before downloading.",
+    "A loader compatibility patch for REAP K128 or 0xSero-style HC tensors would need its own hard-bound/correctness design before implementation; do not infer it from disk cleanup."
+  ]
+}

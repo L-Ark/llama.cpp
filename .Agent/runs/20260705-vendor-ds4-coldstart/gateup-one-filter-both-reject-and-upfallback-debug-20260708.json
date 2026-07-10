@@ -1,0 +1,213 @@
+{
+  "artifact_id": "gateup-one-filter-both-reject-and-upfallback-debug-20260708",
+  "head_commit": "592d829ab56b677b0108d8ee951cd409b13db296",
+  "head_oneline": "592d829ab vendor-ds4: record down q80 nonfrance reverify",
+  "source_status": [
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/explicit-swiglu-down-split-profile-20260708.json",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+    "?? prof.nsys-rep"
+  ],
+  "memory_limit_bytes": 16000000000,
+  "held_out_test_set_used": false,
+  "purpose": "Verify current up fallback cause after down Q80 correctness, and test whether expanding one-stream filter to gate+up can remove fallback without prompt-specific data.",
+  "cases": {
+    "one13_down4_oom_reject": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T231652Z-20260708-gateup-one-downq80-filter-both-n64/france-gateup-one-downq80-filter-both-cpu40-vram4gb",
+      "summary": {
+        "exit_status": 134,
+        "eval_tok_s": null,
+        "prompt_tok_s": null,
+        "ttft_estimate_ms": 20832.705743,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 14971396096,
+        "ram_ok": true,
+        "correctness_ok": false,
+        "correctness_reason": "missing_france,missing_europe,missing_expected_context"
+      },
+      "fallback_by_role": {},
+      "stderr_key_lines": [
+        "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+        "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=210 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+        "[moe_stream_batch] VRAM cache: cudaMalloc 4.0 GiB FAILED; retrying smaller pool",
+        "[moe_stream_batch] VRAM cache: 0.2 GiB, 42 slots (4.25 MiB each)",
+        "[moe_stream_batch] MXFP4 down Q8_0-compatible batch path active",
+        "/root/lfz/vendor/llama.cpp-deepseek-v4/ggml/src/ggml-cuda/ggml-cuda.cu:99: CUDA error",
+        "CUDA error: out of memory"
+      ],
+      "answer_preview": "[New LWP 900865]\n[New LWP 900876]\n[New LWP 900877]\n[New LWP 900878]\n[New LWP 901509]\n[New LWP 901510]\n[New LWP 901511]\n[New LWP 901512]\n[New LWP 901513]\n[New LWP 901514]\n[New LWP 901515]\n[New LWP 901516]\n[New LWP 901517]\n[New LWP 901518]\n[New LWP 901519]\n[New LWP 901520]\n[New LWP 901521]\n[New LWP 901522]\n[New LWP 901523]\n[New LWP 901524]\n[New LWP 901525]\n[New LWP 901526]\n[New LWP 901527]\n[New LWP 901645]\n[New LWP 901648]\n[New LWP 901649]\n[New LWP 901650]\n[New LWP 901651]\n[New LWP 901652]\n[New LW"
+    },
+    "one8_down4_all_gpu_slow": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T231749Z-20260708-gateup-one8-downq80-filter-both-n64/france-gateup-one8-downq80-filter-both-cpu40-vram4gb",
+      "summary": {
+        "exit_status": 0,
+        "eval_tok_s": 1.9,
+        "prompt_tok_s": 0.8,
+        "ttft_estimate_ms": 40273.429203,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15024644096,
+        "ram_ok": true,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required"
+      },
+      "fallback_by_role": {},
+      "stderr_key_lines": [
+        "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+        "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5586 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+        "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+        "[moe_stream_batch] MXFP4 down Q8_0-compatible batch path active",
+        "[moe_stream_batch] VRAM cache: hits=7073 misses=2937 preloads=0 hit_rate=70.7%",
+        "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=7073 misses=2937 preloads=0 pinned=0 hit_rate=70.7%",
+        "[moe_stream] VRAM cache: hits=17673 misses=8840 hit_rate=66.7%"
+      ],
+      "answer_preview": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles, as well as its"
+    },
+    "one10_down2_all_gpu_slow": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T231943Z-20260708-gateup-one10-downq80-filter-both-n64/france-gateup-one10-downq80-filter-both-cpu40-vram2gb",
+      "summary": {
+        "exit_status": 0,
+        "eval_tok_s": 1.9,
+        "prompt_tok_s": 0.8,
+        "ttft_estimate_ms": 39111.388492,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15015628800,
+        "ram_ok": true,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required"
+      },
+      "fallback_by_role": {},
+      "stderr_key_lines": [
+        "[moe_stream] VRAM cache: 10.0 GiB, 2409 slots (4.25 MiB each)",
+        "[moe_stream_batch] VRAM cache budget: requested=2048 MiB actual=2048 MiB free=3536 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+        "[moe_stream_batch] VRAM cache: 2.0 GiB, 481 slots (4.25 MiB each)",
+        "[moe_stream_batch] MXFP4 down Q8_0-compatible batch path active",
+        "[moe_stream_batch] VRAM cache: hits=5954 misses=4056 preloads=0 hit_rate=59.5%",
+        "[moe_stream_batch] VRAM cache down: slots=481 slot=4.25 MiB hits=5954 misses=4056 preloads=0 pinned=0 hit_rate=59.5%",
+        "[moe_stream] VRAM cache: hits=18586 misses=7927 hit_rate=70.1%"
+      ],
+      "answer_preview": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles, as well as its"
+    },
+    "one12_down1_all_gpu_slow": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T232130Z-20260708-gateup-one12-downq80-filter-both-n64/france-gateup-one12-downq80-filter-both-cpu40-vram1gb",
+      "summary": {
+        "exit_status": 0,
+        "eval_tok_s": 1.9,
+        "prompt_tok_s": 0.8,
+        "ttft_estimate_ms": 38939.452038,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15011250176,
+        "ram_ok": true,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required"
+      },
+      "fallback_by_role": {},
+      "stderr_key_lines": [
+        "[moe_stream] VRAM cache: 12.0 GiB, 2891 slots (4.25 MiB each)",
+        "[moe_stream_batch] VRAM cache budget: requested=1024 MiB actual=1024 MiB free=1488 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+        "[moe_stream_batch] VRAM cache: 1.0 GiB, 240 slots (4.25 MiB each)",
+        "[moe_stream_batch] MXFP4 down Q8_0-compatible batch path active",
+        "[moe_stream_batch] VRAM cache: hits=4578 misses=5432 preloads=0 hit_rate=45.7%",
+        "[moe_stream_batch] VRAM cache down: slots=240 slot=4.25 MiB hits=4578 misses=5432 preloads=0 pinned=0 hit_rate=45.7%",
+        "[moe_stream] VRAM cache: hits=19297 misses=7216 hit_rate=72.8%"
+      ],
+      "answer_preview": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles, as well as its"
+    },
+    "baseline_debug_batch_missing": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T231310Z-20260708-upfallback-decline-debug-current-head/france-upfallback-debug-cpu40-vram0gb",
+      "summary": {
+        "exit_status": 0,
+        "eval_tok_s": 1.6,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 37298.096631,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15131164672,
+        "ram_ok": true,
+        "correctness_ok": false,
+        "correctness_reason": "too_short,missing_europe,missing_expected_context"
+      },
+      "fallback_by_role": {
+        "up": {
+          "rows": 3770,
+          "calls": 3121,
+          "fallback_us": 6521404,
+          "batch": {
+            "batch_env_missing": 1815
+          },
+          "single": {
+            "one_name_filter": 1815
+          },
+          "final": {
+            "one_name_filter": 1815
+          }
+        },
+        "down": {
+          "rows": 3770,
+          "calls": 3121,
+          "fallback_us": 5824713,
+          "batch": {
+            "batch_env_missing": 1815
+          },
+          "single": {
+            "one_name_filter": 1815
+          },
+          "final": {
+            "one_name_filter": 1815
+          }
+        }
+      },
+      "stderr_key_lines": [
+        "[moe_stream] VRAM cache: 13.2 GiB, 3192 slots (4.25 MiB each)",
+        "[moe_stream] VRAM cache: hits=3304 misses=2327 hit_rate=58.7%"
+      ],
+      "answer_preview": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic,"
+    },
+    "gate8_down4_up_unsupported_debug": {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T231440Z-20260708-upfallback-decline-debug-gate8-down4/france-upfallback-gate8-down4-debug-cpu40-vram4gb",
+      "summary": {
+        "exit_status": 0,
+        "eval_tok_s": 1.9,
+        "prompt_tok_s": 1.0,
+        "ttft_estimate_ms": 36670.116662,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 14981640192,
+        "ram_ok": true,
+        "correctness_ok": false,
+        "correctness_reason": "too_short,missing_europe,missing_expected_context"
+      },
+      "fallback_by_role": {
+        "up": {
+          "rows": 3770,
+          "calls": 3121,
+          "fallback_us": 6226194,
+          "batch": {
+            "batch_unsupported": 1815
+          },
+          "single": {
+            "one_name_filter": 1815
+          },
+          "final": {
+            "one_name_filter": 1815
+          }
+        }
+      },
+      "stderr_key_lines": [
+        "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+        "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5598 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+        "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+        "[moe_stream_batch] MXFP4 down Q8_0-compatible batch path active",
+        "[moe_stream_batch] VRAM cache: hits=2258 misses=1512 preloads=0 hit_rate=59.9%",
+        "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=2258 misses=1512 preloads=0 pinned=0 hit_rate=59.9%",
+        "[moe_stream] VRAM cache: hits=3292 misses=2339 hit_rate=58.5%"
+      ],
+      "answer_preview": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic,"
+    }
+  },
+  "interpretation": [
+    "Current generalized gate-only debug has up/down fallback as batch_env_missing + one_name_filter because down batch is not enabled.",
+    "Gate8/down4 Q80 split debug activates the MXFP4 down Q8_0-compatible batch path; fallback CSV then contains only up with batch_unsupported + one_name_filter.",
+    "Expanding GGML_MOE_STREAM_ONE_NAME_FILTER to ffn_gate_exps,ffn_up_exps can eliminate fallback rows when paired with down Q80 batch, proving a prompt-general all-GPU expert route is reachable with existing code.",
+    "The all-GPU filter-both route is slower: one8/down4, one10/down2, and one12/down1 all produce only 1.9 tok/s on n64 France despite correctness_ok=true and strict RAM OK.",
+    "one13/down4 exceeds practical VRAM headroom: down batch cache falls back to 0.2GiB and the run aborts with CUDA OOM.",
+    "Therefore simply adding up to the existing one-stream cache is not a SOTA route. The next implementation should build a separate up-aware source/cache strategy or a correctness-checked retained/fused explicit dataflow that does not evict gate/down working sets."
+  ],
+  "decision": "reject_filter_both_as_sota_record_all_gpu_reachable_but_slow_continue_up_specific_design"
+}

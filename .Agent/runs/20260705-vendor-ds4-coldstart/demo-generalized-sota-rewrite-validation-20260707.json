@@ -1,0 +1,49 @@
+{
+  "answer": "AI infrastructure refers to the integrated hardware and software systems—such as data centers, GPUs/TPUs, networking, storage, and software frameworks—that",
+  "artifact": "demo-generalized-sota-rewrite-validation-20260707",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T145301Z-demo-generalized-sota/explain-ai-infrastructure-in-one-short-paragraph-cpu40-vram0gb",
+  "commit": "251506952a699e2940fcf933eb9ea9289ed95817",
+  "constraints": {
+    "cold_default_drop_caches": true,
+    "host_ram_limit_bytes_including_page_cache": 16000000000,
+    "product_target": "random user prompts stable >5 tok/s on 16GB host RAM + 32GB RTX 5090",
+    "prompt_general": true,
+    "prompt_specific_pack_profile_trace": false,
+    "swap": "MemorySwapMax=0 via strict runner/systemd",
+    "vendor": "DeepSeek"
+  },
+  "decision": "script_validated_runnable_for_arbitrary_prompt_fast_smoke; not a new SOTA metric because n_predict=32",
+  "demo_config": {
+    "batch_size": 16,
+    "cpu_moe": 40,
+    "ctx_size": 256,
+    "gate_one_stream_cache_mib": 13568,
+    "n_predict": 32,
+    "name_filter": "ffn_gate_exps",
+    "ubatch_size": 16,
+    "vram_cache_gb": 0
+  },
+  "metrics": {
+    "correctness_ok": true,
+    "correctness_reason": "heuristic_pass_manual_review_required",
+    "elapsed_seconds": 52.09,
+    "eval_tok_s": 2.0,
+    "memory_file_bytes": 15126159360,
+    "memory_max_events": 11225,
+    "memory_peak_bytes": 16000000000,
+    "oom_seen": false,
+    "pgmajfault": 173182,
+    "prompt_tok_s": 0.9,
+    "ram_limit_killed": false,
+    "ram_ok": true,
+    "ttft_estimate_ms": 38410.582415,
+    "workingset_refault_file": 286551
+  },
+  "prompt": "Explain AI infrastructure in one short paragraph.",
+  "purpose": "Validate rewritten prompt-general vendor DeepSeek demo script accepts arbitrary prompts and runs under strict 16GB including page cache.",
+  "script": ".Agent/examples/demo_generalized_sota.sh",
+  "script_sha256": "199208389182bed5fd1018bfa03b0c3bd5394ec6ebfa1922a6fc0733de863506",
+  "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T145301Z-demo-generalized-sota/explain-ai-infrastructure-in-one-short-paragraph-cpu40-vram0gb/summary.json",
+  "validation_mode": "fast_smoke_n_predict_32_not_comparable_sota_metric"
+}

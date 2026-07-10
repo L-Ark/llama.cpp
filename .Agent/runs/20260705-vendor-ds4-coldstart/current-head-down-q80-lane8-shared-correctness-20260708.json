@@ -1,0 +1,45 @@
+{
+  "artifact_id": "current-head-down-q80-lane8-shared-correctness-20260708",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T164651Z-current-head-down-q80-lane8-shared-correctness",
+  "source_commit": "a06aced1c5d122655b301c9916d3c5a38bf09184",
+  "source_commit_oneline": "a06aced1c vendor-ds4: record current down q80 correctness",
+  "base_report": "/root/lfz/runs/vendor-ds4-16gb/20260707T163626Z-current-head-down-q80-correctness-repro/default-report/top1-check.json",
+  "case_report": "/root/lfz/runs/vendor-ds4-16gb/20260707T164651Z-current-head-down-q80-lane8-shared-correctness/full-down-lane8-shared-report/top1-check.json",
+  "n_base": 145,
+  "n_case": 145,
+  "n_compare": 145,
+  "same_top1": 145,
+  "first_mismatch_pos": -1,
+  "mismatches_preview": [],
+  "top1_pass": true,
+  "max_abs_top12_logit_diff": 0.0,
+  "mean_abs_top12_logit_diff": 0.0,
+  "case_memory": {
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 14937870336,
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 84113,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "ram_ok": true
+  },
+  "case_runtime": {
+    "last_batch_accept_decline": [
+      5800,
+      0
+    ],
+    "elapsed_raw": "3:24.78",
+    "profile_line": "[kimi_cpu_moe_profile] down calls=17400 total=9.535 ms/call convert_t0=0.001 route=0.001 route_barrier=0.006 cuda_batch=4.643 cuda_single=0.000 post_cuda_barrier=0.019 fallback_t0=4.841 batch_accept=5800 batch_decline=0 single_accept=0 single_decline=69600"
+  },
+  "env_delta": {
+    "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED": "1"
+  },
+  "decision": "pass_lane8_shared_down_gpu_correctness_current_head_not_sota"
+}

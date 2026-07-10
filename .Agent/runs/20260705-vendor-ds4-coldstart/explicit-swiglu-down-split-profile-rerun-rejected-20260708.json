@@ -1,0 +1,113 @@
+{
+  "artifact_id": "explicit-swiglu-down-split-profile-rerun-rejected-20260708",
+  "created_utc": "2026-07-07T22:30:00Z",
+  "source_head": "819b440db020f1462120c0cb2f585028ecc71451",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "held_out_test_used": false,
+  "prompt_specific_optimization": false,
+  "model_run": "short calibration France only; diagnostic; not correctness or SOTA",
+  "purpose": "Test whether explicit ffn_moe_swiglu -> ffn_moe_down can be captured as a scheduler split-local retained handoff route after down GPU correctness was fixed.",
+  "source_status": "temporary profiler edits were reverted; current source tree has no compute/profiler diff from HEAD after this artifact was written",
+  "runs": [
+    {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T205800Z-explicit-swiglu-down-split-profile-rerun",
+      "exit_status": "0",
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15156035584,
+      "split_profile_lines": 249,
+      "assign_profile_lines": 0,
+      "assign_trace_lines": 0,
+      "node_dump_lines": 0,
+      "moe_name_mentions": 226,
+      "decode_cuda_summary": "[kimi_split_profile] phase=decode backend=CUDA0 total: calls=287 nodes=55804 wall=161.108 ms avg=0.561 ms/call",
+      "decode_cpu_summary": "[kimi_split_profile] phase=decode backend=CPU total: calls=287 nodes=1974 wall=3068.483 ms avg=10.692 ms/call"
+    },
+    {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T211200Z-explicit-swiglu-down-split-scanall-profile",
+      "exit_status": "0",
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15181127680,
+      "split_profile_lines": 369,
+      "assign_profile_lines": 0,
+      "assign_trace_lines": 0,
+      "node_dump_lines": 0,
+      "moe_name_mentions": 311,
+      "decode_cuda_summary": "[kimi_split_profile] phase=decode backend=CUDA0 total: calls=287 nodes=55804 wall=143.250 ms avg=0.499 ms/call",
+      "decode_cpu_summary": "[kimi_split_profile] phase=decode backend=CPU total: calls=287 nodes=1974 wall=555.766 ms avg=1.936 ms/call"
+    },
+    {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T212500Z-explicit-swiglu-down-split-scanall-backends-profile",
+      "exit_status": "0",
+      "memory_peak_bytes": 4078727168,
+      "memory_file_bytes": 3264659456,
+      "split_profile_lines": 249,
+      "assign_profile_lines": 0,
+      "assign_trace_lines": 0,
+      "node_dump_lines": 0,
+      "moe_name_mentions": 200,
+      "decode_cuda_summary": "[kimi_split_profile] phase=decode backend=CUDA0 total: calls=287 nodes=55804 wall=145.729 ms avg=0.508 ms/call",
+      "decode_cpu_summary": "[kimi_split_profile] phase=decode backend=CPU total: calls=287 nodes=1974 wall=560.079 ms avg=1.951 ms/call"
+    },
+    {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T213600Z-explicit-cuda-split-node-dump",
+      "exit_status": "0",
+      "memory_peak_bytes": 811114496,
+      "memory_file_bytes": 45056,
+      "split_profile_lines": 69,
+      "assign_profile_lines": 0,
+      "assign_trace_lines": 0,
+      "node_dump_lines": 0,
+      "moe_name_mentions": 58,
+      "decode_cuda_summary": "[kimi_split_profile] phase=decode backend=CUDA0 total: calls=123 nodes=23637 wall=64.523 ms avg=0.525 ms/call",
+      "decode_cpu_summary": "[kimi_split_profile] phase=decode backend=CPU total: calls=123 nodes=846 wall=285.415 ms avg=2.320 ms/call"
+    },
+    {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T215500Z-assign-hook-entry-trace-with-split",
+      "exit_status": "0",
+      "memory_peak_bytes": 811180032,
+      "memory_file_bytes": 40960,
+      "split_profile_lines": 39,
+      "assign_profile_lines": 0,
+      "assign_trace_lines": 0,
+      "node_dump_lines": 0,
+      "moe_name_mentions": 28,
+      "decode_cuda_summary": "[kimi_split_profile] phase=decode backend=CUDA0 total: calls=123 nodes=23637 wall=64.775 ms avg=0.527 ms/call",
+      "decode_cpu_summary": "[kimi_split_profile] phase=decode backend=CPU total: calls=123 nodes=846 wall=280.957 ms avg=2.284 ms/call"
+    },
+    {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T220800Z-cuda-split-node-dump-via-split-profile",
+      "exit_status": "0",
+      "memory_peak_bytes": 810995712,
+      "memory_file_bytes": 40960,
+      "split_profile_lines": 39,
+      "assign_profile_lines": 0,
+      "assign_trace_lines": 0,
+      "node_dump_lines": 0,
+      "moe_name_mentions": 28,
+      "decode_cuda_summary": "[kimi_split_profile] phase=decode backend=CUDA0 total: calls=123 nodes=23637 wall=65.736 ms avg=0.534 ms/call",
+      "decode_cpu_summary": "[kimi_split_profile] phase=decode backend=CPU total: calls=123 nodes=846 wall=287.424 ms avg=2.337 ms/call"
+    },
+    {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T222000Z-cuda-split-node-dump-unconditional",
+      "exit_status": "0",
+      "memory_peak_bytes": 810536960,
+      "memory_file_bytes": 36864,
+      "split_profile_lines": 39,
+      "assign_profile_lines": 0,
+      "assign_trace_lines": 0,
+      "node_dump_lines": 0,
+      "moe_name_mentions": 28,
+      "decode_cuda_summary": "[kimi_split_profile] phase=decode backend=CUDA0 total: calls=123 nodes=23637 wall=63.305 ms avg=0.515 ms/call",
+      "decode_cpu_summary": "[kimi_split_profile] phase=decode backend=CPU total: calls=123 nodes=846 wall=286.564 ms avg=2.330 ms/call"
+    }
+  ],
+  "findings": [
+    "Opening GGML_KIMI_SPLIT_PROFILE produced split timing, but GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE produced zero assignment lines in the tested paths.",
+    "The visible decode CPU split bottleneck at this level is ffn_moe_gate -> ffn_scores; up/down work is not exposed as a simple named CPU split suitable for local scheduler handoff.",
+    "Adding temporary default-off scan-all and node-dump probes did not produce reliable node-level dump output despite split-profile summaries; those probes were reverted and are not promoted.",
+    "This closes the naive scheduler split-local retained handoff route for now. The next implementation should use the existing DeepSeek4/ggml-cpu retained route and handoff probes, where up/down fallback is actually recorded, instead of relying on scheduler first/last node names."
+  ],
+  "decision": "rejected_route_diagnostic_only",
+  "next_action": "Run the existing GGML_DS4_GROUPED_RETAINED_ROUTE_PROFILE_OUT / GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT and deepseek4 native retained probes on calibration prompts, then implement the smallest default-off handoff fix at the ggml-cpu/moe_stream helper level if the profile shows a valid producer/consumer pair.",
+  "acceptance_impact": "No SOTA change. No held-out prompts used. No accepted performance result."
+}

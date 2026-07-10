@@ -1,0 +1,68 @@
+{
+  "date": "2026-07-08",
+  "status": "rejected_no_new_sota",
+  "experiment": "up/down native expert-pack payload alias",
+  "source_head": "46a9b918c",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "generated_alias_tsv": ".Agent/profiles/vendor-ds4/ds4-native-updown-pack-payload-alias-20260708.tsv",
+  "source_payload": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+  "entries": 22016,
+  "roles": {
+    "up": 11008,
+    "down": 11008
+  },
+  "payload_gib": {
+    "up": 45.6875,
+    "down": 45.6875
+  },
+  "alignment": "pack offsets observed 4096-byte aligned",
+  "runs": [
+    {
+      "name": "n32_france_pack_payload_alias",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-packpayload-alias-probe/20260708T103931Z-france-n32-updown-packpayload-alias",
+      "eval_tok_s": 4.5,
+      "prompt_tok_s": 3.3,
+      "ttft_ms": 24578.862988,
+      "elapsed_seconds": 31.03,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15131164672,
+      "ram_ok": true,
+      "correctness": "France output coherent",
+      "duplicate_keys": false,
+      "batch_reads": 4247,
+      "batch_bytes": 18926534656,
+      "batch_batches": 1829,
+      "inflight_avg": 2.9,
+      "iouring_wait_us": 4837425,
+      "decision": "reject_below_default_n32"
+    },
+    {
+      "name": "n96_france_pack_payload_alias",
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260708-packpayload-alias-probe/20260708T104040Z-france-n96-updown-packpayload-alias",
+      "eval_tok_s": 4.9,
+      "prompt_tok_s": 3.6,
+      "ttft_ms": 23375.830357,
+      "elapsed_seconds": 42.18,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15129747456,
+      "ram_ok": true,
+      "correctness": "France output coherent",
+      "duplicate_keys": false,
+      "batch_reads": 8194,
+      "batch_bytes": 36516134912,
+      "batch_batches": 4431,
+      "inflight_avg": 2.23,
+      "iouring_wait_us": 10063230,
+      "decision": "reject_below_current_france_n96_sota"
+    }
+  ],
+  "baseline_comparison": {
+    "current_france_n96_sota_eval_tok_s": 5.0,
+    "current_france_n96_batch_reads": 8194,
+    "current_france_n96_batch_bytes": 36516134912,
+    "current_france_n96_batches": 4431,
+    "current_france_n96_wait_us_approx": 9732530
+  },
+  "conclusion": "Using the native expert-pack payload layout as an up/down-only no-copy alias is mechanically correct and avoids duplicate keys, but it leaves read jobs/bytes/batch histogram unchanged and slightly worsens wait on n96. The direct pack-layout source does not improve token rate.",
+  "next_direction": "Stop pursuing source-layout-only changes for up/down. The remaining work must change scheduler granularity or overlap, not just source file format."
+}

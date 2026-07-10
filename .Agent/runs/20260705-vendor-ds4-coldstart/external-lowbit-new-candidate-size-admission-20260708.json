@@ -1,0 +1,115 @@
+{
+  "attempt_id": "20260708-external-lowbit-new-candidate-size-admission",
+  "created_at_local": "2026-07-08",
+  "status": "new_candidate_size_admission_not_sota_no_download",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "3d6062a8be198e57625beab83b9063c1a51d4f6e",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Check newly found DeepSeek-V4-Flash compact/lowbit GGUF candidates before any download or correctness benchmark.",
+  "method": "Hugging Face search plus per-file HTTP HEAD/Range; x-linked-size/content-length only, no model body download.",
+  "disk_available_gib": 33.19612121582031,
+  "candidates": [
+    {
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "size_gib": 46.975,
+      "accessible": true
+    },
+    {
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "size_gib": 52.038,
+      "accessible": true
+    },
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-162B-GGUF",
+      "file": "DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf",
+      "size_gib": 48.982,
+      "accessible": true
+    },
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF",
+      "file": "DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf",
+      "size_gib": 53.522,
+      "accessible": true
+    },
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-Spark-Mini-GGUF",
+      "file": "DeepSeek-V4-Flash-Spark-Mini-Q3-Dynamic-REAP-ds4.gguf",
+      "size_gib": 69.864,
+      "accessible": true
+    },
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-Spark-GGUF",
+      "file": "DeepSeek-V4-Flash-Spark-Q3-Dynamic-REAP-ds4.gguf",
+      "size_gib": 76.725,
+      "accessible": true
+    },
+    {
+      "repo": "ssweens/DeepSeek-V4-Flash-GGUF-YMMV",
+      "file": "deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf",
+      "size_gib": 62.87,
+      "accessible": true
+    },
+    {
+      "repo": "ssweens/DeepSeek-V4-Flash-GGUF-YMMV",
+      "file": "deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-00001-of-00002.gguf + 00002",
+      "size_gib": 72.558,
+      "accessible": true
+    },
+    {
+      "repo": "ssweens/DeepSeek-V4-Flash-GGUF-YMMV",
+      "file": "deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS-00001..00003",
+      "size_gib": 104.154,
+      "accessible": true
+    },
+    {
+      "repo": "pinklily69/DeepSeek-V4-Flash-IQ3_S-GGUF",
+      "file": "V4-Flash-IQ3_S.gguf",
+      "size_gib": 114.259,
+      "accessible": true
+    },
+    {
+      "repo": "persadian/DeepSeek-V4-Flash-GGUF",
+      "file": "DeepSeek-V4-Flash-IQ1_S-XL-00001/00002",
+      "size_gib": null,
+      "accessible": false,
+      "http_status": "401/gated auto"
+    },
+    {
+      "repo": "cloudyu/DeepSeek-V4-Flash-4Expert-GGUF",
+      "file": "ds4flash-4expert.gguf",
+      "size_gib": 153.171,
+      "accessible": true
+    },
+    {
+      "repo": "teto3/DeepSeek-V4-Flash-Base-Q4KExperts-GGUF",
+      "file": "DeepSeek-V4-Flash-Base-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out.gguf",
+      "size_gib": 153.327,
+      "accessible": true
+    },
+    {
+      "repo": "6ms/DeepSeek-V4-Flash-MXFP4-GGUF",
+      "file": "Q8Compat + FP8-BF16 GGUFs",
+      "size_gib": 292.565,
+      "accessible": true
+    }
+  ],
+  "smallest_accessible_candidate": {
+    "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+    "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+    "size_gib": 46.975,
+    "accessible": true
+  },
+  "decision": {
+    "download_allowed_now": false,
+    "reason": "The smallest accessible candidate is still larger than current free disk. The only potentially smaller IQ1_S candidate found is gated/401 and cannot be used for an unauthenticated correctness gate.",
+    "no_source_patch": true,
+    "no_sota_claim": true,
+    "next_allowed_actions": [
+      "Do not download these candidates until disk is freed or a smaller accessible artifact is found.",
+      "If user approves deletion, remove rejected IQ2_S or obsolete prompt-specific packs first, preserving reproduction records.",
+      "Otherwise continue external artifact search for a truly smaller correctness-capable representation or a draft/verifier path that does not require full lowbit target download."
+    ]
+  }
+}

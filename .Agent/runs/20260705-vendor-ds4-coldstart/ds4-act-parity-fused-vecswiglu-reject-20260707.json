@@ -1,0 +1,164 @@
+{
+  "artifact_id": "ds4-act-parity-fused-vecswiglu-reject-20260707",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "candidate_env": {
+    "DS4_FUSED_UP_GATE_REF": "1"
+  },
+  "candidate_previous_top1_reject_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-vecswiglu-correctness-reject-20260707.json",
+  "candidate_previous_top1_reject_artifact_exists": true,
+  "candidate_source_patch": ".Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-vecswiglu-rejected-source-diff-20260707.patch",
+  "candidate_source_patch_sha256": "b001814b720d45973d80f938bb236881f42b3bd43a82267f08db3f5f5deb25d3",
+  "clean_rebuild_after_revert": {
+    "exit": "0",
+    "log": "/tmp/ds4-clean-debug-rebuild-after-fused-probe.log",
+    "target": "llama-debug"
+  },
+  "comparison": {
+    "candidate_records": 43,
+    "diffs_over_atol": [
+      {
+        "candidate_sums": [
+          9.174387
+        ],
+        "explicit_sums": [
+          9.174395
+        ],
+        "max_abs": 8.000000001118224e-06,
+        "name": "ffn_moe_swiglu-0"
+      },
+      {
+        "candidate_sums": [
+          -40.430325
+        ],
+        "explicit_sums": [
+          -40.43034
+        ],
+        "max_abs": 1.4999999997655777e-05,
+        "name": "ffn_moe_swiglu-16"
+      },
+      {
+        "candidate_sums": [
+          44.525166
+        ],
+        "explicit_sums": [
+          44.525173
+        ],
+        "max_abs": 7.000000003642981e-06,
+        "name": "ffn_moe_swiglu-2"
+      },
+      {
+        "candidate_sums": [
+          104.649384
+        ],
+        "explicit_sums": [
+          104.649353
+        ],
+        "max_abs": 3.09999999927868e-05,
+        "name": "ffn_moe_swiglu-21"
+      },
+      {
+        "candidate_sums": [
+          -1783.472412
+        ],
+        "explicit_sums": [
+          -1783.473022
+        ],
+        "max_abs": 0.0006099999998241401,
+        "name": "ffn_moe_swiglu-40"
+      },
+      {
+        "candidate_sums": [
+          -4132.708496
+        ],
+        "explicit_sums": [
+          -4132.314941
+        ],
+        "max_abs": 0.39355500000056054,
+        "name": "ffn_moe_swiglu-41"
+      },
+      {
+        "candidate_sums": [
+          4030.224365
+        ],
+        "explicit_sums": [
+          4028.269775
+        ],
+        "max_abs": 1.9545899999998255,
+        "name": "ffn_moe_swiglu-42"
+      },
+      {
+        "candidate_sums": [
+          21.904037
+        ],
+        "explicit_sums": [
+          21.904053
+        ],
+        "max_abs": 1.6000000002236447e-05,
+        "name": "ffn_moe_swiglu-7"
+      }
+    ],
+    "explicit_records": 129,
+    "max_abs_sum_diff": 1.9545899999998255,
+    "missing_candidate_first_20": [
+      "ffn_moe_gate_clamped-0",
+      "ffn_moe_gate_clamped-1",
+      "ffn_moe_gate_clamped-10",
+      "ffn_moe_gate_clamped-11",
+      "ffn_moe_gate_clamped-12",
+      "ffn_moe_gate_clamped-13",
+      "ffn_moe_gate_clamped-14",
+      "ffn_moe_gate_clamped-15",
+      "ffn_moe_gate_clamped-16",
+      "ffn_moe_gate_clamped-17",
+      "ffn_moe_gate_clamped-18",
+      "ffn_moe_gate_clamped-19",
+      "ffn_moe_gate_clamped-2",
+      "ffn_moe_gate_clamped-20",
+      "ffn_moe_gate_clamped-21",
+      "ffn_moe_gate_clamped-22",
+      "ffn_moe_gate_clamped-23",
+      "ffn_moe_gate_clamped-24",
+      "ffn_moe_gate_clamped-25",
+      "ffn_moe_gate_clamped-26"
+    ],
+    "num_diffs_over_atol": 8,
+    "num_missing_candidate": 86,
+    "num_missing_explicit": 0,
+    "pass": false,
+    "record_names": 129
+  },
+  "constraints": {
+    "drop_caches_before_each_case": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0
+  },
+  "created_utc": "2026-07-07T14:07:54.450591+00:00",
+  "decision": "reject_candidate_reverted_not_sota",
+  "git_status_after_revert": "?? .Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-vecswiglu-correctness-reject-20260707.json\n?? .Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-vecswiglu-rejected-source-diff-20260707.patch\n?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json\n?? prof.nsys-rep",
+  "head_commit_after_revert": "e13c2ff0c34dcfe80eb02dd15ebe59d39f6f8f21",
+  "head_oneline_after_revert": "e13c2ff0c vendor-ds4: add prompt-general SOTA demo entry",
+  "prompt": "Please introduce France in a short paragraph.",
+  "prompt_scope": "calibration fixed France prompt only; held-out prompts unused",
+  "reason": "Act-level parity failed: candidate emitted only 43 records vs 129 explicit records, missing gate/up clamped tensors and showing swiglu sum drift up to 1.95459 in late layers. The candidate source patch was reverted before clean rebuild.",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "returncodes": {
+    "candidate": 0,
+    "explicit": 0
+  },
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-vecswiglu",
+  "runtime": {
+    "candidate": {
+      "elapsed": "0:39.72",
+      "exit_status": 0,
+      "major_page_faults": 194862,
+      "max_rss_kb": 15603132
+    },
+    "explicit": {
+      "elapsed": "0:34.93",
+      "exit_status": 0,
+      "major_page_faults": 199149,
+      "max_rss_kb": 15601628
+    }
+  },
+  "summary_json": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-fused-vecswiglu/summary.json"
+}

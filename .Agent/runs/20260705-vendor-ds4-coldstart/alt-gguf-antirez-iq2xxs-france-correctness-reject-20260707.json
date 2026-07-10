@@ -1,0 +1,73 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-france-correctness-reject-20260707.json",
+  "attempt_id": "20260707-antirez-iq2xxs-alt-gguf-france-correctness",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "cleanup": {
+    "delete_local_model_after_record": true,
+    "df_after_cleanup": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/root       993G  882G  111G  89% /\n",
+    "model_exists_after_cleanup": false,
+    "reason": "free disk after correctness reject; sha256 and run artifacts are recorded"
+  },
+  "comparison_note": "The best token-rate-like number observed was 3.4 tok/s in the deepseek3 reasoning-off smoke, but correctness failed with degenerate non-France output, so it is rejected.",
+  "created_utc": "2026-07-06T18:22:08Z",
+  "decision": {
+    "accepted_sota_changed": false,
+    "calibration_dev_allowed": false,
+    "held_out_allowed": false,
+    "reason": "Model loads and stays within 16GB, but France answer is semantically/format incorrect in both default and deepseek3 reasoning-off modes. Therefore it cannot be promoted or used for generalized benchmark.",
+    "strict_token_rate_benchmark_allowed": false
+  },
+  "model_path_before_cleanup": "/root/lfz/models/DeepSeek-V4-Flash-antirez-IQ2XXS-chat-v2-GGUF/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+  "model_sha256": "31598c67c8b8744d3bcebcd19aa62253c6dc43cef3b8adf9f593656c9e86fd8c",
+  "prompt_scope": "France smoke only; calibration_dev_set_v1 and held_out_test_set_v1_locked were not used",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "ready_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-ready-validation-20260707.json",
+  "runs": {
+    "deepseek3_reasoning_off": {
+      "answer": "2bInstruct2024Final: 0.0\nclaude-3-5-sonnet-20241022: 0.0\nclaude-3-5-ha-20241022: 0.0\nclaude-3-5-ha-20241022: 0.0\nclaude-3-5-ha-20241022: 0.0\nclaude-3-7-1: 0.5e3-2024-2\":\":\":\":\":\":\": \n    -1\": \n    -1-s: 0\n \n# 0\n\":\": 0\n: \n \n    -\": 0\":\":\": 0\n \n    -\": 0\n    -\": 0\": 0\n\": \n\": \n 0\": \n 0: \n 0: \n 0\n 0\n 0\": 0\":",
+      "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-antirez-IQ2XXS-chat-v2-GGUF/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 --chat-template deepseek3 --reasoning off --single-turn",
+      "metrics": {
+        "correctness_ok": false,
+        "correctness_reason": "missing_france,missing_europe,missing_expected_context,degenerate_text",
+        "elapsed_seconds": 75.71000000000001,
+        "eval_tok_s": 3.4,
+        "exit_status": 0,
+        "memory_file_bytes": 15073792000,
+        "memory_max_events": 26521,
+        "memory_peak_bytes": 16000000000,
+        "oom_seen": false,
+        "pgmajfault": 533778,
+        "prompt_tok_s": 0.9,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "ttft_estimate_ms": 25495.83811,
+        "workingset_refault_file": 4963433
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T181941Z-20260707-antirez-iq2xxs-alt-gguf-france-deepseek3-reasonoff-smoke/france-antirez-iq2xxs-deepseek3-reasonoff-cpu40-vram0gb-cpu40-vram0gb"
+    },
+    "default_template_reasoning_auto": {
+      "answer": "[Start thinking]\n.\n\n用户要求用简短段落介绍法国。需要涵盖关键点：地理位置、首都、语言、主要特征（如文化、美食、旅游景点等），以及一些标志性元素（如埃菲尔铁France）。\n\n考虑到是简短段落，需要精炼。可以包括：地理位置（西欧）、首都（巴黎）、语言（法语）、以其丰富的文化、美食、旅游景点（如埃菲尔法国）等。 \n\nI need to: 地理位置、首都、 language、 and 文化/：我需要 法语：法语）、语言/：法语）、语言/：法语、 landmarks）、 landmarks）、 \n\nEuropean）、 \n\n）、）、）、）、）、） \n\n \n\n \n\n \n\n \n\n）、 \n\n \n\n）、French）、France）、Paris culture）、Paris cultureParisParisPariscultureculture法语Paris）、 landmarks）、 landmarks）、 landmarks ParisParis）、 landmarks）、 landmarks）、 landmarks）、 landmarks）、 landmarksParis）、 landmarksParisParis）、FranceParisculture）、France）、France~ and ~ and and",
+      "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-antirez-IQ2XXS-chat-v2-GGUF/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16",
+      "metrics": {
+        "correctness_ok": false,
+        "correctness_reason": "unfinished_sentence",
+        "elapsed_seconds": 99.39,
+        "eval_tok_s": 2.7,
+        "exit_status": 0,
+        "memory_file_bytes": 15032459264,
+        "memory_max_events": 42068,
+        "memory_peak_bytes": 16000000000,
+        "oom_seen": false,
+        "pgmajfault": 832260,
+        "prompt_tok_s": 1.2,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "ttft_estimate_ms": 25684.853561,
+        "workingset_refault_file": 10433810
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T181656Z-20260707-antirez-iq2xxs-alt-gguf-france-strict-smoke/france-antirez-iq2xxs-alt-cpu40-vram0gb-cpu40-vram0gb"
+    }
+  },
+  "source_head_before_artifact": "1a8f115eb7f43d125de3e2d6a65a1620e13ad948",
+  "status": "rejected_correctness_not_sota"
+}

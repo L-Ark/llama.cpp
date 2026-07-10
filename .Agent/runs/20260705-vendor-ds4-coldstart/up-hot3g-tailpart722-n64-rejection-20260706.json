@@ -1,0 +1,31 @@
+{
+  "artifact_id": "20260706-up-hot3g-tailpart722-n64-rejection",
+  "candidate_run": {
+    "correctness_ok": false,
+    "correctness_reason": "unfinished_sentence due n64 truncation",
+    "eval_tok_s": 2.2,
+    "fallback_summary": {
+      "down_decode_ms": 4933.766,
+      "down_prompt_ms": 4409.184,
+      "up_decode_ms": 5879.531,
+      "up_prompt_ms": 2520.818
+    },
+    "memory_file_bytes": 15063531520,
+    "memory_peak_bytes": 16000000000,
+    "prompt_tok_s": 0.9,
+    "ram_ok": true,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T125410Z-20260706T-up-hot3g-tailpart722-n64-smoke/france-up-hot3g-tailpart722-cpu40-vram0gb",
+    "ttft_ms": 39035.413654,
+    "vram_cache": "hits=17460 misses=9052 hit_rate=65.9%"
+  },
+  "decision": "Do not expand to full dev set. The larger hotset reduces up fallback but still ties 2.2 tok/s and raises TTFT; cache/hotset streaming overhead cancels the saved CPU fallback.",
+  "held_out_used": false,
+  "profile": {
+    "aggregate_up_coverage_fraction": 0.41996094838823317,
+    "path": ".Agent/profiles/vendor-ds4/calib-dev-up-hot3g-20260706.tsv",
+    "payload_gib": 2.99658203125,
+    "selected_pairs": 722,
+    "summary": ".Agent/runs/20260705-vendor-ds4-coldstart/calib-dev-up-hot3g-profile-summary-20260706.json"
+  },
+  "status": "rejected_tie_not_sota"
+}

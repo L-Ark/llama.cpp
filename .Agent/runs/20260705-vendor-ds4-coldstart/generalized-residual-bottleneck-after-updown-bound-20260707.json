@@ -1,0 +1,126 @@
+{
+  "aggregate": {
+    "below_5_after_ideal_decode_updown_removed_40layer": [
+      "quantum",
+      "fibonacci"
+    ],
+    "below_5_after_ideal_decode_updown_removed_43layer": [
+      "fibonacci"
+    ],
+    "gate_src0_ms_total_trace_by_prompt": {
+      "climate": 30022.49,
+      "fibonacci": 48157.035,
+      "france": 25210.969,
+      "japan": 25854.192,
+      "quantum": 38041.296
+    },
+    "gate_src0_ms_total_trace_sum": 167285.982,
+    "updown_decode_fallback_ms_sum": 176622.28300000043
+  },
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-residual-bottleneck-after-updown-bound-20260707.json",
+  "caveats": [
+    "gate_src0_ms comes from one_trace instrumentation runs and is not phase-separated; it should not be subtracted directly from eval decode windows.",
+    "decode token counts are inferred from decode up calls and layer-count sensitivity; this is a bound, not an exact benchmark.",
+    "No held-out prompt was used; this is calibration-only route selection."
+  ],
+  "date": "2026-07-07",
+  "decision": {
+    "next_allowed_work": "Run no source edits until a joint hard-bound exists. Evaluate exact graph/dataflow routes for retaining gate results and computing up/down without repeated source movement, or a representation route with top1/correctness proof. If neither has a hard bound above generalized 5 with overhead margin, record the blocker.",
+    "reason": "A runtime patch that only moves up/down fallback to a new exact path is unlikely to produce stable generalized >5 tok/s. The next candidate must remove or hide both up/down and gate/source/residual costs, or reduce model/representation payload while preserving correctness.",
+    "source_edit_allowed_now": false,
+    "summary": "Generalized 5 tok/s requires more than a narrow up/down fallback implementation. Ideal decode up/down removal leaves quantum/fibonacci below target under the stricter 40-layer bound and leaves fibonacci below target even under 43-layer sensitivity. Gate source/cache time is a same-order bottleneck in trace data."
+  },
+  "inputs": {
+    "full_updown_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json",
+    "gate_trace": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-gate-updown-overlap-trace-20260706.json"
+  },
+  "per_prompt": [
+    {
+      "below_5_after_updown_40layer": false,
+      "below_5_after_updown_43layer": false,
+      "combined_gate_updown_overlap_payload_gib_trace": 37.03,
+      "current_eval_tok_s": 2.6,
+      "decode_updown_fallback_ms": 23161.21400000004,
+      "gate_cache_hit_rate_pct_trace": 85.86,
+      "gate_src0_ms_total_trace": 25210.969,
+      "gate_trace_eval_tok_s": 2.5,
+      "gate_unique_payload_gib_trace": 19.088,
+      "margin_ms_after_updown_removed_40layer": 2461.21400000004,
+      "note": "gate_src0_ms is prompt+decode trace-time and includes instrumentation; use as bottleneck magnitude, not exact subtractable decode time.",
+      "prompt_id": "france",
+      "required_save_ms_for_5_40layer": 20700.0,
+      "zero_overhead_updown_removed_tok_s_40layer": 5.6164196510621895,
+      "zero_overhead_updown_removed_tok_s_43layer": 6.151691258760012
+    },
+    {
+      "below_5_after_updown_40layer": true,
+      "below_5_after_updown_43layer": false,
+      "combined_gate_updown_overlap_payload_gib_trace": 48.024,
+      "current_eval_tok_s": 1.9,
+      "decode_updown_fallback_ms": 49631.81100000018,
+      "gate_cache_hit_rate_pct_trace": 83.59,
+      "gate_src0_ms_total_trace": 38041.296,
+      "gate_trace_eval_tok_s": 1.9,
+      "gate_unique_payload_gib_trace": 23.031,
+      "margin_ms_after_updown_removed_40layer": -1008.3205789471904,
+      "note": "gate_src0_ms is prompt+decode trace-time and includes instrumentation; use as bottleneck magnitude, not exact subtractable decode time.",
+      "prompt_id": "quantum",
+      "required_save_ms_for_5_40layer": 50640.131578947374,
+      "zero_overhead_updown_removed_tok_s_40layer": 4.8426751818598115,
+      "zero_overhead_updown_removed_tok_s_43layer": 5.479120076648647
+    },
+    {
+      "below_5_after_updown_40layer": true,
+      "below_5_after_updown_43layer": true,
+      "combined_gate_updown_overlap_payload_gib_trace": 48.672,
+      "current_eval_tok_s": 1.7,
+      "decode_updown_fallback_ms": 48085.36200000023,
+      "gate_cache_hit_rate_pct_trace": 79.92,
+      "gate_src0_ms_total_trace": 48157.035,
+      "gate_trace_eval_tok_s": 1.8,
+      "gate_unique_payload_gib_trace": 24.4,
+      "margin_ms_after_updown_removed_40layer": -12163.902705882138,
+      "note": "gate_src0_ms is prompt+decode trace-time and includes instrumentation; use as bottleneck magnitude, not exact subtractable decode time.",
+      "prompt_id": "fibonacci",
+      "required_save_ms_for_5_40layer": 60249.264705882364,
+      "zero_overhead_updown_removed_tok_s_40layer": 3.59218660228526,
+      "zero_overhead_updown_removed_tok_s_43layer": 3.919371077693945
+    },
+    {
+      "below_5_after_updown_40layer": false,
+      "below_5_after_updown_43layer": false,
+      "combined_gate_updown_overlap_payload_gib_trace": 37.217,
+      "current_eval_tok_s": 2.4,
+      "decode_updown_fallback_ms": 24569.478000000006,
+      "gate_cache_hit_rate_pct_trace": 84.92,
+      "gate_src0_ms_total_trace": 25854.192,
+      "gate_trace_eval_tok_s": 2.4,
+      "gate_unique_payload_gib_trace": 19.316,
+      "margin_ms_after_updown_removed_40layer": 803.8530000000064,
+      "note": "gate_src0_ms is prompt+decode trace-time and includes instrumentation; use as bottleneck magnitude, not exact subtractable decode time.",
+      "prompt_id": "japan",
+      "required_save_ms_for_5_40layer": 23765.625,
+      "zero_overhead_updown_removed_tok_s_40layer": 5.190183218258545,
+      "zero_overhead_updown_removed_tok_s_43layer": 5.685960450395252
+    },
+    {
+      "below_5_after_updown_40layer": false,
+      "below_5_after_updown_43layer": false,
+      "combined_gate_updown_overlap_payload_gib_trace": 42.147,
+      "current_eval_tok_s": 2.3,
+      "decode_updown_fallback_ms": 31174.417999999965,
+      "gate_cache_hit_rate_pct_trace": 84.41,
+      "gate_src0_ms_total_trace": 30022.49,
+      "gate_trace_eval_tok_s": 2.2,
+      "gate_unique_payload_gib_trace": 21.424,
+      "margin_ms_after_updown_removed_40layer": 1606.4832173912619,
+      "note": "gate_src0_ms is prompt+decode trace-time and includes instrumentation; use as bottleneck magnitude, not exact subtractable decode time.",
+      "prompt_id": "climate",
+      "required_save_ms_for_5_40layer": 29567.934782608703,
+      "zero_overhead_updown_removed_tok_s_40layer": 5.340630608128836,
+      "zero_overhead_updown_removed_tok_s_43layer": 5.928441499976551
+    }
+  ],
+  "prompt_scope": "calibration_dev_set_v1 only; held_out_test_set_v1_locked not used",
+  "status": "completed_measurement_not_sota"
+}

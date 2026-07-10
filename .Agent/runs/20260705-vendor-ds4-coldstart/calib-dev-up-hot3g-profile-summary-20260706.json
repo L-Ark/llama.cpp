@@ -1,0 +1,14 @@
+{
+  "cap_gib": 3.0,
+  "covered_up_fallback_ms": 51854.272,
+  "held_out_used": false,
+  "payload_bytes": 3217555456,
+  "payload_gib": 2.99658203125,
+  "profile": ".Agent/profiles/vendor-ds4/calib-dev-up-hot3g-20260706.tsv",
+  "selected_calls": 50648,
+  "selected_pairs": 722,
+  "selected_rows": 52608,
+  "source": "calibration_dev_set_v1 fallback_reason_profile.csv only",
+  "total_up_fallback_ms": 123474.033,
+  "up_coverage_fraction": 0.41996094838823317
+}

@@ -1,0 +1,168 @@
+{
+  "artifact": "ds4-limited-upgate-explicit-default-accepted-20260707",
+  "base_commit_before_this_source_change": "7c4bfa8330a24625001ddc6fce380c915c39708e",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "builds": {
+    "llama_cli": {
+      "command": "cmake --build build-ds4-moe-stream --target llama-cli -j20",
+      "exit_code": 0,
+      "log_path": "/tmp/ds4-limited-upgate-explicit-default-cli-build.log"
+    },
+    "llama_debug": {
+      "command": "cmake --build build-ds4-moe-stream --target llama-debug -j20",
+      "exit_code": 0,
+      "log_path": "/tmp/ds4-limited-upgate-explicit-default-build.log"
+    }
+  },
+  "decision": "Accept and push as a correctness guard for future DS4 fused/ref work. Do not claim any token-rate improvement. Real limited fused op can still be tested deliberately with GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1, but must pass act parity before any benchmark.",
+  "default_off_france_96_truncation_observation": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and",
+    "metrics": {
+      "correctness_ok": false,
+      "correctness_reason": "unfinished_sentence",
+      "elapsed_seconds": 74.38,
+      "eval_tok_s": 2.5,
+      "memory_file_bytes": 15057383424,
+      "memory_max_events": 19849,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 243750,
+      "prompt_tok_s": 0.9,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 37839.975992,
+      "workingset_refault_file": 1609184
+    },
+    "mode": "n_predict_96_truncated_observation_not_quality_metric",
+    "note": "Semantically correct prefix, but token cap cut the final sentence; replaced by n_predict=192 France guard for correctness evidence.",
+    "prompt": "Please introduce France in a short paragraph.",
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T152709Z-demo-generalized-sota/please-introduce-france-in-a-short-paragraph-cpu40-vram0gb",
+    "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T152709Z-demo-generalized-sota/please-introduce-france-in-a-short-paragraph-cpu40-vram0gb/summary.json"
+  },
+  "default_off_france_guard": {
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "manual_correctness_note": "pass: semantic, coherent, complete short paragraph about France",
+    "metrics": {
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "elapsed_seconds": 90.13,
+      "eval_tok_s": 2.6,
+      "memory_file_bytes": 15026626560,
+      "memory_max_events": 25240,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 294415,
+      "prompt_tok_s": 0.9,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 38126.413486,
+      "workingset_refault_file": 3484855
+    },
+    "mode": "n_predict_192_full_guard_not_new_sota",
+    "prompt": "Please introduce France in a short paragraph.",
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T152842Z-demo-generalized-sota/please-introduce-france-in-a-short-paragraph-cpu40-vram0gb",
+    "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T152842Z-demo-generalized-sota/please-introduce-france-in-a-short-paragraph-cpu40-vram0gb/summary.json"
+  },
+  "default_off_smoke_validation_pass": {
+    "answer": "or perhaps just \"Hello\" will suffice. For those of us who are more detailed oriented and would like to see more step by step... you see... I",
+    "metrics": {
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "elapsed_seconds": 53.28,
+      "eval_tok_s": 1.6,
+      "memory_file_bytes": 15103774720,
+      "memory_max_events": 11438,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 172793,
+      "prompt_tok_s": 0.9,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 37684.890569,
+      "workingset_refault_file": 444885
+    },
+    "mode": "fast_smoke_n_predict_32_runnable_only_not_quality_metric",
+    "note": "Kept only as runnable smoke; the France n_predict=192 guard is the semantic correctness evidence.",
+    "prompt": "Say hello in five words.",
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T152334Z-demo-generalized-sota/say-hello-in-five-words-cpu40-vram0gb",
+    "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T152334Z-demo-generalized-sota/say-hello-in-five-words-cpu40-vram0gb/summary.json"
+  },
+  "default_off_smoke_validation_truncated_observation": {
+    "answer": "Message queues are a form of asynchronous communication where applications send messages to a temporary storage (the queue) instead of directly to each other, allowing the sender and",
+    "metrics": {
+      "correctness_ok": false,
+      "correctness_reason": "unfinished_sentence",
+      "elapsed_seconds": 54.35,
+      "eval_tok_s": 1.6,
+      "memory_file_bytes": 15097110528,
+      "memory_max_events": 12849,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "pgmajfault": 184085,
+      "prompt_tok_s": 0.9,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 38768.551677,
+      "workingset_refault_file": 320635
+    },
+    "mode": "fast_smoke_n_predict_32_not_sota_metric",
+    "note": "This smoke run completed under strict 16GB, but the 32-token cap cut the answer mid-sentence, so the conservative heuristic marked correctness false. It is not a SOTA or quality metric.",
+    "prompt": "Explain message queues in one short paragraph.",
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T152222Z-demo-generalized-sota/explain-message-queues-in-one-short-paragraph-cpu40-vram0gb",
+    "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T152222Z-demo-generalized-sota/explain-message-queues-in-one-short-paragraph-cpu40-vram0gb/summary.json"
+  },
+  "implementation": {
+    "behavior": "For limit > 1e-6, ggml_moe_up_gate_limit returns explicit mul_mat_id + clamp + swiglu_split unless GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1 is set. Existing limit=0 callers and default SOTA path are unchanged.",
+    "changed_file": "ggml/src/ggml.c",
+    "new_env": "GGML_MOE_UP_GATE_LIMIT_ALLOW_FUSED=1"
+  },
+  "next_action": "Move performance work toward explicit retained dataflow/source movement, or fix the real fused op under the explicit opt-in env until layer-0 act parity is exact.",
+  "parity_validation": {
+    "candidate_env": {
+      "DS4_FUSED_UP_GATE_REF": "1",
+      "DS4_FUSED_UP_GATE_REF_DEBUG_EXPLICIT": "1"
+    },
+    "comparison": {
+      "atol": 0.0,
+      "candidate_records": 129,
+      "diffs_over_atol": [],
+      "explicit_records": 129,
+      "max_abs_sum_diff": 0.0,
+      "missing_candidate": [],
+      "missing_explicit": [],
+      "num_diffs_over_atol": 0,
+      "num_missing_candidate": 0,
+      "num_missing_explicit": 0,
+      "pass": true,
+      "record_names": 129
+    },
+    "drop_caches_before_each_case": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0,
+    "returncodes": {
+      "candidate": 0,
+      "explicit": 0
+    },
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-limited-upgate-explicit-default",
+    "runtime": {
+      "candidate": {
+        "elapsed": "0:33.63",
+        "exit_status": 0,
+        "major_page_faults": 192945,
+        "max_rss_kb": 15603696
+      },
+      "explicit": {
+        "elapsed": "0:33.60",
+        "exit_status": 0,
+        "major_page_faults": 192479,
+        "max_rss_kb": 15601148
+      }
+    },
+    "status": "pass",
+    "summary_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-act-parity-limited-upgate-explicit-default/summary.json"
+  },
+  "purpose": "Make ggml_moe_up_gate_limit default to exact explicit math when a clamp limit is present, so DS4 fused/ref scaffold cannot accidentally use the known non-exact GGML_OP_MOE_FUSED_UP_GATE path unless explicitly allowed.",
+  "source_diff_path": ".Agent/runs/20260705-vendor-ds4-coldstart/limited-upgate-explicit-default-source-diff-20260707.patch",
+  "source_diff_sha256": "87792872ab94c6c19f217e4093f5c4b0c3d625bfb6ef1d9db4e81a35148e3faf",
+  "status": "accepted_default_off_correctness_guard_not_sota"
+}

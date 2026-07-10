@@ -1,0 +1,94 @@
+{
+  "attempt_id": "20260708-post-retained-gate-lowbit-route-selection",
+  "created_at_local": "2026-07-08",
+  "status": "route_selection_recorded_no_source_change_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "current_head": "604f1b7e469150dd050865f76d62c6719c49355b",
+  "purpose": "Decide the next route after retained-gate handoff probe and current-head sparse fused MMVQ placement probe.",
+  "retained_gate_handoff_probe": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/retained-gate-interface-probe-accepted-20260707.json",
+    "probe_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T155914Z-retained-gate-interface-probe-smoke-v2/retained-gate-probe-smoke-cpu40-vram0gb/retained_gate_interface_probe.csv",
+    "rows": 1806,
+    "graph_gate_output_input_available": ["0"],
+    "build_expert_mix_receives_scores": ["0"],
+    "selected_weights_retained_available": ["1"],
+    "selected_src0_is_selection": ["1"],
+    "handoff_payload_nbytes_sum": 103200,
+    "decision": "Retained selected_experts/weights are already available. Passing only top-k/weights into build_expert_mix is not a new source-movement reduction. The missing piece is a retained gate/source context, but current evidence does not show an 80/80 cut path."
+  },
+  "sparse_fused_mmvq_current_head_probe": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T160551Z-sparse-fused-mmvq-placement-probe-current-head/sparse-fused-mmvq-placement-cpu40-vram0gb",
+    "prompt": "Explain database indexes briefly.",
+    "n_predict": 32,
+    "constraints": "strict MemoryMax=16000000000, MemorySwapMax=0, drop_caches, page cache counted",
+    "eval_tok_s": 1.5,
+    "prompt_tok_s": 0.8,
+    "ttft_estimate_ms": 34350.127534,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15106654208,
+    "ram_ok": true,
+    "correctness_ok": true,
+    "probe_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T160551Z-sparse-fused-mmvq-placement-probe-current-head/sparse-fused-mmvq-placement-cpu40-vram0gb/sparse_fused_mmvq_probe.csv",
+    "probe_rows": 1806,
+    "profile_loaded": ["1"],
+    "profile_top_n": ["48"],
+    "profile_payload_bytes": ["427819008"],
+    "profile_active_layers": ["32"],
+    "profile_max_pairs_per_layer": ["3"],
+    "placement_compact_candidate_rows": 1344,
+    "next_compare_allowed_rows": 1344,
+    "requires_runtime_membership_probe_rows": 1344,
+    "graph_gate_output_input_available": ["0"],
+    "selected_values_available_at_graph_build": ["0"],
+    "decision": "The default-off placement/proof skeleton works on current head, but this top48 profile is not a generalized SOTA route. Existing generalized sparse top64/top128/top256/top512 bounds remain closed."
+  },
+  "closed_routes_reconfirmed": {
+    "generalized_sparse_pair": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/sparse-pair-generalized-bound-audit-after-membership-20260707.json",
+      "decision": "closed_for_generalized_target; do not implement sparse-pair writeback/hot branch from current evidence"
+    },
+    "compact_batched_updown_alone": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/compact-batched-updown-transfer-hard-bound-20260707.json",
+      "decision": "up/down transfer alone is not sufficient for generalized 5 tok/s"
+    },
+    "q2ternary_sidecar": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q2ternary-partial-compressed-candidate-20260707.json",
+      "decision": "rejected; nonzero op-level errors"
+    },
+    "simple_lowbit_sidecars": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/lowbit-sidecar-generalization-feasibility-audit-20260707.json",
+      "decision": "q2ternary and simple codebook sidecars do not pass op-level correctness; exact sidecar has no compression benefit"
+    },
+    "external_iq2_iq2s": {
+      "artifacts": [
+        ".Agent/runs/20260705-vendor-ds4-coldstart/alt-gguf-antirez-iq2xxs-france-correctness-reject-20260707.json",
+        ".Agent/runs/20260705-vendor-ds4-coldstart/iq2s-stage3b-reasonoff-correctness-reject-20260707.json"
+      ],
+      "decision": "vendor-loadable but France correctness failed; do not use for calibration/dev or held-out benchmark"
+    }
+  },
+  "remaining_viable_direction": {
+    "lowbit_bound_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-lowbit-representation-coverage-bound-20260707.json",
+    "best_zero_overhead_bound": {
+      "gate_compression": 8,
+      "updown_compression": 8,
+      "gate_used_compressed_gib": 4.472564697265625,
+      "updown_used_compressed_gib": 6.72882080078125,
+      "min_bound_tok_s": 6.540382553107147,
+      "mean_bound_tok_s": 10.41352635633519
+    },
+    "interpretation": "A representation with real 8x-ish gate and up/down compression has enough zero-overhead generalized margin, but no currently tested lowbit representation has passed correctness/top1."
+  },
+  "next_allowed_work": {
+    "runtime_source_patch_allowed_now": false,
+    "strict_cold_benchmark_allowed_now": false,
+    "allowed_next_step": "offline or compare-only correctness gate for a stronger lowbit representation; it must prove fixed-text top1 and France semantic correctness before any runtime token-rate source patch.",
+    "fallback": "If no correctness-verified representation appears, switch to external high-acceptance draft/verifier artifact search rather than local cache/source tuning."
+  },
+  "decision": {
+    "sota_changed": false,
+    "accepted_generalized_improvement": false,
+    "reason": "Current retained-gate and sparse placement probes provide useful facts but do not satisfy the 80/80 generalized hard-bound gate. Existing lowbit attempts with concrete payloads failed correctness; only hypothetical lowbit bounds remain viable."
+  }
+}

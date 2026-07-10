@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260707-lowbit-sidecar-generalization-feasibility-audit",
+  "status": "diagnostic_complete_no_runtime_patch_allowed",
+  "created_at_local": "2026-07-07",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "ec615e73360ebe9b923d4f9669b7409410b9b293",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "prompt_scope": "artifact-only audit from calibration/dev evidence; held-out test prompts were not used",
+  "task_context": {
+    "target": "random/generalized prompts should stably exceed 5 tok/s on 16GB host RAM including page cache plus 32GB RTX 5090 VRAM",
+    "accepted_sota_rule": "final accepted SOTA must be measured on held_out_test_set_v1_locked after candidate freeze and cannot use prompt-specific traces/packs/hotsets"
+  },
+  "evidence": {
+    "exact_sidecar_gate": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/sidecar-repr-payload-correctness-gate-20260707.json",
+      "result": "exact sidecar reproduced GGUF partial bytes with diff_count=0 and fixed-text same_top1=145/145; zero sidecar produced nonzero local diffs",
+      "interpretation": "sidecar loader and compare gate are useful, but exact sidecar has no compression benefit and lossy sidecar still requires compare/top1 proof"
+    },
+    "q2ternary_partial": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/q2ternary-partial-compressed-candidate-20260707.json",
+      "compression_ratio_vs_exact_partial": 1.8888888888888888,
+      "diff_count": 67936,
+      "max_abs": 9.40296984,
+      "mean_abs_max": 2.49075008,
+      "decision": "rejected_correctness_probe_not_sota"
+    },
+    "post_q2_codebook": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/post-q2-mxfp4-codebook-feasibility-20260707.json",
+      "result": "q3/codebook variants reduce error but provide only about 1.31x compression and still have nonzero magnitude error",
+      "decision": "not ready for runtime writeback"
+    },
+    "generalized_lowbit_bound": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-lowbit-representation-coverage-bound-20260707.json",
+      "best_barely_5_family": {
+        "gate_compression": 4,
+        "updown_compression": 4,
+        "mean_bound_tok_s": 6.902439369909851,
+        "min_bound_tok_s": 5.742872399925731
+      },
+      "interpretation": "zero-overhead hypothetical bounds are not correctness or runtime evidence"
+    },
+    "non_native_hard_bound": {
+      "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/non-native-representation-next-hard-bound.json",
+      "decision": "no_non_native_representation_source_patch_allowed_now"
+    }
+  },
+  "decision": {
+    "accepted_sota_changed": false,
+    "runtime_source_patch_allowed_now": false,
+    "strict_cold_benchmark_allowed_now": false,
+    "reason": "q2ternary and simple codebook sidecars do not pass op-level correctness; exact sidecar has no compression benefit; hypothetical lowbit bounds require correctness evidence before any runtime path"
+  },
+  "next_plan": {
+    "attempt_id": "20260707-exact-retained-dataflow-source-movement-plan",
+    "first_step": "artifact-only hard-bound/profile aggregation for prompt-general exact retained dataflow and source movement",
+    "source_edit_gate": "only edit source if dev-set exact bound shows min >= 5.5 tok/s or a concrete subpath can net-save at least 150 ms/token without violating TTFT/RAM/correctness"
+  }
+}

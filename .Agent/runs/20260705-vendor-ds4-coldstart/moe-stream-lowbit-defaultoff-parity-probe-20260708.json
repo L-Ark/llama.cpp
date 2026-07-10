@@ -1,0 +1,42 @@
+{
+  "artifact_id": "moe-stream-lowbit-defaultoff-parity-probe-20260708",
+  "date_local": "2026-07-08",
+  "purpose": "Default-off diagnostic probe for compact-target lowbit DeepSeek down MoE stream types IQ1_S/IQ1_M/Q2_K.",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "966fccd15086ad583e49e819baa8708dd231dc25",
+  "git_diff_files": [
+    ".Agent/run-tools/ds4_moe_stream_direct_probe.cpp",
+    "ggml/src/ggml-cuda/moe_stream_batch.cu"
+  ],
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-lowbit-probe",
+  "build": {
+    "ggml_cuda_rc": 0,
+    "probe_rc": 0,
+    "ggml_cuda_out_file": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-lowbit-probe/build-ggml-cuda.out",
+    "ggml_cuda_err_file": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-lowbit-probe/build-ggml-cuda.err",
+    "probe_out_file": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-lowbit-probe/build-probe-after-finite.out",
+    "probe_err_file": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-lowbit-probe/build-probe-after-finite.err"
+  },
+  "default_off_mode": {
+    "command_env": "GGML_MOE_STREAM=1",
+    "rc": 0,
+    "stdout": "decline-ok type=iq1_s nb01=50 nb02=800\ndecline-ok type=iq1_m nb01=56 nb02=896\ndecline-ok type=q2_K nb01=84 nb02=1344\n",
+    "stderr": "[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight rows_stride=1 type=19 active=0 ne01=16 ne00=256\n[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight rows_stride=1 type=29 active=0 ne01=16 ne00=256\n[moe_stream_batch] down batch declined: reason=unsupported_type tensor=blk.0.ffn_down_exps.weight rows_stride=1 type=10 active=0 ne01=16 ne00=256\n",
+    "decision": "pass_default_off_safe; IQ1_S/IQ1_M/Q2_K remain unsupported_type unless GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1 is explicitly set."
+  },
+  "probe_mode": {
+    "command_env": "GGML_MOE_STREAM=1 GGML_MOE_STREAM_DOWN_LOWBIT_PROBE=1",
+    "rc": 1,
+    "stdout": "accept type=iq1_s nb01=50 nb02=800 finite=0 max_abs=0 mean_abs=nan first_gpu=nan first_ref=inf\naccept type=iq1_m nb01=56 nb02=896 finite=0 max_abs=0 mean_abs=nan first_gpu=inf first_ref=inf\naccept type=q2_K nb01=84 nb02=1344 finite=0 max_abs=0 mean_abs=nan first_gpu=nan first_ref=-nan\n",
+    "stderr": "[moe_stream] batched decode path active: experts=1 ne01=16 ne00=256\n[moe_stream_batch] VRAM cache budget: requested=16384 MiB actual=16384 MiB free=31290 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\nggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\n[moe_stream_batch] VRAM cache: 0.0 GiB, 16384 slots (0.00 MiB each)\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.00 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.00 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache: hits=0 misses=1 preloads=0 hit_rate=0.0%\n[moe_stream_batch] VRAM cache down: slots=16384 slot=0.00 MiB hits=0 misses=1 preloads=0 pinned=0 hit_rate=0.0%\n",
+    "decision": "reject_correctness; stream accepts the synthetic lowbit types but parity fails because GPU/reference outputs include NaN/Inf, and the finite gate returns rc=1."
+  },
+  "production_decision": {
+    "sota_changed": false,
+    "production_enable": false,
+    "reason": "Correctness failed in probe mode. The env-gated diagnostic allow-list must not be used for model runs or SOTA claims.",
+    "next_step": "Use a real compact target pack or revise the harness to match real GGUF lowbit layout before any lowbit down-stream kernel enablement. Current generalized SOTA unchanged."
+  },
+  "committed_source_head": "c709fd2eb6a1052e30b9d6ee3b267a0ade5f6940",
+  "source_head_note": "source_head records the pre-commit tree used for the run; committed_source_head records the commit that stores the diagnostic source, artifact, and plan update."
+}

@@ -1,0 +1,1372 @@
+{
+  "artifact_id": "up-q80-pinned8-generalized-sota-20260708",
+  "status": "accepted_generalized_sota_stage_not_product_target",
+  "head_commit_before_record": "42e2cc1ae4f3133461027ee8e10a4e10131d1f1f",
+  "head_oneline_before_record": "42e2cc1ae vendor-ds4: reject gate up one cache split",
+  "source_status_before_record": [
+    " M ggml/src/ggml-cpu/ggml-cpu.c",
+    " M ggml/src/ggml-cuda/moe_stream_batch.cu",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/explicit-swiglu-down-split-profile-20260708.json",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+    "?? prof.nsys-rep"
+  ],
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli",
+  "memory_limit_bytes": 16000000000,
+  "memory_swap_max": 0,
+  "candidate_config": {
+    "prompt_general": true,
+    "prompt_specific_artifacts": false,
+    "cpu_moe": 40,
+    "vram_cache_gb": 4,
+    "n_predict": 192,
+    "ctx": 256,
+    "batch": 16,
+    "ubatch": 16,
+    "GGML_MOE_STAGE_PINNED_SLOTS": "8",
+    "GGML_MOE_EXPERT_GGUF_ALIAS_TSV": ".Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv",
+    "GGML_MOE_IO_BACKEND": "iouring",
+    "GGML_MOE_IO_ALIGNED_ALIAS_BATCH": "1",
+    "GGML_MOE_STREAM_ONE_EXPERIMENTAL_DS4": "1",
+    "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": "8192",
+    "GGML_MOE_STREAM_DOWN_BATCH": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
+    "GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED": "1",
+    "GGML_MOE_KEEP_TOPK_UPDOWN": "4",
+    "GGML_MOE_KEEP_TOPK_LAYER_RANGE": "10-39",
+    "GGML_MOE_KEEP_TOPK_LAYER_VALUE": "3"
+  },
+  "correctness_gates": {
+    "default_off_smoke": {
+      "prompt": "Please introduce France in a short paragraph.",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T232957Z-20260708-upq80-defaultoff-smoke/france-upq80-defaultoff-smoke-cpu40-vram4gb",
+      "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic,",
+      "eval_tok_s": 1.4,
+      "prompt_tok_s": 0.9,
+      "ttft_estimate_ms": 38684.974306,
+      "elapsed_seconds": 46.88,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15136813056,
+      "memory_max_events": 8866,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "correctness_ok": false,
+      "correctness_reason": "too_short,missing_europe,missing_expected_context",
+      "exit_status": 0,
+      "fallback_by_role": {
+        "up": {
+          "rows": 3770,
+          "calls": 3121,
+          "fallback_us": 6626443,
+          "batch": {
+            "batch_unsupported": 1815
+          },
+          "single": {
+            "one_name_filter": 1815
+          },
+          "final": {
+            "one_name_filter": 1815
+          }
+        }
+      },
+      "stderr_key_lines": [
+        "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+        "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5598 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+        "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+        "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+        "[moe_stream_batch] VRAM cache: hits=2258 misses=1512 preloads=0 hit_rate=59.9%",
+        "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=2258 misses=1512 preloads=0 pinned=0 hit_rate=59.9%",
+        "[moe_stream] VRAM cache: hits=3292 misses=2339 hit_rate=58.5%",
+        "[kimi_cpu_moe_profile] down calls=2160 total=12.345 ms/call convert_t0=0.003 route=0.007 route_barrier=0.010 cuda_batch=3.275 cuda_single=5.913 post_cuda_barrier=0.029 fallback_t0=3.075 batch_accept=720 batch_decline=0 single_accept=5631 single_decline=3121"
+      ],
+      "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -n 16 -c 256 -b 16 -ub 16 -st --simple-io",
+      "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260707T232957Z-20260708-upq80-defaultoff-smoke/france-upq80-defaultoff-smoke-cpu40-vram4gb/environment.txt"
+    },
+    "up_q80_enabled_smoke": {
+      "prompt": "Please introduce France in a short paragraph.",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T233119Z-20260708-upq80-enabled-smoke-n16/france-upq80-enabled-smoke-cpu40-vram4gb",
+      "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic,",
+      "eval_tok_s": 1.2,
+      "prompt_tok_s": 0.7,
+      "ttft_estimate_ms": 42853.711482,
+      "elapsed_seconds": 52.58,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15151652864,
+      "memory_max_events": 8789,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "correctness_ok": false,
+      "correctness_reason": "too_short,missing_europe,missing_expected_context",
+      "exit_status": 0,
+      "fallback_by_role": {},
+      "stderr_key_lines": [
+        "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+        "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5598 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+        "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+        "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+        "[moe_stream_batch] VRAM cache: hits=3713 misses=3827 preloads=0 hit_rate=49.2%",
+        "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=3713 misses=3827 preloads=0 pinned=0 hit_rate=49.2%",
+        "[moe_stream] VRAM cache: hits=3292 misses=2339 hit_rate=58.5%",
+        "[kimi_cpu_moe_profile] down calls=2160 total=15.257 ms/call convert_t0=0.003 route=0.007 route_barrier=0.007 cuda_batch=8.444 cuda_single=6.706 post_cuda_barrier=0.038 fallback_t0=0.001 batch_accept=1440 batch_decline=0 single_accept=5631 single_decline=0"
+      ],
+      "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -n 16 -c 256 -b 16 -ub 16 -st --simple-io",
+      "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260707T233119Z-20260708-upq80-enabled-smoke-n16/france-upq80-enabled-smoke-cpu40-vram4gb/environment.txt"
+    },
+    "up_q80_nonfrance_top1_reverify": {
+      "artifact_id": "up-q80-top1-reverify-20260708",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T233330Z-20260708-upq80-top1-reverify",
+      "prompt": "A database index helps queries find rows faster by keeping an ordered lookup structure, but it can slow down writes because the index must also be maintained.",
+      "source_head": "42e2cc1ae4f3133461027ee8e10a4e10131d1f1f",
+      "source_status": [
+        " M ggml/src/ggml-cpu/ggml-cpu.c",
+        " M ggml/src/ggml-cuda/moe_stream_batch.cu",
+        "?? .Agent/runs/20260705-vendor-ds4-coldstart/explicit-swiglu-down-split-profile-20260708.json",
+        "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+        "?? prof.nsys-rep"
+      ],
+      "memory_limit_bytes": 16000000000,
+      "memory_swap_max": 0,
+      "drop_caches_before_each_case": true,
+      "default": {
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T233330Z-20260708-upq80-top1-reverify/default",
+        "exit_status": 0,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15119081472,
+        "memory_events": {
+          "low": 0,
+          "high": 0,
+          "max": 9203,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "fallback_by_role": {
+          "up": {
+            "rows": 3770,
+            "calls": 3770,
+            "batch": {
+              "batch_unsupported": 1445
+            },
+            "single": {
+              "one_name_filter": 1445
+            },
+            "final": {
+              "one_name_filter": 1445
+            }
+          }
+        },
+        "profile_lines": [
+          "[kimi_cpu_moe_profile] down calls=3480 total=7.426 ms/call convert_t0=0.002 route=0.004 route_barrier=0.009 cuda_batch=1.868 cuda_single=3.448 post_cuda_barrier=0.029 fallback_t0=2.033 batch_accept=1160 batch_decline=0 single_accept=6960 single_decline=3770"
+        ],
+        "stderr_tail": "\tPercent of CPU this job got: 849%\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:47.53\n\tAverage shared text size (kbytes): 0\n\tAverage unshared data size (kbytes): 0\n\tAverage stack size (kbytes): 0\n\tAverage total size (kbytes): 0\n\tMaximum resident set size (kbytes): 15602600\n\tAverage resident set size (kbytes): 0\n\tMajor (requiring I/O) page faults: 35672\n\tMinor (reclaiming a frame) page faults: 1048940\n\tVoluntary context switches: 159036\n\tInvoluntary context switches: 8908\n\tSwaps: 0\n\tFile system inputs: 87172144\n\tFile system outputs: 29720\n\tSocket messages sent: 0\n\tSocket messages received: 0\n\tSignals delivered: 0\n\tPage size (bytes): 4096\n\tExit status: 0",
+        "top1": {
+          "mode": "single",
+          "n_tokens": 29,
+          "n_vocab": 129280,
+          "next_token_positions": 28,
+          "top1_matches_next_token": 10,
+          "positions": [
+            {
+              "position": 0,
+              "predicts_token_position": 1,
+              "actual_next_token": {
+                "id": 8476,
+                "piece": " database",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 20,
+                "piece": "2",
+                "logit": 14.8664
+              },
+              "top2": {
+                "id": 21,
+                "piece": "3",
+                "logit": 13.8573
+              },
+              "margin": 1.00911
+            },
+            {
+              "position": 1,
+              "predicts_token_position": 2,
+              "actual_next_token": {
+                "id": 5508,
+                "piece": " index",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 223,
+                "piece": " ",
+                "logit": 17.3579
+              },
+              "top2": {
+                "id": 1999,
+                "piece": " What",
+                "logit": 15.4447
+              },
+              "margin": 1.91328
+            },
+            {
+              "position": 2,
+              "predicts_token_position": 3,
+              "actual_next_token": {
+                "id": 7531,
+                "piece": " helps",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 344,
+                "piece": " is",
+                "logit": 23.629
+              },
+              "top2": {
+                "id": 396,
+                "piece": " that",
+                "logit": 21.4667
+              },
+              "margin": 2.16239
+            },
+            {
+              "position": 3,
+              "predicts_token_position": 4,
+              "actual_next_token": {
+                "id": 30610,
+                "piece": " queries",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 6276,
+                "piece": " speed",
+                "logit": 26.6767
+              },
+              "top2": {
+                "id": 304,
+                "piece": " to",
+                "logit": 25.3226
+              },
+              "margin": 1.3541
+            },
+            {
+              "position": 4,
+              "predicts_token_position": 5,
+              "actual_next_token": {
+                "id": 1783,
+                "piece": " find",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 6276,
+                "piece": " speed",
+                "logit": 25.8582
+              },
+              "top2": {
+                "id": 304,
+                "piece": " to",
+                "logit": 25.3771
+              },
+              "margin": 0.481037
+            },
+            {
+              "position": 5,
+              "predicts_token_position": 6,
+              "actual_next_token": {
+                "id": 17721,
+                "piece": " rows",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 1499,
+                "piece": " data",
+                "logit": 27.2367
+              },
+              "top2": {
+                "id": 10087,
+                "piece": " records",
+                "logit": 25.2968
+              },
+              "margin": 1.9399
+            },
+            {
+              "position": 6,
+              "predicts_token_position": 7,
+              "actual_next_token": {
+                "id": 13058,
+                "piece": " faster",
+                "logit": 0
+              },
+              "top1_matches_next_token": true,
+              "top1": {
+                "id": 13058,
+                "piece": " faster",
+                "logit": 27.0373
+              },
+              "top2": {
+                "id": 295,
+                "piece": " in",
+                "logit": 26.6696
+              },
+              "margin": 0.367739
+            },
+            {
+              "position": 7,
+              "predicts_token_position": 8,
+              "actual_next_token": {
+                "id": 513,
+                "piece": " by",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 16,
+                "piece": ".",
+                "logit": 25.702
+              },
+              "top2": {
+                "id": 513,
+                "piece": " by",
+                "logit": 24.3974
+              },
+              "margin": 1.30461
+            },
+            {
+              "position": 8,
+              "predicts_token_position": 9,
+              "actual_next_token": {
+                "id": 11779,
+                "piece": " keeping",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 11135,
+                "piece": " reducing",
+                "logit": 26.5979
+              },
+              "top2": {
+                "id": 6706,
+                "piece": " providing",
+                "logit": 24.6388
+              },
+              "margin": 1.9591
+            },
+            {
+              "position": 9,
+              "predicts_token_position": 10,
+              "actual_next_token": {
+                "id": 411,
+                "piece": " an",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 260,
+                "piece": " a",
+                "logit": 26.9572
+              },
+              "top2": {
+                "id": 21974,
+                "piece": " copies",
+                "logit": 24.6242
+              },
+              "margin": 2.33301
+            },
+            {
+              "position": 10,
+              "predicts_token_position": 11,
+              "actual_next_token": {
+                "id": 15320,
+                "piece": " ordered",
+                "logit": 0
+              },
+              "top1_matches_next_token": true,
+              "top1": {
+                "id": 15320,
+                "piece": " ordered",
+                "logit": 25.477
+              },
+              "top2": {
+                "id": 5508,
+                "piece": " index",
+                "logit": 24.5603
+              },
+              "margin": 0.91675
+            },
+            {
+              "position": 11,
+              "predicts_token_position": 12,
+              "actual_next_token": {
+                "id": 64018,
+                "piece": " lookup",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 3676,
+                "piece": " record",
+                "logit": 27.6133
+              },
+              "top2": {
+                "id": 2310,
+                "piece": " list",
+                "logit": 27.5913
+              },
+              "margin": 0.022028
+            },
+            {
+              "position": 12,
+              "predicts_token_position": 13,
+              "actual_next_token": {
+                "id": 4456,
+                "piece": " structure",
+                "logit": 0
+              },
+              "top1_matches_next_token": true,
+              "top1": {
+                "id": 4456,
+                "piece": " structure",
+                "logit": 28.304
+              },
+              "top2": {
+                "id": 294,
+                "piece": " of",
+                "logit": 26.7908
+              },
+              "margin": 1.51314
+            },
+            {
+              "position": 13,
+              "predicts_token_position": 14,
+              "actual_next_token": {
+                "id": 14,
+                "piece": ",",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 362,
+                "piece": " for",
+                "logit": 27.7789
+              },
+              "top2": {
+                "id": 16,
+                "piece": ".",
+                "logit": 27.611
+              },
+              "margin": 0.167824
+            },
+            {
+              "position": 14,
+              "predicts_token_position": 15,
+              "actual_next_token": {
+                "id": 790,
+                "piece": " but",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 1345,
+                "piece": " such",
+                "logit": 25.5873
+              },
+              "top2": {
+                "id": 790,
+                "piece": " but",
+                "logit": 25.4782
+              },
+              "margin": 0.109098
+            },
+            {
+              "position": 15,
+              "predicts_token_position": 16,
+              "actual_next_token": {
+                "id": 436,
+                "piece": " it",
+                "logit": 0
+              },
+              "top1_matches_next_token": true,
+              "top1": {
+                "id": 436,
+                "piece": " it",
+                "logit": 25.7733
+              },
+              "top2": {
+                "id": 990,
+                "piece": " also",
+                "logit": 24.1103
+              },
+              "margin": 1.6631
+            },
+            {
+              "position": 16,
+              "predicts_token_position": 17,
+              "actual_next_token": {
+                "id": 588,
+                "piece": " can",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 990,
+                "piece": " also",
+                "logit": 28.8113
+              },
+              "top2": {
+                "id": 5095,
+                "piece": " comes",
+                "logit": 27.115
+              },
+              "margin": 1.69632
+            },
+            {
+              "position": 17,
+              "predicts_token_position": 18,
+              "actual_next_token": {
+                "id": 6470,
+                "piece": " slow",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 990,
+                "piece": " also",
+                "logit": 28.7497
+              },
+              "top2": {
+                "id": 6470,
+                "piece": " slow",
+                "logit": 26.4401
+              },
+              "margin": 2.30961
+            },
+            {
+              "position": 18,
+              "predicts_token_position": 19,
+              "actual_next_token": {
+                "id": 1910,
+                "piece": " down",
+                "logit": 0
+              },
+              "top1_matches_next_token": true,
+              "top1": {
+                "id": 1910,
+                "piece": " down",
+                "logit": 30.2979
+              },
+              "top2": {
+                "id": 86305,
+                "piece": " inserts",
+                "logit": 25.8798
+              },
+              "margin": 4.4181
+            },
+            {
+              "position": 19,
+              "predicts_token_position": 20,
+              "actual_next_token": {
+                "id": 20366,
+                "piece": " writes",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 420,
+                "piece": " D",
+                "logit": 26.5607
+              },
+              "top2": {
+                "id": 20366,
+                "piece": " writes",
+                "logit": 26.4333
+              },
+              "margin": 0.127373
+            },
+            {
+              "position": 20,
+              "predicts_token_position": 21,
+              "actual_next_token": {
+                "id": 1754,
+                "piece": " because",
+                "logit": 0
+              },
+              "top1_matches_next_token": true,
+              "top1": {
+                "id": 1754,
+                "piece": " because",
+                "logit": 27.5738
+              },
+              "top2": {
+                "id": 16,
+                "piece": ".",
+                "logit": 27.4099
+              },
+              "margin": 0.163876
+            },
+            {
+              "position": 21,
+              "predicts_token_position": 22,
+              "actual_next_token": {
+                "id": 270,
+                "piece": " the",
+                "logit": 0
+              },
+              "top1_matches_next_token": true,
+              "top1": {
+                "id": 270,
+                "piece": " the",
+                "logit": 28.32
+              },
+              "top2": {
+                "id": 436,
+                "piece": " it",
+                "logit": 27.3948
+              },
+              "margin": 0.925175
+            },
+            {
+              "position": 22,
+              "predicts_token_position": 23,
+              "actual_next_token": {
+                "id": 5508,
+                "piece": " index",
+                "logit": 0
+              },
+              "top1_matches_next_token": true,
+              "top1": {
+                "id": 5508,
+                "piece": " index",
+                "logit": 30.1219
+              },
+              "top2": {
+                "id": 4456,
+                "piece": " structure",
+                "logit": 25.915
+              },
+              "margin": 4.20693
+            },
+            {
+              "position": 23,
+              "predicts_token_position": 24,
+              "actual_next_token": {
+                "id": 2231,
+                "piece": " must",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 990,
+                "piece": " also",
+                "logit": 29.2489
+              },
+              "top2": {
+                "id": 2231,
+                "piece": " must",
+                "logit": 29.0447
+              },
+              "margin": 0.20421
+            },
+            {
+              "position": 24,
+              "predicts_token_position": 25,
+              "actual_next_token": {
+                "id": 990,
+                "piece": " also",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 366,
+                "piece": " be",
+                "logit": 32.1834
+              },
+              "top2": {
+                "id": 990,
+                "piece": " also",
+                "logit": 31.0396
+              },
+              "margin": 1.14381
+            },
+            {
+              "position": 25,
+              "predicts_token_position": 26,
+              "actual_next_token": {
+                "id": 366,
+                "piece": " be",
+                "logit": 0
+              },
+              "top1_matches_next_token": true,
+              "top1": {
+                "id": 366,
+                "piece": " be",
+                "logit": 34.0692
+              },
+              "top2": {
+                "id": 9502,
+                "piece": " update",
+                "logit": 25.9026
+              },
+              "margin": 8.16658
+            },
+            {
+              "position": 26,
+              "predicts_token_position": 27,
+              "actual_next_token": {
+                "id": 16678,
+                "piece": " maintained",
+                "logit": 0
+              },
+              "top1_matches_next_token": false,
+              "top1": {
+                "id": 11336,
+                "piece": " updated",
+                "logit": 31.8073
+              },
+              "top2": {
+                "id": 16678,
+                "piece": " maintained",
+                "logit": 29.4376
+              },
+              "margin": 2.36974
+            },
+            {
+              "position": 27,
+              "predicts_token_position": 28,
+              "actual_next_token": {
+                "id": 16,
+                "piece": ".",
+                "logit": 0
+              },
+              "top1_matches_next_token": true,
+              "top1": {
+                "id": 16,
+                "piece": ".",
+                "logit": 27.7092
+              },
+              "top2": {
+                "id": 339,
+                "piece": ".\n\n",
+                "logit": 26.6388
+              },
+              "margin": 1.07047
+            },
+            {
+              "position": 28,
+              "predicts_token_position": null,
+              "actual_next_token": null,
+              "top1_matches_next_token": null,
+              "top1": {
+                "id": 1162,
+                "piece": " This",
+                "logit": 22.5712
+              },
+              "top2": {
+                "id": 660,
+                "piece": " In",
+                "logit": 22.551
+              },
+              "margin": 0.0201969
+            }
+          ]
+        }
+      },
+      "up_q80_check": {
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T233330Z-20260708-upq80-top1-reverify/up-q80-check",
+        "exit_status": 0,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15136260096,
+        "memory_events": {
+          "low": 0,
+          "high": 0,
+          "max": 9030,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "fallback_by_role": {},
+        "profile_lines": [
+          "[kimi_cpu_moe_profile] down calls=3480 total=9.334 ms/call convert_t0=0.002 route=0.004 route_barrier=0.011 cuda_batch=5.002 cuda_single=4.218 post_cuda_barrier=0.043 fallback_t0=0.001 batch_accept=2320 batch_decline=0 single_accept=6960 single_decline=0"
+        ],
+        "stderr_tail": "\tPercent of CPU this job got: 801%\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:53.27\n\tAverage shared text size (kbytes): 0\n\tAverage unshared data size (kbytes): 0\n\tAverage stack size (kbytes): 0\n\tAverage total size (kbytes): 0\n\tMaximum resident set size (kbytes): 15602136\n\tAverage resident set size (kbytes): 0\n\tMajor (requiring I/O) page faults: 7446\n\tMinor (reclaiming a frame) page faults: 1056295\n\tVoluntary context switches: 142875\n\tInvoluntary context switches: 7765\n\tSwaps: 0\n\tFile system inputs: 87194792\n\tFile system outputs: 88\n\tSocket messages sent: 0\n\tSocket messages received: 0\n\tSignals delivered: 0\n\tPage size (bytes): 4096\n\tExit status: 0",
+        "top1": {
+          "n_tokens": 29,
+          "n_vocab": 129280,
+          "same_top1": 29,
+          "same_top1_ratio": 1,
+          "first_mismatch_pos": -1,
+          "next_token_positions": 28,
+          "base_top1_matches_next_token": 10,
+          "calc_top1_matches_next_token": 10,
+          "max_abs": 0,
+          "mean_abs": 0,
+          "mismatches_preview": []
+        }
+      },
+      "top1_pass": true,
+      "ram_ok": true,
+      "decision": "pass_up_q80_top1_not_perf_validated"
+    },
+    "france_n192_quality": {
+      "prompt": "Please introduce France in a short paragraph.",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T233711Z-20260708-upq80-gate8-down4-france-n192/france-upq80-gate8-down4-n192-cpu40-vram4gb",
+      "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+      "eval_tok_s": 2.7,
+      "prompt_tok_s": 0.9,
+      "ttft_estimate_ms": 36102.948674,
+      "elapsed_seconds": 84.92,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15031353344,
+      "memory_max_events": 7571,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "exit_status": 0,
+      "fallback_by_role": {},
+      "stderr_key_lines": [
+        "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+        "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5598 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+        "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+        "[moe_stream_batch] expert pack: total entries=33024 sources=1",
+        "[moe_stream_batch] pinned staging: enabled, 16 slots of 4.25 MiB",
+        "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+        "[moe_stream_batch] pinned staging: copies=15426 waits=15410 fallbacks=0 slots=16 slot=4.25 MiB",
+        "[moe_stream_batch] expert pack: hits=15426 misses=0 read_failures=0 direct_reads=15426 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=33024",
+        "[moe_stream_batch] VRAM cache: hits=24094 misses=15426 preloads=0 hit_rate=61.0%",
+        "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=24094 misses=15426 preloads=0 pinned=0 hit_rate=61.0%",
+        "[moe_stream] VRAM cache: hits=28017 misses=7134 hit_rate=79.7%",
+        "[kimi_cpu_moe_profile] down calls=16920 total=3.687 ms/call convert_t0=0.001 route=0.004 route_barrier=0.002 cuda_batch=1.826 cuda_single=1.830 post_cuda_barrier=0.007 fallback_t0=0.001 batch_accept=11280 batch_decline=0 single_accept=35151 single_decline=0"
+      ],
+      "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -n 192 -c 256 -b 16 -ub 16 -st --simple-io",
+      "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260707T233711Z-20260708-upq80-gate8-down4-france-n192/france-upq80-gate8-down4-n192-cpu40-vram4gb/environment.txt"
+    }
+  },
+  "calibration_dev_set_v1": {
+    "results": [
+      {
+        "prompt_id": "france",
+        "prompt": "Please introduce France in a short paragraph.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T235152Z-20260708-upq80-pinned8-general-devset-n192/france-cpu40-vram4gb",
+        "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+        "eval_tok_s": 2.7,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 35765.120862,
+        "elapsed_seconds": 85.28999999999999,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 14844686336,
+        "memory_max_events": 7619,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "exit_status": 0,
+        "fallback_by_role": {},
+        "stderr_key_lines": [
+          "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+          "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5598 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+          "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+          "[moe_stream_batch] expert pack: total entries=33024 sources=1",
+          "[moe_stream_batch] pinned staging: enabled, 8 slots of 4.25 MiB",
+          "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+          "[moe_stream_batch] pinned staging: copies=15426 waits=15418 fallbacks=0 slots=8 slot=4.25 MiB",
+          "[moe_stream_batch] expert pack: hits=15426 misses=0 read_failures=0 direct_reads=15426 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=33024",
+          "[moe_stream_batch] VRAM cache: hits=24094 misses=15426 preloads=0 hit_rate=61.0%",
+          "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=24094 misses=15426 preloads=0 pinned=0 hit_rate=61.0%",
+          "[moe_stream] VRAM cache: hits=28017 misses=7134 hit_rate=79.7%",
+          "[kimi_cpu_moe_profile] down calls=16920 total=3.715 ms/call convert_t0=0.002 route=0.004 route_barrier=0.003 cuda_batch=1.834 cuda_single=1.849 post_cuda_barrier=0.009 fallback_t0=0.001 batch_accept=11280 batch_decline=0 single_accept=35151 single_decline=0"
+        ],
+        "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Please introduce France in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -st --simple-io",
+        "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260707T235152Z-20260708-upq80-pinned8-general-devset-n192/france-cpu40-vram4gb/environment.txt"
+      },
+      {
+        "prompt_id": "quantum",
+        "prompt": "Explain quantum computing briefly.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T235322Z-20260708-upq80-pinned8-general-devset-n192/quantum-cpu40-vram4gb",
+        "answer": "and**Quantum computing** is a type of computing that uses the principles of quantum mechanics to process information. Unlike classical computers, which use bits (0 or 1), quantum computers use **qubits** (quantum bits). Qubits can exist in a state of 0, 1, or both simultaneously (superposition). This, along with other quantum phenomena like entanglement, allows quantum computers to solve certain problems much faster than classical computers.\n\n**Key Concepts:**\n\n- **Superposition:** A qubit can be in a combination of 0 and 1 at the same time, unlike a classical bit which is either 0 or 1. This allows for parallel computation.\n- **Entanglement:** A pair of qubits can be linked in such a way that the state of one instantly influences the other, regardless of distance. This enables complex calculations.\n- **Quantum Interference:** Quantum algorithms manipulate the probabilities of qubits' states to amplify",
+        "eval_tok_s": 2.2,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 35807.148001,
+        "elapsed_seconds": 120.77,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15063040000,
+        "memory_max_events": 12108,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "exit_status": 0,
+        "fallback_by_role": {},
+        "stderr_key_lines": [
+          "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+          "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5598 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+          "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+          "[moe_stream_batch] expert pack: total entries=33024 sources=1",
+          "[moe_stream_batch] pinned staging: enabled, 8 slots of 4.25 MiB",
+          "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+          "[moe_stream_batch] pinned staging: copies=24062 waits=24054 fallbacks=0 slots=8 slot=4.25 MiB",
+          "[moe_stream_batch] expert pack: hits=24062 misses=0 read_failures=0 direct_reads=24062 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=33024",
+          "[moe_stream_batch] VRAM cache: hits=28458 misses=24062 preloads=0 hit_rate=54.2%",
+          "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=28458 misses=24062 preloads=0 pinned=0 hit_rate=54.2%",
+          "[moe_stream] VRAM cache: hits=34689 misses=12956 hit_rate=72.8%",
+          "[kimi_cpu_moe_profile] down calls=23280 total=4.074 ms/call convert_t0=0.001 route=0.004 route_barrier=0.006 cuda_batch=1.888 cuda_single=2.140 post_cuda_barrier=0.009 fallback_t0=0.001 batch_accept=15520 batch_decline=0 single_accept=47645 single_decline=0"
+        ],
+        "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Explain quantum computing briefly.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -st --simple-io",
+        "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260707T235322Z-20260708-upq80-pinned8-general-devset-n192/quantum-cpu40-vram4gb/environment.txt"
+      },
+      {
+        "prompt_id": "fibonacci",
+        "prompt": "Write a short Python function for Fibonacci.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T235528Z-20260708-upq80-pinned8-general-devset-n192/fibonacci-cpu40-vram4gb",
+        "answer": "that's a classic! Here's a short Python function that computes the Fibonacci sequence:\n\n```python\ndef fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        yield a\n        a, b = b, a + b\n```\n\nThis is a generator function that yields Fibonacci numbers up to the nth term. It's memory-efficient and works well for large values of n.\n\nIf you prefer a more compact version that returns a list:\n\n```python\ndef fib(n):\n    a, b = 0, 1\n    return [a if i == 0 else a := b for i in range(n) for b in [a+b]][:n]\n```\n\nBut the generator version is generally preferred for its memory efficiency, especially when n is large.\n\nHere's a simpler version that returns a list:\n\n```python\ndef fib_list(n):\n    a, b = 0, 1",
+        "eval_tok_s": 2.0,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 37872.535159,
+        "elapsed_seconds": 127.69,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 14792036352,
+        "memory_max_events": 14124,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "exit_status": 0,
+        "fallback_by_role": {},
+        "stderr_key_lines": [
+          "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+          "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5598 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+          "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+          "[moe_stream_batch] expert pack: total entries=33024 sources=1",
+          "[moe_stream_batch] pinned staging: enabled, 8 slots of 4.25 MiB",
+          "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+          "[moe_stream_batch] pinned staging: copies=22984 waits=22976 fallbacks=0 slots=8 slot=4.25 MiB",
+          "[moe_stream_batch] expert pack: hits=22984 misses=0 read_failures=0 direct_reads=22984 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=33024",
+          "[moe_stream_batch] VRAM cache: hits=30316 misses=22984 preloads=0 hit_rate=56.9%",
+          "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=30316 misses=22984 preloads=0 pinned=0 hit_rate=56.9%",
+          "[moe_stream] VRAM cache: hits=35114 misses=12822 hit_rate=73.3%",
+          "[kimi_cpu_moe_profile] down calls=23280 total=4.429 ms/call convert_t0=0.002 route=0.004 route_barrier=0.005 cuda_batch=1.918 cuda_single=2.464 post_cuda_barrier=0.011 fallback_t0=0.001 batch_accept=15520 batch_decline=0 single_accept=47936 single_decline=0"
+        ],
+        "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Write a short Python function for Fibonacci.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -st --simple-io",
+        "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260707T235528Z-20260708-upq80-pinned8-general-devset-n192/fibonacci-cpu40-vram4gb/environment.txt"
+      },
+      {
+        "prompt_id": "japan",
+        "prompt": "Introduce Japan in a short paragraph.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T235741Z-20260708-upq80-pinned8-general-devset-n192/japan-cpu40-vram4gb",
+        "answer": "Japan is an island nation in East Asia, known for its unique blend of ancient traditions and cutting-edge modernity. It is renowned for its rich cultural heritage, including tea ceremonies, kimono, and traditional temples, alongside its technological advancements and bustling cities like Tokyo and Osaka. The country is famous for its cuisine, such as sushi and ramen, and its natural beauty, from Mount Fuji to cherry blossoms. With a strong economy and a high standard of living, Japan is also known for its politeness, efficiency, and innovation in fields like robotics and electronics. Its culture deeply values respect, honor, and community, making it a fascinating blend of old and new.",
+        "eval_tok_s": 2.6,
+        "prompt_tok_s": 0.8,
+        "ttft_estimate_ms": 38824.410633,
+        "elapsed_seconds": 87.21000000000001,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 14827790336,
+        "memory_max_events": 7885,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "exit_status": 0,
+        "fallback_by_role": {},
+        "stderr_key_lines": [
+          "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+          "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5598 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+          "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+          "[moe_stream_batch] expert pack: total entries=33024 sources=1",
+          "[moe_stream_batch] pinned staging: enabled, 8 slots of 4.25 MiB",
+          "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+          "[moe_stream_batch] pinned staging: copies=15480 waits=15472 fallbacks=0 slots=8 slot=4.25 MiB",
+          "[moe_stream_batch] expert pack: hits=15480 misses=0 read_failures=0 direct_reads=15480 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=33024",
+          "[moe_stream_batch] VRAM cache: hits=23260 misses=15480 preloads=0 hit_rate=60.0%",
+          "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=23260 misses=15480 preloads=0 pinned=0 hit_rate=60.0%",
+          "[moe_stream] VRAM cache: hits=26879 misses=7564 hit_rate=78.0%",
+          "[kimi_cpu_moe_profile] down calls=16560 total=3.841 ms/call convert_t0=0.001 route=0.004 route_barrier=0.003 cuda_batch=1.892 cuda_single=1.917 post_cuda_barrier=0.007 fallback_t0=0.001 batch_accept=11040 batch_decline=0 single_accept=34443 single_decline=0"
+        ],
+        "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Introduce Japan in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -st --simple-io",
+        "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260707T235741Z-20260708-upq80-pinned8-general-devset-n192/japan-cpu40-vram4gb/environment.txt"
+      },
+      {
+        "prompt_id": "climate",
+        "prompt": "Summarize climate change in one paragraph.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T235913Z-20260708-upq80-pinned8-general-devset-n192/climate-cpu40-vram4gb",
+        "answer": "Climate change refers to the long-term, large-scale alteration of Earth's climate patterns, primarily driven by human activities such as burning fossil fuels, deforestation, and industrial processes that release greenhouse gases like carbon dioxide, methane, and nitrous oxide into the atmosphere. These gases trap heat, leading to a rise in global average temperatures, a phenomenon known as global warming. The consequences are far-reaching and include more frequent and severe weather events like hurricanes, droughts, and floods; rising sea levels; melting polar ice and glaciers; and disruptions to ecosystems and biodiversity. While natural factors have historically influenced the climate, the current rapid change is overwhelmingly attributed to human actions, and its effects are already being observed worldwide, threatening both natural environments and human societies with the challenges of adaptation and mitigation.",
+        "eval_tok_s": 2.5,
+        "prompt_tok_s": 1.0,
+        "ttft_estimate_ms": 37063.184348,
+        "elapsed_seconds": 96.43,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15077867520,
+        "memory_max_events": 9386,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "exit_status": 0,
+        "fallback_by_role": {},
+        "stderr_key_lines": [
+          "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+          "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5598 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+          "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+          "[moe_stream_batch] expert pack: total entries=33024 sources=1",
+          "[moe_stream_batch] pinned staging: enabled, 8 slots of 4.25 MiB",
+          "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+          "[moe_stream_batch] pinned staging: copies=17898 waits=17890 fallbacks=0 slots=8 slot=4.25 MiB",
+          "[moe_stream_batch] expert pack: hits=17898 misses=0 read_failures=0 direct_reads=17898 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=33024",
+          "[moe_stream_batch] VRAM cache: hits=26042 misses=17898 preloads=0 hit_rate=59.3%",
+          "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=26042 misses=17898 preloads=0 pinned=0 hit_rate=59.3%",
+          "[moe_stream] VRAM cache: hits=30080 misses=9165 hit_rate=76.6%",
+          "[kimi_cpu_moe_profile] down calls=18960 total=3.783 ms/call convert_t0=0.001 route=0.004 route_barrier=0.002 cuda_batch=1.747 cuda_single=2.001 post_cuda_barrier=0.008 fallback_t0=0.001 batch_accept=12640 batch_decline=0 single_accept=39245 single_decline=0"
+        ],
+        "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Summarize climate change in one paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -st --simple-io",
+        "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260707T235913Z-20260708-upq80-pinned8-general-devset-n192/climate-cpu40-vram4gb/environment.txt"
+      }
+    ],
+    "aggregate": {
+      "count": 5,
+      "eval_tok_s_values": [
+        2.7,
+        2.2,
+        2.0,
+        2.6,
+        2.5
+      ],
+      "min_eval_tok_s": 2.0,
+      "mean_eval_tok_s": 2.4,
+      "max_eval_tok_s": 2.7,
+      "all_ram_ok": true,
+      "all_correctness_ok": true,
+      "all_exit_zero": true,
+      "max_ttft_ms": 38824.410633,
+      "min_ttft_ms": 35765.120862
+    }
+  },
+  "held_out_test_set_v1_locked": {
+    "results": [
+      {
+        "prompt_id": "photosynthesis",
+        "prompt": "Describe photosynthesis in a short paragraph.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708T000147Z-20260708-upq80-pinned8-heldout-v1-n192/photosynthesis-cpu40-vram4gb",
+        "answer": "Photosynthesis is the biological process by which plants, algae, and some bacteria convert light energy into chemical energy. Using sunlight, water, and carbon dioxide, they produce glucose (a sugar) and oxygen. This process primarily occurs in the chloroplasts of plant cells, where chlorophyll captures sunlight. The overall equation is 6CO₂ + 6H₂O + light energy → C₆H₁₂O₆ + 6O₂. It consists of two main stages: the light-dependent reactions, which capture energy from sunlight and produce ATP and NADPH, and the Calvin cycle (light-independent reactions), which uses that energy to fix carbon dioxide into glucose. Photosynthesis is essential for life on Earth as it provides oxygen and forms the basis of the food chain.",
+        "eval_tok_s": 2.4,
+        "prompt_tok_s": 0.8,
+        "ttft_estimate_ms": 37269.405825,
+        "elapsed_seconds": 99.82,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 14919671808,
+        "memory_max_events": 9615,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "exit_status": 0,
+        "fallback_by_role": {},
+        "stderr_key_lines": [
+          "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+          "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5597 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+          "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+          "[moe_stream_batch] expert pack: total entries=33024 sources=1",
+          "[moe_stream_batch] pinned staging: enabled, 8 slots of 4.25 MiB",
+          "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+          "[moe_stream_batch] pinned staging: copies=17957 waits=17949 fallbacks=0 slots=8 slot=4.25 MiB",
+          "[moe_stream_batch] expert pack: hits=17957 misses=0 read_failures=0 direct_reads=17957 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=33024",
+          "[moe_stream_batch] VRAM cache: hits=26243 misses=17957 preloads=0 hit_rate=59.4%",
+          "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=26243 misses=17957 preloads=0 pinned=0 hit_rate=59.4%",
+          "[moe_stream] VRAM cache: hits=30274 misses=9383 hit_rate=76.3%",
+          "[kimi_cpu_moe_profile] down calls=19200 total=3.939 ms/call convert_t0=0.001 route=0.004 route_barrier=0.001 cuda_batch=1.850 cuda_single=2.058 post_cuda_barrier=0.008 fallback_t0=0.001 batch_accept=12800 batch_decline=0 single_accept=39657 single_decline=0"
+        ],
+        "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Describe photosynthesis in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -st --simple-io",
+        "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260708T000147Z-20260708-upq80-pinned8-heldout-v1-n192/photosynthesis-cpu40-vram4gb/environment.txt"
+      },
+      {
+        "prompt_id": "office",
+        "prompt": "Give three practical tips for organizing a small home office.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708T000332Z-20260708-upq80-pinned8-heldout-v1-n192/office-cpu40-vram4gb",
+        "answer": "space**3 Practical Tips for Organizing a Small Home Office**  \n\n1. **Maximize Vertical Space with Wall-Mounted Storage**  \n   - Use floating shelves, pegboards, or wall-mounted file holders to keep desks clear. This frees up valuable floor and desk space while keeping essentials like books, files, or stationery within reach.  \n   *Tip: Install a wall-mounted rack for cables to prevent tangling and keep them out of sight.*  \n\n2. **Use Multi-Functional Furniture****  \n   Opt for furniture that serves dual purposes, such as a desk with built-in storage or a chair with a back that doubles as a shelf. This helps minimize clutter and maximize the use of limited space.  \n\n3. **Implement a “One In, One Out” Rule**  \n   To maintain a clutter-free workspace, adopt a policy that for every new item added to the office, an old item must be removed. This helps",
+        "eval_tok_s": 2.3,
+        "prompt_tok_s": 1.1,
+        "ttft_estimate_ms": 37576.323169,
+        "elapsed_seconds": 119.4,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15018258432,
+        "memory_max_events": 12042,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "exit_status": 0,
+        "fallback_by_role": {
+          "gate": {
+            "rows": 147,
+            "calls": 16,
+            "fallback_us": 252612,
+            "batch": {
+              "batch_unsupported": 16
+            },
+            "single": {
+              "one_declined_internal": 16
+            },
+            "final": {
+              "one_declined_internal": 16
+            }
+          }
+        },
+        "stderr_key_lines": [
+          "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+          "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5597 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+          "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+          "[moe_stream_batch] expert pack: total entries=33024 sources=1",
+          "[moe_stream_batch] pinned staging: enabled, 8 slots of 4.25 MiB",
+          "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+          "[moe_stream_batch] pinned staging: copies=24339 waits=24331 fallbacks=0 slots=8 slot=4.25 MiB",
+          "[moe_stream_batch] expert pack: hits=24339 misses=0 read_failures=0 direct_reads=24339 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=33024",
+          "[moe_stream_batch] VRAM cache: hits=29741 misses=24339 preloads=0 hit_rate=55.0%",
+          "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=29741 misses=24339 preloads=0 pinned=0 hit_rate=55.0%",
+          "[moe_stream] VRAM cache: hits=35884 misses=12311 hit_rate=74.5%",
+          "[kimi_cpu_moe_profile] down calls=23280 total=4.013 ms/call convert_t0=0.001 route=0.004 route_barrier=0.002 cuda_batch=1.881 cuda_single=2.090 post_cuda_barrier=0.009 fallback_t0=0.012 batch_accept=15520 batch_decline=0 single_accept=48195 single_decline=16"
+        ],
+        "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Give three practical tips for organizing a small home office.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -st --simple-io",
+        "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260708T000332Z-20260708-upq80-pinned8-heldout-v1-n192/office-cpu40-vram4gb/environment.txt"
+      },
+      {
+        "prompt_id": "palindrome_js",
+        "prompt": "Write a concise JavaScript function that checks whether a string is a palindrome.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708T000536Z-20260708-upq80-pinned8-heldout-v1-n192/palindrome_js-cpu40-vram4gb",
+        "answer": "Here's a concise JavaScript function to check if a string is a palindrome:\n\n```javascript\nconst isPalindrome = str => str === str.split('').reverse().join('');\n```\n\nThis function works by:\n1. Converting the string to an array of characters using `split('')`\n2. Reversing the array using `reverse()`\n3. Joining the array back into a string using `join('')`\n4. Comparing the reversed string with the original string\n\nIf you want to handle case-insensitivity and spaces/punctuation (like \"A man, a plan, a canal, Panama\"), you can use this more robust version:\n\n```javascript\nconst isPalindrome = str => {\n  const cleaned = str.toLowerCase().replace(/[^a-z0-9]/g, '');\n  return cleaned === cleaned.split('').reverse().join('');\n}\n```\n\nThis version removes non-alphanumeric characters and converts to lowercase before checking.",
+        "eval_tok_s": 2.2,
+        "prompt_tok_s": 1.2,
+        "ttft_estimate_ms": 38341.596676,
+        "elapsed_seconds": 125.34,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 14781964288,
+        "memory_max_events": 13688,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "exit_status": 0,
+        "fallback_by_role": {
+          "gate": {
+            "rows": 414,
+            "calls": 42,
+            "fallback_us": 511910,
+            "batch": {
+              "batch_unsupported": 42
+            },
+            "single": {
+              "one_declined_internal": 42
+            },
+            "final": {
+              "one_declined_internal": 42
+            }
+          }
+        },
+        "stderr_key_lines": [
+          "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+          "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5597 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+          "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+          "[moe_stream_batch] expert pack: total entries=33024 sources=1",
+          "[moe_stream_batch] pinned staging: enabled, 8 slots of 4.25 MiB",
+          "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+          "[moe_stream_batch] pinned staging: copies=22618 waits=22610 fallbacks=0 slots=8 slot=4.25 MiB",
+          "[moe_stream_batch] expert pack: hits=22618 misses=0 read_failures=0 direct_reads=22618 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=33024",
+          "[moe_stream_batch] VRAM cache: hits=32242 misses=22618 preloads=0 hit_rate=58.8%",
+          "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=32242 misses=22618 preloads=0 pinned=0 hit_rate=58.8%",
+          "[moe_stream] VRAM cache: hits=35672 misses=12688 hit_rate=73.8%",
+          "[kimi_cpu_moe_profile] down calls=23400 total=4.228 ms/call convert_t0=0.001 route=0.004 route_barrier=0.006 cuda_batch=1.798 cuda_single=2.360 post_cuda_barrier=0.010 fallback_t0=0.023 batch_accept=15600 batch_decline=0 single_accept=48360 single_decline=42"
+        ],
+        "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Write a concise JavaScript function that checks whether a string is a palindrome.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -st --simple-io",
+        "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260708T000536Z-20260708-upq80-pinned8-heldout-v1-n192/palindrome_js-cpu40-vram4gb/environment.txt"
+      },
+      {
+        "prompt_id": "exercise",
+        "prompt": "Explain why regular exercise is important in one paragraph.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708T000747Z-20260708-upq80-pinned8-heldout-v1-n192/exercise-cpu40-vram4gb",
+        "answer": "Regular exercise is crucial for maintaining both physical and mental well-being. It strengthens the cardiovascular system, improves muscle and bone density, and helps regulate weight by boosting metabolism and burning calories. Beyond the physical benefits, exercise also plays a vital role in mental health by reducing stress, anxiety, and depression, while enhancing mood and cognitive function through the release of endorphins and other brain chemicals. Additionally, regular physical activity reduces the risk of chronic diseases such as heart disease, diabetes, and certain cancers, improves sleep quality, and boosts overall energy levels. By promoting longevity and enhancing quality of life, exercise is an essential component of a healthy lifestyle.",
+        "eval_tok_s": 2.6,
+        "prompt_tok_s": 0.8,
+        "ttft_estimate_ms": 40980.942791,
+        "elapsed_seconds": 88.94,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15016034304,
+        "memory_max_events": 8320,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "exit_status": 0,
+        "fallback_by_role": {
+          "gate": {
+            "rows": 45,
+            "calls": 5,
+            "fallback_us": 48597,
+            "batch": {
+              "batch_unsupported": 5
+            },
+            "single": {
+              "one_declined_internal": 5
+            },
+            "final": {
+              "one_declined_internal": 5
+            }
+          }
+        },
+        "stderr_key_lines": [
+          "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+          "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5597 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+          "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+          "[moe_stream_batch] expert pack: total entries=33024 sources=1",
+          "[moe_stream_batch] pinned staging: enabled, 8 slots of 4.25 MiB",
+          "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+          "[moe_stream_batch] pinned staging: copies=15072 waits=15064 fallbacks=0 slots=8 slot=4.25 MiB",
+          "[moe_stream_batch] expert pack: hits=15072 misses=0 read_failures=0 direct_reads=15072 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=33024",
+          "[moe_stream_batch] VRAM cache: hits=22628 misses=15072 preloads=0 hit_rate=60.0%",
+          "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=22628 misses=15072 preloads=0 pinned=0 hit_rate=60.0%",
+          "[moe_stream] VRAM cache: hits=25481 misses=7775 hit_rate=76.6%",
+          "[kimi_cpu_moe_profile] down calls=15840 total=4.106 ms/call convert_t0=0.002 route=0.004 route_barrier=0.003 cuda_batch=1.950 cuda_single=2.116 post_cuda_barrier=0.009 fallback_t0=0.004 batch_accept=10560 batch_decline=0 single_accept=33256 single_decline=5"
+        ],
+        "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Explain why regular exercise is important in one paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -st --simple-io",
+        "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260708T000747Z-20260708-upq80-pinned8-heldout-v1-n192/exercise-cpu40-vram4gb/environment.txt"
+      },
+      {
+        "prompt_id": "brazil",
+        "prompt": "Introduce Brazil in a short paragraph.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708T000921Z-20260708-upq80-pinned8-heldout-v1-n192/brazil-cpu40-vram4gb",
+        "answer": "Brazil is the largest country in South America and the fifth largest in the world by both area and population. It is a vibrant and diverse nation, known for its rich cultural heritage, which blends Indigenous, African, and European influences. The country is famous for its iconic landmarks, such as the Christ the Rede statue in Rio de Janeiro, the Amazon Rainforest, and the vast Pant wetlands. Brazil is also renowned for its lively music and dance traditions, including samba and bossa nova, and its passion for football (soccer). With a population of over 200 million people, it is a Portuguese-speaking country with a unique blend of cultures, natural beauty, and economic potential. The capital is Brasília, and the official language is Portuguese. Brazil is also known for its Carnival festival, diverse ecosystems, and being a major player in the global economy, particularly in agriculture and natural resources.",
+        "eval_tok_s": 2.6,
+        "prompt_tok_s": 0.8,
+        "ttft_estimate_ms": 40201.025771,
+        "elapsed_seconds": 105.66,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15021117440,
+        "memory_max_events": 9744,
+        "ram_ok": true,
+        "ram_limit_killed": false,
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "exit_status": 0,
+        "fallback_by_role": {},
+        "stderr_key_lines": [
+          "[moe_stream] VRAM cache: 8.0 GiB, 1927 slots (4.25 MiB each)",
+          "[moe_stream_batch] VRAM cache budget: requested=4096 MiB actual=4096 MiB free=5597 MiB total=32109 MiB graph_reserve=0 MiB safety=0 MiB clamp=0",
+          "[moe_stream_batch] VRAM cache: 4.0 GiB, 963 slots (4.25 MiB each)",
+          "[moe_stream_batch] expert pack: total entries=33024 sources=1",
+          "[moe_stream_batch] pinned staging: enabled, 8 slots of 4.25 MiB",
+          "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active",
+          "[moe_stream_batch] pinned staging: copies=19614 waits=19606 fallbacks=0 slots=8 slot=4.25 MiB",
+          "[moe_stream_batch] expert pack: hits=19614 misses=0 read_failures=0 direct_reads=19614 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=33024",
+          "[moe_stream_batch] VRAM cache: hits=30826 misses=19614 preloads=0 hit_rate=61.1%",
+          "[moe_stream_batch] VRAM cache down: slots=963 slot=4.25 MiB hits=30826 misses=19614 preloads=0 pinned=0 hit_rate=61.1%",
+          "[moe_stream] VRAM cache: hits=35672 misses=9578 hit_rate=78.8%",
+          "[kimi_cpu_moe_profile] down calls=21960 total=3.644 ms/call convert_t0=0.001 route=0.004 route_barrier=0.001 cuda_batch=1.816 cuda_single=1.803 post_cuda_barrier=0.007 fallback_t0=0.001 batch_accept=14640 batch_decline=0 single_accept=45250 single_decline=0"
+        ],
+        "exact_command": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream/bin/llama-cli -m /root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.gguf -p 'Introduce Brazil in a short paragraph.' -n 192 -c 512 -b 64 -ub 64 -t 20 -tb 20 -ngl all --fit on -fa auto --temp 0 --top-p 1 --top-k 1 --seed 1 --no-display-prompt --n-cpu-moe 40 --defer-experts -c 256 -b 16 -ub 16 -st --simple-io",
+        "environment_file": "/root/lfz/runs/vendor-ds4-16gb/20260708T000921Z-20260708-upq80-pinned8-heldout-v1-n192/brazil-cpu40-vram4gb/environment.txt"
+      }
+    ],
+    "aggregate": {
+      "count": 5,
+      "eval_tok_s_values": [
+        2.4,
+        2.3,
+        2.2,
+        2.6,
+        2.6
+      ],
+      "min_eval_tok_s": 2.2,
+      "mean_eval_tok_s": 2.42,
+      "max_eval_tok_s": 2.6,
+      "all_ram_ok": true,
+      "all_correctness_ok": true,
+      "all_exit_zero": true,
+      "max_ttft_ms": 40980.942791,
+      "min_ttft_ms": 37269.405825
+    }
+  },
+  "baseline_dev_reference": {
+    "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+    "aggregate": {
+      "all_memory_peak_bytes": [
+        16000000000
+      ],
+      "all_ram_ok": true,
+      "max_eval_tok_s": 2.7,
+      "mean_eval_tok_s": 2.1799999999999997,
+      "min_eval_tok_s": 1.8,
+      "prompt_specific_env_detected_any": false,
+      "target_met_all_prompts_gt_5_tok_s": false
+    },
+    "per_prompt": [
+      {
+        "prompt_id": "france",
+        "eval_tok_s": 2.7,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 37923.003507,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15038562304,
+        "ram_ok": true,
+        "heuristic_correctness_ok": true
+      },
+      {
+        "prompt_id": "quantum",
+        "eval_tok_s": 1.8,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 36302.576297,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 14976151552,
+        "ram_ok": true,
+        "heuristic_correctness_ok": true
+      },
+      {
+        "prompt_id": "fibonacci",
+        "eval_tok_s": 1.8,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 39690.826466,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 14956929024,
+        "ram_ok": true,
+        "heuristic_correctness_ok": true
+      },
+      {
+        "prompt_id": "japan",
+        "eval_tok_s": 2.4,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 40176.617912,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15018594304,
+        "ram_ok": true,
+        "heuristic_correctness_ok": true
+      },
+      {
+        "prompt_id": "climate",
+        "eval_tok_s": 2.2,
+        "prompt_tok_s": 0.9,
+        "ttft_estimate_ms": 37774.874377,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 14991720448,
+        "ram_ok": true,
+        "heuristic_correctness_ok": true
+      }
+    ]
+  },
+  "acceptance": {
+    "dev_improves_mean": true,
+    "dev_improves_min": true,
+    "dev_all_ram_correct": true,
+    "heldout_all_ram_correct": true,
+    "ttft_gate_vs_dev_baseline": "pass: per-prompt TTFT is below corresponding dev baseline for calibration set; held-out has no prior baseline in this artifact",
+    "product_gt_5_tok_s_met": false,
+    "decision": "accept_as_current_generalized_sota_but_continue_optimization_toward_gt5"
+  },
+  "reproduction_notes": [
+    "Use pushed branch ssd/vendor/deepseek-token-rate-16gb at the commit containing this artifact.",
+    "Run each prompt with strict_ds4_runner.py, --cpu-moe 40, --vram-cache-gb 4, --drop-caches-before-case, MemoryMax=16000000000, MemorySwapMax=0.",
+    "Set the candidate_config env exactly; do not set prompt-specific packs, prompt-specific profiles, or held-out-derived artifacts.",
+    "Page cache is counted in memory_file_bytes inside the cgroup; all accepted runs have ram_ok=true."
+  ]
+}

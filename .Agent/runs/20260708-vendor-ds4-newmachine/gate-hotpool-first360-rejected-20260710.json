@@ -1,0 +1,54 @@
+{
+  "artifact": "gate-hotpool-first360-rejected-20260710",
+  "created_at_local": "2026-07-10",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit": "cf2c51bc93b4c714b349e11471fe00aabd60c1b6",
+  "machine": "wici@192.168.9.198",
+  "status": "rejected_below_current_sota",
+  "current_sota_reference": {
+    "method": "gate direct hot pool first320",
+    "accepted_eval_tok_s": 5.6,
+    "repeat_eval_tok_s": [5.6, 5.7],
+    "record_commit": "cf6ffc6 / cf2c51b follow-up script parameterization"
+  },
+  "test": {
+    "method": "prompt-general gate direct hot pool first360",
+    "prompt_specific": false,
+    "manifest_entries": 360,
+    "manifest_bytes": 1604321280,
+    "direct_pool_mib": 1600,
+    "direct_prefill_limit": 360,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260710T035645Z-interactive",
+    "prompt": "Explain quantum computing briefly.",
+    "max_tokens": 96,
+    "strict_cold": true,
+    "display_processes_stopped_before_run": true,
+    "source_dirty": false,
+    "eval_tok_s": 5.5,
+    "prompt_tok_s": 3.6,
+    "ttft_ms": 16406.416928,
+    "memory_peak_bytes": 14848045056,
+    "memory_file_bytes": 13949956096,
+    "ram_ok": true,
+    "correctness": "pass: coherent quantum-computing explanation, truncated only by n=96"
+  },
+  "counters": {
+    "direct_hot_pool": {
+      "allocated_mib": 1530.0,
+      "slots": 360,
+      "attempted": 360,
+      "inserted": 360,
+      "bytes": 1604321280,
+      "elapsed_ms": 792.495,
+      "read_ms": 498.327,
+      "h2d_ms": 286.2,
+      "lookups": 12221,
+      "hits": 434
+    },
+    "one_cache": "12.0 GiB, 2891 slots, hits=9170 misses=2712 hit_rate=77.2%",
+    "one_pack_reads": 2712,
+    "one_pack_bytes": 12085886976
+  },
+  "decision": "Reject first360. It reduces one-pack reads versus first320/first240, but the larger async prefill cost and VRAM pressure do not improve the clean strict-cold token rate over the accepted first320 SOTA.",
+  "next": "Keep first320 as SOTA. Future work should focus on allocation ordering/reservation or cheaper hot-pool prefill, not simply increasing entry count."
+}

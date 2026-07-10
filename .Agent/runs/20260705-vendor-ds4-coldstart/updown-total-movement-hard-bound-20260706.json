@@ -1,0 +1,919 @@
+{
+  "aggregate": {
+    "fallback_ms": 216535.305,
+    "logical_repeated_bytes": 1016159272960,
+    "logical_repeated_gib": 946.3720703125,
+    "rows": 228020,
+    "unique_pairs": 13366,
+    "unique_payload_bytes": 59564883968,
+    "unique_payload_gib": 55.47412109375
+  },
+  "aggregate_by_role": {
+    "down": {
+      "fallback_ms": 93061.272,
+      "logical_repeated_bytes": 508079636480,
+      "logical_repeated_gib": 473.18603515625,
+      "rows": 114010,
+      "unique_pairs": 6683,
+      "unique_payload_bytes": 29782441984,
+      "unique_payload_gib": 27.737060546875
+    },
+    "up": {
+      "fallback_ms": 123474.033,
+      "logical_repeated_bytes": 508079636480,
+      "logical_repeated_gib": 473.18603515625,
+      "rows": 114010,
+      "unique_pairs": 6683,
+      "unique_payload_bytes": 29782441984,
+      "unique_payload_gib": 27.737060546875
+    }
+  },
+  "artifact_id": "20260706-updown-total-movement-hard-bound",
+  "case_dirs": [
+    "/root/lfz/runs/vendor-ds4-16gb/20260706T112616Z-dev-fallback-profile-no-prompt-specific-20260706/france-cpu40-vram0gb",
+    "/root/lfz/runs/vendor-ds4-16gb/20260706T112751Z-dev-fallback-profile-no-prompt-specific-20260706/quantum-cpu40-vram0gb",
+    "/root/lfz/runs/vendor-ds4-16gb/20260706T113014Z-dev-fallback-profile-no-prompt-specific-20260706/fibonacci-cpu40-vram0gb",
+    "/root/lfz/runs/vendor-ds4-16gb/20260706T113247Z-dev-fallback-profile-no-prompt-specific-20260706/japan-cpu40-vram0gb",
+    "/root/lfz/runs/vendor-ds4-16gb/20260706T113425Z-dev-fallback-profile-no-prompt-specific-20260706/climate-cpu40-vram0gb"
+  ],
+  "conclusion": {
+    "candidate_A_persistent_hotset": "Only plausible if a small top slice improves enough without stealing gate cache. The coverage table should be used to choose a payload cap before any benchmark.",
+    "candidate_B_combined_pack_read": "Up/down layer-expert overlap is high by construction, but gate overlap is not measured in this artifact. Combined up/down pack could reduce indexing/read overhead but still has large payload and 16GB page-cache pressure.",
+    "candidate_C_grouped_staging": "More credible than naive one-stream if it avoids long-lived cache pollution and amortizes staging over multiple rows, but must be proven against transfer lower bounds before implementation.",
+    "missing_evidence": "No gate per-expert trace in the source dev fallback runs, so gate/up/down overlap cannot be claimed yet. Run a calibration gate trace only if a combined gate/up/down pack design needs it.",
+    "summary": "Calibration up/down fallback has a broad long-tail. The top 50% of fallback already requires a multi-GiB unique up/down payload, and 90% requires most of the observed unique payload. Simple uncached streaming is bounded by hundreds of GiB of repeated expert movement and already regressed in probes."
+  },
+  "coverage_by_fallback": {
+    "50": {
+      "covered_fallback_ms": 108291.419,
+      "covered_fraction": 0.5001097580830988,
+      "logical_repeated_bytes_for_selected": 517567414272,
+      "logical_repeated_gib_for_selected": 482.022216796875,
+      "unique_pairs": 1857,
+      "unique_payload_bytes": 8275623936,
+      "unique_payload_gib": 7.707275390625
+    },
+    "70": {
+      "covered_fallback_ms": 151583.622,
+      "covered_fraction": 0.7000411410970604,
+      "logical_repeated_bytes_for_selected": 706453962752,
+      "logical_repeated_gib_for_selected": 657.9365234375,
+      "unique_pairs": 3587,
+      "unique_payload_bytes": 15985278976,
+      "unique_payload_gib": 14.887451171875
+    },
+    "80": {
+      "covered_fallback_ms": 173233.537,
+      "covered_fraction": 0.8000244440508212,
+      "logical_repeated_bytes_for_selected": 799428837376,
+      "logical_repeated_gib_for_selected": 744.526123046875,
+      "unique_pairs": 4903,
+      "unique_payload_bytes": 21849964544,
+      "unique_payload_gib": 20.349365234375
+    },
+    "90": {
+      "covered_fallback_ms": 194886.753,
+      "covered_fraction": 0.9000229916317803,
+      "logical_repeated_bytes_for_selected": 898598174720,
+      "logical_repeated_gib_for_selected": 836.884765625,
+      "unique_pairs": 6881,
+      "unique_payload_bytes": 30664818688,
+      "unique_payload_gib": 28.558837890625
+    },
+    "95": {
+      "covered_fallback_ms": 205710.394,
+      "covered_fraction": 0.9500085632687012,
+      "logical_repeated_bytes_for_selected": 949201141760,
+      "logical_repeated_gib_for_selected": 884.012451171875,
+      "unique_pairs": 8517,
+      "unique_payload_bytes": 37955567616,
+      "unique_payload_gib": 35.348876953125
+    }
+  },
+  "held_out_test_used": false,
+  "inputs": {
+    "fallback_reason_profile_csv_count": 5,
+    "rows_read": 39422
+  },
+  "prompt_scope": "calibration_dev_set_v1_only",
+  "prompt_summaries": {
+    "null": {
+      "by_role": {
+        "down": {
+          "fallback_ms": 93061.272,
+          "logical_repeated_bytes": 508079636480,
+          "logical_repeated_gib": 473.18603515625,
+          "rows": 114010,
+          "unique_pairs": 6683,
+          "unique_payload_bytes": 29782441984,
+          "unique_payload_gib": 27.737060546875
+        },
+        "up": {
+          "fallback_ms": 123474.033,
+          "logical_repeated_bytes": 508079636480,
+          "logical_repeated_gib": 473.18603515625,
+          "rows": 114010,
+          "unique_pairs": 6683,
+          "unique_payload_bytes": 29782441984,
+          "unique_payload_gib": 27.737060546875
+        }
+      },
+      "coverage_by_fallback": {
+        "50": {
+          "covered_fallback_ms": 108291.419,
+          "covered_fraction": 0.5001097580830988,
+          "logical_repeated_bytes_for_selected": 517567414272,
+          "logical_repeated_gib_for_selected": 482.022216796875,
+          "unique_pairs": 1857,
+          "unique_payload_bytes": 8275623936,
+          "unique_payload_gib": 7.707275390625
+        },
+        "70": {
+          "covered_fallback_ms": 151583.622,
+          "covered_fraction": 0.7000411410970604,
+          "logical_repeated_bytes_for_selected": 706453962752,
+          "logical_repeated_gib_for_selected": 657.9365234375,
+          "unique_pairs": 3587,
+          "unique_payload_bytes": 15985278976,
+          "unique_payload_gib": 14.887451171875
+        },
+        "80": {
+          "covered_fallback_ms": 173233.537,
+          "covered_fraction": 0.8000244440508212,
+          "logical_repeated_bytes_for_selected": 799428837376,
+          "logical_repeated_gib_for_selected": 744.526123046875,
+          "unique_pairs": 4903,
+          "unique_payload_bytes": 21849964544,
+          "unique_payload_gib": 20.349365234375
+        },
+        "90": {
+          "covered_fallback_ms": 194886.753,
+          "covered_fraction": 0.9000229916317803,
+          "logical_repeated_bytes_for_selected": 898598174720,
+          "logical_repeated_gib_for_selected": 836.884765625,
+          "unique_pairs": 6881,
+          "unique_payload_bytes": 30664818688,
+          "unique_payload_gib": 28.558837890625
+        },
+        "95": {
+          "covered_fallback_ms": 205710.394,
+          "covered_fraction": 0.9500085632687012,
+          "logical_repeated_bytes_for_selected": 949201141760,
+          "logical_repeated_gib_for_selected": 884.012451171875,
+          "unique_pairs": 8517,
+          "unique_payload_bytes": 37955567616,
+          "unique_payload_gib": 35.348876953125
+        }
+      },
+      "eval_tok_s": 2.6,
+      "summary": {
+        "fallback_ms": 216535.305,
+        "logical_repeated_bytes": 1016159272960,
+        "logical_repeated_gib": 946.3720703125,
+        "rows": 228020,
+        "unique_pairs": 13366,
+        "unique_payload_bytes": 59564883968,
+        "unique_payload_gib": 55.47412109375
+      },
+      "ttft_ms": 37516.648734
+    }
+  },
+  "source_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+  "top_pairs_by_fallback_ms": [
+    {
+      "calls": 509,
+      "expert_bytes": 4456448,
+      "expert_idx": 66,
+      "fallback_us": 423386,
+      "logical_bytes": 2268332032,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 509,
+      "tensor": "blk.22.ffn_up_exps.weight"
+    },
+    {
+      "calls": 440,
+      "expert_bytes": 4456448,
+      "expert_idx": 101,
+      "fallback_us": 393045,
+      "logical_bytes": 1960837120,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 440,
+      "tensor": "blk.3.ffn_up_exps.weight"
+    },
+    {
+      "calls": 487,
+      "expert_bytes": 4456448,
+      "expert_idx": 3,
+      "fallback_us": 362791,
+      "logical_bytes": 2170290176,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 487,
+      "tensor": "blk.17.ffn_up_exps.weight"
+    },
+    {
+      "calls": 366,
+      "expert_bytes": 4456448,
+      "expert_idx": 166,
+      "fallback_us": 361892,
+      "logical_bytes": 1631059968,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 366,
+      "tensor": "blk.18.ffn_up_exps.weight"
+    },
+    {
+      "calls": 413,
+      "expert_bytes": 4456448,
+      "expert_idx": 152,
+      "fallback_us": 317106,
+      "logical_bytes": 1902903296,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 427,
+      "tensor": "blk.27.ffn_up_exps.weight"
+    },
+    {
+      "calls": 440,
+      "expert_bytes": 4456448,
+      "expert_idx": 101,
+      "fallback_us": 308228,
+      "logical_bytes": 1960837120,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 440,
+      "tensor": "blk.3.ffn_down_exps.weight"
+    },
+    {
+      "calls": 326,
+      "expert_bytes": 4456448,
+      "expert_idx": 200,
+      "fallback_us": 289889,
+      "logical_bytes": 1506279424,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 338,
+      "tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "calls": 509,
+      "expert_bytes": 4456448,
+      "expert_idx": 66,
+      "fallback_us": 286277,
+      "logical_bytes": 2268332032,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 509,
+      "tensor": "blk.22.ffn_down_exps.weight"
+    },
+    {
+      "calls": 162,
+      "expert_bytes": 4456448,
+      "expert_idx": 40,
+      "fallback_us": 276543,
+      "logical_bytes": 891289600,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 200,
+      "tensor": "blk.10.ffn_up_exps.weight"
+    },
+    {
+      "calls": 276,
+      "expert_bytes": 4456448,
+      "expert_idx": 233,
+      "fallback_us": 271384,
+      "logical_bytes": 1229979648,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 276,
+      "tensor": "blk.4.ffn_up_exps.weight"
+    },
+    {
+      "calls": 367,
+      "expert_bytes": 4456448,
+      "expert_idx": 79,
+      "fallback_us": 255308,
+      "logical_bytes": 1635516416,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 367,
+      "tensor": "blk.18.ffn_up_exps.weight"
+    },
+    {
+      "calls": 382,
+      "expert_bytes": 4456448,
+      "expert_idx": 176,
+      "fallback_us": 244657,
+      "logical_bytes": 1702363136,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 382,
+      "tensor": "blk.16.ffn_up_exps.weight"
+    },
+    {
+      "calls": 308,
+      "expert_bytes": 4456448,
+      "expert_idx": 111,
+      "fallback_us": 237404,
+      "logical_bytes": 1399324672,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 314,
+      "tensor": "blk.6.ffn_up_exps.weight"
+    },
+    {
+      "calls": 366,
+      "expert_bytes": 4456448,
+      "expert_idx": 166,
+      "fallback_us": 235929,
+      "logical_bytes": 1631059968,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 366,
+      "tensor": "blk.18.ffn_down_exps.weight"
+    },
+    {
+      "calls": 413,
+      "expert_bytes": 4456448,
+      "expert_idx": 152,
+      "fallback_us": 230197,
+      "logical_bytes": 1902903296,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 427,
+      "tensor": "blk.27.ffn_down_exps.weight"
+    },
+    {
+      "calls": 487,
+      "expert_bytes": 4456448,
+      "expert_idx": 3,
+      "fallback_us": 220089,
+      "logical_bytes": 2170290176,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 487,
+      "tensor": "blk.17.ffn_down_exps.weight"
+    },
+    {
+      "calls": 297,
+      "expert_bytes": 4456448,
+      "expert_idx": 122,
+      "fallback_us": 214435,
+      "logical_bytes": 1403781120,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 315,
+      "tensor": "blk.12.ffn_up_exps.weight"
+    },
+    {
+      "calls": 308,
+      "expert_bytes": 4456448,
+      "expert_idx": 111,
+      "fallback_us": 211141,
+      "logical_bytes": 1399324672,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 314,
+      "tensor": "blk.6.ffn_down_exps.weight"
+    },
+    {
+      "calls": 348,
+      "expert_bytes": 4456448,
+      "expert_idx": 146,
+      "fallback_us": 204874,
+      "logical_bytes": 1550843904,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 348,
+      "tensor": "blk.8.ffn_up_exps.weight"
+    },
+    {
+      "calls": 281,
+      "expert_bytes": 4456448,
+      "expert_idx": 112,
+      "fallback_us": 202596,
+      "logical_bytes": 1252261888,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 281,
+      "tensor": "blk.20.ffn_up_exps.weight"
+    },
+    {
+      "calls": 364,
+      "expert_bytes": 4456448,
+      "expert_idx": 246,
+      "fallback_us": 198073,
+      "logical_bytes": 1635516416,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 367,
+      "tensor": "blk.34.ffn_up_exps.weight"
+    },
+    {
+      "calls": 272,
+      "expert_bytes": 4456448,
+      "expert_idx": 60,
+      "fallback_us": 196998,
+      "logical_bytes": 1212153856,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 272,
+      "tensor": "blk.20.ffn_up_exps.weight"
+    },
+    {
+      "calls": 174,
+      "expert_bytes": 4456448,
+      "expert_idx": 23,
+      "fallback_us": 193345,
+      "logical_bytes": 788791296,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 177,
+      "tensor": "blk.28.ffn_up_exps.weight"
+    },
+    {
+      "calls": 162,
+      "expert_bytes": 4456448,
+      "expert_idx": 40,
+      "fallback_us": 191738,
+      "logical_bytes": 891289600,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 200,
+      "tensor": "blk.10.ffn_down_exps.weight"
+    },
+    {
+      "calls": 367,
+      "expert_bytes": 4456448,
+      "expert_idx": 79,
+      "fallback_us": 190046,
+      "logical_bytes": 1635516416,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 367,
+      "tensor": "blk.18.ffn_down_exps.weight"
+    },
+    {
+      "calls": 165,
+      "expert_bytes": 4456448,
+      "expert_idx": 242,
+      "fallback_us": 186884,
+      "logical_bytes": 735313920,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 165,
+      "tensor": "blk.9.ffn_up_exps.weight"
+    },
+    {
+      "calls": 404,
+      "expert_bytes": 4456448,
+      "expert_idx": 1,
+      "fallback_us": 186124,
+      "logical_bytes": 1800404992,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 404,
+      "tensor": "blk.14.ffn_up_exps.weight"
+    },
+    {
+      "calls": 276,
+      "expert_bytes": 4456448,
+      "expert_idx": 233,
+      "fallback_us": 185853,
+      "logical_bytes": 1229979648,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 276,
+      "tensor": "blk.4.ffn_down_exps.weight"
+    },
+    {
+      "calls": 326,
+      "expert_bytes": 4456448,
+      "expert_idx": 200,
+      "fallback_us": 181923,
+      "logical_bytes": 1506279424,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 338,
+      "tensor": "blk.8.ffn_down_exps.weight"
+    },
+    {
+      "calls": 144,
+      "expert_bytes": 4456448,
+      "expert_idx": 244,
+      "fallback_us": 181268,
+      "logical_bytes": 655097856,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 147,
+      "tensor": "blk.23.ffn_up_exps.weight"
+    },
+    {
+      "calls": 110,
+      "expert_bytes": 4456448,
+      "expert_idx": 8,
+      "fallback_us": 180778,
+      "logical_bytes": 570425344,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 128,
+      "tensor": "blk.4.ffn_up_exps.weight"
+    },
+    {
+      "calls": 98,
+      "expert_bytes": 4456448,
+      "expert_idx": 84,
+      "fallback_us": 169021,
+      "logical_bytes": 481296384,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 108,
+      "tensor": "blk.35.ffn_up_exps.weight"
+    },
+    {
+      "calls": 111,
+      "expert_bytes": 4456448,
+      "expert_idx": 175,
+      "fallback_us": 167422,
+      "logical_bytes": 508035072,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 114,
+      "tensor": "blk.39.ffn_up_exps.weight"
+    },
+    {
+      "calls": 382,
+      "expert_bytes": 4456448,
+      "expert_idx": 176,
+      "fallback_us": 167331,
+      "logical_bytes": 1702363136,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 382,
+      "tensor": "blk.16.ffn_down_exps.weight"
+    },
+    {
+      "calls": 211,
+      "expert_bytes": 4456448,
+      "expert_idx": 86,
+      "fallback_us": 164627,
+      "logical_bytes": 944766976,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 212,
+      "tensor": "blk.5.ffn_up_exps.weight"
+    },
+    {
+      "calls": 361,
+      "expert_bytes": 4456448,
+      "expert_idx": 142,
+      "fallback_us": 160782,
+      "logical_bytes": 1608777728,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 361,
+      "tensor": "blk.28.ffn_up_exps.weight"
+    },
+    {
+      "calls": 194,
+      "expert_bytes": 4456448,
+      "expert_idx": 159,
+      "fallback_us": 160329,
+      "logical_bytes": 864550912,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 194,
+      "tensor": "blk.39.ffn_up_exps.weight"
+    },
+    {
+      "calls": 297,
+      "expert_bytes": 4456448,
+      "expert_idx": 122,
+      "fallback_us": 159173,
+      "logical_bytes": 1403781120,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 315,
+      "tensor": "blk.12.ffn_down_exps.weight"
+    },
+    {
+      "calls": 222,
+      "expert_bytes": 4456448,
+      "expert_idx": 112,
+      "fallback_us": 158950,
+      "logical_bytes": 989331456,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 222,
+      "tensor": "blk.17.ffn_up_exps.weight"
+    },
+    {
+      "calls": 205,
+      "expert_bytes": 4456448,
+      "expert_idx": 232,
+      "fallback_us": 151757,
+      "logical_bytes": 918028288,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 206,
+      "tensor": "blk.11.ffn_up_exps.weight"
+    },
+    {
+      "calls": 252,
+      "expert_bytes": 4456448,
+      "expert_idx": 104,
+      "fallback_us": 150132,
+      "logical_bytes": 1123024896,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 252,
+      "tensor": "blk.15.ffn_up_exps.weight"
+    },
+    {
+      "calls": 188,
+      "expert_bytes": 4456448,
+      "expert_idx": 140,
+      "fallback_us": 149070,
+      "logical_bytes": 855638016,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 192,
+      "tensor": "blk.7.ffn_up_exps.weight"
+    },
+    {
+      "calls": 125,
+      "expert_bytes": 4456448,
+      "expert_idx": 219,
+      "fallback_us": 148577,
+      "logical_bytes": 561512448,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 126,
+      "tensor": "blk.9.ffn_up_exps.weight"
+    },
+    {
+      "calls": 164,
+      "expert_bytes": 4456448,
+      "expert_idx": 58,
+      "fallback_us": 147895,
+      "logical_bytes": 735313920,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 165,
+      "tensor": "blk.31.ffn_up_exps.weight"
+    },
+    {
+      "calls": 231,
+      "expert_bytes": 4456448,
+      "expert_idx": 45,
+      "fallback_us": 146931,
+      "logical_bytes": 1051721728,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 236,
+      "tensor": "blk.29.ffn_up_exps.weight"
+    },
+    {
+      "calls": 281,
+      "expert_bytes": 4456448,
+      "expert_idx": 96,
+      "fallback_us": 145595,
+      "logical_bytes": 1252261888,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 281,
+      "tensor": "blk.16.ffn_up_exps.weight"
+    },
+    {
+      "calls": 184,
+      "expert_bytes": 4456448,
+      "expert_idx": 85,
+      "fallback_us": 144616,
+      "logical_bytes": 824442880,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 185,
+      "tensor": "blk.26.ffn_up_exps.weight"
+    },
+    {
+      "calls": 84,
+      "expert_bytes": 4456448,
+      "expert_idx": 158,
+      "fallback_us": 144131,
+      "logical_bytes": 414449664,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 93,
+      "tensor": "blk.19.ffn_up_exps.weight"
+    },
+    {
+      "calls": 348,
+      "expert_bytes": 4456448,
+      "expert_idx": 146,
+      "fallback_us": 142836,
+      "logical_bytes": 1550843904,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "down",
+      "rows": 348,
+      "tensor": "blk.8.ffn_down_exps.weight"
+    },
+    {
+      "calls": 169,
+      "expert_bytes": 4456448,
+      "expert_idx": 126,
+      "fallback_us": 141894,
+      "logical_bytes": 757596160,
+      "prompt_count": 1,
+      "prompts": [
+        null
+      ],
+      "role": "up",
+      "rows": 170,
+      "tensor": "blk.31.ffn_up_exps.weight"
+    }
+  ],
+  "transfer_lower_bounds": {
+    "16_GiB_s": {
+      "ms": 59148.25439453125,
+      "seconds_for_all_repeated_updown_bytes": 59.14825439453125
+    },
+    "24_GiB_s": {
+      "ms": 39432.169596354164,
+      "seconds_for_all_repeated_updown_bytes": 39.432169596354164
+    },
+    "32_GiB_s": {
+      "ms": 29574.127197265625,
+      "seconds_for_all_repeated_updown_bytes": 29.574127197265625
+    },
+    "48_GiB_s": {
+      "ms": 19716.084798177082,
+      "seconds_for_all_repeated_updown_bytes": 19.716084798177082
+    },
+    "64_GiB_s": {
+      "ms": 14787.063598632812,
+      "seconds_for_all_repeated_updown_bytes": 14.787063598632812
+    }
+  },
+  "up_down_layer_expert_overlap": {
+    "both_fraction_of_down_pairs": 1.0,
+    "both_fraction_of_up_pairs": 1.0,
+    "both_up_and_down_layer_expert_pairs": 6683,
+    "down_layer_expert_pairs": 6683,
+    "up_layer_expert_pairs": 6683
+  },
+  "vram_reference": {
+    "expert_slot_bytes": 4456448,
+    "note": "Payload coverage figures are raw expert bytes. Any persistent up/down hotset must fit in VRAM after preserving enough gate cache; previous runs showed reducing gate cache or adding separate down cache caused regressions/OOM.",
+    "observed_gate_cache_payload_gib": 13.248046875,
+    "observed_one_stream_gate_cache_slots": 3192
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "artifact_id": "20260707-grouped-retained-handoff-eligibility-profile",
+  "status": "handoff_profiler_validated_default_graph_has_no_upgate_handoff_not_sota",
+  "timestamp_utc": "2026-07-07T11:00:00Z",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit_before_artifact_commit": "7642236db",
+  "held_out_test_used": false,
+  "prompt_scope": "calibration prompt only; held_out_test_set_v1_locked was not used",
+  "purpose": "Determine whether the current no-prompt-specific default graph already produces an up_gate output tensor that down can consume through existing GPU handoff semantics.",
+  "source_change": {
+    "file": "ggml/src/ggml-cpu/ggml-cpu.c",
+    "env": "GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT=<csv>",
+    "behavior": "default-off CPU-side profiler only; records the latest moe_up_gate dst pointer and compares each down src1 pointer/layer/width against it; does not enable GPU handoff, allocate GPU buffers, change route counts, change cache admission, or change logits",
+    "source_sha256": "0c8c151f5a867f8537aee35830ae6e805d318a8f690b43fb2035dcb999c93de8"
+  },
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream -j20 --target llama-cli llama-results",
+    "result": "passed",
+    "binary": "build-ds4-moe-stream/bin/llama-cli",
+    "binary_sha256": "c3aa016da81aee65db5b65fbb79a19604ef212e5897840c93dad3c9b8f1eab78"
+  },
+  "profile_run": {
+    "prompt": "Please introduce France in a short paragraph.",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T105726Z-20260707-grouped-retained-handoff-profile-france/france-handoff-profile-cpu40-vram0gb",
+    "handoff_csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T105726Z-20260707-grouped-retained-handoff-profile-france/france-handoff-profile-cpu40-vram0gb/handoff_profile.csv",
+    "config": {
+      "cpu_moe": 40,
+      "vram_cache_gb": 0,
+      "n_predict": 96,
+      "drop_caches_before_case": true,
+      "memory_max_bytes": 16000000000,
+      "memory_swap_max": 0,
+      "prompt_specific_pack_profile_alias": "unset",
+      "GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT": "{case_dir}/handoff_profile.csv"
+    },
+    "metrics": {
+      "eval_tok_s": 2.4,
+      "prompt_tok_s": 0.9,
+      "ttft_estimate_ms": 37437.770123,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15049195520,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "oom_seen": false,
+      "correctness_ok": false,
+      "correctness_reason": "unfinished_sentence",
+      "quality_note": "n=96 diagnostic output is truncated; this run is not a correctness or SOTA promotion run."
+    },
+    "handoff_summary": {
+      "records": 3920,
+      "shape_ok": 0,
+      "ptr_match": 0,
+      "layer_match": 98,
+      "width_match": 0,
+      "down_rows": 14170,
+      "down_active_experts": 13521,
+      "up_gate_serial_max": 0,
+      "up_rows_observed_by_profiler": 0,
+      "up_active_experts_observed_by_profiler": 0
+    }
+  },
+  "default_off_guard": {
+    "prompt": "Please introduce France in a short paragraph.",
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T105924Z-20260707-defaultoff-handoff-profiler-guard/defaultoff-france-after-handoff-profiler-cpu40-vram0gb",
+    "profiler_env_unset": true,
+    "metrics": {
+      "eval_tok_s": 2.5,
+      "prompt_tok_s": 0.9,
+      "ttft_estimate_ms": 36971.998157,
+      "elapsed_seconds": 90.03,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15020609536,
+      "ram_ok": true,
+      "ram_limit_killed": false,
+      "oom_seen": false,
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required"
+    },
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage."
+  },
+  "interpretation": {
+    "current_default_graph": "No moe_up_gate handoff producer was observed: up_gate_serial stayed 0 and all down records had shape_ok=0. The no-prompt-specific generalized path therefore cannot use existing g_handoff by simply enabling GGML_MOE_GPU_HANDOFF.",
+    "why_this_matters": "A retained GPU down path requires the upstream up/gate result to be produced on GPU first. Since the current graph does not create that producer in the baseline path, the next implementation must start at graph/fused-op entry and cannot be only a down-side handoff toggle.",
+    "forbidden_repeat": "Do not rerun the old plain GGML_MOE_STREAM_FUSED_UP_GATE + GGML_MOE_GPU_HANDOFF route as SOTA; prior evidence shows that route duplicates/competes with gate cache and is too slow.",
+    "next_action": "Design a default-off DS4 fused up/gate retained microbench that reuses current gate one-stream cache semantics or avoids gate duplication, produces a GPU-resident fused buffer, then feeds down through a correctness-checked handoff path."
+  },
+  "sota_status": "not_sota_diagnostic_only"
+}

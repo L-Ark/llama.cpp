@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260708-moe-stream-synthetic-harness-feasibility",
+  "created_at_local": "2026-07-08",
+  "status": "existing_backend_test_not_sufficient_for_moe_stream_parity_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "eded2fd9204ce3607d0ad93f95ed717a99e40be7",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Check whether existing test-backend-ops can be reused as a default-off synthetic MoE stream parity harness for compact-target lowbit types.",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-harness-feasibility",
+  "probe_command": "GGML_CUDA_FORCE_MMQ=1 GGML_MOE_STREAM_BATCH=1 GGML_MOE_STREAM_BATCH_ONLY=1 GGML_MOE_STREAM_BATCH_DECLINE_DEBUG=1 ./build-ds4-moe-stream-batch-probe/bin/test-backend-ops test -o MUL_MAT_ID -p type_a=iq1_s,type_b=f32,n_mats=4,n_used=2,b=0,m=512,n=1,k=256 --output csv",
+  "probe_outputs": {
+    "csv": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-harness-feasibility/stream-env-mulmatid-iq1s.csv",
+    "stderr": "/root/lfz/runs/vendor-ds4-16gb/synthetic-parity/20260708-moe-stream-harness-feasibility/stream-env-mulmatid-iq1s.stderr"
+  },
+  "observations": [
+    "The test passed as generic CUDA/CPU correctness, but stderr contained only CUDA init and no moe_stream_batch decline/debug line.",
+    "Current ggml-cuda/moe_stream_batch.cu down entry requires src0_name containing ffn_down_exps and supported stream types; test-backend-ops does not prove that path is entered.",
+    "Therefore X10-AJ generic backend smoke cannot be used as MoE stream fast-path parity evidence."
+  ],
+  "source_gate_summary": {
+    "down_entry_name_gate": "ggml/src/ggml-cuda/moe_stream_batch.cu requires src0_name containing ffn_down_exps before down batch logic.",
+    "type_gate": "current moe_stream_type_supported excludes IQ1_S/IQ1_M/Q2_K.",
+    "existing_tests": "test-backend-ops covers generic MUL_MAT/MUL_MAT_ID but not the vendor stream hook for these compact target types."
+  },
+  "decision": {
+    "accepted_sota_changed": false,
+    "source_patch_now": false,
+    "full_download_now": false,
+    "next_action": "Either run real compact target load/correctness after explicit cleanup, or add a dedicated default-off MoE stream parity harness that constructs named ffn_down_exps/ffn_up_exps tensors or calls ggml_cuda_moe_stream_batch directly with synthetic inputs."
+  }
+}

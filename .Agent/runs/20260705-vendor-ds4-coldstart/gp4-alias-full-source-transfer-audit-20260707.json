@@ -1,0 +1,47 @@
+{
+  "accepted_sota_changed": false,
+  "assessment": {
+    "can_enable_by_env_only_now": false,
+    "can_reference_strategy": true,
+    "expected_benefit_if_successful": "Complete source coverage could reduce pack/source misses and host staging/direct read overhead, moving DeepSeek closer to GP4-style all-source batched io_uring reads.",
+    "main_risks": [
+      "native DeepSeek GGUF tensor offset/name/expert-id mapping must be exact",
+      "io_uring/O_DIRECT alignment constraints may reject raw GGUF offsets",
+      "source coverage alone may not remove up/down CPU fallback or slow GPU kernels",
+      "16GB cgroup page cache must still include all file-backed pages",
+      "correctness must be proven before token-rate promotion"
+    ],
+    "reason": "DeepSeek branch has multi-source expert pack and io_uring machinery, but lacks the GP4 GGUF alias TSV source loader and aligned alias batch switch. The strategy must be ported or reimplemented default-off before runtime testing."
+  },
+  "attempt_id": "20260707-gp4-alias-full-source-transfer-audit",
+  "created_at_utc": "2026-07-07T03:16:43.124731+00:00",
+  "current_deepseek_code_evidence": {
+    "commit": "8649d9dd1ec1a6895b0961142856238f69097ccc",
+    "has_GGML_MOE_EXPERT_GGUF_ALIAS_TSV": false,
+    "has_GGML_MOE_IO_ALIGNED_ALIAS_BATCH": false,
+    "has_expert_pack_overlay": true,
+    "has_iouring_backend": true,
+    "kimi_historical_repo_available": false,
+    "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4"
+  },
+  "next_allowed_step": "artifact-only coverage audit: parse native DeepSeek GGUF expert tensor table and compare theoretical full-source alias entries/bytes against current pack entries and calibration/dev misses; no source edit or held-out run yet.",
+  "recent_deepseek_counter_evidence": [
+    {
+      "eval_tok_s": 2.4,
+      "hit_rate_pct": 82.3,
+      "ram_ok": true,
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260707T025306Z-20260707-user-db-index-diagnostic-no-prompt-specific/db-index-user-diagnostic-cpu40-vram0gb",
+      "vram_cache_hits": 21551,
+      "vram_cache_misses": 4650
+    },
+    {
+      "eval_tok_s": 2.3,
+      "hit_rate_pct": 86.3,
+      "ram_ok": true,
+      "run": "/root/lfz/runs/vendor-ds4-16gb/20260707T025616Z-20260707-user-what-to-eat-diagnostic-no-prompt-specific/what-to-eat-user-diagnostic-cpu40-vram0gb",
+      "vram_cache_hits": 40799,
+      "vram_cache_misses": 6504
+    }
+  ],
+  "source_strategy": "Kimi GP4 alias/full-source: expert packs plus GGUF shard alias TSV, aligned alias batch/io_uring reads, full source coverage, misses=0/direct_reads=0/host_stage=0 in reported run."
+}

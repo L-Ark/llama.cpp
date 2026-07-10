@@ -1,0 +1,58 @@
+{
+  "artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/gate-updown-cosubmit-rejected-20260708.json",
+  "date_utc": "2026-07-08",
+  "status": "rejected_not_sota_default_off",
+  "base_commit": "86f904c50",
+  "implementation": {
+    "env": "GGML_MOE_GATE_UPDOWN_COSUBMIT=1",
+    "default_enabled": false,
+    "summary": "Gate one-stream queues same-expert up/down preload jobs and flushes them once per gate op through batch io_uring/cache path."
+  },
+  "runs": {
+    "default_off_france_n32": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-defaultoff/20260708T052449Z-france-n32-defaultoff-after-cosubmit",
+      "eval_tok_s": 4.4,
+      "ttft_ms": 23772.645264,
+      "ram_ok": true
+    },
+    "cosubmit_france_n32": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-smoke2/20260708T051537Z-france-n32-cosubmit-queued",
+      "eval_tok_s": 4.3,
+      "ttft_ms": 24936.133969,
+      "ram_ok": true
+    },
+    "cosubmit_france_n96": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-n96/20260708T051640Z-france-n96-cosubmit-queued",
+      "eval_tok_s": 4.6,
+      "ttft_ms": 25628.309449,
+      "ram_ok": true
+    },
+    "cosubmit_quantum_n96": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-n96/20260708T051742Z-quantum-n96-cosubmit-queued",
+      "eval_tok_s": 3.6,
+      "ttft_ms": 24446.250065,
+      "ram_ok": true
+    },
+    "cosubmit_defer_france_n96": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-updown-cosubmit-defer-n96/20260708T051945Z-france-n96-cosubmit-defer",
+      "run_ok": false,
+      "elapsed_seconds": 145.99,
+      "killed": true,
+      "ram_ok": true
+    }
+  },
+  "diagnostics": {
+    "france_n96_up_aux_jobs": 2168,
+    "france_n96_up_aux_batches": 76,
+    "france_n96_up_aux_inflight_avg": 6.97,
+    "france_n96_up_aux_inflight_max": 8,
+    "interpretation": "Batching works, but source wait is still exposed because gate direct reads are not in the same async read plan."
+  },
+  "acceptance": {
+    "accepted_as_sota": false,
+    "default_path_regression": false,
+    "ram_ok": true,
+    "correctness_ok_for_completed_runs": true
+  },
+  "next_action": "Implement shared gate source read or background read worker to overlap gate direct reads with up/down io_uring jobs."
+}

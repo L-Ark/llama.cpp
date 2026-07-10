@@ -1,0 +1,24 @@
+{
+  "attempt_id": "20260707-iq2s-download-stage1-complete",
+  "created_at_utc": "2026-07-07T01:07:15.381886Z",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "29bf5ad3cab846b9e4829194abcee4edc23fa75a",
+  "git_status_before_artifact": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "status": "download_complete_not_model_validated",
+  "model_path": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+  "expected_size_bytes": 88019539296,
+  "actual_size_bytes": 88019539296,
+  "actual_allocated_bytes": 88019566592,
+  "sha256": "817627eb3aa7b42e73264b653218fc1a1f27659fb999aa52840c17469415e809",
+  "hf_head_etag_observed": "4e2177af3b8ea17194709873ab12e0c5501e42a184aecca9f68c62e3675f09d0",
+  "etag_note": "HF/Xet etag did not equal file sha256; use recorded sha256 plus size for local reproducibility.",
+  "download_log_summary": "journalctl reported aria2 Download complete at 2026-07-07T01:00:17Z, avg speed 79MiB/s, status OK.",
+  "disk_state": {
+    "total_bytes": 1065418129408,
+    "used_bytes": 1039638765568,
+    "free_bytes": 25762586624
+  },
+  "prompt_scope": "no prompt/model run yet; held_out not used",
+  "accepted_sota_changed": false,
+  "next_step": "Stage 2 strict 16GB/no-swap load smoke with no prompt-specific env and stdout controlled."
+}

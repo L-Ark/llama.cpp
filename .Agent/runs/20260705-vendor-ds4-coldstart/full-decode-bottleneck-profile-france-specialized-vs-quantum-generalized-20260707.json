@@ -1,0 +1,525 @@
+{
+  "cases": {
+    "france_specialized_current_sota": {
+      "cpu_chunk_trace": {
+        "by_role": {
+          "down": {
+            "logical_gib": 1216.9443359375,
+            "rows": 127068,
+            "sum_chunk_ms": 84842.79400002898
+          },
+          "up": {
+            "logical_gib": 647.4775390625,
+            "rows": 72932,
+            "sum_chunk_ms": 63028.23000000233
+          }
+        },
+        "max_thread_ms": 7505.41899999997,
+        "median_thread_ms": 7398.532499999931,
+        "sum_chunk_ms": 147871.02400003132
+      },
+      "derived": {
+        "cpu_chunk_max_thread_ms": 7505.41899999997,
+        "decode_ms_per_token": 227.27272727272725,
+        "decode_tokens_from_graph": 138,
+        "decode_wall_ms_from_eval_rate": 31363.63636363636,
+        "fallback_decode_ms_per_token_counter": 132.05248550724633,
+        "fallback_decode_ms_sum_us_counter": 18223.242999999995,
+        "fallback_prompt_ms_sum_us_counter": 7382.702999999986,
+        "graph_submit_total_ms_prompt_plus_decode": 44352.676,
+        "graph_sync_decode_ms": 109.163,
+        "graph_sync_decode_ms_per_token": 0.7910362318840579,
+        "one_stream_stage_share": {
+          "d2h_ms": 0.01289790100053695,
+          "dontneed_ms": 0.009640843193450814,
+          "kernel_ms": 0.03864734473124231,
+          "scatter_ms": 0.005465005195839026,
+          "src0_ms": 0.8380654106814062,
+          "src1_ms": 0.02090614247081767,
+          "sync_ms": 0.0735729708523905,
+          "total_ms": 1.0
+        },
+        "one_stream_total_ms_sum_call_wall": 8348.024999999527
+      },
+      "fallback_source_profile": {
+        "by_phase_role": {
+          "decode/down": {
+            "calls": 17940,
+            "fallback_ms": 8941.973000000018,
+            "rows": 17940
+          },
+          "decode/up": {
+            "calls": 17940,
+            "fallback_ms": 9281.269999999977,
+            "rows": 17940
+          },
+          "prompt/down": {
+            "calls": 1171,
+            "fallback_ms": 4281.4129999999905,
+            "rows": 1820
+          },
+          "prompt/up": {
+            "calls": 1171,
+            "fallback_ms": 3101.2899999999954,
+            "rows": 1820
+          }
+        },
+        "by_reason_top": [
+          {
+            "batch_reason": "batch_env_missing",
+            "calls": 17940,
+            "dst_buft": "CUDA_Host",
+            "fallback_ms": 9281.269999999977,
+            "final_reason": "one_name_filter",
+            "ids_buft": "CUDA_Host",
+            "phase": "decode",
+            "role": "up",
+            "rows": 17940,
+            "single_reason": "one_name_filter",
+            "src0_buft": "CPU_Mapped",
+            "src1_buft": "CUDA_Host"
+          },
+          {
+            "batch_reason": "batch_env_missing",
+            "calls": 17940,
+            "dst_buft": "CUDA_Host",
+            "fallback_ms": 8941.973000000018,
+            "final_reason": "one_name_filter",
+            "ids_buft": "CUDA_Host",
+            "phase": "decode",
+            "role": "down",
+            "rows": 17940,
+            "single_reason": "one_name_filter",
+            "src0_buft": "CPU_Mapped",
+            "src1_buft": "CUDA_Host"
+          },
+          {
+            "batch_reason": "batch_env_missing",
+            "calls": 1171,
+            "dst_buft": "CUDA_Host",
+            "fallback_ms": 4281.4129999999905,
+            "final_reason": "one_name_filter",
+            "ids_buft": "CUDA_Host",
+            "phase": "prompt",
+            "role": "down",
+            "rows": 1820,
+            "single_reason": "one_name_filter",
+            "src0_buft": "CPU_Mapped",
+            "src1_buft": "CUDA_Host"
+          },
+          {
+            "batch_reason": "batch_env_missing",
+            "calls": 1171,
+            "dst_buft": "CUDA_Host",
+            "fallback_ms": 3101.2899999999954,
+            "final_reason": "one_name_filter",
+            "ids_buft": "CUDA_Host",
+            "phase": "prompt",
+            "role": "up",
+            "rows": 1820,
+            "single_reason": "one_name_filter",
+            "src0_buft": "CPU_Mapped",
+            "src1_buft": "CUDA_Host"
+          }
+        ],
+        "rows": 7030
+      },
+      "graph_profile": {
+        "submit": {
+          "avg_ms_per_call": 314.558,
+          "calls": 141,
+          "total_ms": 44352.676
+        },
+        "sync": {
+          "avg_ms_per_call": 0.133,
+          "calls": 835,
+          "decode_avg_ms": 0.791,
+          "decode_calls": 138,
+          "decode_tokens": 138,
+          "decode_total_ms": 109.163,
+          "idle_avg_ms": 0.001,
+          "idle_calls": 695,
+          "idle_total_ms": 0.409,
+          "prompt_avg_ms": 0.638,
+          "prompt_calls": 2,
+          "prompt_tokens": 14,
+          "prompt_total_ms": 1.276,
+          "total_ms": 110.848
+        }
+      },
+      "one_stream_trace": {
+        "by_cache": {
+          "('gate', 0, 0)": {
+            "calls": 1286,
+            "src0_ms": 1483.137,
+            "total_ms": 1720.0070000000007
+          },
+          "('gate', 0, 1)": {
+            "calls": 600,
+            "src0_ms": 716.0899999999999,
+            "total_ms": 826.5559999999998
+          },
+          "('gate', 1, 0)": {
+            "calls": 33265,
+            "src0_ms": 4796.964000003249,
+            "total_ms": 5801.461999999631
+          }
+        },
+        "by_role": {
+          "gate": {
+            "avg_cne1": 1.037808312708031,
+            "cache_hits": 33265,
+            "cache_inserted": 600,
+            "calls": 35151,
+            "d2h_ms": 107.67200000000138,
+            "dontneed_ms": 80.48200000000267,
+            "kernel_ms": 322.6290000000108,
+            "scatter_ms": 45.621999999991495,
+            "src0_bytes_logical_gib": 151.40625,
+            "src0_ms": 6996.191000003249,
+            "src1_ms": 174.52499999993776,
+            "sync_ms": 614.1889999999925,
+            "total_ms": 8348.024999999527
+          }
+        },
+        "rows": 35151,
+        "stage_totals_ms": {
+          "d2h_ms": 107.67200000000138,
+          "dontneed_ms": 80.48200000000267,
+          "kernel_ms": 322.6290000000108,
+          "scatter_ms": 45.621999999991495,
+          "src0_ms": 6996.191000003249,
+          "src1_ms": 174.52499999993776,
+          "sync_ms": 614.1889999999925,
+          "total_ms": 8348.024999999527
+        }
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T191504Z-20260707-current-sota-full-decode-profile-rerun/france-full-decode-profile-cpu40-vram0gb",
+      "summary": {
+        "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T191504Z-20260707-current-sota-full-decode-profile-rerun/france-full-decode-profile-cpu40-vram0gb",
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "cpu_moe": 40,
+        "elapsed_seconds": 63.59,
+        "eval_ms": null,
+        "eval_tok_s": 4.4,
+        "exit_status": 0,
+        "first_answer_ms": 32262.474937,
+        "load_ms": null,
+        "max_rss_kb": 15597032,
+        "memory_file_bytes": 15065071616,
+        "memory_max_bytes": 16000000000,
+        "memory_max_events": 17449,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 10656137216,
+          "anon": 868352,
+          "file": 15065071616,
+          "file_mapped": 0,
+          "inactive_file": 4408926208,
+          "kernel": 112603136,
+          "pgfault": 2351505,
+          "pgmajfault": 256256,
+          "slab": 112139264,
+          "workingset_activate_file": 606255,
+          "workingset_refault_file": 1652063,
+          "workingset_restore_file": 606197
+        },
+        "oom_seen": false,
+        "pgmajfault": 256256,
+        "prompt_eval_ms": null,
+        "prompt_tok_s": 1.9,
+        "ram_kill_threshold_bytes": 16000000000,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "systemd_status": 0,
+        "ttft_estimate_ms": 32262.474937,
+        "unit": "vendor-ds4-16gb-20260706T191504Z-cpu40.service",
+        "workingset_refault_file": 1652063
+      }
+    },
+    "quantum_generalized_no_prompt_specific": {
+      "cpu_chunk_trace": {
+        "by_role": {
+          "down": {
+            "logical_gib": 959.7861328125,
+            "rows": 122452,
+            "sum_chunk_ms": 86766.2449999876
+          },
+          "up": {
+            "logical_gib": 547.6357421875,
+            "rows": 77548,
+            "sum_chunk_ms": 98747.49400000126
+          }
+        },
+        "max_thread_ms": 9595.05599999999,
+        "median_thread_ms": 9271.95999999999,
+        "sum_chunk_ms": 185513.73899998885
+      },
+      "derived": {
+        "cpu_chunk_max_thread_ms": 9595.05599999999,
+        "decode_ms_per_token": 526.3157894736842,
+        "decode_tokens_from_graph": 191,
+        "decode_wall_ms_from_eval_rate": 100526.31578947368,
+        "fallback_decode_ms_per_token_counter": 259.28594240837646,
+        "fallback_decode_ms_sum_us_counter": 49523.6149999999,
+        "fallback_prompt_ms_sum_us_counter": 7034.8279999999995,
+        "graph_submit_total_ms_prompt_plus_decode": 115437.467,
+        "graph_sync_decode_ms": 154.39,
+        "graph_sync_decode_ms_per_token": 0.8083246073298429,
+        "one_stream_stage_share": {
+          "d2h_ms": 0.0037879028889096908,
+          "dontneed_ms": 0.04491042081708999,
+          "kernel_ms": 0.013238117616827796,
+          "scatter_ms": 0.0013659847347442264,
+          "src0_ms": 0.9188370115433784,
+          "src1_ms": 0.00649228439967127,
+          "sync_ms": 0.01125212851665121,
+          "total_ms": 1.0
+        },
+        "one_stream_total_ms_sum_call_wall": 40706.16499999472
+      },
+      "fallback_source_profile": {
+        "by_phase_role": {
+          "decode/down": {
+            "calls": 24830,
+            "fallback_ms": 20213.01699999997,
+            "rows": 24830
+          },
+          "decode/up": {
+            "calls": 24830,
+            "fallback_ms": 29310.597999999933,
+            "rows": 24830
+          },
+          "prompt/down": {
+            "calls": 1005,
+            "fallback_ms": 3494.5730000000003,
+            "rows": 1430
+          },
+          "prompt/up": {
+            "calls": 1005,
+            "fallback_ms": 3540.254999999999,
+            "rows": 1430
+          }
+        },
+        "by_reason_top": [
+          {
+            "batch_reason": "batch_env_missing",
+            "calls": 24830,
+            "dst_buft": "CUDA_Host",
+            "fallback_ms": 29310.597999999933,
+            "final_reason": "one_name_filter",
+            "ids_buft": "CUDA_Host",
+            "phase": "decode",
+            "role": "up",
+            "rows": 24830,
+            "single_reason": "one_name_filter",
+            "src0_buft": "CPU_Mapped",
+            "src1_buft": "CUDA_Host"
+          },
+          {
+            "batch_reason": "batch_env_missing",
+            "calls": 24830,
+            "dst_buft": "CUDA_Host",
+            "fallback_ms": 20213.01699999997,
+            "final_reason": "one_name_filter",
+            "ids_buft": "CUDA_Host",
+            "phase": "decode",
+            "role": "down",
+            "rows": 24830,
+            "single_reason": "one_name_filter",
+            "src0_buft": "CPU_Mapped",
+            "src1_buft": "CUDA_Host"
+          },
+          {
+            "batch_reason": "batch_env_missing",
+            "calls": 1005,
+            "dst_buft": "CUDA_Host",
+            "fallback_ms": 3540.254999999999,
+            "final_reason": "one_name_filter",
+            "ids_buft": "CUDA_Host",
+            "phase": "prompt",
+            "role": "up",
+            "rows": 1430,
+            "single_reason": "one_name_filter",
+            "src0_buft": "CPU_Mapped",
+            "src1_buft": "CUDA_Host"
+          },
+          {
+            "batch_reason": "batch_env_missing",
+            "calls": 1005,
+            "dst_buft": "CUDA_Host",
+            "fallback_ms": 3494.5730000000003,
+            "final_reason": "one_name_filter",
+            "ids_buft": "CUDA_Host",
+            "phase": "prompt",
+            "role": "down",
+            "rows": 1430,
+            "single_reason": "one_name_filter",
+            "src0_buft": "CPU_Mapped",
+            "src1_buft": "CUDA_Host"
+          }
+        ],
+        "rows": 8650
+      },
+      "graph_profile": {
+        "submit": {
+          "avg_ms_per_call": 595.038,
+          "calls": 194,
+          "total_ms": 115437.467
+        },
+        "sync": {
+          "avg_ms_per_call": 0.135,
+          "calls": 1153,
+          "decode_avg_ms": 0.808,
+          "decode_calls": 191,
+          "decode_tokens": 191,
+          "decode_total_ms": 154.39,
+          "idle_avg_ms": 0.001,
+          "idle_calls": 960,
+          "idle_total_ms": 0.49,
+          "prompt_avg_ms": 0.575,
+          "prompt_calls": 2,
+          "prompt_tokens": 11,
+          "prompt_total_ms": 1.15,
+          "total_ms": 156.03
+        }
+      },
+      "one_stream_trace": {
+        "by_cache": {
+          "('gate', 0, 1)": {
+            "calls": 7820,
+            "src0_ms": 37368.97700000008,
+            "total_ms": 39209.098999999915
+          },
+          "('gate', 1, 0)": {
+            "calls": 39825,
+            "src0_ms": 33.35400000001089,
+            "total_ms": 1497.0659999999575
+          }
+        },
+        "by_role": {
+          "gate": {
+            "avg_cne1": 1.0175254486304963,
+            "cache_hits": 39825,
+            "cache_inserted": 7820,
+            "calls": 47645,
+            "d2h_ms": 154.19099999991454,
+            "dontneed_ms": 1828.130999999663,
+            "kernel_ms": 538.8729999999291,
+            "scatter_ms": 55.603999999972494,
+            "src0_bytes_logical_gib": 201.2109375,
+            "src0_ms": 37402.330999986814,
+            "src1_ms": 264.27599999991037,
+            "sync_ms": 458.03099999995,
+            "total_ms": 40706.16499999472
+          }
+        },
+        "rows": 47645,
+        "stage_totals_ms": {
+          "d2h_ms": 154.19099999991454,
+          "dontneed_ms": 1828.130999999663,
+          "kernel_ms": 538.8729999999291,
+          "scatter_ms": 55.603999999972494,
+          "src0_ms": 37402.330999986814,
+          "src1_ms": 264.27599999991037,
+          "sync_ms": 458.03099999995,
+          "total_ms": 40706.16499999472
+        }
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T191925Z-20260707-generalized-quantum-full-decode-profile/quantum-full-decode-profile-cpu40-vram0gb",
+      "summary": {
+        "answer": "and**Quantum computing** is a type of computing that uses the principles of quantum mechanics to process information. Unlike classical computers, which use bits (0 or 1), quantum computers use **qubits** (quantum bits). Qubits can exist in a state of 0, 1, or both simultaneously (superposition). This, along with other quantum phenomena like entanglement, allows quantum computers to solve certain problems much faster than classical computers.\n\n**Key Concepts:**\n\n- **Superposition:** A qubit can be in a combination of 0 and 1 at the same time, unlike a classical bit which is either 0 or 1. This allows for parallel computation.\n- **Entanglement:** A pair of qubits can be linked in such a way that the state of one instantly influences the other, regardless of distance. This enables complex calculations.\n- **Quantum Interference:** Quantum algorithms manipulate the probabilities of qubits' states to amplify",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T191925Z-20260707-generalized-quantum-full-decode-profile/quantum-full-decode-profile-cpu40-vram0gb",
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "cpu_moe": 40,
+        "elapsed_seconds": 136.05,
+        "eval_ms": null,
+        "eval_tok_s": 1.9,
+        "exit_status": 0,
+        "first_answer_ms": 37988.804989,
+        "load_ms": null,
+        "max_rss_kb": 15593444,
+        "memory_file_bytes": 14957862912,
+        "memory_max_bytes": 16000000000,
+        "memory_max_events": 47704,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 5842284544,
+          "anon": 1146880,
+          "file": 14957862912,
+          "file_mapped": 159744,
+          "inactive_file": 9115566080,
+          "kernel": 193634304,
+          "pgfault": 4323096,
+          "pgmajfault": 437004,
+          "slab": 193156080,
+          "workingset_activate_file": 1345005,
+          "workingset_refault_file": 13153897,
+          "workingset_restore_file": 1344225
+        },
+        "oom_seen": false,
+        "pgmajfault": 437004,
+        "prompt_eval_ms": null,
+        "prompt_tok_s": 0.9,
+        "ram_kill_threshold_bytes": 16000000000,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "systemd_status": 0,
+        "ttft_estimate_ms": 37988.804989,
+        "unit": "vendor-ds4-16gb-20260706T191925Z-cpu40.service",
+        "workingset_refault_file": 13153897
+      }
+    }
+  },
+  "conclusions": [
+    "France-specialized 4.4 tok/s run remains reproducible under strict 16GB, but uses prompt-derived pack/profile and is not generalized product SOTA.",
+    "No-prompt-specific quantum calibration run is only 1.9 tok/s; this is the relevant slow generalized regime.",
+    "For France-specialized, decode wall is about 227 ms/token; up/down CPU fallback counter is about 132 ms/token, graph sync about 0.79 ms/token.",
+    "For quantum generalized, the next bottleneck is dominated by cold source movement/page-cache refault plus up/down fallback; simple CUDA graph/sync work is too small to close the gap.",
+    "Next optimization must be generalized: remove prompt-derived profiles, reduce cold expert source movement, and/or change representation/residency. Candidate promotion must use held-out test set only after freezing."
+  ],
+  "created_at_utc": "2026-07-06T19:23:55.344585Z",
+  "headline": {
+    "france_specialized_current_sota": {
+      "correctness_ok": true,
+      "cpu_chunk_max_thread_ms": 7505.41899999997,
+      "decode_ms_per_token": 227.27272727272725,
+      "decode_tokens": 138,
+      "eval_tok_s": 4.4,
+      "fallback_decode_ms_per_token": 132.05248550724633,
+      "graph_sync_decode_ms_per_token": 0.7910362318840579,
+      "memory_file_bytes": 15065071616,
+      "memory_peak_bytes": 16000000000,
+      "one_stream_total_ms": 8348.024999999527,
+      "prompt_tok_s": 1.9,
+      "ram_ok": true,
+      "ttft_ms": 32262.474937
+    },
+    "quantum_generalized_no_prompt_specific": {
+      "correctness_ok": true,
+      "cpu_chunk_max_thread_ms": 9595.05599999999,
+      "decode_ms_per_token": 526.3157894736842,
+      "decode_tokens": 191,
+      "eval_tok_s": 1.9,
+      "fallback_decode_ms_per_token": 259.28594240837646,
+      "graph_sync_decode_ms_per_token": 0.8083246073298429,
+      "memory_file_bytes": 14957862912,
+      "memory_peak_bytes": 16000000000,
+      "one_stream_total_ms": 40706.16499999472,
+      "prompt_tok_s": 0.9,
+      "ram_ok": true,
+      "ttft_ms": 37988.804989
+    }
+  },
+  "next_plan": [
+    "Profile at least one more generalized slow calibration prompt if a proposed fix targets route distribution, otherwise use quantum as the slow-path guard.",
+    "Do not re-enable up/down one-stream naively; it already eliminated fallback but reduced token rate because per-expert source movement dominated.",
+    "Prioritize generalized VRAM-resident low-bit/partial expert representation or layer/tail placement bounds that reduce both gate misses and up/down CPU fallback without prompt-specific manifests.",
+    "Any new SOTA must be recorded with exact commit/env/run_dir and pushed immediately to ssd/vendor/deepseek-token-rate-16gb, then reproduced from the pushed commit."
+  ],
+  "status": "diagnostic_profile_not_sota",
+  "task_context": "Product target is random/generalized prompts on 16GB host RAM + 32GB RTX 5090 with stable >5 tok/s. Held-out set remains unused."
+}

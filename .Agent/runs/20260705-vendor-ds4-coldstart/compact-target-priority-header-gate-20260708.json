@@ -1,0 +1,1993 @@
+{
+  "attempt_id": "20260708-compact-target-priority-header-gate",
+  "created_at_local": "2026-07-08",
+  "status": "header_gate_recorded_no_full_download_not_sota",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "14780fb5eac66e1c8231ac87c3302abfabc75722",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "purpose": "Probe priority compact target candidates with header-only range slices before any cleanup/full download.",
+  "method": "curl Range 0-268435455 for first/single GGUF file, parse GGUF metadata/tensor table, delete slice immediately.",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/header-probes/20260708-compact-target-priority",
+  "results": [
+    {
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+      "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+      "variant_gib": 52.038,
+      "known_caveat": "related uniform K128 failed ffn_gate_inp shape",
+      "url": "https://huggingface.co/sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF/resolve/main/DeepSeek-V4-Flash-REAP-K128.gguf",
+      "range_bytes": "0-268435455",
+      "tmp_header": "/root/lfz/runs/vendor-ds4-16gb/header-probes/20260708-compact-target-priority/sleepyeldrazi__deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF__DeepSeek-V4-Flash-REAP-K128.gguf.head256m.gguf",
+      "curl_returncode": 0,
+      "curl_stderr_tail": "",
+      "downloaded_bytes": 268435456,
+      "status": "header_parse_ok",
+      "header_parse_end": 5334618,
+      "fields": {
+        "general.architecture": "deepseek4",
+        "general.name": "DeepSeek V4 Flash",
+        "general.size_label": "256x8.4B",
+        "general.quantization_version": 2,
+        "tokenizer.ggml.model": "gpt2",
+        "tokenizer.ggml.pre": "joyai-llm",
+        "tokenizer.ggml.bos_token_id": 0,
+        "tokenizer.ggml.eos_token_id": 1,
+        "tokenizer.ggml.padding_token_id": 1,
+        "deepseek4.block_count": 43,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.embedding_length": 4096
+      },
+      "n_tensors": 1328,
+      "n_kv": 68,
+      "type_counts": {
+        "I32": 3,
+        "16": 74,
+        "10": 37,
+        "Q4_K": 18,
+        "F16": 359,
+        "F32": 492,
+        "Q8_0": 345
+      },
+      "sample_tensors": [
+        {
+          "name": "blk.0.ffn_gate_tid2eid.weight",
+          "dims": [
+            6,
+            129280
+          ],
+          "type": "I32"
+        },
+        {
+          "name": "blk.1.ffn_gate_tid2eid.weight",
+          "dims": [
+            6,
+            129280
+          ],
+          "type": "I32"
+        },
+        {
+          "name": "blk.2.ffn_gate_tid2eid.weight",
+          "dims": [
+            6,
+            129280
+          ],
+          "type": "I32"
+        },
+        {
+          "name": "blk.0.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.0.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.0.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.1.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.1.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.1.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.2.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.2.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.2.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        }
+      ],
+      "ffn_gate_inp_tensors": [
+        {
+          "name": "blk.0.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.1.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.2.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.3.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            128
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.4.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            128
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.5.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            128
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.6.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            128
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.7.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            128
+          ],
+          "type": "F16"
+        }
+      ],
+      "hc_head_tensors": [],
+      "expert_tensors_sample": [
+        {
+          "name": "blk.0.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.0.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.0.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.1.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.1.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.1.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.2.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.2.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.2.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.3.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            128
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.3.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            128
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.3.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            128
+          ],
+          "type": "16"
+        }
+      ],
+      "gate_decision": "metadata_pass_needs_load_correctness_after_cleanup",
+      "gate_reason": "header compatible enough for next load/correctness gate, but no full download without cleanup approval",
+      "elapsed_s": 5.08,
+      "tmp_removed": true,
+      "post_audit_decision": "direct_metadata_pass_needs_load_correctness_after_cleanup",
+      "post_audit_reason": "deepseek4, gpt2/joyai-llm tokenizer metadata, expert_count=256, ffn_gate_inp [4096,256]"
+    },
+    {
+      "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF",
+      "file": "DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf",
+      "variant_gib": 53.522,
+      "known_caveat": "related Spark Mini failed missing global HC tensors",
+      "url": "https://huggingface.co/0xSero/DeepSeek-V4-Flash-180B-GGUF/resolve/main/DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf",
+      "range_bytes": "0-268435455",
+      "tmp_header": "/root/lfz/runs/vendor-ds4-16gb/header-probes/20260708-compact-target-priority/0xSero__DeepSeek-V4-Flash-180B-GGUF__DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf.head256m.gguf",
+      "curl_returncode": 0,
+      "curl_stderr_tail": "",
+      "downloaded_bytes": 268435456,
+      "status": "header_parse_ok",
+      "header_parse_end": 5333508,
+      "fields": {
+        "general.architecture": "deepseek4",
+        "general.name": "DeepSeek V4 Flash",
+        "general.size_label": "256x8.4B",
+        "general.quantization_version": 2,
+        "tokenizer.ggml.model": "gpt2",
+        "tokenizer.ggml.pre": "joyai-llm",
+        "tokenizer.ggml.bos_token_id": 0,
+        "tokenizer.ggml.eos_token_id": 1,
+        "tokenizer.ggml.padding_token_id": 1,
+        "deepseek4.block_count": 43,
+        "deepseek4.expert_count": 160,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.embedding_length": 4096
+      },
+      "n_tensors": 1328,
+      "n_kv": 58,
+      "type_counts": {
+        "I32": 3,
+        "16": 86,
+        "10": 43,
+        "F16": 359,
+        "F32": 492,
+        "Q8_0": 345
+      },
+      "sample_tensors": [
+        {
+          "name": "blk.0.ffn_gate_tid2eid.weight",
+          "dims": [
+            6,
+            129280
+          ],
+          "type": "I32"
+        },
+        {
+          "name": "blk.1.ffn_gate_tid2eid.weight",
+          "dims": [
+            6,
+            129280
+          ],
+          "type": "I32"
+        },
+        {
+          "name": "blk.2.ffn_gate_tid2eid.weight",
+          "dims": [
+            6,
+            129280
+          ],
+          "type": "I32"
+        },
+        {
+          "name": "blk.0.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.0.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            160
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.0.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.1.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.1.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            160
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.1.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.2.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.2.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            160
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.2.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        }
+      ],
+      "ffn_gate_inp_tensors": [
+        {
+          "name": "blk.0.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            160
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.1.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            160
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.2.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            160
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.3.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            160
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.4.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            160
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.5.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            160
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.6.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            160
+          ],
+          "type": "F16"
+        },
+        {
+          "name": "blk.7.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            160
+          ],
+          "type": "F16"
+        }
+      ],
+      "hc_head_tensors": [],
+      "expert_tensors_sample": [
+        {
+          "name": "blk.0.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.0.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            160
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.0.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.1.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.1.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            160
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.1.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.2.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.2.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            160
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.2.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.3.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.3.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            160
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.3.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            160
+          ],
+          "type": "16"
+        }
+      ],
+      "gate_decision": "reject_or_requires_loader_shape_plan",
+      "gate_reason": "ffn_gate_inp sample shape [4096, 160] differs from expected [4096, 256]",
+      "elapsed_s": 4.679,
+      "tmp_removed": true,
+      "post_audit_decision": "reject_or_requires_loader_shape_plan",
+      "post_audit_reason": "ffn_gate_inp sample shape [4096, 160] differs from expected [4096, 256]"
+    },
+    {
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+      "variant": "IQ1_S-XL",
+      "variant_gib": 57.314,
+      "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+      "range_bytes": "0-268435455",
+      "tmp_header": "/root/lfz/runs/vendor-ds4-16gb/header-probes/20260708-compact-target-priority/teamblobfish__DeepSeek-V4-Flash-GGUF__IQ1_S-XL__DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf.head256m.gguf",
+      "curl_returncode": 0,
+      "curl_stderr_tail": "",
+      "downloaded_bytes": 268435456,
+      "status": "header_parse_ok",
+      "header_parse_end": 5316980,
+      "fields": {
+        "general.architecture": "deepseek4",
+        "general.name": "DeepSeek V4 Flash",
+        "general.size_label": "256x8.4B",
+        "general.quantization_version": 2,
+        "tokenizer.ggml.model": "gpt2",
+        "tokenizer.ggml.pre": "joyai-llm",
+        "tokenizer.ggml.bos_token_id": 0,
+        "tokenizer.ggml.eos_token_id": 1,
+        "tokenizer.ggml.padding_token_id": 1,
+        "deepseek4.block_count": 43,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.feed_forward_length": 18432,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.embedding_length": 4096
+      },
+      "n_tensors": 1066,
+      "n_kv": 68,
+      "type_counts": {
+        "13": 2,
+        "F32": 430,
+        "Q8_0": 423,
+        "10": 5,
+        "19": 203,
+        "I32": 3
+      },
+      "sample_tensors": [
+        {
+          "name": "output.weight",
+          "dims": [
+            4096,
+            129280
+          ],
+          "type": "13"
+        },
+        {
+          "name": "output_hc_base.weight",
+          "dims": [
+            4
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "output_hc_fn.weight",
+          "dims": [
+            16384,
+            4
+          ],
+          "type": "Q8_0"
+        },
+        {
+          "name": "output_hc_scale.weight",
+          "dims": [
+            1
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "output_norm.weight",
+          "dims": [
+            4096
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "token_embd.weight",
+          "dims": [
+            4096,
+            129280
+          ],
+          "type": "13"
+        },
+        {
+          "name": "blk.0.attn_kv.weight",
+          "dims": [
+            4096,
+            512
+          ],
+          "type": "Q8_0"
+        },
+        {
+          "name": "blk.0.attn_kv_a_norm.weight",
+          "dims": [
+            512
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.0.attn_norm.weight",
+          "dims": [
+            4096
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.0.attn_output_a.weight",
+          "dims": [
+            4096,
+            8192
+          ],
+          "type": "Q8_0"
+        },
+        {
+          "name": "blk.0.attn_output_b.weight",
+          "dims": [
+            8192,
+            4096
+          ],
+          "type": "Q8_0"
+        },
+        {
+          "name": "blk.0.attn_q_a.weight",
+          "dims": [
+            4096,
+            1024
+          ],
+          "type": "Q8_0"
+        }
+      ],
+      "ffn_gate_inp_tensors": [
+        {
+          "name": "blk.0.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.1.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.2.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.3.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.4.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.5.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.6.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.7.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        }
+      ],
+      "hc_head_tensors": [],
+      "expert_tensors_sample": [
+        {
+          "name": "blk.0.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.0.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "19"
+        },
+        {
+          "name": "blk.0.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "19"
+        },
+        {
+          "name": "blk.1.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.1.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "19"
+        },
+        {
+          "name": "blk.1.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "19"
+        },
+        {
+          "name": "blk.2.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.2.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "19"
+        },
+        {
+          "name": "blk.2.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "19"
+        },
+        {
+          "name": "blk.3.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "19"
+        },
+        {
+          "name": "blk.3.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "19"
+        },
+        {
+          "name": "blk.3.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "19"
+        }
+      ],
+      "gate_decision": "metadata_pass_needs_load_correctness_after_cleanup",
+      "gate_reason": "header compatible enough for next load/correctness gate, but no full download without cleanup approval",
+      "elapsed_s": 8.941,
+      "tmp_removed": true,
+      "post_audit_decision": "direct_metadata_pass_needs_load_correctness_after_cleanup",
+      "post_audit_reason": "deepseek4, gpt2/joyai-llm tokenizer metadata, expert_count=256, ffn_gate_inp [4096,256]"
+    },
+    {
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "file": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+      "variant": "IQ1_M",
+      "variant_gib": 60.078,
+      "url": "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF/resolve/main/IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+      "range_bytes": "0-268435455",
+      "tmp_header": "/root/lfz/runs/vendor-ds4-16gb/header-probes/20260708-compact-target-priority/teamblobfish__DeepSeek-V4-Flash-GGUF__IQ1_M__DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf.head256m.gguf",
+      "curl_returncode": 0,
+      "curl_stderr_tail": "",
+      "downloaded_bytes": 268435456,
+      "status": "header_parse_ok",
+      "header_parse_end": 5314781,
+      "fields": {
+        "general.architecture": "deepseek4",
+        "general.name": "DeepSeek V4 Flash",
+        "general.size_label": "256x8.4B",
+        "general.quantization_version": 2,
+        "tokenizer.ggml.model": "gpt2",
+        "tokenizer.ggml.pre": "joyai-llm",
+        "tokenizer.ggml.bos_token_id": 0,
+        "tokenizer.ggml.eos_token_id": 1,
+        "tokenizer.ggml.padding_token_id": 1,
+        "deepseek4.block_count": 43,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.feed_forward_length": 18432,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.embedding_length": 4096
+      },
+      "n_tensors": 1032,
+      "n_kv": 68,
+      "type_counts": {
+        "13": 279,
+        "F32": 416,
+        "29": 329,
+        "10": 5,
+        "I32": 3
+      },
+      "sample_tensors": [
+        {
+          "name": "output.weight",
+          "dims": [
+            4096,
+            129280
+          ],
+          "type": "13"
+        },
+        {
+          "name": "output_hc_base.weight",
+          "dims": [
+            4
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "output_hc_fn.weight",
+          "dims": [
+            16384,
+            4
+          ],
+          "type": "13"
+        },
+        {
+          "name": "output_hc_scale.weight",
+          "dims": [
+            1
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "output_norm.weight",
+          "dims": [
+            4096
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "token_embd.weight",
+          "dims": [
+            4096,
+            129280
+          ],
+          "type": "13"
+        },
+        {
+          "name": "blk.0.attn_kv.weight",
+          "dims": [
+            4096,
+            512
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.0.attn_kv_a_norm.weight",
+          "dims": [
+            512
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.0.attn_norm.weight",
+          "dims": [
+            4096
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.0.attn_output_a.weight",
+          "dims": [
+            4096,
+            8192
+          ],
+          "type": "13"
+        },
+        {
+          "name": "blk.0.attn_output_b.weight",
+          "dims": [
+            8192,
+            4096
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.0.attn_q_a.weight",
+          "dims": [
+            4096,
+            1024
+          ],
+          "type": "29"
+        }
+      ],
+      "ffn_gate_inp_tensors": [
+        {
+          "name": "blk.0.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.1.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.2.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.3.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.4.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.5.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.6.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.7.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "F32"
+        }
+      ],
+      "hc_head_tensors": [],
+      "expert_tensors_sample": [
+        {
+          "name": "blk.0.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.0.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.0.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.1.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.1.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.1.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.2.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.2.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.2.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.3.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.3.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.3.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        }
+      ],
+      "gate_decision": "metadata_pass_needs_load_correctness_after_cleanup",
+      "gate_reason": "header compatible enough for next load/correctness gate, but no full download without cleanup approval",
+      "elapsed_s": 13.638,
+      "tmp_removed": true,
+      "post_audit_decision": "direct_metadata_pass_needs_load_correctness_after_cleanup",
+      "post_audit_reason": "deepseek4, gpt2/joyai-llm tokenizer metadata, expert_count=256, ffn_gate_inp [4096,256]"
+    },
+    {
+      "repo": "ssweens/DeepSeek-V4-Flash-GGUF-YMMV",
+      "file": "deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf",
+      "variant": "IQ1_M",
+      "variant_gib": 62.87,
+      "known_caveat": "YMMV repo",
+      "url": "https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV/resolve/main/deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf",
+      "range_bytes": "0-268435455",
+      "tmp_header": "/root/lfz/runs/vendor-ds4-16gb/header-probes/20260708-compact-target-priority/ssweens__DeepSeek-V4-Flash-GGUF-YMMV__deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf.head256m.gguf",
+      "curl_returncode": 0,
+      "curl_stderr_tail": "",
+      "downloaded_bytes": 268435456,
+      "status": "header_parse_ok",
+      "header_parse_end": 5341538,
+      "fields": {
+        "general.architecture": "deepseek4",
+        "general.name": "DeepSeek V4 Flash",
+        "general.size_label": "256x8.4B",
+        "general.quantization_version": 2,
+        "tokenizer.ggml.model": "gpt2",
+        "tokenizer.ggml.pre": "deepseek-v3",
+        "tokenizer.ggml.bos_token_id": 0,
+        "tokenizer.ggml.eos_token_id": 1,
+        "tokenizer.ggml.padding_token_id": 1,
+        "deepseek4.block_count": 43,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.embedding_length": 4096
+      },
+      "n_tensors": 1328,
+      "n_kv": 71,
+      "type_counts": {
+        "13": 1,
+        "F32": 492,
+        "14": 659,
+        "10": 6,
+        "29": 124,
+        "30": 43,
+        "I32": 3
+      },
+      "sample_tensors": [
+        {
+          "name": "output.weight",
+          "dims": [
+            4096,
+            129280
+          ],
+          "type": "13"
+        },
+        {
+          "name": "output_hc_base.weight",
+          "dims": [
+            4
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "output_hc_fn.weight",
+          "dims": [
+            16384,
+            4
+          ],
+          "type": "14"
+        },
+        {
+          "name": "output_hc_scale.weight",
+          "dims": [
+            1
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "output_norm.weight",
+          "dims": [
+            4096
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "token_embd.weight",
+          "dims": [
+            4096,
+            129280
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.0.attn_kv.weight",
+          "dims": [
+            4096,
+            512
+          ],
+          "type": "14"
+        },
+        {
+          "name": "blk.0.attn_kv_a_norm.weight",
+          "dims": [
+            512
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.0.attn_norm.weight",
+          "dims": [
+            4096
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.0.attn_output_a.weight",
+          "dims": [
+            4096,
+            8192
+          ],
+          "type": "14"
+        },
+        {
+          "name": "blk.0.attn_output_b.weight",
+          "dims": [
+            8192,
+            4096
+          ],
+          "type": "14"
+        },
+        {
+          "name": "blk.0.attn_q_a.weight",
+          "dims": [
+            4096,
+            1024
+          ],
+          "type": "14"
+        }
+      ],
+      "ffn_gate_inp_tensors": [
+        {
+          "name": "blk.0.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.1.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.2.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.3.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.4.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.5.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.6.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.7.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        }
+      ],
+      "hc_head_tensors": [],
+      "expert_tensors_sample": [
+        {
+          "name": "blk.0.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.0.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.0.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.1.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.1.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.1.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.2.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.2.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.2.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.3.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.3.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        },
+        {
+          "name": "blk.3.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "29"
+        }
+      ],
+      "gate_decision": "metadata_pass_needs_load_correctness_after_cleanup",
+      "gate_reason": "header compatible enough for next load/correctness gate, but no full download without cleanup approval",
+      "elapsed_s": 9.191,
+      "tmp_removed": true,
+      "post_audit_decision": "metadata_shape_pass_but_tokenizer_pre_mismatch_correctness_first",
+      "post_audit_reason": "tokenizer.ggml.pre='deepseek-v3', expected joyai-llm; do not prioritize until tokenizer/correctness gate proves semantics"
+    },
+    {
+      "repo": "ssweens/DeepSeek-V4-Flash-GGUF-YMMV",
+      "file": "deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-00001-of-00002.gguf",
+      "variant": "IQ2_XXS",
+      "variant_gib": 72.557,
+      "known_caveat": "YMMV repo",
+      "url": "https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV/resolve/main/deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-00001-of-00002.gguf",
+      "range_bytes": "0-268435455",
+      "tmp_header": "/root/lfz/runs/vendor-ds4-16gb/header-probes/20260708-compact-target-priority/ssweens__DeepSeek-V4-Flash-GGUF-YMMV__deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-00001-of-00002.gguf.head256m.gguf",
+      "curl_returncode": 0,
+      "curl_stderr_tail": "",
+      "downloaded_bytes": 268435456,
+      "status": "header_parse_ok",
+      "header_parse_end": 5310357,
+      "fields": {
+        "general.architecture": "deepseek4",
+        "general.name": "DeepSeek V4 Flash",
+        "general.size_label": "256x8.4B",
+        "general.quantization_version": 2,
+        "tokenizer.ggml.model": "gpt2",
+        "tokenizer.ggml.pre": "deepseek-v3",
+        "tokenizer.ggml.bos_token_id": 0,
+        "tokenizer.ggml.eos_token_id": 1,
+        "tokenizer.ggml.padding_token_id": 1,
+        "deepseek4.block_count": 43,
+        "deepseek4.expert_count": 256,
+        "deepseek4.expert_used_count": 6,
+        "deepseek4.attention.head_count": 64,
+        "deepseek4.attention.head_count_kv": 1,
+        "deepseek4.embedding_length": 4096
+      },
+      "n_tensors": 846,
+      "n_kv": 74,
+      "type_counts": {
+        "13": 1,
+        "F32": 314,
+        "14": 419,
+        "10": 6,
+        "16": 76,
+        "30": 27,
+        "I32": 3
+      },
+      "sample_tensors": [
+        {
+          "name": "output.weight",
+          "dims": [
+            4096,
+            129280
+          ],
+          "type": "13"
+        },
+        {
+          "name": "output_hc_base.weight",
+          "dims": [
+            4
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "output_hc_fn.weight",
+          "dims": [
+            16384,
+            4
+          ],
+          "type": "14"
+        },
+        {
+          "name": "output_hc_scale.weight",
+          "dims": [
+            1
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "output_norm.weight",
+          "dims": [
+            4096
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "token_embd.weight",
+          "dims": [
+            4096,
+            129280
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.0.attn_kv.weight",
+          "dims": [
+            4096,
+            512
+          ],
+          "type": "14"
+        },
+        {
+          "name": "blk.0.attn_kv_a_norm.weight",
+          "dims": [
+            512
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.0.attn_norm.weight",
+          "dims": [
+            4096
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.0.attn_output_a.weight",
+          "dims": [
+            4096,
+            8192
+          ],
+          "type": "14"
+        },
+        {
+          "name": "blk.0.attn_output_b.weight",
+          "dims": [
+            8192,
+            4096
+          ],
+          "type": "14"
+        },
+        {
+          "name": "blk.0.attn_q_a.weight",
+          "dims": [
+            4096,
+            1024
+          ],
+          "type": "14"
+        }
+      ],
+      "ffn_gate_inp_tensors": [
+        {
+          "name": "blk.0.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.1.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.2.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.3.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.4.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.5.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.6.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        },
+        {
+          "name": "blk.7.ffn_gate_inp.weight",
+          "dims": [
+            4096,
+            256
+          ],
+          "type": "30"
+        }
+      ],
+      "hc_head_tensors": [],
+      "expert_tensors_sample": [
+        {
+          "name": "blk.0.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.0.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.0.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.1.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.1.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.1.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.2.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.2.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.2.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.3.ffn_down_exps.weight",
+          "dims": [
+            2048,
+            4096,
+            256
+          ],
+          "type": "10"
+        },
+        {
+          "name": "blk.3.ffn_gate_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        },
+        {
+          "name": "blk.3.ffn_up_exps.weight",
+          "dims": [
+            4096,
+            2048,
+            256
+          ],
+          "type": "16"
+        }
+      ],
+      "gate_decision": "metadata_pass_needs_load_correctness_after_cleanup",
+      "gate_reason": "header compatible enough for next load/correctness gate, but no full download without cleanup approval",
+      "elapsed_s": 38.218,
+      "tmp_removed": true,
+      "post_audit_decision": "metadata_shape_pass_but_tokenizer_pre_mismatch_correctness_first",
+      "post_audit_reason": "tokenizer.ggml.pre='deepseek-v3', expected joyai-llm; do not prioritize until tokenizer/correctness gate proves semantics"
+    }
+  ],
+  "decision": {
+    "accepted_sota_changed": false,
+    "full_download": false,
+    "source_patch": false,
+    "next_action": "After explicit cleanup, prioritize direct_metadata_pass_after_audit candidates only. Tokenizer-pre mismatch candidates are correctness-first fallback; 0xSero 180B Q2 requires loader/shape plan."
+  },
+  "post_audit_summary": {
+    "direct_metadata_pass_after_audit": [
+      {
+        "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-Q4-Mixed-GGUF",
+        "file": "DeepSeek-V4-Flash-REAP-K128.gguf",
+        "variant_gib": 52.038
+      },
+      {
+        "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+        "file": "IQ1_S-XL/DeepSeek-V4-Flash-IQ1_S-XL-00001-of-00002.gguf",
+        "variant_gib": 57.314
+      },
+      {
+        "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+        "file": "IQ1_M/DeepSeek-V4-Flash-IQ1_M-00001-of-00002.gguf",
+        "variant_gib": 60.078
+      }
+    ],
+    "metadata_pass_with_tokenizer_pre_risk": [
+      {
+        "repo": "ssweens/DeepSeek-V4-Flash-GGUF-YMMV",
+        "file": "deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf",
+        "tokenizer_pre": "deepseek-v3"
+      },
+      {
+        "repo": "ssweens/DeepSeek-V4-Flash-GGUF-YMMV",
+        "file": "deepseek-ai__DeepSeek-V4-Flash-IQ2_XXS-00001-of-00002.gguf",
+        "tokenizer_pre": "deepseek-v3"
+      }
+    ],
+    "rejected_or_requires_loader_plan": [
+      {
+        "repo": "0xSero/DeepSeek-V4-Flash-180B-GGUF",
+        "file": "DeepSeek-V4-Flash-Spark-Q2-REAP-ds4.gguf",
+        "reason": "ffn_gate_inp sample shape [4096, 160] differs from expected [4096, 256]"
+      }
+    ]
+  }
+}

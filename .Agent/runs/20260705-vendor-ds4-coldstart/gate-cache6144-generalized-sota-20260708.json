@@ -1,0 +1,97 @@
+{
+  "stage": "X10-BR gate cache 6144 generalized SOTA",
+  "date": "2026-07-08",
+  "status": "accepted_generalized_sota_stage_not_product_target",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head_before_commit": "3c9f078b495e861c4ff64b026b11774be57ba93a",
+  "source_dirty_during_candidate_runs": true,
+  "prompt_specific_optimization": false,
+  "task_target": "arbitrary user prompts on 16GB host RAM including page cache plus 32GB RTX 5090, stable decode above 5 tok/s",
+  "accepted_baseline_previous": {
+    "stage": "X10-BM prompt-general full native gate source",
+    "dev_n192_min_mean_max_tok_s": [3.7, 4.10, 4.5],
+    "heldout_n192_min_mean_max_tok_s": [3.9, 4.12, 4.4],
+    "postpush_france_n192_eval_tok_s": 4.6
+  },
+  "config_delta": {
+    "GGML_MOE_STREAM_ONE_CACHE_MIB": 6144,
+    "GGML_MOE_VRAM_CACHE_GB": 9,
+    "note": "Batch cache requested 9GB but may clamp downward after the larger 6GB gate cache; France n96 observed batch cache actual 6.9GB. The accepted improvement comes from reducing gate direct reads, not prompt-specific routing."
+  },
+  "diagnostic_basis": {
+    "france_n96_gate_cache_4096": {
+      "accepted_range_eval_tok_s": "4.5-4.6",
+      "gate_vram_cache_hits": 16161,
+      "gate_vram_cache_misses": 8670,
+      "gate_hit_rate_pct": 65.1
+    },
+    "france_n96_gate_cache_6144_probe": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache-sweep/20260708T055222Z-france-n96-onecache6144-vram9",
+      "eval_tok_s": 5.0,
+      "ttft_ms": 24020.749997,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15124594688,
+      "gate_vram_cache_hits": 18358,
+      "gate_vram_cache_misses": 6473,
+      "gate_hit_rate_pct": 73.9,
+      "one_expert_pack_direct_reads": 6473,
+      "batch_cache_actual_gib": 6.9,
+      "ram_ok": true
+    },
+    "quantum_n96_gate_cache_6144_probe": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache-sweep/20260708T055401Z-quantum-n96-onecache6144-vram9",
+      "eval_tok_s": 3.9,
+      "ttft_ms": 23823.1091,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15122849792,
+      "ram_ok": true,
+      "quality_note": "Semantically correct, with an extra leading 'and'."
+    }
+  },
+  "dev_v1_n192_before_candidate_freeze": {
+    "aggregate_eval_tok_s": {"min": 3.8, "mean": 4.36, "max": 4.8},
+    "runs": [
+      {"prompt_id": "france", "prompt": "Please introduce France in a short paragraph.", "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-dev-n192/20260708T055646Z-france-n192-onecache6144", "eval_tok_s": 4.8, "prompt_tok_s": 3.2, "ttft_ms": 24199.443379, "memory_peak_bytes": 16000000000, "memory_file_bytes": 15043018752, "ram_ok": true, "manual_correctness_ok": true},
+      {"prompt_id": "quantum", "prompt": "Explain quantum computing briefly.", "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-dev-n192/20260708T055742Z-quantum-n192-onecache6144", "eval_tok_s": 3.8, "prompt_tok_s": 3.1, "ttft_ms": 24354.945642, "memory_peak_bytes": 16000000000, "memory_file_bytes": 15125495808, "ram_ok": true, "manual_correctness_ok": true, "quality_note": "Semantically correct with an extra leading 'and'."},
+      {"prompt_id": "fibonacci", "prompt": "Write a short Python function for Fibonacci.", "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-dev-n192/20260708T055859Z-fibonacci-n192-onecache6144", "eval_tok_s": 4.0, "prompt_tok_s": 3.2, "ttft_ms": 26456.327107, "memory_peak_bytes": 16000000000, "memory_file_bytes": 15122169856, "ram_ok": true, "manual_correctness_ok": true, "quality_note": "First generator function is correct; later optional compact list variant is noisy/truncated."},
+      {"prompt_id": "japan", "prompt": "Introduce Japan in a short paragraph.", "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-dev-n192/20260708T060017Z-japan-n192-onecache6144", "eval_tok_s": 4.7, "prompt_tok_s": 3.4, "ttft_ms": 24977.208887, "memory_peak_bytes": 16000000000, "memory_file_bytes": 15120297984, "ram_ok": true, "manual_correctness_ok": true},
+      {"prompt_id": "climate", "prompt": "Summarize climate change in one paragraph.", "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-dev-n192/20260708T060113Z-climate-n192-onecache6144", "eval_tok_s": 4.5, "prompt_tok_s": 3.4, "ttft_ms": 23812.487884, "memory_peak_bytes": 16000000000, "memory_file_bytes": 15121707008, "ram_ok": true, "manual_correctness_ok": true}
+    ]
+  },
+  "heldout_v1_n192_after_candidate_freeze": {
+    "aggregate_eval_tok_s": {"min": 4.0, "mean": 4.30, "max": 4.6},
+    "runs": [
+      {"prompt_id": "photosynthesis", "prompt": "Describe photosynthesis in a short paragraph.", "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-heldout-n192/20260708T060319Z-photosynthesis-n192-onecache6144", "eval_tok_s": 4.3, "prompt_tok_s": 3.3, "ttft_ms": 22558.7481, "memory_peak_bytes": 16000000000, "memory_file_bytes": 15121285120, "ram_ok": true, "manual_correctness_ok": true},
+      {"prompt_id": "office", "prompt": "Give three practical tips for organizing a small home office.", "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-heldout-n192/20260708T060422Z-office-n192-onecache6144", "eval_tok_s": 4.0, "prompt_tok_s": 3.2, "ttft_ms": 25031.911113, "memory_peak_bytes": 16000000000, "memory_file_bytes": 15065264128, "ram_ok": true, "manual_correctness_ok": true, "quality_note": "Same known output style as previous SOTA: leading 'space' fragment and n192 truncation, but three tips are semantically usable."},
+      {"prompt_id": "palindrome_js", "prompt": "Write a concise JavaScript function that checks whether a string is a palindrome.", "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-heldout-n192/20260708T060538Z-palindrome_js-n192-onecache6144", "eval_tok_s": 4.0, "prompt_tok_s": 3.8, "ttft_ms": 25181.794571, "memory_peak_bytes": 16000000000, "memory_file_bytes": 15063633920, "ram_ok": true, "manual_correctness_ok": true},
+      {"prompt_id": "exercise", "prompt": "Explain why regular exercise is important in one paragraph.", "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-heldout-n192/20260708T060654Z-exercise-n192-onecache6144", "eval_tok_s": 4.6, "prompt_tok_s": 3.2, "ttft_ms": 25628.558032, "memory_peak_bytes": 16000000000, "memory_file_bytes": 15067561984, "ram_ok": true, "manual_correctness_ok": true},
+      {"prompt_id": "brazil", "prompt": "Introduce Brazil in a short paragraph.", "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-heldout-n192/20260708T060752Z-brazil-n192-onecache6144", "eval_tok_s": 4.6, "prompt_tok_s": 3.2, "ttft_ms": 25439.907254, "memory_peak_bytes": 16000000000, "memory_file_bytes": 15123312640, "ram_ok": true, "manual_correctness_ok": true}
+    ]
+  },
+  "decision": "Accept as the current generalized SOTA stage result. Held-out min/mean/max improves from 3.9/4.12/4.4 to 4.0/4.30/4.6 under strict 16GB host RAM including page cache. Product target stable >5 tok/s is still not met.",
+  "post_push_repro": {
+    "commit": "b3c396c6a7cec3cdc4c113ddd1fface08e53b359",
+    "pushed_to": "ssd/vendor/deepseek-token-rate-16gb",
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-cache6144-postpush-repro/20260708T061235Z-france-n192-pushed-b3c396c-default6144-repro",
+    "prompt": "Please introduce France in a short paragraph.",
+    "eval_tok_s": 4.8,
+    "prompt_tok_s": 3.3,
+    "ttft_ms": 24617.123377,
+    "elapsed_seconds": 53.11,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15120154624,
+    "memory_anon_bytes": 1159168,
+    "ram_ok": true,
+    "source_dirty": false,
+    "config": {
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": 6144,
+      "GGML_MOE_VRAM_CACHE_GB": 9,
+      "batch_cache_actual_gib": 6.9
+    },
+    "gate_vram_cache_hits": 26174,
+    "gate_vram_cache_misses": 8977,
+    "gate_vram_cache_hit_rate_pct": 74.5,
+    "one_expert_pack_direct_reads": 8977,
+    "quality": "France output complete, coherent, and semantically correct."
+  }
+}

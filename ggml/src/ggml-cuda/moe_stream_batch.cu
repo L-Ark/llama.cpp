@@ -8,11 +8,17 @@ typedef struct { float direct_up; float direct_gate; float direct_fused; float r
 void ggml_cuda_moe_stream_batch_link_anchor(void) {}
 void ggml_cuda_moe_ttft_trace_mark(const char *) {}
 bool ggml_cuda_moe_iq2_prompt_replay(int, const void *, const void *, int64_t, int64_t, size_t, const float *, int64_t, int, float, ggml_moe_iq2_replay_result *) { return false; }
-bool ggml_cuda_moe_stream_batch(int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, const float *, int64_t, size_t, size_t, float *, size_t, size_t, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
+bool ggml_cuda_moe_stream_batch(int, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, const float *, int64_t, size_t, size_t, const void *, size_t, int64_t, float *, size_t, size_t, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
+bool ggml_cuda_moe_stream_handoff_upload(const float *, int64_t, int64_t) { return false; }
+int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *, int, size_t) { return 0; }
+int ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit(void) { return 0; }
+int ggml_cuda_moe_stream_batch_preload_active_from_pack(int, const char *, int64_t, size_t, const int64_t *) { return 0; }
+int ggml_cuda_moe_stream_route_group_preload_updown_from_gate(const char *, int64_t, const int64_t *) { return 0; }
 bool ggml_cuda_moe_stream_preload_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_preload_tensor_prompt(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64_t, size_t, size_t) { return false; }
 bool ggml_cuda_moe_stream_cache_contains(const char *, size_t, int) { return false; }
+const void * ggml_cuda_moe_stream_cache_dev_ptr(const char *, size_t, int) { return nullptr; }
 bool ggml_cuda_moe_iq2_xxs_q8k_selftest(void) { return false; }
 bool ggml_cuda_moe_stream_up_gate_batch(int, int, const char *, const void *, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, int, float, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *, int, size_t) { return nullptr; }
@@ -112,6 +118,8 @@ void ggml_cuda_moe_stream_batch_link_anchor(void) {
 
 void ggml_cuda_moe_ttft_trace_mark(const char *label);
 
+bool ggml_cuda_moe_stream_handoff_upload(const float *host_ptr, int64_t ne01, int64_t dst_cols);
+
 bool ggml_cuda_moe_stream_batch(
     int  src0_type_int,
     const char *src0_name,
@@ -124,11 +132,28 @@ bool ggml_cuda_moe_stream_batch(
     const float *src1_f32,
     int64_t src1_ne1,
     size_t src1_nb1, size_t src1_nb2,
+    const void *src1_q8_0,
+    size_t src1_q8_0_row_size,
+    int64_t src1_q8_0_ne1,
     float *dst,
     size_t dst_nb1, size_t dst_nb2,
     const int64_t *matrix_row_counts,
     const ggml_moe_row_mapping *matrix_rows,
     int64_t rows_stride);
+
+int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_name, int expert_idx, size_t expert_bytes);
+int ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit(void);
+int ggml_cuda_moe_stream_batch_preload_active_from_pack(
+    int src0_type_int,
+    const char *src0_name,
+    int64_t n_as,
+    size_t expert_bytes,
+    const int64_t *matrix_row_counts);
+int ggml_cuda_moe_stream_route_group_preload_updown_from_gate(
+    const char *src0_gate_name,
+    int64_t n_as,
+    const int64_t *matrix_row_counts);
+const void * ggml_cuda_moe_stream_cache_dev_ptr(const char *src0_name, size_t expert_bytes, int expert_idx);
 
 bool ggml_cuda_moe_stream_preload_tensor(
     int src0_type_int,
@@ -344,6 +369,7 @@ struct moe_gpu_handoff {
 };
 
 static moe_gpu_handoff g_handoff;
+static bool init_batch_once();
 
 struct batch_profile {
     bool enabled = false;
@@ -616,6 +642,7 @@ struct expert_pack_entry {
     int32_t source_idx = 0;
     uint64_t offset = 0;
     uint64_t nbytes = 0;
+    bool alias_source = false;
 };
 
 struct expert_pack_source {
@@ -1243,6 +1270,7 @@ struct batch_vram_cache {
     bool slot_pinned[16384] = {};
     bool slot_prefetch_down[16384] = {};
     bool slot_pending[16384] = {};
+    bool slot_filling[16384] = {};
     cudaEvent_t slot_ready[16384] = {};
     uint64_t clock = 1;
     uint64_t hits = 0;
@@ -1257,6 +1285,57 @@ struct batch_vram_cache {
 
 static batch_vram_cache g_bcaches[2];
 static bool g_bcache_inited[2] = {};
+
+static FILE * batch_vram_accounting_fp() {
+    static FILE * fp = nullptr;
+    static bool initialized = false;
+    static std::mutex mu;
+    std::lock_guard<std::mutex> lk(mu);
+    if (!initialized) {
+        initialized = true;
+        const char * path = std::getenv("GGML_MOE_VRAM_ACCOUNTING_OUT");
+        if (path && path[0]) {
+            fp = std::fopen(path, "a");
+            if (fp) {
+                std::setvbuf(fp, nullptr, _IOLBF, 0);
+            } else {
+                std::fprintf(stderr, "[moe_stream_batch] VRAM accounting: failed to open %s\n", path);
+            }
+        }
+    }
+    return fp;
+}
+
+static uint64_t batch_vram_accounting_now_us() {
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    return (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(now).count();
+}
+
+static void batch_vram_accounting_record(const char * event, int cid, const batch_vram_cache * c, const char * detail = "") {
+    FILE * fp = batch_vram_accounting_fp();
+    if (!fp) return;
+    size_t free_bytes = 0;
+    size_t total_bytes = 0;
+    const cudaError_t err = cudaMemGetInfo(&free_bytes, &total_bytes);
+    if (err != cudaSuccess) {
+        cudaGetLastError();
+        return;
+    }
+    const double mib = 1024.0 * 1024.0;
+    const double pool_mib = c && c->pool ? ((double)c->n_slots * (double)c->slot_sz) / mib : 0.0;
+    std::fprintf(fp,
+        "%llu,batch_%s,%s,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%s\n",
+        (unsigned long long) batch_vram_accounting_now_us(),
+        cid == 1 ? "upgate" : "down",
+        event ? event : "",
+        free_bytes / mib,
+        total_bytes / mib,
+        (total_bytes - free_bytes) / mib,
+        pool_mib,
+        c ? c->n_slots : 0,
+        c ? c->slot_sz / mib : 0.0,
+        detail ? detail : "");
+}
 
 struct cache_policy_diag {
     std::atomic<uint64_t> profile_count_lookups{0};
@@ -1966,6 +2045,23 @@ static bool profile_preload_evict_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static bool profile_preload_enabled() {
+    const char *env = std::getenv("GGML_MOE_VRAM_PROFILE_PRELOAD");
+    return !env || !env[0] || env[0] != '0';
+}
+
+static bool profile_pin_on_insert_enabled() {
+    const char *env = std::getenv("GGML_MOE_VRAM_PROFILE_PIN_ON_INSERT");
+    return env && env[0] && env[0] != '0';
+}
+
+static uint32_t profile_pin_min_count() {
+    const char *env = std::getenv("GGML_MOE_VRAM_PROFILE_PIN_MIN_COUNT");
+    if (!env || !env[0]) return 1;
+    const unsigned long value = std::strtoul(env, nullptr, 10);
+    return value > UINT32_MAX ? UINT32_MAX : (uint32_t)value;
+}
+
 static uint64_t batch_key_hash(const char *name, int expert_idx) {
     uint64_t h = 1469598103934665603ULL;
     if (name) {
@@ -2204,6 +2300,7 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         std::fill_n(c->slot_expert, 16384, -1);
         std::fill_n(c->slot_pinned, 16384, false);
         std::fill_n(c->slot_prefetch_down, 16384, false);
+        std::fill_n(c->slot_filling, 16384, false);
         for (cudaEvent_t &ev : c->slot_ready) {
             if (ev) {
                 cudaEventDestroy(ev);
@@ -2241,6 +2338,7 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
         g_bcache_inited[cid] = true;
         return nullptr;
     }
+    batch_vram_accounting_record("batch_cache_alloc_before", cid, c);
     int alloc_slots = c->n_slots;
     size_t alloc = (size_t)alloc_slots * expert_sz;
     cudaError_t alloc_err = cudaMalloc(&c->pool, alloc);
@@ -2264,10 +2362,12 @@ static batch_vram_cache * batch_cache_get(size_t expert_sz) {
                          cid == 1 ? "upgate" : "down");
             c->n_slots = 0;
             g_bcache_inited[cid] = true;
+            batch_vram_accounting_record("batch_cache_alloc_failed", cid, c);
             return nullptr;
         }
         c->n_slots = alloc_slots;
     }
+    batch_vram_accounting_record("batch_cache_alloc_after", cid, c);
     for (char (&name)[128] : c->slot_tensor) {
         name[0] = '\0';
     }
@@ -2296,6 +2396,7 @@ static int batch_cache_lookup_slot(batch_vram_cache *c, uintptr_t key) {
     if (!c || !c->pool || c->n_slots == 0) return -1;
     for (int slot = 0; slot < c->n_slots; ++slot) {
         if (c->slot_key[slot] == key) {
+            if (c->slot_filling[slot]) return -1;
             if (!batch_cache_wait_slot_ready(c, slot)) return -1;
             c->slot_used[slot] = c->clock++;
             if (c->slot_hits[slot] != UINT32_MAX) {
@@ -2334,6 +2435,7 @@ static void batch_cache_clear_slot(batch_vram_cache *c, int slot) {
     }
     c->slot_pinned[slot] = false;
     c->slot_prefetch_down[slot] = false;
+    c->slot_filling[slot] = false;
     c->slot_pending[slot] = false;
 }
 
@@ -2381,6 +2483,24 @@ static bool cache_policy_profile_lfu_lru_enabled() {
 static bool cache_policy_hybrid_profile_lfu_lru_enabled() {
     const char *env = std::getenv("GGML_MOE_VRAM_CACHE_POLICY");
     return env && std::strcmp(env, "hybrid_profile_lfu_lru") == 0;
+}
+
+static int cache_gate_preload_evict_updown_max_hits() {
+    static int max_hits = []() {
+        const char *env = std::getenv("GGML_MOE_GATE_PRELOAD_EVICT_UPDOWN_MAX_HITS");
+        if (!env || !env[0]) return -1;
+        return std::atoi(env);
+    }();
+    return max_hits;
+}
+
+static bool cache_tensor_is_gate(const char *name) {
+    return name && std::strstr(name, ".ffn_gate_exps.") != nullptr;
+}
+
+static bool cache_tensor_is_updown(const char *name) {
+    return name && (std::strstr(name, ".ffn_up_exps.") != nullptr ||
+            std::strstr(name, ".ffn_down_exps.") != nullptr);
 }
 
 static uint64_t cache_policy_hybrid_after() {
@@ -3632,6 +3752,7 @@ static bool expert_pack_load_gguf_alias_tsv(const char *path, std::vector<expert
         e.source_idx = source_idx;
         e.offset = offset;
         e.nbytes = nbytes;
+        e.alias_source = true;
         entries.push_back(e);
         existing_keys.insert(key);
         ++loaded;
@@ -3643,6 +3764,55 @@ static bool expert_pack_load_gguf_alias_tsv(const char *path, std::vector<expert
             (unsigned long)loaded, path, alias_sources.size(),
             (unsigned long)skipped_duplicates, (unsigned long)bad_rows, (unsigned long)rows);
     return bad_rows == 0;
+}
+
+static bool expert_pack_open_alias_source(const char *path, int32_t source_idx) {
+    if (!path || !path[0]) return false;
+
+    FILE *file = std::fopen(path, "rb");
+    if (!file) {
+        std::fprintf(stderr, "[moe_stream_batch] expert alias source: open failed: %s\n", path);
+        return false;
+    }
+
+    expert_pack_source source;
+    source.file = file;
+    std::snprintf(source.path, sizeof(source.path), "%s", path);
+#if !defined(_WIN32)
+    source.fd_direct = -1;
+    if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
+#if defined(O_DIRECT)
+        source.fd_direct = ::open(path, O_RDONLY | O_DIRECT);
+#endif
+        if (source.fd_direct < 0) {
+            std::fprintf(stderr, "[moe_stream_batch] expert alias source: direct open failed; using buffered reads: %s\n", path);
+            g_expert_pack.io_backend = 0;
+        } else if (g_expert_pack.io_backend == 2) {
+#if defined(GGML_MOE_HAS_LIBURING)
+            std::fprintf(stderr, "[moe_stream_batch] expert alias source: io_uring direct reads enabled: %s io_bytes=%zu depth=%zu\n",
+                         path, expert_pack_io_bytes(), expert_pack_io_depth());
+#else
+            std::fprintf(stderr, "[moe_stream_batch] expert alias source: io_uring requested but liburing headers are unavailable; using direct fallback\n");
+            g_expert_pack.io_backend = 1;
+#endif
+        } else {
+            std::fprintf(stderr, "[moe_stream_batch] expert alias source: direct reads enabled: %s\n", path);
+        }
+    }
+#else
+    if (g_expert_pack.io_backend == 1 || g_expert_pack.io_backend == 2) {
+        std::fprintf(stderr, "[moe_stream_batch] expert alias source: direct/io_uring reads are not supported on this platform; using buffered reads\n");
+        g_expert_pack.io_backend = 0;
+    }
+#endif
+
+    if ((size_t)source_idx != g_expert_pack.sources.size()) {
+        std::fprintf(stderr, "[moe_stream_batch] expert alias source: internal source index mismatch for %s\n", path);
+        std::fclose(file);
+        return false;
+    }
+    g_expert_pack.sources.push_back(source);
+    return true;
 }
 
 static void expert_pack_append_env_list(std::vector<std::string> &paths, const char *env_name) {
@@ -3979,6 +4149,7 @@ static void expert_pack_init_once() {
         return;
     }
 
+
     std::vector<expert_pack_entry> entries;
     for (const std::string &source_path : source_paths) {
         if (!expert_pack_load_source(source_path.c_str(), (int32_t)g_expert_pack.sources.size(), entries, false)) {
@@ -3995,6 +4166,12 @@ static void expert_pack_init_once() {
             g_expert_pack.inited = true;
             return;
         }
+    }
+
+
+    if (entries.empty()) {
+        g_expert_pack.inited = true;
+        return;
     }
 
     std::sort(entries.begin(), entries.end(),
@@ -5035,8 +5212,20 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
     expert_pack_source *source = expert_pack_source_for_entry(entry);
     if (!entry || !source || source->fd_direct < 0 || entry->nbytes != sz) return false;
     const uint64_t alignment = expert_pack_direct_alignment();
-    const size_t read_sz = (size_t)align_up_u64((uint64_t)sz, alignment);
-    if ((entry->offset % alignment) != 0 ||
+    const bool aligned_alias = expert_pack_env_bool("GGML_MOE_IO_ALIGNED_ALIAS_BATCH", false) &&
+        entry->alias_source && (entry->offset % alignment) != 0;
+    const size_t payload_shift = (size_t)(entry->offset % alignment);
+    const uint64_t read_offset = aligned_alias ? entry->offset - payload_shift : entry->offset;
+    const size_t read_sz = aligned_alias ?
+        (size_t)align_up_u64((uint64_t)payload_shift + (uint64_t)sz, alignment) :
+        (size_t)align_up_u64((uint64_t)sz, alignment);
+    void *read_dst = dst;
+    if (aligned_alias) {
+        if (posix_memalign(&read_dst, (size_t)alignment, read_sz) != 0 || !read_dst) {
+            ++g_expert_pack.iouring_fallbacks;
+            return false;
+        }
+    } else if ((entry->offset % alignment) != 0 ||
             ((uintptr_t)dst % alignment) != 0 ||
             read_sz < sz) {
         ++g_expert_pack.iouring_fallbacks;
@@ -5046,6 +5235,7 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
     io_uring ring_io;
     const unsigned int flags = expert_pack_env_bool("GGML_MOE_IO_SQPOLL", false) ? IORING_SETUP_SQPOLL : 0;
     if (io_uring_queue_init(1, &ring_io, flags) != 0) {
+        if (read_dst != dst) std::free(read_dst);
         ++g_expert_pack.iouring_fallbacks;
         return false;
     }
@@ -5053,11 +5243,12 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
     io_uring_sqe *sqe = io_uring_get_sqe(&ring_io);
     if (!sqe) {
         io_uring_queue_exit(&ring_io);
+        if (read_dst != dst) std::free(read_dst);
         ++g_expert_pack.iouring_fallbacks;
         return false;
     }
 
-    io_uring_prep_read(sqe, source->fd_direct, dst, (unsigned)read_sz, (off_t)entry->offset);
+    io_uring_prep_read(sqe, source->fd_direct, read_dst, (unsigned)read_sz, (off_t)read_offset);
     io_uring_sqe_set_data64(sqe, 1);
 
     const auto submit_start = std::chrono::steady_clock::now();
@@ -5067,6 +5258,7 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
             (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(submit_end - submit_start).count());
     if (submit_rc < 0) {
         io_uring_queue_exit(&ring_io);
+        if (read_dst != dst) std::free(read_dst);
         ++g_expert_pack.iouring_fallbacks;
         return false;
     }
@@ -5085,11 +5277,16 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
     io_uring_queue_exit(&ring_io);
 
     if (ok) {
+        if (read_dst != dst) {
+            std::memcpy(dst, (const char *)read_dst + payload_shift, sz);
+            std::free(read_dst);
+        }
         ++g_expert_pack.iouring_reads;
         g_expert_pack.iouring_bytes.fetch_add(sz);
         return true;
     }
 
+    if (read_dst != dst) std::free(read_dst);
     ++g_expert_pack.iouring_fallbacks;
     return false;
 #else
@@ -5504,6 +5701,56 @@ static bool io_locality_profile_enabled() {
 static bool io_read_trace_enabled() {
     const char *env = std::getenv("GGML_MOE_IO_READ_TRACE_OUT");
     return env && env[0];
+}
+
+static bool h2d_coalesce_profile_enabled() {
+    const char *env = std::getenv("GGML_MOE_H2D_COALESCE_PROFILE_OUT");
+    return env && env[0];
+}
+
+static void h2d_coalesce_profile_record(
+        const char *op,
+        size_t jobs,
+        size_t read_jobs,
+        size_t copy_count,
+        size_t coalesced_copy_count,
+        size_t host_contiguous_pairs,
+        size_t dst_contiguous_pairs,
+        size_t both_contiguous_pairs,
+        size_t expert_bytes) {
+    const char *path = std::getenv("GGML_MOE_H2D_COALESCE_PROFILE_OUT");
+    if (!path || !path[0] || copy_count == 0) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,op,jobs,read_jobs,copy_count,coalesced_copy_count,"
+                "host_contiguous_pairs,dst_contiguous_pairs,both_contiguous_pairs,"
+                "expert_bytes,bytes,total_saved_copy_count\n");
+        header_written = true;
+    }
+    const size_t saved = copy_count > coalesced_copy_count ? copy_count - coalesced_copy_count : 0;
+    std::fprintf(f,
+            "%lu,%s,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu\n",
+            (unsigned long)++seq,
+            op ? op : "",
+            jobs,
+            read_jobs,
+            copy_count,
+            coalesced_copy_count,
+            host_contiguous_pairs,
+            dst_contiguous_pairs,
+            both_contiguous_pairs,
+            expert_bytes,
+            copy_count * expert_bytes,
+            saved);
+    std::fclose(f);
 }
 
 static void io_locality_profile_record(
@@ -6576,7 +6823,18 @@ static int batch_cache_insert_slot(
         bool prefetch_down = false, bool pin_preload = true, bool async_prefetch = false,
         uint64_t profile_count = 0) {
     if (!c || !c->pool || c->n_slots == 0 || sz > c->slot_sz) return -1;
-    const bool pin_slot = preload && pin_preload && profile_protect_enabled();
+    bool pin_slot = preload && pin_preload && profile_protect_enabled();
+    if (!pin_slot && profile_pin_on_insert_enabled() && profile_protect_enabled()) {
+        load_profile_once();
+        if (g_profile_enabled) {
+            if (profile_count == 0) {
+                profile_count = profile_count_for_key(key);
+            }
+            if (profile_count >= profile_pin_min_count() && c->pinned < profile_preload_slot_budget(c)) {
+                pin_slot = true;
+            }
+        }
+    }
     if (pin_slot && c->pinned >= profile_preload_slot_budget(c)) return -1;
 
     int slot = -1;
@@ -6589,6 +6847,9 @@ static int batch_cache_insert_slot(
     const bool evict_profile = cache_evict_profile_enabled();
     const bool use_profile_score =
         profile_lfu_lru || (hybrid_profile_lfu_lru && c->clock >= cache_policy_hybrid_after());
+    const int gate_preload_updown_max_hits = cache_gate_preload_evict_updown_max_hits();
+    const bool gate_preload_protect_updown =
+        preload && gate_preload_updown_max_hits >= 0 && cache_tensor_is_gate(tensor_name);
     if ((profile_lfu_lru || hybrid_profile_lfu_lru) && !g_cache_policy_diag_registered.exchange(true)) {
         std::atexit(cache_policy_diag_report_atexit);
     }
@@ -6599,7 +6860,12 @@ static int batch_cache_insert_slot(
             break;
         }
         if (!allow_evict) continue;
+        if (c->slot_filling[i]) continue;
         if (c->slot_pinned[i]) continue;
+        if (gate_preload_protect_updown && cache_tensor_is_updown(c->slot_tensor[i]) &&
+                (int)c->slot_hits[i] > gate_preload_updown_max_hits) {
+            continue;
+        }
         if (use_profile_score) {
             if (c->slot_profile_count[i] < lowest_profile_count ||
                     (c->slot_profile_count[i] == lowest_profile_count &&
@@ -6679,6 +6945,7 @@ static int batch_cache_insert_slot(
         profile_pinned_key_record((uint64_t)key);
     }
     c->slot_prefetch_down[slot] = prefetch_down;
+    c->slot_filling[slot] = false;
     c->slot_pending[slot] = false;
     void *dst = (char *)c->pool + (size_t)slot * c->slot_sz;
     auto clear_slot = [&]() {
@@ -6693,6 +6960,7 @@ static int batch_cache_insert_slot(
         }
         c->slot_pinned[slot] = false;
         c->slot_prefetch_down[slot] = false;
+        c->slot_filling[slot] = false;
         c->slot_pending[slot] = false;
     };
     if (do_copy) {
@@ -6750,6 +7018,248 @@ static int batch_cache_insert_slot(
         ++c->down_prefetch_loads;
     }
     return slot;
+}
+
+static bool down_batch_demand_queue_enabled();
+static int down_batch_demand_queue_max();
+static int down_batch_demand_queue_delay_us();
+
+struct down_demand_prefill_job {
+    batch_vram_cache *cache = nullptr;
+    int slot = -1;
+    uintptr_t key = 0;
+    void *dst = nullptr;
+    const void *host_data = nullptr;
+    const expert_pack_entry *pack_entry = nullptr;
+    size_t expert_bytes = 0;
+    int expert_idx = -1;
+    char tensor[128] = {};
+};
+
+struct down_demand_prefill_queue_state {
+    bool inited = false;
+    bool enabled = false;
+    bool stop = false;
+    bool failed = false;
+    cudaStream_t stream = nullptr;
+    pinned_stage_ring ring;
+    std::deque<down_demand_prefill_job> jobs;
+    size_t max_jobs = 256;
+    std::mutex mu;
+    std::condition_variable cv;
+    std::thread worker;
+    std::atomic<uint64_t> submitted{0};
+    std::atomic<uint64_t> completed{0};
+    std::atomic<uint64_t> batches{0};
+    std::atomic<uint64_t> failures{0};
+    std::atomic<uint64_t> queue_full{0};
+    std::atomic<uint64_t> no_slot{0};
+    std::atomic<uint64_t> duplicate{0};
+    std::atomic<uint64_t> evicted{0};
+};
+
+static down_demand_prefill_queue_state g_down_demand_queue;
+
+static void down_demand_prefill_report_atexit() {
+    if (!g_down_demand_queue.inited || !g_down_demand_queue.enabled) return;
+    std::fprintf(stderr,
+            "[moe_stream_batch] down demand queue: submitted=%lu completed=%lu batches=%lu failures=%lu "
+            "queue_full=%lu no_slot=%lu duplicate=%lu evicted=%lu pending=%zu\n",
+            (unsigned long)g_down_demand_queue.submitted.load(),
+            (unsigned long)g_down_demand_queue.completed.load(),
+            (unsigned long)g_down_demand_queue.batches.load(),
+            (unsigned long)g_down_demand_queue.failures.load(),
+            (unsigned long)g_down_demand_queue.queue_full.load(),
+            (unsigned long)g_down_demand_queue.no_slot.load(),
+            (unsigned long)g_down_demand_queue.duplicate.load(),
+            (unsigned long)g_down_demand_queue.evicted.load(),
+            g_down_demand_queue.jobs.size());
+}
+
+static void down_demand_prefill_worker() {
+    if (cudaSetDevice(0) != cudaSuccess) {
+        g_down_demand_queue.failed = true;
+        return;
+    }
+    for (;;) {
+        std::vector<down_demand_prefill_job> batch;
+        {
+            std::unique_lock<std::mutex> lk(g_down_demand_queue.mu);
+            g_down_demand_queue.cv.wait(lk, [] {
+                return g_down_demand_queue.stop || !g_down_demand_queue.jobs.empty();
+            });
+            if (g_down_demand_queue.stop && g_down_demand_queue.jobs.empty()) {
+                break;
+            }
+            if (g_down_demand_queue.jobs.empty()) {
+                continue;
+            }
+            const int delay_us = down_batch_demand_queue_delay_us();
+            if (delay_us > 0 && !g_down_demand_queue.stop) {
+                g_down_demand_queue.cv.wait_for(lk, std::chrono::microseconds(delay_us), [] {
+                    return g_down_demand_queue.stop;
+                });
+                if (g_down_demand_queue.stop && g_down_demand_queue.jobs.empty()) {
+                    break;
+                }
+            }
+            const size_t expert_bytes = g_down_demand_queue.jobs.front().expert_bytes;
+            while (!g_down_demand_queue.jobs.empty() &&
+                    g_down_demand_queue.jobs.front().expert_bytes == expert_bytes &&
+                    batch.size() < 32) {
+                batch.push_back(g_down_demand_queue.jobs.front());
+                g_down_demand_queue.jobs.pop_front();
+            }
+        }
+        if (batch.empty()) {
+            continue;
+        }
+
+        const size_t expert_bytes = batch[0].expert_bytes;
+        bool copied = expert_pack_iouring_copy_jobs(batch, expert_bytes, g_down_demand_queue.stream,
+                g_down_demand_queue.ring, "down_demand_queue");
+        if (!copied) {
+            copied = true;
+            for (const down_demand_prefill_job &job : batch) {
+                batch_copy_trace copy_trace;
+                if (!batch_cache_copy_h2d(g_down_demand_queue.ring, job.dst, job.host_data, expert_bytes,
+                            g_down_demand_queue.stream, job.pack_entry, &copy_trace,
+                            "down_demand_queue", job.tensor, job.expert_idx)) {
+                    copied = false;
+                    break;
+                }
+            }
+        }
+
+        std::lock_guard<std::mutex> lk(g_batch_mu);
+        if (!copied || cudaGetLastError() != cudaSuccess) {
+            for (const down_demand_prefill_job &job : batch) {
+                if (job.cache && job.slot >= 0 && job.slot < job.cache->n_slots &&
+                        job.cache->slot_key[job.slot] == job.key && job.cache->slot_filling[job.slot]) {
+                    batch_cache_clear_slot(job.cache, job.slot);
+                }
+            }
+            ++g_down_demand_queue.failures;
+            continue;
+        }
+
+        ++g_down_demand_queue.batches;
+        for (const down_demand_prefill_job &job : batch) {
+            if (!job.cache || job.slot < 0 || job.slot >= job.cache->n_slots ||
+                    job.cache->slot_key[job.slot] != job.key || !job.cache->slot_filling[job.slot]) {
+                ++g_down_demand_queue.evicted;
+                continue;
+            }
+            cudaEvent_t ready = nullptr;
+            if (cudaEventCreateWithFlags(&ready, cudaEventDisableTiming) != cudaSuccess ||
+                    cudaEventRecord(ready, g_down_demand_queue.stream) != cudaSuccess) {
+                if (ready) {
+                    cudaEventDestroy(ready);
+                }
+                batch_cache_clear_slot(job.cache, job.slot);
+                ++g_down_demand_queue.failures;
+                continue;
+            }
+            if (job.cache->slot_ready[job.slot]) {
+                cudaEventDestroy(job.cache->slot_ready[job.slot]);
+            }
+            job.cache->slot_ready[job.slot] = ready;
+            job.cache->slot_pending[job.slot] = true;
+            job.cache->slot_filling[job.slot] = false;
+            ++g_down_demand_queue.completed;
+        }
+    }
+}
+
+static void down_demand_prefill_shutdown() {
+    {
+        std::lock_guard<std::mutex> lk(g_down_demand_queue.mu);
+        g_down_demand_queue.stop = true;
+        g_down_demand_queue.cv.notify_all();
+    }
+    if (g_down_demand_queue.worker.joinable()) {
+        g_down_demand_queue.worker.join();
+    }
+    if (g_down_demand_queue.stream) {
+        cudaStreamSynchronize(g_down_demand_queue.stream);
+    }
+    pinned_stage_release(g_down_demand_queue.ring);
+    if (g_down_demand_queue.stream) {
+        cudaStreamDestroy(g_down_demand_queue.stream);
+        g_down_demand_queue.stream = nullptr;
+    }
+}
+
+static void down_demand_prefill_init_once() {
+    if (g_down_demand_queue.inited) return;
+    std::lock_guard<std::mutex> lk(g_down_demand_queue.mu);
+    if (g_down_demand_queue.inited) return;
+    g_down_demand_queue.enabled = down_batch_demand_queue_enabled();
+    g_down_demand_queue.max_jobs = (size_t)down_batch_demand_queue_max();
+    g_down_demand_queue.inited = true;
+    if (!g_down_demand_queue.enabled) {
+        return;
+    }
+    if (cudaStreamCreateWithFlags(&g_down_demand_queue.stream, cudaStreamNonBlocking) != cudaSuccess) {
+        g_down_demand_queue.enabled = false;
+        g_down_demand_queue.failed = true;
+        return;
+    }
+    std::atexit(down_demand_prefill_report_atexit);
+    std::atexit(down_demand_prefill_shutdown);
+    g_down_demand_queue.worker = std::thread(down_demand_prefill_worker);
+    std::fprintf(stderr,
+            "[moe_stream_batch] down demand queue active: max_jobs=%zu\n",
+            g_down_demand_queue.max_jobs);
+}
+
+static bool down_demand_prefill_enqueue(
+        batch_vram_cache *cache,
+        uintptr_t key,
+        const void *host_data,
+        size_t expert_bytes,
+        const char *tensor_name,
+        int expert_idx,
+        cudaStream_t st) {
+    down_demand_prefill_init_once();
+    if (!g_down_demand_queue.enabled || !cache || !cache->pool) return false;
+    if (batch_cache_find_slot(cache, key) >= 0) {
+        ++g_down_demand_queue.duplicate;
+        return false;
+    }
+    const expert_pack_entry *pack_entry = expert_pack_lookup(tensor_name, expert_idx, expert_bytes);
+    const int slot = batch_cache_insert_slot(cache, key, host_data, expert_bytes, st,
+            true, true, nullptr, 0, false, tensor_name, expert_idx,
+            true, false, false);
+    if (slot < 0) {
+        ++g_down_demand_queue.no_slot;
+        return false;
+    }
+    cache->slot_filling[slot] = true;
+
+    down_demand_prefill_job job;
+    job.cache = cache;
+    job.slot = slot;
+    job.key = key;
+    job.dst = (char *)cache->pool + (size_t)slot * cache->slot_sz;
+    job.host_data = host_data;
+    job.pack_entry = pack_entry;
+    job.expert_bytes = expert_bytes;
+    job.expert_idx = expert_idx;
+    std::snprintf(job.tensor, sizeof(job.tensor), "%s", tensor_name ? tensor_name : "");
+
+    {
+        std::lock_guard<std::mutex> lk(g_down_demand_queue.mu);
+        if (g_down_demand_queue.jobs.size() >= g_down_demand_queue.max_jobs) {
+            batch_cache_clear_slot(cache, slot);
+            ++g_down_demand_queue.queue_full;
+            return false;
+        }
+        g_down_demand_queue.jobs.push_back(job);
+        ++g_down_demand_queue.submitted;
+    }
+    g_down_demand_queue.cv.notify_one();
+    return true;
 }
 
 static void preload_profile_entries_for_tensor(
@@ -6818,6 +7328,7 @@ static void preload_profile_for_tensor(
         const char *tensor_name, const void *src0_data, int64_t n_as, size_t nb02, size_t src0_bytes, cudaStream_t st) {
     load_profile_once();
     if (!g_profile_enabled) return;
+    if (!profile_preload_enabled()) return;
     std::lock_guard<std::mutex> lk(g_profile_mu);
     preload_profile_entries_for_tensor(
         g_profile, "profile", tensor_name, src0_data, n_as, nb02, src0_bytes, st,
@@ -7036,6 +7547,50 @@ static bool ensure_host_pinned(void *&p, size_t &cur, size_t need) {
 static bool gpu_handoff_enabled() {
     const char *env = std::getenv("GGML_MOE_GPU_HANDOFF");
     return env && env[0] && env[0] != '0';
+}
+
+
+extern "C" bool ggml_cuda_moe_stream_handoff_upload(
+        const float *host_ptr,
+        int64_t ne01,
+        int64_t dst_cols) {
+    const char *env = std::getenv("GGML_MOE_GPU_HANDOFF_UPLOAD_GLU");
+    if (!env || !env[0] || env[0] == 0x30 || !gpu_handoff_enabled()) {
+        return false;
+    }
+    if (!host_ptr || ne01 <= 0 || dst_cols <= 0) {
+        return false;
+    }
+    if (!init_batch_once()) {
+        return false;
+    }
+    const size_t bytes = (size_t)ne01 * (size_t)dst_cols * sizeof(float);
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    batch_ctx &bc = g_batch;
+    if (!ensure_dev(bc.d_handoff, bc.d_handoff_sz, bytes)) {
+        return false;
+    }
+    if (cudaMemcpyAsync(bc.d_handoff, host_ptr, bytes, cudaMemcpyHostToDevice, bc.stream) != cudaSuccess) {
+        return false;
+    }
+    const char *sync_env = std::getenv("GGML_MOE_GPU_HANDOFF_UPLOAD_GLU_SYNC");
+    if (sync_env && sync_env[0] && sync_env[0] != 0x30) {
+        if (cudaStreamSynchronize(bc.stream) != cudaSuccess) {
+            return false;
+        }
+    }
+    g_handoff.host_ptr = host_ptr;
+    g_handoff.d_data = (const float *) bc.d_handoff;
+    g_handoff.bytes = bytes;
+    g_handoff.ne01 = ne01;
+    g_handoff.dst_cols = dst_cols;
+    ++g_handoff.serial;
+    static std::atomic<int> first_upload{0};
+    if (first_upload.fetch_add(1) == 0) {
+        std::fprintf(stderr, "[moe_stream_batch] GLU GPU handoff upload active: ne01=%ld dst_cols=%ld bytes=%zu\n",
+                (long)ne01, (long)dst_cols, bytes);
+    }
+    return true;
 }
 
 static __device__ __forceinline__ int moe_q8k_nearest_int(float fval) {
@@ -7637,7 +8192,7 @@ static float moe_host_up_gate_fuse(float u, float g, int unary_op, float limit) 
             if (limit < 1.0e-6f) {
                 return u * moe_host_silu(g);
             } else {
-                const float gate_v = std::min(moe_host_silu(g), limit);
+                const float gate_v = moe_host_silu(std::min(g, limit));
                 const float up_v = std::max(-limit, std::min(limit, u));
                 return up_v * gate_v;
             }
@@ -7805,6 +8360,12 @@ static bool moe_stream_type_supported(ggml_type type) {
         type == GGML_TYPE_Q2_K || type == GGML_TYPE_Q3_K || type == GGML_TYPE_IQ4_XS;
 }
 
+static bool moe_stream_pack_prefetch_type_supported(ggml_type type) {
+    return moe_stream_type_supported(type) ||
+        type == GGML_TYPE_MXFP4 ||
+        type == GGML_TYPE_F8_E4M3_B128;
+}
+
 static std::atomic<int> g_q4_down_parity_calls{0};
 static std::mutex g_q4_down_parity_seen_mu;
 static std::unordered_set<std::string> g_q4_down_parity_seen_tensors;
@@ -7815,6 +8376,596 @@ static bool q4_down_parity_candidate(const char *name, ggml_type type) {
     if (type != GGML_TYPE_Q4_0 || !name || !std::strstr(name, "ffn_down_exps")) return false;
     const char *target = std::getenv("GGML_MOE_Q4_DOWN_PARITY_TENSOR");
     return !target || !target[0] || std::strcmp(target, name) == 0;
+}
+
+static const char *mxfp4_down_probe_mode() {
+    const char *env = std::getenv("GGML_MOE_STREAM_DOWN_MXFP4_PROBE");
+    if (!env || !env[0] || env[0] == '0') return nullptr;
+    return env;
+}
+
+static bool mxfp4_down_probe_candidate(const char *name, ggml_type type) {
+    if (!mxfp4_down_probe_mode()) return false;
+    if (type != GGML_TYPE_MXFP4 || !name || !std::strstr(name, "ffn_down_exps")) return false;
+    const char *target = std::getenv("GGML_MOE_STREAM_DOWN_MXFP4_PROBE_TENSOR");
+    return !target || !target[0] || std::strcmp(target, name) == 0;
+}
+
+static bool mxfp4_down_q80_compat_candidate(const char *name, ggml_type type) {
+    if (type != GGML_TYPE_MXFP4 || !name) return false;
+    const bool is_down = std::strstr(name, "ffn_down_exps") != nullptr;
+    const bool is_up = std::strstr(name, "ffn_up_exps") != nullptr;
+    const char *env_name = is_down ? "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH" :
+        (is_up ? "GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH" : nullptr);
+    if (!env_name || !expert_pack_env_bool(env_name, false)) return false;
+    const char *target = std::getenv(is_down ?
+            "GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR" : "GGML_MOE_STREAM_UP_Q80_COMPAT_TENSOR");
+    return !target || !target[0] || std::strcmp(target, name) == 0;
+}
+
+static bool mxfp4_down_q80_compat_forces_mxfp4(const char *name, ggml_type type) {
+    if (type != GGML_TYPE_MXFP4 || !name) return false;
+    if (std::strstr(name, "ffn_down_exps")) {
+        return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH", false);
+    }
+    if (std::strstr(name, "ffn_up_exps")) {
+        return expert_pack_env_bool("GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH", false);
+    }
+    return false;
+}
+
+static bool mxfp4_down_q80_debug_enabled() {
+    return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_DEBUG", false);
+}
+
+static bool lowbit_down_probe_candidate(const char *name, ggml_type type) {
+    if (!expert_pack_env_bool("GGML_MOE_STREAM_DOWN_LOWBIT_PROBE", false)) return false;
+    if (!name || !std::strstr(name, "ffn_down_exps")) return false;
+    if (type != GGML_TYPE_IQ2_XS && type != GGML_TYPE_IQ1_S && type != GGML_TYPE_IQ1_M && type != GGML_TYPE_Q2_K) return false;
+    const char *target = std::getenv("GGML_MOE_STREAM_DOWN_LOWBIT_PROBE_TENSOR");
+    return !target || !target[0] || std::strstr(name, target) != nullptr;
+}
+
+static bool mxfp4_down_q80_cpu_order_enabled() {
+    return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER", false);
+}
+
+static bool mxfp4_down_q80_cpu_order_lane8_enabled() {
+    return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8", false);
+}
+
+static bool mxfp4_down_q80_cpu_order_lane8_shared_enabled() {
+    return expert_pack_env_bool("GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED", false);
+}
+
+static bool mxfp4_down_probe_parity_mode() {
+    const char *mode = mxfp4_down_probe_mode();
+    return mode && std::strcmp(mode, "perf") != 0;
+}
+
+static bool mxfp4_down_probe_f32_mode() {
+    const char *mode = mxfp4_down_probe_mode();
+    return mode && std::strcmp(mode, "f32") == 0;
+}
+
+static int mxfp4_down_probe_max_calls() {
+    const char *env = std::getenv("GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_CALLS");
+    long max_calls = (env && env[0]) ? std::atol(env) : 8;
+    if (max_calls < 1) max_calls = 1;
+    if (max_calls > 256) max_calls = 256;
+    return (int)max_calls;
+}
+
+static std::atomic<int> g_mxfp4_down_probe_calls{0};
+static std::mutex g_mxfp4_down_probe_out_mu;
+
+static void mxfp4_down_probe_write_csv(
+        const char *name,
+        int call_id,
+        const char *status,
+        int n_active,
+        int64_t ne01,
+        int64_t ne00,
+        int64_t compared,
+        double max_abs,
+        double mean_abs,
+        double max_rel,
+        double mean_rel,
+        int worst_active,
+        int worst_expert,
+        int64_t worst_col,
+        float worst_gpu,
+        float worst_cpu) {
+    const char *path = std::getenv("GGML_MOE_STREAM_DOWN_MXFP4_PROBE_OUT");
+    if (!path || !path[0]) return;
+
+    static bool header_written = false;
+    std::lock_guard<std::mutex> lk(g_mxfp4_down_probe_out_mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "call,tensor,status,active,ne01,ne00,compared,max_abs,mean_abs,max_rel,mean_rel,"
+                "worst_active,worst_expert,worst_col,gpu,cpu\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%d,%s,%s,%d,%ld,%ld,%ld,%.9g,%.9g,%.9g,%.9g,%d,%d,%ld,%.9g,%.9g\n",
+            call_id, name ? name : "", status ? status : "", n_active, (long)ne01, (long)ne00,
+            (long)compared, max_abs, mean_abs, max_rel, mean_rel, worst_active, worst_expert,
+            (long)worst_col, (double)worst_gpu, (double)worst_cpu);
+    std::fclose(f);
+}
+
+static void mxfp4_down_stage_trace_write(
+        const char *name,
+        int call_id,
+        const char *stage,
+        int n_active,
+        int64_t ne01,
+        int64_t ne00,
+        size_t src0_all_bytes,
+        size_t src1_f32_bytes,
+        size_t src1_q8_bytes,
+        size_t dst_bytes,
+        int cache_hits,
+        int cache_misses,
+        bool use_handoff,
+        bool down_q8k_requested,
+        double elapsed_ms) {
+    const char *path = std::getenv("GGML_MOE_STREAM_DOWN_MXFP4_STAGE_TRACE_OUT");
+    if (!path || !path[0]) return;
+
+    static bool header_written = false;
+    std::lock_guard<std::mutex> lk(g_mxfp4_down_probe_out_mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "call,tensor,stage,active,ne01,ne00,src0_all_bytes,src1_f32_bytes,src1_q8_bytes,dst_bytes,"
+                "cache_hits,cache_misses,use_handoff,down_q8k_requested,elapsed_ms\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%d,%s,%s,%d,%ld,%ld,%zu,%zu,%zu,%zu,%d,%d,%d,%d,%.6f\n",
+            call_id, name ? name : "", stage ? stage : "", n_active, (long)ne01, (long)ne00,
+            src0_all_bytes, src1_f32_bytes, src1_q8_bytes, dst_bytes,
+            cache_hits, cache_misses, use_handoff ? 1 : 0, down_q8k_requested ? 1 : 0, elapsed_ms);
+    std::fclose(f);
+}
+
+static void mxfp4_down_probe_report(
+        const char *name,
+        int call_id,
+        const void *src0_data,
+        size_t nb01,
+        size_t nb02,
+        int64_t ne00,
+        int64_t ne01,
+        const float *src1_f32,
+        size_t src1_nb1,
+        size_t src1_nb2,
+        const int *active_experts,
+        const int32_t *dst_ids,
+        const int32_t *token_ids,
+        int n_active,
+        const float *gpu_rows) {
+    if (!src0_data || !src1_f32 || !active_experts || !dst_ids || !token_ids || !gpu_rows ||
+            ne00 <= 0 || ne01 <= 0 || n_active <= 0 || ne00 % QK_MXFP4 != 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] mxfp4_down_probe tensor=%s call=%d status=invalid_args active=%d ne01=%ld ne00=%ld\n",
+                name ? name : "", call_id, n_active, (long)ne01, (long)ne00);
+        mxfp4_down_probe_write_csv(name, call_id, "invalid_args", n_active, ne01, ne00,
+                0, 0.0, 0.0, 0.0, 0.0, -1, -1, -1, 0.0f, 0.0f);
+        return;
+    }
+
+    std::vector<float> deq((size_t)ne00);
+    double sum_abs = 0.0;
+    double sum_rel = 0.0;
+    double max_abs = -1.0;
+    double max_rel = -1.0;
+    float worst_gpu = 0.0f;
+    float worst_cpu = 0.0f;
+    int worst_active = -1;
+    int worst_expert = -1;
+    int64_t worst_col = -1;
+    int64_t compared = 0;
+
+    auto env_limit_i64 = [](const char *env_name, int64_t fallback) -> int64_t {
+        const char *env = std::getenv(env_name);
+        if (!env || !env[0]) {
+            return fallback;
+        }
+        char *end = nullptr;
+        const long long value = std::strtoll(env, &end, 10);
+        if (end == env || value <= 0) {
+            return fallback;
+        }
+        return (int64_t)value;
+    };
+    const int active_limit = (int)std::min<int64_t>(
+            (int64_t)n_active,
+            env_limit_i64("GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_ACTIVE", (int64_t)n_active));
+    const int64_t col_limit = std::min<int64_t>(
+            ne01,
+            env_limit_i64("GGML_MOE_STREAM_DOWN_MXFP4_PROBE_MAX_COLS", ne01));
+
+    for (int j = 0; j < active_limit; ++j) {
+        const char *expert_base = (const char *)src0_data + (size_t)active_experts[j] * nb02;
+        const float *src_row = (const float *)((const char *)src1_f32 +
+                (size_t)dst_ids[j] * src1_nb1 + (size_t)token_ids[j] * src1_nb2);
+        const float *gpu_row = gpu_rows + (size_t)j * (size_t)ne01;
+        for (int64_t col = 0; col < col_limit; ++col) {
+            const block_mxfp4 *qrow = (const block_mxfp4 *)(expert_base + (size_t)col * nb01);
+            dequantize_row_mxfp4(qrow, deq.data(), ne00);
+            double cpu = 0.0;
+            for (int64_t k = 0; k < ne00; ++k) {
+                cpu += (double)deq[(size_t)k] * (double)src_row[(size_t)k];
+            }
+            const double gpu = (double)gpu_row[(size_t)col];
+            const double abs_err = std::fabs(gpu - cpu);
+            const double rel_err = abs_err / std::max(1.0e-6, std::fabs(cpu));
+            sum_abs += abs_err;
+            sum_rel += rel_err;
+            ++compared;
+            if (abs_err > max_abs) {
+                max_abs = abs_err;
+                max_rel = rel_err;
+                worst_gpu = (float)gpu;
+                worst_cpu = (float)cpu;
+                worst_active = j;
+                worst_expert = active_experts[j];
+                worst_col = col;
+            }
+        }
+    }
+
+    const double mean_abs = compared > 0 ? sum_abs / (double)compared : std::numeric_limits<double>::quiet_NaN();
+    const double mean_rel = compared > 0 ? sum_rel / (double)compared : std::numeric_limits<double>::quiet_NaN();
+    std::fprintf(stderr,
+            "[moe_stream_batch] mxfp4_down_probe tensor=%s call=%d status=ok active=%d compared=%ld "
+            "max_abs=%.9g mean_abs=%.9g max_rel=%.9g mean_rel=%.9g worst_active=%d worst_expert=%d "
+            "worst_col=%ld gpu=%.9g cpu=%.9g\n",
+            name ? name : "", call_id, n_active, (long)compared,
+            max_abs, mean_abs, max_rel, mean_rel, worst_active, worst_expert,
+            (long)worst_col, worst_gpu, worst_cpu);
+    mxfp4_down_probe_write_csv(name, call_id, "ok", n_active, ne01, ne00, compared,
+            max_abs, mean_abs, max_rel, mean_rel, worst_active, worst_expert, worst_col,
+            worst_gpu, worst_cpu);
+}
+
+static __device__ __forceinline__ int mxfp4_q80_value_dev(int q) {
+    switch (q & 0x0F) {
+        case 0x0: return 0;
+        case 0x1: return 1;
+        case 0x2: return 2;
+        case 0x3: return 3;
+        case 0x4: return 4;
+        case 0x5: return 6;
+        case 0x6: return 8;
+        case 0x7: return 12;
+        case 0x8: return 0;
+        case 0x9: return -1;
+        case 0xA: return -2;
+        case 0xB: return -3;
+        case 0xC: return -4;
+        case 0xD: return -6;
+        case 0xE: return -8;
+        default:  return -12;
+    }
+}
+
+static __global__ void mxfp4_down_q80_compat_batch_kernel(
+        const char * __restrict__ src0_pool,
+        const int32_t * __restrict__ x_ids,
+        int64_t slot_stride,
+        int64_t ne00,
+        int64_t ne01,
+        int64_t nb01,
+        const char * __restrict__ q80,
+        size_t q80_row_size,
+        float * __restrict__ dst,
+        int64_t n_active,
+        bool cpu_order) {
+    const int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+    const int64_t total = n_active * ne01;
+    if (idx >= total) return;
+
+    const int64_t row = idx / ne01;
+    const int64_t col = idx - row * ne01;
+    const int32_t slot = x_ids[row];
+    if (slot < 0) return;
+
+    const char *src0 = src0_pool + (size_t)slot * (size_t)slot_stride;
+    const block_mxfp4 *x = (const block_mxfp4 *)(src0 + (size_t)col * (size_t)nb01);
+    const block_q8_0 *y = (const block_q8_0 *)(q80 + (size_t)row * q80_row_size);
+    const int64_t nb = ne00 / QK_MXFP4;
+
+    if (cpu_order) {
+        float accum1[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+        float accum2[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+        int64_t ib = 0;
+        for (; ib + 1 < nb; ib += 2) {
+#pragma unroll
+            for (int lane = 0; lane < 8; ++lane) {
+                const int base = lane * 4;
+                int p1 = 0;
+                int p2 = 0;
+#pragma unroll
+                for (int t = 0; t < 4; ++t) {
+                    const int qidx = base + t;
+                    const int xidx = qidx & 15;
+                    const uint8_t q1 = x[ib + 0].qs[xidx];
+                    const uint8_t q2 = x[ib + 1].qs[xidx];
+                    const int v1 = (qidx < 16) ? mxfp4_q80_value_dev(q1 & 0x0F) : mxfp4_q80_value_dev(q1 >> 4);
+                    const int v2 = (qidx < 16) ? mxfp4_q80_value_dev(q2 & 0x0F) : mxfp4_q80_value_dev(q2 >> 4);
+                    p1 += y[ib + 0].qs[qidx] * v1;
+                    p2 += y[ib + 1].qs[qidx] * v2;
+                }
+                const float scale1 = __fmul_rn(__half2float(y[ib + 0].d), ggml_cuda_e8m0_to_fp32(x[ib + 0].e) * 0.5f);
+                const float scale2 = __fmul_rn(__half2float(y[ib + 1].d), ggml_cuda_e8m0_to_fp32(x[ib + 1].e) * 0.5f);
+                accum1[lane] = __fmaf_rn(scale1, (float)p1, accum1[lane]);
+                accum2[lane] = __fmaf_rn(scale2, (float)p2, accum2[lane]);
+            }
+        }
+        float sum8[8];
+#pragma unroll
+        for (int lane = 0; lane < 8; ++lane) {
+            sum8[lane] = __fadd_rn(accum1[lane], accum2[lane]);
+        }
+        float r0 = __fadd_rn(sum8[4], sum8[0]);
+        float r1 = __fadd_rn(sum8[5], sum8[1]);
+        float r2 = __fadd_rn(sum8[6], sum8[2]);
+        float r3 = __fadd_rn(sum8[7], sum8[3]);
+        r0 = __fadd_rn(r0, r2);
+        r1 = __fadd_rn(r1, r3);
+        float sumf = __fadd_rn(r0, r1);
+        for (; ib < nb; ++ib) {
+            int sumi1 = 0;
+            int sumi2 = 0;
+#pragma unroll
+            for (int j = 0; j < QK_MXFP4 / 2; ++j) {
+                const uint8_t q = x[ib].qs[j];
+                sumi1 += y[ib].qs[j] * mxfp4_q80_value_dev(q & 0x0F);
+                sumi2 += y[ib].qs[j + QK_MXFP4 / 2] * mxfp4_q80_value_dev(q >> 4);
+            }
+            const float scale = __fmul_rn(__half2float(y[ib].d), ggml_cuda_e8m0_to_fp32(x[ib].e) * 0.5f);
+            sumf = __fadd_rn(sumf, __fmul_rn(scale, (float)(sumi1 + sumi2)));
+        }
+        dst[(size_t)row * (size_t)ne01 + (size_t)col] = sumf;
+        return;
+    }
+
+    float sumf = 0.0f;
+    for (int64_t ib = 0; ib < nb; ++ib) {
+        int sumi1 = 0;
+        int sumi2 = 0;
+#pragma unroll
+        for (int j = 0; j < QK_MXFP4 / 2; ++j) {
+            const uint8_t q = x[ib].qs[j];
+            sumi1 += y[ib].qs[j] * mxfp4_q80_value_dev(q & 0x0F);
+            sumi2 += y[ib].qs[j + QK_MXFP4 / 2] * mxfp4_q80_value_dev(q >> 4);
+        }
+        const float scale = __half2float(y[ib].d) * (ggml_cuda_e8m0_to_fp32(x[ib].e) * 0.5f);
+        sumf = fmaf(scale, (float)(sumi1 + sumi2), sumf);
+    }
+    dst[(size_t)row * (size_t)ne01 + (size_t)col] = sumf;
+}
+
+static __global__ void mxfp4_down_q80_cpu_order_lane8_batch_kernel(
+        const char * __restrict__ src0_pool,
+        const int32_t * __restrict__ x_ids,
+        int64_t slot_stride,
+        int64_t ne00,
+        int64_t ne01,
+        int64_t nb01,
+        const char * __restrict__ q80,
+        size_t q80_row_size,
+        float * __restrict__ dst,
+        int64_t n_active,
+        bool cache_q80) {
+    extern __shared__ char s_q80[];
+    const int64_t tid = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+    const int lane8 = threadIdx.x & 7;
+    const int64_t out = tid >> 3;
+    const int64_t total = n_active * ne01;
+    if (out >= total) return;
+
+    const int64_t row = out / ne01;
+    const int64_t col = out - row * ne01;
+    const int32_t slot = x_ids[row];
+    if (slot < 0) return;
+
+    const int64_t groups_per_block = blockDim.x >> 3;
+    const int64_t first_out = (int64_t)blockIdx.x * groups_per_block;
+    const int64_t last_candidate = first_out + groups_per_block - 1;
+    const int64_t last_out = last_candidate < total ? last_candidate : total - 1;
+    const int64_t block_row = first_out / ne01;
+    const bool block_same_row = cache_q80 && block_row == last_out / ne01;
+    if (block_same_row) {
+        const char *q80_src = q80 + (size_t)block_row * q80_row_size;
+        for (size_t off = threadIdx.x; off < q80_row_size; off += blockDim.x) {
+            s_q80[off] = q80_src[off];
+        }
+    }
+    __syncthreads();
+
+    const char *src0 = src0_pool + (size_t)slot * (size_t)slot_stride;
+    const block_mxfp4 *x = (const block_mxfp4 *)(src0 + (size_t)col * (size_t)nb01);
+    const block_q8_0 *y = block_same_row ?
+        (const block_q8_0 *)s_q80 :
+        (const block_q8_0 *)(q80 + (size_t)row * q80_row_size);
+    const int64_t nb = ne00 / QK_MXFP4;
+
+    float accum1 = 0.0f;
+    float accum2 = 0.0f;
+    int64_t ib = 0;
+    const int base = lane8 * 4;
+    for (; ib + 1 < nb; ib += 2) {
+        int p1 = 0;
+        int p2 = 0;
+#pragma unroll
+        for (int t = 0; t < 4; ++t) {
+            const int qidx = base + t;
+            const int xidx = qidx & 15;
+            const uint8_t q1 = x[ib + 0].qs[xidx];
+            const uint8_t q2 = x[ib + 1].qs[xidx];
+            const int v1 = (qidx < 16) ? mxfp4_q80_value_dev(q1 & 0x0F) : mxfp4_q80_value_dev(q1 >> 4);
+            const int v2 = (qidx < 16) ? mxfp4_q80_value_dev(q2 & 0x0F) : mxfp4_q80_value_dev(q2 >> 4);
+            p1 += y[ib + 0].qs[qidx] * v1;
+            p2 += y[ib + 1].qs[qidx] * v2;
+        }
+        const float scale1 = __fmul_rn(__half2float(y[ib + 0].d), ggml_cuda_e8m0_to_fp32(x[ib + 0].e) * 0.5f);
+        const float scale2 = __fmul_rn(__half2float(y[ib + 1].d), ggml_cuda_e8m0_to_fp32(x[ib + 1].e) * 0.5f);
+        accum1 = __fmaf_rn(scale1, (float)p1, accum1);
+        accum2 = __fmaf_rn(scale2, (float)p2, accum2);
+    }
+
+    const int warp_group_base = (threadIdx.x & 31) & ~7;
+    const unsigned int group_mask = 0xFFu << warp_group_base;
+    const float sum_lane = __fadd_rn(accum1, accum2);
+    const float s0 = __shfl_sync(group_mask, sum_lane, warp_group_base + 0);
+    const float s1 = __shfl_sync(group_mask, sum_lane, warp_group_base + 1);
+    const float s2 = __shfl_sync(group_mask, sum_lane, warp_group_base + 2);
+    const float s3 = __shfl_sync(group_mask, sum_lane, warp_group_base + 3);
+    const float s4 = __shfl_sync(group_mask, sum_lane, warp_group_base + 4);
+    const float s5 = __shfl_sync(group_mask, sum_lane, warp_group_base + 5);
+    const float s6 = __shfl_sync(group_mask, sum_lane, warp_group_base + 6);
+    const float s7 = __shfl_sync(group_mask, sum_lane, warp_group_base + 7);
+
+    if (lane8 == 0) {
+        float r0 = __fadd_rn(s4, s0);
+        float r1 = __fadd_rn(s5, s1);
+        float r2 = __fadd_rn(s6, s2);
+        float r3 = __fadd_rn(s7, s3);
+        r0 = __fadd_rn(r0, r2);
+        r1 = __fadd_rn(r1, r3);
+        float sumf = __fadd_rn(r0, r1);
+        for (; ib < nb; ++ib) {
+            int sumi1 = 0;
+            int sumi2 = 0;
+#pragma unroll
+            for (int j = 0; j < QK_MXFP4 / 2; ++j) {
+                const uint8_t q = x[ib].qs[j];
+                sumi1 += y[ib].qs[j] * mxfp4_q80_value_dev(q & 0x0F);
+                sumi2 += y[ib].qs[j + QK_MXFP4 / 2] * mxfp4_q80_value_dev(q >> 4);
+            }
+            const float scale = __fmul_rn(__half2float(y[ib].d), ggml_cuda_e8m0_to_fp32(x[ib].e) * 0.5f);
+            sumf = __fadd_rn(sumf, __fmul_rn(scale, (float)(sumi1 + sumi2)));
+        }
+        dst[(size_t)row * (size_t)ne01 + (size_t)col] = sumf;
+    }
+}
+
+
+static __device__ __forceinline__ float mxfp4_f32_value_dev(uint8_t q) {
+    return (float)mxfp4_q80_value_dev(q);
+}
+
+static __global__ void mxfp4_down_f32_exact_batch_kernel(
+        const char * __restrict__ src0_pool,
+        const int32_t * __restrict__ x_ids,
+        int64_t slot_stride,
+        int64_t ne00,
+        int64_t ne01,
+        int64_t nb01,
+        const float * __restrict__ src1,
+        int64_t src1_row_stride,
+        const int32_t * __restrict__ src1_rows,
+        float * __restrict__ dst,
+        int64_t n_active) {
+    const int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+    const int64_t total = n_active * ne01;
+    if (idx >= total) return;
+
+    const int64_t row = idx / ne01;
+    const int64_t col = idx - row * ne01;
+    const int32_t slot = x_ids[row];
+    if (slot < 0) return;
+
+    const int64_t src1_row = src1_rows ? src1_rows[row] : row;
+    const float *y = src1 + (size_t)src1_row * (size_t)src1_row_stride;
+    const char *src0 = src0_pool + (size_t)slot * (size_t)slot_stride;
+    const block_mxfp4 *x = (const block_mxfp4 *)(src0 + (size_t)col * (size_t)nb01);
+    const int64_t nb = ne00 / QK_MXFP4;
+
+    double sum = 0.0;
+    for (int64_t ib = 0; ib < nb; ++ib) {
+        const float scale = ggml_cuda_e8m0_to_fp32(x[ib].e) * 0.5f;
+#pragma unroll
+        for (int j = 0; j < QK_MXFP4 / 2; ++j) {
+            const uint8_t q = x[ib].qs[j];
+            const int64_t base = ib * QK_MXFP4;
+            sum += (double)(scale * mxfp4_f32_value_dev(q & 0x0F)) * (double)y[base + j];
+            sum += (double)(scale * mxfp4_f32_value_dev(q >> 4)) * (double)y[base + j + QK_MXFP4 / 2];
+        }
+    }
+    dst[(size_t)row * (size_t)ne01 + (size_t)col] = (float)sum;
+}
+
+static bool launch_mxfp4_down_f32_exact_batch(
+        const char *src0_pool,
+        const int32_t *d_x_ids,
+        int64_t slot_stride,
+        int64_t ne00,
+        int64_t ne01,
+        int64_t nb01,
+        const float *d_src1_f32,
+        int64_t src1_row_stride,
+        const int32_t *d_src1_rows,
+        float *d_dst,
+        int64_t n_active,
+        cudaStream_t st) {
+    if (!src0_pool || !d_x_ids || !d_src1_f32 || !d_dst ||
+            ne00 <= 0 || ne01 <= 0 || n_active <= 0 || ne00 % QK_MXFP4 != 0) {
+        return false;
+    }
+    const int threads = 128;
+    const int64_t total = n_active * ne01;
+    const int blocks = (int)((total + threads - 1) / threads);
+    mxfp4_down_f32_exact_batch_kernel<<<blocks, threads, 0, st>>>(
+            src0_pool, d_x_ids, slot_stride, ne00, ne01, nb01,
+            d_src1_f32, src1_row_stride, d_src1_rows, d_dst, n_active);
+    return cudaGetLastError() == cudaSuccess;
+}
+
+static bool launch_mxfp4_down_q80_compat_batch(
+        const char *src0_pool,
+        const int32_t *d_x_ids,
+        int64_t slot_stride,
+        int64_t ne00,
+        int64_t ne01,
+        int64_t nb01,
+        const char *d_q80,
+        size_t q80_row_size,
+        float *d_dst,
+        int64_t n_active,
+        bool cpu_order,
+        bool cpu_order_lane8,
+        bool cpu_order_lane8_shared,
+        cudaStream_t st) {
+    if (!src0_pool || !d_x_ids || !d_q80 || !d_dst ||
+            ne00 <= 0 || ne01 <= 0 || n_active <= 0 || ne00 % QK_MXFP4 != 0) {
+        return false;
+    }
+    if (cpu_order_lane8) {
+        const int threads = 128;
+        const int64_t total_threads = n_active * ne01 * 8;
+        const int blocks = (int)((total_threads + threads - 1) / threads);
+        const size_t shared_bytes = cpu_order_lane8_shared ? q80_row_size : 0;
+        mxfp4_down_q80_cpu_order_lane8_batch_kernel<<<blocks, threads, shared_bytes, st>>>(
+                src0_pool, d_x_ids, slot_stride, ne00, ne01, nb01,
+                d_q80, q80_row_size, d_dst, n_active, cpu_order_lane8_shared);
+        return cudaGetLastError() == cudaSuccess;
+    }
+    const int threads = 128;
+    const int64_t total = n_active * ne01;
+    const int blocks = (int)((total + threads - 1) / threads);
+    mxfp4_down_q80_compat_batch_kernel<<<blocks, threads, 0, st>>>(
+            src0_pool, d_x_ids, slot_stride, ne00, ne01, nb01,
+            d_q80, q80_row_size, d_dst, n_active, cpu_order);
+    return cudaGetLastError() == cudaSuccess;
 }
 
 static bool q4_down_route_profile_candidate(const char *name, ggml_type type) {
@@ -8161,6 +9312,108 @@ extern "C" bool ggml_cuda_moe_stream_preload_expert_from_pack_async(
             nullptr, 0, true, src0_name, expert_idx) >= 0;
 }
 
+extern "C" int ggml_cuda_moe_stream_batch_preload_active_from_pack(
+    int src0_type_int,
+    const char *src0_name,
+    int64_t n_as,
+    size_t expert_bytes,
+    const int64_t *matrix_row_counts) {
+    static std::atomic<int> first_report{0};
+    auto report_once = [&](const char *reason, int jobs) {
+        if (first_report.fetch_add(1) == 0) {
+            std::fprintf(stderr,
+                    "[moe_stream_batch] gate active batch preload probe: reason=%s tensor=%s jobs=%d n_as=%ld bytes=%zu\n",
+                    reason, src0_name ? src0_name : "", jobs, (long)n_as, expert_bytes);
+        }
+    };
+    if (!init_batch_once()) {
+        report_once("init_failed", 0);
+        return 0;
+    }
+    if (!moe_stream_pack_prefetch_type_supported((ggml_type)src0_type_int) || !src0_name || !src0_name[0] ||
+            n_as <= 0 || expert_bytes == 0 || !matrix_row_counts) {
+        report_once("invalid_args", 0);
+        return 0;
+    }
+
+    struct active_preload_job {
+        int slot = -1;
+        void *dst = nullptr;
+        const void *host_data = nullptr;
+        const expert_pack_entry *pack_entry = nullptr;
+        int expert_idx = -1;
+        char tensor[128] = {};
+    };
+
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    batch_vram_cache *cache = batch_cache_get(expert_bytes);
+    if (!cache) {
+        report_once("cache_unavailable", 0);
+        return 0;
+    }
+
+    std::vector<active_preload_job> jobs;
+    jobs.reserve(256);
+    for (int64_t expert = 0; expert < n_as; ++expert) {
+        if (matrix_row_counts[expert] <= 0) {
+            continue;
+        }
+        const uintptr_t key = batch_key_hash(src0_name, (int)expert);
+        if (batch_cache_find_slot(cache, key) >= 0) {
+            continue;
+        }
+        const expert_pack_entry *pack_entry = expert_pack_lookup(src0_name, (int)expert, expert_bytes);
+        if (!pack_entry) {
+            continue;
+        }
+        const int slot = batch_cache_insert_slot(cache, key, nullptr, expert_bytes, g_batch.stream,
+                true, false, nullptr, 0, false, src0_name, (int)expert);
+        if (slot < 0) {
+            continue;
+        }
+        active_preload_job job;
+        job.slot = slot;
+        job.dst = (char *)cache->pool + (size_t)slot * cache->slot_sz;
+        job.host_data = nullptr;
+        job.pack_entry = pack_entry;
+        job.expert_idx = (int)expert;
+        std::snprintf(job.tensor, sizeof(job.tensor), "%s", src0_name);
+        jobs.push_back(job);
+    }
+
+    if (jobs.empty()) {
+        report_once("empty_jobs", 0);
+        return 0;
+    }
+
+    auto clear_jobs = [&]() {
+        for (const active_preload_job &job : jobs) {
+            batch_cache_clear_slot(cache, job.slot);
+        }
+    };
+
+    bool ok = expert_pack_iouring_copy_jobs(jobs, expert_bytes, g_batch.stream, g_batch.stage_ring, "gate_batch_preload");
+    if (!ok) {
+        for (const active_preload_job &job : jobs) {
+            batch_copy_trace copy_trace;
+            if (!batch_cache_copy_h2d(g_batch.stage_ring, job.dst, job.host_data, expert_bytes,
+                        g_batch.stream, job.pack_entry, &copy_trace,
+                        "gate_batch_preload", job.tensor, job.expert_idx)) {
+                ok = false;
+                break;
+            }
+            ok = true;
+        }
+    }
+    if (!ok || cudaStreamSynchronize(g_batch.stream) != cudaSuccess) {
+        clear_jobs();
+        report_once("copy_failed", (int)jobs.size());
+        return 0;
+    }
+    report_once("active", (int)jobs.size());
+    return (int)jobs.size();
+}
+
 extern "C" bool ggml_cuda_moe_stream_preload_synchronize(void) {
     if (!init_batch_once()) return false;
     std::lock_guard<std::mutex> lk(g_batch_mu);
@@ -8178,6 +9431,20 @@ extern "C" bool ggml_cuda_moe_stream_cache_contains(
     std::lock_guard<std::mutex> lk(g_batch_mu);
     const batch_vram_cache *cache = &g_bcaches[cid];
     return batch_cache_contains_slot(cache, batch_key_hash(src0_name, expert_idx));
+}
+
+extern "C" const void * ggml_cuda_moe_stream_cache_dev_ptr(
+    const char *src0_name,
+    size_t expert_bytes,
+    int expert_idx) {
+    if (!src0_name || !src0_name[0] || expert_bytes == 0 || expert_idx < 0) return nullptr;
+    const int cid = batch_cache_id_for_size(expert_bytes);
+    if (!g_bcache_inited[cid]) return nullptr;
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    batch_vram_cache *cache = &g_bcaches[cid];
+    const int slot = batch_cache_lookup_slot(cache, batch_key_hash(src0_name, expert_idx));
+    if (slot < 0) return nullptr;
+    return (const char *)cache->pool + (size_t)slot * cache->slot_sz;
 }
 
 extern "C" bool ggml_cuda_moe_stream_register_tensor(
@@ -8222,6 +9489,53 @@ static bool down_prefetch_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static bool down_batch_hit_only_enabled() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_HIT_ONLY");
+    return env && env[0] && env[0] != '0';
+}
+
+static int down_batch_min_active() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_MIN_ACTIVE");
+    const long value = (env && env[0]) ? std::atol(env) : 0;
+    if (value <= 1) return 0;
+    if (value > MOE_STREAM_MAX_ACTIVE) return MOE_STREAM_MAX_ACTIVE;
+    return (int)value;
+}
+
+static bool down_batch_demand_prefill_enabled() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_DEMAND_PREFILL");
+    return env && env[0] && env[0] != '0';
+}
+
+static bool down_batch_demand_queue_enabled() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_DEMAND_QUEUE");
+    return env && env[0] && env[0] != '0';
+}
+
+static int down_batch_demand_min_seen() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_DEMAND_MIN_SEEN");
+    long value = (env && env[0]) ? std::atol(env) : 1;
+    if (value < 1) value = 1;
+    if (value > 1024) value = 1024;
+    return (int)value;
+}
+
+static int down_batch_demand_queue_max() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_DEMAND_QUEUE_MAX");
+    long value = (env && env[0]) ? std::atol(env) : 256;
+    if (value < 1) value = 1;
+    if (value > 8192) value = 8192;
+    return (int)value;
+}
+
+static int down_batch_demand_queue_delay_us() {
+    const char *env = std::getenv("GGML_MOE_DOWN_BATCH_DEMAND_QUEUE_DELAY_US");
+    long value = (env && env[0]) ? std::atol(env) : 0;
+    if (value < 0) value = 0;
+    if (value > 10000) value = 10000;
+    return (int)value;
+}
+
 static int down_prefetch_depth() {
     const char *env = std::getenv("GGML_MOE_PREFETCH_DOWN_DEPTH");
     long depth = (env && env[0]) ? std::atol(env) : 8;
@@ -8243,6 +9557,1177 @@ static bool down_name_for_up_gate(const char *src_name, char *out, size_t out_sz
     }
     std::snprintf(out, out_sz, "%.*s.ffn_down_exps.%s", (int)prefix, src_name, suffix);
     return true;
+}
+
+static bool route_group_down_queue_enabled() {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_DOWN_QUEUE");
+    return env && env[0] && env[0] != '0';
+}
+
+static bool route_group_updown_queue_enabled() {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_UPDOWN_QUEUE");
+    return env && env[0] && env[0] != '0';
+}
+
+static bool route_group_native_parity_enabled() {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_NATIVE_PARITY");
+    return env && env[0] && env[0] != '0';
+}
+
+static bool route_group_native_cobatch_enabled() {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_NATIVE_COBATCH");
+    return env && env[0] && env[0] != '0';
+}
+
+static bool route_group_native_priority_split_enabled() {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_NATIVE_PRIORITY_SPLIT");
+    return env && env[0] && env[0] != '0';
+}
+
+static bool route_group_native_skip_gate_enabled() {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_NATIVE_SKIP_GATE");
+    return env && env[0] && env[0] != '0';
+}
+
+static int route_group_native_min_seen() {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_NATIVE_MIN_SEEN");
+    long value = (env && env[0]) ? std::atol(env) : 1;
+    if (value < 1) value = 1;
+    if (value > 1024) value = 1024;
+    return (int)value;
+}
+
+static int route_group_native_role_min_seen(char role) {
+    const char *role_env = nullptr;
+    if (role == 'u') {
+        role_env = std::getenv("GGML_MOE_ROUTE_GROUP_NATIVE_UP_MIN_SEEN");
+    } else if (role == 'd') {
+        role_env = std::getenv("GGML_MOE_ROUTE_GROUP_NATIVE_DOWN_MIN_SEEN");
+    }
+    if (role_env && role_env[0]) {
+        long value = std::atol(role_env);
+        if (value < 1) value = 1;
+        if (value > 1024) value = 1024;
+        return (int)value;
+    }
+    return route_group_native_min_seen();
+}
+
+static int route_group_min_seen() {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_MIN_SEEN");
+    long value = (env && env[0]) ? std::atol(env) : 1;
+    if (value < 1) value = 1;
+    if (value > 1024) value = 1024;
+    return (int)value;
+}
+
+static bool route_group_target_enabled(const char *target) {
+    const char *env = std::getenv("GGML_MOE_ROUTE_GROUP_TARGETS");
+    if (!env || !env[0]) {
+        return true;
+    }
+    if (std::strcmp(env, "updown") == 0 || std::strcmp(env, "all") == 0) {
+        return true;
+    }
+    return std::strstr(env, target) != nullptr;
+}
+
+static std::atomic<uint64_t> g_route_group_calls{0};
+static std::atomic<uint64_t> g_route_group_submitted{0};
+static std::atomic<uint64_t> g_route_group_cache_hits{0};
+static std::atomic<uint64_t> g_route_group_missing_pack{0};
+static std::atomic<uint64_t> g_route_group_repeat_skips{0};
+static std::atomic<uint64_t> g_route_group_invalid_gate{0};
+static std::atomic<uint64_t> g_route_group_inactive_expert_skips{0};
+static std::atomic<bool> g_route_group_report_registered{false};
+static std::mutex g_route_group_seen_mu;
+static std::unordered_map<uintptr_t, uint32_t> g_route_group_seen;
+
+static std::atomic<uint64_t> g_route_group_native_calls{0};
+static std::atomic<uint64_t> g_route_group_native_selected{0};
+static std::atomic<uint64_t> g_route_group_native_gate_hits{0};
+static std::atomic<uint64_t> g_route_group_native_gate_misses{0};
+static std::atomic<uint64_t> g_route_group_native_up_hits{0};
+static std::atomic<uint64_t> g_route_group_native_up_misses{0};
+static std::atomic<uint64_t> g_route_group_native_down_hits{0};
+static std::atomic<uint64_t> g_route_group_native_down_misses{0};
+static std::atomic<uint64_t> g_route_group_native_stage_a_jobs{0};
+static std::atomic<uint64_t> g_route_group_native_stage_a_batches{0};
+static std::atomic<uint64_t> g_route_group_native_stage_a_bytes{0};
+static std::atomic<uint64_t> g_route_group_native_stage_a_copy_us{0};
+static std::atomic<uint64_t> g_route_group_native_stage_b_jobs{0};
+static std::atomic<uint64_t> g_route_group_native_stage_b_batches{0};
+static std::atomic<uint64_t> g_route_group_native_stage_b_bytes{0};
+static std::atomic<uint64_t> g_route_group_native_stage_b_copy_us{0};
+static std::atomic<uint64_t> g_route_group_native_missing_pack{0};
+static std::atomic<uint64_t> g_route_group_native_no_slot{0};
+static std::atomic<uint64_t> g_route_group_native_copy_fail{0};
+static std::atomic<uint64_t> g_route_group_native_seen_skips{0};
+static std::atomic<uint64_t> g_route_group_native_priority_down_enqueued{0};
+static std::atomic<uint64_t> g_route_group_native_priority_down_queue_fail{0};
+static std::atomic<uint64_t> g_route_group_native_priority_down_enqueue_us{0};
+static std::mutex g_route_group_native_seen_mu;
+static std::unordered_map<uintptr_t, uint32_t> g_route_group_native_seen;
+
+static void route_group_report_atexit() {
+    const uint64_t calls = g_route_group_calls.load(std::memory_order_relaxed);
+    if (calls != 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] route group down queue: calls=%lu submitted=%lu cache_hits=%lu "
+                "missing_pack=%lu repeat_skips=%lu invalid_gate=%lu inactive_expert_skips=%lu\n",
+                (unsigned long)calls,
+                (unsigned long)g_route_group_submitted.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_cache_hits.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_missing_pack.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_repeat_skips.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_invalid_gate.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_inactive_expert_skips.load(std::memory_order_relaxed));
+    }
+    const uint64_t native_calls = g_route_group_native_calls.load(std::memory_order_relaxed);
+    if (native_calls != 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] route group native parity: calls=%lu selected=%lu "
+                "gate_hits=%lu gate_misses=%lu up_hits=%lu up_misses=%lu down_hits=%lu down_misses=%lu "
+                "stage_a_jobs=%lu stage_a_batches=%lu stage_a_bytes=%lu stage_a_copy_us=%lu "
+                "stage_b_jobs=%lu stage_b_batches=%lu stage_b_bytes=%lu stage_b_copy_us=%lu "
+                "missing_pack=%lu no_slot=%lu copy_fail=%lu seen_skips=%lu "
+                "priority_down_enqueued=%lu priority_down_queue_fail=%lu priority_down_enqueue_us=%lu\n",
+                (unsigned long)native_calls,
+                (unsigned long)g_route_group_native_selected.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_gate_hits.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_gate_misses.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_up_hits.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_up_misses.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_down_hits.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_down_misses.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_a_jobs.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_a_batches.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_a_bytes.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_a_copy_us.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_b_jobs.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_b_batches.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_b_bytes.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_b_copy_us.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_missing_pack.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_no_slot.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_copy_fail.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_seen_skips.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_priority_down_enqueued.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_priority_down_queue_fail.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_priority_down_enqueue_us.load(std::memory_order_relaxed));
+    }
+}
+
+static bool name_from_gate(const char *gate_name, const char *target, char *out, size_t out_sz) {
+    if (!gate_name || !target || !out || out_sz == 0) return false;
+    const char *needle = std::strstr(gate_name, ".ffn_gate_exps.");
+    if (!needle) return false;
+    const size_t prefix = (size_t)(needle - gate_name);
+    const char *suffix = needle + std::strlen(".ffn_gate_exps.");
+    const int n = std::snprintf(out, out_sz, "%.*s.%s.%s", (int)prefix, gate_name, target, suffix);
+    return n > 0 && (size_t)n < out_sz;
+}
+
+static int route_group_enqueue_tensor(
+        const char *tensor_name,
+        int expert,
+        cudaStream_t st,
+        int min_seen) {
+    const expert_pack_entry *entry = expert_pack_lookup_any_size(tensor_name, expert);
+    if (!entry || entry->nbytes == 0) {
+        ++g_route_group_missing_pack;
+        return 0;
+    }
+    const uintptr_t key = batch_key_hash(tensor_name, expert);
+    if (min_seen > 1) {
+        uint32_t seen = 0;
+        {
+            std::lock_guard<std::mutex> lk(g_route_group_seen_mu);
+            uint32_t &slot_seen = g_route_group_seen[key];
+            seen = slot_seen;
+            if (slot_seen != UINT32_MAX) {
+                ++slot_seen;
+            }
+        }
+        if ((int)seen + 1 < min_seen) {
+            ++g_route_group_repeat_skips;
+            return 0;
+        }
+    }
+
+    batch_vram_cache *cache = batch_cache_get((size_t)entry->nbytes);
+    if (!cache) {
+        return 0;
+    }
+    if (batch_cache_find_slot(cache, key) >= 0) {
+        ++g_route_group_cache_hits;
+        return 0;
+    }
+    if (down_demand_prefill_enqueue(cache, key, nullptr, (size_t)entry->nbytes,
+                tensor_name, expert, st)) {
+        ++g_route_group_submitted;
+        return 1;
+    }
+    return 0;
+}
+
+struct route_group_native_job {
+    batch_vram_cache *cache = nullptr;
+    int slot = -1;
+    uintptr_t key = 0;
+    void *dst = nullptr;
+    const void *host_data = nullptr;
+    const expert_pack_entry *pack_entry = nullptr;
+    size_t expert_bytes = 0;
+    int expert_idx = -1;
+    char tensor[128] = {};
+    char role = '?';
+};
+
+static void route_group_native_count_hit(char role) {
+    if (role == 'g') {
+        ++g_route_group_native_gate_hits;
+    } else if (role == 'u') {
+        ++g_route_group_native_up_hits;
+    } else if (role == 'd') {
+        ++g_route_group_native_down_hits;
+    }
+}
+
+static void route_group_native_count_miss(char role) {
+    if (role == 'g') {
+        ++g_route_group_native_gate_misses;
+    } else if (role == 'u') {
+        ++g_route_group_native_up_misses;
+    } else if (role == 'd') {
+        ++g_route_group_native_down_misses;
+    }
+}
+
+static bool route_group_native_plan_one(
+        std::vector<route_group_native_job> &jobs,
+        const char *tensor_name,
+        int expert,
+        char role,
+        cudaStream_t st,
+        int min_seen) {
+    const expert_pack_entry *entry = expert_pack_lookup_any_size(tensor_name, expert);
+    if (!entry || entry->nbytes == 0) {
+        ++g_route_group_native_missing_pack;
+        return false;
+    }
+    batch_vram_cache *cache = batch_cache_get((size_t)entry->nbytes);
+    if (!cache) {
+        ++g_route_group_native_no_slot;
+        return false;
+    }
+    const uintptr_t key = batch_key_hash(tensor_name, expert);
+    if (batch_cache_find_slot(cache, key) >= 0) {
+        route_group_native_count_hit(role);
+        return true;
+    }
+    const int role_min_seen = role == 'g' ? 1 : route_group_native_role_min_seen(role);
+    (void)min_seen;
+    if (role_min_seen > 1) {
+        uint32_t seen = 0;
+        {
+            std::lock_guard<std::mutex> lk(g_route_group_native_seen_mu);
+            uint32_t &slot_seen = g_route_group_native_seen[key];
+            seen = slot_seen;
+            if (slot_seen != UINT32_MAX) {
+                ++slot_seen;
+            }
+        }
+        if ((int)seen + 1 < role_min_seen) {
+            ++g_route_group_native_seen_skips;
+            return true;
+        }
+    }
+    route_group_native_count_miss(role);
+    const int slot = batch_cache_insert_slot(cache, key, nullptr, (size_t)entry->nbytes, st,
+            true, true, nullptr, 0, false, tensor_name, expert,
+            role == 'd', false, false);
+    if (slot < 0) {
+        ++g_route_group_native_no_slot;
+        return false;
+    }
+
+    route_group_native_job job;
+    job.cache = cache;
+    job.slot = slot;
+    job.key = key;
+    job.dst = (char *)cache->pool + (size_t)slot * cache->slot_sz;
+    job.host_data = nullptr;
+    job.pack_entry = entry;
+    job.expert_bytes = (size_t)entry->nbytes;
+    job.expert_idx = expert;
+    job.role = role;
+    std::snprintf(job.tensor, sizeof(job.tensor), "%s", tensor_name);
+    jobs.push_back(job);
+    return true;
+}
+
+static bool route_group_native_enqueue_down_priority(
+        const char *tensor_name,
+        int expert,
+        cudaStream_t st) {
+    const auto enqueue_start = std::chrono::steady_clock::now();
+    auto record_enqueue_us = [&]() {
+        const auto enqueue_end = std::chrono::steady_clock::now();
+        g_route_group_native_priority_down_enqueue_us.fetch_add(
+                (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(enqueue_end - enqueue_start).count(),
+                std::memory_order_relaxed);
+    };
+    const expert_pack_entry *entry = expert_pack_lookup_any_size(tensor_name, expert);
+    if (!entry || entry->nbytes == 0) {
+        ++g_route_group_native_missing_pack;
+        record_enqueue_us();
+        return false;
+    }
+    batch_vram_cache *cache = batch_cache_get((size_t)entry->nbytes);
+    if (!cache) {
+        ++g_route_group_native_no_slot;
+        record_enqueue_us();
+        return false;
+    }
+    const uintptr_t key = batch_key_hash(tensor_name, expert);
+    if (batch_cache_find_slot(cache, key) >= 0) {
+        route_group_native_count_hit('d');
+        record_enqueue_us();
+        return true;
+    }
+    const int role_min_seen = route_group_native_role_min_seen('d');
+    if (role_min_seen > 1) {
+        uint32_t seen = 0;
+        {
+            std::lock_guard<std::mutex> lk(g_route_group_native_seen_mu);
+            uint32_t &slot_seen = g_route_group_native_seen[key];
+            seen = slot_seen;
+            if (slot_seen != UINT32_MAX) {
+                ++slot_seen;
+            }
+        }
+        if ((int)seen + 1 < role_min_seen) {
+            ++g_route_group_native_seen_skips;
+            record_enqueue_us();
+            return true;
+        }
+    }
+    route_group_native_count_miss('d');
+    if (!down_demand_prefill_enqueue(cache, key, nullptr, (size_t)entry->nbytes, tensor_name, expert, st)) {
+        ++g_route_group_native_priority_down_queue_fail;
+        record_enqueue_us();
+        return false;
+    }
+    ++g_route_group_native_priority_down_enqueued;
+    g_route_group_native_stage_b_jobs.fetch_add(1, std::memory_order_relaxed);
+    g_route_group_native_stage_b_bytes.fetch_add((uint64_t)entry->nbytes, std::memory_order_relaxed);
+    record_enqueue_us();
+    return true;
+}
+
+static bool route_group_native_copy_stage(
+        std::vector<route_group_native_job> &jobs,
+        const char *trace_op,
+        bool stage_a,
+        pinned_stage_ring *override_ring = nullptr) {
+    if (jobs.empty()) {
+        return true;
+    }
+    std::stable_sort(jobs.begin(), jobs.end(), [](const route_group_native_job &a, const route_group_native_job &b) {
+        if (a.expert_bytes != b.expert_bytes) return a.expert_bytes < b.expert_bytes;
+        if (a.pack_entry && b.pack_entry && a.pack_entry->source_idx != b.pack_entry->source_idx) {
+            return a.pack_entry->source_idx < b.pack_entry->source_idx;
+        }
+        if (a.pack_entry && b.pack_entry && a.pack_entry->offset != b.pack_entry->offset) {
+            return a.pack_entry->offset < b.pack_entry->offset;
+        }
+        return a.expert_idx < b.expert_idx;
+    });
+
+    cudaStream_t copy_stream = g_batch.prefetch_stream ? g_batch.prefetch_stream : g_batch.stream;
+    size_t pos = 0;
+    while (pos < jobs.size()) {
+        const size_t bytes = jobs[pos].expert_bytes;
+        size_t end = pos + 1;
+        while (end < jobs.size() && jobs[end].expert_bytes == bytes) {
+            ++end;
+        }
+        std::vector<route_group_native_job> group(jobs.begin() + (ptrdiff_t)pos, jobs.begin() + (ptrdiff_t)end);
+        pinned_stage_ring &copy_ring = override_ring ? *override_ring : g_batch.stage_ring;
+        const auto copy_start = std::chrono::steady_clock::now();
+        const bool copied = expert_pack_iouring_copy_jobs(group, bytes, copy_stream, copy_ring, trace_op);
+        const auto copy_end = std::chrono::steady_clock::now();
+        const uint64_t copy_us = (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(copy_end - copy_start).count();
+        if (stage_a) {
+            g_route_group_native_stage_a_copy_us.fetch_add(copy_us, std::memory_order_relaxed);
+        } else {
+            g_route_group_native_stage_b_copy_us.fetch_add(copy_us, std::memory_order_relaxed);
+        }
+        if (!copied || cudaGetLastError() != cudaSuccess) {
+            for (const route_group_native_job &job : group) {
+                if (job.cache && job.slot >= 0) {
+                    batch_cache_clear_slot(job.cache, job.slot);
+                }
+            }
+            ++g_route_group_native_copy_fail;
+            return false;
+        }
+        bool mark_ok = true;
+        for (const route_group_native_job &job : group) {
+            if (!job.cache || job.slot < 0 || job.slot >= job.cache->n_slots) {
+                mark_ok = false;
+                break;
+            }
+            if (!job.cache->slot_ready[job.slot] &&
+                    cudaEventCreateWithFlags(&job.cache->slot_ready[job.slot], cudaEventDisableTiming) != cudaSuccess) {
+                mark_ok = false;
+                break;
+            }
+            if (cudaEventRecord(job.cache->slot_ready[job.slot], copy_stream) != cudaSuccess) {
+                mark_ok = false;
+                break;
+            }
+            job.cache->slot_pending[job.slot] = true;
+            ++job.cache->preloads;
+        }
+        if (!mark_ok) {
+            for (const route_group_native_job &job : group) {
+                if (job.cache && job.slot >= 0) {
+                    batch_cache_clear_slot(job.cache, job.slot);
+                }
+            }
+            ++g_route_group_native_copy_fail;
+            return false;
+        }
+        if (stage_a) {
+            ++g_route_group_native_stage_a_batches;
+            g_route_group_native_stage_a_jobs.fetch_add(group.size(), std::memory_order_relaxed);
+            g_route_group_native_stage_a_bytes.fetch_add((uint64_t)group.size() * (uint64_t)bytes, std::memory_order_relaxed);
+        } else {
+            ++g_route_group_native_stage_b_batches;
+            g_route_group_native_stage_b_jobs.fetch_add(group.size(), std::memory_order_relaxed);
+            g_route_group_native_stage_b_bytes.fetch_add((uint64_t)group.size() * (uint64_t)bytes, std::memory_order_relaxed);
+        }
+        pos = end;
+    }
+    return true;
+}
+
+static bool route_group_native_copy_cobatch(
+        std::vector<route_group_native_job> &stage_a_jobs,
+        std::vector<route_group_native_job> &stage_b_jobs) {
+    if (stage_a_jobs.empty() && stage_b_jobs.empty()) {
+        return true;
+    }
+
+    std::vector<route_group_native_job> jobs;
+    jobs.reserve(stage_a_jobs.size() + stage_b_jobs.size());
+    jobs.insert(jobs.end(), stage_a_jobs.begin(), stage_a_jobs.end());
+    jobs.insert(jobs.end(), stage_b_jobs.begin(), stage_b_jobs.end());
+
+    std::stable_sort(jobs.begin(), jobs.end(), [](const route_group_native_job &a, const route_group_native_job &b) {
+        if (a.expert_bytes != b.expert_bytes) return a.expert_bytes < b.expert_bytes;
+        const int pa = a.role == 'd' ? 1 : 0;
+        const int pb = b.role == 'd' ? 1 : 0;
+        if (pa != pb) return pa < pb;
+        if (a.pack_entry && b.pack_entry && a.pack_entry->source_idx != b.pack_entry->source_idx) {
+            return a.pack_entry->source_idx < b.pack_entry->source_idx;
+        }
+        if (a.pack_entry && b.pack_entry && a.pack_entry->offset != b.pack_entry->offset) {
+            return a.pack_entry->offset < b.pack_entry->offset;
+        }
+        return a.expert_idx < b.expert_idx;
+    });
+
+    cudaStream_t copy_stream = g_batch.prefetch_stream ? g_batch.prefetch_stream : g_batch.stream;
+    size_t pos = 0;
+    while (pos < jobs.size()) {
+        const size_t bytes = jobs[pos].expert_bytes;
+        size_t end = pos + 1;
+        while (end < jobs.size() && jobs[end].expert_bytes == bytes) {
+            ++end;
+        }
+        std::vector<route_group_native_job> group(jobs.begin() + (ptrdiff_t)pos, jobs.begin() + (ptrdiff_t)end);
+        const auto copy_start = std::chrono::steady_clock::now();
+        const bool copied = expert_pack_iouring_copy_jobs(group, bytes, copy_stream, g_batch.stage_ring, "route_group_cobatch");
+        const auto copy_end = std::chrono::steady_clock::now();
+        const uint64_t copy_us = (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(copy_end - copy_start).count();
+        if (!copied || cudaGetLastError() != cudaSuccess) {
+            for (const route_group_native_job &job : group) {
+                if (job.cache && job.slot >= 0) {
+                    batch_cache_clear_slot(job.cache, job.slot);
+                }
+            }
+            ++g_route_group_native_copy_fail;
+            return false;
+        }
+        bool mark_ok = true;
+        uint64_t stage_a_count = 0;
+        uint64_t stage_b_count = 0;
+        for (const route_group_native_job &job : group) {
+            if (!job.cache || job.slot < 0 || job.slot >= job.cache->n_slots) {
+                mark_ok = false;
+                break;
+            }
+            if (!job.cache->slot_ready[job.slot] &&
+                    cudaEventCreateWithFlags(&job.cache->slot_ready[job.slot], cudaEventDisableTiming) != cudaSuccess) {
+                mark_ok = false;
+                break;
+            }
+            if (cudaEventRecord(job.cache->slot_ready[job.slot], copy_stream) != cudaSuccess) {
+                mark_ok = false;
+                break;
+            }
+            job.cache->slot_pending[job.slot] = true;
+            ++job.cache->preloads;
+            if (job.role == 'd') {
+                ++stage_b_count;
+            } else {
+                ++stage_a_count;
+            }
+        }
+        if (!mark_ok) {
+            for (const route_group_native_job &job : group) {
+                if (job.cache && job.slot >= 0) {
+                    batch_cache_clear_slot(job.cache, job.slot);
+                }
+            }
+            ++g_route_group_native_copy_fail;
+            return false;
+        }
+        if (stage_a_count > 0) {
+            ++g_route_group_native_stage_a_batches;
+            g_route_group_native_stage_a_jobs.fetch_add(stage_a_count, std::memory_order_relaxed);
+            g_route_group_native_stage_a_bytes.fetch_add(stage_a_count * (uint64_t)bytes, std::memory_order_relaxed);
+            g_route_group_native_stage_a_copy_us.fetch_add(
+                    (copy_us * stage_a_count) / (stage_a_count + stage_b_count), std::memory_order_relaxed);
+        }
+        if (stage_b_count > 0) {
+            ++g_route_group_native_stage_b_batches;
+            g_route_group_native_stage_b_jobs.fetch_add(stage_b_count, std::memory_order_relaxed);
+            g_route_group_native_stage_b_bytes.fetch_add(stage_b_count * (uint64_t)bytes, std::memory_order_relaxed);
+            g_route_group_native_stage_b_copy_us.fetch_add(
+                    (copy_us * stage_b_count) / (stage_a_count + stage_b_count), std::memory_order_relaxed);
+        }
+        pos = end;
+    }
+    return true;
+}
+
+static int route_group_native_parity_from_gate(
+        const char *src0_gate_name,
+        int64_t n_as,
+        const int64_t *matrix_row_counts) {
+    if (!route_group_native_parity_enabled()) {
+        return -1;
+    }
+    if (!init_batch_once()) {
+        ++g_route_group_native_copy_fail;
+        return 0;
+    }
+    char gate_name[128] = {};
+    char up_name[128] = {};
+    char down_name[128] = {};
+    std::snprintf(gate_name, sizeof(gate_name), "%s", src0_gate_name ? src0_gate_name : "");
+    if (!name_from_gate(src0_gate_name, "ffn_up_exps", up_name, sizeof(up_name)) ||
+            !name_from_gate(src0_gate_name, "ffn_down_exps", down_name, sizeof(down_name))) {
+        ++g_route_group_invalid_gate;
+        return 0;
+    }
+
+    ++g_route_group_native_calls;
+    std::vector<route_group_native_job> stage_a_jobs;
+    std::vector<route_group_native_job> stage_b_jobs;
+    std::vector<int> priority_down_experts;
+    stage_a_jobs.reserve(64);
+    stage_b_jobs.reserve(32);
+    priority_down_experts.reserve(32);
+    const int native_min_seen = route_group_native_min_seen();
+    const bool priority_split = route_group_native_priority_split_enabled();
+    const bool skip_gate = route_group_native_skip_gate_enabled();
+    bool priority_down_ok = true;
+
+    int active = 0;
+    std::lock_guard<std::mutex> lk(g_batch_mu);
+    for (int64_t expert = 0; expert < n_as; ++expert) {
+        if (matrix_row_counts[expert] <= 0) {
+            continue;
+        }
+        ++active;
+        if (!skip_gate) {
+            route_group_native_plan_one(stage_a_jobs, gate_name, (int)expert, 'g', g_batch.stream, native_min_seen);
+        }
+        route_group_native_plan_one(stage_a_jobs, up_name, (int)expert, 'u', g_batch.stream, native_min_seen);
+        if (priority_split) {
+            priority_down_experts.push_back((int)expert);
+        } else {
+            route_group_native_plan_one(stage_b_jobs, down_name, (int)expert, 'd', g_batch.stream, native_min_seen);
+        }
+    }
+    g_route_group_native_selected.fetch_add((uint64_t)active, std::memory_order_relaxed);
+
+    static std::atomic<int> first_native{0};
+    if (first_native.fetch_add(1, std::memory_order_relaxed) == 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] route group native parity active: gate=%s up=%s down=%s active=%d stage_a_jobs=%zu stage_b_jobs=%zu\n",
+                gate_name, up_name, down_name, active, stage_a_jobs.size(), stage_b_jobs.size());
+    }
+
+    if (priority_split) {
+        if (!route_group_native_copy_stage(stage_a_jobs, "route_group_priority_up_gate", true, &g_batch.stage_ring_gate)) {
+            return 0;
+        }
+        for (int expert : priority_down_experts) {
+            if (!route_group_native_enqueue_down_priority(down_name, expert, g_batch.stream)) {
+                priority_down_ok = false;
+            }
+        }
+        if (!priority_down_ok) {
+            ++g_route_group_native_copy_fail;
+            return 0;
+        }
+    } else if (route_group_native_cobatch_enabled()) {
+        if (!route_group_native_copy_cobatch(stage_a_jobs, stage_b_jobs)) {
+            return 0;
+        }
+    } else {
+        if (!route_group_native_copy_stage(stage_a_jobs, "route_group_up_gate", true)) {
+            return 0;
+        }
+        if (!route_group_native_copy_stage(stage_b_jobs, "route_group_down", false)) {
+            return 0;
+        }
+    }
+    return (int)(stage_a_jobs.size() + stage_b_jobs.size());
+}
+
+extern "C" int ggml_cuda_moe_stream_route_group_preload_updown_from_gate(
+        const char *src0_gate_name,
+        int64_t n_as,
+        const int64_t *matrix_row_counts) {
+    const int native_result = route_group_native_parity_from_gate(src0_gate_name, n_as, matrix_row_counts);
+    if (native_result >= 0) {
+        if (!g_route_group_report_registered.exchange(true)) {
+            std::atexit(route_group_report_atexit);
+        }
+        return native_result;
+    }
+    if (!route_group_updown_queue_enabled()) {
+        return 0;
+    }
+    if (!src0_gate_name || !matrix_row_counts || n_as <= 0) {
+        return 0;
+    }
+    if (!g_route_group_report_registered.exchange(true)) {
+        std::atexit(route_group_report_atexit);
+    }
+    ++g_route_group_calls;
+
+    char up_name[128] = {};
+    char down_name[128] = {};
+    if (!name_from_gate(src0_gate_name, "ffn_up_exps", up_name, sizeof(up_name)) ||
+            !name_from_gate(src0_gate_name, "ffn_down_exps", down_name, sizeof(down_name))) {
+        ++g_route_group_invalid_gate;
+        return 0;
+    }
+
+    const int min_seen = route_group_min_seen();
+    int submitted = 0;
+    int active = 0;
+    for (int64_t expert = 0; expert < n_as; ++expert) {
+        if (matrix_row_counts[expert] <= 0) {
+            ++g_route_group_inactive_expert_skips;
+            continue;
+        }
+        ++active;
+        if (route_group_target_enabled("up")) {
+            submitted += route_group_enqueue_tensor(up_name, (int)expert, nullptr, min_seen);
+        }
+        if (route_group_target_enabled("down")) {
+            submitted += route_group_enqueue_tensor(down_name, (int)expert, nullptr, min_seen);
+        }
+    }
+
+    static std::atomic<int> first_route_group_updown{0};
+    if (submitted > 0 && first_route_group_updown.fetch_add(1, std::memory_order_relaxed) == 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] route group up/down queue active: gate=%s submitted=%d active=%d min_seen=%d\n",
+                src0_gate_name, submitted, active, min_seen);
+    }
+    return submitted;
+}
+
+static int route_group_enqueue_down(
+        const char *src0_up_name,
+        const int *active_experts,
+        int n_active,
+        cudaStream_t st) {
+    if (!route_group_down_queue_enabled() || !src0_up_name || !active_experts || n_active <= 0) {
+        return 0;
+    }
+    if (!g_route_group_report_registered.exchange(true)) {
+        std::atexit(route_group_report_atexit);
+    }
+    ++g_route_group_calls;
+
+    char down_name[128] = {};
+    if (!down_name_for_up_gate(src0_up_name, down_name, sizeof(down_name))) {
+        return 0;
+    }
+
+    const int min_seen = route_group_min_seen();
+    int submitted = 0;
+    for (int j = 0; j < n_active; ++j) {
+        const int expert = active_experts[j];
+        const expert_pack_entry *entry = expert_pack_lookup_any_size(down_name, expert);
+        if (!entry || entry->nbytes == 0) {
+            ++g_route_group_missing_pack;
+            continue;
+        }
+        const uintptr_t key = batch_key_hash(down_name, expert);
+        if (min_seen > 1) {
+            uint32_t seen = 0;
+            {
+                std::lock_guard<std::mutex> lk(g_route_group_seen_mu);
+                uint32_t &slot_seen = g_route_group_seen[key];
+                seen = slot_seen;
+                if (slot_seen != UINT32_MAX) {
+                    ++slot_seen;
+                }
+            }
+            if ((int)seen + 1 < min_seen) {
+                ++g_route_group_repeat_skips;
+                continue;
+            }
+        }
+
+        batch_vram_cache *down_cache = batch_cache_get((size_t)entry->nbytes);
+        if (!down_cache) {
+            continue;
+        }
+        if (batch_cache_find_slot(down_cache, key) >= 0) {
+            ++g_route_group_cache_hits;
+            continue;
+        }
+        if (down_demand_prefill_enqueue(down_cache, key, nullptr, (size_t)entry->nbytes,
+                    down_name, expert, st)) {
+            ++submitted;
+            ++g_route_group_submitted;
+        }
+    }
+    static std::atomic<int> first_route_group{0};
+    if (submitted > 0 && first_route_group.fetch_add(1, std::memory_order_relaxed) == 0) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] route group down queue active: tensor=%s submitted=%d active=%d min_seen=%d\n",
+                down_name, submitted, n_active, min_seen);
+    }
+    return submitted;
+}
+
+
+static bool gate_updown_cosubmit_make_name(const char *gate_name, const char *target, char *out, size_t out_sz) {
+    if (!gate_name || !target || !out || out_sz == 0) return false;
+    const char *needle = std::strstr(gate_name, ".ffn_gate_exps.");
+    if (!needle) return false;
+    const size_t prefix = (size_t)(needle - gate_name);
+    const char *suffix = needle + std::strlen(".ffn_gate_exps.");
+    const int n = std::snprintf(out, out_sz, "%.*s.%s.%s", (int)prefix, gate_name, target, suffix);
+    return n > 0 && (size_t)n < out_sz;
+}
+
+struct gate_updown_cosubmit_job {
+    batch_vram_cache *cache = nullptr;
+    int slot = -1;
+    void *dst = nullptr;
+    const void *host_data = nullptr;
+    const expert_pack_entry *pack_entry = nullptr;
+    size_t expert_bytes = 0;
+    int expert_idx = -1;
+    char tensor[128] = {};
+};
+
+static std::mutex g_gate_updown_cosubmit_pending_mu;
+static std::vector<gate_updown_cosubmit_job> g_gate_updown_cosubmit_pending;
+
+static std::atomic<uint64_t> g_gate_updown_cosubmit_calls{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_jobs{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_cache_hits{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_missing_pack{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_iouring_ok{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_fallback_ok{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_no_slot_skips{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_repeat_skips{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_profile_skips{0};
+static std::atomic<uint64_t> g_gate_updown_cosubmit_failures{0};
+static std::atomic<bool> g_gate_updown_cosubmit_report_registered{false};
+static std::mutex g_gate_updown_cosubmit_seen_mu;
+static std::unordered_map<uintptr_t, uint32_t> g_gate_updown_cosubmit_seen;
+
+static void gate_updown_cosubmit_report_atexit() {
+    const uint64_t calls = g_gate_updown_cosubmit_calls.load(std::memory_order_relaxed);
+    if (calls == 0) return;
+    std::fprintf(stderr,
+            "[moe_stream_batch] gate/up/down cosubmit: calls=%lu jobs=%lu cache_hits=%lu missing_pack=%lu "
+            "iouring_ok=%lu fallback_ok=%lu no_slot_skips=%lu repeat_skips=%lu profile_skips=%lu failures=%lu\n",
+            (unsigned long)calls,
+            (unsigned long)g_gate_updown_cosubmit_jobs.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_cache_hits.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_missing_pack.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_iouring_ok.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_fallback_ok.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_no_slot_skips.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_repeat_skips.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_profile_skips.load(std::memory_order_relaxed),
+            (unsigned long)g_gate_updown_cosubmit_failures.load(std::memory_order_relaxed));
+}
+
+static bool gate_updown_cosubmit_env_enabled() {
+    const char *env = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT");
+    return env && env[0] && env[0] != '0';
+}
+
+static bool gate_updown_cosubmit_down_only_enabled() {
+    const char *env = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_DOWN_ONLY");
+    return env && env[0] && env[0] != '0';
+}
+
+static uint32_t gate_updown_cosubmit_min_seen() {
+    const char *env = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_MIN_SEEN");
+    const long value = (env && env[0]) ? std::atol(env) : 0;
+    if (value <= 0) return 0;
+    if (value > 1024) return 1024;
+    return (uint32_t)value;
+}
+
+static uint32_t gate_updown_cosubmit_profile_min_count() {
+    const char *env = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_MIN_COUNT");
+    const unsigned long value = (env && env[0]) ? std::strtoul(env, nullptr, 10) : 0;
+    if (value == 0) return 0;
+    return value > UINT32_MAX ? UINT32_MAX : (uint32_t)value;
+}
+
+extern "C" int ggml_cuda_moe_stream_batch_preload_gate_updown(const char *gate_name, int expert_idx, size_t expert_bytes) {
+    if (!gate_updown_cosubmit_env_enabled()) return 0;
+    if (!gate_name || !std::strstr(gate_name, ".ffn_gate_exps.")) return 0;
+    if (expert_idx < 0 || expert_bytes == 0) return 0;
+
+    if (!g_gate_updown_cosubmit_report_registered.exchange(true)) {
+        std::atexit(gate_updown_cosubmit_report_atexit);
+    }
+    ++g_gate_updown_cosubmit_calls;
+
+    batch_vram_cache *cache = batch_cache_get(expert_bytes);
+    if (!cache) return 0;
+
+    char names[2][128] = {};
+    if (!gate_updown_cosubmit_make_name(gate_name, "ffn_up_exps", names[0], sizeof(names[0])) ||
+            !gate_updown_cosubmit_make_name(gate_name, "ffn_down_exps", names[1], sizeof(names[1]))) {
+        return 0;
+    }
+
+    std::vector<gate_updown_cosubmit_job> planned;
+    planned.reserve(2);
+    const bool down_only = gate_updown_cosubmit_down_only_enabled();
+    const uint32_t min_seen = gate_updown_cosubmit_min_seen();
+    const uint32_t profile_min_count = gate_updown_cosubmit_profile_min_count();
+    if (profile_min_count > 0) {
+        load_profile_once();
+    }
+    for (int i = 0; i < 2; ++i) {
+        const char *tensor = names[i];
+        const bool is_down = std::strstr(tensor, ".ffn_down_exps.") != nullptr;
+        if (down_only && !is_down) {
+            continue;
+        }
+        const uintptr_t key = batch_key_hash(tensor, expert_idx);
+        if (min_seen > 0) {
+            uint32_t seen = 0;
+            {
+                std::lock_guard<std::mutex> lk(g_gate_updown_cosubmit_seen_mu);
+                uint32_t &slot_seen = g_gate_updown_cosubmit_seen[key];
+                seen = slot_seen;
+                if (slot_seen != UINT32_MAX) {
+                    ++slot_seen;
+                }
+            }
+            if (seen < min_seen) {
+                ++g_gate_updown_cosubmit_repeat_skips;
+                continue;
+            }
+        }
+        if (profile_min_count > 0 && profile_count_for_key(key) < profile_min_count) {
+            ++g_gate_updown_cosubmit_profile_skips;
+            continue;
+        }
+        if (batch_cache_find_slot(cache, key) >= 0) {
+            ++g_gate_updown_cosubmit_cache_hits;
+            continue;
+        }
+        const expert_pack_entry *pack_entry = expert_pack_lookup(tensor, expert_idx, expert_bytes);
+        if (!pack_entry) {
+            ++g_gate_updown_cosubmit_missing_pack;
+            continue;
+        }
+        const int slot = batch_cache_insert_slot(cache, key, nullptr, expert_bytes, g_batch.prefetch_stream,
+                false, true, nullptr, 0, false, tensor, expert_idx,
+                is_down, false, false);
+        if (slot < 0) {
+            ++g_gate_updown_cosubmit_no_slot_skips;
+            continue;
+        }
+        gate_updown_cosubmit_job job;
+        job.cache = cache;
+        job.slot = slot;
+        job.dst = (char *)cache->pool + (size_t)slot * cache->slot_sz;
+        job.host_data = nullptr;
+        job.pack_entry = pack_entry;
+        job.expert_bytes = expert_bytes;
+        job.expert_idx = expert_idx;
+        std::snprintf(job.tensor, sizeof(job.tensor), "%s", tensor);
+        planned.push_back(job);
+    }
+
+    if (planned.empty()) return 0;
+    std::lock_guard<std::mutex> lk(g_gate_updown_cosubmit_pending_mu);
+    g_gate_updown_cosubmit_pending.insert(g_gate_updown_cosubmit_pending.end(), planned.begin(), planned.end());
+    return (int)planned.size();
+}
+
+extern "C" int ggml_cuda_moe_stream_batch_flush_gate_updown_cosubmit(void) {
+    if (!gate_updown_cosubmit_env_enabled()) return 0;
+    std::vector<gate_updown_cosubmit_job> jobs;
+    {
+        std::lock_guard<std::mutex> lk(g_gate_updown_cosubmit_pending_mu);
+        if (g_gate_updown_cosubmit_pending.empty()) return 0;
+        jobs.swap(g_gate_updown_cosubmit_pending);
+    }
+
+    size_t pos = 0;
+    int ready_jobs = 0;
+    while (pos < jobs.size()) {
+        const size_t expert_bytes = jobs[pos].expert_bytes;
+        size_t end = pos + 1;
+        while (end < jobs.size() && jobs[end].expert_bytes == expert_bytes) {
+            ++end;
+        }
+        std::vector<gate_updown_cosubmit_job> group(jobs.begin() + (ptrdiff_t)pos, jobs.begin() + (ptrdiff_t)end);
+        const bool copied_iouring = expert_pack_iouring_copy_jobs(group, expert_bytes, g_batch.prefetch_stream,
+                g_batch.stage_ring_up_aux, "gate_updown_cosubmit");
+        bool copied = copied_iouring;
+        if (!copied) {
+            copied = true;
+            for (const gate_updown_cosubmit_job &job : group) {
+                batch_copy_trace copy_trace;
+                if (!batch_cache_copy_h2d(g_batch.stage_ring_up_aux, job.dst, job.host_data, expert_bytes,
+                            g_batch.prefetch_stream, job.pack_entry, &copy_trace,
+                            "gate_updown_cosubmit", job.tensor, job.expert_idx)) {
+                    copied = false;
+                    break;
+                }
+            }
+        }
+
+        if (!copied || cudaGetLastError() != cudaSuccess) {
+            for (const gate_updown_cosubmit_job &job : group) {
+                batch_cache_clear_slot(job.cache, job.slot);
+            }
+            ++g_gate_updown_cosubmit_failures;
+            pos = end;
+            continue;
+        }
+
+        for (const gate_updown_cosubmit_job &job : group) {
+            batch_vram_cache *cache = job.cache;
+            if (!cache || job.slot < 0 || job.slot >= cache->n_slots) {
+                ++g_gate_updown_cosubmit_failures;
+                continue;
+            }
+            if (!cache->slot_ready[job.slot] &&
+                    cudaEventCreateWithFlags(&cache->slot_ready[job.slot], cudaEventDisableTiming) != cudaSuccess) {
+                batch_cache_clear_slot(cache, job.slot);
+                ++g_gate_updown_cosubmit_failures;
+                continue;
+            }
+            if (cudaEventRecord(cache->slot_ready[job.slot], g_batch.prefetch_stream) != cudaSuccess) {
+                batch_cache_clear_slot(cache, job.slot);
+                ++g_gate_updown_cosubmit_failures;
+                continue;
+            }
+            cache->slot_pending[job.slot] = true;
+            ++g_gate_updown_cosubmit_jobs;
+            ++cache->preloads;
+            ++ready_jobs;
+        }
+        if (copied_iouring) {
+            ++g_gate_updown_cosubmit_iouring_ok;
+        } else {
+            ++g_gate_updown_cosubmit_fallback_ok;
+        }
+        pos = end;
+    }
+    return ready_jobs;
+}
+
+static bool updown_pair_profile_enabled() {
+    const char *path = std::getenv("GGML_MOE_UPDOWN_PAIR_PROFILE_OUT");
+    if (path && path[0]) return true;
+    const char *cosubmit_path = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT");
+    return cosubmit_path && cosubmit_path[0];
+}
+
+static uint64_t updown_pair_active_hash(const int *active_experts, int n_active) {
+    uint64_t h = 1469598103934665603ULL;
+    for (int i = 0; i < n_active; ++i) {
+        h ^= (uint64_t)(uint32_t)active_experts[i] + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h *= 1099511628211ULL;
+    }
+    return h ? h : 1;
+}
+
+static uint64_t gate_updown_batch_profile_now_us() {
+    return (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+static void gate_updown_batch_profile_write(
+        const char *phase,
+        const char *src_name,
+        const char *pair_name,
+        size_t expert_bytes,
+        int n_active,
+        uint64_t active_hash,
+        int cache_hits,
+        int cache_misses,
+        int pack_hits,
+        int pack_misses) {
+    const char *path = std::getenv("GGML_MOE_GATE_UPDOWN_COSUBMIT_PROFILE_OUT");
+    if (!path || !path[0]) return;
+    static std::mutex mu;
+    static bool header = false;
+    std::lock_guard<std::mutex> lk(mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header) {
+        std::fprintf(f,
+                "phase,time_us,tensor,pair_tensor,expert,expert_bytes,n_active,active_hash,"
+                "cache_hit,cache_inserted,cache_hits,cache_misses,pack_hit,pack_hits,pack_misses,src0_ms,total_ms\n");
+        header = true;
+    }
+    std::fprintf(f,
+            "%s,%lu,%s,%s,%d,%lu,%d,%lu,%d,%d,%d,%d,%d,%d,%d,%.6f,%.6f\n",
+            phase ? phase : "",
+            (unsigned long)gate_updown_batch_profile_now_us(),
+            src_name ? src_name : "",
+            pair_name ? pair_name : "",
+            -1,
+            (unsigned long)expert_bytes,
+            n_active,
+            (unsigned long)active_hash,
+            -1,
+            -1,
+            cache_hits,
+            cache_misses,
+            -1,
+            pack_hits,
+            pack_misses,
+            0.0,
+            0.0);
+    std::fclose(f);
+}
+
+static void updown_pair_profile_write(
+        const char *phase,
+        const char *src_name,
+        const char *pair_name,
+        size_t expert_bytes,
+        int n_active,
+        uint64_t active_hash,
+        int cache_hits,
+        int cache_misses,
+        int pack_hits,
+        int pack_misses) {
+    gate_updown_batch_profile_write(phase, src_name, pair_name, expert_bytes, n_active, active_hash,
+            cache_hits, cache_misses, pack_hits, pack_misses);
+    const char *path = std::getenv("GGML_MOE_UPDOWN_PAIR_PROFILE_OUT");
+    if (!path || !path[0]) return;
+    static std::mutex mu;
+    static bool header = false;
+    std::lock_guard<std::mutex> lk(mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header) {
+        std::fprintf(f, "phase,src_name,pair_name,expert_bytes,n_active,active_hash,cache_hits,cache_misses,pack_hits,pack_misses\n");
+        header = true;
+    }
+    std::fprintf(f, "%s,%s,%s,%lu,%d,%lu,%d,%d,%d,%d\n",
+            phase ? phase : "",
+            src_name ? src_name : "",
+            pair_name ? pair_name : "",
+            (unsigned long)expert_bytes,
+            n_active,
+            (unsigned long)active_hash,
+            cache_hits,
+            cache_misses,
+            pack_hits,
+            pack_misses);
+    std::fclose(f);
+}
+
+static void updown_pair_profile_predict_down(
+        const char *src_name,
+        size_t expert_bytes,
+        batch_vram_cache *cache,
+        const int *active_experts,
+        int n_active) {
+    if (!updown_pair_profile_enabled() || !src_name || !std::strstr(src_name, ".ffn_up_exps.")) return;
+    char down_name[128] = {};
+    if (!down_name_for_up_gate(src_name, down_name, sizeof(down_name))) return;
+    int cache_hits = 0;
+    int cache_misses = 0;
+    int pack_hits = 0;
+    int pack_misses = 0;
+    for (int j = 0; j < n_active; ++j) {
+        const int expert = active_experts[j];
+        const uintptr_t key = batch_key_hash(down_name, expert);
+        if (cache && batch_cache_find_slot(cache, key) >= 0) {
+            ++cache_hits;
+        } else {
+            ++cache_misses;
+        }
+        if (expert_pack_lookup_impl(down_name, expert, expert_bytes, false)) {
+            ++pack_hits;
+        } else {
+            ++pack_misses;
+        }
+    }
+    updown_pair_profile_write("up_predict_down", src_name, down_name, expert_bytes, n_active,
+            updown_pair_active_hash(active_experts, n_active), cache_hits, cache_misses, pack_hits, pack_misses);
+}
+
+static void updown_pair_profile_actual(
+        const char *src_name,
+        size_t expert_bytes,
+        const int *active_experts,
+        int n_active,
+        int cache_hits,
+        int cache_misses) {
+    if (!updown_pair_profile_enabled() || !src_name) return;
+    const bool is_up = std::strstr(src_name, ".ffn_up_exps.") || std::strstr(src_name, "ffn_up_exps");
+    const bool is_down = std::strstr(src_name, ".ffn_down_exps.") || std::strstr(src_name, "ffn_down_exps");
+    if (!is_up && !is_down) return;
+    int pack_hits = 0;
+    int pack_misses = 0;
+    for (int j = 0; j < n_active; ++j) {
+        const int expert = active_experts[j];
+        if (expert_pack_lookup_impl(src_name, expert, expert_bytes, false)) {
+            ++pack_hits;
+        } else {
+            ++pack_misses;
+        }
+    }
+    updown_pair_profile_write(is_down ? "actual_down" : "actual_up", src_name, "", expert_bytes, n_active,
+            updown_pair_active_hash(active_experts, n_active), cache_hits, cache_misses, pack_hits, pack_misses);
 }
 
 static void preload_registered_down_for_active(const char *src_name, const int *active_experts, int n_active) {
@@ -8314,7 +10799,9 @@ static bool launch_moe_mmvq_compact_batch(
         case GGML_TYPE_IQ3_XXS:
         case GGML_TYPE_IQ3_S:
         case GGML_TYPE_IQ2_S:
+        case GGML_TYPE_IQ1_M:
         case GGML_TYPE_IQ4_XS:
+        case GGML_TYPE_MXFP4:
             break;
         default: return false;
     }
@@ -8411,7 +10898,7 @@ static __global__ void moe_stream_up_gate_fuse_kernel(
             if (limit < 1e-6f) {
                 r = u * moe_stream_silu(g);
             } else {
-                float gate_v = fminf(moe_stream_silu(g), limit);
+                float gate_v = moe_stream_silu(fminf(g, limit));
                 float up_v = fmaxf(-limit, fminf(limit, u));
                 r = up_v * gate_v;
             }
@@ -8708,6 +11195,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
 
     batch_vram_cache *cache = batch_cache_get(cache_slot_bytes);
     if (!cache) return decline("cache_unavailable");
+    route_group_enqueue_down(src0_up_name, active_experts, n_active, st);
     if (!current_down_overlap_enabled()) {
         preload_registered_down_for_active(src0_up_name, active_experts, n_active);
     }
@@ -10341,6 +12829,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const float *src1_f32,
     int64_t src1_ne1,
     size_t src1_nb1, size_t src1_nb2,
+    const void *src1_q8_0,
+    size_t src1_q8_0_row_size,
+    int64_t src1_q8_0_ne1,
     float *dst,
     size_t dst_nb1, size_t dst_nb2,
     const int64_t *matrix_row_counts,
@@ -10371,6 +12862,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const char *prompt_matmul_roles = std::getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH_ROLES");
     const bool is_prompt_up = src0_name && std::strstr(src0_name, "ffn_up_exps");
     const bool is_prompt_gate = src0_name && std::strstr(src0_name, "ffn_gate_exps");
+    const bool is_down = src0_name && std::strstr(src0_name, "ffn_down_exps");
     const bool prompt_matmul_role_allowed =
         !prompt_matmul_roles || !prompt_matmul_roles[0] ||
         std::strcmp(prompt_matmul_roles, "all") == 0 ||
@@ -10381,14 +12873,35 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         prompt_matmul_env && prompt_matmul_env[0] && prompt_matmul_env[0] != '0' &&
         prompt_matmul_role_allowed &&
         (is_prompt_up || is_prompt_gate);
-    if (!src0_name || (!std::strstr(src0_name, "ffn_down_exps") && !prompt_matmul_id)) {
-        return decline("not_down_tensor");
-    }
     const bool q4_parity_candidate = q4_down_parity_candidate(src0_name, src0_type);
     const bool q4_route_profile_candidate = q4_down_route_profile_candidate(src0_name, src0_type);
     const bool q4_batch_candidate = q4_down_batch_candidate(src0_name, src0_type);
-    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate && !q4_batch_candidate) return decline("unsupported_type");
+    const bool is_mxfp4_type = src0_type == GGML_TYPE_MXFP4;
+    const bool is_lowbit_probe_type =
+        src0_type == GGML_TYPE_IQ2_XS || src0_type == GGML_TYPE_IQ1_S ||
+        src0_type == GGML_TYPE_IQ1_M || src0_type == GGML_TYPE_Q2_K;
+    const bool mxfp4_probe_candidate = is_mxfp4_type && mxfp4_down_probe_candidate(src0_name, src0_type);
+    const bool mxfp4_q80_compat_candidate = is_mxfp4_type && mxfp4_down_q80_compat_candidate(src0_name, src0_type);
+    const bool lowbit_probe_candidate = is_lowbit_probe_type && lowbit_down_probe_candidate(src0_name, src0_type);
+    if (!src0_name || (!is_down && !prompt_matmul_id && !mxfp4_q80_compat_candidate)) {
+        return decline("not_down_tensor");
+    }
+    if (src0_type == GGML_TYPE_MXFP4 && mxfp4_down_q80_debug_enabled()) {
+        static std::atomic<int> q80_candidate_debug_count{0};
+        const int dbg = q80_candidate_debug_count.fetch_add(1);
+        if (dbg < 64) {
+            const char *env = std::getenv("GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH");
+            const char *target = std::getenv("GGML_MOE_STREAM_DOWN_Q80_COMPAT_TENSOR");
+            std::fprintf(stderr,
+                    "[moe_stream_batch] q80_candidate_debug idx=%d tensor=%s type=%d env=%s target=%s candidate=%d\n",
+                    dbg, src0_name ? src0_name : "", src0_type_int,
+                    env ? env : "", target ? target : "", mxfp4_q80_compat_candidate ? 1 : 0);
+        }
+    }
+    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate && !q4_batch_candidate && !mxfp4_probe_candidate && !mxfp4_q80_compat_candidate && !lowbit_probe_candidate) return decline("unsupported_type");
+    if (mxfp4_down_q80_compat_forces_mxfp4(src0_name, src0_type) && !mxfp4_q80_compat_candidate) return decline("q80_not_target");
     if (!src1_f32) return decline("missing_src1");
+    if (mxfp4_q80_compat_candidate && (!src1_q8_0 || src1_q8_0_row_size == 0 || src1_q8_0_ne1 <= 0)) return decline("missing_src1_q8_0");
     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);
 
     if (prompt_multirow && !prompt_matmul_id && !prompt_down_batch_enabled()) {
@@ -10408,11 +12921,14 @@ extern "C" bool ggml_cuda_moe_stream_batch(
             active_experts[n_active] = (int)e;
             dst_ids[n_active] = r[row].i1;
             token_ids[n_active] = r[row].i2;
+            if (dst_ids[n_active] < 0 || token_ids[n_active] < 0) return decline("bad_route_row");
             if (dst_ids[n_active] > max_dst_id) max_dst_id = dst_ids[n_active];
             ++n_active;
         }
     }
     if (n_active <= 0 || max_dst_id < 0) return decline("no_active_routes");
+    const int min_active = down_batch_min_active();
+    if (min_active > 0 && n_active < min_active) return decline("down_min_active");
     static std::atomic<int> q4_route_profile_calls{0};
     if (q4_route_profile_candidate) {
         const int q4_route_call = q4_route_profile_calls.fetch_add(1, std::memory_order_relaxed);
@@ -10442,6 +12958,35 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         std::fprintf(stderr,
                 "[moe_stream_batch] q4_down_parity active tensor=%s call=%d active=%d ne01=%ld ne00=%ld\n",
                 src0_name ? src0_name : "", q4_parity_call, n_active, (long)ne01, (long)ne00);
+    }
+    bool mxfp4_probe_run = false;
+    int mxfp4_probe_call = -1;
+    if (mxfp4_probe_candidate) {
+        static std::atomic<int> first_mxfp4_down_probe{0};
+        if (first_mxfp4_down_probe.fetch_add(1, std::memory_order_relaxed) == 0) {
+            std::fprintf(stderr, "[moe_stream_batch] MXFP4 down batch probe active mode=%s\n",
+                    mxfp4_down_probe_mode() ? mxfp4_down_probe_mode() : "");
+        }
+        mxfp4_probe_call = g_mxfp4_down_probe_calls.fetch_add(1, std::memory_order_relaxed);
+        if (mxfp4_probe_call >= mxfp4_down_probe_max_calls()) return decline("mxfp4_probe_limit");
+        if (mxfp4_down_probe_parity_mode()) {
+            mxfp4_probe_run = true;
+        }
+        std::fprintf(stderr,
+                "[moe_stream_batch] mxfp4_down_probe active tensor=%s call=%d active=%d ne01=%ld ne00=%ld\n",
+                src0_name ? src0_name : "", mxfp4_probe_call, n_active, (long)ne01, (long)ne00);
+    }
+    if (mxfp4_q80_compat_candidate && mxfp4_down_q80_debug_enabled()) {
+        std::fprintf(stderr,
+                "[moe_stream_batch] q80_debug candidate tensor=%s active=%d ne01=%ld ne00=%ld "
+                "row_size=%zu ne1=%ld rows_stride=%ld\n",
+                src0_name ? src0_name : "", n_active, (long)ne01, (long)ne00,
+                src1_q8_0_row_size, (long)src1_q8_0_ne1, (long)rows_stride);
+        for (int j = 0; j < n_active && j < 16; ++j) {
+            std::fprintf(stderr,
+                    "[moe_stream_batch] q80_debug route j=%d expert=%d dst_id=%d token_id=%d\n",
+                    j, active_experts[j], (int)dst_ids[j], (int)token_ids[j]);
+        }
     }
 
     static std::atomic<int> first_batch{0};
@@ -10499,9 +13044,12 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     }
 
     const size_t src0_bytes = (size_t)ne01 * nb01;
+    const size_t src0_all_bytes = (size_t)n_active * src0_bytes;
     batch_ttft_call_scope ttft_scope("call_down", src0_name, n_active, src0_bytes);
     const size_t src1_f32_bytes = (size_t)n_active * ne00 * sizeof(float);
     const size_t src1_q8_bytes = (size_t)n_active * moe_stream_q8_1_row_bytes(ne00);
+    const size_t src1_q80_bytes = mxfp4_q80_compat_candidate ? (size_t)n_active * src1_q8_0_row_size : 0;
+    const size_t src1_q8_alloc_bytes = std::max(src1_q8_bytes, src1_q80_bytes);
     const char *down_q8k_env = std::getenv("GGML_MOE_STREAM_DOWN_Q8K");
     const char *down_q8k_types_env = std::getenv("GGML_MOE_STREAM_DOWN_Q8K_TYPES");
     const char *down_q8k_layer_range = std::getenv("GGML_MOE_STREAM_DOWN_Q8K_LAYER_RANGE");
@@ -10516,7 +13064,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         down_q8k_type_allowed &&
         (!src0_name || std::strstr(src0_name, ".ffn_down_exps.") || std::strstr(src0_name, "ffn_down_exps")) &&
         moe_tensor_layer_in_simple_range(src0_name, down_q8k_layer_range);
-    const int64_t dst_cols = max_dst_id + 1;
+    const int64_t dst_cols = std::max<int64_t>(max_dst_id + 1, n_active);
     const bool use_handoff =
         gpu_handoff_enabled() &&
         g_handoff.host_ptr == src1_f32 &&
@@ -10524,6 +13072,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         g_handoff.ne01 == ne00 &&
         g_handoff.dst_cols >= dst_cols;
     const bool shadow_error = down_act_shadow_error_enabled();
+    const bool mxfp4_f32_exact_candidate = mxfp4_probe_candidate && mxfp4_down_probe_f32_mode();
     const bool down_q8k_requested = down_q8k_candidate && !use_handoff;
     const size_t src1_q8k_bytes = down_q8k_requested ? (size_t)n_active * (ne00 / QK_K) * sizeof(block_q8_K) : 0;
     const int64_t dst_rows = down_q8k_requested ? dst_cols : n_active;
@@ -10531,29 +13080,114 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const size_t ids_bytes = (size_t)n_active * sizeof(int32_t);
     const size_t bounds_bytes = (size_t)(n_active + 1) * sizeof(int32_t);
 
-    bool ok = ((use_handoff && !shadow_error) || ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes))
-        && ensure_dev(bc.d_src1_q8, bc.d_src1_q8_sz, src1_q8_bytes)
+    int down_profile_cache_hits = 0;
+    int down_profile_cache_misses = 0;
+    const auto mxfp4_stage_trace_t0 = mxfp4_probe_candidate ?
+        std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    auto mxfp4_stage_elapsed_ms = [&]() -> double {
+        if (!mxfp4_probe_candidate) return 0.0;
+        return std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - mxfp4_stage_trace_t0).count();
+    };
+    auto mxfp4_stage_trace = [&](const char *stage) {
+        if (mxfp4_probe_candidate) {
+            mxfp4_down_stage_trace_write(
+                    src0_name, mxfp4_probe_call, stage, n_active, ne01, ne00,
+                    src0_all_bytes, src1_f32_bytes, src1_q8_bytes, dst_bytes,
+                    down_profile_cache_hits, down_profile_cache_misses,
+                    use_handoff, down_q8k_requested, mxfp4_stage_elapsed_ms());
+        }
+    };
+    mxfp4_stage_trace("sizes");
+    const bool need_src0_all_stage = mxfp4_probe_candidate || mxfp4_q80_compat_candidate || lowbit_probe_candidate;
+
+    bool ok = (!need_src0_all_stage || ensure_dev(bc.d_src0, bc.d_src0_sz, src0_all_bytes))
+        && ((use_handoff && !shadow_error) || mxfp4_q80_compat_candidate || ensure_dev(bc.d_src1_f32, bc.d_src1_f32_sz, src1_f32_bytes))
+        && ensure_dev(bc.d_src1_q8, bc.d_src1_q8_sz, src1_q8_alloc_bytes)
         && (!down_q8k_requested || ensure_dev(bc.d_src1_q8k, bc.d_src1_q8k_sz, src1_q8k_bytes))
         && ensure_dev(bc.d_dst, bc.d_dst_sz, dst_bytes)
         && ensure_dev((void *&)bc.d_ids_src1, bc.d_ids_src1_sz, ids_bytes)
         && ensure_dev((void *&)bc.d_ids_dst, bc.d_ids_dst_sz, ids_bytes)
         && ensure_dev((void *&)bc.d_x_ids, bc.d_x_ids_sz, ids_bytes)
         && ensure_dev((void *&)bc.d_bounds, bc.d_bounds_sz, bounds_bytes)
-        && ((use_handoff && !shadow_error) || ensure_host_pinned(bc.h_src1, bc.h_src1_sz, src1_f32_bytes))
+        && ((use_handoff && !shadow_error) || ensure_host_pinned(bc.h_src1, bc.h_src1_sz, std::max(src1_f32_bytes, src1_q80_bytes)))
         && ensure_host_pinned(bc.h_dst, bc.h_dst_sz, dst_bytes)
         && (!shadow_error || ensure_host_pinned(bc.h_src1_shadow, bc.h_src1_shadow_sz, src1_f32_bytes))
         && (!shadow_error || ensure_host_pinned(bc.h_dst_shadow, bc.h_dst_shadow_sz, dst_bytes));
-    if (!ok) return decline("ensure_buffers");
+    if (!ok) {
+        mxfp4_stage_trace("ensure_buffers_fail");
+        return decline("ensure_buffers");
+    }
+    mxfp4_stage_trace("ensure_buffers_ok");
     static std::atomic<int> first_down_q8k{0};
     if (down_q8k_requested && first_down_q8k.fetch_add(1) == 0) {
         std::fprintf(stderr, "[moe_stream_batch] down Q3_K/IQ4_XS Q8_K-reference batch path active\n");
     }
 
     batch_vram_cache *cache = batch_cache_get(src0_bytes);
-    if (!cache) return decline("cache_get");
+    if (!cache) {
+        mxfp4_stage_trace("cache_get_fail");
+        return decline("cache_get");
+    }
+    mxfp4_stage_trace("cache_get_ok");
+    updown_pair_profile_predict_down(src0_name, src0_bytes, cache, active_experts, n_active);
+    const bool updown_paired_read = expert_pack_env_bool("GGML_MOE_UPDOWN_PAIRED_READ", false) &&
+        src0_name && std::strstr(src0_name, ".ffn_up_exps.");
+    char updown_paired_down_name[128] = {};
+    const bool updown_paired_down_name_ok =
+        updown_paired_read && down_name_for_up_gate(src0_name, updown_paired_down_name, sizeof(updown_paired_down_name));
     preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, src0_bytes, st);
 
     if (profile) cudaEventRecord(bc.ev_start, st);
+
+    const bool down_hit_only = down_batch_hit_only_enabled();
+    const bool down_demand_prefill = down_hit_only && down_batch_demand_prefill_enabled();
+    if (down_demand_prefill) {
+        static std::unordered_map<uintptr_t, uint32_t> down_demand_seen;
+        const int demand_min_seen = down_batch_demand_min_seen();
+        const bool demand_queue = down_batch_demand_queue_enabled();
+        int demand_prefills = 0;
+        int demand_seen_skips = 0;
+        cudaStream_t prefill_stream = bc.prefetch_stream ? bc.prefetch_stream : st;
+        for (int j = 0; j < n_active; ++j) {
+            const uintptr_t cache_key = batch_key_hash(src0_name, active_experts[j]);
+            if (batch_cache_find_slot(cache, cache_key) >= 0) {
+                continue;
+            }
+            uint32_t &seen = down_demand_seen[cache_key];
+            if (seen != UINT32_MAX) {
+                ++seen;
+            }
+            if ((int)seen < demand_min_seen) {
+                ++demand_seen_skips;
+                continue;
+            }
+            const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
+            if (demand_queue) {
+                if (down_demand_prefill_enqueue(cache, cache_key, expert_host, src0_bytes,
+                            src0_name, active_experts[j], prefill_stream)) {
+                    ++demand_prefills;
+                }
+            } else {
+                const int slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, prefill_stream,
+                        true, true, nullptr, 0, true, src0_name, active_experts[j],
+                        true, true, true);
+                if (slot >= 0) {
+                    ++demand_prefills;
+                }
+            }
+        }
+        if (demand_prefills > 0) {
+            static std::atomic<int> first_demand_prefill{0};
+            if (first_demand_prefill.fetch_add(1) == 0) {
+                std::fprintf(stderr,
+                        "[moe_stream_batch] down demand prefill active: tensor=%s prefills=%d active=%d min_seen=%d seen_skips=%d queue=%d\n",
+                        src0_name ? src0_name : "", demand_prefills, n_active, demand_min_seen, demand_seen_skips,
+                        demand_queue ? 1 : 0);
+            }
+            return decline(demand_queue ? "down_demand_prefill_queue" : "down_demand_prefill");
+        }
+    }
 
     struct down_stage_copy_job {
         int slot = -1;
@@ -10626,8 +13260,6 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     std::vector<down_stage_copy_job> down_jobs_a;
     std::vector<down_stage_copy_job> down_jobs_b;
-    int down_profile_cache_hits = 0;
-    int down_profile_cache_misses = 0;
 
     for (int j = 0; j < n_active; ++j) {
         const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
@@ -10639,6 +13271,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                 "down", src0_name, active_experts[j], src0_type_int,
                 src0_bytes, cache_hit ? "cache_hit" : "cache_miss");
         if (cache_slot < 0) {
+            if (down_hit_only) {
+                return decline("down_cache_miss_hit_only");
+            }
             ++down_profile_cache_misses;
             cache_slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, st, true, false,
                     nullptr, 0, !down_parallel_stage, src0_name, active_experts[j]);
@@ -10670,40 +13305,102 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         const int32_t src1_id = src1_ne1 > 0 ? (int32_t)(dst_ids[j] % src1_ne1) : dst_ids[j];
         const char *src1_base = (const char *)src1_f32;
         const char *src_row = src1_base + (size_t)src1_id * src1_nb1 + (size_t)token_ids[j] * src1_nb2;
-        if (down_act_sparsity_profile_enabled()) {
-            down_act_sparsity_profile_record(
+        if (!mxfp4_q80_compat_candidate) {
+            if (down_act_sparsity_profile_enabled()) {
+                down_act_sparsity_profile_record(
+                        (uint64_t)batch_call,
+                        src0_name,
+                        src0_type,
+                        j,
+                        active_experts[j],
+                        dst_ids[j],
+                        token_ids[j],
+                        (const float *)src_row,
+                        ne00);
+            }
+            moe_activation_dump_record(
+                    "down",
+                    "decode",
                     (uint64_t)batch_call,
                     src0_name,
-                    src0_type,
-                    j,
+                    src0_type_int,
                     active_experts[j],
+                    j,
                     dst_ids[j],
                     token_ids[j],
-                    (const float *)src_row,
-                    ne00);
+                    ne00,
+                    ne01,
+                    src0_bytes,
+                    (const float *)src_row);
         }
-        moe_activation_dump_record(
-                "down",
-                "decode",
-                (uint64_t)batch_call,
-                src0_name,
-                src0_type_int,
-                active_experts[j],
-                j,
-                dst_ids[j],
-                token_ids[j],
-                ne00,
-                ne01,
-                src0_bytes,
-                (const float *)src_row);
-        if (!use_handoff || shadow_error) {
+        if (mxfp4_q80_compat_candidate) {
+            const int64_t q80_i11 = ((int64_t)dst_ids[j] % src1_q8_0_ne1 + src1_q8_0_ne1) % src1_q8_0_ne1;
+            const int64_t q80_i12 = (int64_t)token_ids[j];
+            if (q80_i12 < 0) return decline("bad_q80_row");
+            if (q80_i12 * src1_q8_0_ne1 + q80_i11 >= rows_stride) return decline("q80_row_oob");
+            const char *q80_row = (const char *)src1_q8_0 + (size_t)(q80_i11 + q80_i12 * src1_q8_0_ne1) * src1_q8_0_row_size;
+            std::memcpy((char *)bc.h_src1 + (size_t)j * src1_q8_0_row_size, q80_row, src1_q8_0_row_size);
+        } else if (!use_handoff || shadow_error) {
             std::memcpy((char *)bc.h_src1 + (size_t)j * ne00 * sizeof(float), src_row, (size_t)ne00 * sizeof(float));
         }
         bc.h_ids_src1[j] = j;
         bc.h_ids_dst[j] = dst_ids[j];
         bc.h_bounds[j] = j;
     }
+    if (updown_paired_down_name_ok) {
+        int paired_jobs = 0;
+        int paired_cache_hits = 0;
+        int paired_missing_pack = 0;
+        for (int j = 0; j < n_active; ++j) {
+            const int expert = active_experts[j];
+            const uintptr_t down_key = batch_key_hash(updown_paired_down_name, expert);
+            if (batch_cache_find_slot(cache, down_key) >= 0) {
+                ++paired_cache_hits;
+                continue;
+            }
+            const int down_slot = batch_cache_insert_slot(cache, down_key, nullptr, src0_bytes, st,
+                    true, false, bc.h_x_ids, n_active, false, updown_paired_down_name, expert, true);
+            if (down_slot < 0) {
+                continue;
+            }
+            const expert_pack_entry *pack_entry = expert_pack_lookup(updown_paired_down_name, expert, src0_bytes);
+            if (!pack_entry) {
+                ++paired_missing_pack;
+                batch_cache_clear_slot(cache, down_slot);
+                continue;
+            }
+            down_stage_copy_job job;
+            job.slot = down_slot;
+            job.dst = (char *)cache->pool + (size_t)down_slot * cache->slot_sz;
+            job.host_data = nullptr;
+            job.pack_entry = pack_entry;
+            job.expert_idx = expert;
+            std::snprintf(job.tensor, sizeof(job.tensor), "%s", updown_paired_down_name);
+            if (down_stage_single_ring) {
+                down_jobs_a.push_back(job);
+            } else if ((int)(down_jobs_a.size() + down_jobs_b.size()) & 1) {
+                down_jobs_b.push_back(job);
+            } else {
+                down_jobs_a.push_back(job);
+            }
+            ++paired_jobs;
+        }
+        static std::atomic<int> first_updown_paired_read{0};
+        if (paired_jobs > 0 && first_updown_paired_read.fetch_add(1) == 0) {
+            std::fprintf(stderr,
+                    "[moe_stream_batch] up/down paired read active: up=%s down=%s jobs=%d cache_hits=%d missing_pack=%d\n",
+                    src0_name ? src0_name : "", updown_paired_down_name, paired_jobs, paired_cache_hits, paired_missing_pack);
+        }
+        if (updown_pair_profile_enabled()) {
+            updown_pair_profile_write("paired_down_plan", src0_name, updown_paired_down_name, src0_bytes, n_active,
+                    updown_pair_active_hash(active_experts, n_active), paired_cache_hits, paired_jobs,
+                    paired_jobs, paired_missing_pack);
+        }
+    }
     bc.h_bounds[n_active] = n_active;
+    updown_pair_profile_actual(src0_name, src0_bytes, active_experts, n_active,
+            down_profile_cache_hits, down_profile_cache_misses);
+    mxfp4_stage_trace("stage_jobs_done");
 
     if (down_parallel_stage && (!down_jobs_a.empty() || !down_jobs_b.empty())) {
         bool copy_a_ok = true;
@@ -10726,13 +13423,19 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         if (cudaStreamWaitEvent(st, bc.ev_up_done, 0) != cudaSuccess) return decline("wait_up_done");
         if (cudaStreamWaitEvent(st, bc.ev_gate_done, 0) != cudaSuccess) return decline("wait_gate_done");
     }
+    mxfp4_stage_trace("parallel_stage_done");
 
-    if (!use_handoff && cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_src1_h2d");
+    if (mxfp4_q80_compat_candidate) {
+        if (cudaMemcpyAsync(bc.d_src1_q8, bc.h_src1, src1_q80_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_src1_q80_h2d");
+    } else if (!use_handoff && cudaMemcpyAsync(bc.d_src1_f32, bc.h_src1, src1_f32_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+        return decline("copy_src1_h2d");
+    }
     if (cudaMemcpyAsync(bc.d_ids_src1, bc.h_ids_src1, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_ids_src1_h2d");
     if (cudaMemcpyAsync(bc.d_ids_dst, bc.h_ids_dst, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_ids_dst_h2d");
     if (cudaMemcpyAsync(bc.d_x_ids, bc.h_x_ids, ids_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_x_ids_h2d");
     if (cudaMemcpyAsync(bc.d_bounds, bc.h_bounds, bounds_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) return decline("copy_bounds_h2d");
     if (cudaMemsetAsync(bc.d_dst, 0, dst_bytes, st) != cudaSuccess) return decline("memset_dst");
+    mxfp4_stage_trace("h2d_meta_enqueued");
     if (profile) cudaEventRecord(bc.ev_stage, st);
 
     if (use_handoff) {
@@ -10747,7 +13450,33 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const float *d_src1_run = use_handoff ? g_handoff.d_data : (const float *)bc.d_src1_f32;
     const int64_t src1_run_stride = use_handoff ? g_handoff.ne01 : ne00;
     const int32_t *src1_rows = use_handoff ? bc.h_ids_dst : nullptr;
-    if (down_q8k_requested) {
+    mxfp4_stage_trace("pre_kernel");
+    if (mxfp4_q80_compat_candidate) {
+        static std::atomic<int> first_mxfp4_q80_compat{0};
+        if (first_mxfp4_q80_compat.fetch_add(1) == 0) {
+            std::fprintf(stderr, "[moe_stream_batch] MXFP4 Q8_0-compatible batch path active\n");
+        }
+        if (!launch_mxfp4_down_q80_compat_batch(
+                (const char *)cache->pool, bc.d_x_ids, cache->slot_sz,
+                ne00, ne01, nb01, (const char *)bc.d_src1_q8, src1_q8_0_row_size,
+                (float *)bc.d_dst, n_active,
+                mxfp4_down_q80_cpu_order_enabled(),
+                mxfp4_down_q80_cpu_order_lane8_enabled(),
+                mxfp4_down_q80_cpu_order_lane8_shared_enabled(), st)) {
+            return decline("launch_mxfp4_down_q80_compat_batch");
+        }
+    } else if (mxfp4_f32_exact_candidate) {
+        static std::atomic<int> first_mxfp4_f32_exact{0};
+        if (first_mxfp4_f32_exact.fetch_add(1) == 0) {
+            std::fprintf(stderr, "[moe_stream_batch] MXFP4 down f32 exact probe path active\n");
+        }
+        if (!launch_mxfp4_down_f32_exact_batch(
+                (const char *)cache->pool, bc.d_x_ids, cache->slot_sz,
+                ne00, ne01, nb01, d_src1_run, src1_run_stride, bc.d_ids_src1,
+                (float *)bc.d_dst, n_active, st)) {
+            return decline("launch_mxfp4_down_f32_exact_batch");
+        }
+    } else if (down_q8k_requested) {
         if (ne00 % QK_K != 0) return decline("down_q8k_bad_ne00");
         const int nblocks = (int)(n_active * (ne00 / QK_K));
         moe_quantize_row_q8_k_kernel<<<nblocks, 1, 0, st>>>((const float *)bc.d_src1_f32, (block_q8_K *)bc.d_src1_q8k, nblocks);
@@ -10763,16 +13492,33 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                 (const char *)cache->pool, bc.h_x_ids, cache->slot_sz,
                 ne00, ne01, nb01, d_src1_run, src1_run_stride, src1_rows,
                 bc.d_src1_q8, (float *)bc.d_dst, n_active, st)) {
+            mxfp4_stage_trace("launch_moe_mmvq_compact_batch_fail");
             return decline("launch_moe_mmvq_compact_batch");
     }
+    mxfp4_stage_trace("kernel_enqueued");
     if (use_handoff) {
         g_handoff.host_ptr = nullptr;
         g_handoff.d_data = nullptr;
     }
     if (profile) cudaEventRecord(bc.ev_kernel, st);
     if (cudaMemcpyAsync(bc.h_dst, bc.d_dst, dst_bytes, cudaMemcpyDeviceToHost, st) != cudaSuccess) return decline("copy_dst_d2h");
+    mxfp4_stage_trace("d2h_enqueued");
     if (profile) cudaEventRecord(bc.ev_d2h, st);
-    if (cudaStreamSynchronize(st) != cudaSuccess) return decline("sync_stream");
+    mxfp4_stage_trace("pre_sync");
+    if (cudaStreamSynchronize(st) != cudaSuccess) {
+        mxfp4_stage_trace("sync_stream_fail");
+        return decline("sync_stream");
+    }
+    mxfp4_stage_trace("sync_done");
+
+    if (mxfp4_probe_run) {
+        mxfp4_stage_trace("pre_report");
+        mxfp4_down_probe_report(
+                src0_name, mxfp4_probe_call, src0_data, nb01, nb02, ne00, ne01,
+                src1_f32, src1_nb1, src1_nb2,
+                active_experts, dst_ids, token_ids, n_active, (const float *)bc.h_dst);
+        return false;
+    }
 
     if (q4_parity_run) {
         q4_down_parity_report(

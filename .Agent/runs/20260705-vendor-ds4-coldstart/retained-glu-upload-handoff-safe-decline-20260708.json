@@ -1,0 +1,84 @@
+{
+  "created_utc": "2026-07-07T21:45:00Z",
+  "status": "diagnostic_probe_safe_default_off_not_sota",
+  "purpose": "Advance DS4 down GPU correctness by testing whether explicit CPU GLU/SwiGLU activations can be uploaded to the existing CUDA handoff buffer and consumed by down batch.",
+  "source_head": "02cb6edf0fa0d8713485d643650e0acf9c8a3f98",
+  "source_status": [
+    "M ggml/src/ggml-cpu/ggml-cpu.c",
+    " M ggml/src/ggml-cuda/moe_stream_batch.cu",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/explicit-swiglu-down-split-profile-20260708.json",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+    "?? prof.nsys-rep"
+  ],
+  "code_changes": [
+    "Added default-off ggml_cuda_moe_stream_handoff_upload() hook and weak CPU declaration.",
+    "Changed ffn_moe_swiglu GLU marker so upload can be triggered by GGML_MOE_GPU_HANDOFF_UPLOAD_GLU without requiring GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT.",
+    "Rejected and removed unsafe MXFP4 generic f32 handoff consume: MXFP4 down is not in moe_stream_type_supported() and generic handoff output was incorrect."
+  ],
+  "runs": {
+    "env_not_passed_demo_control": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T213029Z-glu-upload-handoff-smoke-20260708",
+      "result": "caller env did not propagate through demo systemd-run; no handoff env in environment.txt; not used as handoff evidence",
+      "eval_tok_s": 1.4,
+      "ram_ok": true
+    },
+    "strict_upload_gate_cache_only": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T213322Z-retained-glu-upload-handoff-smoke-20260708b/france-glu-upload-handoff-cpu40-vram0gb",
+      "env": "handoff upload/down batch on; GGML_MOE_VRAM_CACHE_GB=0",
+      "result": "no upload before trigger fix; down batch declined cache_get because batch_vram_cache budget was zero",
+      "eval_tok_s": 1.8,
+      "ram_ok": true
+    },
+    "strict_upload_downfilter_cache_get": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T213615Z-retained-glu-upload-handoff-downfilter-smoke-20260708/france-glu-upload-handoff-downfilter-cpu40-vram0gb",
+      "env": "handoff upload/down batch on; down one-name filter; GGML_MOE_VRAM_CACHE_GB=0",
+      "observed": [
+        "GLU GPU handoff upload active",
+        "down batch declined cache_get"
+      ],
+      "result": "upload trigger fixed; no down consume because batch cache remained disabled",
+      "eval_tok_s": 1.7,
+      "ram_ok": true
+    },
+    "strict_unsafe_mxfp4_generic_handoff_rejected": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T213821Z-retained-glu-upload-handoff-bcache2g-smoke-20260708/france-glu-upload-handoff-bcache2g-cpu40-vram2gb",
+      "env": "handoff upload/down batch on; GGML_MOE_VRAM_CACHE_GB=2; temporary unsafe MXFP4 generic handoff candidate enabled in source",
+      "observed": [
+        "GLU GPU handoff upload active",
+        "GPU handoff consumed",
+        "VRAM cache down hits=2671 misses=2139"
+      ],
+      "result": "rejected: model output was semantically wrong ('reply, answer, comeback...') despite successful consume; generic f32 MMVQ path is not correct for MXFP4 down",
+      "eval_tok_s": 1.7,
+      "ram_ok": true,
+      "correctness_ok": false
+    },
+    "strict_safe_decline_after_guard": {
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T214127Z-retained-glu-upload-safe-decline-smoke-20260708/france-glu-upload-safe-decline-cpu40-vram2gb",
+      "env": "handoff upload/down batch on; GGML_MOE_VRAM_CACHE_GB=2; unsafe MXFP4 generic handoff candidate removed",
+      "observed": [
+        "GLU GPU handoff upload active count=1",
+        "GPU handoff consumed count=0",
+        "unsupported_type decline count=2000"
+      ],
+      "result": "accepted as safety behavior only: MXFP4 uploaded handoff no longer silently takes an incorrect generic down path; CPU fallback output is semantically France but truncated by n=48 at 'Eiff' so not a correctness pass/SOTA",
+      "eval_tok_s": 1.7,
+      "prompt_tok_s": 1.2,
+      "ttft_estimate_ms": 35343.176445,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15082020864,
+      "ram_ok": true,
+      "correctness_ok": false
+    }
+  },
+  "decision": {
+    "commit_allowed": true,
+    "why": "The remaining code is default-off and does not consume MXFP4 handoff through an incorrect path. It provides a reproducible upload marker/probe for the next correct MXFP4 down implementation.",
+    "not_sota": true,
+    "next_required_for_down_gpu_correctness": [
+      "Do not use generic f32 MMVQ compact batch for MXFP4 down.",
+      "Either route MXFP4 down through the already-correct Q8_0-compatible path, or implement a dedicated MXFP4+f32 activation kernel with logit/top1 parity before any performance run.",
+      "A future consume path must pass semantic output, top1/logit parity, strict 16GB RAM, and TTFT gate before SOTA consideration."
+    ]
+  }
+}

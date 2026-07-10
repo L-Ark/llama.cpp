@@ -1,0 +1,58 @@
+{
+  "artifact_id": "down-mxfp4-perf-france-probe-rejection-20260706",
+  "timestamp_local": "2026-07-06T12:20:00+08:00",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "push_target": "https://github.com/wici-ai/ssd-llama.git branch vendor/deepseek-token-rate-16gb",
+  "source_head": "e610117593173cb3fd4658834aacf7f30c55c5b4",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T120136Z-down-mxfp4-perf-france-probe-20260706/france-cpu40-vram0gb",
+  "prompt_set_role": "calibration_dev_set_v1_only",
+  "held_out_used": false,
+  "prompt": "Please introduce France in a short paragraph.",
+  "config_summary": {
+    "binary": "/root/lfz/vendor/llama.cpp-deepseek-v4/build-ds4-moe-stream-batch/bin/llama-cli",
+    "cpu_moe": 40,
+    "strict_cgroup_memory_max_bytes": 16000000000,
+    "strict_cgroup_swap": 0,
+    "drop_caches": true,
+    "no_prompt_specific_pack_or_profile": true,
+    "down_probe_mode": "GGML_MOE_STREAM_DOWN_MXFP4_PROBE=perf",
+    "down_batch": "GGML_MOE_STREAM_DOWN_BATCH=1",
+    "one_stream_gate_cache_mib": 8192,
+    "batch_down_cache_mib": 512,
+    "one_stream_name_filter": "ffn_gate_exps"
+  },
+  "metrics": {
+    "eval_tok_s": 1.7,
+    "prompt_tok_s": 0.9,
+    "ttft_ms": 38553.15988,
+    "elapsed_seconds": 127.07,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15004889088,
+    "pgmajfault": 156746,
+    "workingset_refault_file": 8071289,
+    "ram_ok": true,
+    "ram_limit_killed": false,
+    "oom_seen": false,
+    "correctness_ok": true
+  },
+  "fallback_after_perf_probe": {
+    "fallback_reason_profile_rows": 3619,
+    "remaining_fallback_roles": [
+      "up"
+    ],
+    "up_decode_fallback_ms": 19954.796,
+    "up_prompt_fallback_ms": 4304.18,
+    "down_fallback_ms_in_reason_profile": 0.0,
+    "down_batch_profile": "down calls=18959 total=5.225 ms/call cuda_batch=1.703 cuda_single=2.201 fallback_t0=1.287 batch_accept=6320 batch_decline=0 single_accept=39228 single_decline=21320"
+  },
+  "decision": "rejected_not_sota",
+  "rejection_reasons": [
+    "End-to-end eval_tok_s=1.7 is below the no-prompt-specific calibration France baseline/profile of about 2.6-2.7 tok/s.",
+    "The run reduced/removed down CPU fallback locally, but up fallback remained large: up decode 19954.796ms and up prompt 4304.180ms.",
+    "The conservative VRAM split required for stability reduced one-stream gate cache headroom while the down batch path still paid staging/cache overhead.",
+    "Only a calibration prompt was used; held-out test was intentionally not used because this is not a frozen candidate."
+  ],
+  "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is renowned for its iconic landmarks such as the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is famous for its cuisine, wine, and fashion, and is home to many world-renowned artists, writers, and philosophers. The country is a major economic and political power in Europe, with a strong industrial and agricultural sector. It is also known for its beautiful landscapes, from the beaches of the French Riviera to the mountains of the Alps. France is a country of great diversity and beauty, and is a popular destination for tourists from all over the world.",
+  "next_action": "Do not promote down-batch perf mode. Continue with prompt-general up fallback path or a hard-bound redesign that does not sacrifice gate cache and does not rely on held-out prompts."
+}

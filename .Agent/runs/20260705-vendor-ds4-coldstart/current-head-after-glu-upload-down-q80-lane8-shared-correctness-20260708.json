@@ -1,0 +1,78 @@
+{
+  "artifact_id": "current-head-after-glu-upload-down-q80-lane8-shared-correctness-20260708",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T214741Z-current-head-after-glu-upload-q80-correctness-reverify",
+  "source_commit": "3732f86645cf7517ccecc3072c9003c16b7930b0",
+  "source_commit_oneline": "3732f8664 vendor-ds4: add safe glu handoff upload probe",
+  "source_status": [
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/explicit-swiglu-down-split-profile-20260708.json",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+    "?? prof.nsys-rep"
+  ],
+  "memory_max_bytes": 16000000000,
+  "memory_swap_max": 0,
+  "drop_caches_before_each_case": true,
+  "n_base": 145,
+  "n_case": 145,
+  "n_compare": 145,
+  "same_top1": 145,
+  "first_mismatch_pos": -1,
+  "mismatches_preview": [],
+  "top1_pass": true,
+  "max_abs_top2_logit_diff": 0.0,
+  "mean_abs_top2_logit_diff": 0.0,
+  "baseline_top1_matches_next_token": 122,
+  "full_down_top1_matches_next_token": 122,
+  "default": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T214741Z-current-head-after-glu-upload-q80-correctness-reverify/default-report",
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 14900539392,
+    "memory_anon_bytes": 450560,
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 82715,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "ram_ok": true,
+    "profile_line": "[kimi_cpu_moe_profile] down calls=17400 total=6.578 ms/call convert_t0=0.002 route=0.001 route_barrier=0.002 cuda_batch=0.001 cuda_single=0.000 post_cuda_barrier=0.001 fallback_t0=6.568 batch_accept=0 batch_decline=5800 single_accept=0 single_decline=69600",
+    "batch_accept_decline": [
+      0,
+      5800
+    ],
+    "elapsed_raw": null,
+    "max_rss_kb": 15602684,
+    "exit_status": 0
+  },
+  "full_down_lane8_shared": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T214741Z-current-head-after-glu-upload-q80-correctness-reverify/full-down-lane8-shared-report",
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 14929158144,
+    "memory_anon_bytes": 294912,
+    "memory_events": {
+      "low": 0,
+      "high": 0,
+      "max": 84766,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "ram_ok": true,
+    "profile_line": "[kimi_cpu_moe_profile] down calls=17400 total=9.499 ms/call convert_t0=0.001 route=0.001 route_barrier=0.006 cuda_batch=4.700 cuda_single=0.000 post_cuda_barrier=0.020 fallback_t0=4.746 batch_accept=5800 batch_decline=0 single_accept=0 single_decline=69600",
+    "batch_accept_decline": [
+      5800,
+      0
+    ],
+    "elapsed_raw": null,
+    "max_rss_kb": 15601636,
+    "exit_status": 0
+  },
+  "env_delta": {
+    "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8": "1",
+    "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED": "1"
+  },
+  "decision": "pass_current_head_after_glu_upload_down_gpu_q80_lane8_shared_correctness_not_sota"
+}

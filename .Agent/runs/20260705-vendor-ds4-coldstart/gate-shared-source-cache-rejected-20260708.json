@@ -1,0 +1,74 @@
+{
+  "stage": "X10-BQ gate shared-source cache preservation diagnostic",
+  "date": "2026-07-08",
+  "status": "rejected_not_sota_default_off_diagnostic",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head": "d2f1f710c6199d99a6c3f25d7f479a1b21828170",
+  "source_dirty": true,
+  "accepted_baseline": {
+    "stage": "X10-BM prompt-general full native gate source",
+    "france_n192_repro_eval_tok_s": 4.6,
+    "held_out_n192_min_mean_max_tok_s": [3.9, 4.12, 4.4]
+  },
+  "implementation": {
+    "env": "GGML_MOE_GATE_SHARED_SOURCE=1",
+    "default_enabled": false,
+    "change": "gate source can be loaded through batch expert source and then inserted into the one-stream gate VRAM cache using cudaMemcpyDeviceToDevice"
+  },
+  "runs": [
+    {
+      "label": "defaultoff_after_shared_cache_france_n32",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-shared-source-cache-smoke/20260708T054339Z-france-n32-defaultoff-after-shared-cache",
+      "eval_tok_s": 4.3,
+      "prompt_tok_s": 3.1,
+      "ttft_ms": 24532.12463,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15125835776,
+      "ram_ok": true,
+      "answer_present": true
+    },
+    {
+      "label": "shared_source_cache_france_n32",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-shared-source-cache-smoke/20260708T054427Z-france-n32-gate-shared-source-cache",
+      "eval_tok_s": 3.9,
+      "prompt_tok_s": 2.1,
+      "ttft_ms": 25784.435876,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 15072686080,
+      "ram_ok": true,
+      "gate_vram_cache_hits": 5466,
+      "gate_vram_cache_misses": 4005,
+      "gate_vram_cache_hit_rate_pct": 57.7,
+      "batch_expert_pack_hits": 7884,
+      "batch_expert_pack_misses": 0,
+      "batch_direct_reads": 4005,
+      "batch_iouring_reads": 3879,
+      "gate_aux_copies": 4005,
+      "answer_present": true
+    },
+    {
+      "label": "shared_source_cache_france_n96",
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-shared-source-cache-n96/20260708T054607Z-france-n96-gate-shared-source-cache",
+      "eval_tok_s": 4.1,
+      "prompt_tok_s": 2.0,
+      "ttft_ms": 27518.13386,
+      "elapsed_seconds": 49.93,
+      "memory_peak_bytes": 16000000000,
+      "memory_file_bytes": 14855278592,
+      "memory_anon_bytes": 1032192,
+      "ram_ok": true,
+      "gate_vram_cache_hits": 16161,
+      "gate_vram_cache_misses": 8670,
+      "gate_vram_cache_hit_rate_pct": 65.1,
+      "batch_expert_pack_hits": 15386,
+      "batch_expert_pack_misses": 0,
+      "batch_direct_reads": 8670,
+      "batch_iouring_reads": 6716,
+      "batch_iouring_wait_us": 7886297,
+      "gate_aux_copies": 8670,
+      "quality": "semantically correct but n96 answer truncated by token limit"
+    }
+  ],
+  "decision": "Rejected as SOTA. Cache preservation fixed the prior hits=0 collapse, but moving gate through shared-source still performs one direct read plus pinned staging per gate miss and lowers France n96 from the accepted 4.5-4.6 tok/s range to 4.1 tok/s.",
+  "next_step": "Do not accept shared-source gate alone. True speedup requires reducing or overlapping exposed gate source reads with up/down reads; current helper ties read and H2D to one stream and does not provide real asynchronous gate/up/down co-submit."
+}

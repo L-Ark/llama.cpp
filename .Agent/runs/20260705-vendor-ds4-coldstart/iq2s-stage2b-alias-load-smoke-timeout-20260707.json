@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260707-iq2s-stage2b-alias-load-smoke",
+  "created_at_utc": "2026-07-07T01:20:24.104508Z",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "head": "02a92999716ad8c148be31e59cc6ced35edb79d7",
+  "git_status_before_artifact": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "status": "alias_load_reached_prompt_but_timeout_due_interactive_wrapper_not_sota",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-load-smoke/france-n1-alias-load",
+  "model": "/root/lfz/models/DeepSeek-V4-Flash-IQ2S-GGUF-bullerwins/DeepSeek-V4-Flash.IQ2_S.gguf",
+  "env": {
+    "LLAMA_DEEPSEEK4_4EXPERT_TENSOR_ALIAS": "1",
+    "LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS": "1",
+    "LLAMA_GGUF_TOKEN_TYPE_UNDEFINED_AS_NORMAL": "1",
+    "GGML_CUDA_DISABLE_GRAPHS": "1"
+  },
+  "command_scope": "strict MemoryMax=16000000000 MemorySwapMax=0, France calibration n=1, no prompt-specific pack/profile, stdout controlled after run by keeping excerpts",
+  "systemd_result": "timeout after RuntimeMaxSec=420; main process killed by TERM",
+  "load_status": "passed_alias_tensor_load_and_reached_prompt",
+  "stdout_head_excerpt_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-load-smoke/france-n1-alias-load/stdout_head_excerpt.txt",
+  "stdout_tail_excerpt_path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-iq2s-load-smoke/france-n1-alias-load/stdout_tail_excerpt.txt",
+  "stdout_original_removed_reason": "stdout grew to about 1.3GB due interactive prompt/spinner after llama-cli waited for another turn; head/tail excerpts were preserved and stdout.txt was removed.",
+  "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):\n  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB\ncommon_memory_breakdown_print: | memory breakdown [MiB] | total    free     self   model   context   compute    unaccounted |\ncommon_memory_breakdown_print: |   - CUDA0 (RTX 5090)   | 32109 = 20274 + (10943 = 10920 +      18 +       4) +         891 |\ncommon_memory_breakdown_print: |   - Host               |                  77705 = 77703 +       0 +       1                |\n~llama_context:      CUDA0 compute buffer size of   4.0703 MiB, does not match expectation of   1.3138 MiB\n~llama_context:  CUDA_Host compute buffer size of   1.3830 MiB, does not match expectation of   0.5012 MiB",
+  "observed_memory_from_polling": {
+    "memory_current_near_bytes": 15997000000,
+    "memory_peak_bytes": 16000000000,
+    "note": "Wrapper was killed before it could persist cgroup memory files; polling during run repeatedly showed memory.current near 15.997GB and memory.peak exactly 16000000000."
+  },
+  "correctness_ok": false,
+  "accepted_sota_changed": false,
+  "interpretation": "Existing DeepSeek4 alias envs make the IQ2_S GGUF vendor-loadable, but this run is invalid for correctness/performance because llama-cli was left in interactive mode. Need a controlled --single-turn run before any correctness decision.",
+  "next_allowed": "Run Stage 3 France calibration semantic smoke with the same alias env plus --single-turn and a real n token budget. If output degenerates or RAM/TTFT fails, reject; if it passes, only then run calibration/dev."
+}

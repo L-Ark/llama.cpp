@@ -1,0 +1,97 @@
+{
+  "artifact_id": "retained-handoff-glu-act-marker-probe-20260708",
+  "created_utc": "2026-07-07T23:05:00Z",
+  "source_head_before_commit": "3fad84bb973383347c65f73346ff9e48d12852b5",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "held_out_test_used": false,
+  "prompt_specific_optimization": false,
+  "change": "Default-off/profile-only GLU act marker for GGML_DS4_GROUPED_RETAINED_HANDOFF_PROFILE_OUT. It marks ffn_moe_swiglu-* runtime dst pointers after GLU compute so down handoff profile can verify producer/consumer pointer, layer, and width match on the explicit path.",
+  "baseline_existing_probe": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T224000Z-retained-handoff-existing-probes-smoke",
+    "memory_peak_bytes": 5127348224,
+    "memory_file_bytes": 4290662400,
+    "handoff": {
+      "rows": 720,
+      "shape_ok": 0,
+      "ptr_match": 0,
+      "layer_match": 18,
+      "width_match": 0,
+      "nonzero_up_serial": 0,
+      "first_row": {
+        "seq": "1",
+        "down_layer": "0",
+        "down_tensor": "blk.0.ffn_down_exps.weight",
+        "up_gate_serial": "0",
+        "up_layer": "0",
+        "up_tensor": "",
+        "gate_tensor": "",
+        "ptr_match": "0",
+        "layer_match": "1",
+        "width_match": "0",
+        "shape_ok": "0",
+        "down_active_experts": "4",
+        "down_rows": "8",
+        "up_active_experts": "0",
+        "up_rows": "0",
+        "down_ne00": "2048",
+        "down_ne01": "4096",
+        "up_ne01": "0",
+        "up_dst_rows": "0"
+      }
+    }
+  },
+  "after_marker_probe": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T225500Z-retained-handoff-glu-act-marker-probe",
+    "memory_peak_bytes": 830640128,
+    "memory_file_bytes": 2183168,
+    "handoff": {
+      "rows": 720,
+      "shape_ok": 720,
+      "ptr_match": 720,
+      "layer_match": 720,
+      "width_match": 720,
+      "nonzero_up_serial": 720,
+      "first_row": {
+        "seq": "1",
+        "down_layer": "0",
+        "down_tensor": "blk.0.ffn_down_exps.weight",
+        "up_gate_serial": "20",
+        "up_layer": "0",
+        "up_tensor": "ffn_moe_up_clamped-0",
+        "gate_tensor": "ffn_moe_gate_clamped-0",
+        "ptr_match": "1",
+        "layer_match": "1",
+        "width_match": "1",
+        "shape_ok": "1",
+        "down_active_experts": "4",
+        "down_rows": "8",
+        "up_active_experts": "6",
+        "up_rows": "12",
+        "down_ne00": "2048",
+        "down_ne01": "4096",
+        "up_ne01": "2048",
+        "up_dst_rows": "12"
+      }
+    }
+  },
+  "default_no_profile_smoke": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260707T211329Z-verify-default-after-glu-marker-20260708",
+    "prompt": "用一句话解释缓存是什么。",
+    "eval_tok_s": 3.3,
+    "prompt_tok_s": 2.8,
+    "first_output_ms": 10562.987717,
+    "memory_peak_bytes": 6434877440,
+    "memory_file_bytes": 5605781504,
+    "ram_ok": true,
+    "answer_present": true,
+    "target_gt_5_tok_s_met_by_this_run": false,
+    "answer": "，缓存是数据的临时副本，用于"
+  },
+  "findings": [
+    "Before the marker, existing handoff profile had shape_ok=0/720 and nonzero_up_serial=0/720 because explicit DS4 gate/up never called the fused up_gate marker.",
+    "After marking ffn_moe_swiglu-* GLU outputs, handoff profile has shape_ok=720/720 with ptr_match=720, layer_match=720, width_match=720, nonzero_up_serial=720.",
+    "Native down probe independently shows down_src1_is_act=1118/1118, act_src0_is_gate=1118/1118, act_src1_is_up=1118/1118, so the explicit graph has the correct producer/consumer relation for a retained down microbench.",
+    "This is not a token-rate SOTA. It only fixes the profiler/handoff evidence needed for the next default-off retained down consume microbench."
+  ],
+  "next_action": "Implement a default-off retained down consume microbench/path that reuses the marked ffn_moe_swiglu activation and proves CPU-vs-GPU/top1 parity before any calibration/dev performance run."
+}

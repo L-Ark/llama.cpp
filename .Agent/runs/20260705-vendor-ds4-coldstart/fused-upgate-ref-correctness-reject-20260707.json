@@ -1,0 +1,161 @@
+{
+  "artifact_id": "20260707-fused-upgate-ref-correctness-reject",
+  "attempt_kind": "default_off_correctness_scaffold_rejected",
+  "base_commit": "02eb6b24749bb77d929a8ba38fecc39b1142763d",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "constraints": {
+    "drop_caches": true,
+    "held_out_used": false,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max": 0
+  },
+  "decision": "reject_and_revert_source",
+  "default_off_guard": {
+    "metrics": {
+      "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+      "correctness_ok": true,
+      "correctness_reason": "heuristic_pass_manual_review_required",
+      "elapsed_seconds": 94.16,
+      "eval_tok_s": 2.4,
+      "memory_file_bytes": 15004102656,
+      "memory_max_events": 26199,
+      "memory_peak_bytes": 16000000000,
+      "oom_seen": false,
+      "prompt_tok_s": 0.9,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "ttft_estimate_ms": 39081.059658
+    },
+    "summary": "/root/lfz/runs/vendor-ds4-16gb/20260707T122502Z-20260707T-defaultoff-fused-upgate-guard/france-defaultoff-fused-upgate-guard-cpu40-vram0gb/summary.json"
+  },
+  "next_debug_hypotheses": [
+    "Fused op computes up and gate dot products inside one custom MOE op, while explicit graph materializes two MUL_MAT_ID nodes then clamp+GLU; accumulation/order or src1 quantization differences are large enough to flip close logits.",
+    "A future fused path should first add act-level parity instrumentation for gate/up/act before down/logits, rather than relying only on final top1 report.",
+    "Do not enable fused up/gate for performance until per-layer act parity identifies and closes the numerical gap."
+  ],
+  "post_reject_cleanup": {
+    "rebuild_after_revert": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j20",
+    "rebuild_exit": 0,
+    "rebuild_log": "/tmp/ds4-rebuild-after-fused-revert.log",
+    "source_reverted": true
+  },
+  "reason": "Both SOTA-env and no-stream CPU explicit-vs-fused top1 comparisons matched only 142/145 positions. The path is default-off and default guard passed, but the fused op is not numerically equivalent enough for promotion or retention as a correctness scaffold.",
+  "scope": "DS4 separate ffn_up_exps/ffn_gate_exps fused reference op with raw clamp semantics",
+  "source_diff": ".Agent/runs/20260705-vendor-ds4-coldstart/fused-upgate-ref-rejected-source-diff-20260707.patch",
+  "top1_cpu_explicit_compare": {
+    "explicit_cpu_top1_matches_next_token": 122,
+    "first_mismatch_pos": 78,
+    "fused_ref_cpu_top1_matches_next_token": 122,
+    "max_abs_top2_logit_diff": 1.1980000000000004,
+    "mean_abs_top2_logit_diff": 0.12500689655172426,
+    "mismatches": [
+      {
+        "base_top1": {
+          "id": 305,
+          "logit": 31.7496,
+          "piece": " and"
+        },
+        "case_top1": {
+          "id": 412,
+          "logit": 31.7201,
+          "piece": " as"
+        },
+        "position": 78
+      },
+      {
+        "base_top1": {
+          "id": 9965,
+          "logit": 27.8109,
+          "piece": " advanced"
+        },
+        "case_top1": {
+          "id": 5218,
+          "logit": 27.69,
+          "piece": " political"
+        },
+        "position": 109
+      },
+      {
+        "base_top1": {
+          "id": 8469,
+          "logit": 30.8499,
+          "piece": " player"
+        },
+        "case_top1": {
+          "id": 7267,
+          "logit": 30.4488,
+          "piece": " cultural"
+        },
+        "position": 135
+      }
+    ],
+    "n_base": 145,
+    "n_case": 145,
+    "n_compare": 145,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T124700Z-fused-upgate-ref-cpu-top1-current",
+    "same_top1": 142,
+    "top1_pass": false
+  },
+  "top1_sota_env_compare": {
+    "baseline_top1_matches_next_token": 122,
+    "default_batch": {
+      "batch_accept": 0,
+      "batch_decline": 5800
+    },
+    "first_mismatch_pos": 78,
+    "fused_ref_batch": {
+      "batch_accept": 0,
+      "batch_decline": 5800
+    },
+    "fused_ref_top1_matches_next_token": 122,
+    "max_abs_top2_logit_diff": 1.1980000000000004,
+    "mean_abs_top2_logit_diff": 0.12500689655172426,
+    "mismatches": [
+      {
+        "base_top1": {
+          "id": 305,
+          "logit": 31.7496,
+          "piece": " and"
+        },
+        "case_top1": {
+          "id": 412,
+          "logit": 31.7201,
+          "piece": " as"
+        },
+        "position": 78
+      },
+      {
+        "base_top1": {
+          "id": 9965,
+          "logit": 27.8109,
+          "piece": " advanced"
+        },
+        "case_top1": {
+          "id": 5218,
+          "logit": 27.69,
+          "piece": " political"
+        },
+        "position": 109
+      },
+      {
+        "base_top1": {
+          "id": 8469,
+          "logit": 30.8499,
+          "piece": " player"
+        },
+        "case_top1": {
+          "id": 7267,
+          "logit": 30.4488,
+          "piece": " cultural"
+        },
+        "position": 135
+      }
+    ],
+    "n_base": 145,
+    "n_case": 145,
+    "n_compare": 145,
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T123900Z-fused-upgate-ref-top1-current",
+    "same_top1": 142,
+    "top1_pass": false
+  }
+}

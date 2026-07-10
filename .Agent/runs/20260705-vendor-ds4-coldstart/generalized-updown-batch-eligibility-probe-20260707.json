@@ -1,0 +1,78 @@
+{
+  "attempt_id": "20260707-generalized-updown-batch-eligibility-probe",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "decision": "reject: n96 diagnostic exceeded four minutes and was terminated; down batch accepted 0 routes; up remained unsupported/name-filtered",
+  "exit_status_file_present": false,
+  "fallback_reason_aggregate": {
+    "down|decode|eligible|not_attempted_batch_path_selected|batch_declined_internal_no_single_retry": {
+      "batch_accepts": 0,
+      "batch_attempts": 12350,
+      "calls": 12350,
+      "entries": 2200,
+      "fallback_us": 6558052,
+      "rows": 12350,
+      "single_accepts": 0,
+      "single_attempts": 0
+    },
+    "down|prompt|eligible|not_attempted_batch_path_selected|batch_declined_internal_no_single_retry": {
+      "batch_accepts": 0,
+      "batch_attempts": 1171,
+      "calls": 1171,
+      "entries": 888,
+      "fallback_us": 4459693,
+      "rows": 1820,
+      "single_accepts": 0,
+      "single_attempts": 0
+    },
+    "up|decode|batch_unsupported|one_name_filter|one_name_filter": {
+      "batch_accepts": 0,
+      "batch_attempts": 0,
+      "calls": 12350,
+      "entries": 2200,
+      "fallback_us": 9589467,
+      "rows": 12350,
+      "single_accepts": 0,
+      "single_attempts": 12350
+    },
+    "up|prompt|batch_unsupported|one_name_filter|one_name_filter": {
+      "batch_accepts": 0,
+      "batch_attempts": 0,
+      "calls": 1171,
+      "entries": 888,
+      "fallback_us": 3654414,
+      "rows": 1820,
+      "single_accepts": 0,
+      "single_attempts": 1171
+    }
+  },
+  "interpretation": {
+    "down": "down was eligible but batch_attempts were nonzero and batch_accepts were zero; batch path had no single retry and residual CPU fallback remained",
+    "next_source_question": "add a source-level down MXFP4 internal decline/parity probe before trying performance again; up requires separate support/name-filter plan",
+    "up": "up MXFP4 remained batch_unsupported and one_name_filter blocked one-stream, so all up fallback stayed CPU"
+  },
+  "profile_files": {
+    "fallback_reason_profile.csv": {
+      "bytes": 868682,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-generalized-updown-batch-eligibility-probe/france-n96-batch-env/fallback_reason_profile.csv",
+      "sha256": "eeffeee3d7f817920fb5090b1c9e1947d91b163e8825d717b1df7aa18d904ea8"
+    },
+    "fallback_source_probe.csv": {
+      "bytes": 1514662,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-generalized-updown-batch-eligibility-probe/france-n96-batch-env/fallback_source_probe.csv",
+      "sha256": "4b8852c99fb6969412eda2c0a662918fd69c24779523c018eaaac45948ca16e3"
+    },
+    "kimi_fallback_profile.csv": {
+      "bytes": 420908,
+      "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-generalized-updown-batch-eligibility-probe/france-n96-batch-env/kimi_fallback_profile.csv",
+      "sha256": "4b5ae62a6f321508cda1b8ca748c948c934d395f2edca7dd283d564dfaf898f1"
+    }
+  },
+  "prompt_scope": "France calibration diagnostic only; held-out not used; no prompt-specific pack/profile; not SOTA",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-generalized-updown-batch-eligibility-probe/france-n96-batch-env",
+  "source_head": "ec8b2b93f7fb39d436b89e79f1cd9f9b752de54a",
+  "status": "rejected_timeout_and_batch_decline_not_sota",
+  "stdout_bytes": 520130531,
+  "systemd_memory_observed_before_kill": "about 14.8G under 16GB max",
+  "systemd_runtime_before_kill": "4min02.967s",
+  "systemd_unit": "vendor-ds4-updown-batch-probe-20260707.service"
+}

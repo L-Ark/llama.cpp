@@ -1,0 +1,233 @@
+{
+  "attempt_id": "20260707-exact-retained-dataflow-source-movement-bound",
+  "baseline_dev_set": {
+    "all_memory_peak_bytes": [
+      16000000000
+    ],
+    "all_ram_ok": true,
+    "max_eval_tok_s": 2.7,
+    "mean_eval_tok_s": 2.1799999999999997,
+    "min_eval_tok_s": 1.8,
+    "prompt_specific_env_detected_any": false,
+    "target_met_all_prompts_gt_5_tok_s": false
+  },
+  "best_exact_hotset_split_by_min_tok_s": {
+    "gate_budget_gib": 6,
+    "mean_bound_tok_s": 3.1860363950100736,
+    "min_bound_tok_s": 2.7706693327175755,
+    "updown_budget_gib": 7.25
+  },
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "created_at_utc": "2026-07-07T00:01:54.446705Z",
+  "decision": {
+    "accepted_sota_changed": false,
+    "exact_hotset_alone_passes_5tok_s": false,
+    "next_allowed_work": "Do not implement exact hotset residency alone. A future source edit needs a fused/retained dataflow design that simultaneously cuts gate source movement and up/down fallback, with a new hard bound showing min >=5.5 tok/s before coding.",
+    "reason": "Prompt-agnostic exact hotset residency under the available 13.25GiB payload budget has best min bound only 2.771 tok/s and mean 3.186 tok/s, far below the >5 tok/s product target. Even zero-overhead exact residency alone is insufficient.",
+    "source_edit_allowed_by_this_bound": false
+  },
+  "exact_budget_splits": [
+    {
+      "gate_budget_gib": 4,
+      "gate_entries": 963,
+      "gate_used_gib": 3.996826171875,
+      "mean_bound_tok_s": 3.149162786599343,
+      "min_bound_tok_s": 2.7266122338612844,
+      "updown_budget_gib": 9.25,
+      "updown_entries": 2228,
+      "updown_used_gib": 9.2470703125,
+      "worst_prompt": "fibonacci"
+    },
+    {
+      "gate_budget_gib": 6,
+      "gate_entries": 1445,
+      "gate_used_gib": 5.997314453125,
+      "mean_bound_tok_s": 3.1860363950100736,
+      "min_bound_tok_s": 2.7706693327175755,
+      "updown_budget_gib": 7.25,
+      "updown_entries": 1746,
+      "updown_used_gib": 7.24658203125,
+      "worst_prompt": "quantum"
+    },
+    {
+      "gate_budget_gib": 8,
+      "gate_entries": 1927,
+      "gate_used_gib": 7.997802734375,
+      "mean_bound_tok_s": 3.186316499982513,
+      "min_bound_tok_s": 2.7537035615742105,
+      "updown_budget_gib": 5.25,
+      "updown_entries": 1264,
+      "updown_used_gib": 5.24609375,
+      "worst_prompt": "quantum"
+    },
+    {
+      "gate_budget_gib": 10,
+      "gate_entries": 2409,
+      "gate_used_gib": 9.998291015625,
+      "mean_bound_tok_s": 3.1420379220141887,
+      "min_bound_tok_s": 2.687905237004901,
+      "updown_budget_gib": 3.25,
+      "updown_entries": 783,
+      "updown_used_gib": 3.249755859375,
+      "worst_prompt": "quantum"
+    },
+    {
+      "gate_budget_gib": 12,
+      "gate_entries": 2891,
+      "gate_used_gib": 11.998779296875,
+      "mean_bound_tok_s": 3.0304753216044444,
+      "min_bound_tok_s": 2.557840852643104,
+      "updown_budget_gib": 1.25,
+      "updown_entries": 301,
+      "updown_used_gib": 1.249267578125,
+      "worst_prompt": "quantum"
+    },
+    {
+      "gate_budget_gib": 13.25,
+      "gate_entries": 3192,
+      "gate_used_gib": 13.248046875,
+      "mean_bound_tok_s": 2.826990999249962,
+      "min_bound_tok_s": 2.310887007137701,
+      "updown_budget_gib": 0.0,
+      "updown_entries": 0,
+      "updown_used_gib": 0.0,
+      "worst_prompt": "quantum"
+    }
+  ],
+  "exact_prompt_agnostic_hotset_inventory": {
+    "gate_total_gib": 35.780517578125,
+    "gate_unique_entries": 8621,
+    "updown_total_gib": 53.83056640625,
+    "updown_unique_entries": 12970
+  },
+  "full_decode_updown_removal_bound": {
+    "40": {
+      "max_zero_overhead_tok_s_if_decode_updown_removed": 5.6164196510621895,
+      "mean_margin_ms_after_reaching_5": -1660.134613487604,
+      "mean_zero_overhead_tok_s_if_decode_updown_removed": 4.916419052318928,
+      "min_margin_ms_after_reaching_5": -12163.902705882138,
+      "min_zero_overhead_tok_s_if_decode_updown_removed": 3.59218660228526,
+      "prompts_below_5_even_with_decode_updown_removed": [
+        "quantum",
+        "fibonacci"
+      ]
+    },
+    "43": {
+      "max_zero_overhead_tok_s_if_decode_updown_removed": 6.151691258760012,
+      "mean_margin_ms_after_reaching_5": 920.1857037324713,
+      "mean_zero_overhead_tok_s_if_decode_updown_removed": 5.432916872694881,
+      "min_margin_ms_after_reaching_5": -7960.465633378699,
+      "min_zero_overhead_tok_s_if_decode_updown_removed": 3.919371077693945,
+      "prompts_below_5_even_with_decode_updown_removed": [
+        "fibonacci"
+      ]
+    }
+  },
+  "inputs": {
+    "baseline": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json",
+    "fallback_profile": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-fallback-profile-no-prompt-specific-20260706.json",
+    "full_updown_removal": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-full-updown-removal-bound-20260707.json",
+    "role_aware_exact_residency": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-role-aware-residency-coverage-bound-20260707.json",
+    "source_movement_combination": ".Agent/runs/20260705-vendor-ds4-coldstart/generalized-source-movement-combination-hard-bound-20260707.json"
+  },
+  "method": "Summarize existing prompt-independent exact residency bound, full up/down removal bound, and source-movement combination bound. No model run and no source change.",
+  "per_prompt_components": {
+    "climate": {
+      "baseline_eval_tok_s": 2.3,
+      "baseline_ms_per_token": 454.5454545454545,
+      "down_decode_ms": 12832.0,
+      "down_prompt_ms": 4521.875,
+      "fallback_decode_ms": 31483.048999999886,
+      "fallback_logical_gib": 177.047,
+      "fallback_unique_entries": 5936,
+      "gate_total_src0_ms": 30022.49000000002,
+      "gate_unique_entries": 5162,
+      "memory_peak_bytes": 16000000000,
+      "ram_ok": true,
+      "tokens_assumed": 192,
+      "ttft_ms": 39247.277955,
+      "up_decode_ms": 18342.418,
+      "up_prompt_ms": 3920.292
+    },
+    "fibonacci": {
+      "baseline_eval_tok_s": 1.7,
+      "baseline_ms_per_token": 555.5555555555555,
+      "down_decode_ms": 18727.004,
+      "down_prompt_ms": 4325.713,
+      "fallback_decode_ms": 48516.95199999988,
+      "fallback_logical_gib": 215.953,
+      "fallback_unique_entries": 7274,
+      "gate_total_src0_ms": 48157.03500000007,
+      "gate_unique_entries": 5879,
+      "memory_peak_bytes": 16000000000,
+      "ram_ok": true,
+      "tokens_assumed": 192,
+      "ttft_ms": 39047.801183,
+      "up_decode_ms": 29358.358,
+      "up_prompt_ms": 3939.911
+    },
+    "france": {
+      "baseline_eval_tok_s": 2.6,
+      "baseline_ms_per_token": 370.3703703703703,
+      "down_decode_ms": 9706.409,
+      "down_prompt_ms": 4199.564,
+      "fallback_decode_ms": 23416.66000000011,
+      "fallback_logical_gib": 158.636,
+      "fallback_unique_entries": 5254,
+      "gate_total_src0_ms": 25210.96900000004,
+      "gate_unique_entries": 4599,
+      "memory_peak_bytes": 16000000000,
+      "ram_ok": true,
+      "tokens_assumed": 192,
+      "ttft_ms": 37516.648734,
+      "up_decode_ms": 13454.805,
+      "up_prompt_ms": 3872.435
+    },
+    "japan": {
+      "baseline_eval_tok_s": 2.4,
+      "baseline_ms_per_token": 416.6666666666667,
+      "down_decode_ms": 9858.454,
+      "down_prompt_ms": 4407.483,
+      "fallback_decode_ms": 24789.726999999995,
+      "fallback_logical_gib": 155.465,
+      "fallback_unique_entries": 5140,
+      "gate_total_src0_ms": 25854.19200000004,
+      "gate_unique_entries": 4654,
+      "memory_peak_bytes": 16000000000,
+      "ram_ok": true,
+      "tokens_assumed": 192,
+      "ttft_ms": 38760.496441,
+      "up_decode_ms": 14711.024,
+      "up_prompt_ms": 4004.806
+    },
+    "quantum": {
+      "baseline_eval_tok_s": 1.9,
+      "baseline_ms_per_token": 555.5555555555555,
+      "down_decode_ms": 21084.471,
+      "down_prompt_ms": 3398.299,
+      "fallback_decode_ms": 50024.765,
+      "fallback_logical_gib": 214.451,
+      "fallback_unique_entries": 7166,
+      "gate_total_src0_ms": 38041.29599999996,
+      "gate_unique_entries": 5549,
+      "memory_peak_bytes": 16000000000,
+      "ram_ok": true,
+      "tokens_assumed": 192,
+      "ttft_ms": 36335.945769,
+      "up_decode_ms": 28547.34,
+      "up_prompt_ms": 3322.644
+    }
+  },
+  "prompt_scope": "calibration/dev artifacts only; held-out test prompts were not used",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "source_head": "ec615e73360ebe9b923d4f9669b7409410b9b293",
+  "source_movement_combination_decision": {
+    "combination_required": true,
+    "cuda_graph_mainline": false,
+    "gate_source_alone_sufficient": false,
+    "minimum_practical_direction": "Need simultaneous generalized gate/source-movement reduction and up/down fallback reduction. A symmetric ~70% reduction of both is the first optimistic bound crossing 5 tok/s for quantum; after real overhead, target should be >=80% on one side or both.",
+    "runtime_prototype_gate": "Do not write a large source patch until a prompt-independent residency/representation design can plausibly cut both terms under 32GB VRAM and 16GB host RAM.",
+    "updown_fallback_alone_sufficient": false
+  },
+  "status": "diagnostic_complete_exact_hotset_alone_rejected"
+}

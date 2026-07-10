@@ -1,0 +1,127 @@
+{
+  "attempt_id": "20260707-sidecar-repr-payload-correctness-gate",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "build": "cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2 passed",
+  "created_at_utc": "2026-07-06T20:42:15.177090Z",
+  "decision": {
+    "exact_sidecar_passed": true,
+    "promotion_allowed": false,
+    "reason": "Sidecar exact reproduces GGUF partial bytes with diff_count=0, while zero sidecar produces nonzero local diffs. This validates the sidecar payload gate and demonstrates that approximate payloads must pass compare/top1 before any writeback or performance benchmark.",
+    "zero_sidecar_rejected": true
+  },
+  "files": {
+    "exact_manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.sidecar_exact_manifest.csv",
+    "exact_payload": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.partial_exact_payload.bin",
+    "payload_bytes": 2506752,
+    "zero_manifest": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.sidecar_zero_manifest.csv",
+    "zero_payload": ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.zero_payload.bin"
+  },
+  "prompt_scope": "fixed France text verifier only; calibration-derived top48 row128 sidecar manifests; held-out unused; not SOTA",
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "runs": {
+    "exact-sidecar": {
+      "exit_status": 0,
+      "hashes": {
+        "environment.txt": "95bd5ada83e8192f5739db63b098c07dba73ce2fbfd7aca4c8619c08c6ad7338",
+        "hot-batch-probe.csv": "211d06422470a9d0926558978bceccaba60407f5acb3bb6de087fa0b8370e1f9",
+        "partial-repr-probe.csv": "fa74d6a5215cce804af65d534d7b417cee5dc40e2ecf0e139caf2f4ed9132d37",
+        "repr-report.csv": "b914320560aab8552af61b50938bc42be6385b9ea256c3e9a95e819e5bea4393",
+        "run_case.sh": "2dbb3507688214d1137cc4f1edc6065c8e2c52a7211bb80961d9cb0054c70e31",
+        "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_peak_bytes": 1001168896,
+      "partial_probe_aggregate": {
+        "compare_ok": 3786,
+        "compare_ran": 3786,
+        "d2h_us": 27292,
+        "diff_count": 0,
+        "elapsed_us": 2840673,
+        "h2d_us": 54103,
+        "kernel_us": 2684944,
+        "matched_experts": 4246,
+        "max_abs": 0.0,
+        "nonzero_rows": 3786,
+        "out_bytes": 271744,
+        "q80_bytes": 13858944,
+        "records": 4246,
+        "rows": 11600,
+        "src0_bytes": 110871552
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T204010Z-20260707-sidecar-repr-payload-gate/exact-sidecar",
+      "top1": {
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "n_tokens": 145,
+        "same_top1": 145,
+        "same_top1_ratio": 1
+      }
+    },
+    "zero-sidecar": {
+      "exit_status": 0,
+      "hashes": {
+        "environment.txt": "c9d2a67bfad7655482eada94b857bc4d74a32f7bc06c66051912c0e474c31b0f",
+        "hot-batch-probe.csv": "da1f2cf7e4bd0806b2a804439973b16eb96766a9e6798ead411bf2edd751de87",
+        "partial-repr-probe.csv": "9f22a0313b54ee0c669ec6bddb71a87246fa732ed82dfe9b92d8bcede856c74f",
+        "repr-report.csv": "012057607821949f966621fc611c02b1f448fab72f045db127f66fcc0ad8db34",
+        "run_case.sh": "2c4fd24688e35bd682a9d660e6466ff0f7196cfca8666589bf7e6b360452ef2f",
+        "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+      },
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_peak_bytes": 1025785856,
+      "partial_probe_aggregate": {
+        "compare_ok": 3786,
+        "compare_ran": 3786,
+        "d2h_us": 25520,
+        "diff_count": 67936,
+        "elapsed_us": 929302,
+        "h2d_us": 53530,
+        "kernel_us": 779692,
+        "matched_experts": 4246,
+        "max_abs": 5.71276379,
+        "nonzero_rows": 3786,
+        "out_bytes": 271744,
+        "q80_bytes": 13858944,
+        "records": 4246,
+        "rows": 11600,
+        "src0_bytes": 110871552
+      },
+      "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T204010Z-20260707-sidecar-repr-payload-gate/zero-sidecar",
+      "top1": {
+        "first_mismatch_pos": -1,
+        "max_abs": 0,
+        "mean_abs": 0,
+        "n_tokens": 145,
+        "same_top1": 145,
+        "same_top1_ratio": 1
+      }
+    }
+  },
+  "sha256": {
+    ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.partial_exact_payload.bin": "98b013f976d1f3eed541f19847aa589d5755801022c39833d9215e4d3b645086",
+    ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.sidecar_exact_manifest.csv": "70082c6231e2653a3dafb99a07ef7399f79b97419507ae839335a90c3e91585a",
+    ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.sidecar_zero_manifest.csv": "2581b330c59ad62cd2812fbb56025f58915a7c7f3d7692405221dcf031fc73c2",
+    ".Agent/profiles/vendor-ds4/calib-dev-sparse-pair-top48-updown-row128-16-20260707.zero_payload.bin": "a0b9a62d7b8c92a912a0e1fd6a2e8f218a33c6ba11c64c01ad4ef5aad89e3827"
+  },
+  "source_change": {
+    "behavior": "repr pool reads compressed_offset from sidecar payload when set; otherwise keeps model_offset-from-GGUF behavior",
+    "env": "GGML_MOE_STREAM_ONE_DIRECT_REPR_PAYLOAD"
+  },
+  "source_head_before_commit": "521dbc88705682d572e31777f71e3ceadea90d03",
+  "status": "passed_exact_sidecar_and_rejected_zero_sidecar_not_sota"
+}

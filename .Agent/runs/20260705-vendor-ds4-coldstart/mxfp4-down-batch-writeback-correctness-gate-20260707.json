@@ -1,0 +1,3588 @@
+{
+  "attempt_id": "20260707-mxfp4-down-batch-writeback-correctness-gate",
+  "blk0_only_writeback": {
+    "check_exit_status": 1,
+    "fallback_reason_aggregate": {
+      "down|decode|eligible|not_attempted_batch_path_selected|batch_declined_internal_no_single_retry": {
+        "batch_accepts": 0,
+        "batch_attempts": 33930,
+        "calls": 33930,
+        "fallback_us": 34725132,
+        "rows": 33930,
+        "single_accepts": 0,
+        "single_attempts": 0
+      },
+      "gate|decode|batch_unsupported|one_declined_internal|one_declined_internal": {
+        "batch_accepts": 0,
+        "batch_attempts": 0,
+        "calls": 34800,
+        "fallback_us": 39511356,
+        "rows": 34800,
+        "single_accepts": 0,
+        "single_attempts": 34800
+      },
+      "up|decode|batch_unsupported|one_declined_internal|one_declined_internal": {
+        "batch_accepts": 0,
+        "batch_attempts": 0,
+        "calls": 34800,
+        "fallback_us": 36795156,
+        "rows": 34800,
+        "single_accepts": 0,
+        "single_attempts": 34800
+      }
+    },
+    "memory": {
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 84289,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_peak_bytes": 16000000000,
+      "memory_stat": {
+        "anon": 1011712,
+        "file": 14860320768,
+        "pgmajfault": 805162,
+        "workingset_refault_file": 25046884
+      },
+      "ram_ok": true
+    },
+    "profile_files": {
+      "fallback_reason_profile": {
+        "bytes": 1950190,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-mxfp4-down-writeback-correctness/top1-blk0-only/fallback_reason_profile.csv",
+        "sha256": "cf11aa13fe16d17cd28bc8ecdf2915d30dd9364430d0b52b7285e5e656e00d9f"
+      },
+      "top1_check": {
+        "bytes": 2246,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-mxfp4-down-writeback-correctness/top1-blk0-only/top1-check.json",
+        "sha256": "858878305420fa5df867dd59afeeab615859eb964a62b8dc6be976f797a22520"
+      }
+    },
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-mxfp4-down-writeback-correctness/top1-blk0-only",
+    "timing": {
+      "check": {
+        "elapsed": "mm:ss or m:ss): 2:36.28",
+        "fs_inputs": "363113328",
+        "major_faults": "805039",
+        "max_rss_kb": "15589428"
+      }
+    },
+    "top1": {
+      "base_top1_matches_next_token": 122,
+      "calc_top1_matches_next_token": 121,
+      "first_mismatch_pos": 10,
+      "max_abs": 5.79487,
+      "mean_abs": 0.146093,
+      "mismatches_preview": [
+        {
+          "actual_next_token": {
+            "id": 3107,
+            "logit": 0,
+            "piece": " short"
+          },
+          "base_margin": 0.253237,
+          "base_top1": {
+            "id": 9708,
+            "logit": 26.1973,
+            "piece": " brief"
+          },
+          "base_top2": {
+            "id": 3107,
+            "logit": 25.9441,
+            "piece": " short"
+          },
+          "calc_margin": 0.00802803,
+          "calc_top1": {
+            "id": 6810,
+            "logit": 25.5315,
+            "piece": " sample"
+          },
+          "calc_top2": {
+            "id": 9708,
+            "logit": 25.5235,
+            "piece": " brief"
+          },
+          "position": 10,
+          "predicts_token_position": 11
+        },
+        {
+          "actual_next_token": {
+            "id": 305,
+            "logit": 0,
+            "piece": " and"
+          },
+          "base_margin": 0.00805664,
+          "base_top1": {
+            "id": 305,
+            "logit": 31.7496,
+            "piece": " and"
+          },
+          "base_top2": {
+            "id": 412,
+            "logit": 31.7416,
+            "piece": " as"
+          },
+          "calc_margin": 0.204571,
+          "calc_top1": {
+            "id": 412,
+            "logit": 31.7428,
+            "piece": " as"
+          },
+          "calc_top2": {
+            "id": 305,
+            "logit": 31.5382,
+            "piece": " and"
+          },
+          "position": 78,
+          "predicts_token_position": 79
+        },
+        {
+          "actual_next_token": {
+            "id": 6440,
+            "logit": 0,
+            "piece": " particularly"
+          },
+          "base_margin": 0.0197487,
+          "base_top1": {
+            "id": 9965,
+            "logit": 27.8109,
+            "piece": " advanced"
+          },
+          "base_top2": {
+            "id": 5218,
+            "logit": 27.7911,
+            "piece": " political"
+          },
+          "calc_margin": 0.286982,
+          "calc_top1": {
+            "id": 5218,
+            "logit": 27.6945,
+            "piece": " political"
+          },
+          "calc_top2": {
+            "id": 9965,
+            "logit": 27.4075,
+            "piece": " advanced"
+          },
+          "position": 109,
+          "predicts_token_position": 110
+        },
+        {
+          "actual_next_token": {
+            "id": 3631,
+            "logit": 0,
+            "piece": " major"
+          },
+          "base_margin": 0.0723114,
+          "base_top1": {
+            "id": 3631,
+            "logit": 31.0991,
+            "piece": " major"
+          },
+          "base_top2": {
+            "id": 2656,
+            "logit": 31.0268,
+            "piece": " top"
+          },
+          "calc_margin": 0.406998,
+          "calc_top1": {
+            "id": 2656,
+            "logit": 31.3166,
+            "piece": " top"
+          },
+          "calc_top2": {
+            "id": 3631,
+            "logit": 30.9096,
+            "piece": " major"
+          },
+          "position": 134,
+          "predicts_token_position": 135
+        },
+        {
+          "actual_next_token": {
+            "id": 7267,
+            "logit": 0,
+            "piece": " cultural"
+          },
+          "base_margin": 0.301416,
+          "base_top1": {
+            "id": 8469,
+            "logit": 30.8499,
+            "piece": " player"
+          },
+          "base_top2": {
+            "id": 7267,
+            "logit": 30.5485,
+            "piece": " cultural"
+          },
+          "calc_margin": 0.322449,
+          "calc_top1": {
+            "id": 7267,
+            "logit": 30.4617,
+            "piece": " cultural"
+          },
+          "calc_top2": {
+            "id": 8469,
+            "logit": 30.1393,
+            "piece": " player"
+          },
+          "position": 135,
+          "predicts_token_position": 136
+        }
+      ],
+      "n_tokens": 145,
+      "n_vocab": 129280,
+      "next_token_positions": 144,
+      "same_top1": 140,
+      "same_top1_ratio": 0.965517
+    }
+  },
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "build": "cmake --build build-ds4-moe-stream-batch-on --target llama-cli llama-results -j2 passed before tests",
+  "decision": "Reject MXFP4 down batch writeback. Full down writeback and even blk.0-only writeback fail fixed-text top1, so this path cannot be promoted or benchmarked. Revert the writeback source edit and keep only the prior default-off stage trace diagnostics.",
+  "full_writeback": {
+    "baseline_exit_status": 0,
+    "baseline_top1": {
+      "mode": "single",
+      "n_tokens": 145,
+      "n_vocab": 129280,
+      "next_token_positions": 144,
+      "positions": [
+        {
+          "actual_next_token": {
+            "id": 16507,
+            "logit": 0,
+            "piece": " introduce"
+          },
+          "margin": 1.02709,
+          "position": 0,
+          "predicts_token_position": 1,
+          "top1": {
+            "id": 20,
+            "logit": 14.8042,
+            "piece": "2"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 21,
+            "logit": 13.7771,
+            "piece": "3"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 8760,
+            "logit": 0,
+            "piece": " France"
+          },
+          "margin": 1.96091,
+          "position": 1,
+          "predicts_token_position": 2,
+          "top1": {
+            "id": 223,
+            "logit": 17.4007,
+            "piece": " "
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 1999,
+            "logit": 15.4398,
+            "piece": " What"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 295,
+            "logit": 0,
+            "piece": " in"
+          },
+          "margin": 0.428827,
+          "position": 2,
+          "predicts_token_position": 3,
+          "top1": {
+            "id": 295,
+            "logit": 19.891,
+            "piece": " in"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 734,
+            "logit": 19.4622,
+            "piece": "'s"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 260,
+            "logit": 0,
+            "piece": " a"
+          },
+          "margin": 0.351135,
+          "position": 3,
+          "predicts_token_position": 4,
+          "top1": {
+            "id": 3947,
+            "logit": 23.2099,
+            "piece": " English"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 7891,
+            "logit": 22.8588,
+            "piece": " Chinese"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 3107,
+            "logit": 0,
+            "piece": " short"
+          },
+          "margin": 1.52851,
+          "position": 4,
+          "predicts_token_position": 5,
+          "top1": {
+            "id": 2767,
+            "logit": 25.2149,
+            "piece": " few"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 47468,
+            "logit": 23.6864,
+            "piece": " concise"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 15363,
+            "logit": 0,
+            "piece": " paragraph"
+          },
+          "margin": 1.45782,
+          "position": 5,
+          "predicts_token_position": 6,
+          "top1": {
+            "id": 15363,
+            "logit": 26.1115,
+            "piece": " paragraph"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 10175,
+            "logit": 24.6537,
+            "piece": " sentence"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 9440,
+            "logit": 0,
+            "piece": ".H"
+          },
+          "margin": 1.06079,
+          "position": 6,
+          "predicts_token_position": 7,
+          "top1": {
+            "id": 16,
+            "logit": 24.9299,
+            "piece": "."
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 14,
+            "logit": 23.8691,
+            "piece": ","
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 717,
+            "logit": 0,
+            "piece": "ere"
+          },
+          "margin": 1.26388,
+          "position": 7,
+          "predicts_token_position": 8,
+          "top1": {
+            "id": 717,
+            "logit": 23.732,
+            "piece": "ere"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 264,
+            "logit": 22.4681,
+            "piece": "er"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 344,
+            "logit": 0,
+            "piece": " is"
+          },
+          "margin": 0.440163,
+          "position": 8,
+          "predicts_token_position": 9,
+          "top1": {
+            "id": 344,
+            "logit": 26.1695,
+            "piece": " is"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 734,
+            "logit": 25.7294,
+            "piece": "'s"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 260,
+            "logit": 0,
+            "piece": " a"
+          },
+          "margin": 0.550989,
+          "position": 9,
+          "predicts_token_position": 10,
+          "top1": {
+            "id": 260,
+            "logit": 27.1315,
+            "piece": " a"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 270,
+            "logit": 26.5805,
+            "piece": " the"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 3107,
+            "logit": 0,
+            "piece": " short"
+          },
+          "margin": 0.253237,
+          "position": 10,
+          "predicts_token_position": 11,
+          "top1": {
+            "id": 9708,
+            "logit": 26.1973,
+            "piece": " brief"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 3107,
+            "logit": 25.9441,
+            "piece": " short"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 15363,
+            "logit": 0,
+            "piece": " paragraph"
+          },
+          "margin": 3.98673,
+          "position": 11,
+          "predicts_token_position": 12,
+          "top1": {
+            "id": 15363,
+            "logit": 30.4543,
+            "piece": " paragraph"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 8837,
+            "logit": 26.4675,
+            "piece": " description"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 27671,
+            "logit": 0,
+            "piece": " introducing"
+          },
+          "margin": 1.47454,
+          "position": 12,
+          "predicts_token_position": 13,
+          "top1": {
+            "id": 943,
+            "logit": 29.9143,
+            "piece": " about"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 22897,
+            "logit": 28.4398,
+            "piece": " describing"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 8760,
+            "logit": 0,
+            "piece": " France"
+          },
+          "margin": 6.09516,
+          "position": 13,
+          "predicts_token_position": 14,
+          "top1": {
+            "id": 8760,
+            "logit": 29.0686,
+            "piece": " France"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 270,
+            "logit": 22.9735,
+            "piece": " the"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 979,
+            "logit": 0,
+            "piece": ":\n\n"
+          },
+          "margin": 0.300873,
+          "position": 14,
+          "predicts_token_position": 15,
+          "top1": {
+            "id": 28,
+            "logit": 28.5638,
+            "piece": ":"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 19804,
+            "logit": 28.2629,
+            "piece": ":\\"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 51725,
+            "logit": 0,
+            "piece": "France"
+          },
+          "margin": 2.43005,
+          "position": 15,
+          "predicts_token_position": 16,
+          "top1": {
+            "id": 51725,
+            "logit": 26.0716,
+            "piece": "France"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 666,
+            "logit": 23.6416,
+            "piece": "**"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 1.91021,
+          "position": 16,
+          "predicts_token_position": 17,
+          "top1": {
+            "id": 14,
+            "logit": 33.1898,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 344,
+            "logit": 31.2795,
+            "piece": " is"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 27890,
+            "logit": 0,
+            "piece": " officially"
+          },
+          "margin": 1.18556,
+          "position": 17,
+          "predicts_token_position": 18,
+          "top1": {
+            "id": 27890,
+            "logit": 30.8653,
+            "piece": " officially"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 260,
+            "logit": 29.6797,
+            "piece": " a"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 270,
+            "logit": 0,
+            "piece": " the"
+          },
+          "margin": 1.70832,
+          "position": 18,
+          "predicts_token_position": 19,
+          "top1": {
+            "id": 270,
+            "logit": 33.474,
+            "piece": " the"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 3459,
+            "logit": 31.7657,
+            "piece": " known"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 7213,
+            "logit": 0,
+            "piece": " French"
+          },
+          "margin": 6.7618,
+          "position": 19,
+          "predicts_token_position": 20,
+          "top1": {
+            "id": 7213,
+            "logit": 36.0789,
+            "piece": " French"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 9375,
+            "logit": 29.3171,
+            "piece": " Republic"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 9375,
+            "logit": 0,
+            "piece": " Republic"
+          },
+          "margin": 9.12027,
+          "position": 20,
+          "predicts_token_position": 21,
+          "top1": {
+            "id": 9375,
+            "logit": 35.9757,
+            "piece": " Republic"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 115313,
+            "logit": 26.8555,
+            "piece": " R\u00e9publique"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 3.58806,
+          "position": 21,
+          "predicts_token_position": 22,
+          "top1": {
+            "id": 14,
+            "logit": 34.7773,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 343,
+            "logit": 31.1892,
+            "piece": " ("
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 344,
+            "logit": 0,
+            "piece": " is"
+          },
+          "margin": 7.18679,
+          "position": 22,
+          "predicts_token_position": 23,
+          "top1": {
+            "id": 344,
+            "logit": 34.2463,
+            "piece": " is"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 13809,
+            "logit": 27.0596,
+            "piece": " stands"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 260,
+            "logit": 0,
+            "piece": " a"
+          },
+          "margin": 5.77067,
+          "position": 23,
+          "predicts_token_position": 24,
+          "top1": {
+            "id": 260,
+            "logit": 33.5096,
+            "piece": " a"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 834,
+            "logit": 27.7389,
+            "piece": " one"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 3924,
+            "logit": 0,
+            "piece": " country"
+          },
+          "margin": 1.28496,
+          "position": 24,
+          "predicts_token_position": 25,
+          "top1": {
+            "id": 3924,
+            "logit": 30.3244,
+            "piece": " country"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 10734,
+            "logit": 29.0395,
+            "piece": " Western"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 295,
+            "logit": 0,
+            "piece": " in"
+          },
+          "margin": 1.5064,
+          "position": 25,
+          "predicts_token_position": 26,
+          "top1": {
+            "id": 7840,
+            "logit": 32.3469,
+            "piece": " located"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 295,
+            "logit": 30.8405,
+            "piece": " in"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 10734,
+            "logit": 0,
+            "piece": " Western"
+          },
+          "margin": 3.62786,
+          "position": 26,
+          "predicts_token_position": 27,
+          "top1": {
+            "id": 10734,
+            "logit": 34.827,
+            "piece": " Western"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 17739,
+            "logit": 31.1991,
+            "piece": " western"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 4174,
+            "logit": 0,
+            "piece": " Europe"
+          },
+          "margin": 6.30285,
+          "position": 27,
+          "predicts_token_position": 28,
+          "top1": {
+            "id": 4174,
+            "logit": 34.7446,
+            "piece": " Europe"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 28.4418,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 3459,
+            "logit": 0,
+            "piece": " known"
+          },
+          "margin": 0.240456,
+          "position": 28,
+          "predicts_token_position": 29,
+          "top1": {
+            "id": 3459,
+            "logit": 29.4264,
+            "piece": " known"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 14,
+            "logit": 29.186,
+            "piece": ","
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 362,
+            "logit": 0,
+            "piece": " for"
+          },
+          "margin": 5.54737,
+          "position": 29,
+          "predicts_token_position": 30,
+          "top1": {
+            "id": 362,
+            "logit": 34.0717,
+            "piece": " for"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 412,
+            "logit": 28.5243,
+            "piece": " as"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 1009,
+            "logit": 0,
+            "piece": " its"
+          },
+          "margin": 7.54211,
+          "position": 30,
+          "predicts_token_position": 31,
+          "top1": {
+            "id": 1009,
+            "logit": 33.9335,
+            "piece": " its"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 260,
+            "logit": 26.3914,
+            "piece": " a"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 8954,
+            "logit": 0,
+            "piece": " rich"
+          },
+          "margin": 4.06076,
+          "position": 31,
+          "predicts_token_position": 32,
+          "top1": {
+            "id": 8954,
+            "logit": 32.4327,
+            "piece": " rich"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 1606,
+            "logit": 28.3719,
+            "piece": " long"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 3980,
+            "logit": 0,
+            "piece": " history"
+          },
+          "margin": 2.34512,
+          "position": 32,
+          "predicts_token_position": 33,
+          "top1": {
+            "id": 3980,
+            "logit": 33.156,
+            "piece": " history"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 5785,
+            "logit": 30.8109,
+            "piece": " culture"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 4.66492,
+          "position": 33,
+          "predicts_token_position": 34,
+          "top1": {
+            "id": 14,
+            "logit": 32.1677,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 27.5027,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 10445,
+            "logit": 0,
+            "piece": " diverse"
+          },
+          "margin": 1.62132,
+          "position": 34,
+          "predicts_token_position": 35,
+          "top1": {
+            "id": 5785,
+            "logit": 31.9612,
+            "piece": " culture"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 10445,
+            "logit": 30.3399,
+            "piece": " diverse"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 5785,
+            "logit": 0,
+            "piece": " culture"
+          },
+          "margin": 2.65376,
+          "position": 35,
+          "predicts_token_position": 36,
+          "top1": {
+            "id": 5785,
+            "logit": 33.9029,
+            "piece": " culture"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 34517,
+            "logit": 31.2491,
+            "piece": " landscapes"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 5.5351,
+          "position": 36,
+          "predicts_token_position": 37,
+          "top1": {
+            "id": 14,
+            "logit": 34.6624,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 29.1273,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 305,
+            "logit": 0,
+            "piece": " and"
+          },
+          "margin": 5.56825,
+          "position": 37,
+          "predicts_token_position": 38,
+          "top1": {
+            "id": 305,
+            "logit": 33.6545,
+            "piece": " and"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 32380,
+            "logit": 28.0862,
+            "piece": " iconic"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 3168,
+            "logit": 0,
+            "piece": " significant"
+          },
+          "margin": 1.42537,
+          "position": 38,
+          "predicts_token_position": 39,
+          "top1": {
+            "id": 3168,
+            "logit": 31.9507,
+            "piece": " significant"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 29681,
+            "logit": 30.5254,
+            "piece": " influential"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 5217,
+            "logit": 0,
+            "piece": " global"
+          },
+          "margin": 3.50958,
+          "position": 39,
+          "predicts_token_position": 40,
+          "top1": {
+            "id": 5217,
+            "logit": 34.7254,
+            "piece": " global"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 6853,
+            "logit": 31.2158,
+            "piece": " influence"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 6853,
+            "logit": 0,
+            "piece": " influence"
+          },
+          "margin": 7.67373,
+          "position": 40,
+          "predicts_token_position": 41,
+          "top1": {
+            "id": 6853,
+            "logit": 36.2024,
+            "piece": " influence"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 3683,
+            "logit": 28.5287,
+            "piece": " impact"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 16,
+            "logit": 0,
+            "piece": "."
+          },
+          "margin": 4.63547,
+          "position": 41,
+          "predicts_token_position": 42,
+          "top1": {
+            "id": 16,
+            "logit": 31.1235,
+            "piece": "."
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 295,
+            "logit": 26.4881,
+            "piece": " in"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 983,
+            "logit": 0,
+            "piece": " It"
+          },
+          "margin": 0.783096,
+          "position": 42,
+          "predicts_token_position": 43,
+          "top1": {
+            "id": 983,
+            "logit": 31.4188,
+            "piece": " It"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 14619,
+            "logit": 30.6357,
+            "piece": " Ren"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 344,
+            "logit": 0,
+            "piece": " is"
+          },
+          "margin": 1.45514,
+          "position": 43,
+          "predicts_token_position": 44,
+          "top1": {
+            "id": 344,
+            "logit": 33.6237,
+            "piece": " is"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 734,
+            "logit": 32.1686,
+            "piece": "'s"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 12734,
+            "logit": 0,
+            "piece": " famous"
+          },
+          "margin": 0.41503,
+          "position": 44,
+          "predicts_token_position": 45,
+          "top1": {
+            "id": 12734,
+            "logit": 30.6291,
+            "piece": " famous"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 270,
+            "logit": 30.214,
+            "piece": " the"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 362,
+            "logit": 0,
+            "piece": " for"
+          },
+          "margin": 6.25196,
+          "position": 45,
+          "predicts_token_position": 46,
+          "top1": {
+            "id": 362,
+            "logit": 34.9006,
+            "piece": " for"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 16531,
+            "logit": 28.6486,
+            "piece": " worldwide"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 1009,
+            "logit": 0,
+            "piece": " its"
+          },
+          "margin": 1.73629,
+          "position": 46,
+          "predicts_token_position": 47,
+          "top1": {
+            "id": 1009,
+            "logit": 33.0424,
+            "piece": " its"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 32380,
+            "logit": 31.3061,
+            "piece": " iconic"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 32380,
+            "logit": 0,
+            "piece": " iconic"
+          },
+          "margin": 1.65905,
+          "position": 47,
+          "predicts_token_position": 48,
+          "top1": {
+            "id": 32380,
+            "logit": 33.0123,
+            "piece": " iconic"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 2783,
+            "logit": 31.3533,
+            "piece": " art"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 63554,
+            "logit": 0,
+            "piece": " landmarks"
+          },
+          "margin": 6.36737,
+          "position": 48,
+          "predicts_token_position": 49,
+          "top1": {
+            "id": 63554,
+            "logit": 35.77,
+            "piece": " landmarks"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 11234,
+            "logit": 29.4026,
+            "piece": " cities"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 1277,
+            "logit": 0,
+            "piece": " like"
+          },
+          "margin": 0.396366,
+          "position": 49,
+          "predicts_token_position": 50,
+          "top1": {
+            "id": 1277,
+            "logit": 32.4446,
+            "piece": " like"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 1345,
+            "logit": 32.0482,
+            "piece": " such"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 270,
+            "logit": 0,
+            "piece": " the"
+          },
+          "margin": 7.09591,
+          "position": 50,
+          "predicts_token_position": 51,
+          "top1": {
+            "id": 270,
+            "logit": 35.8775,
+            "piece": " the"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 11111,
+            "logit": 28.7816,
+            "piece": " Paris"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 446,
+            "logit": 0,
+            "piece": " E"
+          },
+          "margin": 8.67801,
+          "position": 51,
+          "predicts_token_position": 52,
+          "top1": {
+            "id": 446,
+            "logit": 35.7054,
+            "piece": " E"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 2619,
+            "logit": 27.0274,
+            "piece": " **"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 4280,
+            "logit": 0,
+            "piece": "iff"
+          },
+          "margin": 9.6203,
+          "position": 52,
+          "predicts_token_position": 53,
+          "top1": {
+            "id": 4280,
+            "logit": 34.0044,
+            "piece": "iff"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 394,
+            "logit": 24.3841,
+            "piece": "if"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 317,
+            "logit": 0,
+            "piece": "el"
+          },
+          "margin": 4.14178,
+          "position": 53,
+          "predicts_token_position": 54,
+          "top1": {
+            "id": 317,
+            "logit": 33.2701,
+            "piece": "el"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 36788,
+            "logit": 29.1283,
+            "piece": " Tower"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 36788,
+            "logit": 0,
+            "piece": " Tower"
+          },
+          "margin": 8.52678,
+          "position": 54,
+          "predicts_token_position": 55,
+          "top1": {
+            "id": 36788,
+            "logit": 34.9126,
+            "piece": " Tower"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 28757,
+            "logit": 26.3858,
+            "piece": " tower"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 0.778496,
+          "position": 55,
+          "predicts_token_position": 56,
+          "top1": {
+            "id": 14,
+            "logit": 32.0965,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 31.318,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 270,
+            "logit": 0,
+            "piece": " the"
+          },
+          "margin": 0.425423,
+          "position": 56,
+          "predicts_token_position": 57,
+          "top1": {
+            "id": 270,
+            "logit": 29.8171,
+            "piece": " the"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 1009,
+            "logit": 29.3916,
+            "piece": " its"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 125089,
+            "logit": 0,
+            "piece": " Louvre"
+          },
+          "margin": 3.69028,
+          "position": 57,
+          "predicts_token_position": 58,
+          "top1": {
+            "id": 125089,
+            "logit": 31.4115,
+            "piece": " Louvre"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 37622,
+            "logit": 27.7213,
+            "piece": " Palace"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 13924,
+            "logit": 0,
+            "piece": " Museum"
+          },
+          "margin": 3.02757,
+          "position": 58,
+          "predicts_token_position": 59,
+          "top1": {
+            "id": 13924,
+            "logit": 34.0148,
+            "piece": " Museum"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 22598,
+            "logit": 30.9872,
+            "piece": " museum"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 3.82278,
+          "position": 59,
+          "predicts_token_position": 60,
+          "top1": {
+            "id": 14,
+            "logit": 32.4837,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 28.6609,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 305,
+            "logit": 0,
+            "piece": " and"
+          },
+          "margin": 4.87145,
+          "position": 60,
+          "predicts_token_position": 61,
+          "top1": {
+            "id": 305,
+            "logit": 32.4996,
+            "piece": " and"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 270,
+            "logit": 27.6282,
+            "piece": " the"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 270,
+            "logit": 0,
+            "piece": " the"
+          },
+          "margin": 2.69055,
+          "position": 61,
+          "predicts_token_position": 62,
+          "top1": {
+            "id": 270,
+            "logit": 32.323,
+            "piece": " the"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 1009,
+            "logit": 29.6325,
+            "piece": " its"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 37622,
+            "logit": 0,
+            "piece": " Palace"
+          },
+          "margin": 5.5494,
+          "position": 62,
+          "predicts_token_position": 63,
+          "top1": {
+            "id": 37622,
+            "logit": 32.8873,
+            "piece": " Palace"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 21057,
+            "logit": 27.3379,
+            "piece": " historic"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 294,
+            "logit": 0,
+            "piece": " of"
+          },
+          "margin": 9.05786,
+          "position": 63,
+          "predicts_token_position": 64,
+          "top1": {
+            "id": 294,
+            "logit": 34.7424,
+            "piece": " of"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 87660,
+            "logit": 25.6846,
+            "piece": " Versailles"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 87660,
+            "logit": 0,
+            "piece": " Versailles"
+          },
+          "margin": 9.39054,
+          "position": 64,
+          "predicts_token_position": 65,
+          "top1": {
+            "id": 87660,
+            "logit": 35.571,
+            "piece": " Versailles"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 22834,
+            "logit": 26.1805,
+            "piece": " Vers"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 16,
+            "logit": 0,
+            "piece": "."
+          },
+          "margin": 0.906517,
+          "position": 65,
+          "predicts_token_position": 66,
+          "top1": {
+            "id": 14,
+            "logit": 32.2604,
+            "piece": ","
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 16,
+            "logit": 31.3539,
+            "piece": "."
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 8760,
+            "logit": 0,
+            "piece": " France"
+          },
+          "margin": 1.30843,
+          "position": 66,
+          "predicts_token_position": 67,
+          "top1": {
+            "id": 8760,
+            "logit": 31.2417,
+            "piece": " France"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 14619,
+            "logit": 29.9333,
+            "piece": " Ren"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 344,
+            "logit": 0,
+            "piece": " is"
+          },
+          "margin": 3.54182,
+          "position": 67,
+          "predicts_token_position": 68,
+          "top1": {
+            "id": 344,
+            "logit": 34.0415,
+            "piece": " is"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 769,
+            "logit": 30.4997,
+            "piece": " has"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 34161,
+            "logit": 0,
+            "piece": " renowned"
+          },
+          "margin": 0.149506,
+          "position": 68,
+          "predicts_token_position": 69,
+          "top1": {
+            "id": 34161,
+            "logit": 32.7676,
+            "piece": " renowned"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 990,
+            "logit": 32.6181,
+            "piece": " also"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 362,
+            "logit": 0,
+            "piece": " for"
+          },
+          "margin": 3.96807,
+          "position": 69,
+          "predicts_token_position": 70,
+          "top1": {
+            "id": 362,
+            "logit": 34.3145,
+            "piece": " for"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 16531,
+            "logit": 30.3464,
+            "piece": " worldwide"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 1009,
+            "logit": 0,
+            "piece": " its"
+          },
+          "margin": 8.40886,
+          "position": 70,
+          "predicts_token_position": 71,
+          "top1": {
+            "id": 1009,
+            "logit": 34.3079,
+            "piece": " its"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 2058,
+            "logit": 25.899,
+            "piece": " world"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 41506,
+            "logit": 0,
+            "piece": " cuisine"
+          },
+          "margin": 0.216969,
+          "position": 71,
+          "predicts_token_position": 72,
+          "top1": {
+            "id": 41506,
+            "logit": 31.4537,
+            "piece": " cuisine"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 15413,
+            "logit": 31.2367,
+            "piece": " contributions"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 4.83218,
+          "position": 72,
+          "predicts_token_position": 73,
+          "top1": {
+            "id": 14,
+            "logit": 31.7479,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 26.9158,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14394,
+            "logit": 0,
+            "piece": " wine"
+          },
+          "margin": 2.1875,
+          "position": 73,
+          "predicts_token_position": 74,
+          "top1": {
+            "id": 14394,
+            "logit": 32.6244,
+            "piece": " wine"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 2622,
+            "logit": 30.4368,
+            "piece": " including"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 5.22917,
+          "position": 74,
+          "predicts_token_position": 75,
+          "top1": {
+            "id": 14,
+            "logit": 32.5454,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 27.3162,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 305,
+            "logit": 0,
+            "piece": " and"
+          },
+          "margin": 0.685188,
+          "position": 75,
+          "predicts_token_position": 76,
+          "top1": {
+            "id": 305,
+            "logit": 33.352,
+            "piece": " and"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 13556,
+            "logit": 32.6668,
+            "piece": " fashion"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 13556,
+            "logit": 0,
+            "piece": " fashion"
+          },
+          "margin": 3.14041,
+          "position": 76,
+          "predicts_token_position": 77,
+          "top1": {
+            "id": 13556,
+            "logit": 31.5456,
+            "piece": " fashion"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 2783,
+            "logit": 28.4052,
+            "piece": " art"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 2.72998,
+          "position": 77,
+          "predicts_token_position": 78,
+          "top1": {
+            "id": 14,
+            "logit": 32.0365,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 16,
+            "logit": 29.3065,
+            "piece": "."
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 305,
+            "logit": 0,
+            "piece": " and"
+          },
+          "margin": 0.00805664,
+          "position": 78,
+          "predicts_token_position": 79,
+          "top1": {
+            "id": 305,
+            "logit": 31.7496,
+            "piece": " and"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 412,
+            "logit": 31.7416,
+            "piece": " as"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 344,
+            "logit": 0,
+            "piece": " is"
+          },
+          "margin": 1.19757,
+          "position": 79,
+          "predicts_token_position": 80,
+          "top1": {
+            "id": 344,
+            "logit": 31.6044,
+            "piece": " is"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 436,
+            "logit": 30.4069,
+            "piece": " it"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 260,
+            "logit": 0,
+            "piece": " a"
+          },
+          "margin": 0.216471,
+          "position": 80,
+          "predicts_token_position": 81,
+          "top1": {
+            "id": 2680,
+            "logit": 32.0676,
+            "piece": " home"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 260,
+            "logit": 31.8511,
+            "piece": " a"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 5217,
+            "logit": 0,
+            "piece": " global"
+          },
+          "margin": 0.483156,
+          "position": 81,
+          "predicts_token_position": 82,
+          "top1": {
+            "id": 3631,
+            "logit": 31.3054,
+            "piece": " major"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 6646,
+            "logit": 30.8222,
+            "piece": " leading"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 6354,
+            "logit": 0,
+            "piece": " center"
+          },
+          "margin": 0.496609,
+          "position": 82,
+          "predicts_token_position": 83,
+          "top1": {
+            "id": 6354,
+            "logit": 32.6962,
+            "piece": " center"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 10782,
+            "logit": 32.1996,
+            "piece": " leader"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 362,
+            "logit": 0,
+            "piece": " for"
+          },
+          "margin": 3.90065,
+          "position": 83,
+          "predicts_token_position": 84,
+          "top1": {
+            "id": 362,
+            "logit": 34.6403,
+            "piece": " for"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 294,
+            "logit": 30.7396,
+            "piece": " of"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 2783,
+            "logit": 0,
+            "piece": " art"
+          },
+          "margin": 4.50708,
+          "position": 84,
+          "predicts_token_position": 85,
+          "top1": {
+            "id": 2783,
+            "logit": 34.4768,
+            "piece": " art"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 16865,
+            "logit": 29.9697,
+            "piece": " arts"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 2.76834,
+          "position": 85,
+          "predicts_token_position": 86,
+          "top1": {
+            "id": 14,
+            "logit": 35.4011,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 32.6328,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 16296,
+            "logit": 0,
+            "piece": " philosophy"
+          },
+          "margin": 1.93933,
+          "position": 86,
+          "predicts_token_position": 87,
+          "top1": {
+            "id": 16296,
+            "logit": 32.5276,
+            "piece": " philosophy"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 6262,
+            "logit": 30.5883,
+            "piece": " science"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 4.19456,
+          "position": 87,
+          "predicts_token_position": 88,
+          "top1": {
+            "id": 14,
+            "logit": 36.5168,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 32.3222,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 305,
+            "logit": 0,
+            "piece": " and"
+          },
+          "margin": 6.05338,
+          "position": 88,
+          "predicts_token_position": 89,
+          "top1": {
+            "id": 305,
+            "logit": 34.8162,
+            "piece": " and"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 6262,
+            "logit": 28.7628,
+            "piece": " science"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 6262,
+            "logit": 0,
+            "piece": " science"
+          },
+          "margin": 1.23575,
+          "position": 89,
+          "predicts_token_position": 90,
+          "top1": {
+            "id": 6262,
+            "logit": 31.2164,
+            "piece": " science"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 5785,
+            "logit": 29.9807,
+            "piece": " culture"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 16,
+            "logit": 0,
+            "piece": "."
+          },
+          "margin": 4.12522,
+          "position": 90,
+          "predicts_token_position": 91,
+          "top1": {
+            "id": 16,
+            "logit": 30.752,
+            "piece": "."
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 339,
+            "logit": 26.6268,
+            "piece": ".\n\n"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 455,
+            "logit": 0,
+            "piece": " The"
+          },
+          "margin": 1.02377,
+          "position": 91,
+          "predicts_token_position": 92,
+          "top1": {
+            "id": 455,
+            "logit": 31.496,
+            "piece": " The"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 3710,
+            "logit": 30.4723,
+            "piece": " With"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 3924,
+            "logit": 0,
+            "piece": " country"
+          },
+          "margin": 2.70353,
+          "position": 92,
+          "predicts_token_position": 93,
+          "top1": {
+            "id": 3924,
+            "logit": 32.7935,
+            "piece": " country"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 6102,
+            "logit": 30.09,
+            "piece": " capital"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 344,
+            "logit": 0,
+            "piece": " is"
+          },
+          "margin": 1.15611,
+          "position": 93,
+          "predicts_token_position": 94,
+          "top1": {
+            "id": 344,
+            "logit": 32.0343,
+            "piece": " is"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 769,
+            "logit": 30.8782,
+            "piece": " has"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 260,
+            "logit": 0,
+            "piece": " a"
+          },
+          "margin": 0.612837,
+          "position": 94,
+          "predicts_token_position": 95,
+          "top1": {
+            "id": 260,
+            "logit": 31.2904,
+            "piece": " a"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 990,
+            "logit": 30.6776,
+            "piece": " also"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 39572,
+            "logit": 0,
+            "piece": " founding"
+          },
+          "margin": 0.508293,
+          "position": 95,
+          "predicts_token_position": 96,
+          "top1": {
+            "id": 39572,
+            "logit": 30.0257,
+            "piece": " founding"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 81511,
+            "logit": 29.5174,
+            "piece": " unitary"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 5637,
+            "logit": 0,
+            "piece": " member"
+          },
+          "margin": 4.55482,
+          "position": 96,
+          "predicts_token_position": 97,
+          "top1": {
+            "id": 5637,
+            "logit": 33.5126,
+            "piece": " member"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 28.9578,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 294,
+            "logit": 0,
+            "piece": " of"
+          },
+          "margin": 7.99451,
+          "position": 97,
+          "predicts_token_position": 98,
+          "top1": {
+            "id": 294,
+            "logit": 34.8691,
+            "piece": " of"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 26.8746,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 270,
+            "logit": 0,
+            "piece": " the"
+          },
+          "margin": 6.03415,
+          "position": 98,
+          "predicts_token_position": 99,
+          "top1": {
+            "id": 270,
+            "logit": 33.8916,
+            "piece": " the"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 1623,
+            "logit": 27.8574,
+            "piece": " many"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 6919,
+            "logit": 0,
+            "piece": " European"
+          },
+          "margin": 4.24188,
+          "position": 99,
+          "predicts_token_position": 100,
+          "top1": {
+            "id": 6919,
+            "logit": 32.7653,
+            "piece": " European"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 3702,
+            "logit": 28.5234,
+            "piece": " United"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 9829,
+            "logit": 0,
+            "piece": " Union"
+          },
+          "margin": 9.09827,
+          "position": 100,
+          "predicts_token_position": 101,
+          "top1": {
+            "id": 9829,
+            "logit": 32.3162,
+            "piece": " Union"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 23.2179,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 305,
+            "logit": 0,
+            "piece": " and"
+          },
+          "margin": 2.47492,
+          "position": 101,
+          "predicts_token_position": 102,
+          "top1": {
+            "id": 305,
+            "logit": 33.0501,
+            "piece": " and"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 14,
+            "logit": 30.5752,
+            "piece": ","
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 344,
+            "logit": 0,
+            "piece": " is"
+          },
+          "margin": 0.214962,
+          "position": 102,
+          "predicts_token_position": 103,
+          "top1": {
+            "id": 260,
+            "logit": 30.0393,
+            "piece": " a"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 344,
+            "logit": 29.8243,
+            "piece": " is"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 3459,
+            "logit": 0,
+            "piece": " known"
+          },
+          "margin": 1.0766,
+          "position": 103,
+          "predicts_token_position": 104,
+          "top1": {
+            "id": 260,
+            "logit": 31.6057,
+            "piece": " a"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 834,
+            "logit": 30.5291,
+            "piece": " one"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 362,
+            "logit": 0,
+            "piece": " for"
+          },
+          "margin": 4.59808,
+          "position": 104,
+          "predicts_token_position": 105,
+          "top1": {
+            "id": 362,
+            "logit": 34.6032,
+            "piece": " for"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 412,
+            "logit": 30.0052,
+            "piece": " as"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 1009,
+            "logit": 0,
+            "piece": " its"
+          },
+          "margin": 6.30702,
+          "position": 105,
+          "predicts_token_position": 106,
+          "top1": {
+            "id": 1009,
+            "logit": 32.1016,
+            "piece": " its"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 270,
+            "logit": 25.7946,
+            "piece": " the"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 3828,
+            "logit": 0,
+            "piece": " strong"
+          },
+          "margin": 2.88555,
+          "position": 106,
+          "predicts_token_position": 107,
+          "top1": {
+            "id": 3828,
+            "logit": 29.4268,
+            "piece": " strong"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 105898,
+            "logit": 26.5412,
+            "piece": " republican"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 8536,
+            "logit": 0,
+            "piece": " economy"
+          },
+          "margin": 2.86941,
+          "position": 107,
+          "predicts_token_position": 108,
+          "top1": {
+            "id": 8536,
+            "logit": 31.09,
+            "piece": " economy"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 6672,
+            "logit": 28.2206,
+            "piece": " central"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 2.65055,
+          "position": 108,
+          "predicts_token_position": 109,
+          "top1": {
+            "id": 14,
+            "logit": 31.8986,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 29.2481,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 6440,
+            "logit": 0,
+            "piece": " particularly"
+          },
+          "margin": 0.0197487,
+          "position": 109,
+          "predicts_token_position": 110,
+          "top1": {
+            "id": 9965,
+            "logit": 27.8109,
+            "piece": " advanced"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 5218,
+            "logit": 27.7911,
+            "piece": " political"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 295,
+            "logit": 0,
+            "piece": " in"
+          },
+          "margin": 6.91254,
+          "position": 110,
+          "predicts_token_position": 111,
+          "top1": {
+            "id": 295,
+            "logit": 33.7162,
+            "piece": " in"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 1009,
+            "logit": 26.8037,
+            "piece": " its"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 20896,
+            "logit": 0,
+            "piece": " sectors"
+          },
+          "margin": 1.00117,
+          "position": 111,
+          "predicts_token_position": 112,
+          "top1": {
+            "id": 20896,
+            "logit": 31.8445,
+            "piece": " sectors"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 270,
+            "logit": 30.8433,
+            "piece": " the"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 1277,
+            "logit": 0,
+            "piece": " like"
+          },
+          "margin": 0.232983,
+          "position": 112,
+          "predicts_token_position": 113,
+          "top1": {
+            "id": 1277,
+            "logit": 33.6939,
+            "piece": " like"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 1345,
+            "logit": 33.4609,
+            "piece": " such"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 76851,
+            "logit": 0,
+            "piece": " aerospace"
+          },
+          "margin": 3.75277,
+          "position": 113,
+          "predicts_token_position": 114,
+          "top1": {
+            "id": 76851,
+            "logit": 32.4788,
+            "piece": " aerospace"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 24080,
+            "logit": 28.726,
+            "piece": " tourism"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 5.45374,
+          "position": 114,
+          "predicts_token_position": 115,
+          "top1": {
+            "id": 14,
+            "logit": 34.1363,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 28.6826,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 40961,
+            "logit": 0,
+            "piece": " automotive"
+          },
+          "margin": 0.930885,
+          "position": 115,
+          "predicts_token_position": 116,
+          "top1": {
+            "id": 40961,
+            "logit": 31.3474,
+            "piece": " automotive"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 24080,
+            "logit": 30.4165,
+            "piece": " tourism"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 4.06771,
+          "position": 116,
+          "predicts_token_position": 117,
+          "top1": {
+            "id": 14,
+            "logit": 33.8867,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 305,
+            "logit": 29.819,
+            "piece": " and"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 305,
+            "logit": 0,
+            "piece": " and"
+          },
+          "margin": 1.76397,
+          "position": 117,
+          "predicts_token_position": 118,
+          "top1": {
+            "id": 305,
+            "logit": 32.9894,
+            "piece": " and"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 30172,
+            "logit": 31.2254,
+            "piece": " luxury"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 30172,
+            "logit": 0,
+            "piece": " luxury"
+          },
+          "margin": 1.33669,
+          "position": 118,
+          "predicts_token_position": 119,
+          "top1": {
+            "id": 30172,
+            "logit": 31.078,
+            "piece": " luxury"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 24080,
+            "logit": 29.7413,
+            "piece": " tourism"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 11292,
+            "logit": 0,
+            "piece": " goods"
+          },
+          "margin": 8.77564,
+          "position": 119,
+          "predicts_token_position": 120,
+          "top1": {
+            "id": 11292,
+            "logit": 33.5154,
+            "piece": " goods"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 16,
+            "logit": 24.7398,
+            "piece": "."
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 16,
+            "logit": 0,
+            "piece": "."
+          },
+          "margin": 2.8188,
+          "position": 120,
+          "predicts_token_position": 121,
+          "top1": {
+            "id": 16,
+            "logit": 30.0396,
+            "piece": "."
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 339,
+            "logit": 27.2208,
+            "piece": ".\n\n"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 3710,
+            "logit": 0,
+            "piece": " With"
+          },
+          "margin": 1.21954,
+          "position": 121,
+          "predicts_token_position": 122,
+          "top1": {
+            "id": 3710,
+            "logit": 29.5034,
+            "piece": " With"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 8760,
+            "logit": 28.2838,
+            "piece": " France"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 1009,
+            "logit": 0,
+            "piece": " its"
+          },
+          "margin": 0.490891,
+          "position": 122,
+          "predicts_token_position": 123,
+          "top1": {
+            "id": 260,
+            "logit": 31.218,
+            "piece": " a"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 1009,
+            "logit": 30.7271,
+            "piece": " its"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 24972,
+            "logit": 0,
+            "piece": " blend"
+          },
+          "margin": 0.390701,
+          "position": 123,
+          "predicts_token_position": 124,
+          "top1": {
+            "id": 7992,
+            "logit": 27.5558,
+            "piece": " beautiful"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 6102,
+            "logit": 27.1651,
+            "piece": " capital"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 294,
+            "logit": 0,
+            "piece": " of"
+          },
+          "margin": 12.5984,
+          "position": 124,
+          "predicts_token_position": 125,
+          "top1": {
+            "id": 294,
+            "logit": 34.2798,
+            "piece": " of"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 14,
+            "logit": 21.6814,
+            "piece": ","
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 9600,
+            "logit": 0,
+            "piece": " historical"
+          },
+          "margin": 0.801342,
+          "position": 125,
+          "predicts_token_position": 126,
+          "top1": {
+            "id": 9600,
+            "logit": 30.9916,
+            "piece": " historical"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 21057,
+            "logit": 30.1903,
+            "piece": " historic"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 36501,
+            "logit": 0,
+            "piece": " charm"
+          },
+          "margin": 1.72984,
+          "position": 126,
+          "predicts_token_position": 127,
+          "top1": {
+            "id": 20876,
+            "logit": 31.3617,
+            "piece": " heritage"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 36501,
+            "logit": 29.6318,
+            "piece": " charm"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 305,
+            "logit": 0,
+            "piece": " and"
+          },
+          "margin": 2.89548,
+          "position": 127,
+          "predicts_token_position": 128,
+          "top1": {
+            "id": 305,
+            "logit": 34.1214,
+            "piece": " and"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 14,
+            "logit": 31.226,
+            "piece": ","
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 5970,
+            "logit": 0,
+            "piece": " modern"
+          },
+          "margin": 4.26295,
+          "position": 128,
+          "predicts_token_position": 129,
+          "top1": {
+            "id": 5970,
+            "logit": 34.2336,
+            "piece": " modern"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 78101,
+            "logit": 29.9706,
+            "piece": " modernity"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 62899,
+            "logit": 0,
+            "piece": " vitality"
+          },
+          "margin": 1.52594,
+          "position": 129,
+          "predicts_token_position": 130,
+          "top1": {
+            "id": 13194,
+            "logit": 29.4621,
+            "piece": " innovation"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 62899,
+            "logit": 27.9362,
+            "piece": " vitality"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 14,
+            "logit": 0,
+            "piece": ","
+          },
+          "margin": 10.2876,
+          "position": 130,
+          "predicts_token_position": 131,
+          "top1": {
+            "id": 14,
+            "logit": 33.941,
+            "piece": ","
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 2893,
+            "logit": 23.6535,
+            "piece": ",\n\n"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 8760,
+            "logit": 0,
+            "piece": " France"
+          },
+          "margin": 7.03546,
+          "position": 131,
+          "predicts_token_position": 132,
+          "top1": {
+            "id": 8760,
+            "logit": 32.1714,
+            "piece": " France"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 436,
+            "logit": 25.136,
+            "piece": " it"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 7926,
+            "logit": 0,
+            "piece": " remains"
+          },
+          "margin": 1.25824,
+          "position": 132,
+          "predicts_token_position": 133,
+          "top1": {
+            "id": 7926,
+            "logit": 31.8425,
+            "piece": " remains"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 344,
+            "logit": 30.5843,
+            "piece": " is"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 260,
+            "logit": 0,
+            "piece": " a"
+          },
+          "margin": 0.218586,
+          "position": 133,
+          "predicts_token_position": 134,
+          "top1": {
+            "id": 260,
+            "logit": 34.0816,
+            "piece": " a"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 834,
+            "logit": 33.863,
+            "piece": " one"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 3631,
+            "logit": 0,
+            "piece": " major"
+          },
+          "margin": 0.0723114,
+          "position": 134,
+          "predicts_token_position": 135,
+          "top1": {
+            "id": 3631,
+            "logit": 31.0991,
+            "piece": " major"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 2656,
+            "logit": 31.0268,
+            "piece": " top"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 7267,
+            "logit": 0,
+            "piece": " cultural"
+          },
+          "margin": 0.301416,
+          "position": 135,
+          "predicts_token_position": 136,
+          "top1": {
+            "id": 8469,
+            "logit": 30.8499,
+            "piece": " player"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 7267,
+            "logit": 30.5485,
+            "piece": " cultural"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 305,
+            "logit": 0,
+            "piece": " and"
+          },
+          "margin": 2.09233,
+          "position": 136,
+          "predicts_token_position": 137,
+          "top1": {
+            "id": 305,
+            "logit": 33.9945,
+            "piece": " and"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 14,
+            "logit": 31.9021,
+            "piece": ","
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 5389,
+            "logit": 0,
+            "piece": " economic"
+          },
+          "margin": 1.22038,
+          "position": 137,
+          "predicts_token_position": 138,
+          "top1": {
+            "id": 5389,
+            "logit": 34.274,
+            "piece": " economic"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 5218,
+            "logit": 33.0536,
+            "piece": " political"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 5478,
+            "logit": 0,
+            "piece": " force"
+          },
+          "margin": 0.712093,
+          "position": 138,
+          "predicts_token_position": 139,
+          "top1": {
+            "id": 5478,
+            "logit": 32.4283,
+            "piece": " force"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 106523,
+            "logit": 31.7162,
+            "piece": " powerhouse"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 377,
+            "logit": 0,
+            "piece": " on"
+          },
+          "margin": 1.05107,
+          "position": 139,
+          "predicts_token_position": 140,
+          "top1": {
+            "id": 295,
+            "logit": 31.1478,
+            "piece": " in"
+          },
+          "top1_matches_next_token": false,
+          "top2": {
+            "id": 377,
+            "logit": 30.0967,
+            "piece": " on"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 270,
+            "logit": 0,
+            "piece": " the"
+          },
+          "margin": 7.39252,
+          "position": 140,
+          "predicts_token_position": 141,
+          "top1": {
+            "id": 270,
+            "logit": 35.6389,
+            "piece": " the"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 1952,
+            "logit": 28.2464,
+            "piece": " both"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 2058,
+            "logit": 0,
+            "piece": " world"
+          },
+          "margin": 4.37835,
+          "position": 141,
+          "predicts_token_position": 142,
+          "top1": {
+            "id": 2058,
+            "logit": 33.8427,
+            "piece": " world"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 5217,
+            "logit": 29.4644,
+            "piece": " global"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 6632,
+            "logit": 0,
+            "piece": " stage"
+          },
+          "margin": 8.75869,
+          "position": 142,
+          "predicts_token_position": 143,
+          "top1": {
+            "id": 6632,
+            "logit": 34.3533,
+            "piece": " stage"
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 11219,
+            "logit": 25.5946,
+            "piece": " scene"
+          }
+        },
+        {
+          "actual_next_token": {
+            "id": 16,
+            "logit": 0,
+            "piece": "."
+          },
+          "margin": 0.867981,
+          "position": 143,
+          "predicts_token_position": 144,
+          "top1": {
+            "id": 16,
+            "logit": 30.0848,
+            "piece": "."
+          },
+          "top1_matches_next_token": true,
+          "top2": {
+            "id": 339,
+            "logit": 29.2168,
+            "piece": ".\n\n"
+          }
+        },
+        {
+          "actual_next_token": null,
+          "margin": 3.45981,
+          "position": 144,
+          "predicts_token_position": null,
+          "top1": {
+            "id": 1,
+            "logit": 24.8376,
+            "piece": "<\uff5cend\u2581of\u2581sentence\uff5c>"
+          },
+          "top1_matches_next_token": null,
+          "top2": {
+            "id": 1004,
+            "logit": 21.3778,
+            "piece": " \n\n"
+          }
+        }
+      ],
+      "top1_matches_next_token": 122
+    },
+    "check_exit_status": 1,
+    "fallback_reason_aggregate": {
+      "gate|decode|batch_unsupported|one_declined_internal|one_declined_internal": {
+        "batch_accepts": 0,
+        "batch_attempts": 0,
+        "calls": 34800,
+        "fallback_us": 49828800,
+        "rows": 34800,
+        "single_accepts": 0,
+        "single_attempts": 34800
+      },
+      "up|decode|batch_unsupported|one_declined_internal|one_declined_internal": {
+        "batch_accepts": 0,
+        "batch_attempts": 0,
+        "calls": 34800,
+        "fallback_us": 33502692,
+        "rows": 34800,
+        "single_accepts": 0,
+        "single_attempts": 34800
+      }
+    },
+    "memory": {
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 177204,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_peak_bytes": 16000000000,
+      "memory_stat": {
+        "anon": 1142784,
+        "file": 14838439936,
+        "pgmajfault": 1367806,
+        "workingset_refault_file": 71853833
+      },
+      "ram_ok": true
+    },
+    "parity_probe_rows": [
+      {
+        "active": "6",
+        "call": "0",
+        "compared": "2048",
+        "cpu": "0.335620582",
+        "gpu": "0.326186031",
+        "max_abs": "0.00943454833",
+        "max_rel": "0.0281107563",
+        "mean_abs": "0.00140763733",
+        "mean_rel": "0.0736001043",
+        "ne00": "2048",
+        "ne01": "4096",
+        "status": "ok",
+        "tensor": "blk.0.ffn_down_exps.weight",
+        "worst_active": "1",
+        "worst_col": "244",
+        "worst_expert": "26"
+      },
+      {
+        "active": "6",
+        "call": "1",
+        "compared": "2048",
+        "cpu": "-0.0971328989",
+        "gpu": "-0.099700138",
+        "max_abs": "0.00256724249",
+        "max_rel": "0.0264302066",
+        "mean_abs": "0.000617714547",
+        "mean_rel": "0.046219945",
+        "ne00": "2048",
+        "ne01": "4096",
+        "status": "ok",
+        "tensor": "blk.1.ffn_down_exps.weight",
+        "worst_active": "0",
+        "worst_col": "165",
+        "worst_expert": "11"
+      },
+      {
+        "active": "6",
+        "call": "2",
+        "compared": "2048",
+        "cpu": "0.202371135",
+        "gpu": "0.197776601",
+        "max_abs": "0.00459454126",
+        "max_rel": "0.0227035397",
+        "mean_abs": "0.000974720163",
+        "mean_rel": "0.0456463534",
+        "ne00": "2048",
+        "ne01": "4096",
+        "status": "ok",
+        "tensor": "blk.2.ffn_down_exps.weight",
+        "worst_active": "0",
+        "worst_col": "284",
+        "worst_expert": "16"
+      },
+      {
+        "active": "6",
+        "call": "3",
+        "compared": "2048",
+        "cpu": "0.0823339969",
+        "gpu": "0.0766003653",
+        "max_abs": "0.00573363136",
+        "max_rel": "0.0696386862",
+        "mean_abs": "0.000867475051",
+        "mean_rel": "0.0393517295",
+        "ne00": "2048",
+        "ne01": "4096",
+        "status": "ok",
+        "tensor": "blk.3.ffn_down_exps.weight",
+        "worst_active": "3",
+        "worst_col": "291",
+        "worst_expert": "128"
+      }
+    ],
+    "profile_files": {
+      "fallback_reason_profile": {
+        "bytes": 1256098,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-mxfp4-down-writeback-correctness/top1-france/fallback_reason_profile.csv",
+        "sha256": "637ee07de023ad6355ed58b13c28e0229fbaae12d1342f380e2201dd7f714628"
+      },
+      "probe": {
+        "bytes": 675,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-mxfp4-down-writeback-correctness/top1-france/down_mxfp4_writeback_probe.csv",
+        "sha256": "48ca4d992ced8889d407c8d725c981a0591c99100375c8ef4a290747b8bca35c"
+      },
+      "top1_check": {
+        "bytes": 1811,
+        "path": "/root/lfz/runs/vendor-ds4-16gb/20260707T-mxfp4-down-writeback-correctness/top1-france/top1-check.json",
+        "sha256": "dcaa8182072c9187558670f7959564f18894216825c7539710de4c3c9c829ea9"
+      }
+    },
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T-mxfp4-down-writeback-correctness/top1-france",
+    "timing": {
+      "baseline": {
+        "elapsed": "mm:ss or m:ss): 2:36.35",
+        "fs_inputs": "371305992",
+        "major_faults": "841183",
+        "max_rss_kb": "15599688"
+      },
+      "check": {
+        "elapsed": "mm:ss or m:ss): 3:29.66",
+        "fs_inputs": "369846576",
+        "major_faults": "526520",
+        "max_rss_kb": "15435752"
+      }
+    },
+    "top1": {
+      "base_top1_matches_next_token": 122,
+      "calc_top1_matches_next_token": 122,
+      "first_mismatch_pos": 9,
+      "max_abs": 4.5455,
+      "mean_abs": 0.159527,
+      "mismatches_preview": [
+        {
+          "actual_next_token": {
+            "id": 260,
+            "logit": 0,
+            "piece": " a"
+          },
+          "base_margin": 0.550989,
+          "base_top1": {
+            "id": 260,
+            "logit": 27.1315,
+            "piece": " a"
+          },
+          "base_top2": {
+            "id": 270,
+            "logit": 26.5805,
+            "piece": " the"
+          },
+          "calc_margin": 0.0721302,
+          "calc_top1": {
+            "id": 270,
+            "logit": 26.3427,
+            "piece": " the"
+          },
+          "calc_top2": {
+            "id": 260,
+            "logit": 26.2706,
+            "piece": " a"
+          },
+          "position": 9,
+          "predicts_token_position": 10
+        },
+        {
+          "actual_next_token": {
+            "id": 3107,
+            "logit": 0,
+            "piece": " short"
+          },
+          "base_margin": 0.253237,
+          "base_top1": {
+            "id": 9708,
+            "logit": 26.1973,
+            "piece": " brief"
+          },
+          "base_top2": {
+            "id": 3107,
+            "logit": 25.9441,
+            "piece": " short"
+          },
+          "calc_margin": 0.15357,
+          "calc_top1": {
+            "id": 3107,
+            "logit": 25.8843,
+            "piece": " short"
+          },
+          "calc_top2": {
+            "id": 9708,
+            "logit": 25.7308,
+            "piece": " brief"
+          },
+          "position": 10,
+          "predicts_token_position": 11
+        },
+        {
+          "actual_next_token": {
+            "id": 305,
+            "logit": 0,
+            "piece": " and"
+          },
+          "base_margin": 0.00805664,
+          "base_top1": {
+            "id": 305,
+            "logit": 31.7496,
+            "piece": " and"
+          },
+          "base_top2": {
+            "id": 412,
+            "logit": 31.7416,
+            "piece": " as"
+          },
+          "calc_margin": 0.11062,
+          "calc_top1": {
+            "id": 412,
+            "logit": 31.7916,
+            "piece": " as"
+          },
+          "calc_top2": {
+            "id": 305,
+            "logit": 31.681,
+            "piece": " and"
+          },
+          "position": 78,
+          "predicts_token_position": 79
+        },
+        {
+          "actual_next_token": {
+            "id": 7267,
+            "logit": 0,
+            "piece": " cultural"
+          },
+          "base_margin": 0.301416,
+          "base_top1": {
+            "id": 8469,
+            "logit": 30.8499,
+            "piece": " player"
+          },
+          "base_top2": {
+            "id": 7267,
+            "logit": 30.5485,
+            "piece": " cultural"
+          },
+          "calc_margin": 0.223127,
+          "calc_top1": {
+            "id": 7267,
+            "logit": 30.4529,
+            "piece": " cultural"
+          },
+          "calc_top2": {
+            "id": 8469,
+            "logit": 30.2298,
+            "piece": " player"
+          },
+          "position": 135,
+          "predicts_token_position": 136
+        }
+      ],
+      "n_tokens": 145,
+      "n_vocab": 129280,
+      "next_token_positions": 144,
+      "same_top1": 141,
+      "same_top1_ratio": 0.972414
+    }
+  },
+  "interpretation": "The current GPU MXFP4 down batch path is fast enough to run but numerically incompatible with CPU fallback/top1. The likely issue is kernel arithmetic/layout semantics rather than staging. Next work should compare CPU and GPU math at a smaller deterministic harness level before any writeback attempt.",
+  "next_step": "Revert writeback source, push rejected artifact/plan, then design a deterministic MXFP4 down math parity harness or inspect launch_moe_mmvq_compact_batch for MXFP4 layout/accumulation mismatch.",
+  "source_diff_excerpt": "diff --git a/ggml/src/ggml-cuda/moe_stream_batch.cu b/ggml/src/ggml-cuda/moe_stream_batch.cu\nindex 51f46c2e2..3f22ed0af 100644\n--- a/ggml/src/ggml-cuda/moe_stream_batch.cu\n+++ b/ggml/src/ggml-cuda/moe_stream_batch.cu\n@@ -5977,13 +5977,26 @@ static const char *mxfp4_down_probe_mode() {\n     return env;\n }\n \n-static bool mxfp4_down_probe_candidate(const char *name, ggml_type type) {\n-    if (!mxfp4_down_probe_mode()) return false;\n+static bool mxfp4_down_tensor_match(const char *name, ggml_type type, const char *target_env) {\n     if (type != GGML_TYPE_MXFP4 || !name || !std::strstr(name, \"ffn_down_exps\")) return false;\n-    const char *target = std::getenv(\"GGML_MOE_STREAM_DOWN_MXFP4_PROBE_TENSOR\");\n+    const char *target = target_env ? std::getenv(target_env) : nullptr;\n     return !target || !target[0] || std::strcmp(target, name) == 0;\n }\n \n+static bool mxfp4_down_writeback_enabled() {\n+    return expert_pack_env_bool(\"GGML_MOE_STREAM_DOWN_MXFP4_WRITEBACK\", false);\n+}\n+\n+static bool mxfp4_down_writeback_candidate(const char *name, ggml_type type) {\n+    return mxfp4_down_writeback_enabled() &&\n+        mxfp4_down_tensor_match(name, type, \"GGML_MOE_STREAM_DOWN_MXFP4_WRITEBACK_TENSOR\");\n+}\n+\n+static bool mxfp4_down_probe_candidate(const char *name, ggml_type type) {\n+    if (!mxfp4_down_probe_mode()) return false;\n+    return mxfp4_down_tensor_match(name, type, \"GGML_MOE_STREAM_DOWN_MXFP4_PROBE_TENSOR\");\n+}\n+\n static bool mxfp4_down_probe_parity_mode() {\n     const char *mode = mxfp4_down_probe_mode();\n     return mode && std::strcmp(mode, \"perf\") != 0;\n@@ -8595,7 +8608,9 @@ extern \"C\" bool ggml_cuda_moe_stream_batch(\n     const bool q4_parity_candidate = q4_down_parity_candidate(src0_name, src0_type);\n     const bool q4_route_profile_candidate = q4_down_route_profile_candidate(src0_name, src0_type);\n     const bool mxfp4_probe_candidate = mxfp4_down_probe_candidate(src0_name, src0_type);\n-    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate && !mxfp4_probe_candidate) return decline(\"unsupported_type\");\n+    const bool mxfp4_writeback_candidate = mxfp4_down_writeback_candidate(src0_name, src0_type);\n+    const bool mxfp4_batch_candidate = mxfp4_probe_candidate || mxfp4_writeback_candidate;\n+    if (!moe_stream_type_supported(src0_type) && !q4_parity_candidate && !q4_route_profile_candidate && !mxfp4_batch_candidate) return decline(\"unsupported_type\");\n     if (!src1_f32) return decline(\"missing_src1\");\n     ggml_cuda_moe_stream_register_tensor(src0_type_int, src0_name, src0_data, n_as, nb02, (size_t)ne01 * nb01);\n \n@@ -8655,11 +8670,14 @@ extern \"C\" bool ggml_cuda_moe_stream_batch(\n         }\n         if (mxfp4_down_probe_parity_mode()) {\n             mxfp4_probe_call = g_mxfp4_down_probe_calls.fetch_add(1, std::memory_order_relaxed);\n-            if (mxfp4_probe_call >= mxfp4_down_probe_max_calls()) return decline(\"mxfp4_probe_limit\");\n-            mxfp4_probe_run = true;\n-            std::fprintf(stderr,\n-                    \"[moe_stream_batch] mxfp4_down_probe active tensor=%s call=%d active=%d ne01=%ld ne00=%ld\\n\",\n-                    src0_name ? src0_name : \"\", mxfp4_probe_call, n_active, (long)ne01, (long)ne00);\n+            if (mxfp4_probe_call >= mxfp4_down_probe_max_calls()) {\n+                if (!mxfp4_writeback_candidate) return decline(\"mxfp4_probe_limit\");\n+            } else {\n+                mxfp4_probe_run = true;\n+                std::fprintf(stderr,\n+                        \"[moe_stream_batch] mxfp4_down_probe active tensor=%s call=%d active=%d ne01=%ld ne00=%ld\\n\",\n+                        src0_name ? src0_name : \"\", mxfp4_probe_call, n_active, (long)ne01, (long)ne00);\n+            }\n         }\n     }\n \n@@ -8964,7 +8982,7 @@ extern \"C\" bool ggml_cuda_moe_stream_batch(\n                 src0_name, mxfp4_probe_call, src0_data, nb01, nb02, ne00, ne01,\n                 src1_f32, src1_nb1, src1_nb2,\n                 active_experts, dst_ids, token_ids, n_active, (const float *)bc.h_dst);\n-        return false;\n+        if (!mxfp4_writeback_candidate) return false;\n     }\n \n     if (q4_parity_run) {\n",
+  "source_diff_sha256": "7677b43190f0e209e9ca9e91cfd6acb73454261891f15801b0650646a3da8302",
+  "source_head_before_revert": "1b943c118ca159d55060d127ea3269af73aa88f7",
+  "status": "rejected_top1_failed_source_reverted"
+}

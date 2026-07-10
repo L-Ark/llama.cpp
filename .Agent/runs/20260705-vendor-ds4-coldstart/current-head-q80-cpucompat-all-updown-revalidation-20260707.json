@@ -1,0 +1,127 @@
+{
+  "attempt_id": "20260707-current-head-q80-cpucompat-all-updown-revalidation",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "build_command": "cmake --build build-ds4-moe-stream --target llama-results llama-cli -j2",
+  "commit": "b3b1cbddf638b7e7382152a1ac0f57c8e22e6484",
+  "created_at_utc": "2026-07-06T19:42:37.577211Z",
+  "decision": {
+    "accepted_for_next_lowbit_design": true,
+    "promote_as_sota": false,
+    "reason": "Current head validates the existing default-off Q8_0 CPU-compatible all-up/all-down pre-fallback skip as token-stable in fixed-text top1. It is still too slow/per-call for performance, so next work must design resident/batched low-bit or partial representation; do not benchmark this per-call skip as SOTA."
+  },
+  "env_delta_for_check": {
+    "GGML_MOE_STREAM_Q80_ALLOW_DOWN": "1",
+    "GGML_MOE_STREAM_Q80_CPU_COMPAT": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CALLS": "0",
+    "GGML_MOE_STREAM_Q80_SKIP_MAX_CNE1": "1",
+    "GGML_MOE_STREAM_Q80_SKIP_NAME_FILTER": "ffn_"
+  },
+  "git_status": "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+  "hashes": {
+    "environment.txt": "e73143edb51cf98c4466ebdd12685ec311ad9e7ab6931fb7fd5b7c8749b92872",
+    "q80-skip-profile.txt": "a73b3b2f01d8cd0d988b985ccf7cd47cb5e84323949eccbebc346b75433f2052",
+    "q80-skip-report.csv": "236402e22100fee640b9852acd51e4fee392f78305b16b41a385344bd812bf8c",
+    "result.gguf": "c3d34b098accd1e5dafc5bda74412b830d559ba60c5317eafec8ce424b540787",
+    "run_case.sh": "8d8d48659eb03429b0d2d73aab879b86ff1388be061c74334e7436e7c57ace67",
+    "top1-check.json": "c420bdd68619e7d2e5c940057c333d775726d5001b2ec1a9694bc60a1841fae9"
+  },
+  "memory": {
+    "memory_events": {
+      "high": 0,
+      "low": 0,
+      "max": 55142,
+      "oom": 0,
+      "oom_group_kill": 0,
+      "oom_kill": 0
+    },
+    "memory_max_bytes": 16000000000,
+    "memory_peak_bytes": 16000000000,
+    "memory_stat_relevant": {
+      "active_file": 10771558400,
+      "anon": 454656,
+      "file": 14934110208,
+      "file_mapped": 0,
+      "inactive_file": 4162326528,
+      "kernel": 161918976,
+      "pgmajfault": 229979,
+      "slab": 161387896,
+      "workingset_refault_file": 23515418
+    },
+    "memory_swap_max": 0,
+    "ram_ok": true
+  },
+  "pass_gate": {
+    "baseline_exit_status": 0,
+    "check_exit_status": 0,
+    "first_mismatch_pos": -1,
+    "max_abs": 0,
+    "mean_abs": 0,
+    "same_top1_equals_n_tokens": true
+  },
+  "prompt_scope": "fixed France text top1 verifier only; held-out unused; not a token-rate benchmark",
+  "q80_skip": {
+    "counts": {
+      "down_records": 18850,
+      "total_records": 37700,
+      "unique_tensor_expert_pairs": 5790,
+      "up_records": 18850
+    },
+    "profile": {
+      "avg_alloc_us": 114.594,
+      "avg_d2h_us": 10.3,
+      "avg_free_us": 84.63,
+      "avg_h2d_us": 321.619,
+      "avg_kernel_sync_us": 813.639,
+      "avg_total_us": 3384.419,
+      "calls_attempted": 37700,
+      "calls_entered": 37700,
+      "calls_failed": 0,
+      "calls_ok": 37700,
+      "cuda_alloc_ms": 4320.181,
+      "cuda_free_ms": 3190.559,
+      "d2h_ms": 388.314,
+      "h2d_ms": 12125.037,
+      "host_q80_ms": 34.482,
+      "host_src0_ms": 76458.769,
+      "kernel_sync_ms": 30674.175,
+      "out_bytes": 463257600,
+      "q80_bytes": 123052800,
+      "report_ms": 333.175,
+      "scatter_ms": 67.923,
+      "src0_bytes": 168008089600,
+      "total_ms": 127592.615
+    },
+    "profile_raw": "[moe_stream_q80_skip_profile] calls_entered=37700 calls_attempted=37700 calls_ok=37700 calls_failed=0 src0_bytes=168008089600 q80_bytes=123052800 out_bytes=463257600 total_ms=127592.615 host_src0_ms=76458.769 host_q80_ms=34.482 cuda_alloc_ms=4320.181 h2d_ms=12125.037 kernel_sync_ms=30674.175 d2h_ms=388.314 scatter_ms=67.923 report_ms=333.175 cuda_free_ms=3190.559 avg_total_us=3384.419 avg_alloc_us=114.594 avg_h2d_us=321.619 avg_kernel_sync_us=813.639 avg_d2h_us=10.300 avg_free_us=84.630"
+  },
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260706T193647Z-20260707-current-head-q80-cpucompat-all-updown-revalidation/top1",
+  "status": "passed_correctness_probe_not_sota",
+  "systemd_unit": "vendor-ds4-q80-current-head-reval-20260706T193647Z.service",
+  "timing": {
+    "baseline_time_v": {
+      "elapsed": "1:26.60",
+      "fs_inputs": "160602184",
+      "major_faults": "197929",
+      "max_rss_kb": "15599632"
+    },
+    "check_time_v": {
+      "elapsed": "3:12.16",
+      "fs_inputs": "159370936",
+      "major_faults": "32015",
+      "max_rss_kb": "15440052"
+    }
+  },
+  "top1": {
+    "base_top1_matches_next_token": 119,
+    "calc_top1_matches_next_token": 119,
+    "first_mismatch_pos": -1,
+    "max_abs": 0,
+    "mean_abs": 0,
+    "mismatches_preview": [],
+    "n_tokens": 145,
+    "n_vocab": 129280,
+    "next_token_positions": 144,
+    "same_top1": 145,
+    "same_top1_ratio": 1
+  }
+}

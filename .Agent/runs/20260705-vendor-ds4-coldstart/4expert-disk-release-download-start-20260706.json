@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260706-4expert-disk-release-download-start",
+  "status": "download_in_progress_not_sota",
+  "timestamp_utc": "2026-07-06T13:04:49Z",
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "prompt_scope": "no prompts run; no held-out test used",
+  "action": "released disk space for full 4Expert GGUF route and started real download",
+  "deleted_path": "/root/lfz/models/GLM-5.2-UD-IQ3_XXS",
+  "deleted_path_reason": "previously approved unrelated GLM experiment; required >=180GB free space for real 4Expert GGUF",
+  "protected_assets_touched": false,
+  "root_df_after_cleanup_and_prealloc": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/root       993G  882G  112G  89% /",
+  "candidate_4expert_url": "https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf",
+  "expected_size_bytes": 164465760544,
+  "head_etag": "96bcd717ee6a3715d4ba1fd7946d9ee8a1eabb1247737afd009931f0318f000b",
+  "download_path": "/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf",
+  "download_service": "ds4-4expert-download.service",
+  "download_command": "aria2c -c -x8 -s8 -k16M --file-allocation=none --summary-interval=60 --console-log-level=notice -o ds4flash-4expert.gguf <url>",
+  "completion_gate": ".aria2 sidecar absent and stat size == expected_size_bytes; then compute sha256 before load/benchmark",
+  "current_stat": "/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf size=164465760544 blocks=321222280 block_size=512\n/root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf.aria2 size=19984 blocks=40 block_size=512",
+  "service_status_head": "● ds4-4expert-download.service - /bin/bash -lc exec aria2c -c -x8 -s8 -k16M --file-allocation=none --summary-interval=60 --console-log-level=notice -o ds4flash-4expert.gguf \"https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf\" > aria2-4expert.log 2>&1\n     Loaded: loaded (/run/systemd/transient/ds4-4expert-download.service; transient)\n  Transient: yes\n     Active: active (running) since Mon 2026-07-06 13:04:07 UTC; 2min 52s ago\n   Main PID: 1749412 (aria2c)\n      Tasks: 1 (limit: 106158)\n     Memory: 1.8G\n        CPU: 20.820s\n     CGroup: /system.slice/ds4-4expert-download.service\n             └─1749412 aria2c -c -x8 -s8 -k16M --file-allocation=none --summary-interval=60 --console-log-level=notice -o ds4flash-4expert.gguf https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf\n\nJul 06 13:04:07 ubuntu systemd[1]: Started /bin/bash -lc exec aria2c -c -x8 -s8 -k16M --file-allocation=none --summary-interval=60 --console-log-level=notice -o ds4flash-4expert.gguf \"https://huggingface.co/cloudyu/DeepSeek-V4-Flash-4Expert-GGUF/resolve/main/ds4flash-4expert.gguf\" > aria2-4expert.log 2>&1.",
+  "correctness_or_perf_claim": "none; model not yet downloaded/validated",
+  "next_steps": [
+    "wait for full download to complete",
+    "verify exact file size and sha256",
+    "run metadata/load validation with LLAMA_DEEPSEEK4_TID2EID_WEIGHT_ALIAS=1 and GGML_MOE_STREAM_ONE_Q4K=1",
+    "run strict 16GB correctness smoke before any performance claim"
+  ],
+  "last_update_utc": "2026-07-06T13:06:59Z",
+  "progress_tail": "[#b880c5 2.6GiB/153GiB(1%) CN:8 DL:12MiB ETA:3h22m18s]\n[#b880c5 2.6GiB/153GiB(1%) CN:8 DL:12MiB ETA:3h22m40s]\n[#b880c5 2.6GiB/153GiB(1%) CN:8 DL:12MiB ETA:3h21m32s]\n[#b880c5 2.6GiB/153GiB(1%) CN:8 DL:11MiB ETA:3h35m40s]\n[#b880c5 2.6GiB/153GiB(1%) CN:8 DL:11MiB ETA:3h40m47s]\n[#b880c5 2.6GiB/153GiB(1%) CN:8 DL:11MiB ETA:3h40m14s]\n[#b880c5 2.7GiB/153GiB(1%) CN:8 DL:12MiB ETA:3h25m11s]\n[#b880c5 2.7GiB/153GiB(1%) CN:8 DL:11MiB ETA:3h36m51s]\n[#b880c5 2.7GiB/153GiB(1%) CN:8 DL:13MiB ETA:3h7m16s]\n[#b880c5 2.7GiB/153GiB(1%) CN:8 DL:14MiB ETA:2h54m57s]\n[#b880c5 2.7GiB/153GiB(1%) CN:8 DL:14MiB ETA:2h51m9s]\n[#b880c5 2.7GiB/153GiB(1%) CN:8 DL:16MiB ETA:2h40m9s]\n[#b880c5 2.8GiB/153GiB(1%) CN:8 DL:16MiB ETA:2h35m46s]\n[#b880c5 2.8GiB/153GiB(1%) CN:8 DL:17MiB ETA:2h23m18s]\n *** Download Progress Summary as of Mon Jul  6 13:06:09 2026 *** \n===============================================================================\n[#b880c5 2.8GiB/153GiB(1%) CN:8 DL:17MiB ETA:2h22m40s]\nFILE: /root/lfz/models/DeepSeek-V4-Flash-4Expert-GGUF/ds4flash-4expert.gguf\n-------------------------------------------------------------------------------"
+}

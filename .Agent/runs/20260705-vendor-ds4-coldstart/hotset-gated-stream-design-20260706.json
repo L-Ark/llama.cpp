@@ -1,0 +1,67 @@
+{
+  "artifact_id": "20260706-hotset-gated-stream-design",
+  "candidate_profiles": {
+    "first_probe": "up-only or up+down top 0.5-1.0GiB. Start small to protect gate cache and TTFT.",
+    "profile_source": "calibration_dev_set_v1 fallback_reason_profile.csv only, no held-out",
+    "promotion_precondition": "dev-set min/mean token rate improves over no-prompt-specific baseline mean=2.18 min=1.8, correctness passes, memory_peak<=16GB including page cache, TTFT recorded and not promoted if over gate."
+  },
+  "cap_table": [
+    {
+      "cap_gib": 0.25,
+      "covered_fallback_ms": 11928.8,
+      "covered_fraction": 0.055,
+      "pairs": 60,
+      "payload_gib": 0.249
+    },
+    {
+      "cap_gib": 0.5,
+      "covered_fallback_ms": 19144.0,
+      "covered_fraction": 0.088,
+      "pairs": 120,
+      "payload_gib": 0.498
+    },
+    {
+      "cap_gib": 1.0,
+      "covered_fallback_ms": 30326.2,
+      "covered_fraction": 0.14,
+      "pairs": 240,
+      "payload_gib": 0.996
+    },
+    {
+      "cap_gib": 2.0,
+      "covered_fallback_ms": 47615.9,
+      "covered_fraction": 0.22,
+      "pairs": 481,
+      "payload_gib": 1.996
+    },
+    {
+      "cap_gib": 3.0,
+      "covered_fallback_ms": 61444.3,
+      "covered_fraction": 0.284,
+      "pairs": 722,
+      "payload_gib": 2.997
+    },
+    {
+      "cap_gib": 8.0,
+      "covered_fallback_ms": 110544.8,
+      "covered_fraction": 0.511,
+      "pairs": 1927,
+      "payload_gib": 7.998
+    }
+  ],
+  "design_status": "ready_for_default_off_implementation",
+  "held_out_test_used": false,
+  "implementation_order": [
+    "Add default-off env parsing in moe_stream.cu; unset behavior unchanged.",
+    "Generate small calibration hotset profile TSV from existing dev fallback CSVs.",
+    "Run short calibration France smoke with GPU-only diagnostics disabled first; then run full calibration_dev_set_v1 only if smoke improves or at least does not regress badly.",
+    "Do not run held-out until candidate is frozen."
+  ],
+  "problem": "Naive ffn_up_exps/ffn_down_exps one-stream removes CPU fallback locally but streams too many uncached experts, causing cache pressure and transfer overhead. Need a mode that tries GPU only for calibration-selected hot experts and leaves the rest on CPU fallback.",
+  "proposed_default_off_envs": {
+    "GGML_MOE_STREAM_CACHE_ADMIT_PROFILE_APPLIES_FILTER": "comma/colon tensor-name filter; when set, cache admit profile restricts only matching tensors, while non-matching tensors keep default cache admission. This preserves gate cache while applying a calibration hotset to up/down.",
+    "GGML_MOE_STREAM_ONE_REQUIRE_CACHE_ADMIT_FILTER": "comma/colon tensor-name filter; when a matching tensor is not admitted by the cache profile and is not already cached, ggml_cuda_moe_stream_one returns false so CPU fallback handles it instead of uncached GPU streaming."
+  },
+  "source_bound": ".Agent/runs/20260705-vendor-ds4-coldstart/updown-total-movement-hard-bound-20260706.json",
+  "theoretical_limit": "Even a perfect 3GiB hotset covers only 28.4% of measured fallback, so this is an incremental candidate, not a complete >5 tok/s route. If 1-3GiB probes do not improve dev-set end-to-end, close hotset-gated streaming and move to a more structural representation/model route."
+}

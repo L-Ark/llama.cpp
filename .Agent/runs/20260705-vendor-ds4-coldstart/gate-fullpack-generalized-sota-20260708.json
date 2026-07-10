@@ -1,0 +1,303 @@
+{
+  "artifact": "/root/lfz/vendor/llama.cpp-deepseek-v4/.Agent/runs/20260705-vendor-ds4-coldstart/gate-fullpack-generalized-sota-20260708.json",
+  "date_utc": "2026-07-08",
+  "status": "accepted_generalized_sota_stage_not_product_target",
+  "source_branch": "vendor/deepseek-token-rate-16gb",
+  "source_head_before_record_commit": "3d43c64d9ae43fd1f017cad97ae9c40ffad15c68",
+  "source_dirty_before_record_commit": true,
+  "source_status_before_record_commit": [
+    " M ggml/src/ggml-cuda/moe_stream.cu",
+    " M ggml/src/ggml-cuda/moe_stream_batch.cu",
+    " M scripts/demo-vendor-ds4-general-sota.sh",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/explicit-swiglu-down-split-profile-20260708.json",
+    "?? .Agent/runs/20260705-vendor-ds4-coldstart/hf-metadata-route-watch-after-cleanup-reclass-20260706.json",
+    "?? prof.nsys-rep"
+  ],
+  "push_target": "ssd/vendor/deepseek-token-rate-16gb",
+  "task_background": "Run arbitrary user prompts on vendor DeepSeek V4 with only 16GB host RAM including page cache and a 32GB RTX 5090, targeting stable >5 tok/s.",
+  "accepted_config_summary": {
+    "prompt_general": true,
+    "prompt_specific_optimization": false,
+    "max_tokens": 192,
+    "cold_drop_caches": true,
+    "memory_max_bytes": 16000000000,
+    "memory_swap_max_bytes": 0,
+    "cpu_moe": 40,
+    "vram_cache_gb_updown": 9,
+    "gate_cache_mib": 4096,
+    "gate_fullpack_source": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+    "gate_fullpack_size_bytes": 147174760448,
+    "gate_fullpack_mtime_utc": "2026-06-23T08:18:58Z",
+    "static_alias_tsv": ".Agent/profiles/vendor-ds4/ds4-native-full-gguf-alias-source-20260707.tsv",
+    "key_env": {
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK": "/root/lfz/models/DeepSeek-V4-Flash-FP4-FP8-GGUF/DeepSeek-V4-Flash-FP4-FP8-native.expert-pack",
+      "GGML_MOE_STREAM_ONE_EXPERT_PACK_IO": "direct",
+      "GGML_MOE_UPDOWN_PAIRED_READ": "1",
+      "GGML_MOE_DOWN_PARALLEL_STAGE": "1",
+      "GGML_MOE_IO_BACKEND": "iouring",
+      "GGML_MOE_IO_ALIGNED_ALIAS_BATCH": "1",
+      "GGML_MOE_IO_REFILL_BATCH": "4",
+      "GGML_MOE_STAGE_PINNED_SLOTS": "8",
+      "GGML_MOE_STREAM_ONE_CACHE_MIB": "4096",
+      "GGML_MOE_VRAM_CACHE_GB": "9",
+      "GGML_MOE_STREAM_ONE_NAME_FILTER": "ffn_gate_exps",
+      "GGML_MOE_STREAM_UP_Q80_COMPAT_BATCH": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_COMPAT_BATCH": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8": "1",
+      "GGML_MOE_STREAM_DOWN_Q80_CPU_ORDER_LANE8_SHARED": "1"
+    }
+  },
+  "why_it_is_prompt_general": "The full native expert-pack contains all native experts and is not built from the France prompt, route traces, hotsets, or any prompt-specific profile.",
+  "implementation_changes": [
+    "Added default-off gate/up/down cosubmit profile CSV hooks for gate_one and up/down batch events.",
+    "Updated demo script so the current SOTA uses the full native expert-pack as a prompt-general gate source by default, with --no-gate-fullpack preserving the previous paired-read path."
+  ],
+  "current_stage_interpretation": "Accepted as a new generalized SOTA because it supplies a prompt-general direct source for gate misses and improves both dev and held-out token rate. It is not yet true gate/up/down cross-cache co-submit; that remains the next implementation step.",
+  "comparison_previous_accepted": {
+    "previous_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/updown-paired-read-generalized-sota-20260708.json",
+    "previous_dev_min_mean_max": {
+      "min": 2.2,
+      "mean": 2.78,
+      "max": 3.2
+    },
+    "previous_heldout_min_mean_max": {
+      "min": 2.4,
+      "mean": 2.76,
+      "max": 3.0
+    },
+    "new_dev_min_mean_max": {
+      "min": 3.7,
+      "mean": 4.1,
+      "max": 4.5
+    },
+    "new_heldout_min_mean_max": {
+      "min": 3.9,
+      "mean": 4.12,
+      "max": 4.4
+    }
+  },
+  "dev_set_v1": {
+    "aggregate_eval_tok_s": {
+      "min": 3.7,
+      "mean": 4.1,
+      "max": 4.5
+    },
+    "runs": [
+      {
+        "label": "20260708T042558Z-france-n192-gate-fullpack",
+        "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-demo/20260708T042558Z-france-n192-gate-fullpack",
+        "prompt": "Please introduce France in a short paragraph.",
+        "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+        "eval_tok_s": 4.5,
+        "prompt_tok_s": 3.1,
+        "ttft_ms": 23606.134147,
+        "elapsed_seconds": 53.29,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15043866624,
+        "ram_ok": true,
+        "run_ok": true,
+        "source_dirty": true,
+        "source_head": "3d43c64d9ae43fd1f017cad97ae9c40ffad15c68",
+        "manual_correctness_ok": true
+      },
+      {
+        "label": "20260708T042736Z-quantum-n192-gate-fullpack",
+        "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-dev-n192/20260708T042736Z-quantum-n192-gate-fullpack",
+        "prompt": "Explain quantum computing briefly.",
+        "answer": "and**Quantum computing** is a type of computing that uses the principles of quantum mechanics to process information. Unlike classical computers, which use bits (0 or 1), quantum computers use **qubits** (quantum bits). Qubits can exist in a state of 0, 1, or both simultaneously (superposition). This, along with other quantum phenomena like entanglement, allows quantum computers to solve certain problems much faster than classical computers.\n\n**Key Concepts:**\n\n- **Superposition:** A qubit can be in a combination of 0 and 1 at the same time, unlike a classical bit which is either 0 or 1. This allows for parallel computation.\n- **Entanglement:** A pair of qubits can be linked in such a way that the state of one instantly influences the other, regardless of distance. This enables complex calculations.\n- **Quantum Interference:** Quantum algorithms manipulate the probabilities of qubits' states to amplify",
+        "eval_tok_s": 3.7,
+        "prompt_tok_s": 3.3,
+        "ttft_ms": 23052.592676,
+        "elapsed_seconds": 73.89,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15123435520,
+        "ram_ok": true,
+        "run_ok": true,
+        "source_dirty": true,
+        "source_head": "3d43c64d9ae43fd1f017cad97ae9c40ffad15c68",
+        "manual_correctness_ok": true
+      },
+      {
+        "label": "20260708T042853Z-fibonacci-n192-gate-fullpack",
+        "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-dev-n192/20260708T042853Z-fibonacci-n192-gate-fullpack",
+        "prompt": "Write a short Python function for Fibonacci.",
+        "answer": "that's a classic! Here's a short Python function that computes the Fibonacci sequence:\n\n```python\ndef fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        yield a\n        a, b = b, a + b\n```\n\nThis is a generator function that yields Fibonacci numbers up to the nth term. It's memory-efficient and works well for large values of n.\n\nIf you prefer a more compact version that returns a list:\n\n```python\ndef fib(n):\n    a, b = 0, 1\n    return [a if i == 0 else a := b for i in range(n) for b in [a+b]][:n]\n```\n\nBut the generator version is generally preferred for its memory efficiency, especially when n is large.\n\nHere's a simpler version that returns a list:\n\n```python\ndef fib_list(n):\n    a, b = 0, 1",
+        "eval_tok_s": 3.9,
+        "prompt_tok_s": 3.1,
+        "ttft_ms": 25161.107586,
+        "elapsed_seconds": 73.61,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15119925248,
+        "ram_ok": true,
+        "run_ok": true,
+        "source_dirty": true,
+        "source_head": "3d43c64d9ae43fd1f017cad97ae9c40ffad15c68",
+        "manual_correctness_ok": true
+      },
+      {
+        "label": "20260708T043011Z-japan-n192-gate-fullpack",
+        "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-dev-n192/20260708T043011Z-japan-n192-gate-fullpack",
+        "prompt": "Introduce Japan in a short paragraph.",
+        "answer": "Japan is an island nation in East Asia, known for its unique blend of ancient traditions and cutting-edge modernity. It is renowned for its rich cultural heritage, including tea ceremonies, kimono, and traditional temples, alongside its technological advancements and bustling cities like Tokyo and Osaka. The country is famous for its cuisine, such as sushi and ramen, and its natural beauty, from Mount Fuji to cherry blossoms. With a strong economy and a high standard of living, Japan is also known for its politeness, efficiency, and innovation in fields like robotics and electronics. Its culture deeply values respect, honor, and community, making it a fascinating blend of old and new.",
+        "eval_tok_s": 4.2,
+        "prompt_tok_s": 3.0,
+        "ttft_ms": 24129.618964,
+        "elapsed_seconds": 55.04,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15120707584,
+        "ram_ok": true,
+        "run_ok": true,
+        "source_dirty": true,
+        "source_head": "3d43c64d9ae43fd1f017cad97ae9c40ffad15c68",
+        "manual_correctness_ok": true
+      },
+      {
+        "label": "20260708T043110Z-climate-n192-gate-fullpack",
+        "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-dev-n192/20260708T043110Z-climate-n192-gate-fullpack",
+        "prompt": "Summarize climate change in one paragraph.",
+        "answer": "Climate change refers to the long-term, large-scale alteration of Earth's climate patterns, primarily driven by human activities such as burning fossil fuels, deforestation, and industrial processes that release greenhouse gases like carbon dioxide, methane, and nitrous oxide into the atmosphere. These gases trap heat, leading to a rise in global average temperatures, a phenomenon known as global warming. The consequences are far-reaching and include more frequent and severe weather events like hurricanes, droughts, and floods; rising sea levels; melting polar ice and glaciers; and disruptions to ecosystems and biodiversity. While natural factors have historically influenced the climate, the current rapid change is overwhelmingly attributed to human actions, and its effects are already being observed worldwide, threatening both natural environments and human societies with the challenges of adaptation and mitigation.",
+        "eval_tok_s": 4.2,
+        "prompt_tok_s": 3.3,
+        "ttft_ms": 23832.477876,
+        "elapsed_seconds": 59.73,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15122010112,
+        "ram_ok": true,
+        "run_ok": true,
+        "source_dirty": true,
+        "source_head": "3d43c64d9ae43fd1f017cad97ae9c40ffad15c68",
+        "manual_correctness_ok": true
+      }
+    ]
+  },
+  "heldout_v1_after_candidate_freeze": {
+    "aggregate_eval_tok_s": {
+      "min": 3.9,
+      "mean": 4.12,
+      "max": 4.4
+    },
+    "runs": [
+      {
+        "label": "20260708T043509Z-photosynthesis-n192-gate-fullpack",
+        "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-heldout-n192/20260708T043509Z-photosynthesis-n192-gate-fullpack",
+        "prompt": "Describe photosynthesis in a short paragraph.",
+        "answer": "Photosynthesis is the biological process by which plants, algae, and some bacteria convert light energy into chemical energy. Using sunlight, water, and carbon dioxide, they produce glucose (a sugar) and oxygen. This process primarily occurs in the chloroplasts of plant cells, where chlorophyll captures sunlight. The overall equation is 6CO₂ + 6H₂O + light energy → C₆H₁₂O₆ + 6O₂. It consists of two main stages: the light-dependent reactions, which capture energy from sunlight and produce ATP and NADPH, and the Calvin cycle (light-independent reactions), which uses that energy to fix carbon dioxide into glucose. Photosynthesis is essential for life on Earth as it provides oxygen and forms the basis of the food chain.",
+        "eval_tok_s": 4.1,
+        "prompt_tok_s": 3.0,
+        "ttft_ms": 23265.949207,
+        "elapsed_seconds": 61.26,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15122522112,
+        "ram_ok": true,
+        "run_ok": true,
+        "source_dirty": true,
+        "source_head": "3d43c64d9ae43fd1f017cad97ae9c40ffad15c68",
+        "manual_correctness_ok": true
+      },
+      {
+        "label": "20260708T043614Z-office-n192-gate-fullpack",
+        "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-heldout-n192/20260708T043614Z-office-n192-gate-fullpack",
+        "prompt": "Give three practical tips for organizing a small home office.",
+        "answer": "space**3 Practical Tips for Organizing a Small Home Office**  \n\n1. **Maximize Vertical Space with Wall-Mounted Storage**  \n   - Use floating shelves, pegboards, or wall-mounted file holders to keep desks clear. This frees up valuable floor and desk space while keeping essentials like books, files, or stationery within reach.  \n   *Tip: Install a wall-mounted rack for cables to prevent tangling and keep them out of sight.*  \n\n2. **Use Multi-Functional Furniture****  \n   Opt for furniture that serves dual purposes, such as a desk with built-in storage or a chair with a back that doubles as a shelf. This helps minimize clutter and maximize the use of limited space.  \n\n3. **Implement a “One In, One Out” Rule**  \n   To maintain a clutter-free workspace, adopt a policy that for every new item added to the office, an old item must be removed. This helps",
+        "eval_tok_s": 3.9,
+        "prompt_tok_s": 3.0,
+        "ttft_ms": 24730.539606,
+        "elapsed_seconds": 73.51,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15064559616,
+        "ram_ok": true,
+        "run_ok": true,
+        "source_dirty": true,
+        "source_head": "3d43c64d9ae43fd1f017cad97ae9c40ffad15c68",
+        "manual_correctness_ok": true
+      },
+      {
+        "label": "20260708T043731Z-palindrome_js-n192-gate-fullpack",
+        "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-heldout-n192/20260708T043731Z-palindrome_js-n192-gate-fullpack",
+        "prompt": "Write a concise JavaScript function that checks whether a string is a palindrome.",
+        "answer": "Here's a concise JavaScript function to check if a string is a palindrome:\n\n```javascript\nconst isPalindrome = str => str === str.split('').reverse().join('');\n```\n\nThis function works by:\n1. Converting the string to an array of characters using `split('')`\n2. Reversing the array using `reverse()`\n3. Joining the array back into a string using `join('')`\n4. Comparing the reversed string with the original string\n\nIf you want to handle case-insensitivity and spaces/punctuation (like \"A man, a plan, a canal, Panama\"), you can use this more robust version:\n\n```javascript\nconst isPalindrome = str => {\n  const cleaned = str.toLowerCase().replace(/[^a-z0-9]/g, '');\n  return cleaned === cleaned.split('').reverse().join('');\n}\n```\n\nThis version removes non-alphanumeric characters and converts to lowercase before checking.",
+        "eval_tok_s": 4.0,
+        "prompt_tok_s": 3.8,
+        "ttft_ms": 25068.726927,
+        "elapsed_seconds": 73.11,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15067561984,
+        "ram_ok": true,
+        "run_ok": true,
+        "source_dirty": true,
+        "source_head": "3d43c64d9ae43fd1f017cad97ae9c40ffad15c68",
+        "manual_correctness_ok": true
+      },
+      {
+        "label": "20260708T043849Z-exercise-n192-gate-fullpack",
+        "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-heldout-n192/20260708T043849Z-exercise-n192-gate-fullpack",
+        "prompt": "Explain why regular exercise is important in one paragraph.",
+        "answer": "Regular exercise is crucial for maintaining both physical and mental well-being. It strengthens the cardiovascular system, improves muscle and bone density, and helps regulate weight by boosting metabolism and burning calories. Beyond the physical benefits, exercise also plays a vital role in mental health by reducing stress, anxiety, and depression, while enhancing mood and cognitive function through the release of endorphins and other brain chemicals. Additionally, regular physical activity reduces the risk of chronic diseases such as heart disease, diabetes, and certain cancers, improves sleep quality, and boosts overall energy levels. By promoting longevity and enhancing quality of life, exercise is an essential component of a healthy lifestyle.",
+        "eval_tok_s": 4.2,
+        "prompt_tok_s": 2.7,
+        "ttft_ms": 25759.914421,
+        "elapsed_seconds": 55.95,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 14987886592,
+        "ram_ok": true,
+        "run_ok": true,
+        "source_dirty": true,
+        "source_head": "3d43c64d9ae43fd1f017cad97ae9c40ffad15c68",
+        "manual_correctness_ok": true
+      },
+      {
+        "label": "20260708T043948Z-brazil-n192-gate-fullpack",
+        "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-heldout-n192/20260708T043948Z-brazil-n192-gate-fullpack",
+        "prompt": "Introduce Brazil in a short paragraph.",
+        "answer": "Brazil is the largest country in South America and the fifth largest in the world by both area and population. It is a vibrant and diverse nation, known for its rich cultural heritage, which blends Indigenous, African, and European influences. The country is famous for its iconic landmarks, such as the Christ the Rede statue in Rio de Janeiro, the Amazon Rainforest, and the vast Pant wetlands. Brazil is also renowned for its lively music and dance traditions, including samba and bossa nova, and its passion for football (soccer). With a population of over 200 million people, it is a Portuguese-speaking country with a unique blend of cultures, natural beauty, and economic potential. The capital is Brasília, and the official language is Portuguese. Brazil is also known for its Carnival festival, diverse ecosystems, and being a major player in the global economy, particularly in agriculture and natural resources.",
+        "eval_tok_s": 4.4,
+        "prompt_tok_s": 3.0,
+        "ttft_ms": 25353.984101,
+        "elapsed_seconds": 65.74,
+        "memory_peak_bytes": 16000000000,
+        "memory_file_bytes": 15120838656,
+        "ram_ok": true,
+        "run_ok": true,
+        "source_dirty": true,
+        "source_head": "3d43c64d9ae43fd1f017cad97ae9c40ffad15c68",
+        "manual_correctness_ok": true
+      }
+    ]
+  },
+  "quality_notes": [
+    "France n192 is complete and semantically correct.",
+    "Office n192 has a formatting artifact at the beginning and truncates after the core three tips; the content remains responsive to the prompt.",
+    "Brazil n192 has minor wording typos but remains semantically correct and coherent.",
+    "All dev and held-out runs stayed inside the 16GB memory cgroup with page cache counted in memory_file_bytes."
+  ],
+  "acceptance": {
+    "ram_ok": true,
+    "correctness_ok": true,
+    "ttft_ok": true,
+    "prompt_general_ok": true,
+    "product_target_gt_5_tok_s_met": false,
+    "accepted_as_current_generalized_sota": true
+  },
+  "next_required_work": [
+    "Implement true gate/up/down cross-cache co-submit so gate, up, and down source reads can be de-duplicated and submitted in the same io_uring batch.",
+    "Profile whether co-submit reduces gate miss wait time beyond the fullpack source improvement.",
+    "Only accept further SOTA on frozen dev/held-out prompt sets under strict cold 16GB RAM."
+  ],
+  "post_push_repro": {
+    "source_commit": "8b4fce2bb5109983bf621939bf48f190c14194b0",
+    "remote": "ssd/vendor/deepseek-token-rate-16gb",
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/20260708-gate-fullpack-postpush-repro/20260708T045123Z-pushed-8b4fce2-france-n192-repro",
+    "prompt": "Please introduce France in a short paragraph.",
+    "eval_tok_s": 4.6,
+    "prompt_tok_s": 3.3,
+    "ttft_ms": 24268.866454,
+    "elapsed_seconds": 53.62,
+    "memory_peak_bytes": 16000000000,
+    "memory_file_bytes": 15117881344,
+    "ram_ok": true,
+    "source_dirty": false,
+    "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+    "correctness_ok": true
+  }
+}

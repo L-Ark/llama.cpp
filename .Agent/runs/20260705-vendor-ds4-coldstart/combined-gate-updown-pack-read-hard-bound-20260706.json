@@ -1,0 +1,51 @@
+{
+  "artifact_id": "20260706-combined-gate-updown-pack-read-hard-bound",
+  "status": "rejected_before_source_change",
+  "held_out_test_used": false,
+  "source_commit": "6e5d49e16e7d63469659d219676d6d0d489e221d",
+  "inputs": {
+    "overlap_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/dev-gate-updown-overlap-trace-20260706.json",
+    "updown_movement_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/updown-total-movement-hard-bound-20260706.json",
+    "baseline_artifact": ".Agent/runs/20260705-vendor-ds4-coldstart/general-prompt-baseline-no-prompt-specific-20260706.json"
+  },
+  "baseline_context": {
+    "calibration_mean_eval_tok_s": 2.1799999999999997,
+    "calibration_min_eval_tok_s": 1.8,
+    "estimated_total_generated_tokens": 778.1,
+    "estimated_current_decode_seconds": 374.722,
+    "estimated_decode_seconds_for_5tok_s": 155.62
+  },
+  "overlap_context": {
+    "gate_updown_overlap_layer_expert_pairs": 6683,
+    "updown_fallback_overlap_pct": 100.0,
+    "overlap_combined_gate_updown_payload_gib": 83.211,
+    "resident_cache_feasible": false,
+    "resident_cache_reject_reason": "83.211GiB combined gate+up+down tensor payload is far above spare VRAM and would also violate the 16GB host/page-cache goal if mirrored in RAM."
+  },
+  "streaming_bound": {
+    "gate_miss_estimated_calls_from_trace_hit_rate": 33729,
+    "gate_miss_estimated_gib": 139.989,
+    "updown_repeated_logical_gib": 946.372,
+    "combined_gate_miss_plus_updown_stream_gib": 1086.361,
+    "updown_only_transfer_lower_bound_seconds": {
+      "16_GiBps_seconds": 59.148,
+      "32_GiBps_seconds": 29.574,
+      "48_GiBps_seconds": 19.716,
+      "64_GiBps_seconds": 14.787,
+      "96_GiBps_seconds": 9.858
+    },
+    "combined_transfer_lower_bound_seconds": {
+      "16_GiBps_seconds": 67.898,
+      "32_GiBps_seconds": 33.949,
+      "48_GiBps_seconds": 22.633,
+      "64_GiBps_seconds": 16.974,
+      "96_GiBps_seconds": 11.316
+    },
+    "interpretation": "Even ideal sequential pack/read does not reduce the up/down repeated logical payload unless it also changes compute/dataflow. At 64GiB/s, up/down repeated movement alone is about 14.8s across the dev-set trace before kernel/sync/D2H/page-cache overhead; combined with gate misses it is about 17.0s. This is only a bandwidth floor, not an achievable runtime."
+  },
+  "decision": {
+    "combined_sequential_pack_read_as_standalone_path": "rejected",
+    "reason": "Overlap is 100%, but combining reads does not reduce bytes enough. Full resident cache is impossible, and pure streaming still has a large transfer floor plus GPU compute and remaining down/up scheduling overhead. Prior pack/hotset/cache probes show that stealing gate cache regresses token rate.",
+    "allowed_followup": "Only a compare-only or hard-bound design that reduces payload footprint or fuses compute without extra long-lived cache should proceed. A pack may still be useful for cold gate miss locality, but not as a standalone route to generalized >5 tok/s."
+  }
+}

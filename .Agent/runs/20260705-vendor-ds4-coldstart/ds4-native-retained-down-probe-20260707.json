@@ -1,0 +1,221 @@
+{
+  "artifact_id": "20260707-ds4-native-retained-down-probe",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "build": {
+    "command": "cmake --build build-ds4-moe-stream --target llama-cli llama-results -j20",
+    "status": "passed"
+  },
+  "commit": "9407ee6696b199c2e278c41996a241bccea7606a",
+  "created_at_utc": "2026-07-07T11:47:35Z",
+  "default_off_guards": [
+    {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T114339Z-20260707-defaultoff-native-retained-down-probe-guard/defaultoff-native-retained-down-probe-guard-cpu40-vram0gb",
+      "metrics": {
+        "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T114339Z-20260707-defaultoff-native-retained-down-probe-guard/defaultoff-native-retained-down-probe-guard-cpu40-vram0gb",
+        "correctness_ok": false,
+        "correctness_reason": "unfinished_sentence",
+        "cpu_moe": 40,
+        "elapsed_seconds": 75.13,
+        "eval_ms": null,
+        "eval_tok_s": 2.4,
+        "exit_status": 0,
+        "first_answer_ms": 37979.951421,
+        "load_ms": null,
+        "max_rss_kb": 15591240,
+        "memory_file_bytes": 15054069760,
+        "memory_max_bytes": 16000000000,
+        "memory_max_events": 19932,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 10065989632,
+          "anon": 1093632,
+          "file": 15054069760,
+          "file_mapped": 126976,
+          "inactive_file": 4988076032,
+          "kernel": 150269952,
+          "pgfault": 2712399,
+          "pgmajfault": 240040,
+          "slab": 149716040,
+          "workingset_activate_file": 566067,
+          "workingset_refault_file": 1751334,
+          "workingset_restore_file": 565465
+        },
+        "oom_seen": false,
+        "pgmajfault": 240040,
+        "prompt_eval_ms": null,
+        "prompt_tok_s": 1.0,
+        "ram_kill_threshold_bytes": 16000000000,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "systemd_status": 0,
+        "ttft_estimate_ms": 37979.951421,
+        "unit": "vendor-ds4-16gb-20260707T114339Z-cpu40.service",
+        "workingset_refault_file": 1751334
+      },
+      "note": "n96 diagnostic truncated, RAM/speed only"
+    },
+    {
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T114521Z-20260707-defaultoff-native-retained-down-probe-guard-n192/defaultoff-native-retained-down-probe-guard-n192-cpu40-vram0gb",
+      "metrics": {
+        "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and significant global influence. It is famous for its iconic landmarks like the Eiffel Tower, the Louvre Museum, and the Palace of Versailles. France is renowned for its cuisine, wine, and fashion, and is a global center for art, philosophy, and science. The country is a founding member of the European Union and is known for its strong economy, particularly in sectors like aerospace, automotive, and luxury goods. With its blend of historical charm and modern vitality, France remains a major cultural and economic force on the world stage.",
+        "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T114521Z-20260707-defaultoff-native-retained-down-probe-guard-n192/defaultoff-native-retained-down-probe-guard-n192-cpu40-vram0gb",
+        "correctness_ok": true,
+        "correctness_reason": "heuristic_pass_manual_review_required",
+        "cpu_moe": 40,
+        "elapsed_seconds": 89.69,
+        "eval_ms": null,
+        "eval_tok_s": 2.5,
+        "exit_status": 0,
+        "first_answer_ms": 37199.507438,
+        "load_ms": null,
+        "max_rss_kb": 15593244,
+        "memory_file_bytes": 15031795712,
+        "memory_max_bytes": 16000000000,
+        "memory_max_events": 24625,
+        "memory_peak_bytes": 16000000000,
+        "memory_stat_relevant": {
+          "active_file": 10013470720,
+          "anon": 1130496,
+          "file": 15031795712,
+          "file_mapped": 188416,
+          "inactive_file": 5018320896,
+          "kernel": 164745216,
+          "pgfault": 3070493,
+          "pgmajfault": 289706,
+          "slab": 164023264,
+          "workingset_activate_file": 896383,
+          "workingset_refault_file": 3607661,
+          "workingset_restore_file": 896232
+        },
+        "oom_seen": false,
+        "pgmajfault": 289706,
+        "prompt_eval_ms": null,
+        "prompt_tok_s": 1.0,
+        "ram_kill_threshold_bytes": 16000000000,
+        "ram_limit_killed": false,
+        "ram_ok": true,
+        "systemd_status": 0,
+        "ttft_estimate_ms": 37199.507438,
+        "unit": "vendor-ds4-16gb-20260707T114521Z-cpu40.service",
+        "workingset_refault_file": 3607661
+      },
+      "note": "n192 semantic guard passed"
+    }
+  ],
+  "held_out_used": false,
+  "interpretation": {
+    "actual_graph": "This GGUF does not use combined ffn_gate_up_exps on the measured path: gate_up_present=0 for all records. It uses separate ffn_gate_exps and ffn_up_exps, both clamped, then ggml_swiglu_split.",
+    "not_sota": "Probe-only source; no token-rate promotion. The n32 probe output is truncated by design; default-off n192 France guard passes semantic correctness.",
+    "retained_eligibility": "The graph relation is clean: act_src0_is_gate=1, act_src1_is_up=1, down_src1_is_act=1, down_src2_is_selected=1 for all records. A retained path must target separate gate/up -> swiglu activation, not the generic ggml_moe_up_gate handoff."
+  },
+  "next_step": "Design a default-off separate gate/up retained activation microbench that preserves the existing gate cache semantics and uses current Q8_0 CPU-order down correctness as the reference gate.",
+  "probe_run": {
+    "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T114132Z-20260707-ds4-native-retained-down-probe-france-r2/france-native-retained-down-probe-cpu40-vram0gb",
+    "csv": "/root/lfz/runs/vendor-ds4-16gb/20260707T114132Z-20260707-ds4-native-retained-down-probe-france-r2/france-native-retained-down-probe-cpu40-vram0gb/native_retained_down_probe.csv",
+    "metrics": {
+      "answer": "Here is a short paragraph introducing France:\n\nFrance, officially the French Republic, is a country in Western Europe known for its rich history, diverse culture, and",
+      "case_dir": "/root/lfz/runs/vendor-ds4-16gb/20260707T114132Z-20260707-ds4-native-retained-down-probe-france-r2/france-native-retained-down-probe-cpu40-vram0gb",
+      "correctness_ok": false,
+      "correctness_reason": "unfinished_sentence",
+      "cpu_moe": 40,
+      "elapsed_seconds": 54.31,
+      "eval_ms": null,
+      "eval_tok_s": 1.8,
+      "exit_status": 0,
+      "first_answer_ms": 39030.956178,
+      "load_ms": null,
+      "max_rss_kb": 15594184,
+      "memory_file_bytes": 15109578752,
+      "memory_max_bytes": 16000000000,
+      "memory_max_events": 11903,
+      "memory_peak_bytes": 16000000000,
+      "memory_stat_relevant": {
+        "active_file": 11928657920,
+        "anon": 1138688,
+        "file": 15109578752,
+        "file_mapped": 843776,
+        "inactive_file": 3180879872,
+        "kernel": 121696256,
+        "pgfault": 2234780,
+        "pgmajfault": 181085,
+        "slab": 121027512,
+        "workingset_activate_file": 97615,
+        "workingset_refault_file": 271763,
+        "workingset_restore_file": 96997
+      },
+      "oom_seen": false,
+      "pgmajfault": 181085,
+      "prompt_eval_ms": null,
+      "prompt_tok_s": 0.9,
+      "ram_kill_threshold_bytes": 16000000000,
+      "ram_limit_killed": false,
+      "ram_ok": true,
+      "systemd_status": 0,
+      "ttft_estimate_ms": 39030.956178,
+      "unit": "vendor-ds4-16gb-20260707T114132Z-cpu40.service",
+      "workingset_refault_file": 271763
+    },
+    "summary_json": "/root/lfz/runs/vendor-ds4-16gb/20260707T114132Z-20260707-ds4-native-retained-down-probe-france-r2/france-native-retained-down-probe-cpu40-vram0gb/summary.json"
+  },
+  "probe_summary": {
+    "act_nbytes_unique": [
+      49152,
+      98304,
+      196608,
+      393216
+    ],
+    "act_src0_is_gate": {
+      "1": 1806
+    },
+    "act_src1_is_up": {
+      "1": 1806
+    },
+    "down_nbytes_unique": [
+      98304,
+      196608,
+      393216,
+      786432
+    ],
+    "down_src0_is_down_weight": {
+      "1": 1806
+    },
+    "down_src1_is_act": {
+      "1": 1806
+    },
+    "down_src2_is_selected": {
+      "1": 1806
+    },
+    "down_weight_expert_bytes_unique": [
+      4456448
+    ],
+    "down_weight_type": {
+      "mxfp4": 1806
+    },
+    "gate_up_present": {
+      "0": 1806
+    },
+    "gate_was_clamped": {
+      "1": 1806
+    },
+    "layers_max": 42,
+    "layers_min": 0,
+    "mix_tokens": {
+      "1": 1677,
+      "2": 43,
+      "4": 43,
+      "8": 43
+    },
+    "records": 1806,
+    "selected_ne0": {
+      "6": 1806
+    },
+    "up_was_clamped": {
+      "1": 1806
+    }
+  },
+  "repo": "/root/lfz/vendor/llama.cpp-deepseek-v4",
+  "scope": "Default-off DS4 native graph/dataflow probe for separate gate/up -> swiglu -> down retained-path planning.",
+  "source_change": "Add DS4_NATIVE_RETAINED_DOWN_PROBE_OUT in src/models/deepseek4.cpp; env unset is no-op and does not change logits.",
+  "status": "default_off_probe_validated_not_sota"
+}

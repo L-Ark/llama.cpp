@@ -1,0 +1,367 @@
+{
+  "disk_free_bytes": 35670593536,
+  "disk_free_gib": 33.220829010009766,
+  "groups": [
+    {
+      "files": [
+        "DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf"
+      ],
+      "group": "DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS",
+      "missing_sizes": 0,
+      "n_files": 1,
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4",
+      "total_size_bytes_known": 68579737280,
+      "total_size_gib_known": 63.869857490062714
+    },
+    {
+      "files": [
+        "DeepSeek-V4-Flash-REAP-K128-uniform.gguf"
+      ],
+      "group": "DeepSeek-V4-Flash-REAP-K128-uniform",
+      "missing_sizes": 0,
+      "n_files": 1,
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "total_size_bytes_known": 50439361920,
+      "total_size_gib_known": 46.975316405296326
+    },
+    {
+      "files": [
+        "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00001-of-00004.gguf",
+        "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00002-of-00004.gguf",
+        "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00003-of-00004.gguf",
+        "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00004-of-00004.gguf"
+      ],
+      "group": "IQ3_XXS",
+      "missing_sizes": 0,
+      "n_files": 4,
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "total_size_bytes_known": 112111985344,
+      "total_size_gib_known": 104.41242283582687
+    },
+    {
+      "files": [
+        "Q2_K/DeepSeek-V4-Flash-Q2_K-00001-of-00003.gguf",
+        "Q2_K/DeepSeek-V4-Flash-Q2_K-00002-of-00003.gguf",
+        "Q2_K/DeepSeek-V4-Flash-Q2_K-00003-of-00003.gguf"
+      ],
+      "group": "Q2_K",
+      "missing_sizes": 0,
+      "n_files": 3,
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "total_size_bytes_known": 96962159168,
+      "total_size_gib_known": 90.30304771661758
+    },
+    {
+      "files": [
+        "Q3_K/DeepSeek-V4-Flash-Q3_K-00001-of-00004.gguf",
+        "Q3_K/DeepSeek-V4-Flash-Q3_K-00002-of-00004.gguf",
+        "Q3_K/DeepSeek-V4-Flash-Q3_K-00003-of-00004.gguf",
+        "Q3_K/DeepSeek-V4-Flash-Q3_K-00004-of-00004.gguf"
+      ],
+      "group": "Q3_K",
+      "missing_sizes": 0,
+      "n_files": 4,
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "total_size_bytes_known": 125097550528,
+      "total_size_gib_known": 116.50617283582687
+    },
+    {
+      "files": [
+        "IQ2_XS-XL/DeepSeek-V4-Flash-IQ2_XS-XL-00001-of-00002.gguf",
+        "IQ2_XS-XL/DeepSeek-V4-Flash-IQ2_XS-XL-00002-of-00002.gguf"
+      ],
+      "group": "IQ2_XS-XL",
+      "missing_sizes": 0,
+      "n_files": 2,
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "total_size_bytes_known": 87007832800,
+      "total_size_gib_known": 81.03235885500908
+    },
+    {
+      "files": [
+        "IQ2_XXS-XL/DeepSeek-V4-Flash-IQ2_XXS-XL-00001-of-00002.gguf",
+        "IQ2_XXS-XL/DeepSeek-V4-Flash-IQ2_XXS-XL-00002-of-00002.gguf"
+      ],
+      "group": "IQ2_XXS-XL",
+      "missing_sizes": 0,
+      "n_files": 2,
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "total_size_bytes_known": 78518823680,
+      "total_size_gib_known": 73.1263530254364
+    },
+    {
+      "files": [
+        "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00001-of-00003.gguf",
+        "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00002-of-00003.gguf",
+        "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00003-of-00003.gguf"
+      ],
+      "group": "UD-IQ2_M",
+      "missing_sizes": 0,
+      "n_files": 3,
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "total_size_bytes_known": 90926927488,
+      "total_size_gib_known": 84.68230020999908
+    },
+    {
+      "files": [
+        "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00001-of-00003.gguf",
+        "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00002-of-00003.gguf",
+        "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00003-of-00003.gguf"
+      ],
+      "group": "UD-IQ2_XXS",
+      "missing_sizes": 0,
+      "n_files": 3,
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "total_size_bytes_known": 90860736128,
+      "total_size_gib_known": 84.62065470218658
+    },
+    {
+      "files": [
+        "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00001-of-00004.gguf",
+        "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00002-of-00004.gguf",
+        "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00003-of-00004.gguf",
+        "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00004-of-00004.gguf"
+      ],
+      "group": "UD-IQ3_XXS",
+      "missing_sizes": 0,
+      "n_files": 4,
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "total_size_bytes_known": 102999887616,
+      "total_size_gib_known": 95.92612051963806
+    },
+    {
+      "files": [
+        "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00001-of-00004.gguf",
+        "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00002-of-00004.gguf",
+        "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00003-of-00004.gguf",
+        "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00004-of-00004.gguf"
+      ],
+      "group": "UD-Q3_K_M",
+      "missing_sizes": 0,
+      "n_files": 4,
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "total_size_bytes_known": 129319997216,
+      "total_size_gib_known": 120.43863275647163
+    }
+  ],
+  "raw_results": [
+    {
+      "content_range": "bytes 0-0/5256864",
+      "file": "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00001-of-00003.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 5256864,
+      "size_gib": 0.004895836114883423
+    },
+    {
+      "content_range": "bytes 0-0/49956780160",
+      "file": "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00002-of-00003.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49956780160,
+      "size_gib": 46.52587711811066
+    },
+    {
+      "content_range": "bytes 0-0/40964890464",
+      "file": "UD-IQ2_M/DeepSeek-V4-Flash-UD-IQ2_M-00003-of-00003.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 40964890464,
+      "size_gib": 38.151527255773544
+    },
+    {
+      "content_range": "bytes 0-0/5256864",
+      "file": "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00001-of-00003.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 5256864,
+      "size_gib": 0.004895836114883423
+    },
+    {
+      "content_range": "bytes 0-0/49890588800",
+      "file": "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00002-of-00003.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49890588800,
+      "size_gib": 46.46423161029816
+    },
+    {
+      "content_range": "bytes 0-0/40964890464",
+      "file": "UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00003-of-00003.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 40964890464,
+      "size_gib": 38.151527255773544
+    },
+    {
+      "content_range": "bytes 0-0/5256864",
+      "file": "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00001-of-00004.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 5256864,
+      "size_gib": 0.004895836114883423
+    },
+    {
+      "content_range": "bytes 0-0/49485728288",
+      "file": "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00002-of-00004.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49485728288,
+      "size_gib": 46.087175875902176
+    },
+    {
+      "content_range": "bytes 0-0/49437886752",
+      "file": "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00003-of-00004.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49437886752,
+      "size_gib": 46.0426199734211
+    },
+    {
+      "content_range": "bytes 0-0/4071015712",
+      "file": "UD-IQ3_XXS/DeepSeek-V4-Flash-UD-IQ3_XXS-00004-of-00004.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 4071015712,
+      "size_gib": 3.7914288341999054
+    },
+    {
+      "content_range": "bytes 0-0/5256864",
+      "file": "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00001-of-00004.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 5256864,
+      "size_gib": 0.004895836114883423
+    },
+    {
+      "content_range": "bytes 0-0/49222528448",
+      "file": "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00002-of-00004.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49222528448,
+      "size_gib": 45.842051923274994
+    },
+    {
+      "content_range": "bytes 0-0/49189072672",
+      "file": "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00003-of-00004.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49189072672,
+      "size_gib": 45.810893803834915
+    },
+    {
+      "content_range": "bytes 0-0/30903139232",
+      "file": "UD-Q3_K_M/DeepSeek-V4-Flash-UD-Q3_K_M-00004-of-00004.gguf",
+      "repo": "unsloth/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 30903139232,
+      "size_gib": 28.78079119324684
+    },
+    {
+      "content_range": "bytes 0-0/5248448",
+      "file": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00001-of-00004.gguf",
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 5248448,
+      "size_gib": 0.004887998104095459
+    },
+    {
+      "content_range": "bytes 0-0/49179918240",
+      "file": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00002-of-00004.gguf",
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49179918240,
+      "size_gib": 45.80236807465553
+    },
+    {
+      "content_range": "bytes 0-0/49994259008",
+      "file": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00003-of-00004.gguf",
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49994259008,
+      "size_gib": 46.56078201532364
+    },
+    {
+      "content_range": "bytes 0-0/12932559648",
+      "file": "IQ3_XXS/DeepSeek-V4-Flash-IQ3_XXS-00004-of-00004.gguf",
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 12932559648,
+      "size_gib": 12.044384747743607
+    },
+    {
+      "content_range": "bytes 0-0/5248448",
+      "file": "Q2_K/DeepSeek-V4-Flash-Q2_K-00001-of-00003.gguf",
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 5248448,
+      "size_gib": 0.004887998104095459
+    },
+    {
+      "content_range": "bytes 0-0/49310047712",
+      "file": "Q2_K/DeepSeek-V4-Flash-Q2_K-00002-of-00003.gguf",
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49310047712,
+      "size_gib": 45.923560589551926
+    },
+    {
+      "content_range": "bytes 0-0/47646863008",
+      "file": "Q2_K/DeepSeek-V4-Flash-Q2_K-00003-of-00003.gguf",
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 47646863008,
+      "size_gib": 44.37459912896156
+    },
+    {
+      "content_range": "bytes 0-0/5248448",
+      "file": "Q3_K/DeepSeek-V4-Flash-Q3_K-00001-of-00004.gguf",
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 5248448,
+      "size_gib": 0.004887998104095459
+    },
+    {
+      "content_range": "bytes 0-0/49983378752",
+      "file": "Q3_K/DeepSeek-V4-Flash-Q3_K-00002-of-00004.gguf",
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49983378752,
+      "size_gib": 46.55064898729324
+    },
+    {
+      "content_range": "bytes 0-0/49196411616",
+      "file": "Q3_K/DeepSeek-V4-Flash-Q3_K-00003-of-00004.gguf",
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49196411616,
+      "size_gib": 45.817728728055954
+    },
+    {
+      "content_range": "bytes 0-0/25912511712",
+      "file": "Q3_K/DeepSeek-V4-Flash-Q3_K-00004-of-00004.gguf",
+      "repo": "tarruda/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 25912511712,
+      "size_gib": 24.13290712237358
+    },
+    {
+      "content_range": "bytes 0-0/49732551680",
+      "file": "IQ2_XS-XL/DeepSeek-V4-Flash-IQ2_XS-XL-00001-of-00002.gguf",
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49732551680,
+      "size_gib": 46.31704807281494
+    },
+    {
+      "content_range": "bytes 0-0/37275281120",
+      "file": "IQ2_XS-XL/DeepSeek-V4-Flash-IQ2_XS-XL-00002-of-00002.gguf",
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 37275281120,
+      "size_gib": 34.71531078219414
+    },
+    {
+      "content_range": "bytes 0-0/49859758944",
+      "file": "IQ2_XXS-XL/DeepSeek-V4-Flash-IQ2_XXS-XL-00001-of-00002.gguf",
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 49859758944,
+      "size_gib": 46.43551906943321
+    },
+    {
+      "content_range": "bytes 0-0/28659064736",
+      "file": "IQ2_XXS-XL/DeepSeek-V4-Flash-IQ2_XXS-XL-00002-of-00002.gguf",
+      "repo": "teamblobfish/DeepSeek-V4-Flash-GGUF",
+      "size_bytes": 28659064736,
+      "size_gib": 26.69083395600319
+    },
+    {
+      "content_range": "bytes 0-0/50439361920",
+      "file": "DeepSeek-V4-Flash-REAP-K128-uniform.gguf",
+      "repo": "sleepyeldrazi/deepseek-v4-flash-reap-k128-Q2-GGUF",
+      "size_bytes": 50439361920,
+      "size_gib": 46.975316405296326
+    },
+    {
+      "content_range": "bytes 0-0/68579737280",
+      "file": "DeepSeek-V4-Flash-REAP25-LCB50-DS4-compact-IQ2XXS.gguf",
+      "repo": "eouya2/DeepSeek-V4-Flash-REAP25-LCB50-DS4",
+      "size_bytes": 68579737280,
+      "size_gib": 63.869857490062714
+    }
+  ],
+  "status": "full_shard_size_admission_not_sota"
+}
