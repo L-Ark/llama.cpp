@@ -871,6 +871,121 @@ Acceptance:
 - RAM-tier hits must replace SSD waits on the critical path; if hit rate rises but token rate falls, reject.
 - Any accepted improvement must be committed and pushed with run roots, exact profiles, commands, RAM/TTFT/quality, and rollback point.
 
+### Phase 4D progress: trace screen and N32 candidate A/B
+
+Timestamp: 2026-07-10 14:16 CST.
+
+Trace run:
+
+- Correct trace root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4d-io-trace-n32-dev3-correct-141127`
+- Earlier mistaken trace root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4d-io-trace-n32-dev3-220835`
+  - rejected as a data source because `$RUN` was expanded too early and trace files were written under `/`;
+  - generated root files were removed before the corrected run.
+
+Correct trace command shape:
+
+```bash
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --repo /root/lfz/llama.cpp-vendor-kimi \
+  --prompt-file .Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root /root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4d-io-trace-n32-dev3-correct-141127 \
+  --mode dev \
+  --n 32 \
+  --max-prompts 3 \
+  --keep-going \
+  --memory-max 15900000000 \
+  --runtime-max-sec 600 \
+  --upgate-pct 62 \
+  --extra-runtime-env "GGML_MOE_RAM_TIER_MIB=1800
+GGML_MOE_RAM_TIER_PROFILE=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=1
+GGML_MOE_RAM_TIER_PIN_MIB=1800
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+GGML_MOE_RAM_BATCH_PROFILE_OUT=\$RUN/ram-batch-profile.csv
+GGML_MOE_IO_READ_TRACE_OUT=\$RUN/io-read-trace.csv
+GGML_MOE_IO_WAIT_TRACE_OUT=\$RUN/io-wait-trace.csv"
+```
+
+Trace result:
+
+| prompt | quality | tok/s | TTFT ms | decode ms/runs | RAM peak GiB | io-read rows |
+|---|---:|---:|---:|---:|---:|---:|
+| dev_france_regression | pass | 1.84 | 8758.53 | 16852.32/31 | 13.56 | 38849 |
+| dev_japan_factual | pass | 1.75 | 9128.08 | 17672.96/31 | 13.56 | 38844 |
+| dev_photosynthesis_factual | pass | 1.81 | 7607.67 | 17132.35/31 | 13.41 | 38035 |
+
+Trace note:
+
+- The trace run is diagnostic only; tracing overhead means its token rate is not used as the paired performance baseline.
+- Total trace rows: `115722`, total traced IO bytes: `617.14 GiB`.
+- Current `blk1_gate_full384.csv` RAM tier does not appear in `io-read-trace.csv` because RAM-tier hits bypass the IO trace.
+- Current tier measured from `ram-batch-profile.csv`:
+  - total RAM hits: `718`;
+  - total RAM H2D bytes: `3.144 GiB`;
+  - total RAM batch wall: `2068.418 ms`.
+
+Candidate screening output:
+
+- Candidate directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4d-io-trace-n32-dev3-correct-141127/ram-candidates`
+
+Top screened candidates:
+
+| candidate | budget MiB | selected entries | trace hit rows | trace hit GiB | prompts | batches | dominant batches >=4 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| down-1800 | 1800 | 269 | 4437 | 29.02 | 3 | 2513 | 223 |
+| upgate-1800 | 1800 | 375 | 5425 | 25.31 | 3 | 3186 | 210 |
+| all-1800 | 1800 | 310 | 5519 | 31.45 | 3 | 3843 | 55 |
+| all-3000 | 3000 | 529 | 8463 | 47.19 | 3 | 5062 | 310 |
+
+N32 A/B run:
+
+- Candidate root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4d-ram-candidate-n32-dev3-141626`
+- Paired fresh control:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4c-early-down-n32-dev3-215843/control`
+
+Result:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | TTFT median ms | RAM peak GiB | iouring wait s | iouring bytes GiB | RAM hits | RAM H2D GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control blk1_gate-1800 | 3/3 | 1.86 | 1.88 | 1.88 | 7382.51 | 13.56 | 56.16 | 617.1 | 718 | 3.14 |
+| all-1800 | 3/3 | 1.91 | 1.95 | 1.99 | 7579.92 | 13.61 | 52.90 | 588.8 | 5519 | 31.45 |
+| all-3000 | 3/3 | 1.92 | 1.98 | 1.96 | 8726.13 | 14.78 | 53.17 | 573.0 | 8463 | 47.19 |
+
+Per-prompt `all-1800`:
+
+| prompt | quality | tok/s | TTFT ms | decode ms/runs | RAM peak GiB | iouring wait s | RAM hits |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| dev_france_regression | pass | 2.11 | 7579.92 | 14672.06/31 | 13.61 | 16.53 | 1884 |
+| dev_japan_factual | pass | 1.95 | 8151.71 | 15914.49/31 | 13.61 | 18.03 | 1911 |
+| dev_photosynthesis_factual | pass | 1.91 | 7382.18 | 16234.74/31 | 13.47 | 18.34 | 1724 |
+
+Interpretation:
+
+- `all-1800` is the better next candidate despite `all-3000` having a slightly higher N32 minimum:
+  - `all-1800` has better mean token rate;
+  - lower TTFT;
+  - far lower RAM peak;
+  - less risk against the 16 GB hard gate.
+- The gain is consistent with the intended mechanism:
+  - RAM hits increase from `718` to `5519`;
+  - explicit RAM H2D increases from `3.14 GiB` to `31.45 GiB`;
+  - expert-pack iouring bytes drop from `617.1 GiB` to `588.8 GiB`;
+  - iouring wait drops from `56.16s` to `52.90s`;
+  - token-rate min/median/mean improve.
+- This is still a dev N32 result, not a SOTA claim.
+
+Decision:
+
+- Promote only `all-1800` to N96 dev validation.
+- Do not promote `all-3000` yet because TTFT and RAM are too close to the limit for only marginal min-token-rate gain.
+- If N96 passes, copy the `all-1800.profile.csv` into a tracked `.Agent/profiles/kimi/ram-tier/phase4d-*` path, record exact reproduction commands, run held-out validation, then commit and push as a candidate improvement.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
