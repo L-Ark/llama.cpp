@@ -1,5 +1,41 @@
 # Kimi token-rate optimization plan under 16GB host RAM
 
+## Non-negotiable SOTA reproducibility gate
+
+This section is the first gate for every future SOTA claim. It overrides any
+older note that treats a one-off run as accepted without a complete reproducible
+code state.
+
+A run may be promoted to accepted SOTA only if all of the following are true:
+
+- `git status --short` is clean before the run, except for explicitly listed
+  ignored/untracked measurement artifacts that do not affect build/runtime.
+- The exact source state is committed and pushed before or immediately after the
+  accepted run. The pushed commit must contain every runtime/code/config/script
+  change required by the result.
+- The commit message body records the improvement amount, exact branch and
+  commit, rollback point, env block, full reproduction command, prompt/dev/test
+  set, model path, expert-pack/profile paths, cgroup settings, cold-start method,
+  RAM peak, TTFT, decode time, token rate, quality gate, and fallback/direct-read
+  integrity checks.
+- The run directory records the same command/env/metrics and contains enough
+  evidence to rerun the result from the pushed commit without relying on memory,
+  shell history, or uncommitted files.
+- A clean checkout of the pushed commit can rerun the recorded command and reach
+  the same result within the documented variance band while passing RAM, TTFT,
+  quality, and fallback/direct-read gates.
+
+If any source file is modified during a run, that run is dirty. Dirty runs are
+diagnostic only unless the exact diff is committed and pushed, or at minimum
+saved as a patch artifact and then committed before SOTA acceptance. A dirty run
+must not be described as accepted SOTA in this plan, in commit messages, or in
+status updates.
+
+The historical `1.93 tok/s` pageable full-layer RAM run is treated as a dirty
+historical measurement, not a valid accepted SOTA, because its run artifact shows
+`ggml/src/ggml-cuda/moe_stream_batch.cu` had `45` uncommitted insertions and the
+patch was not preserved. Future work must not repeat this failure mode.
+
 ## Goal
 
 Continue optimizing Kimi IQ3_S decode throughput in the ik_llama-compatible
