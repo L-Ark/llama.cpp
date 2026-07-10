@@ -460,6 +460,135 @@ Next plan:
    - If residual is dense/attention/shared compute, expert-cache policy alone
      cannot reach `5 tok/s`.
 
+## 2026-07-11 Phase 4X goal and plan: Kimi CPU/defer GPU-extension audit
+
+Goal:
+
+- Verify whether the DeepSeek SOTA idea applies to Kimi in the current code:
+  keep CPU/defer as the MoE control path, but make GPU the execution and
+  storage extension for `gate/up/down` experts whenever this reduces measured
+  critical-path time.
+- The near-term target is a reproducible, prompt-general Kimi improvement over
+  the current stable path and a stable `>2 tok/s` N96 result under the hard
+  16 GB host RAM gate.
+- The product target remains stable `>5 tok/s` for random user prompts on
+  `16 GB host RAM + 32 GB RTX 5090`; this phase must state whether that target
+  is blocked by expert movement, residual non-MoE time, or storage format.
+
+Why this is not a direct DeepSeek gate-only port:
+
+- In DeepSeek, a large gain came from the fact that the CPU/defer MoE path was
+  still doing important gate work slowly until a GPU expert-cache extension
+  caught it.
+- In current Kimi profiles, decode CPU fallback is already `0`, direct reads
+  are `0`, and the measured hot path is mostly GPU extension plus expert-pack
+  movement.
+- Therefore, Kimi should not assume a gate-only VRAM preload will reproduce the
+  DeepSeek jump. The next useful work is to prove which part of Kimi still
+  waits outside the current `upgate` and `down` profile buckets.
+
+Current measured bound to respect:
+
+- Corrected Phase 4V N32 profile:
+  - decode: `604.395 ms/token`;
+  - upgate wall: `165.835 ms/token`;
+  - down wall: `160.585 ms/token`;
+  - unattributed residual: `277.976 ms/token`;
+  - decode CPU fallback: `0`.
+- If all measured upgate and down wall vanished, the remaining residual alone
+  would still cap rate at about `3.6 tok/s`.
+- A stable `>2 tok/s` requires decode below `500 ms/token`, so Phase 4X needs
+  at least about `105 ms/token` real saved time on N96, not just higher hit
+  rate.
+- A stable `>5 tok/s` requires decode near `200 ms/token`; expert-cache policy
+  alone cannot credibly claim that until residual is attributed and reduced.
+
+Hard gates for this phase:
+
+- Cold start only.
+- Total host RAM peak must remain below `15900000000` bytes, including page
+  cache, pinned memory, mmap/file-backed pages, helper processes, and cgroup
+  accounting.
+- TTFT must stay within `1.20x` of the paired baseline.
+- Quality must pass for `Please introduce France in a short paragraph.` and
+  the general-prompt dev set before any held-out run.
+- Optimizations must be prompt-general. Held-out prompts must not be used to
+  tune packs, profiles, layer choices, cache budgets, thresholds, or admission
+  policy.
+- Accepted SOTA commits must include improvement size, env, exact commands,
+  prompt split, RAM/TTFT/quality gate, run directories, and rollback commit in
+  the commit body, then be pushed immediately.
+
+Plan:
+
+1. Reproduce the current stable baseline before changing runtime behavior.
+   - Run one N96 cold-start dev prompt with `GGML_MOE_PHASE_REPORT=1`.
+   - Record token rate, TTFT, decode time, prompt time, RAM peak, final
+     `file/active_file/inactive_file`, VRAM hit rates, expert-pack bytes,
+     `io_uring_wait`, staging wall, H2D wall, upgate wall, down wall, and CPU
+     fallback counters.
+   - Record the rollback commit and exact SOTA env.
+
+2. Add residual attribution before any new cache policy.
+   - Split decode wall into:
+     - measured `upgate`;
+     - measured `down`;
+     - dense/attention/shared compute if available from graph/node timing;
+     - CUDA synchronization gaps;
+     - D2H/scatter not currently counted in MoE buckets;
+     - scheduler/host bookkeeping;
+     - sampler/output overhead.
+   - Keep instrumentation default-off or low overhead under a profiling env.
+   - Acceptance for instrumentation is no behavior change, same quality, and
+     overhead within noise.
+
+3. Audit CPU/defer GPU-extension coverage.
+   - For each active expert operation, classify the actual path:
+     `VRAM resident`, `dynamic VRAM cache hit`, `RAM tier`, `expert-pack
+     iouring`, `pack mmap`, `GGUF mmap`, or `CPU fallback`.
+   - Report the classification by layer, role, quant type, and prompt phase.
+   - Any unclassified decode work must be treated as a profiling bug before
+     optimization claims are made.
+
+4. Only if residual is MoE scheduler or movement wait, test role-joint IO.
+   - When routing for a layer is known, submit `gate/up/down` misses through a
+     single scheduler view to improve queue depth and reduce stalls.
+   - This is IO scheduling only. `down` compute still waits for the
+     `up/gate` activation result.
+   - Add fairness so down prefetch cannot starve current-layer `gate/up`.
+   - The theoretical upper bound is the measured exposed `io_uring_wait` and
+     staging wait that can be overlapped without increasing read bytes or TTFT.
+
+5. Only if page cache is low-value during decode, test explicit RAM/VRAM tiers.
+   - Replace low-value file cache with batchable expert storage, not scattered
+     one-off entries.
+   - Prefer compact layer/role slabs or adjacent pack ranges that can transfer
+     to VRAM efficiently.
+   - Measure evicted page-cache categories, refaults, direct reclaim, TTFT, and
+     H2D wall. Reject any candidate that only shifts SSD wait into RAM pressure
+     or H2D tail latency.
+
+6. Validation ladder.
+   - N32 dev smoke for parser, RAM, quality, and obvious regressions.
+   - N96 dev paired A/B for the real decision.
+   - N96 held-out paired A/B only after dev passes.
+   - Commit and push immediately only for accepted improvements.
+   - Default-off or revert rejected experiments and record the measured reason
+     here.
+
+Decision rules:
+
+- If residual is mostly dense/attention/shared compute, the next plan should
+  move away from expert-cache admission and toward non-MoE GPU graph/kernel
+  optimization.
+- If residual is mostly scheduler wait or uncovered MoE transfer, prioritize
+  role-joint IO with fairness and better queue continuity.
+- If residual is mostly RAM/page-cache churn, prioritize controlled RAM expert
+  slabs and prompt-phase cache eviction.
+- If all measured components are already near hardware limits, reaching
+  `5 tok/s` requires a smaller expert representation, predictive prefetch that
+  is validated on held-out prompts, or a different storage/compute format.
+
 ## 2026-07-11 active goal and plan history
 
 This section was the previous source of truth. It is retained as history and
