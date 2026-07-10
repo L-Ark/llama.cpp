@@ -697,6 +697,17 @@ struct expert_pack_state {
     std::atomic<uint64_t> iouring_batch_hist_9_16{0};
     std::atomic<uint64_t> iouring_batch_hist_17_32{0};
     std::atomic<uint64_t> iouring_batch_hist_gt32{0};
+    std::atomic<uint64_t> adjacent_coalesce_groups{0};
+    std::atomic<uint64_t> adjacent_coalesce_slices{0};
+    std::atomic<uint64_t> adjacent_coalesce_extents_saved{0};
+    std::atomic<uint64_t> adjacent_coalesce_physical_bytes{0};
+    std::atomic<uint64_t> adjacent_coalesce_payload_bytes{0};
+    std::atomic<uint64_t> adjacent_coalesce_max_group_jobs{0};
+    std::atomic<uint64_t> adjacent_coalesce_max_span_bytes{0};
+    std::atomic<uint64_t> adjacent_coalesce_reject_source{0};
+    std::atomic<uint64_t> adjacent_coalesce_reject_tensor{0};
+    std::atomic<uint64_t> adjacent_coalesce_reject_gap{0};
+    std::atomic<uint64_t> adjacent_coalesce_reject_span{0};
     // RAM hot tier
     void *ram_tier_base = nullptr;
     size_t ram_tier_bytes = 0;
@@ -2654,6 +2665,25 @@ static size_t expert_pack_io_refill_batch() {
     return expert_pack_env_size("GGML_MOE_IO_REFILL_BATCH", 1, 1, 256);
 }
 
+static bool expert_pack_adjacent_coalesce_enabled() {
+    return expert_pack_env_bool("GGML_MOE_IO_ADJACENT_COALESCE", false);
+}
+
+static size_t expert_pack_adjacent_max_span() {
+    return expert_pack_env_size("GGML_MOE_IO_ADJACENT_MAX_SPAN_MIB", 16, 1, 64) * 1024ULL * 1024ULL;
+}
+
+static size_t expert_pack_adjacent_max_gap() {
+    const char *env = std::getenv("GGML_MOE_IO_ADJACENT_MAX_GAP");
+    if (!env || !env[0]) return 0;
+    const unsigned long long parsed = std::strtoull(env, nullptr, 10);
+    return (size_t)std::min<unsigned long long>(parsed, 4096ULL);
+}
+
+static size_t expert_pack_adjacent_min_group() {
+    return expert_pack_env_size("GGML_MOE_IO_ADJACENT_MIN_GROUP", 2, 2, 64);
+}
+
 static void expert_pack_atomic_max(std::atomic<uint64_t> &target, uint64_t value) {
     uint64_t current = target.load(std::memory_order_relaxed);
     while (current < value &&
@@ -3400,6 +3430,27 @@ static void expert_pack_report_atexit() {
                      g_expert_pack.iouring_batch_hist_1.load(), g_expert_pack.iouring_batch_hist_2_4.load(),
                      g_expert_pack.iouring_batch_hist_5_8.load(), g_expert_pack.iouring_batch_hist_9_16.load(),
                      g_expert_pack.iouring_batch_hist_17_32.load(), g_expert_pack.iouring_batch_hist_gt32.load());
+    }
+    if (g_expert_pack.adjacent_coalesce_groups.load() > 0 ||
+            g_expert_pack.adjacent_coalesce_reject_source.load() > 0 ||
+            g_expert_pack.adjacent_coalesce_reject_tensor.load() > 0 ||
+            g_expert_pack.adjacent_coalesce_reject_gap.load() > 0 ||
+            g_expert_pack.adjacent_coalesce_reject_span.load() > 0) {
+        std::fprintf(stderr,
+                     "[moe_stream_batch] adjacent coalesce: groups=%lu slices=%lu extents_saved=%lu "
+                     "physical_bytes=%lu payload_bytes=%lu max_group_jobs=%lu max_span_bytes=%lu "
+                     "reject_source=%lu reject_tensor=%lu reject_gap=%lu reject_span=%lu\n",
+                     g_expert_pack.adjacent_coalesce_groups.load(),
+                     g_expert_pack.adjacent_coalesce_slices.load(),
+                     g_expert_pack.adjacent_coalesce_extents_saved.load(),
+                     g_expert_pack.adjacent_coalesce_physical_bytes.load(),
+                     g_expert_pack.adjacent_coalesce_payload_bytes.load(),
+                     g_expert_pack.adjacent_coalesce_max_group_jobs.load(),
+                     g_expert_pack.adjacent_coalesce_max_span_bytes.load(),
+                     g_expert_pack.adjacent_coalesce_reject_source.load(),
+                     g_expert_pack.adjacent_coalesce_reject_tensor.load(),
+                     g_expert_pack.adjacent_coalesce_reject_gap.load(),
+                     g_expert_pack.adjacent_coalesce_reject_span.load());
     }
     if (g_expert_pack.ram_tier_base) {
         std::fprintf(stderr,
@@ -6227,6 +6278,20 @@ static bool expert_pack_iouring_copy_jobs(
         uint64_t offset = 0;
         size_t read_sz = 0;
         size_t prefix = 0;
+        int32_t source_idx = 0;
+        const char *tensor = nullptr;
+    };
+
+    struct iouring_group_slice {
+        size_t plan_idx = 0;
+        size_t payload_offset = 0;
+    };
+
+    struct iouring_group_plan {
+        int32_t source_idx = 0;
+        uint64_t offset = 0;
+        size_t read_sz = 0;
+        std::vector<iouring_group_slice> slices;
     };
 
     std::vector<iouring_read_plan> read_plans;
@@ -6311,26 +6376,129 @@ static bool expert_pack_iouring_copy_jobs(
             return false;
         }
         max_read_sz = std::max(max_read_sz, read_sz);
-        read_plans.push_back({i, read_offset, read_sz, prefix});
+        read_plans.push_back({i, read_offset, read_sz, prefix, job.pack_entry->source_idx, job.tensor});
     }
-    if (!read_plans.empty() && !pinned_stage_ensure(ring, max_read_sz, true)) {
-        return false;
+    const bool coalesce_adjacent = expert_pack_adjacent_coalesce_enabled() && read_plans.size() > 1;
+    const bool sort_by_offset = expert_pack_env_bool("GGML_MOE_IO_SORT_OFFSET", false) || coalesce_adjacent;
+    std::vector<size_t> plan_order;
+    if (sort_by_offset && read_plans.size() > 1) {
+        plan_order.resize(read_plans.size());
+        for (size_t i = 0; i < read_plans.size(); ++i) {
+            plan_order[i] = i;
+        }
+        std::stable_sort(plan_order.begin(), plan_order.end(),
+            [&](size_t a, size_t b) {
+                const expert_pack_entry *ea = jobs[read_plans[a].job_idx].pack_entry;
+                const expert_pack_entry *eb = jobs[read_plans[b].job_idx].pack_entry;
+                if (ea->source_idx != eb->source_idx) return ea->source_idx < eb->source_idx;
+                return read_plans[a].offset < read_plans[b].offset;
+            });
     }
-    const size_t depth = std::min(expert_pack_io_depth(), ring.slots.size());
-    if (!read_plans.empty() && depth == 0) {
-        return false;
+    auto ordered_plan_idx = [&](size_t seq_idx) -> size_t {
+        return plan_order.empty() ? seq_idx : plan_order[seq_idx];
+    };
+
+    std::vector<iouring_group_plan> group_plans;
+    group_plans.reserve(read_plans.size());
+    const size_t adjacent_max_span = expert_pack_adjacent_max_span();
+    const size_t adjacent_max_gap = expert_pack_adjacent_max_gap();
+    const size_t adjacent_min_group = expert_pack_adjacent_min_group();
+    size_t adjacent_groups = 0;
+    size_t adjacent_slices = 0;
+    size_t adjacent_extents_saved = 0;
+    uint64_t adjacent_physical_bytes = 0;
+    uint64_t adjacent_payload_bytes = 0;
+    size_t adjacent_max_group_jobs = 0;
+    size_t adjacent_max_span_bytes = 0;
+    uint64_t adjacent_reject_source = 0;
+    uint64_t adjacent_reject_tensor = 0;
+    uint64_t adjacent_reject_gap = 0;
+    uint64_t adjacent_reject_span = 0;
+
+    auto append_single_group = [&](size_t plan_idx) {
+        const iouring_read_plan &plan = read_plans[plan_idx];
+        iouring_group_plan group;
+        group.source_idx = plan.source_idx;
+        group.offset = plan.offset;
+        group.read_sz = plan.read_sz;
+        group.slices.push_back({plan_idx, plan.prefix});
+        group_plans.push_back(std::move(group));
+    };
+
+    if (coalesce_adjacent) {
+        size_t seq = 0;
+        while (seq < read_plans.size()) {
+            const size_t first_idx = ordered_plan_idx(seq);
+            const iouring_read_plan &first = read_plans[first_idx];
+            iouring_group_plan group;
+            group.source_idx = first.source_idx;
+            group.offset = first.offset;
+            group.read_sz = first.read_sz;
+            group.slices.push_back({first_idx, first.prefix});
+            uint64_t group_end = first.offset + first.read_sz;
+            size_t next_seq = seq + 1;
+            while (next_seq < read_plans.size()) {
+                const size_t next_idx = ordered_plan_idx(next_seq);
+                const iouring_read_plan &next = read_plans[next_idx];
+                if (next.source_idx != group.source_idx) {
+                    ++adjacent_reject_source;
+                    break;
+                }
+                if (std::strcmp(next.tensor, first.tensor) != 0) {
+                    ++adjacent_reject_tensor;
+                    break;
+                }
+                if (next.offset < group_end || next.offset - group_end > adjacent_max_gap) {
+                    ++adjacent_reject_gap;
+                    break;
+                }
+                const uint64_t next_end = next.offset + next.read_sz;
+                if (next_end < group.offset || next_end - group.offset > adjacent_max_span) {
+                    ++adjacent_reject_span;
+                    break;
+                }
+                group.slices.push_back({next_idx, (size_t)(next.offset - group.offset) + next.prefix});
+                group_end = next_end;
+                group.read_sz = (size_t)(group_end - group.offset);
+                ++next_seq;
+            }
+            if (group.slices.size() >= adjacent_min_group) {
+                max_read_sz = std::max(max_read_sz, group.read_sz);
+                adjacent_groups += 1;
+                adjacent_slices += group.slices.size();
+                adjacent_extents_saved += group.slices.size() - 1;
+                adjacent_physical_bytes += group.read_sz;
+                adjacent_payload_bytes += (uint64_t)group.slices.size() * (uint64_t)expert_bytes;
+                adjacent_max_group_jobs = std::max(adjacent_max_group_jobs, group.slices.size());
+                adjacent_max_span_bytes = std::max(adjacent_max_span_bytes, group.read_sz);
+                group_plans.push_back(std::move(group));
+            } else {
+                for (const iouring_group_slice &slice : group.slices) {
+                    append_single_group(slice.plan_idx);
+                }
+            }
+            seq = next_seq;
+        }
+    } else {
+        for (size_t seq = 0; seq < read_plans.size(); ++seq) {
+            append_single_group(ordered_plan_idx(seq));
+        }
     }
-    if (stage_granularity_profile_enabled()) {
-        ++ring.granularity_calls;
-        ring.granularity_total_jobs += jobs.size();
-        ring.granularity_read_jobs += read_plans.size();
-        ring.granularity_depth_sum += depth;
-        ring.granularity_slots_sum += ring.slots.size();
-        ring.granularity_max_jobs = std::max<uint64_t>(ring.granularity_max_jobs, (uint64_t)jobs.size());
-        ring.granularity_max_read_jobs = std::max<uint64_t>(ring.granularity_max_read_jobs, (uint64_t)read_plans.size());
-        ring.granularity_max_depth = std::max<uint64_t>(ring.granularity_max_depth, (uint64_t)depth);
+    if (adjacent_groups > 0) {
+        g_expert_pack.adjacent_coalesce_groups.fetch_add(adjacent_groups);
+        g_expert_pack.adjacent_coalesce_slices.fetch_add(adjacent_slices);
+        g_expert_pack.adjacent_coalesce_extents_saved.fetch_add(adjacent_extents_saved);
+        g_expert_pack.adjacent_coalesce_physical_bytes.fetch_add(adjacent_physical_bytes);
+        g_expert_pack.adjacent_coalesce_payload_bytes.fetch_add(adjacent_payload_bytes);
+        expert_pack_atomic_max(g_expert_pack.adjacent_coalesce_max_group_jobs, adjacent_max_group_jobs);
+        expert_pack_atomic_max(g_expert_pack.adjacent_coalesce_max_span_bytes, adjacent_max_span_bytes);
     }
-    const bool sort_by_offset = expert_pack_env_bool("GGML_MOE_IO_SORT_OFFSET", false);
+    if (coalesce_adjacent) {
+        g_expert_pack.adjacent_coalesce_reject_source.fetch_add(adjacent_reject_source);
+        g_expert_pack.adjacent_coalesce_reject_tensor.fetch_add(adjacent_reject_tensor);
+        g_expert_pack.adjacent_coalesce_reject_gap.fetch_add(adjacent_reject_gap);
+        g_expert_pack.adjacent_coalesce_reject_span.fetch_add(adjacent_reject_span);
+    }
     if (read_plans.empty()) {
         if (profile_io_batch) {
             const auto io_batch_end = std::chrono::steady_clock::now();
@@ -6339,7 +6507,7 @@ static bool expert_pack_iouring_copy_jobs(
                     jobs.empty() ? "" : jobs.front().tensor,
                     jobs.empty() ? "" : jobs.back().tensor,
                     jobs.size(), read_plans.size(), ram_or_prefetch_jobs, ram_or_prefetch_bytes,
-                    depth, ring.slots.size(), 0, 0,
+                    0, ring.slots.size(), 0, 0,
                     0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0,
                     std::chrono::duration<double, std::milli>(io_batch_end - io_batch_start).count(),
                     sort_by_offset);
@@ -6360,6 +6528,23 @@ static bool expert_pack_iouring_copy_jobs(
             }
         }
         return true;
+    }
+    if (!pinned_stage_ensure(ring, max_read_sz, true)) {
+        return false;
+    }
+    const size_t depth = std::min(expert_pack_io_depth(), ring.slots.size());
+    if (depth == 0) {
+        return false;
+    }
+    if (stage_granularity_profile_enabled()) {
+        ++ring.granularity_calls;
+        ring.granularity_total_jobs += jobs.size();
+        ring.granularity_read_jobs += group_plans.size();
+        ring.granularity_depth_sum += depth;
+        ring.granularity_slots_sum += ring.slots.size();
+        ring.granularity_max_jobs = std::max<uint64_t>(ring.granularity_max_jobs, (uint64_t)jobs.size());
+        ring.granularity_max_read_jobs = std::max<uint64_t>(ring.granularity_max_read_jobs, (uint64_t)group_plans.size());
+        ring.granularity_max_depth = std::max<uint64_t>(ring.granularity_max_depth, (uint64_t)depth);
     }
     global_sched_shadow_scope sched_shadow_scope;
     if (global_sched_shadow_enabled()) {
@@ -6434,38 +6619,19 @@ static bool expert_pack_iouring_copy_jobs(
             std::fclose(f);
         }
     }
-    expert_pack_record_iouring_batch(read_plans.size());
+    expert_pack_record_iouring_batch(group_plans.size());
     ring.iouring_batches += 1;
-    ring.iouring_jobs += read_plans.size();
-    const size_t bucket = expert_pack_iouring_batch_bucket(read_plans.size());
+    ring.iouring_jobs += group_plans.size();
+    const size_t bucket = expert_pack_iouring_batch_bucket(group_plans.size());
     if (bucket < 6) {
         ring.iouring_batch_hist[bucket] += 1;
     }
 
     struct pending_job {
-        size_t plan_idx = 0;
+        size_t group_idx = 0;
         size_t slot_idx = 0;
         size_t bytes = 0;
-        size_t prefix = 0;
         std::chrono::steady_clock::time_point copy_start;
-    };
-
-    std::vector<size_t> plan_order;
-    if (sort_by_offset && read_plans.size() > 1) {
-        plan_order.resize(read_plans.size());
-        for (size_t i = 0; i < read_plans.size(); ++i) {
-            plan_order[i] = i;
-        }
-        std::stable_sort(plan_order.begin(), plan_order.end(),
-            [&](size_t a, size_t b) {
-                const expert_pack_entry *ea = jobs[read_plans[a].job_idx].pack_entry;
-                const expert_pack_entry *eb = jobs[read_plans[b].job_idx].pack_entry;
-                if (ea->source_idx != eb->source_idx) return ea->source_idx < eb->source_idx;
-                return read_plans[a].offset < read_plans[b].offset;
-            });
-    }
-    auto ordered_plan_idx = [&](size_t seq_idx) -> size_t {
-        return plan_order.empty() ? seq_idx : plan_order[seq_idx];
     };
 
     const unsigned int flags = expert_pack_env_bool("GGML_MOE_IO_SQPOLL", false) ? IORING_SETUP_SQPOLL : 0;
@@ -6508,9 +6674,11 @@ static bool expert_pack_iouring_copy_jobs(
     uint64_t io_batch_inflight_sum = 0;
     uint64_t io_batch_inflight_samples = 0;
     uint64_t io_batch_inflight_max = 0;
-    auto submit_one = [&](size_t plan_idx, size_t slot_idx, size_t pending_idx) -> bool {
-        const iouring_read_plan &plan = read_plans[plan_idx];
-        const Job &job = jobs[plan.job_idx];
+    auto submit_one = [&](size_t group_idx, size_t slot_idx, size_t pending_idx) -> bool {
+        const iouring_group_plan &group = group_plans[group_idx];
+        if (group.slices.empty()) return false;
+        const iouring_read_plan &first_plan = read_plans[group.slices.front().plan_idx];
+        const Job &first_job = jobs[first_plan.job_idx];
         pinned_stage_slot &slot = ring.slots[slot_idx];
         if (slot.pending) {
             const auto wait_start = (profile_stage || profile_io_batch) ?
@@ -6530,15 +6698,14 @@ static bool expert_pack_iouring_copy_jobs(
         io_uring_sqe *sqe = io_uring_get_sqe(ring_io);
         if (!sqe) return false;
         pending[pending_idx] = {
-            plan_idx,
+            group_idx,
             slot_idx,
-            plan.read_sz,
-            plan.prefix,
+            group.read_sz,
             (batch_ttft_trace_enabled() || profile_copy) ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}
         };
-        const expert_pack_source *source = expert_pack_source_for_entry(job.pack_entry);
+        const expert_pack_source *source = expert_pack_source_for_entry(first_job.pack_entry);
         if (!source || source->fd_direct < 0) return false;
-        io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)plan.read_sz, (off_t)plan.offset);
+        io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)group.read_sz, (off_t)group.offset);
         io_uring_sqe_set_data64(sqe, (uint64_t)pending_idx + 1);
         return true;
     };
@@ -6553,11 +6720,11 @@ static bool expert_pack_iouring_copy_jobs(
     };
     std::vector<reusable_pending> reusable_pending_slots;
     reusable_pending_slots.reserve(depth);
-    while (next_job < read_plans.size() && inflight < depth) {
+    while (next_job < group_plans.size() && inflight < depth) {
         const size_t pending_idx = free_pending.back();
         free_pending.pop_back();
         const size_t slot_idx = ring.next++ % ring.slots.size();
-        if (!submit_one(ordered_plan_idx(next_job), slot_idx, pending_idx)) {
+        if (!submit_one(next_job, slot_idx, pending_idx)) {
             ++g_expert_pack.iouring_fallbacks;
             return false;
         }
@@ -6580,7 +6747,7 @@ static bool expert_pack_iouring_copy_jobs(
     const size_t initial_submit_jobs = next_job;
 
     size_t completed = 0;
-    while (completed < read_plans.size()) {
+    while (completed < group_plans.size()) {
         g_expert_pack.iouring_inflight_sum.fetch_add(inflight);
         ++g_expert_pack.iouring_inflight_samples;
         expert_pack_atomic_max(g_expert_pack.iouring_inflight_max, inflight);
@@ -6606,8 +6773,7 @@ static bool expert_pack_iouring_copy_jobs(
             }
 
             const pending_job done = pending[pending_idx];
-            const iouring_read_plan &plan = read_plans[done.plan_idx];
-            const Job &job = jobs[plan.job_idx];
+            const iouring_group_plan &group = group_plans[done.group_idx];
             pinned_stage_slot &slot = ring.slots[done.slot_idx];
             io_uring_cqe_seen(ring_io, cqe);
             ++g_expert_pack.iouring_cqes;
@@ -6620,9 +6786,13 @@ static bool expert_pack_iouring_copy_jobs(
                     return false;
                 }
             }
-            const char *slot_src = (const char *)slot.host + done.prefix;
-            if (cudaMemcpyAsync(job.dst, slot_src, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
-                return false;
+            for (const iouring_group_slice &slice : group.slices) {
+                const iouring_read_plan &plan = read_plans[slice.plan_idx];
+                const Job &job = jobs[plan.job_idx];
+                const char *slot_src = (const char *)slot.host + slice.payload_offset;
+                if (cudaMemcpyAsync(job.dst, slot_src, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+                    return false;
+                }
             }
             if ((profile_stage || profile_copy_h2d) && slot.copy_done) {
                 if (cudaEventRecord(slot.copy_done, st) != cudaSuccess) {
@@ -6651,39 +6821,45 @@ static bool expert_pack_iouring_copy_jobs(
             if (profile_io_batch) io_batch_enqueue_ms += enqueue_ms;
             if (profile_io_wait) io_wait_enqueue_ms += enqueue_ms;
             slot.pending = true;
-            ++ring.copies;
-            ++g_expert_pack.iouring_reads;
-            g_expert_pack.iouring_bytes.fetch_add(expert_bytes);
-            ++g_expert_pack.iouring_h2d_enqueues;
             if (profile_io_batch) ++io_batch_cqes;
 
-            if (done.copy_start != std::chrono::steady_clock::time_point{}) {
-                double h2d_ms = -1.0;
-                if (profile_copy_h2d && slot.copy_start && slot.copy_done &&
-                        cudaEventSynchronize(slot.copy_done) == cudaSuccess) {
-                    float h2d_ms_f = 0.0f;
-                    if (cudaEventElapsedTime(&h2d_ms_f, slot.copy_start, slot.copy_done) == cudaSuccess) {
-                        h2d_ms = h2d_ms_f;
+            double h2d_ms = -1.0;
+            if (done.copy_start != std::chrono::steady_clock::time_point{} &&
+                    profile_copy_h2d && group.slices.size() == 1 &&
+                    slot.copy_start && slot.copy_done &&
+                    cudaEventSynchronize(slot.copy_done) == cudaSuccess) {
+                float h2d_ms_f = 0.0f;
+                if (cudaEventElapsedTime(&h2d_ms_f, slot.copy_start, slot.copy_done) == cudaSuccess) {
+                    h2d_ms = h2d_ms_f;
+                }
+            }
+            for (const iouring_group_slice &slice : group.slices) {
+                const iouring_read_plan &plan = read_plans[slice.plan_idx];
+                const Job &job = jobs[plan.job_idx];
+                ++ring.copies;
+                ++g_expert_pack.iouring_reads;
+                g_expert_pack.iouring_bytes.fetch_add(expert_bytes);
+                ++g_expert_pack.iouring_h2d_enqueues;
+                if (done.copy_start != std::chrono::steady_clock::time_point{}) {
+                    const auto copy_end = std::chrono::steady_clock::now();
+                    const double wall_ms = std::chrono::duration<double, std::milli>(copy_end - done.copy_start).count();
+                    if (batch_ttft_trace_enabled()) {
+                        batch_ttft_trace_record(
+                            trace_op,
+                            job.tensor,
+                            job.expert_idx,
+                            expert_bytes,
+                            false,
+                            true,
+                            false,
+                            wall_ms);
                     }
-                }
-                const auto copy_end = std::chrono::steady_clock::now();
-                const double wall_ms = std::chrono::duration<double, std::milli>(copy_end - done.copy_start).count();
-                if (batch_ttft_trace_enabled()) {
-                    batch_ttft_trace_record(
-                        trace_op,
-                        job.tensor,
-                        job.expert_idx,
-                        expert_bytes,
-                        false,
-                        true,
-                        false,
-                        wall_ms);
-                }
-                if (profile_copy) {
-                    copy_profile_record(
-                            trace_op, job.tensor, job.expert_idx, expert_bytes,
-                            true, false, true,
-                            0.0, 0.0, wall_ms, enqueue_ms, h2d_ms, wall_ms);
+                    if (profile_copy) {
+                        copy_profile_record(
+                                trace_op, job.tensor, job.expert_idx, expert_bytes,
+                                true, false, true,
+                                0.0, 0.0, wall_ms, enqueue_ms, h2d_ms, wall_ms);
+                    }
                 }
             }
 
@@ -6695,12 +6871,12 @@ static bool expert_pack_iouring_copy_jobs(
 
         auto refill_pending = [&]() -> bool {
             size_t submitted = 0;
-            while (next_job < read_plans.size() && inflight < depth && !reusable_pending_slots.empty() && submitted < refill_batch) {
+            while (next_job < group_plans.size() && inflight < depth && !reusable_pending_slots.empty() && submitted < refill_batch) {
                 const reusable_pending reusable = reusable_pending_slots.back();
                 reusable_pending_slots.pop_back();
                 const size_t pending_idx = reusable.pending_idx;
                 const size_t slot_idx = reusable.slot_idx;
-                if (!submit_one(ordered_plan_idx(next_job), slot_idx, pending_idx)) {
+                if (!submit_one(next_job, slot_idx, pending_idx)) {
                     ++g_expert_pack.iouring_fallbacks;
                     return false;
                 }
@@ -6748,7 +6924,7 @@ static bool expert_pack_iouring_copy_jobs(
         ++drained_cqes;
         if (refill_batch == 1 && !refill_pending()) return false;
 
-        while (completed < read_plans.size() && inflight > 0) {
+        while (completed < group_plans.size() && inflight > 0) {
             io_uring_cqe *extra_cqe = nullptr;
             const int peek_rc = io_uring_peek_cqe(ring_io, &extra_cqe);
             if (peek_rc != 0 || !extra_cqe) {
@@ -6764,7 +6940,7 @@ static bool expert_pack_iouring_copy_jobs(
                     trace_op,
                     jobs.empty() ? "" : jobs.front().tensor,
                     jobs.empty() ? "" : jobs.back().tensor,
-                    read_plans.size(),
+                    group_plans.size(),
                     wait_completed_before,
                     wait_inflight_before,
                     wait_next_job_before,
@@ -6787,7 +6963,7 @@ static bool expert_pack_iouring_copy_jobs(
                 trace_op,
                 jobs.empty() ? "" : jobs.front().tensor,
                 jobs.empty() ? "" : jobs.back().tensor,
-                jobs.size(), read_plans.size(), ram_or_prefetch_jobs, ram_or_prefetch_bytes,
+                jobs.size(), group_plans.size(), ram_or_prefetch_jobs, ram_or_prefetch_bytes,
                 depth, ring.slots.size(), refill_batch, initial_submit_jobs,
                 io_batch_submit_calls, io_batch_wait_calls, io_batch_cqes,
                 io_batch_inflight_sum, io_batch_inflight_samples, io_batch_inflight_max,

@@ -2905,6 +2905,77 @@ Next step:
   1. current pack + coalescer enabled safety A/B;
   2. greedy-pair dev overlay + coalescer enabled performance A/B.
 
+### Phase 4P step B result: default-off exact-adjacent io_uring coalescer
+
+Timestamp: 2026-07-11 04:20 CST.
+
+Implemented:
+
+- File: `ggml/src/ggml-cuda/moe_stream_batch.cu`
+- Function: `expert_pack_iouring_copy_jobs`
+- Default behavior remains off unless `GGML_MOE_IO_ADJACENT_COALESCE=1`.
+
+Runtime envs:
+
+- `GGML_MOE_IO_ADJACENT_COALESCE=1`
+- `GGML_MOE_IO_ADJACENT_MAX_SPAN_MIB=16`
+- `GGML_MOE_IO_ADJACENT_MAX_GAP=0`
+- `GGML_MOE_IO_ADJACENT_MIN_GROUP=2`
+
+Implementation details:
+
+- The code still builds one logical `iouring_read_plan` per expert.
+- It then builds physical `iouring_group_plan` objects.
+- With coalescing disabled, each group contains exactly one logical plan.
+- With coalescing enabled, plans can merge only when:
+  - same source;
+  - same tensor;
+  - adjacent offset under the configured gap cap;
+  - grouped span under the configured span cap;
+  - group size reaches `GGML_MOE_IO_ADJACENT_MIN_GROUP`.
+- SQE submission now reads one physical group into one pinned staging slot.
+- CQE handling iterates group slices and enqueues one `cudaMemcpyAsync` per logical expert into its original `dst`.
+- The pinned slot records one `done` event after the last slice copy, preventing slot reuse before all H2D copies from that group are enqueued and ordered on the stream.
+- `GGML_MOE_IO_READ_TRACE_OUT` remains logical/per-expert for compatibility with existing scripts.
+
+Counters added:
+
+- `adjacent_coalesce_groups`
+- `adjacent_coalesce_slices`
+- `adjacent_coalesce_extents_saved`
+- `adjacent_coalesce_physical_bytes`
+- `adjacent_coalesce_payload_bytes`
+- `adjacent_coalesce_max_group_jobs`
+- `adjacent_coalesce_max_span_bytes`
+- reject counters for source/tensor/gap/span.
+
+Validation:
+
+```bash
+cmake --build build-cuda-batch -j 8
+build-cuda-batch/bin/test-kimi-deepseek2-guards
+```
+
+Result:
+
+- Build passed.
+- `test-kimi-deepseek2-guards` passed.
+- This is not a SOTA claim. No token-rate result is accepted until the A/B ladder below passes.
+
+Next validation ladder:
+
+1. N32 dev current-pack safety A/B:
+   - baseline: current SOTA env, coalescer disabled;
+   - candidate: same env with `GGML_MOE_IO_ADJACENT_COALESCE=1`;
+   - expected: tiny effect because current physical layout only has a `1.34%` bound;
+   - reject immediately if quality, RAM, TTFT, or token rate regresses.
+2. If safety passes, build a dev-only greedy-pair overlay using `scripts/kimi-build-trace-overlay-pack.py --mode greedy-pair --max-jobs 8`.
+3. N32 dev greedy-pair overlay + coalescer A/B:
+   - require visible `adjacent_coalesce_extents_saved`;
+   - require lower exposed `iouring_wait_us` or better token rate before any N96 run.
+4. N96 dev only after N32 passes.
+5. N96 held-out only after N96 dev passes.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
