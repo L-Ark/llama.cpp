@@ -352,6 +352,114 @@ Interpretation:
   3. IO-budget scheduling only if it can reduce measured upgate/down wall
      without increasing residual or total iouring wait.
 
+## 2026-07-11 Phase 4W result: budgeted hot expert profile rejected
+
+Goal:
+
+- Test a smaller alternative to whole-layer admission:
+  top experts inside wait-weighted hot layer/role buckets.
+- Keep the mechanism default-off via existing `GGML_MOE_VRAM_PROFILE*`.
+- Use dev-only profile data; do not use held-out prompts.
+
+Tool:
+
+- Added `.Agent/run-tools/kimi_make_budgeted_hot_expert_profile.py`.
+- Inputs:
+  - corrected layer/role screen:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4v-default-profile-n32-dev3-analysis-v3/admission-screen/layer-role-screen.csv`
+  - dev route profiles from:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4v-default-profile-n32-dev3`
+- Candidate output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4w-budgeted-hot-profile/budgeted-hot-upgate1024-down512.csv`
+- Budget:
+  - upgate: `1024 MiB`
+  - down: `512 MiB`
+- Selected:
+  - `197` upgate entries, `1019.92 MiB`;
+  - `66` down entries, `509.69 MiB`;
+  - total `263` entries, `1529.61 MiB`.
+
+Runtime env for candidate:
+
+```text
+GGML_MOE_PHASE_REPORT=1
+GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4w-budgeted-hot-profile/budgeted-hot-upgate1024-down512.csv
+GGML_MOE_VRAM_PROFILE_PROTECT=1
+GGML_MOE_VRAM_PROFILE_PROTECT_PROFILE_ONLY=1
+GGML_MOE_VRAM_PROFILE_PRELOAD=1
+GGML_MOE_VRAM_PROFILE_PRELOAD_EVICT=1
+GGML_MOE_VRAM_PROFILE_RESERVE_PCT=20
+```
+
+N32 dev result:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4w-budgeted-hot-n32-dev3`
+
+| prompt | base tok/s | candidate tok/s | decode delta ms | iouring wait delta s | TTFT ratio | quality |
+|---|---:|---:|---:|---:|---:|---|
+| `dev_france_regression` | 1.95 | 1.94 | +79.5 | +0.448 | 1.052 | pass/pass |
+| `dev_japan_factual` | 1.90 | 1.95 | -446.5 | -0.221 | 1.152 | pass/pass |
+| `dev_photosynthesis_factual` | 1.84 | 1.95 | -921.3 | -0.474 | 1.151 | pass/pass |
+
+N32 aggregate:
+
+- decode: `527.19 -> 513.34 ms/token`;
+- token rate: `1.897 -> 1.948 tok/s`;
+- iouring wait: `-0.247 s`;
+- read bytes: `-0.87 GiB`;
+- quality: all pass.
+
+N96 dev result:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4w-budgeted-hot-n96-dev3`
+
+| prompt | base tok/s | candidate tok/s | decode delta ms | iouring wait delta s | read GiB delta | direct reads candidate | TTFT ratio | quality |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `dev_france_regression` | 1.94 | 1.93 | +324.1 | +1.186 | +0.53 | 263 | 1.105 | pass/pass |
+| `dev_japan_factual` | 1.97 | 1.98 | -201.2 | -0.959 | -1.55 | 263 | 1.115 | pass/pass |
+| `dev_photosynthesis_factual` | 1.92 | 1.81 | +3101.6 | +2.978 | +4.08 | 263 | 1.228 | pass/pass |
+
+N96 aggregate:
+
+- decode: `514.61 -> 527.15 ms/token`;
+- token rate: `1.943 -> 1.897 tok/s`;
+- iouring wait: `+3.206 s`;
+- read bytes: `+3.07 GiB`;
+- candidate introduced `263` direct reads;
+- `dev_photosynthesis_factual` violates the TTFT gate: `1.228x > 1.20x`.
+
+Decision:
+
+- Reject this candidate as SOTA.
+- Do not run held-out validation.
+- Do not set this `GGML_MOE_VRAM_PROFILE` in reproduction.
+- Keep the generator as offline tooling only.
+
+Interpretation:
+
+- N32 was a false positive. Longer N96 output exposed that the profile can
+  increase read volume, direct reads, and iouring wait on at least one general
+  prompt.
+- Pinning a budgeted dev hotset can displace useful dynamic cache entries even
+  when the selected profile is much smaller than whole-layer admission.
+- Upgate hit rate did not improve reliably; down hit rate improved only modestly
+  and was not enough to offset profile preload/protection side effects.
+- The next optimization should not tune static VRAM profile budgets further
+  until residual attribution is better understood.
+
+Next plan:
+
+1. Add residual attribution for decode.
+   - Measure time outside current upgate/down profile buckets.
+   - Split dense/attention/shared compute, CUDA sync, D2H/scatter, scheduler
+     overhead, and host bookkeeping where feasible.
+2. Only revisit cache admission after residual is explained.
+   - If residual is mostly dynamic cache/scheduler wait, target scheduler.
+   - If residual is dense/attention/shared compute, expert-cache policy alone
+     cannot reach `5 tok/s`.
+
 ## 2026-07-11 active goal and plan history
 
 This section was the previous source of truth. It is retained as history and
