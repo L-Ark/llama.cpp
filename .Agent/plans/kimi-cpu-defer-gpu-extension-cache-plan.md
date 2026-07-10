@@ -3073,6 +3073,162 @@ Next plan after rejection:
    - exposed `io_uring_wait` comes from critical-path runtime misses, not just physical read count;
    - next candidates should reduce wait without delaying the earliest needed expert.
 
+### Phase 4Q plan: op-filtered adjacent coalescing for overlap-only paths
+
+Reason:
+
+- Phase 4P proved that reducing physical CQEs is not enough when the first needed expert is delayed.
+- `runtime_load:*` is on the decode critical path; coalescing there can make the earliest slice wait for the whole group.
+- `current_down_overlap:down` is a better place to test the idea because it is a prefetch/overlap path, so a later first slice may be hidden by current up/gate compute.
+
+Hypothesis:
+
+> Exact-adjacent coalescing may be safe only when restricted to non-critical prefetch/overlap operations, especially `current_down_overlap`, because the grouped read can reduce CQE overhead without delaying an immediately required expert.
+
+Implementation plan:
+
+1. Add an op filter:
+   - env: `GGML_MOE_IO_ADJACENT_OP_FILTER`;
+   - empty/default means no filter beyond `GGML_MOE_IO_ADJACENT_COALESCE=1`;
+   - for Phase 4Q use `GGML_MOE_IO_ADJACENT_OP_FILTER=current_down_overlap`.
+2. Add per-op coalescer counters:
+   - `runtime_load`
+   - `current_down_overlap`
+   - `other`
+   - record groups, slices, extents saved, physical bytes, payload bytes, max group, max span.
+3. Keep all behavior default-off.
+4. Do not touch greedy-pair overlay in this phase.
+
+Validation:
+
+1. Build:
+
+```bash
+cmake --build build-cuda-batch -j 8
+build-cuda-batch/bin/test-kimi-deepseek2-guards
+```
+
+2. N32 dev3 current-pack A/B:
+
+Control:
+
+```bash
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --prompt-file .Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4q-overlap-only-coalesce-n32-dev3/control \
+  --mode dev --n 32 --max-prompts 3 --keep-going --runtime-max-sec 900
+```
+
+Candidate:
+
+```bash
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --prompt-file .Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4q-overlap-only-coalesce-n32-dev3/candidate \
+  --mode dev --n 32 --max-prompts 3 --keep-going --runtime-max-sec 900 \
+  --extra-runtime-env $'GGML_MOE_IO_ADJACENT_COALESCE=1\nGGML_MOE_IO_ADJACENT_OP_FILTER=current_down_overlap\nGGML_MOE_IO_ADJACENT_MAX_SPAN_MIB=16\nGGML_MOE_IO_ADJACENT_MAX_GAP=0\nGGML_MOE_IO_ADJACENT_MIN_GROUP=2'
+```
+
+Acceptance:
+
+- quality `3/3`;
+- RAM peak `<15900000000`;
+- TTFT ratio `<=1.20`;
+- no token-rate regression on min/median/mean;
+- `current_down_overlap` counters show actual extents saved;
+- `runtime_load` counters must stay zero when the op filter is enabled.
+
+Rejection:
+
+- any quality failure;
+- token-rate regression;
+- `iouring_wait` increase without decode improvement;
+- nonzero `runtime_load` coalescing under the filter;
+- RAM/TTFT gate failure.
+
+### Phase 4Q result: overlap-only adjacent coalescing rejected
+
+Timestamp: 2026-07-11 05:35 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4q-overlap-only-coalesce-n32-dev3`
+
+Experiment:
+
+- N32 cold start.
+- First 3 dev prompts only:
+  - `dev_france_regression`
+  - `dev_japan_factual`
+  - `dev_photosynthesis_factual`
+- Control:
+  - current SOTA env;
+  - adjacent coalescer disabled.
+- Candidate:
+  - `GGML_MOE_IO_ADJACENT_COALESCE=1`
+  - `GGML_MOE_IO_ADJACENT_OP_FILTER=current_down_overlap`
+  - `GGML_MOE_IO_ADJACENT_MAX_SPAN_MIB=16`
+  - `GGML_MOE_IO_ADJACENT_MAX_GAP=0`
+  - `GGML_MOE_IO_ADJACENT_MIN_GROUP=2`
+
+Build validation before A/B:
+
+- `cmake --build build-cuda-batch -j 8`: passed.
+- `build-cuda-batch/bin/test-kimi-deepseek2-guards`: passed.
+
+Aggregate result:
+
+| run | quality | min tok/s | median tok/s | mean tok/s | decode sum ms | iouring wait sum ms | max RAM GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| control | 3/3 | 1.850 | 1.960 | 1.923 | 48420.8 | 54511.8 | 11.85 |
+| candidate | 3/3 | 1.750 | 1.830 | 1.807 | 51531.1 | 57907.7 | 11.90 |
+
+Paired result:
+
+| prompt | tok/s delta | TTFT ratio | decode delta ms | iouring wait delta ms | RAM delta MiB | runtime extents | overlap extents |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `dev_france_regression` | -0.210 | 1.006 | +1908.9 | +1974.5 | +51.3 | 0 | 103 |
+| `dev_japan_factual` | -0.120 | 1.125 | +1016.9 | +1111.3 | +52.9 | 0 | 62 |
+| `dev_photosynthesis_factual` | -0.020 | 1.035 | +184.5 | +310.2 | +51.9 | 0 | 47 |
+
+Candidate op-filter evidence:
+
+- `runtime_load` coalesced extents: `0` on all three prompts.
+- `current_down_overlap` coalesced extents:
+  - France: `103`
+  - Japan: `62`
+  - Photosynthesis: `47`
+- The op filter worked correctly, so the regression is not caused by accidentally coalescing critical `runtime_load`.
+
+Interpretation:
+
+- Even overlap-only adjacent coalescing is too small and still harmful on the current pack layout.
+- It saves only tens to low hundreds of extents per N32 prompt:
+  - much smaller than the full current-pack coalescer;
+  - far below the scale needed to reduce exposed wait.
+- It still increases `iouring_wait`, likely because the overlap worker holds larger staging slots longer and changes refill/slot timing.
+- This confirms that adjacent-span coalescing is not the next high-value path unless the storage layout is changed and the read path becomes truly non-blocking for first needed slices.
+
+Decision:
+
+- Reject overlap-only adjacent coalescing for SOTA.
+- Keep the op filter and per-op counters default-off as diagnostic infrastructure only.
+- Do not run N96 or held-out.
+- Do not build a greedy-pair overlay for this coalescer path.
+
+Next plan after Phase 4Q:
+
+1. Stop adjacent coalescing work for now.
+2. Return to bottleneck classes that can reduce critical-path wait without delaying first expert availability:
+   - VRAM cache budget rebalancing by exposed wait;
+   - route-predicted prefetch that begins before the current layer reaches the miss;
+   - RAM/VRAM explicit tiering only when it fully avoids SSD wait for critical up/gate misses;
+   - lower-byte expert representation for second-tier experts.
+3. The next design step should build a wait-weighted layer/role report from current N32/N96 traces:
+   - group by `runtime_load:up`, `runtime_load:gate`, `runtime_load:down`, `current_down_overlap:down`;
+   - rank by exposed wait, miss count, bytes, and whether wait is on critical path;
+   - select one candidate that removes wait without increasing first-slice latency.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:

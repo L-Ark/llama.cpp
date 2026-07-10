@@ -658,6 +658,16 @@ struct expert_pack_source {
     char path[512] = {};
 };
 
+struct expert_pack_adjacent_op_stats {
+    std::atomic<uint64_t> groups{0};
+    std::atomic<uint64_t> slices{0};
+    std::atomic<uint64_t> extents_saved{0};
+    std::atomic<uint64_t> physical_bytes{0};
+    std::atomic<uint64_t> payload_bytes{0};
+    std::atomic<uint64_t> max_group_jobs{0};
+    std::atomic<uint64_t> max_span_bytes{0};
+};
+
 struct expert_pack_state {
     FILE *file = nullptr;
 #if !defined(_WIN32)
@@ -708,6 +718,7 @@ struct expert_pack_state {
     std::atomic<uint64_t> adjacent_coalesce_reject_tensor{0};
     std::atomic<uint64_t> adjacent_coalesce_reject_gap{0};
     std::atomic<uint64_t> adjacent_coalesce_reject_span{0};
+    expert_pack_adjacent_op_stats adjacent_coalesce_op[3];
     // RAM hot tier
     void *ram_tier_base = nullptr;
     size_t ram_tier_bytes = 0;
@@ -2684,6 +2695,26 @@ static size_t expert_pack_adjacent_min_group() {
     return expert_pack_env_size("GGML_MOE_IO_ADJACENT_MIN_GROUP", 2, 2, 64);
 }
 
+static bool expert_pack_adjacent_op_allowed(const char *trace_op) {
+    const char *filter = std::getenv("GGML_MOE_IO_ADJACENT_OP_FILTER");
+    if (!filter || !filter[0]) return true;
+    return trace_op && std::strstr(trace_op, filter) != nullptr;
+}
+
+static size_t expert_pack_adjacent_op_bucket(const char *trace_op) {
+    if (trace_op && std::strstr(trace_op, "runtime_load") != nullptr) return 0;
+    if (trace_op && std::strstr(trace_op, "current_down_overlap") != nullptr) return 1;
+    return 2;
+}
+
+static const char *expert_pack_adjacent_op_name(size_t bucket) {
+    switch (bucket) {
+        case 0: return "runtime_load";
+        case 1: return "current_down_overlap";
+        default: return "other";
+    }
+}
+
 static void expert_pack_atomic_max(std::atomic<uint64_t> &target, uint64_t value) {
     uint64_t current = target.load(std::memory_order_relaxed);
     while (current < value &&
@@ -3451,6 +3482,19 @@ static void expert_pack_report_atexit() {
                      g_expert_pack.adjacent_coalesce_reject_tensor.load(),
                      g_expert_pack.adjacent_coalesce_reject_gap.load(),
                      g_expert_pack.adjacent_coalesce_reject_span.load());
+        for (size_t i = 0; i < 3; ++i) {
+            const expert_pack_adjacent_op_stats &s = g_expert_pack.adjacent_coalesce_op[i];
+            if (s.groups.load() == 0 && s.slices.load() == 0 && s.extents_saved.load() == 0) {
+                continue;
+            }
+            std::fprintf(stderr,
+                         "[moe_stream_batch] adjacent coalesce op=%s: groups=%lu slices=%lu extents_saved=%lu "
+                         "physical_bytes=%lu payload_bytes=%lu max_group_jobs=%lu max_span_bytes=%lu\n",
+                         expert_pack_adjacent_op_name(i),
+                         s.groups.load(), s.slices.load(), s.extents_saved.load(),
+                         s.physical_bytes.load(), s.payload_bytes.load(),
+                         s.max_group_jobs.load(), s.max_span_bytes.load());
+        }
     }
     if (g_expert_pack.ram_tier_base) {
         std::fprintf(stderr,
@@ -6378,7 +6422,9 @@ static bool expert_pack_iouring_copy_jobs(
         max_read_sz = std::max(max_read_sz, read_sz);
         read_plans.push_back({i, read_offset, read_sz, prefix, job.pack_entry->source_idx, job.tensor});
     }
-    const bool coalesce_adjacent = expert_pack_adjacent_coalesce_enabled() && read_plans.size() > 1;
+    const size_t adjacent_op_bucket = expert_pack_adjacent_op_bucket(trace_op);
+    const bool coalesce_adjacent = expert_pack_adjacent_coalesce_enabled() &&
+        expert_pack_adjacent_op_allowed(trace_op) && read_plans.size() > 1;
     const bool sort_by_offset = expert_pack_env_bool("GGML_MOE_IO_SORT_OFFSET", false) || coalesce_adjacent;
     std::vector<size_t> plan_order;
     if (sort_by_offset && read_plans.size() > 1) {
@@ -6492,6 +6538,14 @@ static bool expert_pack_iouring_copy_jobs(
         g_expert_pack.adjacent_coalesce_payload_bytes.fetch_add(adjacent_payload_bytes);
         expert_pack_atomic_max(g_expert_pack.adjacent_coalesce_max_group_jobs, adjacent_max_group_jobs);
         expert_pack_atomic_max(g_expert_pack.adjacent_coalesce_max_span_bytes, adjacent_max_span_bytes);
+        expert_pack_adjacent_op_stats &op_stats = g_expert_pack.adjacent_coalesce_op[adjacent_op_bucket];
+        op_stats.groups.fetch_add(adjacent_groups);
+        op_stats.slices.fetch_add(adjacent_slices);
+        op_stats.extents_saved.fetch_add(adjacent_extents_saved);
+        op_stats.physical_bytes.fetch_add(adjacent_physical_bytes);
+        op_stats.payload_bytes.fetch_add(adjacent_payload_bytes);
+        expert_pack_atomic_max(op_stats.max_group_jobs, adjacent_max_group_jobs);
+        expert_pack_atomic_max(op_stats.max_span_bytes, adjacent_max_span_bytes);
     }
     if (coalesce_adjacent) {
         g_expert_pack.adjacent_coalesce_reject_source.fetch_add(adjacent_reject_source);
