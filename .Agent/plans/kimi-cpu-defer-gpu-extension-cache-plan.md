@@ -189,6 +189,123 @@ Conclusion:
 - Do not use this held-out trace to choose hot experts, layer slabs, or cache
   thresholds. It only validates the failure mode and the new counters.
 
+## 2026-07-11 Phase 4U next experiment: queue-fed decode IO
+
+Dev profiling input:
+
+- Prompt: `dev_photosynthesis_factual`
+  (`Explain photosynthesis briefly.`).
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4t-dev-photosynthesis-n96-profile`
+- Command shape:
+  `--mode dev --n 96 --profile --runtime-max-sec 600 --extra-runtime-env GGML_MOE_PHASE_REPORT=1`
+- Result: quality `pass`, token rate `1.53 tok/s`, TTFT `7385.48 ms`,
+  decode `61406.24 ms / 94`, memory peak `12630376448` bytes.
+
+Bottleneck:
+
+- Decode phase added `475905884160` bytes (`443.2 GiB`) of expert-pack
+  iouring reads and `56.451 s` iouring wait.
+- Decode total is `61.406 s`, so exposed expert movement is the dominant
+  removable cost.
+- Runtime IO queue is not saturated like the pure IO bench:
+  `inflight_avg=3.77`, `inflight_max=8`, batch histogram mostly `2-8`.
+- VRAM cache stats:
+  - Down: `61.9%` hit rate, decode misses `15959`.
+  - Upgate: `41.1%` hit rate, decode misses `53256`.
+- CPU fallback is still zero in this run, so the next gain should not target
+  CPU compute fallback.
+
+Theory bound for the `>2 tok/s` short-term target:
+
+- Current decode rate: `94 / 61.406 = 1.53 tok/s`.
+- `2 tok/s` requires decode time `<=47.0 s`, so the experiment needs roughly
+  `14.4 s` saved on this prompt.
+- If the same `443.2 GiB` decode read volume reaches the previously measured
+  high IO bench level of `10.4 GiB/s`, read wait lower bound is
+  `443.2 / 10.4 = 42.6 s`.
+- That saves about `13.8 s` versus the current `56.45 s` iouring wait, nearly
+  enough by itself. A small additional reduction from better cache allocation
+  or lower synchronization overhead could pass `2 tok/s`.
+
+Immediate A/B, before writing runtime code:
+
+1. Run an env-only queue-depth screen on this dev prompt:
+   - Baseline: current default `GGML_MOE_IO_DEPTH=8`,
+     `GGML_MOE_IO_REFILL_BATCH=4`.
+   - Candidate:
+     `GGML_MOE_IO_DEPTH=16`, `GGML_MOE_IO_REFILL_BATCH=8`,
+     `GGML_MOE_PHASE_REPORT=1`.
+   - Acceptance for this screen: quality pass, RAM `<15900000000`, TTFT not
+     worse by `>20%`, lower decode time, higher `inflight_avg`, and lower
+     phase `delta_iouring_wait_us`.
+
+2. Interpret the result:
+   - If depth/refill improves materially, test the same env on France + one
+     more dev prompt, then N96 dev paired baseline/candidate.
+   - If depth/refill does not improve, the queue is starved by scheduling
+     readiness rather than the global depth cap. Move to default-off same-layer
+     `up/gate/down` co-submit after routing.
+
+3. Code path if env-only fails:
+   - After routing/top-k for a layer is known, enumerate up, gate, and down
+     misses together.
+   - Submit ready expert-pack reads into one async scheduler without blocking
+     earlier slices.
+   - Preserve current-down overlap and per-slice readiness; do not wait for a
+     whole coalesced group before allowing available up/gate work to run.
+   - Add counters for submitted jobs, ready jobs, wait time, inflight depth,
+     and role split.
+   - Keep the path default-off until N32 dev A/B passes quality, RAM, TTFT, and
+     decode-time gates.
+
+Phase 4U.0 result: env-only `depth=16/refill=8` is rejected as SOTA.
+
+- Candidate env:
+  `GGML_MOE_IO_DEPTH=16`, `GGML_MOE_IO_REFILL_BATCH=8`,
+  `GGML_MOE_PHASE_REPORT=1`.
+- Paired baseline env:
+  default `GGML_MOE_IO_DEPTH=8`, `GGML_MOE_IO_REFILL_BATCH=4`,
+  `GGML_MOE_PHASE_REPORT=1`.
+- Current commit: `811ac28dc`.
+- Baseline run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4u-default-depth8-refill4-dev3-n96`
+- Candidate runs:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4u-depth16-refill8-dev-france-japan-n96`
+  and
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4u-depth16-refill8-dev-photosynthesis-n96`
+
+Paired dev N96 results:
+
+| prompt | baseline tok/s | candidate tok/s | baseline decode ms | candidate decode ms | baseline wait s | candidate wait s | decision |
+|---|---:|---:|---:|---:|---:|---:|---|
+| dev_france_regression | 1.86 | 1.84 | 45728.20 | 46319.31 | 46.374 | 46.871 | regress |
+| dev_japan_factual | 1.90 | 1.92 | 41024.81 | 40723.19 | 41.297 | 39.632 | small gain |
+| dev_photosynthesis_factual | 1.82 | 1.84 | 51723.87 | 51016.66 | 52.728 | 51.970 | small gain |
+
+Aggregate:
+
+- Quality: `3/3` pass for both baseline and candidate.
+- RAM: all runs stay around `11.7-11.9 GiB`, below the 16 GB gate.
+- TTFT: candidate does not regress; it is slightly lower on these three
+  prompts.
+- Decode time: `138476.88 ms -> 138059.16 ms`, only `417.72 ms` saved
+  (`0.30%`).
+- Token rate: mean `1.86 -> 1.87 tok/s`, too small and prompt-mixed.
+- Queue shape: `inflight_max` can rise from `8` to `12`, but `inflight_avg`
+  stays around `3.8`, and batch histogram still has no `9-16` batch bucket.
+
+Conclusion:
+
+- The global io_uring depth/refill cap is not the main reason the runtime fails
+  to reach pure IO bench throughput.
+- The queue remains underfed because the scheduler often does not expose enough
+  ready expert reads at once.
+- Do not promote `depth=16/refill=8` as SOTA.
+- Next implementation target is a default-off same-layer `up/gate/down`
+  co-submit path that increases ready jobs after routing without blocking
+  earlier slices or damaging current-down overlap.
+
 ## 2026-07-11 goal: Kimi CPU/defer + GPU-extension path
 
 Goal:
