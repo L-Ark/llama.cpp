@@ -2864,6 +2864,47 @@ Expected upper bound:
 - The only expected speedup is lower per-read io_uring/CQE/wait overhead and fewer tiny exposed reads.
 - Because current runtime wait is not purely per-SQE overhead, the realistic gain is likely much smaller than `25.75%`; require measurement before any SOTA claim.
 
+### Phase 4P step A result: greedy-pair trace overlay pack tool
+
+Timestamp: 2026-07-11 03:55 CST.
+
+Implemented:
+
+- Extended `scripts/kimi-build-trace-overlay-pack.py`.
+- `--trace` can now be repeated so the layout can be trained on the full dev prompt set instead of one prompt.
+- Added `--mode`:
+  - `first-use` keeps the old behavior and remains the default;
+  - `frequency` sorts selected experts by per-tensor trace frequency;
+  - `greedy-pair` starts from the most frequent expert and then greedily places the expert with highest same-batch co-occurrence with the previous expert.
+- Added `--max-jobs`, so Phase 4O can be reproduced with `--max-jobs 8`.
+
+Validation:
+
+- Syntax:
+
+```bash
+python3 -m py_compile scripts/kimi-build-trace-overlay-pack.py
+```
+
+- Help output confirms the new flags:
+
+```bash
+python3 scripts/kimi-build-trace-overlay-pack.py --help
+```
+
+- Synthetic GGMLMOEPACKv1 test:
+  - input experts: `[0, 1, 2, 3]`;
+  - trace makes expert `0` most frequent and expert `2` the strongest same-batch neighbor;
+  - `--mode greedy-pair --max-jobs 8` output order: `[0, 2, 1, 3]`;
+  - assertion passed.
+
+Next step:
+
+- Do not build the large dev overlay yet until runtime coalescer code exists, because a greedy-pair pack without adjacent-span merging should not materially reduce read plans.
+- Implement the default-off exact-adjacent coalescer in `expert_pack_iouring_copy_jobs`, then run:
+  1. current pack + coalescer enabled safety A/B;
+  2. greedy-pair dev overlay + coalescer enabled performance A/B.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
