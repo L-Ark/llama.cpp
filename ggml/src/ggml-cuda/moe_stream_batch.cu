@@ -4857,6 +4857,8 @@ static bool host_prefetch_copy_h2d(
 
 static std::once_flag g_ram_tier_once;
 
+static bool expert_pack_direct_read_entry_to_host(const expert_pack_entry *entry, void *dst, size_t sz);
+
 static void ram_tier_init() {
     if (!g_expert_pack.enabled) return;
     const char *ram_tier_env = std::getenv("GGML_MOE_RAM_TIER_MIB");
@@ -4902,6 +4904,21 @@ static void ram_tier_init() {
         (size_t)std::atol(pin_mib_env) * 1024ULL * 1024ULL : budget;
 
     size_t loaded = 0, n_loaded = 0, n_skipped = 0, pin_prefix_bytes = 0, pin_prefix_entries = 0;
+    const bool direct_preload = expert_pack_env_bool("GGML_MOE_RAM_TIER_PRELOAD_DIRECT", false);
+    int preload_threads = 1;
+    const char *preload_threads_env = std::getenv("GGML_MOE_RAM_TIER_PRELOAD_THREADS");
+    if (preload_threads_env && preload_threads_env[0]) {
+        preload_threads = std::max(1, std::atoi(preload_threads_env));
+    }
+
+    struct ram_tier_load_job {
+        size_t pack_index;
+        size_t offset;
+        const expert_pack_entry *entry;
+        bool ok;
+    };
+    std::vector<ram_tier_load_job> parallel_jobs;
+
     for (const profile_entry &pe : ram_profile) {
         if (loaded >= budget) break;
         if (n_skipped < skip) { ++n_skipped; continue; }
@@ -4917,12 +4934,28 @@ static void ram_tier_init() {
         const expert_pack_entry &ent = g_expert_pack.entries[lo2];
         if (loaded + ent.nbytes > budget) break;
         char *dst_ptr = (char *)region + loaded;
+        if (direct_preload && preload_threads > 1) {
+            parallel_jobs.push_back({lo2, loaded, &ent, false});
+            loaded += (size_t)ent.nbytes;
+            continue;
+        }
         {
-            std::lock_guard<std::mutex> lk2(g_expert_pack.mu);
             const expert_pack_source *source = expert_pack_source_for_entry(&ent);
             if (!source || !source->file) continue;
-            if (::fseeko(source->file, (off_t)ent.offset, SEEK_SET) != 0) continue;
-            if (!expert_pack_read_exact(source->file, dst_ptr, (size_t)ent.nbytes)) continue;
+            bool loaded_direct = false;
+            if (direct_preload) {
+                loaded_direct = expert_pack_direct_read_entry_to_host(&ent, dst_ptr, (size_t)ent.nbytes);
+                if (loaded_direct) {
+                    g_expert_pack.ram_tier_direct_bytes.fetch_add((uint64_t)ent.nbytes);
+                } else {
+                    ++g_expert_pack.ram_tier_direct_fallbacks;
+                }
+            }
+            if (!loaded_direct) {
+                std::lock_guard<std::mutex> lk2(g_expert_pack.mu);
+                if (::fseeko(source->file, (off_t)ent.offset, SEEK_SET) != 0) continue;
+                if (!expert_pack_read_exact(source->file, dst_ptr, (size_t)ent.nbytes)) continue;
+            }
         }
         g_expert_pack.ram_tier_index[lo2] = {loaded, (size_t)ent.nbytes};
         loaded += (size_t)ent.nbytes;
@@ -4932,6 +4965,41 @@ static void ram_tier_init() {
             ++pin_prefix_entries;
         }
     }
+
+    if (!parallel_jobs.empty()) {
+        std::atomic<size_t> next_job{0};
+        const int n_threads = std::min<int>(preload_threads, (int)parallel_jobs.size());
+        std::vector<std::thread> workers;
+        workers.reserve((size_t)n_threads);
+        for (int ti = 0; ti < n_threads; ++ti) {
+            workers.emplace_back([&]() {
+                for (;;) {
+                    const size_t ji = next_job.fetch_add(1);
+                    if (ji >= parallel_jobs.size()) break;
+                    ram_tier_load_job &job = parallel_jobs[ji];
+                    char *dst_ptr = (char *)region + job.offset;
+                    const bool ok = expert_pack_direct_read_entry_to_host(job.entry, dst_ptr, (size_t)job.entry->nbytes);
+                    job.ok = ok;
+                    if (ok) {
+                        g_expert_pack.ram_tier_direct_bytes.fetch_add((uint64_t)job.entry->nbytes);
+                    } else {
+                        ++g_expert_pack.ram_tier_direct_fallbacks;
+                    }
+                }
+            });
+        }
+        for (std::thread &worker : workers) worker.join();
+        for (const ram_tier_load_job &job : parallel_jobs) {
+            if (!job.ok) continue;
+            g_expert_pack.ram_tier_index[job.pack_index] = {job.offset, (size_t)job.entry->nbytes};
+            ++n_loaded;
+            if (pin_prefix_bytes + (size_t)job.entry->nbytes <= pin_budget) {
+                pin_prefix_bytes += (size_t)job.entry->nbytes;
+                ++pin_prefix_entries;
+            }
+        }
+    }
+
     std::fprintf(stderr, "[moe_stream_batch] RAM tier: loaded %zu entries (skipped %zu), %.2f MiB into anonymous mmap\n",
                  n_loaded, skip, loaded / (1024.0 * 1024.0));
     if (loaded > 0 && expert_pack_env_bool("GGML_MOE_RAM_TIER_PIN", true)) {

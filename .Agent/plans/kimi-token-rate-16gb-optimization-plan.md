@@ -97044,3 +97044,219 @@ fallback-source-profile.csv lines=1
 direct_reads=0
 ```
 
+
+## GP112 prompt0 pinned RAM whole-layer-role probe
+
+Status: planned on `2026-07-10T04:05+0000`.
+
+Objective:
+
+- Test whether replacing low-value decode file cache with pinned host expert
+  payloads can improve token rate on the current GP112 prompt0 branch.
+- The experiment must keep the existing model math and expert-pack layout; only
+  the source of selected expert payloads changes from SSD/io_uring to pinned RAM
+  followed by H2D.
+
+Baseline for comparison:
+
+```text
+branch=vendor/kimi-gp112-prompt0-fallback
+commit=ac933b974
+baseline_run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-n96-france-lowoverhead-032441
+prompt=Please introduce France in a short paragraph.
+quality=pass
+TTFT=7753.38 ms
+decode=46592.22 ms / 85
+token_rate=1.82 tok/s
+host_memory_peak=12726206464
+fallback=0 prompt/decode rows under profile validation
+direct_reads=0
+```
+
+Bottleneck evidence from current profile:
+
+```text
+profile_run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-current-profile-n96-france-033158
+expert_pack_iouring_wait=38337.188 ms
+expert_pack_iouring_bytes=491342774272
+inflight_avg=4.30, inflight_max=8
+upgate_wall=14918.722 ms
+down_wall=25463.406 ms
+fallback_rows=0
+```
+
+Top layer/role IO wait candidates from `copy-profile.csv`:
+
+```text
+blk.4.ffn_down_exps.weight rows=631 io_wait=2684.3 ms full384=2856 MiB
+blk.1.ffn_gate_exps.weight rows=569 io_wait=2550.8 ms full384=1722 MiB
+blk.1.ffn_up_exps.weight   rows=569 io_wait=2523.3 ms full384=1722 MiB
+blk.6.ffn_down_exps.weight rows=569 io_wait=2483.8 ms full384=2856 MiB
+blk.10.ffn_down_exps.weight rows=579 io_wait=2450.7 ms full384=2856 MiB
+```
+
+Hypothesis:
+
+- A full layer-role RAM tier is more prompt-general than a prompt-specific hot
+  expert profile, because all 384 experts for that layer/role are resident.
+- If a high-wait layer/role is hit during decode, RAM tier should bypass SSD
+  io_uring wait and issue H2D directly from pinned host memory.
+- The theoretical upper bound for a single full role is the exposed IO wait for
+  that role. For `blk.1 gate` this is at most about `2.55s`; for `blk.1 up+gate`
+  about `5.07s`; for `blk.4 down` about `2.68s`. Actual gain will be smaller
+  because H2D remains, CUDA synchronization remains, and some waits overlap.
+
+Candidate order:
+
+1. `blk1_gate_full384`: 384 entries, about `1722 MiB` resident/pinned.
+2. `blk1_upgate_full384`: 768 entries, about `3444 MiB` resident/pinned.
+3. `blk4_down_full384`: 384 entries, about `2856 MiB` resident/pinned.
+
+Runtime env for each candidate:
+
+```bash
+GGML_MOE_RAM_TIER_MIB=<candidate_mib + small margin>
+GGML_MOE_RAM_TIER_PROFILE=<candidate_profile.csv>
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=1
+GGML_MOE_RAM_TIER_PIN_MIB=<candidate_mib + small margin>
+GGML_MOE_RAM_BATCH_PROFILE_OUT=<run>/ram-batch-profile.csv
+```
+
+Acceptance gates:
+
+- Cold start through `systemd-run` with `MemoryMax=15900000000` and
+  `MemorySwapMax=0`.
+- Host RAM peak, including page cache and pinned memory, remains below
+  `15900000000` bytes.
+- France answer remains semantically correct and coherent.
+- TTFT is no more than `20%` above the low-overhead baseline, i.e. no more than
+  `9304 ms` for the same prompt/run shape.
+- `fallback-profile.csv` and `fallback-source-profile.csv` remain header-only
+  in profile validation.
+- Token rate must exceed the current reproducible low-overhead baseline
+  (`1.82 tok/s`) before it can be called an improvement.
+- If token rate regresses, TTFT exceeds the gate, quality fails, or RAM exceeds
+  the limit, reject the candidate and do not promote it as SOTA.
+
+Reproducibility requirements:
+
+- Record exact branch, commit, candidate profile path, env block, run path,
+  token rate, TTFT, decode time, host RAM peak, RAM-tier hit counters,
+  iouring bytes/wait, H2D counters, fallback rows, answer text, and decision.
+- Any accepted improvement must be committed and pushed with a commit message
+  body containing the improvement amount, env, command, prompt/test set,
+  RAM/TTFT/quality gate, and rollback point.
+
+
+GP112 prompt0 pinned RAM whole-layer-role results:
+
+Rejected buffered preload result:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-ram-blk1-gate-full384-n96-034548
+candidate=blk1_gate_full384
+resident=1800.00 MiB
+pinned=1722.00 MiB
+ram_tier_hits=569/85754, hit_rate=0.7%
+token_rate=1.86 tok/s
+TTFT=12432.39 ms
+host_memory_peak=15899996160
+quality=pass
+reason=rejected: TTFT exceeds 9304 ms gate and memory peak reaches cgroup limit
+```
+
+Rejected single-thread direct preload result:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-ram-blk1-gate-full384-direct-n96-035211
+candidate=blk1_gate_full384
+resident=1800.00 MiB
+pinned=1722.00 MiB
+ram_tier_hits=569/85754, hit_rate=0.7%
+ram_tier_direct_bytes=1805647872
+ram_tier_direct_fallbacks=0
+token_rate=1.86 tok/s
+TTFT=10249.44 ms
+host_memory_peak=14542848000
+quality=pass
+reason=rejected: direct preload fixes page-cache peak, but TTFT still exceeds 9304 ms gate
+```
+
+Accepted 4-thread direct preload result:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-ram-blk1-gate-full384-direct4-n96-035701
+candidate_profile=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv
+candidate=blk1_gate_full384
+entries=384
+resident=1800.00 MiB
+pinned=1722.00 MiB
+ram_tier_hits=569/85754, hit_rate=0.7%
+ram_tier_h2d_bytes=2675556352
+ram_tier_direct_bytes=1805647872
+ram_tier_direct_fallbacks=0
+token_rate=1.90 tok/s
+baseline_token_rate=1.82 tok/s
+improvement=+0.08 tok/s, +4.4%
+TTFT=8468.67 ms
+baseline_TTFT=7753.38 ms
+TTFT_delta=+715.29 ms, +9.2%, within +20% gate
+host_memory_peak=14554849280
+quality=pass
+answer=France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.
+direct_reads=0
+expert_pack_iouring_wait_us=47337582
+```
+
+Profile validation:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-ram-blk1-gate-full384-direct4-profile-n96-035855
+PROFILE=1
+COPY_PROFILE=1
+quality=pass
+fallback-profile.csv lines=1
+fallback-source-profile.csv lines=1
+copy-profile.csv lines=85186
+ram-batch-profile.csv lines=87
+ram_tier_hits=569/85754, hit_rate=0.7%
+ram_tier_direct_bytes=1805647872
+ram_tier_direct_fallbacks=0
+host_memory_peak=14630932480
+profile_token_rate=1.51 tok/s  # profiler overhead, not SOTA number
+```
+
+Decision:
+
+- Accept `blk1_gate_full384` pinned RAM tier with 4-thread direct preload as the
+  current branch improvement over GP112 prompt0 France N96.
+- The accepted change keeps prompt/decode CPU fallback at zero under profile
+  validation, keeps cold-start host RAM below 16GB, keeps TTFT within +20%, and
+  improves low-overhead decode token rate from `1.82` to `1.90 tok/s`.
+- Larger candidates (`blk1_upgate_full384`, `blk4_down_full384`) are not promoted
+  yet; they require separate A/B because their preload size is 2.8-3.4GB and may
+  violate TTFT/RAM gates even with parallel direct preload.
+
+Reproduction command for accepted low-overhead run:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<new-run>
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO=/root/lfz/llama.cpp-vendor-kimi \
+      RUN="$RUN" \
+      PROMPT_ID=gp112_prompt0_ram_blk1_gate_full384_direct4_n96_france \
+      PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+      QUALITY_KEYWORDS="france,paris|europe|western europe" \
+      N=96 PROFILE=0 COPY_PROFILE=0 RAM_AUDIT=1 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_RAM_TIER_MIB=1800
+GGML_MOE_RAM_TIER_PROFILE=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=1
+GGML_MOE_RAM_TIER_PIN_MIB=1800
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+GGML_MOE_RAM_BATCH_PROFILE_OUT=$RUN/ram-batch-profile.csv" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
