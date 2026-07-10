@@ -4,6 +4,61 @@ Date: 2026-07-10
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Current goal and next plan: CPU/defer GPU-extension for Kimi
+
+Goal:
+
+> On `vendor/kimi-deepseek-41d205-additive`, determine whether the DeepSeek-style idea of keeping CPU/defer MoE as the scheduler while expanding the GPU expert-cache/compute extension can improve Kimi's **general-prompt** decode speed. The immediate target is a reproducible held-out improvement toward `2 tok/s`; the long-term target remains stable `>5 tok/s` on random user prompts with 16 GB host RAM and one 32 GB RTX 5090-class GPU.
+
+Why this is useful for Kimi:
+
+- The transferable idea is **not** "copy DeepSeek gate-only hotpool".
+- The useful part is that CPU/defer can remain the control path while GPU handles more expert residency, transfer, and compute.
+- Current Kimi evidence shows the bottleneck is mostly exposed expert movement wait: `io_uring_wait`, staging/H2D, small runtime batches, and incomplete overlap.
+- Recent profiling shows decode CPU fallback is already near zero, so the next gain must reduce exposed transfer/staging wait rather than only moving more work away from CPU.
+
+Non-negotiable acceptance gates:
+
+- Cold start only.
+- Host RAM peak `<15900000000` bytes, including page cache, mmap pages, pinned memory, process memory, helpers, and kernel/cgroup accounting.
+- TTFT `<=1.20x` paired baseline.
+- France regression prompt must remain semantically correct: `Please introduce France in a short paragraph.`
+- Held-out general prompts must pass quality and are not allowed for tuning.
+- A result is SOTA only after paired baseline/candidate N96 dev plus N96 held-out validation.
+- Accepted improvements must be committed and pushed immediately with exact env, commands, prompt set, run path, RAM/VRAM metrics, TTFT, token-rate delta, quality result, and rollback commit.
+- If speed, quality, RAM, or TTFT regresses, revert or keep the code default-off and document the rejection.
+
+Immediate execution plan:
+
+1. Finish the current `blk.1 gate` profile-only VRAM-protection N96 paired A/B.
+   - Candidate env must include `GGML_MOE_VRAM_PROFILE_PROTECT_PROFILE_ONLY=1`.
+   - Parse per-prompt token rate, TTFT, decode time, RAM peak, `iouring_wait_us`, SSD bytes, upgate/down hit rates, and profile preload events.
+   - Accept only if N96 dev improves without quality/RAM/TTFT regression; otherwise reject without held-out.
+
+2. If the `blk.1 gate` profile-only A/B passes N96 dev, run the same config on N96 held-out.
+   - Do not inspect held-out traces for tuning.
+   - If held-out improves, promote the profile to tracked `.Agent/profiles/`, commit, and push as SOTA with full reproduction body.
+   - If held-out does not improve, document rejection and keep only default-off infrastructure if useful.
+
+3. If `blk.1 gate` fails, stop adding isolated slabs and move to the next higher-upside path:
+   - same-layer aggressive co-submit of up/gate/down misses after routing;
+   - layer/role-aware RAM cache replacing low-value decode-time file cache;
+   - pack-layout changes that increase batchable contiguous reads instead of fragmenting SSD/RAM traffic.
+
+4. Before every implementation step, update this plan with:
+   - current bottleneck in seconds/token or aggregate N96 seconds;
+   - theoretical upper bound from removable `iouring_wait`, staging/H2D bytes, or compute time;
+   - exact experiment command and rollback point.
+
+5. After every experiment, record:
+   - per-prompt metrics and answer quality;
+   - mean/median/min token rate;
+   - TTFT ratio;
+   - host RAM and decode page-cache/file/anon distribution;
+   - VRAM expert-cache hit/miss/preload/pinned stats;
+   - `iouring_wait_us`, SSD bytes, RAM->VRAM H2D bytes, staging wall, and CPU fallback counters;
+   - accept/reject decision.
+
 ## 2026-07-10 goal and execution plan refresh
 
 Active goal:
