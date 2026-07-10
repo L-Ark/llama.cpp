@@ -986,6 +986,95 @@ Decision:
 - Do not promote `all-3000` yet because TTFT and RAM are too close to the limit for only marginal min-token-rate gain.
 - If N96 passes, copy the `all-1800.profile.csv` into a tracked `.Agent/profiles/kimi/ram-tier/phase4d-*` path, record exact reproduction commands, run held-out validation, then commit and push as a candidate improvement.
 
+### Phase 4D result: all-1800 rejected after held-out test
+
+Timestamp: 2026-07-10 14:59 CST.
+
+N96 dev candidate:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4d-all1800-n96-dev3-142351`
+- Fresh paired N96 dev control:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4d-fresh-control-n96-dev3-142832`
+
+N96 dev paired result:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | TTFT median ms | RAM peak GiB | iouring wait s | iouring bytes GiB | RAM hits | RAM H2D GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control blk1_gate-1800 | 3/3 | 1.82 | 1.83 | 1.86 | 8449.15 | 13.56 | 144.08 | 1369.9 | 1694 | 7.42 |
+| all-1800 | 3/3 | 1.88 | 1.90 | 1.91 | 8436.26 | 13.62 | 140.23 | 1311.5 | 11562 | 65.82 |
+
+N96 dev interpretation:
+
+- Dev3 passed all gates.
+- Improvement mechanism matched the hypothesis:
+  - RAM hits increased by `9868`;
+  - iouring bytes dropped by `58.4 GiB`;
+  - iouring wait dropped by `3.85s`;
+  - token-rate min/median/mean improved.
+- This justified held-out validation but was still not a SOTA claim.
+
+Held-out candidate:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4d-all1800-n96-test-143404`
+- Profile used:
+  `.Agent/profiles/kimi/ram-tier/phase4d-dev-trace/all-1800.profile.csv`
+  - copied temporarily for the test;
+  - removed from the worktree after rejection;
+  - canonical artifact remains in the trace run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4d-io-trace-n32-dev3-correct-141127/ram-candidates/all-1800.profile.csv`.
+- Fresh paired held-out control:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4d-control-n96-test-144730`
+
+Held-out result:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | TTFT median ms | TTFT max ms | RAM peak GiB | iouring wait s | iouring bytes GiB | RAM hits | RAM H2D GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control blk1_gate-1800 | 6/6 | 1.54 | 1.82 | 1.788 | 9621.60 | 232735.82 | 14.81 | 311.95 | 2920.0 | 3455 | 15.13 |
+| all-1800 | 6/6 | 1.54 | 1.82 | 1.785 | 9993.85 | 230457.74 | 14.81 | 315.54 | 2849.2 | 15244 | 85.87 |
+
+Held-out per-prompt deltas:
+
+| prompt | token-rate delta | decode delta ms | TTFT delta ms | quality |
+|---|---:|---:|---:|---:|
+| test_chinese_01 | +0.01 | -356.03 | -704.22 | pass/pass |
+| test_coding_01 | +0.00 | +61.48 | +160.86 | pass/pass |
+| test_english_factual_01 | +0.00 | -114.97 | -211.29 | pass/pass |
+| test_english_factual_02 | +0.02 | -492.32 | +182.39 | pass/pass |
+| test_mixed_instruction_01 | -0.02 | +531.74 | +742.01 | pass/pass |
+| test_reasoning_math_01 | -0.03 | +680.83 | -2278.08 | pass/pass |
+
+Held-out quality notes:
+
+- All six held-out answers were semantically coherent.
+- The math prompt produced the correct answer `5:15 PM` in both candidate and control.
+- The very high math TTFT was not introduced by all-1800:
+  - control TTFT `232735.82 ms`;
+  - all-1800 TTFT `230457.74 ms`.
+
+Decision:
+
+- Reject `all-1800` as a SOTA/performance improvement.
+- Reason: it improves dev3 but does not improve held-out min/median/mean token rate; mean regresses slightly and `iouring_wait` increases by `3.59s` despite lower iouring bytes.
+- Do not commit the `phase4d-dev-trace/all-1800.profile.csv` runtime profile.
+- Keep the result as evidence that dev3 static RAM hotsets can overfit and may only move bytes from SSD to RAM without reducing held-out endpoint wait.
+
+Next plan:
+
+1. Build the next RAM/VRAM candidate from the full 7-prompt dev set, not dev3.
+2. Require candidate screening to enforce prompt/category coverage, e.g. `min_prompts >= 4` and no single category dominating selected traffic.
+3. Prefer dynamic or online RAM admission rules over static prompt-trace hotsets:
+   - promote an expert to RAM only after repeated misses across prompts or sustained per-layer pressure;
+   - preserve the current explicit 16 GB RAM accounting;
+   - record whether RAM hits reduce endpoint wait, not just SSD bytes.
+4. Do not use held-out test prompts for candidate construction.
+5. Any future RAM profile must pass:
+   - N32 full-dev;
+   - N96 full-dev;
+   - held-out N96;
+   - and only then be committed as an accepted profile.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
