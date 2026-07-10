@@ -145,6 +145,151 @@ Execution plan:
    - If performance, quality, RAM, or TTFT fails, revert the candidate or leave it
      default-off with a rejection record and do not call it SOTA.
 
+## Phase 4Y plan: dev-only upgate lazy pin smoke
+
+Timestamp: 2026-07-11 CST.
+
+Reason:
+
+- Phase 4W rejected static budgeted hot profiles because preload/protect
+  displaced useful dynamic cache entries and increased N96 wait on at least one
+  general prompt.
+- Current N96 France profiling shows a large mixed `up=22/gate=18` row, but
+  general dev N32 and dev photosynthesis N96 profiles mainly show
+  `up=22/gate=22` and `up=18/gate=18`. Therefore the next candidate must not
+  hardcode France-specific mixed layers.
+- Existing runtime supports default-off lazy pin:
+  `GGML_MOE_VRAM_PROFILE_PRELOAD=0` plus
+  `GGML_MOE_VRAM_PROFILE_PIN_ON_INSERT=1`. This avoids cold preload and should
+  not raise TTFT unless the profile lookup/pinning itself adds overhead.
+
+Candidate:
+
+- Generate an upgate-only `GGML_MOE_VRAM_PROFILE` from dev-only route profiles:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4v-default-profile-n32-dev3`.
+- Use the wait-weighted dev screen:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4v-default-profile-n32-dev3-analysis-v3/admission-screen/layer-role-screen.csv`.
+- Budget:
+  - upgate: `512 MiB`;
+  - down: `0 MiB`.
+- Generated output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4y-lazy-upgate-profile/upgate512-down0.csv`.
+- Selected:
+  - `99` upgate entries;
+  - `511.33 MiB`;
+  - `3909` dev route count.
+
+Candidate env delta:
+
+```text
+GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4y-lazy-upgate-profile/upgate512-down0.csv
+GGML_MOE_VRAM_PROFILE_PROTECT=1
+GGML_MOE_VRAM_PROFILE_PROTECT_PROFILE_ONLY=1
+GGML_MOE_VRAM_PROFILE_PRELOAD=0
+GGML_MOE_VRAM_PROFILE_PIN_ON_INSERT=1
+GGML_MOE_VRAM_PROFILE_PIN_MIN_COUNT=1
+GGML_MOE_VRAM_PROFILE_RESERVE_PCT=92
+```
+
+Hypothesis:
+
+- Lazy pin should avoid the Phase 4W preload/TTFT penalty.
+- If the dev hot upgate entries recur during decode, pin-on-insert should
+  reduce later upgate misses and lower upgate wait without changing down cache.
+
+Theoretical bound:
+
+- On dev photosynthesis N96, upgate wall is `177.032 ms/token`.
+- The largest dev-general upgate type is `up=22/gate=22`, `99.705 ms/token`,
+  with wait `5.308 ms/call` and compute only about `0.342 ms/call`.
+- A 512 MiB profile cannot remove all upgate wait. With `99` entries versus
+  thousands of possible layer experts, the realistic N32 smoke bound is small:
+  expect at most a few percent if the selected entries recur.
+- The candidate is worth continuing only if it reduces measured decode wall and
+  upgate wait, not just nominal cache hit rate.
+
+Execution:
+
+1. Run a paired N32 cold-start smoke on `dev_photosynthesis_factual` with
+   `PROFILE=1` and `COPY_PROFILE=1`.
+2. Compare control and candidate:
+   - token rate;
+   - TTFT ratio;
+   - RAM peak;
+   - quality;
+   - upgate wall and upgate hit/miss;
+   - `iouring_wait`;
+   - down hit rate to catch collateral damage.
+3. If N32 smoke regresses or is noise-level, reject and do not run N96.
+4. If N32 smoke clearly improves without violating gates, run paired N96 dev
+   before any held-out validation.
+
+Phase 4Y N32 smoke result: rejected.
+
+Timestamp: 2026-07-11 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4y-lazy-upgate-n32-photosynthesis`
+
+Prompt:
+
+- `dev_photosynthesis_factual`
+- User text: `Explain photosynthesis briefly.`
+
+Candidate env delta:
+
+- `GGML_MOE_VRAM_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4y-lazy-upgate-profile/upgate512-down0.csv`
+- `GGML_MOE_VRAM_PROFILE_PROTECT=1`
+- `GGML_MOE_VRAM_PROFILE_PROTECT_PROFILE_ONLY=1`
+- `GGML_MOE_VRAM_PROFILE_PRELOAD=0`
+- `GGML_MOE_VRAM_PROFILE_PIN_ON_INSERT=1`
+- `GGML_MOE_VRAM_PROFILE_PIN_MIN_COUNT=1`
+- `GGML_MOE_VRAM_PROFILE_RESERVE_PCT=92`
+
+Result:
+
+| run | quality | tok/s | TTFT ms | decode ms / runs | RAM peak bytes | upgate hit | down hit | upgate pinned |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| control | pass | 1.50 | 9795.98 | 20733.50 / 31 | 12604973056 | 42.5% | 58.2% | 0 |
+| lazy_upgate512 | pass | 1.49 | 10095.77 | 20789.45 / 31 | 12608712704 | 42.4% | 58.2% | 65 |
+
+Component deltas:
+
+- decode: `+55.95 ms` total regression;
+- TTFT ratio: `1.031`, within the gate but worse;
+- `iouring_wait`: `15959.039 -> 16143.942 ms`, `+184.903 ms`;
+- upgate wall: `462.690 -> 465.560 ms/token`, `+2.870 ms/token`;
+- down wall: `169.635 -> 168.535 ms/token`, `-1.100 ms/token`;
+- SSD bytes: `218799931392 -> 218895925248`, `+95.99 MB`;
+- upgate cache hit rate did not improve and slightly decreased.
+
+Decision:
+
+- Reject `upgate512-down0` lazy pin.
+- Do not run N96.
+- Do not use this profile in SOTA reproduction.
+
+Interpretation:
+
+- Lazy pin avoided the large preload/TTFT failure mode, but it still did not
+  reduce the critical path.
+- Only `65` of `99` candidate entries became pinned during this N32 decode, and
+  they did not increase aggregate upgate hit rate.
+- Static or lazy dev hotset admission is not the right next lever unless a
+  later profile proves a much stronger recurrence pattern.
+
+Next:
+
+- Stop tuning static/lazy `GGML_MOE_VRAM_PROFILE` budgets for now.
+- Move to runtime queue/scheduler evidence:
+  - join `copy-profile.csv`, `io-batch-profile.csv`, and `up-gate-profile.csv`
+    by tensor/role/time window where feasible;
+  - identify whether current upgate stalls are due to small per-layer batch
+    size, queue drain between layers, H2D slot pressure, or unavoidable routing
+    dependency;
+  - only then implement co-submit/queue-continuity changes.
+
 ## 2026-07-11 goal: transfer the DeepSeek CPU/defer GPU-extension pattern to Kimi
 
 This section is the immediate goal and plan for the next Kimi workstream.
