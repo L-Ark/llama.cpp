@@ -699,6 +699,53 @@ Decision:
   - layer/role-aware RAM/VRAM cache reallocation for layers with high all-role miss;
   - no-op if the expected upper bound is too small after subtracting current-down overlap.
 
+### Phase 4C plan: early current-down overlap A/B
+
+Reason:
+
+- The current Kimi path already supports current-layer down overlap, but the Phase 4B env did not enable `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY`.
+- In the mixed up/gate path, the non-early mode starts current-down overlap only after up/gate staging and compute. The early mode starts it immediately after routing and before up/gate staging/compute.
+- This is the narrowest way to test the user's desired behavior: once routing has produced active expert IDs, begin moving down experts without waiting for up/gate compute.
+
+Hypothesis:
+
+- If exposed down wait is still on the critical path, `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1` can hide part of the current-down worker time behind up/gate staging/compute.
+- Phase 4B measured current-down worker time around `2.34-2.48s` per N32 dev prompt, so the hard upper bound is roughly that worker time. A realistic bound is smaller because part of the work is already overlapped and because early down reads can compete with up/gate reads.
+- If IO contention dominates, early mode may reduce down wait but increase up/gate staging wait or total `iouring_wait_us`; in that case reject it.
+
+Experiment:
+
+1. Run a fresh cold-start N32 dev3 control on current HEAD with shadow disabled.
+2. Run candidate with the same env plus:
+
+```bash
+GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1
+```
+
+3. Keep:
+   - `UPGATE_PCT=62`;
+   - 1800 MiB RAM tier with `blk1_gate_full384.csv`;
+   - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+   - no held-out test prompts.
+4. Compare:
+   - token-rate min/median/mean;
+   - TTFT;
+   - decode ms;
+   - `expert_pack iouring_wait_us`;
+   - current-down `worker_us`, planned jobs, completed jobs;
+   - up/gate and down cache hit/miss;
+   - iouring batch hist/inflight;
+   - RAM peak and quality.
+
+Acceptance:
+
+- Quality 3/3 pass.
+- Host RAM remains under the hard gate.
+- TTFT ratio `<=1.20`.
+- N32 dev3 min and median token rate beat the paired fresh control.
+- The gain must be explained by lower exposed wait, not by noise or shorter output.
+- If accepted on N32, run N96 dev before any SOTA claim.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
