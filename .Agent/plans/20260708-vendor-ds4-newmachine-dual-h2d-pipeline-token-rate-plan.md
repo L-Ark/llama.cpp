@@ -198,6 +198,34 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      - `iouring_batches` may decrease, but token rate must not regress;
      - `iouring_reads`, `iouring_bytes`, `h2d_enqueues`, and async waits are
        recorded separately for priority 0 and priority 1.
+   - 2026-07-10 diagnostic update: the first default-off priority split probe
+     proved that "enqueue down into a background demand queue" is not enough.
+     Run
+     `20260710T024115Z-20260710-native-priority-split-minseen1-vram14000-quantum-n96`
+     used full native expert pack parity, `min_seen=1`, `14GB` batch VRAM
+     cache, `GGML_MOE_DOWN_BATCH_DEMAND_QUEUE=1`, and strict cold 16GB cgroup.
+     It was RAM/correctness compliant, but rejected for SOTA:
+     `eval_tok_s=4.0`, `prompt_tok_s=3.2`, `TTFT=16856 ms`,
+     `memory_peak_bytes=14830362624`, answer coherent. Counters showed:
+     `stage_a_jobs=8388`, `stage_b_jobs=4192`,
+     `priority_down_enqueued=4192`, `priority_down_queue_fail=0`,
+     `down demand queue submitted=4192 completed=4192`, but
+     `iouring_wait_us=9999909` and `iouring_batches=6246`, worse than the
+     native parity reference (`iouring_wait_us≈6574945`, `batches=5236`) and
+     worse than the clean gate SOTA (`5.5 tok/s`). Conclusion: current down
+     demand queue creates many small priority-1 batches and still competes with
+     the same staging/H2D machinery. The next implementation must be a real
+     dual-ring or reserved-slot priority scheduler, not another plain queue.
+   - Concrete next method:
+     - keep priority-0 gate/up on a dedicated staging ring or protected slot
+       pool with independent ready-event publication;
+     - keep priority-1 down on a separate ring/stream whose copy completion
+       cannot hold `g_batch_mu` while priority-0 is publishing events;
+     - add separate counters for priority-0 and priority-1 submit/wait/H2D ms;
+     - batch priority-1 down by layer or short horizon so it does not fragment
+       into thousands of one-job io_uring batches;
+     - reject the run if down background work increases priority-0 wait or if
+       token rate remains below the clean generalized SOTA.
 
 5. **Make the full lifecycle observable before claiming speedup**
    - Add per-layer/per-token counters for Stage A and Stage B:
