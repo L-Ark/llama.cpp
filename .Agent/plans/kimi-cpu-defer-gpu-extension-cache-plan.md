@@ -2338,6 +2338,103 @@ If no candidate passes:
   - evaluate whether a layout overlay can reduce `span/read` from the current `5x-9x` range;
   - only then revisit RAM tier.
 
+### Phase 4L result: only layer/role slabs are batch-coherent
+
+Timestamp: 2026-07-11 02:45 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4l-batch-coherent-ram-screen`
+
+Outputs:
+
+- `batch-coherent-screen.csv`
+- `batch-coherent-screen.report.json`
+
+Key result:
+
+- Scattered profiles touch many batches but fully cover almost none:
+  - Phase 4K wait-upgate-1800 touched `6035` runtime batches but fully covered only `22`;
+  - full-batch wait upper bound was only `35.5 ms`;
+  - this explains why it reduced SSD bytes without lowering token time.
+- Layer/role slabs fully cover their target batches:
+  - they have much lower touched-batch count but convert entire slow batches to RAM hits.
+
+Top runtime-load full-batch candidates:
+
+| candidate | RAM MiB | entries | touched batches | dominant batches | full batches | touch wait ms | full wait ms | hit GiB | remaining rows in touched |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| slab blk28+29 upgate | 7560.0 | 1536 | 896 | 790 | 896 | 3576.5 | 3576.5 | 33.58 | 0 |
+| slab blk4+6+7 down | 8904.0 | 1152 | 672 | 629 | 672 | 3002.6 | 3002.6 | 41.30 | 0 |
+| slab blk4+6 down | 5880.0 | 768 | 448 | 421 | 448 | 2091.2 | 2091.2 | 27.81 | 0 |
+| slab blk28+29 gate | 4116.0 | 768 | 448 | 395 | 448 | 1855.7 | 1855.7 | 18.28 | 0 |
+| slab blk29 upgate | 3780.0 | 768 | 448 | 390 | 448 | 1801.3 | 1801.3 | 16.82 | 0 |
+| slab blk28 upgate | 3780.0 | 768 | 448 | 400 | 448 | 1775.3 | 1775.3 | 16.76 | 0 |
+| tracked blk4 down | 2856.0 | 384 | 224 | 217 | 224 | 1060.0 | 1060.0 | 14.17 | 0 |
+| slab blk6 down | 3024.0 | 384 | 224 | 204 | 224 | 1031.2 | 1031.2 | 13.64 | 0 |
+| slab blk29 gate | 2058.0 | 384 | 224 | 195 | 224 | 941.7 | 941.7 | 9.16 | 0 |
+| slab blk28 gate | 2058.0 | 384 | 224 | 200 | 224 | 914.0 | 914.0 | 9.12 | 0 |
+| Phase 4K wait-upgate-1800 | 1795.7 | 386 | 6035 | 43 | 22 | 27053.1 | 35.5 | 51.69 | 64002 |
+| Phase 4E upgate-1800 | 1799.2 | 378 | 5999 | 26 | 18 | 26677.5 | 27.2 | 52.34 | 64162 |
+
+Decision:
+
+- Do not run any more scattered RAM tiers.
+- A real A/B is justified only for a layer/role slab with full-batch coverage.
+- Start with `tracked_blk4_down` because:
+  - it is already tracked;
+  - it has the smallest cost among candidates whose full-batch wait upper bound exceeds `1s`;
+  - it fully covers `224` runtime-load batches;
+  - its added RAM over the current tier is about `1.1 GiB`, likely still under the 16 GB host gate.
+
+Risk:
+
+- Upper bound is only about `1.06s` on N32 dev7 traces.
+- The slab will replace SSD reads with RAM->VRAM H2D/staging; if H2D or RAM copy wall is comparable to O_DIRECT wait, token rate can still tie or regress.
+- If `blk4 down` helps but is too small, a second candidate can test `blk4+6 down`, but its `5880 MiB` tier risks RAM/TTFT pressure and must not be tried unless single-layer data is positive.
+
+### Phase 4M plan: tracked `blk4 down` RAM slab N32 A/B
+
+Hypothesis:
+
+- Replacing `blk1_gate_full384.csv` with `blk4_down_full384.csv` converts full `blk.4 down` runtime-load batches to RAM hits.
+- Unlike Phase 4K, this should remove whole batch wait waves rather than leaving residual SSD tails.
+
+Candidate:
+
+- RAM profile: `.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk4_down_full384.csv`
+- Profile size: `2856 MiB`
+- Runtime env:
+
+```bash
+GGML_MOE_RAM_TIER_MIB=3000
+GGML_MOE_RAM_TIER_PROFILE=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk4_down_full384.csv
+GGML_MOE_RAM_TIER_PIN=1
+GGML_MOE_RAM_TIER_PIN_MIB=3000
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+```
+
+Paired control:
+
+- current SOTA RAM profile: `.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv`
+- `GGML_MOE_RAM_TIER_MIB=1800`
+- `GGML_MOE_RAM_TIER_PIN_MIB=1800`
+
+N32 acceptance:
+
+- quality matches control;
+- host RAM peak `<15900000000`;
+- TTFT ratio `<=1.20`;
+- min and median token rate improve, or at least decode sum and `iouring_wait` clearly improve without min regression;
+- `iouring_wait` should fall by close to the `~1s` upper bound;
+- RAM wall must not increase enough to erase the wait gain.
+
+If rejected:
+
+- Do not test larger multi-layer down slabs immediately.
+- Move to pack-layout/locality overlay, because RAM replacement has failed both scattered and small slab modes.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
