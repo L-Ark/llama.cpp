@@ -2976,6 +2976,103 @@ Next validation ladder:
 4. N96 dev only after N32 passes.
 5. N96 held-out only after N96 dev passes.
 
+### Phase 4P step C result: current-pack coalescer safety A/B rejected
+
+Timestamp: 2026-07-11 04:55 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4p-current-pack-coalesce-safety-n32-dev3`
+
+Experiment:
+
+- N32 cold start.
+- First 3 dev prompts only:
+  - `dev_france_regression`
+  - `dev_japan_factual`
+  - `dev_photosynthesis_factual`
+- Control:
+  - current SOTA env;
+  - `GGML_MOE_IO_ADJACENT_COALESCE` unset.
+- Candidate:
+  - same env;
+  - `GGML_MOE_IO_ADJACENT_COALESCE=1`;
+  - `GGML_MOE_IO_ADJACENT_MAX_SPAN_MIB=16`;
+  - `GGML_MOE_IO_ADJACENT_MAX_GAP=0`;
+  - `GGML_MOE_IO_ADJACENT_MIN_GROUP=2`.
+
+Aggregate result:
+
+| run | quality | min tok/s | median tok/s | mean tok/s | decode sum ms | iouring wait sum ms | max RAM GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| control | 3/3 | 1.810 | 1.870 | 1.853 | 50176.6 | 56878.5 | 11.85 |
+| candidate | 3/3 | 1.670 | 1.730 | 1.730 | 53815.8 | 59231.5 | 12.04 |
+
+Paired result:
+
+| prompt | tok/s delta | TTFT ratio | decode delta ms | iouring wait delta ms | RAM delta MiB |
+|---|---:|---:|---:|---:|---:|
+| `dev_france_regression` | -0.210 | 0.964 | +2151.0 | +976.9 | +194.0 |
+| `dev_japan_factual` | -0.080 | 1.024 | +681.0 | +828.2 | +157.4 |
+| `dev_photosynthesis_factual` | -0.080 | 0.996 | +807.2 | +547.9 | +194.9 |
+
+Candidate coalescer counters:
+
+| prompt | groups | slices | extents saved | physical/payload bytes | max group jobs | max span bytes |
+|---|---:|---:|---:|---:|---:|---:|
+| `dev_france_regression` | 4105 | 8713 | 4608 | 49369169920 / 49369169920 | 3 | 16515072 |
+| `dev_japan_factual` | 3760 | 7946 | 4186 | 44900122624 / 44900122624 | 3 | 16515072 |
+| `dev_photosynthesis_factual` | 2423 | 5100 | 2677 | 28813524992 / 28813524992 | 3 | 16515072 |
+
+Important counters:
+
+- France:
+  - control CQEs: `39090`
+  - candidate CQEs: `34482`
+  - candidate saved extents: `4608`
+  - token rate still fell from `1.88` to `1.67`.
+- Japan:
+  - control CQEs: `39075`
+  - candidate CQEs: `34889`
+  - token rate fell from `1.87` to `1.79`.
+- Photosynthesis:
+  - control CQEs: `38275`
+  - candidate CQEs: `35598`
+  - token rate fell from `1.81` to `1.73`.
+
+Interpretation:
+
+- The implementation did reduce physical CQEs/read extents.
+- It did **not** reduce exposed wait; `iouring_wait` increased on all three prompts.
+- The likely mechanism is critical-path latency:
+  - old path can receive and H2D each expert as soon as its smaller read completes;
+  - coalesced path waits for the entire 2-3 expert span before the first slice can be H2D-enqueued;
+  - the staged slot is also held until all slice copies are enqueued and ordered;
+  - fewer CQEs are not enough to offset the longer first-slice latency on runtime-load critical paths.
+- This matches the previous historical warning that broad/blocking coalescing can move the bottleneck from SQE count to slot/wait latency.
+
+Decision:
+
+- Reject `GGML_MOE_IO_ADJACENT_COALESCE=1` with the current implementation for SOTA use.
+- Keep the code default-off only as diagnostic infrastructure.
+- Do not build or test the large greedy-pair overlay with this coalescer implementation; greedy-pair would create more groups and likely amplify the same first-slice latency problem.
+- No N96 run and no held-out run.
+
+Next plan after rejection:
+
+1. Do not pursue synchronous adjacent-span coalescing on `runtime_load` up/gate/down.
+2. If coalescing is revisited, restrict it to non-critical prefetch paths first:
+   - `current_down_overlap` only;
+   - or explicit prefetch where compute does not wait for the first slice.
+3. Add per-op coalescer counters before any retry, because this result needs separation of:
+   - `runtime_load:up`;
+   - `runtime_load:gate`;
+   - `runtime_load:down`;
+   - `current_down_overlap:down`.
+4. Return to the main bottleneck ranking:
+   - exposed `io_uring_wait` comes from critical-path runtime misses, not just physical read count;
+   - next candidates should reduce wait without delaying the earliest needed expert.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
