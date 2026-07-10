@@ -290,6 +290,152 @@ Next:
     dependency;
   - only then implement co-submit/queue-continuity changes.
 
+## Phase 4Z plan: queue/scheduler evidence before co-submit
+
+Timestamp: 2026-07-11 CST.
+
+Reason:
+
+- Static preload and lazy pin both failed to reduce the critical path.
+- Upgate wait remains large, but cache hit rate tuning alone has not improved
+  decode wall.
+- Before changing scheduling, collect direct queue evidence to decide whether
+  exposed wait comes from:
+  - small per-layer batches;
+  - IO queue drain between batches;
+  - refill/wait policy;
+  - H2D slot pressure or copy coalescing;
+  - unavoidable routing dependency.
+
+Instrumentation run:
+
+- Prompt: `dev_photosynthesis_factual`.
+- N: `32`.
+- Cold start, 16GB cgroup.
+- Keep runtime behavior unchanged except profiling env.
+- Enable:
+  - `PROFILE=1`;
+  - `COPY_PROFILE=1`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`;
+  - `GGML_MOE_H2D_COALESCE_PROFILE_OUT=$RUN/h2d-coalesce-profile.csv`;
+  - `GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv`.
+
+Analysis to add:
+
+- Parse `copy-profile.csv` by role/layer/tensor:
+  `io_wait_ms`, `h2d_ms`, `enqueue_ms`, `slot_wait_ms`, bytes, read count.
+- Parse `io-batch-profile.csv` by op and tensor role:
+  jobs, read jobs, initial submit jobs, wait calls, inflight average/max,
+  wait wall, submit wall, slot wait, batch-size histogram.
+- Parse `io-wait-trace.csv`:
+  wait count, zero-drain waits, waits with low inflight, waits with queue
+  exhaustion, and top wait records.
+- Parse `h2d-coalesce-profile.csv`:
+  copy count, coalesced copy count, contiguous-pair opportunity, bytes.
+- Join at aggregate tensor/role level with `up-gate-profile.csv`.
+
+Decision rules:
+
+- If most wait records have low `inflight_before` and small `read_jobs`, the
+  next candidate should be queue continuity/co-submit.
+- If wait records have high inflight but long wait, the bottleneck is storage
+  latency/throughput or refill policy, not simply batch construction.
+- If H2D coalescing is poor and H2D is significant, target staging layout.
+- If `up-gate-profile.csv` wait is high but IO batch wait is not, target CUDA
+  stream synchronization or cache slot readiness.
+- This phase produces evidence only; no SOTA claim.
+
+Phase 4Z result: decode waits are not queue-empty; locality is poor.
+
+Timestamp: 2026-07-11 CST.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4z-queue-evidence-n32-photosynthesis/dev_photosynthesis_factual`
+
+Reports:
+
+- Decode bottleneck:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4z-queue-evidence-n32-photosynthesis/decode-analysis/report.md`
+- Queue/scheduler evidence:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4z-queue-evidence-n32-photosynthesis/queue-analysis-v3/report.md`
+
+Run metrics:
+
+- Quality: pass.
+- Token rate: `1.50 tok/s`.
+- TTFT: `10399.55 ms`.
+- Decode: `20716.66 ms / 31 runs`.
+- Expert-pack iouring:
+  - reads: `38275`;
+  - bytes: `218799931392`;
+  - wait: `15765374 us`;
+  - inflight avg/max: `4.47 / 8`.
+
+Decode-like IO batch evidence (`read_jobs <= 8`):
+
+| op | rows | read jobs | avg read jobs | avg initial submit | wait ms | wait/read job | inflight avg | inflight max |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| runtime_load | 4678 | 22320 | 4.771 | 4.771 | 10059.096 | 0.451 | 4.100 | 8 |
+| current_down_overlap | 899 | 4489 | 4.993 | 4.993 | 1559.044 | 0.347 | 4.669 | 8 |
+
+Decode-like IO wait evidence:
+
+- wait rows: `10534`;
+- wait ms: `11618.140`;
+- p50/p95/p99 wait: `1.189 / 2.372 / 2.983 ms`;
+- low inflight ratio: `0.055`;
+- queue empty ratio: `0.000`;
+- zero drain ratio: `0.000`;
+- next-job-done ratio: `1.000`.
+
+Decode-like IO locality evidence:
+
+| op | rows | read jobs | read GiB | span/read | gap/read | source switches/row | adjacent pairs/read job |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| runtime_load | 4678 | 22320 | 116.855 | 32.580 | 31.580 | 1.519 | 0.013 |
+| current_down_overlap | 899 | 4489 | 26.377 | 34.017 | 33.017 | 1.734 | 0.010 |
+
+Up/gate evidence:
+
+- Largest type is `up=22/gate=18/parallel=1`:
+  - calls: `899`;
+  - wall: `8442.332 ms`, `9.391 ms/call`;
+  - up/gate misses: `4.402 / 4.406 per call`;
+  - up/gate wait: `4.990 / 5.429 ms/call`;
+  - up/gate compute: `0.157 / 0.097 ms/call`.
+
+Interpretation:
+
+- Decode wait is not caused by an empty queue. During decode-like waits, the
+  queue-empty ratio is `0`, zero-drain ratio is `0`, and `next_job_done=1.0`
+  means the currently exposed batch has already submitted all available jobs.
+- A plain same-layer submit-loop rewrite is unlikely to recover the pure IO
+  bench gap unless it exposes genuinely new future-layer work.
+- `runtime_load` batches average only `4.77` read jobs and `current_down_overlap`
+  batches average `4.99` read jobs. This is a dependency/visibility limit, not
+  just a missed submit call.
+- Locality is very poor even for same-tensor batches:
+  `gap/read` is about `31-33x` and adjacent pairs per read job are near zero.
+  This points toward expert pack layout / route-order locality / predictive
+  future-layer prefetch as higher-leverage than more static VRAM hotsets.
+- H2D coalesce profile did not emit rows in this run, so H2D coalescing still
+  needs either different instrumentation or a specific H2D-focused experiment
+  before making claims.
+
+Decision:
+
+- Do not implement a naive same-layer co-submit path as the next step.
+- Do not retry static/lazy `GGML_MOE_VRAM_PROFILE` budgets.
+- Next work should be a layout/prefetch bound study:
+  1. estimate how much wait is removable if same-tensor active experts are laid
+     out contiguously or near-contiguously in the expert pack;
+  2. estimate how many future-layer expert IDs would need to be known to raise
+     decode-like read jobs from `~5` toward `12-16`;
+  3. only implement a runtime path if the bound can save at least
+     `~100 ms/token` on dev N96 without prompt-specific tuning.
+
 ## 2026-07-11 goal: transfer the DeepSeek CPU/defer GPU-extension pattern to Kimi
 
 This section is the immediate goal and plan for the next Kimi workstream.
