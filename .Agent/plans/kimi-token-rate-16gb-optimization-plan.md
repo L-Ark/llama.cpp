@@ -97640,3 +97640,62 @@ Conclusion:
   streaming. The load must be smaller-grained/trickle-loaded, or it must target a
   layer-role whose miss wait is provably exposed on the critical path.
 
+Prompt-half RAM append trial:
+
+Status: rejected on `2026-07-10T07:59+0800`; no SOTA change.
+
+Goal: start loading extra RAM-tier experts during the second half of prompt
+instead of at first decode token, hoping to overlap append IO with prompt work and
+improve decode token rate.
+
+Implementation trial:
+
+- Added a default-off `GGML_MOE_RAM_TIER_APPEND_START=prompt_after_layer` mode.
+- First attempt hooked up/gate prompt mode only. On the France short prompt it did
+  not trigger, because the observed up/gate path was decode-only:
+  `batched up/gate decode path active`.
+- Added the same hook to the down/prompt-multirow path, where `rows_stride > 8`
+  identifies prompt work. This correctly triggered at the configured layer.
+
+A/B results, all cold N96 under `MemoryMax=15900000000`:
+
+```text
+prompt_after_layer=40, append blk29_upgate_top128, no drop_caches:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt-down-layer40-blk29-upgate-top128-n96-075213
+trigger=blk.40.ffn_gate_exps.weight
+append loaded=255 entries, resident=7009.52MiB, wall=1672.412ms
+quality=pass
+TTFT=9448.80 ms, fails +20% gate
+decode=45430.25 ms / 85
+token_rate=1.87 tok/s
+
+prompt_after_layer=40, append blk29_upgate_top64, no drop_caches:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt-down-layer40-blk29-upgate-top64-n96-075350
+trigger=blk.40.ffn_gate_exps.weight
+append loaded=127 entries, resident=6379.52MiB, wall=821.158ms
+quality=pass
+TTFT=9386.40 ms, fails +20% gate
+decode=46354.17 ms / 85
+token_rate=1.83 tok/s
+
+prompt_after_layer=55, append blk29_upgate_top64, no drop_caches:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt-down-layer55-blk29-upgate-top64-n96-075604
+trigger=blk.55.ffn_gate_exps.weight
+append loaded=127 entries, resident=6379.52MiB, wall=774.588ms
+quality=pass
+TTFT=10774.70 ms, fails +20% gate
+decode=45105.28 ms / 85
+token_rate=1.88 tok/s
+```
+
+Conclusion:
+
+- The prompt-half trigger works technically once attached to the prompt down path,
+  but it does not improve the short-prompt N96 objective.
+- Even 127 up+gate entries add enough competing IO/H2D pressure to increase TTFT
+  and/or decode wait; the extra RAM hits do not offset that cost for N96.
+- Revert the runtime experiment and do not commit the generated top-N profiles as
+  accepted artifacts.
+- This direction may still be useful for long prompts or long generations, but it
+  should not be promoted as the current 16GB short-prompt SOTA path.
+
