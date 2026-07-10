@@ -65,7 +65,8 @@ Execution plan from here:
 
 Immediate next action:
 
-- Finish parsing the latest N96 full-dev paired validation for `all-1200-minp4` RAM tier. If it improves full-dev and then held-out metrics, promote the profile into tracked `.Agent/profiles/`; otherwise document rejection and continue with layer/role slab candidates based on exposed wait.
+- `all-1200-minp4` RAM tier has been rejected after N96 held-out validation. It reduced SSD bytes but did not reduce exposed `io_uring_wait` on held-out prompts and slightly regressed median/mean token rate.
+- Next work must return to exposed-wait profiling and layer/role slab candidates, with special attention to prompt-dependent TTFT long tails and queue starvation.
 
 ## Current execution goal
 
@@ -1303,6 +1304,81 @@ Next:
   - control with `blk1_gate_full384.csv`;
   - candidate with `all-1200-minp4`.
 - Only if N96 full-dev improves min/median/mean and quality passes, copy the profile into a tracked path and run held-out N96.
+
+### Phase 4E N96 full-dev and held-out result
+
+Timestamp: 2026-07-10 23:55 CST.
+
+Runs:
+
+- N96 full-dev run root:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-all1200-n96-fulldev-153209`
+- N96 held-out run root:
+  - `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-all1200-n96-heldout-235502`
+
+N96 full-dev aggregate:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | TTFT median ms | TTFT max ms | RAM peak GiB | iouring wait s | iouring bytes GiB | RAM hits | RAM H2D GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control | 7/7 | 1.63 | 1.81 | 1.816 | 9024.04 | 11973.20 | 13.56 | 284.84 | 2799.68 | 3363 | 14.73 |
+| all-1200-minp4 | 7/7 | 1.68 | 1.83 | 1.836 | 8622.40 | 11075.65 | 13.03 | 282.15 | 2729.91 | 15315 | 84.49 |
+
+Full-dev interpretation:
+
+- `all-1200-minp4` was a small positive dev signal:
+  - token-rate mean `+0.020 tok/s`;
+  - min `+0.05 tok/s`;
+  - median `+0.02 tok/s`;
+  - `iouring_wait` `-2.69s`;
+  - SSD IO `-69.77 GiB`.
+- However, per-prompt results already showed regressions on `dev_mixed_summary` and `dev_python_reverse`.
+- Therefore it was allowed to proceed to held-out validation but was not accepted.
+
+N96 held-out aggregate:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | TTFT median ms | TTFT max ms | RAM peak GiB | iouring wait s | iouring bytes GiB | RAM hits | RAM H2D GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control | 6/6 | 1.62 | 1.85 | 1.810 | 9830.87 | 248966.26 | 14.81 | 307.34 | 2919.97 | 3455 | 15.13 |
+| all-1200-minp4 | 6/6 | 1.63 | 1.82 | 1.802 | 9466.49 | 228378.04 | 14.81 | 312.94 | 2862.60 | 13174 | 72.50 |
+
+Held-out per-prompt deltas versus control:
+
+| prompt | tok delta | decode delta ms | TTFT delta ms | TTFT ratio |
+|---|---:|---:|---:|---:|
+| test_chinese_01 | -0.01 | +136.16 | +553.55 | 1.064 |
+| test_coding_01 | +0.01 | -245.85 | -669.13 | 0.936 |
+| test_english_factual_01 | +0.05 | -1280.16 | -1129.60 | 0.874 |
+| test_english_factual_02 | -0.01 | +323.09 | -350.96 | 0.962 |
+| test_mixed_instruction_01 | -0.05 | +1660.17 | -1423.75 | 0.873 |
+| test_reasoning_math_01 | -0.04 | +845.74 | -20588.22 | 0.917 |
+
+Decision:
+
+- Reject `all-1200-minp4`; do not copy it into tracked `.Agent/profiles/`.
+- Reason:
+  - held-out median token rate regressed from `1.85` to `1.82`;
+  - held-out mean regressed from `1.810` to `1.802`;
+  - total held-out decode time increased by `1.44s`;
+  - `iouring_wait` increased by `5.61s` even though SSD IO decreased by `57.37 GiB`;
+  - RAM H2D increased from `15.13 GiB` to `72.50 GiB`, so the profile moved bytes from SSD to RAM but did not shorten the critical path.
+- Quality passed and TTFT did not violate the `1.20x` gate, but performance was not a general-prompt improvement.
+
+Additional observation:
+
+- `test_reasoning_math_01` shows a severe prompt-dependent TTFT long tail:
+  - control TTFT `248966.26 ms`;
+  - candidate TTFT `228378.04 ms`;
+  - both runs hit the `15899996160` byte cgroup peak.
+- The next profiling pass must separate decode token-rate work from cold-start/prompt TTFT long-tail causes. A candidate that only improves decode bytes but leaves TTFT near the memory limit is not sufficient.
+
+Next:
+
+- Build an exposed-wait profile for N96 dev and held-out control runs:
+  - per-layer and per-role `io_uring_wait`;
+  - queue depth and batch histogram around stalls;
+  - RAM tier H2D timing versus SSD wait;
+  - prompt/prefill TTFT memory peak and major fault source for the reasoning/math long tail.
+- Screen layer/role slab candidates only if they have a measurable upper bound in removable exposed wait and keep RAM below the 16 GB gate with margin.
 
 ## Phase 5: Commit and push protocol
 
