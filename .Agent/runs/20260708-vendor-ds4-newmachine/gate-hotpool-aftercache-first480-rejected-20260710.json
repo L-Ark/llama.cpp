@@ -1,0 +1,48 @@
+{
+  "artifact": "gate-hotpool-aftercache-first480-rejected-20260710",
+  "created_at_local": "2026-07-10",
+  "branch": "vendor/deepseek-token-rate-16gb",
+  "source_commit_base": "730b1ac452efa63dae4f3bf93d8dc8651d61636e",
+  "machine": "wici@192.168.9.198",
+  "status": "rejected_dirty_probe_not_retained",
+  "method": {
+    "name": "default-off direct hot pool prefill after one-cache init",
+    "description": "Dirty-source probe adding GGML_MOE_STREAM_ONE_DIRECT_PREFILL_AFTER_CACHE=1 to try to initialize the 12288MiB gate one-cache before starting the 480-entry direct hot pool.",
+    "retained_in_source": false,
+    "reason_not_retained": "The probe did not improve token rate and still reported the 12288MiB one-cache cudaMalloc failure."
+  },
+  "run": {
+    "run_dir": "/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260710T040432Z-interactive",
+    "prompt": "Explain quantum computing briefly.",
+    "max_tokens": 96,
+    "strict_cold": true,
+    "display_processes_stopped_before_run": true,
+    "source_dirty": true,
+    "eval_tok_s": 3.2,
+    "prompt_tok_s": 3.4,
+    "ttft_ms": 16738.597375,
+    "memory_peak_bytes": 14887018496,
+    "memory_file_bytes": 13943316480,
+    "ram_ok": true,
+    "correctness": "pass: coherent quantum-computing explanation, truncated only by n=96"
+  },
+  "counters": {
+    "direct_hot_pool": {
+      "manifest_entries": 480,
+      "allocated_mib": 2040.0,
+      "attempted": 480,
+      "inserted": 480,
+      "bytes": 2139095040,
+      "elapsed_ms": 1027.493,
+      "read_ms": 635.261,
+      "h2d_ms": 390.047,
+      "lookups": 12190,
+      "hits": 570
+    },
+    "one_cache": "cudaMalloc 12.0 GiB FAILED",
+    "one_pack_reads": 11746,
+    "one_pack_bytes": 52345438208
+  },
+  "decision": "Reject. The intended allocation-order guard did not preserve the main gate one-cache in the multithreaded first-call path, and performance remained far below the first320 SOTA.",
+  "next": "A future allocation-order fix must serialize first-call one-cache initialization before any direct hot-pool initialization across all worker threads, or reserve/cache-budget memory explicitly. Do not keep this dirty implementation."
+}

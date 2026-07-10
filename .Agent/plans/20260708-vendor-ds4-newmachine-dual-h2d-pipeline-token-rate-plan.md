@@ -502,6 +502,23 @@ Promotion requirements:
   - investigate cheaper prefill or overlapped prefill so the hot pool saves
     decode H2D without adding comparable TTFT/prefill cost.
 
+Allocation-order dirty probe:
+
+- A default-off dirty probe attempted to add
+  `GGML_MOE_STREAM_ONE_DIRECT_PREFILL_AFTER_CACHE=1`, intending to initialize
+  the 12288MiB gate one-cache before starting a first480 direct hot pool.
+- Run:
+  `/root/lfz/runs/vendor-ds4-16gb/demo-general-sota/20260710T040432Z-interactive`,
+  source `730b1ac45-dirty`, strict cold, RAM OK, correctness pass.
+- Result: rejected, `eval_tok_s=3.2`.
+- Counters still showed `VRAM cache: cudaMalloc 12.0 GiB FAILED`, followed by
+  `11746` one-pack reads / `52.35GB`. The dirty source change was reverted and
+  not retained.
+- Diagnosis: a real allocation-order fix must serialize first-call one-cache
+  initialization before any direct hot-pool initialization across worker
+  threads, or introduce explicit reserved VRAM budgeting. A per-thread
+  after-cache call is insufficient.
+
 ## 2026-07-08 Execution Notes
 
 - Added run-artifact hardware metadata collection to
