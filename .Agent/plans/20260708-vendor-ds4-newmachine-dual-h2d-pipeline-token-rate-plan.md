@@ -226,6 +226,43 @@ cleanup are diagnostic only and must not be promoted as SOTA.
        into thousands of one-job io_uring batches;
      - reject the run if down background work increases priority-0 wait or if
        token rate remains below the clean generalized SOTA.
+   - 2026-07-10 implementation/profiling update: added default-off route-group
+     timing counters in `ggml/src/ggml-cuda/moe_stream_batch.cu` so native
+     parity reports `stage_a_copy_us`, `stage_b_copy_us`, and
+     `priority_down_enqueue_us`. This does not change the clean SOTA path.
+     Dirty diagnostic run on the isolated new-machine worktree
+     `/home/wici/ssd-llama-diag-a631`:
+     `20260710T044520Z-route-priority-timing-dirty2-n32`, prompt
+     `Explain quantum computing briefly.`, n32, strict cold 16GB cgroup,
+     `GGML_CUDA_MOE_STREAM_BATCH=ON`,
+     `GGML_MOE_BATCH_FULLPACK=1`,
+     `GGML_MOE_ROUTE_GROUP_NATIVE_PARITY=1`,
+     `GGML_MOE_ROUTE_GROUP_NATIVE_PRIORITY_SPLIT=1`,
+     `GGML_MOE_DOWN_BATCH_DEMAND_QUEUE=1`,
+     `GGML_MOE_VRAM_CACHE_MIB=14000`.
+     Result: `eval_tok_s=2.4`, `prompt_tok_s=2.1`,
+     `TTFT=19923.203 ms`, `memory_peak_bytes=14799269888`,
+     `memory_file_bytes=13887459328`, RAM OK, output coherent; rejected for
+     SOTA because it is far below the clean generalized `5.6 tok/s`.
+     New counters:
+     `stage_a_jobs=3732`, `stage_a_batches=929`,
+     `stage_a_bytes=16.63GB`, `stage_a_copy_us=2620319`;
+     `stage_b_jobs=1866`, `stage_b_batches=0`,
+     `stage_b_bytes=8.32GB`, `stage_b_copy_us=0`,
+     `priority_down_enqueued=1866`, `priority_down_queue_fail=0`,
+     `priority_down_enqueue_us=19852`.
+     Down queue counters: `submitted=1866`, `completed=1866`,
+     `batches=930`, `failures=0`.
+     Aggregated `GGML_MOE_IO_BATCH_PROFILE_OUT`:
+     `route_group_priority_up_gate` `rows=929`, `jobs=3732`,
+     `wait_ms=1459.575`, `submit_ms=518.435`, `wall_ms=2602.961`;
+     `down_demand_queue` `rows=930`, `jobs=1866`,
+     `wait_ms=854.873`, `submit_ms=369.710`, `wall_ms=1495.606`.
+     Diagnosis: the existing priority split is not a true route-group dual-ring
+     pipeline. Gate/up still issues many small batches, and down is fragmented
+     into almost one batch per layer/call. Next code work must aggregate
+     priority-1 down by layer or short horizon and keep it on a resource path
+     that cannot fragment priority-0 or compete for its staging progress.
 
 5. **Make the full lifecycle observable before claiming speedup**
    - Add per-layer/per-token counters for Stage A and Stage B:

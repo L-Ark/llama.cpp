@@ -7980,15 +7980,18 @@ static std::atomic<uint64_t> g_route_group_native_down_misses{0};
 static std::atomic<uint64_t> g_route_group_native_stage_a_jobs{0};
 static std::atomic<uint64_t> g_route_group_native_stage_a_batches{0};
 static std::atomic<uint64_t> g_route_group_native_stage_a_bytes{0};
+static std::atomic<uint64_t> g_route_group_native_stage_a_copy_us{0};
 static std::atomic<uint64_t> g_route_group_native_stage_b_jobs{0};
 static std::atomic<uint64_t> g_route_group_native_stage_b_batches{0};
 static std::atomic<uint64_t> g_route_group_native_stage_b_bytes{0};
+static std::atomic<uint64_t> g_route_group_native_stage_b_copy_us{0};
 static std::atomic<uint64_t> g_route_group_native_missing_pack{0};
 static std::atomic<uint64_t> g_route_group_native_no_slot{0};
 static std::atomic<uint64_t> g_route_group_native_copy_fail{0};
 static std::atomic<uint64_t> g_route_group_native_seen_skips{0};
 static std::atomic<uint64_t> g_route_group_native_priority_down_enqueued{0};
 static std::atomic<uint64_t> g_route_group_native_priority_down_queue_fail{0};
+static std::atomic<uint64_t> g_route_group_native_priority_down_enqueue_us{0};
 static std::mutex g_route_group_native_seen_mu;
 static std::unordered_map<uintptr_t, uint32_t> g_route_group_native_seen;
 
@@ -8011,10 +8014,10 @@ static void route_group_report_atexit() {
         std::fprintf(stderr,
                 "[moe_stream_batch] route group native parity: calls=%lu selected=%lu "
                 "gate_hits=%lu gate_misses=%lu up_hits=%lu up_misses=%lu down_hits=%lu down_misses=%lu "
-                "stage_a_jobs=%lu stage_a_batches=%lu stage_a_bytes=%lu "
-                "stage_b_jobs=%lu stage_b_batches=%lu stage_b_bytes=%lu "
+                "stage_a_jobs=%lu stage_a_batches=%lu stage_a_bytes=%lu stage_a_copy_us=%lu "
+                "stage_b_jobs=%lu stage_b_batches=%lu stage_b_bytes=%lu stage_b_copy_us=%lu "
                 "missing_pack=%lu no_slot=%lu copy_fail=%lu seen_skips=%lu "
-                "priority_down_enqueued=%lu priority_down_queue_fail=%lu\n",
+                "priority_down_enqueued=%lu priority_down_queue_fail=%lu priority_down_enqueue_us=%lu\n",
                 (unsigned long)native_calls,
                 (unsigned long)g_route_group_native_selected.load(std::memory_order_relaxed),
                 (unsigned long)g_route_group_native_gate_hits.load(std::memory_order_relaxed),
@@ -8026,15 +8029,18 @@ static void route_group_report_atexit() {
                 (unsigned long)g_route_group_native_stage_a_jobs.load(std::memory_order_relaxed),
                 (unsigned long)g_route_group_native_stage_a_batches.load(std::memory_order_relaxed),
                 (unsigned long)g_route_group_native_stage_a_bytes.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_a_copy_us.load(std::memory_order_relaxed),
                 (unsigned long)g_route_group_native_stage_b_jobs.load(std::memory_order_relaxed),
                 (unsigned long)g_route_group_native_stage_b_batches.load(std::memory_order_relaxed),
                 (unsigned long)g_route_group_native_stage_b_bytes.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_stage_b_copy_us.load(std::memory_order_relaxed),
                 (unsigned long)g_route_group_native_missing_pack.load(std::memory_order_relaxed),
                 (unsigned long)g_route_group_native_no_slot.load(std::memory_order_relaxed),
                 (unsigned long)g_route_group_native_copy_fail.load(std::memory_order_relaxed),
                 (unsigned long)g_route_group_native_seen_skips.load(std::memory_order_relaxed),
                 (unsigned long)g_route_group_native_priority_down_enqueued.load(std::memory_order_relaxed),
-                (unsigned long)g_route_group_native_priority_down_queue_fail.load(std::memory_order_relaxed));
+                (unsigned long)g_route_group_native_priority_down_queue_fail.load(std::memory_order_relaxed),
+                (unsigned long)g_route_group_native_priority_down_enqueue_us.load(std::memory_order_relaxed));
     }
 }
 
@@ -8191,19 +8197,29 @@ static bool route_group_native_enqueue_down_priority(
         const char *tensor_name,
         int expert,
         cudaStream_t st) {
+    const auto enqueue_start = std::chrono::steady_clock::now();
+    auto record_enqueue_us = [&]() {
+        const auto enqueue_end = std::chrono::steady_clock::now();
+        g_route_group_native_priority_down_enqueue_us.fetch_add(
+                (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(enqueue_end - enqueue_start).count(),
+                std::memory_order_relaxed);
+    };
     const expert_pack_entry *entry = expert_pack_lookup_any_size(tensor_name, expert);
     if (!entry || entry->nbytes == 0) {
         ++g_route_group_native_missing_pack;
+        record_enqueue_us();
         return false;
     }
     batch_vram_cache *cache = batch_cache_get((size_t)entry->nbytes);
     if (!cache) {
         ++g_route_group_native_no_slot;
+        record_enqueue_us();
         return false;
     }
     const uintptr_t key = batch_key_hash(tensor_name, expert);
     if (batch_cache_find_slot(cache, key) >= 0) {
         route_group_native_count_hit('d');
+        record_enqueue_us();
         return true;
     }
     const int role_min_seen = route_group_native_role_min_seen('d');
@@ -8219,17 +8235,20 @@ static bool route_group_native_enqueue_down_priority(
         }
         if ((int)seen + 1 < role_min_seen) {
             ++g_route_group_native_seen_skips;
+            record_enqueue_us();
             return true;
         }
     }
     route_group_native_count_miss('d');
     if (!down_demand_prefill_enqueue(cache, key, nullptr, (size_t)entry->nbytes, tensor_name, expert, st)) {
         ++g_route_group_native_priority_down_queue_fail;
+        record_enqueue_us();
         return false;
     }
     ++g_route_group_native_priority_down_enqueued;
     g_route_group_native_stage_b_jobs.fetch_add(1, std::memory_order_relaxed);
     g_route_group_native_stage_b_bytes.fetch_add((uint64_t)entry->nbytes, std::memory_order_relaxed);
+    record_enqueue_us();
     return true;
 }
 
@@ -8262,7 +8281,15 @@ static bool route_group_native_copy_stage(
         }
         std::vector<route_group_native_job> group(jobs.begin() + (ptrdiff_t)pos, jobs.begin() + (ptrdiff_t)end);
         pinned_stage_ring &copy_ring = override_ring ? *override_ring : g_batch.stage_ring;
+        const auto copy_start = std::chrono::steady_clock::now();
         const bool copied = expert_pack_iouring_copy_jobs(group, bytes, copy_stream, copy_ring, trace_op);
+        const auto copy_end = std::chrono::steady_clock::now();
+        const uint64_t copy_us = (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(copy_end - copy_start).count();
+        if (stage_a) {
+            g_route_group_native_stage_a_copy_us.fetch_add(copy_us, std::memory_order_relaxed);
+        } else {
+            g_route_group_native_stage_b_copy_us.fetch_add(copy_us, std::memory_order_relaxed);
+        }
         if (!copied || cudaGetLastError() != cudaSuccess) {
             for (const route_group_native_job &job : group) {
                 if (job.cache && job.slot >= 0) {
@@ -8348,7 +8375,10 @@ static bool route_group_native_copy_cobatch(
             ++end;
         }
         std::vector<route_group_native_job> group(jobs.begin() + (ptrdiff_t)pos, jobs.begin() + (ptrdiff_t)end);
+        const auto copy_start = std::chrono::steady_clock::now();
         const bool copied = expert_pack_iouring_copy_jobs(group, bytes, copy_stream, g_batch.stage_ring, "route_group_cobatch");
+        const auto copy_end = std::chrono::steady_clock::now();
+        const uint64_t copy_us = (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(copy_end - copy_start).count();
         if (!copied || cudaGetLastError() != cudaSuccess) {
             for (const route_group_native_job &job : group) {
                 if (job.cache && job.slot >= 0) {
@@ -8396,11 +8426,15 @@ static bool route_group_native_copy_cobatch(
             ++g_route_group_native_stage_a_batches;
             g_route_group_native_stage_a_jobs.fetch_add(stage_a_count, std::memory_order_relaxed);
             g_route_group_native_stage_a_bytes.fetch_add(stage_a_count * (uint64_t)bytes, std::memory_order_relaxed);
+            g_route_group_native_stage_a_copy_us.fetch_add(
+                    (copy_us * stage_a_count) / (stage_a_count + stage_b_count), std::memory_order_relaxed);
         }
         if (stage_b_count > 0) {
             ++g_route_group_native_stage_b_batches;
             g_route_group_native_stage_b_jobs.fetch_add(stage_b_count, std::memory_order_relaxed);
             g_route_group_native_stage_b_bytes.fetch_add(stage_b_count * (uint64_t)bytes, std::memory_order_relaxed);
+            g_route_group_native_stage_b_copy_us.fetch_add(
+                    (copy_us * stage_b_count) / (stage_a_count + stage_b_count), std::memory_order_relaxed);
         }
         pos = end;
     }
