@@ -2435,6 +2435,116 @@ If rejected:
 - Do not test larger multi-layer down slabs immediately.
 - Move to pack-layout/locality overlay, because RAM replacement has failed both scattered and small slab modes.
 
+### Phase 4M result: tracked `blk4 down` RAM slab rejected
+
+Timestamp: 2026-07-11 02:55 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4m-blk4down-ram-slab-n32-dev3-0255`
+
+Aggregate:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | decode sum s | TTFT median ms | TTFT max ms | RAM peak GiB | iouring wait s | iouring bytes GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control `blk1 gate` | 3/3 | 1.95 | 1.95 | 1.970 | 47.201 | 8165.57 | 8912.50 | 13.55 | 53.241 | 617.072 |
+| `blk4 down` slab | 3/3 | 1.74 | 1.83 | 1.813 | 51.281 | 9310.48 | 10157.07 | 14.67 | 58.956 | 614.268 |
+
+Per-prompt deltas:
+
+| prompt | token-rate delta | decode delta ms | TTFT ratio | quality |
+|---|---:|---:|---:|---:|
+| dev_france_regression | -0.18 | +1535.71 | 0.995 | pass/pass |
+| dev_japan_factual | -0.08 | +676.73 | 1.244 | pass/pass |
+| dev_photosynthesis_factual | -0.21 | +1866.98 | 1.312 | pass/pass |
+
+RAM and IO deltas:
+
+| metric | control | `blk4 down` | delta |
+|---|---:|---:|---:|
+| `iouring_wait` | 53.241s | 58.956s | +5.715s |
+| SSD expert bytes | 617.072 GiB | 614.268 GiB | -2.804 GiB |
+| RAM hit jobs | 718 | 819 | +101 |
+| RAM hit bytes | 3.144 GiB | 5.949 GiB | +2.804 GiB |
+| RAM wall | 2.343s | 0.004s | -2.339s |
+| host RAM peak | 13.55 GiB | 14.67 GiB | +1.12 GiB |
+
+Decision:
+
+- Reject candidate.
+- Do not run N96.
+- Do not test larger multi-layer down slabs.
+
+Reason:
+
+- The slab fully covered `blk.4 down` batches, but it replaced the existing `blk1 gate` RAM tier rather than adding to it.
+- Net SSD byte reduction was only `2.804 GiB`, because `blk4 down` saved `5.949 GiB` while losing `blk1 gate` RAM hits worth `3.144 GiB`.
+- `iouring_wait` increased by `5.715s`, so removing those `blk4 down` reads did not reduce the exposed critical path.
+- TTFT failed the `<=1.20x` gate on two of three prompts.
+- Host RAM peak remained under the hard cap but rose to `14.67 GiB`, leaving little room for a combined `blk1 gate + blk4 down` tier.
+
+Conclusion:
+
+- RAM tier has now failed in both forms:
+  - scattered high-reuse entries reduce bytes but not batch tails;
+  - a small batch-coherent slab loses the current gate tier and worsens exposed wait.
+- Under the current pack layout and 16 GB host RAM limit, RAM-tier tuning is not the next best path.
+
+### Phase 4N plan: pack-layout locality screen
+
+Reason:
+
+- Phase 4J showed slow batches often have `60-75` read jobs but poor physical locality:
+  - `span/read` often falls in the `5x-9x` range.
+- Phase 4L showed RAM can cover entire batches only with large layer/role slabs.
+- Phase 4M showed replacing the existing tier with such a slab worsens wait and TTFT.
+- Therefore the next storage direction is not more RAM, but making the existing SSD reads more locality-friendly.
+
+Existing diagnostic tool:
+
+- `.Agent/run-tools/kimi_io_trace_pack_layout_screen.py`
+
+Purpose:
+
+- Use actual `io-read-trace.csv` rows to estimate whether a different expert-pack physical layout could reduce extents/span/gap for active expert batches.
+- This does not create a pack and does not change runtime behavior.
+
+Experiment:
+
+1. Use Phase 4E full-dev7 traces:
+
+```bash
+/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343/*/io-read-trace.csv
+```
+
+2. Run screen with:
+
+```bash
+python3 .Agent/run-tools/kimi_io_trace_pack_layout_screen.py \
+  --input-root /root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343 \
+  --roles up,gate,down \
+  --max-jobs 0 \
+  --max-gap-mib 1 \
+  --out-json /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4n-pack-layout-screen/pack-layout-screen.json \
+  --out-md /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4n-pack-layout-screen/pack-layout-screen.md
+```
+
+3. Evaluate:
+   - current extents/read bytes/span bytes/gap bytes;
+   - ideal tensor layout;
+   - layer/role layout;
+   - layer layout;
+   - static per-tensor layouts such as frequency/first-use/greedy-pair if reported.
+
+Acceptance to build a real overlay/repacked expert pack:
+
+- A candidate layout must reduce extents or span/read enough to plausibly save more than N32 noise:
+  - target `>=1s` N32 wait upper bound;
+  - or a clear reduction in top slow batch span/read from `5x-9x` toward `~1x-2x`.
+- It must not require prompt-specific held-out data.
+- It must be implementable as a dev-trained general pack or overlay, not a France-only pack.
+- Before any pack artifact is used in runtime A/B, record exact build command, source trace set, included tensors, artifact size, and rollback path.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
