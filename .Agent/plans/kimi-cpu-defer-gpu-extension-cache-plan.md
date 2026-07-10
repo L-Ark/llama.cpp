@@ -213,6 +213,145 @@ Next direction from this rejection:
    - target RAM/VRAM layout so high-value down reads become real cache hits
      without adding same-token speculative IO.
 
+## 2026-07-11 Phase 4V profile: decode-only bottleneck correction
+
+Why this was needed:
+
+- The previous bottleneck script treated every `down-batch-profile.csv` row as
+  decode work.
+- That was wrong because `down-batch-profile.csv` has no `mode` column and also
+  contains prompt/prefill rows with large `n_active`.
+- The script now filters down rows with `n_active > 8` out of decode totals by
+  default and only treats directories with `metrics.txt` as run directories.
+- This is a tooling fix only; it does not change runtime behavior.
+
+Run:
+
+- Root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4v-default-profile-n32-dev3`
+- Analysis:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4v-default-profile-n32-dev3-analysis-v2`
+- Env:
+  - `N=32`
+  - `PROFILE=1`
+  - `GGML_MOE_PHASE_REPORT=1`
+  - default runtime, no `GGML_MOE_CURRENT_DOWN_OVERLAP_ALL_PATHS`
+- Prompts:
+  - `dev_france_regression`
+  - `dev_japan_factual`
+  - `dev_photosynthesis_factual`
+- Quality: all pass.
+
+Corrected decode-only profile:
+
+| prompt | tok/s | decode ms/token | up/gate ms/token | down ms/token | residual ms/token | direct read ratio | iouring GiB/s |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `dev_france_regression` | 1.680 | 595.630 | 164.590 | 161.737 | 269.303 | 0.000 | 11.300 |
+| `dev_japan_factual` | 1.650 | 606.544 | 168.059 | 159.635 | 278.850 | 0.000 | 11.051 |
+| `dev_photosynthesis_factual` | 1.640 | 611.012 | 164.855 | 160.383 | 285.774 | 0.000 | 10.758 |
+
+Aggregate:
+
+- weighted decode: `604.395 ms/token` (`1.655 tok/s`) with profiling overhead;
+- residual unattributed: `277.976 ms/token`;
+- upgate wall: `165.835 ms/token`;
+- down wall: `160.585 ms/token`;
+- down stage: `150.492 ms/token`;
+- decode CPU fallback: `0`;
+- direct reads: `0`;
+- iouring read ratio: `1.000`.
+
+Top corrected detail rows:
+
+| group | item | ms/token |
+|---|---|---:|
+| `upgate_type` | `up=22/gate=22` | 94.479 |
+| `upgate_type` | `up=18/gate=18` | 71.356 |
+| `down_type` | `type=11` | 66.213 |
+| `down_type` | `type=23` | 57.905 |
+| `down_type` | `type=2` | 36.466 |
+| `upgate_layer` | `blk.1` | 8.367 |
+| `upgate_layer` | `blk.60` | 8.027 |
+| `upgate_layer` | `blk.5` | 7.754 |
+| `upgate_layer` | `blk.4` | 7.575 |
+| `upgate_layer` | `blk.3` | 7.430 |
+| `down_layer` | `blk.6` | 5.478 |
+| `down_layer` | `blk.10` | 5.477 |
+| `down_layer` | `blk.4` | 5.405 |
+
+Implications:
+
+- The current stable path has no decode CPU fallback and no direct-read path in
+  this dev profile. CPU fallback is not the next bottleneck.
+- Expert movement is still a pressure signal (`iouring_wait_reported` is high),
+  but the additive decode buckets show that residual non-profiled work is also
+  large.
+- Removing only measured upgate+down wall would still leave roughly
+  `278 ms/token`, which is only about `3.6 tok/s`; reaching `5 tok/s` requires
+  reducing residual or proving that part of residual is hidden MoE/scheduler
+  wait not currently attributed.
+- Therefore the next candidate must be tied to a measured component:
+  - for MoE: reduce `upgate_type up=22/gate=22`,
+    `upgate_type up=18/gate=18`, or down stage for types `11/23/2`;
+  - for the product target: add residual attribution before claiming a path to
+    `5 tok/s`.
+
+Next plan:
+
+1. Build a default-off wait-weighted layer/role admission screen.
+   - Use dev route/profile data only.
+   - Rank candidates by corrected decode wall/stage, not by hit rate alone.
+   - Candidate should prefer upgate hot layers and down hot layers that are
+     stable across dev prompts.
+   - Do not use held-out prompts for selecting layers or experts.
+2. Separately add residual attribution before the next large implementation.
+   - Split residual into dense/attention/shared compute, scheduler overhead,
+     CUDA sync, D2H/scatter not covered by current profiles, and host-side
+     bookkeeping if feasible.
+   - If residual is mostly non-MoE compute, the `5 tok/s` plan cannot rely only
+     on expert-cache policy.
+3. Only after the screen shows a theoretical bound, run an N32 default-off A/B.
+   - Acceptance requires lower decode wall, lower exposed wait or measured
+     component wall, unchanged quality, RAM under limit, and TTFT within gate.
+
+Phase 4V admission screen result:
+
+- Tool added:
+  `.Agent/run-tools/kimi_wait_weighted_admission_screen.py`
+- Output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4v-default-profile-n32-dev3-analysis-v3/admission-screen/layer-role-screen.md`
+- The screen ranks layer/role buckets by corrected decode wall, not hit rate.
+
+Top screen rows:
+
+| layer | role | ms/token | hit rate | misses | observed footprint |
+|---:|---|---:|---:|---:|---:|
+| 1 | upgate | 8.367 | 30.24% | 1038 | 1892.41 MiB |
+| 60 | upgate | 8.027 | 33.46% | 1022 | 2186.62 MiB |
+| 5 | upgate | 7.754 | 29.03% | 1056 | 2368.84 MiB |
+| 4 | upgate | 7.575 | 30.51% | 1034 | 2368.84 MiB |
+| 3 | upgate | 7.430 | 33.00% | 997 | 2636.81 MiB |
+| 6 | down | 5.478 | 27.96% | 536 | 1653.75 MiB |
+| 10 | down | 5.477 | 26.08% | 550 | 1614.38 MiB |
+| 4 | down | 5.405 | 20.97% | 588 | 1643.69 MiB |
+
+Interpretation:
+
+- Whole layer/role admission is too coarse for the 16 GB host RAM and 32 GB
+  VRAM target. A single upgate layer can cost around `1.9-2.6 GiB` for only
+  `7-8 ms/token` of ideal bound in this N32 dev profile.
+- A full down layer is cheaper than upgate but still around `1.6 GiB` for only
+  `5.4 ms/token` of ideal bound.
+- Therefore the next runtime candidate should not preload whole layers by
+  default.
+- Better next candidates:
+  1. top-expert-within-hot-layer admission, budgeted by MiB and weighted by
+     measured decode wall/stage;
+  2. residual attribution, because `~278 ms/token` remains outside the current
+     upgate/down buckets;
+  3. IO-budget scheduling only if it can reduce measured upgate/down wall
+     without increasing residual or total iouring wait.
+
 ## 2026-07-11 active goal and plan history
 
 This section was the previous source of truth. It is retained as history and

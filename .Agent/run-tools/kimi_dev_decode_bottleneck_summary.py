@@ -74,7 +74,7 @@ def read_csv_rows(path):
         return list(csv.DictReader(f))
 
 
-def summarize_run(run_dir):
+def summarize_run(run_dir, decode_down_max_active):
     metrics = read_metrics(run_dir)
     decode_runs = inum(metrics.get("decode_runs"))
     decode_ms = fnum(metrics.get("decode_ms"))
@@ -133,6 +133,12 @@ def summarize_run(run_dir):
     down_jobs_by_type = defaultdict(int)
     if (run_dir / "down-batch-profile.csv").exists():
         for row in read_csv_rows(run_dir / "down-batch-profile.csv"):
+            # down-batch-profile.csv does not carry a mode column. Decode rows
+            # have one routed top-k set, while prompt rows batch many tokens and
+            # have larger n_active. Keep this threshold configurable for models
+            # whose routed top-k differs from Kimi's current 8.
+            if inum(row.get("n_active")) > decode_down_max_active:
+                continue
             key = f"type={row.get('src0_type')}"
             wall = fnum(row.get("wall_ms"))
             stage = fnum(row.get("stage_ms"))
@@ -214,10 +220,19 @@ def main():
         default=pathlib.Path(".Agent/runs/20260706-kimi-general-dev-baseline-n96-profile"),
     )
     parser.add_argument("--out", type=pathlib.Path, required=True)
+    parser.add_argument(
+        "--decode-down-max-active",
+        type=int,
+        default=8,
+        help="Treat down-batch rows with n_active above this value as prompt/prefill rows.",
+    )
     args = parser.parse_args()
 
-    run_dirs = sorted(p for p in args.input.iterdir() if p.is_dir() and p.name != "entropy")
-    runs = [summarize_run(p) for p in run_dirs]
+    run_dirs = sorted(
+        p for p in args.input.iterdir()
+        if p.is_dir() and p.name != "entropy" and (p / "metrics.txt").exists()
+    )
+    runs = [summarize_run(p, args.decode_down_max_active) for p in run_dirs]
     total_decode_runs = sum(r["decode_runs"] for r in runs)
     total_decode_ms = sum(r["decode_ms"] for r in runs)
     base_ms_per_token = total_decode_ms / total_decode_runs if total_decode_runs else 0.0
@@ -328,9 +343,10 @@ def main():
 
     top_details = detail_rows[:20]
     lines = [
-        "# GP52 Dev Decode Bottleneck Summary",
+        "# Kimi Dev Decode Bottleneck Summary",
         "",
         f"Input: `{args.input}`",
+        f"Decode down row filter: `n_active <= {args.decode_down_max_active}`",
         "",
         f"Runs: `{len(runs)}`",
         f"Total decode runs: `{total_decode_runs}`",
@@ -375,14 +391,20 @@ def main():
         lines.append(f"| `{row['group']}` | `{row['item']}` | {row['total_ms']} | {row['ms_per_token']} |")
     lines += [
         "",
-        "## Decision",
+        "## Interpretation",
         "",
-        "The largest prompt-agnostic component is `residual_unattributed`, not the seven unsupported Q4_0 down tensors.",
-        "The slowest dev prompts also have the highest direct-read ratios and the lowest iouring throughput, while the France prompt is fast and mostly iouring-backed.",
-        "This means the next implementation target should first explain and reduce broad direct-read/residual time on non-France dev prompts.",
-        "A standalone Q4_0 down fallback implementation is lower priority because `decode_fallback` is only a small fraction of the weighted decode wall.",
+        "- `iouring_wait_reported` can exceed decode wall share because wait",
+        "  counters are collected across overlapping worker paths. Use it as an",
+        "  exposed-pressure signal, not as an additive component.",
+        "- `down_wall`, `upgate_wall`, and `residual_unattributed` are closer to",
+        "  additive decode-wall buckets, but they are still profiling estimates.",
+        "- `down-batch-profile.csv` has no mode column; this report treats rows",
+        "  with `n_active` above the configured threshold as prompt/prefill rows",
+        "  and excludes them from decode down totals.",
+        "- Any accepted optimization must name the component and detail rows it is",
+        "  expected to reduce, compute a best-case bound from this report, and",
+        "  then verify the reduction with paired cold-start runs.",
         "",
-        "Recommended next step: run current GP50 code on slow dev prompts with `COPY_PROFILE=1`, rank direct-read copy paths by tensor/type, then implement the highest-byte path that can move from direct reads to batched iouring without changing output.",
         "This report does not change runtime behavior and makes no SOTA claim.",
         "",
     ]
