@@ -1927,6 +1927,126 @@ Decision after diagnostic:
   - do not implement global scheduler;
   - move to storage layout: RAM tier replacement of low-value file cache and pack locality/role layout.
 
+### Phase 4I result: global scheduler shadow shows no reusable in-flight overlap
+
+Timestamp: 2026-07-11 01:38 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4i-global-sched-shadow-n32-dev3-0138`
+
+Candidate env delta:
+
+```bash
+GGML_MOE_GLOBAL_EXPERT_SCHED_SHADOW=1
+```
+
+Aggregate:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | decode sum s | TTFT median ms | TTFT max ms | RAM peak GiB | iouring wait s | iouring bytes GiB | up hit | down hit |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control | 3/3 | 1.78 | 1.80 | 1.797 | 51.739 | 8309.59 | 9506.20 | 13.55 | 58.851 | 617.072 | 0.441 | 0.585 |
+| shadow | 3/3 | 1.79 | 1.81 | 1.817 | 51.204 | 9369.86 | 9483.67 | 13.56 | 57.989 | 617.072 | 0.441 | 0.585 |
+
+Shadow aggregate:
+
+| counter | value |
+|---|---:|
+| batches | 17160 |
+| tasks | 115722 |
+| demand tasks | 102681 |
+| prefetch tasks | 13041 |
+| active duplicates | 0 |
+| demand hit active prefetch | 0 |
+| prefetch hit active demand | 0 |
+| demand hit active demand | 0 |
+| prefetch hit active prefetch | 0 |
+| batch hist 1 | 375 |
+| batch hist 2-4 | 7586 |
+| batch hist 5-8 | 8671 |
+| batch hist gt32 | 528 |
+
+Ratios:
+
+- duplicate task ratio: `0.000000`
+- useful demand-prefetch overlap ratio: `0.000000`
+- saved-wait upper bound from demand-prefetch reuse: `0.000s`
+
+Decision:
+
+- Do not implement a real global in-flight prefetch reuse scheduler for the current Kimi path.
+- The diagnostic proves that demand reads are not colliding with active prefetch reads under the current submit/wait scopes.
+- Queue starvation is not caused by duplicate simultaneous reads that can be fixed by demand waiting on existing prefetch work.
+- The small token-rate difference in the shadow run is normal N32 noise; it is not a SOTA claim and does not justify N96.
+
+Next:
+
+- Move to storage-layout/RAM-layout work.
+- Do not repeat `GGML_MOE_IO_SORT_OFFSET=1` as a new idea:
+  - it is already enabled in `.Agent/run-tools/kimi-general-prompt-repro.sh`;
+  - historical sort-off ablation rejected disabling it.
+- The next diagnostic must identify:
+  - what decode-time file-backed memory is low value;
+  - which expert reads dominate exposed wait under current general prompts;
+  - whether a larger explicit RAM expert tier can replace low-value file cache without fragmenting SSD/RAM batches;
+  - whether pack-layout/locality changes can make the existing sorted O_DIRECT reads more contiguous or reduce per-batch wait.
+
+### Phase 4J plan: storage-layout and RAM-tier diagnostic
+
+Reason:
+
+- Current decode still spends most time in expert movement, and Phase 4I rules out useful in-flight duplicate reuse.
+- The 16 GB host RAM is largely occupied by file-backed pages, but that cache is not a controlled expert cache and does not eliminate hundreds of GiB of expert-pack IO.
+- Previous larger RAM tiers reduced SSD bytes but sometimes increased exposed wait, likely because RAM hits fragmented batches or added H2D/staging pressure.
+- The next step is to profile storage layout at the batch level before designing another RAM tier or pack overlay.
+
+Hypothesis:
+
+- A RAM tier can help only if it stores entries that:
+  - sit on the critical path;
+  - are requested repeatedly across general prompts;
+  - can be grouped by layer/role/size so RAM hits do not destroy SSD batch size;
+  - replace low-value file cache without causing refault or TTFT regressions.
+- A pack-layout change can help only if current active batches have enough physical locality that grouping/co-location reduces wait, not just bytes.
+
+Diagnostic run:
+
+1. Run cold-start N32 dev3 with current SOTA env and profiling only.
+2. Add:
+
+```bash
+GGML_MOE_IO_BATCH_PROFILE_OUT=$OUT/io-batch-profile.csv
+GGML_MOE_IO_LOCALITY_PROFILE_OUT=$OUT/io-locality-profile.csv
+GGML_MOE_IO_WAIT_TRACE_OUT=$OUT/io-wait-trace.csv
+GGML_MOE_H2D_COALESCE_PROFILE_OUT=$OUT/h2d-coalesce-profile.csv
+```
+
+3. Keep:
+   - `GGML_MOE_IO_SORT_OFFSET=1`, already default in the repro script;
+   - current 1800 MiB RAM tier;
+   - `MemoryMax=15900000000`;
+   - cold start and quality gates.
+
+Analysis after run:
+
+- Join batch profile and locality profile by sequence.
+- For each op/tensor/layer/role:
+  - sum read jobs, read bytes, wait ms, wall ms;
+  - compute jobs-per-batch, inflight avg/max, source switches, unique sources;
+  - compute span/read and gap/read locality;
+  - identify whether slow batches are small random reads or large contiguous groups.
+- From `memory.stat.final.txt`, record file/active_file/inactive_file/anon/kernel and refault counters.
+- Generate RAM-tier candidates ranked by removable wait, not by hit count alone:
+  - role/layer slabs for high-wait low-hit layers;
+  - compact next-hot expert entries grouped by tensor size and layer;
+  - avoid mixing RAM and SSD inside batches when it reduces SSD read batch size.
+
+Acceptance for moving past diagnostic:
+
+- Produce a candidate list with estimated RAM cost, removable wait bound, expected TTFT cost, and fragmentation risk.
+- Do not implement another RAM tier unless the estimated upper bound exceeds the observed noise band and explains why previous larger tiers regressed.
+- If no RAM/pack-layout candidate has a credible bound, stop storage-layout tuning and move to byte-reduction/compression-style methods.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
