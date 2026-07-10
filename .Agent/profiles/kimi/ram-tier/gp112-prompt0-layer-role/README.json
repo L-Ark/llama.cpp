@@ -1,4 +1,15 @@
 {
+  "blk1_full_gate_up_down_full384": {
+    "bytes": 6033506304,
+    "entries": 1152,
+    "mib": 5754.0,
+    "path": ".Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_full_gate_up_down_full384.csv",
+    "tensors": [
+      "blk.1.ffn_gate_exps.weight",
+      "blk.1.ffn_up_exps.weight",
+      "blk.1.ffn_down_exps.weight"
+    ]
+  },
   "blk1_gate_full384": {
     "bytes": 1805647872,
     "entries": 384,

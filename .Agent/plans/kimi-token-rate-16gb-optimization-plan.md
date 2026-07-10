@@ -97260,3 +97260,65 @@ GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
 GGML_MOE_RAM_BATCH_PROFILE_OUT=$RUN/ram-batch-profile.csv" \
       .Agent/run-tools/kimi-general-prompt-repro.sh
 ```
+
+
+Full-layer pinned RAM tier follow-up:
+
+Status: rejected on `2026-07-10T04:38+0000`.
+
+This test follows the stricter requirement that if a layer is placed in RAM, the
+whole layer's `gate`, `up`, and `down` experts are placed together. It is not a
+role-only test.
+
+Candidate profile:
+
+```text
+profile=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_full_gate_up_down_full384.csv
+layer=blk.1
+roles=gate,up,down
+entries=1152
+resident_profile_bytes=6033506304
+resident_profile_mib=5754.0
+runtime_budget_mib=5900
+pinned_mib=5754.00
+preload=O_DIRECT, GGML_MOE_RAM_TIER_PRELOAD_THREADS=12
+```
+
+Low-overhead N96 result:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-ram-blk1-full-gud-full384-direct12-n96-043659
+prompt=Please introduce France in a short paragraph.
+quality=pass
+TTFT=10213.99 ms
+baseline_TTFT=7753.38 ms
+TTFT_delta=+2460.61 ms, +31.7%, fails +20% gate
+decode=46769.69 ms / 85
+token_rate=1.82 tok/s
+current_accepted_token_rate=1.90 tok/s
+host_memory_peak=15899996160, reaches cgroup limit
+memory_current_final=9157500928
+inactive_file=8923705344
+active_file=201998336
+pgmajfault=2577
+workingset_refault_file=749
+ram_tier_hits=1767/85754, hit_rate=2.1%
+ram_tier_h2d_bytes=9318744064
+ram_tier_direct_bytes=6033506304
+ram_tier_direct_fallbacks=0
+expert_pack_iouring_bytes=482024030208
+expert_pack_iouring_wait_us=48341502
+```
+
+Decision:
+
+- Reject full `blk.1 gate/up/down` pinned RAM tier.
+- It satisfies correctness but fails the TTFT gate, reaches the 16GB cgroup
+  limit, and regresses decode token rate from the accepted `1.90 tok/s` to
+  `1.82 tok/s`.
+- The result confirms that complete-layer RAM residency is mechanically possible
+  with O_DIRECT parallel preload, but too expensive under the current 16GB host
+  RAM budget when using this full-precision expert representation.
+- The accepted SOTA remains the smaller `blk1_gate_full384` RAM tier because it
+  avoids pushing the host into reclaim/refault pressure while still removing one
+  early-layer gate wait.
