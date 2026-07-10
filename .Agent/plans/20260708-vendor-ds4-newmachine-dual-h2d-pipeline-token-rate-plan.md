@@ -287,6 +287,26 @@ cleanup are diagnostic only and must not be promoted as SOTA.
      producer/consumer contract, for example by collecting a layer/short-horizon
      vector of down jobs before wakeup instead of waking the worker for each
      small arrival pattern.
+   - Dirty implementation probe tried the narrow producer-side part of that
+     idea: route-group priority split collected the selected down experts for
+     one route call and pushed them to `down_demand_queue` with a single
+     `notify_one` instead of one enqueue/notify per expert. Run
+     `20260710T045340Z-route-priority-batchenqueue-dirty-n32`, same prompt and
+     strict cold 16GB cgroup, `GGML_MOE_DOWN_BATCH_DEMAND_QUEUE_DELAY_US=0`.
+     Result: `eval_tok_s=2.3`, `prompt_tok_s=2.1`,
+     `TTFT=20001.527 ms`, `memory_peak_bytes=14818549760`,
+     `memory_file_bytes=13897773056`, RAM OK, output coherent; rejected and
+     code reverted because performance regressed. Counters confirmed no
+     structural improvement: down queue still had `batches=930` for
+     `submitted=1866`, expert pack still had `iouring_reads=5598`,
+     `iouring_bytes=24.95GB`, total `batches=1859`, with `496` single-job
+     batches. Aggregated batch profile worsened:
+     `down_demand_queue` `wait_ms=1373.899`, `wall_ms=1868.481`;
+     `route_group_priority_up_gate` `wait_ms=1549.173`,
+     `wall_ms=2479.648`.
+     Conclusion: same-route-call batching is too small; the real next step must
+     aggregate across a larger short horizon or avoid the separate down queue
+     for current-token data entirely.
 
 5. **Make the full lifecycle observable before claiming speedup**
    - Add per-layer/per-token counters for Stage A and Stage B:
