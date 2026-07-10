@@ -1180,6 +1180,67 @@ N32 promotion rule:
 - TTFT median must not exceed `1.20x` control.
 - If N32 passes, run N96 full-dev before any held-out validation.
 
+### Phase 4E N32 full-dev A/B result
+
+Timestamp: 2026-07-10 15:27 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-minp4-n32-fulldev-ab-151309`
+
+Runs:
+
+- `control`: current `blk1_gate_full384.csv`, 1800 MiB.
+- `all-1200-minp4`: full-dev7 `min_prompts>=4` all-role candidate, 1200 MiB.
+- `all-1800-minp4`: full-dev7 `min_prompts>=4` all-role candidate, 1800 MiB.
+
+Aggregate:
+
+| run | quality | tok/s min | tok/s median | tok/s mean | TTFT median ms | TTFT max ms | RAM peak GiB | iouring wait s | iouring bytes GiB | RAM hits | RAM H2D GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| control | 6/7 | 1.62 | 1.85 | 1.793 | 8824.89 | 10729.33 | 13.56 | 139.08 | 1557.15 | 1770 | 7.75 |
+| all-1200-minp4 | 6/7 | 1.63 | 1.89 | 1.839 | 8471.97 | 11157.23 | 13.03 | 137.68 | 1515.60 | 8940 | 49.31 |
+| all-1800-minp4 | 6/7 | 1.56 | 1.91 | 1.813 | 8360.51 | 11407.33 | 13.62 | 139.42 | 1498.79 | 11984 | 66.12 |
+
+N32 quality note:
+
+- `dev_linear_equation` is `fail` for all three runs due N32 truncation, not a candidate-specific semantic failure.
+- N96 full-dev remains mandatory before any quality claim.
+
+Per-prompt deltas versus control:
+
+| prompt | all-1200 tok delta | all-1200 decode delta ms | all-1800 tok delta | all-1800 decode delta ms |
+|---|---:|---:|---:|---:|
+| dev_france_regression | +0.06 | -466.73 | +0.05 | -405.37 |
+| dev_japan_factual | +0.09 | -736.54 | +0.06 | -498.80 |
+| dev_linear_equation | +0.01 | -195.52 | +0.04 | -454.69 |
+| dev_mixed_summary | +0.02 | -149.10 | -0.04 | +519.48 |
+| dev_photosynthesis_factual | +0.04 | -392.96 | +0.06 | -534.82 |
+| dev_python_reverse | +0.06 | -647.63 | -0.11 | +1317.29 |
+| dev_zh_france | +0.04 | -268.18 | +0.08 | -611.89 |
+
+Decision:
+
+- Promote `all-1200-minp4` to N96 full-dev.
+  - It improves min/median/mean;
+  - improves every per-prompt decode time;
+  - reduces iouring wait by `1.40s`;
+  - reduces iouring bytes by `41.55 GiB`;
+  - lowers RAM peak from `13.56 GiB` to `13.03 GiB`;
+  - keeps TTFT well inside the `+20%` gate.
+- Reject `all-1800-minp4` at N32.
+  - It regresses min token rate from `1.62` to `1.56`;
+  - regresses Python and mixed prompts;
+  - increases iouring wait slightly despite reducing bytes;
+  - therefore it has the same "more RAM hits but worse endpoint" warning pattern as Phase 4D held-out.
+
+Next:
+
+- Run fresh paired N96 full-dev:
+  - control with `blk1_gate_full384.csv`;
+  - candidate with `all-1200-minp4`.
+- Only if N96 full-dev improves min/median/mean and quality passes, copy the profile into a tracked path and run held-out N96.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
