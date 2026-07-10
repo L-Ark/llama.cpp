@@ -327,6 +327,61 @@ Promotion requirements:
 - Kimi functionality must not be removed or weakened when touching shared MoE or
   CUDA streaming code.
 
+## 2026-07-10 Execution Notes
+
+- Implemented default-off native route-group diagnostics:
+  `GGML_MOE_ROUTE_GROUP_NATIVE_COBATCH`,
+  `GGML_MOE_ROUTE_GROUP_NATIVE_PRIORITY_SPLIT`,
+  `GGML_MOE_ROUTE_GROUP_NATIVE_SKIP_GATE`, and role-aware native admission
+  thresholds for up/down. These are diagnostic paths only unless a clean run
+  beats the accepted generalized SOTA.
+- Plain priority split with full native gate/up/down parity was rejected:
+  `20260710T025110Z-20260710-native-priority-split-stageA-first-vram14000-quantum-n96`
+  reached `4.2 tok/s`, RAM/correctness OK, but below the clean `5.5 tok/s`
+  SOTA. It reduced the earlier bad priority-split wait (`iouring_wait_us`
+  `10.0s -> 7.0s`) by copying Stage A gate/up before queuing down, but down
+  still had `3122` queue batches and `async prefetch waits≈11008`.
+- `GGML_MOE_DOWN_BATCH_DEMAND_QUEUE_DELAY_US=200` restored native-parity-like
+  batching (`iouring_batches=5236`) but still produced only `4.2 tok/s`.
+  Delay-based down aggregation alone does not move the product metric.
+- Role-aware admission showed the current up/down native cache is only useful
+  when it avoids low-reuse tensors:
+  - `up_min_seen=1, down_min_seen=6`: `4.4 tok/s`, reads `8027`,
+    bytes `35.77GB`, wait `5.20s`.
+  - `up_min_seen=6, down_min_seen=6`: `5.3 tok/s`, reads `3940`,
+    bytes `17.56GB`, wait `2.81s`, RAM/correctness OK.
+  - `up_min_seen=8, down_min_seen=8`: rejected, `4.8 tok/s`.
+  The best native-parity diagnostic remains below the clean gate-only SOTA, so
+  it is not promoted.
+- VRAM split experiments were rejected:
+  - `gate12288 + up/down2GB` failed because the 12GB gate one-cache allocation
+    failed after the batch cache allocation; gate fell back to `12316`
+    O_DIRECT reads and token rate dropped to `2.9 tok/s`.
+  - `gate10240 + up/down2GB` allocated both caches but reached only
+    `4.6 tok/s`; gate hit rate stayed `76.1%`, and reduced gate cache was more
+    costly than the up/down cache benefit.
+  - `gate12288 + up/down1GB` allocated both caches but reached only
+    `4.7 tok/s`; up/down cache produced many small batches and useful down
+    rate was only `41.3%`.
+  Conclusion: under the current implementation, moving VRAM away from gate
+  one-cache to up/down is not beneficial.
+- Gate one-cache size probe:
+  - `GGML_MOE_STREAM_ONE_CACHE_MIB=13312` produced one dirty diagnostic at
+    `5.6 tok/s`, but the repeat was `5.5 tok/s` with the same gate hit/miss
+    profile as 12GB (`hits=9403`, `misses=2913`). Treat this as normal run
+    variance, not a new SOTA.
+- Current accepted generalized SOTA remains the clean gate one-cache path:
+  `GGML_MOE_STREAM_ONE_CACHE_MIB=12288`, `eval_tok_s=5.5` on the Quantum n96
+  calibration run, strict 16GB cgroup including page cache, coherent output,
+  and display cleanup recorded.
+- Updated next direction: do not continue simple VRAM splits or plain down
+  queue delay sweeps. The next meaningful implementation must either:
+  1. make up/down cache fills non-blocking enough that they do not add
+     thousands of small wait points;
+  2. reduce up/down H2D bytes with a compact/partial expert representation; or
+  3. improve the gate one-cache layout/replacement itself without reducing the
+     12GB gate budget.
+
 ## 2026-07-08 Execution Notes
 
 - Added run-artifact hardware metadata collection to
