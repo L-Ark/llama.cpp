@@ -36,6 +36,87 @@ historical measurement, not a valid accepted SOTA, because its run artifact show
 `ggml/src/ggml-cuda/moe_stream_batch.cu` had `45` uncommitted insertions and the
 patch was not preserved. Future work must not repeat this failure mode.
 
+## Current reproducible France N96 >1.9 record
+
+Status: reproduced on `2026-07-10T09:06+0000` from pushed commit
+`de689bc70` on branch `vendor/kimi-gp112-prompt0-fallback`.
+
+This is not a new runtime method. It is a clean rebuild and rerun of the
+committed `blk1_gate_full384` RAM-tier configuration from the historical docs,
+after explicitly rejecting the dirty historical `1.93 tok/s` full-layer run as
+non-reproducible.
+
+Rebuild evidence:
+
+```text
+cmake --build build-cuda-batch --target llama-completion -j $(nproc)
+CMAKE_BUILD_TYPE=Release
+ggml commit: de689bc70
+```
+
+Run:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-confirm-de689-blk1-gate-pin-direct4-n96-goal-090634
+branch=vendor/kimi-gp112-prompt0-fallback
+head=de689bc70e1bfff3a120fe762427be68baec3221
+diff_stat=empty
+source_status=only unrelated untracked .Agent/run-tools artifacts; no tracked source/config diff
+```
+
+Reproduction command shape:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<new-run>
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO=/root/lfz/llama.cpp-vendor-kimi \
+      RUN="$RUN" \
+      PROMPT_ID=gp112_prompt0_ram_blk1_gate_full384_direct4_confirm_n96_france \
+      PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+      QUALITY_KEYWORDS="france,paris|europe|western europe" \
+      N=96 PROFILE=0 COPY_PROFILE=0 RAM_AUDIT=1 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_RAM_TIER_MIB=1800
+GGML_MOE_RAM_TIER_PROFILE=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=1
+GGML_MOE_RAM_TIER_PIN_MIB=1800
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+GGML_MOE_RAM_BATCH_PROFILE_OUT=$RUN/ram-batch-profile.csv" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+Metrics:
+
+```text
+quality=pass
+answer=France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.
+TTFT=8388.41 ms
+decode=43814.69 ms / 85
+token_rate=1.94 tok/s
+memory.peak=14559027200 (<15900000000)
+direct_reads=0, direct_fallbacks=0, read_failures=0
+expert_pack_iouring_wait_us=45906281
+current_down_overlap_worker_us=6299988
+RAM tier profile=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv
+RAM tier loaded=384 entries, 1722.00 MiB pinned, hits=569/85754
+VRAM cache down=723 slots, hit_rate=61.4%
+VRAM cache upgate=1735 slots, hit_rate=43.5%
+```
+
+Decision:
+
+- This satisfies the immediate France N96 target of `>1.9 tok/s` under the 16GB
+  host RAM cgroup, cold start, correct output, TTFT gate, and zero direct/fallback
+  integrity checks.
+- The accepted method remains the committed `blk1_gate_full384` pinned RAM tier
+  with 4-thread O_DIRECT preload. The dirty full-layer pageable `1.93 tok/s` run
+  remains rejected as a non-reproducible historical measurement.
+- Future SOTA claims still need the held-out general-prompt gate; this record is
+  a France N96 reproduction target, not proof of the final random-prompt
+  deployment target.
+
 ## Goal
 
 Continue optimizing Kimi IQ3_S decode throughput in the ik_llama-compatible
