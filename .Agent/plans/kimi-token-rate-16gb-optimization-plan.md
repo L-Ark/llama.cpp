@@ -97322,3 +97322,91 @@ Decision:
 - The accepted SOTA remains the smaller `blk1_gate_full384` RAM tier because it
   avoids pushing the host into reclaim/refault pressure while still removing one
   early-layer gate wait.
+
+
+Full-layer pageable RAM tier follow-up:
+
+Status: accepted on `2026-07-10T05:13+0800` as a config-level improvement over
+the previous `blk1_gate_full384` RAM tier SOTA.
+
+The pinned full-layer test above was not slow because RAM->VRAM H2D bytes were
+new work. The SSD path also ends in H2D. The regression came from the large
+`cudaHostRegister` path for a 5754MiB RAM tier. Evidence:
+
+```text
+pinned full blk1 gate/up/down:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-ram-blk1-full-gud-full384-direct12-n96-043659
+TTFT=10213.99 ms, token_rate=1.82 tok/s
+first RAM batch blk1 gate=2004.14 ms for 70 jobs / 329154560 bytes
+
+pinned full blk1 gate/up/down with full H2D warmup experiment:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-ram-blk1-full-gud-warmfull-direct12-n96-050821
+warmup=6033506304 bytes in 242.637 ms
+TTFT=10027.69 ms, token_rate=1.87 tok/s
+first RAM batch blk1 gate=2463.54 ms
+result=rejected; warmup does not remove the first gate enqueue cost
+
+pageable full blk1 gate/up/down:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-prompt0-ram-blk1-full-gud-unpinned-direct12-n96-051128
+GGML_MOE_RAM_TIER_PIN=0
+TTFT=9131.50 ms
+baseline_TTFT=7753.38 ms
+TTFT_delta=+1378.12 ms, +17.8%, within +20% gate
+quality=pass
+decode=43962.29 ms / 85
+token_rate=1.93 tok/s
+previous_accepted_token_rate=1.90 tok/s
+host_memory_peak=15899996160
+memory_current_final=9157521408
+inactive_file=8925335552
+active_file=200044544
+pgmajfault=2539
+workingset_refault_file=704
+ram_tier_hits=1767/85754, hit_rate=2.1%
+ram_tier_h2d_bytes=9318744064
+ram_tier_direct_bytes=6033506304
+ram_tier_direct_fallbacks=0
+expert_pack_iouring_bytes=482024030208
+expert_pack_iouring_wait_us=45079893
+current_down_overlap_worker_us=6370072
+first RAM batch blk1 gate=1382.01 ms
+first RAM batch blk1 up=36.83 ms
+first RAM batch blk1 down=56.28 ms
+```
+
+Decision:
+
+- Accept complete `blk.1 gate/up/down` RAM residency only with
+  `GGML_MOE_RAM_TIER_PIN=0` for now.
+- Do not promote the pinned full-layer variant. Its H2D byte count is not the
+  problem; the large registered host range causes high first-batch enqueue cost
+  and fails TTFT.
+- Do not promote the H2D warmup experiment. Full warmup copies the whole 5754MiB
+  tier in 242.637ms but does not remove the first `blk1 gate` enqueue spike.
+- The next implementation target is a better RAM-tier transfer path: keep large
+  complete-layer experts resident in RAM, but avoid one huge `cudaHostRegister`
+  range. Candidate fixes are smaller pinned slabs, per-role/per-tensor registered
+  chunks, or reuse of the existing pinned staging scheduler for RAM-resident
+  entries.
+
+Reproduction command for the accepted pageable full-layer run:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/<new-run>
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO=/root/lfz/llama.cpp-vendor-kimi \
+      RUN="$RUN" \
+      PROMPT_ID=gp112_prompt0_ram_blk1_full_gud_unpinned_direct12_n96_france \
+      PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+      QUALITY_KEYWORDS="france,paris|europe|western europe" \
+      N=96 PROFILE=0 COPY_PROFILE=0 RAM_AUDIT=1 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_RAM_TIER_MIB=5900
+GGML_MOE_RAM_TIER_PROFILE=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_full_gate_up_down_full384.csv
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=12
+GGML_MOE_RAM_BATCH_PROFILE_OUT=$RUN/ram-batch-profile.csv" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
