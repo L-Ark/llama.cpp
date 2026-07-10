@@ -97581,3 +97581,62 @@ Conclusion:
   before decode accounting, smaller trickle-loaded chunks, or an offline pack/VRAM
   profile change that reduces active decode misses without loading gigabytes in
   the middle of generation.
+
+Startup small second-layer hotset trial:
+
+Status: rejected on `2026-07-10T07:12+0800`; keep current SOTA unchanged.
+
+Rationale: instead of loading another GB-scale layer during decode, append a very
+small `blk.2 down` hotset to the accepted `blk.1 gate/up/down full384` pageable
+RAM tier. This avoids mid-decode loader contention and tests whether replacing a
+small part of the low-value page cache with explicit expert data can improve the
+critical path while preserving the strict TTFT gate.
+
+Profiles generated from the existing France `copy-profile.csv` top
+`blk.2.ffn_down_exps.weight` counts:
+
+```text
+blk1_full_plus_blk2_down_top64.csv: +64 entries, +385.00 MiB, total 6139.00 MiB
+blk1_full_plus_blk2_down_top32.csv: +32 entries, +192.50 MiB, total 5946.50 MiB
+blk1_full_plus_blk2_down_top16.csv: +16 entries,  +96.25 MiB, total 5850.25 MiB
+```
+
+A/B results:
+
+```text
+top64:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-blk1-full-plus-blk2-down-top64-n96-070105
+quality=pass
+TTFT=9501.02 ms, fails +20% gate
+decode=43488.72 ms / 85
+token_rate=1.95 tok/s
+RAM tier hits=2173/85754, hit_rate=2.5%, resident=6400MiB
+
+top32:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-blk1-full-plus-blk2-down-top32-n96-070636
+quality=pass
+TTFT=11160.94 ms, fails +20% gate
+decode=43625.83 ms / 85
+token_rate=1.95 tok/s
+RAM tier hits=2064/85754, hit_rate=2.4%, resident=6100MiB
+
+top16:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-blk1-full-plus-blk2-down-top16-n96-070812
+quality=pass
+TTFT=9590.91 ms, fails +20% gate
+decode=43615.37 ms / 85
+token_rate=1.95 tok/s
+RAM tier hits=1965/85754, hit_rate=2.3%, resident=6000MiB
+```
+
+Conclusion:
+
+- The small appended startup hotset slightly reduces decode time, but the gain is
+  only about `0.02 tok/s` over the accepted `1.93 tok/s` SOTA and all tested
+  sizes failed the strict TTFT gate.
+- Do not commit these generated profiles as accepted artifacts.
+- The next experiment must reclaim page cache after prompt/decode start and then
+  fill RAM without extending TTFT or contending heavily with active expert-pack
+  streaming. The load must be smaller-grained/trickle-loaded, or it must target a
+  layer-role whose miss wait is provably exposed on the critical path.
+
