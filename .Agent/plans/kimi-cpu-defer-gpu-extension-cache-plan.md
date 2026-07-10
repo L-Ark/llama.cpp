@@ -108,6 +108,111 @@ Execution plan:
    - Reject or leave default-off any candidate that regresses quality, TTFT,
      RAM, held-out token rate, or aggregate exposed wait.
 
+## 2026-07-11 Phase 4U.1 implementation plan: all-path current-down overlap
+
+Hypothesis:
+
+- Current Kimi decode is still limited by exposed expert movement wait.
+- Existing current-down overlap only fires on part of the fused up/gate path.
+- Shadow profiling on N32 dev3 showed `25094` plannable same-layer down jobs,
+  while actual current-down overlap completed only `13041` jobs.
+- Therefore, extending current-down overlap to the same-type fused up/gate
+  paths may hide additional down transfer under already-required up/gate
+  staging, up/gate compute, fuse, D2H, and scatter.
+
+Implementation constraints:
+
+- Add a new default-off switch:
+  `GGML_MOE_CURRENT_DOWN_OVERLAP_ALL_PATHS=1`.
+- Preserve existing default behavior when the env flag is absent.
+- Do not enable the previously rejected
+  `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1` path.
+- Start overlap only after the same-type up/gate work has been planned or
+  staged, so the candidate is less aggressive than the rejected early mode.
+- Join the overlap worker before returning from the up/gate batch function so
+  downstream down compute sees either a ready/pending cache slot or the normal
+  fallback behavior.
+- Keep failures non-fatal for model semantics: a failed overlap should clear
+  speculative slots and let the normal down path recover.
+
+Theoretical upper bound:
+
+- The absolute upper bound is the exposed down-transfer time for the additional
+  plannable jobs that are not currently overlapped.
+- From the N32 dev3 shadow run, additional plannable jobs are roughly
+  `25094 - 13041 = 12053` down jobs across three prompts.
+- The realized gain must be lower than this bound because the extra overlap
+  competes with up/gate expert reads for the same SSD/io_uring and H2D
+  resources, and some down reads will still be consumed after up/gate has
+  already finished.
+- Accept only if measured paired runs show lower decode wall time and lower
+  exposed wait, not merely more submitted overlap jobs.
+
+Validation:
+
+1. Build and guard test.
+2. N32 dev smoke with:
+   `GGML_MOE_PHASE_REPORT=1`,
+   `GGML_MOE_CURRENT_DOWN_OVERLAP=1`,
+   `GGML_MOE_CURRENT_DOWN_OVERLAP_ALL_PATHS=1`.
+3. Paired N96 dev A/B against the same commit and baseline env.
+4. Held-out N96 only if dev improves without RAM, TTFT, or quality regression.
+5. Commit and push only if accepted; otherwise keep default-off and record the
+   measured rejection reason here.
+
+Result:
+
+- Status: rejected as SOTA; keep the implementation default-off only.
+- Build: `cmake --build build-cuda-batch -j 8` passed.
+- Guard: `build-cuda-batch/bin/test-kimi-deepseek2-guards` passed.
+- Env:
+  - baseline: `GGML_MOE_PHASE_REPORT=1`;
+  - candidate: `GGML_MOE_PHASE_REPORT=1`,
+    `GGML_MOE_CURRENT_DOWN_OVERLAP=1`,
+    `GGML_MOE_CURRENT_DOWN_OVERLAP_ALL_PATHS=1`.
+- Run roots:
+  - France:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4u1-allpath-n32-france`
+  - Japan/photosynthesis:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4u1-allpath-n32-dev3`
+
+N32 paired result:
+
+| prompt | base tok/s | candidate tok/s | decode delta ms | iouring wait delta s | current-down jobs delta | down hit delta | TTFT ratio | quality |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `dev_france_regression` | 1.88 | 1.97 | -775.1 | -1.274 | +4142 | +18.6 pp | 0.950 | pass/pass |
+| `dev_japan_factual` | 1.94 | 1.93 | +111.4 | +0.120 | +3853 | +17.3 pp | 1.021 | pass/pass |
+| `dev_photosynthesis_factual` | 1.85 | 1.75 | +915.6 | +0.099 | +4069 | +19.4 pp | 0.955 | pass/pass |
+
+Decision:
+
+- Do not run N96 promotion for this candidate.
+- Do not enable `GGML_MOE_CURRENT_DOWN_OVERLAP_ALL_PATHS=1` in SOTA
+  reproduction.
+- Although the candidate nearly doubles current-down overlap coverage and
+  raises down hit rate by `17-19 pp`, it does not reliably reduce exposed wait.
+- Total expert-pack read count and bytes are essentially unchanged. The change
+  mostly shifts down reads earlier, but the late start point only overlaps them
+  with fuse/D2H/scatter, which is too short for the additional down jobs.
+- The added overlap worker time is not fully hidden and can contend with the
+  same SSD/io_uring and staging resources needed by up/gate or normal down
+  reads. This explains why hit rate improves while `dev_photosynthesis_factual`
+  slows down.
+
+Next direction from this rejection:
+
+1. Do not chase down-hit rate alone.
+2. If revisiting overlap, it must be a scheduler-level design that starts only
+   when it can hide under real up/gate staging/compute time and avoid stealing
+   critical up/gate IO.
+3. Prefer measuring per-layer exposed wait before adding more speculative down
+   traffic.
+4. The next candidate should either:
+   - implement role-joint scheduling with explicit IO-budget fairness between
+     up/gate and down; or
+   - target RAM/VRAM layout so high-value down reads become real cache hits
+     without adding same-token speculative IO.
+
 ## 2026-07-11 active goal and plan history
 
 This section was the previous source of truth. It is retained as history and
