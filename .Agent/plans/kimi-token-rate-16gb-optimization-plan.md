@@ -97471,3 +97471,113 @@ Conclusion:
   before TTFT accounting if allowed by the benchmark definition, reduce the first
   `blk1 gate` active set transfer size, or place the most expensive first-batch
   `blk1 gate` entries in VRAM rather than RAM.
+
+
+Decode page-cache replacement experiment:
+
+Status: rejected for SOTA on `2026-07-10T06:58+0800`; useful finding, but do not
+promote delayed second-layer RAM tier yet.
+
+Live memory finding:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-live-mem-sota-full-blk1-063111
+During decode live max:
+  memory_current ~= 15.90GB
+  anon ~= 6.55GB        # current blk.1 RAM tier + process/CUDA memory
+  file ~= 9.28GB        # mostly page cache
+  inactive_file ~= 8.97GB
+Process smaps at live max showed only ~0.38GB file RSS, so most cgroup file
+memory is reclaimable page cache, not active process-mapped model RSS.
+```
+
+Direct drop-cache validation:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-dropcache-decode-n96-full-blk1-063915
+Before drop during decode:
+  memory_current=15888207872
+  anon=6497107968
+  file=9321451520
+  inactive_file=9187823616
+After drop during decode:
+  memory_current=6806523904
+  anon=6511587328
+  file=250724352
+  inactive_file=14856192
+quality=pass
+token_rate=1.94 tok/s
+TTFT=9395.37 ms  # slightly above strict +20% gate, not accepted as SOTA
+```
+
+Delayed second RAM tier implementation trial:
+
+Implemented a default-off delayed RAM tier experiment:
+
+```text
+GGML_MOE_RAM_TIER_DELAY_PROFILE=<profile.csv>
+GGML_MOE_RAM_TIER_DELAY_SEC=<seconds>
+GGML_MOE_RAM_TIER_DELAY_DROP_CACHES=1
+```
+
+Mechanism: keep initial `blk.1 gate/up/down` RAM tier at startup, then during
+decode sleep for the configured delay, drop page cache, and load another profile
+into the remaining anonymous RAM tier using direct expert-pack reads.
+
+A/B results:
+
+```text
+blk2 full profile, delay=15s, budget=11800MiB:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-delayed-blk2-full-n96-064657
+loaded=384 entries only (effectively blk2_down), total_span=8064MiB
+quality=pass
+TTFT=9797.08 ms, fails +20% gate
+token_rate=2.00 tok/s
+
+blk2 gate only, delay=15s, budget=8200MiB:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-delayed-blk2-gate-n96-064859
+loaded=0 entries; expert pack does not contain this profile path
+quality=pass
+TTFT=8912.92 ms
+token_rate=1.90 tok/s
+
+blk2 down only, delay=15s, budget=8500MiB:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-delayed-blk2-down-n96-065044
+loaded=384 entries, total_span=8064MiB
+quality=pass
+TTFT=9082.58 ms
+token_rate=1.90 tok/s
+
+blk2 down only, delay=10s, budget=8500MiB:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-delayed-blk2-down-sec10-n96-065225
+loaded=384 entries, total_span=8064MiB
+quality=pass
+TTFT=9247.95 ms, within +20% gate
+token_rate=1.99 tok/s
+reproduction run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-delayed-blk2-down-sec10-n96-repro-065403
+quality=pass
+TTFT=9258.29 ms, within +20% gate
+token_rate=1.88 tok/s
+result=not reproducible, reject
+
+blk4 down only, delay=10s, budget=9100MiB:
+run=/root/lfz/runs/vendor-kimi-token-rate/20260710-gp112-delayed-blk4-down-sec10-n96-065604
+loaded=384 entries, total_span=8610MiB
+quality=pass
+TTFT=9423.31 ms, fails +20% gate
+token_rate=1.81 tok/s
+```
+
+Conclusion:
+
+- The page-cache deletion premise is correct: decode can reclaim roughly 9GB of
+  low-value file cache, dropping cgroup memory from ~15.9GB to ~6.8GB.
+- However, loading a second layer/role during decode is not yet a stable token
+  rate improvement. The delayed O_DIRECT load competes with the same SSD/CPU path
+  used by decode expert streaming. It can produce a single good run, but failed
+  the reproducibility gate.
+- Do not promote the delayed loader code as SOTA. The next viable design should
+  avoid competing with active decode IO, e.g. prompt-end hook with a short pause
+  before decode accounting, smaller trickle-loaded chunks, or an offline pack/VRAM
+  profile change that reduces active decode misses without loading gigabytes in
+  the middle of generation.
