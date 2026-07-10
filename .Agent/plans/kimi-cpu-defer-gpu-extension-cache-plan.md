@@ -4,6 +4,115 @@ Date: 2026-07-10
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-11 active goal and plan
+
+This section is the current source of truth. Older sections below are retained as
+history and experiment audit trail.
+
+Active goal:
+
+> On `vendor/kimi-deepseek-41d205-additive`, verify whether the DeepSeek SOTA
+> architecture pattern transfers to Kimi: CPU/defer MoE remains the scheduler,
+> while GPU becomes a stronger expert-cache, transfer, and compute extension for
+> Kimi `gate/up/down`. The immediate target is a reproducible general-prompt gain
+> toward stable `>2 tok/s`; the product target remains stable `>5 tok/s` for
+> random user prompts on a 16 GB host-RAM machine with one 32 GB RTX 5090-class
+> GPU.
+
+Why this should be tested on Kimi:
+
+- The useful DeepSeek lesson is not a gate-only hotpool. The useful lesson is
+  the control split: CPU/defer owns routing/scheduling, while GPU handles hot
+  expert residency, transfer, and compute whenever the extension can safely
+  catch the request.
+- Kimi already has near-zero decode CPU fallback in the current stable path, so
+  the next gain is unlikely to come from simply moving more CPU math to GPU.
+- Current Kimi bottleneck is exposed expert movement latency: `io_uring_wait`,
+  small runtime batches, staging/H2D gaps, and incomplete overlap between
+  routing, up/gate compute, down movement, and down compute.
+- Therefore the Kimi-specific plan is to reduce exposed movement wait for
+  `gate/up/down` together, not to optimize one role by hit rate alone.
+
+Hard gates for every accepted result:
+
+- Cold start only; no warm page cache or reused process state.
+- Host RAM peak `<15900000000` bytes, including page cache, mmap/file-backed
+  pages, pinned memory, process memory, helper processes, and cgroup/kernel
+  accounting.
+- Use VRAM aggressively, but do not trade VRAM hit rate for TTFT, RAM, or
+  quality regressions.
+- TTFT must be `<=1.20x` paired baseline.
+- Mandatory quality prompt: `Please introduce France in a short paragraph.`
+  must remain coherent and semantically correct.
+- Optimization must be prompt-general. Dev prompts may guide design; held-out
+  prompts are validation only and must not be used to tune packs, hotsets,
+  thresholds, or layer selections.
+- A result is SOTA only after paired baseline/candidate N96 dev plus N96
+  held-out validation.
+- Every accepted improvement must be committed and pushed immediately with exact
+  env, command, prompt split, run path, RAM/VRAM metrics, TTFT, token-rate delta,
+  quality result, and rollback commit.
+- Failed candidates must be reverted or left default-off, with the measured
+  rejection reason recorded here.
+
+Current execution plan:
+
+1. Finish Phase 4T observability before changing cache policy.
+   - Add default-off phase reports gated by `GGML_MOE_PHASE_REPORT=1`.
+   - Capture `before_prompt_eval`, `after_prompt_eval`, and `after_generation`
+     memory state: `memory.current`, `memory.peak`, anon/file split,
+     active/inactive file, major faults, refaults, direct reclaim, and direct
+     steal.
+   - Capture MoE deltas per phase: expert-pack hits/misses, direct/io_uring
+     reads and bytes, submit/wait/H2D, staging ring waits, VRAM cache
+     hits/misses, current-down overlap, and fallback counters.
+   - Keep normal runtime behavior unchanged when the env flag is absent.
+
+2. Re-profile the current stable SOTA with the new phase counters.
+   - Run one N32 dev smoke to verify logging, quality, RAM, and parser output.
+   - Run one targeted N96 diagnostic on the known TTFT long-tail prompt to
+     separate prompt reclaim/refault cost from decode `io_uring_wait`.
+   - Do not tune from held-out traces; use them only to identify whether the
+     instrumentation explains a failure mode.
+
+3. Rank the next optimization by removable seconds.
+   - If phase counters show prompt/file-cache reclaim dominates, target prompt
+     page-cache lifecycle and fallback elimination first.
+   - If decode exposed `io_uring_wait` dominates, target same-layer miss
+     co-submit, layer/role-aware RAM slabs, or pack-layout changes only where
+     they can keep the queue fed asynchronously.
+   - If staging/H2D dominates, target pinned/pageable strategy, larger coherent
+     slabs, and H2D stream overlap before increasing SSD read volume.
+   - If CPU fallback reappears, fix the exact unsupported type/role first and
+     measure whether it is on the critical path.
+
+4. Apply the DeepSeek-style GPU extension only where Kimi profiles justify it.
+   - Test gate-only, up/gate paired, and up/gate/down joint residency as
+     separate default-off A/B candidates.
+   - Accept a candidate only when it reduces exposed decode time on general
+     prompts, not merely SSD bytes or hit-rate counters.
+   - Do not promote profile-specific packs, hotsets, or held-out-derived layer
+     selections.
+
+5. RAM/VRAM storage plan.
+   - VRAM holds the hottest and most latency-critical experts.
+   - RAM holds second-tier experts only when the data is batchable and replaces
+     low-value decode-time file cache.
+   - Prefer whole layer/role slabs or compact adjacent pack ranges over
+     scattered single-expert RAM entries when fragmentation reduces batch size.
+   - Before adding RAM-resident experts, prove which decode-time file-backed
+     pages are low-value and safe to evict.
+
+6. Validation and commit discipline.
+   - N32 dev: quick screen for logging, quality, RAM, TTFT, and obvious
+     regression.
+   - N96 dev: real token-rate and bottleneck validation.
+   - N96 held-out: final acceptance only.
+   - Accepted candidate: commit and push immediately with full reproduction
+     body.
+   - Rejected candidate: revert or leave default-off, update this plan with the
+     measured reason, and move to the next ranked bottleneck.
+
 ## 2026-07-11 goal: Kimi CPU/defer + GPU-extension path
 
 Goal:
