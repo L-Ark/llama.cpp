@@ -4,6 +4,69 @@ Date: 2026-07-10
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-10 goal and execution plan refresh
+
+Active goal:
+
+> On the current Kimi vendor branch, validate and implement the transferable part of the DeepSeek SOTA idea: CPU/defer MoE remains the scheduler, while GPU becomes a more complete expert-cache/compute extension for Kimi gate/up/down. The optimization target is a reproducible general-prompt token-rate gain under a strict 16 GB host RAM cap and a single 32 GB RTX 5090-class GPU, without losing semantic quality or increasing TTFT by more than 20%.
+
+Current technical judgment:
+
+- The DeepSeek gate-hotpool result is relevant to Kimi at the architecture level: the CPU/defer path can call a GPU expert-cache extension instead of falling through to slow CPU work.
+- It should not be copied as a gate-only strategy without evidence. Kimi's current bottleneck is exposed expert movement wait, especially `io_uring_wait` caused by up/gate/down miss scheduling, small runtime batches, and incomplete overlap.
+- The next accepted gain must reduce exposed wait on general prompts. Higher hit rate, lower SSD bytes, or a better single prompt is insufficient by itself.
+- The short-term engineering target is to make stable general-prompt decode exceed `2 tok/s`. The long-term product target remains stable `>5 tok/s` for random user prompts on 16 GB host RAM + 32 GB VRAM.
+
+Hard constraints for every experiment:
+
+- Cold start only; no warm page cache or reused process state.
+- Host RAM peak `<15900000000` bytes, including mmap/file cache, pinned staging, page cache, helper processes, and kernel/cgroup accounting.
+- Use as much VRAM as safely possible, but do not trade VRAM hit rate for correctness or TTFT regressions.
+- Quality gate must include `Please introduce France in a short paragraph.` and held-out general prompts; output must be coherent and semantically correct.
+- TTFT must be `<=1.20x` the paired baseline.
+- Dev prompts may guide optimization; held-out prompts are used only for final validation.
+- Every accepted SOTA must be reproducible: commit and push immediately with env, command, prompt set, run path, RAM/VRAM metrics, TTFT, quality result, token-rate delta, and rollback commit in the commit body and plan.
+
+Execution plan from here:
+
+1. Re-establish the current reproducible baseline.
+   - Use the current branch and pinned control profile.
+   - Run N96 cold-start paired baseline on the dev prompt set.
+   - Record per-prompt token rate, TTFT, decode time, quality answer, host RAM, file/anon breakdown, VRAM cache stats, expert-pack bytes, `iouring_wait_us`, H2D, pinned staging, and CPU fallback counters.
+   - Treat the current `1.8-1.9 tok/s` France-like result as historical until reproduced by the exact command on this branch.
+
+2. Locate the exposed critical path before changing code.
+   - Break down each token into routing/top-k, up/gate expert read, up/gate H2D/staging, up/gate compute, down expert read, down H2D/staging, down compute, CPU fallback, and synchronization gaps.
+   - For each layer/role, record whether the stall is caused by missing residency, queue starvation, small batch size, H2D serialization, compute, or fallback.
+   - Rank optimization candidates by removable seconds, not by intuition or hit rate alone.
+
+3. Test the DeepSeek-style gate extension hypothesis on Kimi.
+   - Measure how much gate work still executes on CPU/defer slow paths.
+   - Compare gate-only VRAM/RAM residency against up/gate paired residency and up/gate/down joint residency.
+   - Accept gate-only work only if it reduces exposed wait and improves held-out token rate; otherwise keep the useful part as "GPU extension under CPU/defer scheduler" and optimize all roles together.
+
+4. Optimize RAM/VRAM layout explicitly.
+   - VRAM holds the hottest and most latency-critical experts.
+   - RAM holds second-tier experts only when they are batchable and reduce exposed wait versus SSD.
+   - Replace low-value decode-time file cache with explicit expert cache only after proving those file-backed pages are not needed during decode.
+   - Prefer layer/role slabs for high-miss critical layers when random hot entries fragment IO or reduce batch size.
+
+5. Reduce `io_uring` queue starvation.
+   - Test more aggressive same-layer co-submit of up/gate/down misses after routing is known.
+   - Test one-layer-ahead prefetch only when a predictor or route history gives enough accuracy to avoid wasting RAM/VRAM bandwidth.
+   - Keep all speculative/predictive paths default-off until N32 dev A/B proves they reduce exposed wait without quality or TTFT regressions.
+
+6. Validation ladder.
+   - N32 dev: cheap screen for quality, RAM, and obvious regressions.
+   - N96 dev: verify real token-rate and bottleneck changes.
+   - N96 held-out: only final acceptance; no tuning based on held-out traces.
+   - Accepted candidate: commit and push immediately.
+   - Rejected candidate: revert or leave default-off, document measured reason and rollback point.
+
+Immediate next action:
+
+- Finish parsing the latest N96 full-dev paired validation for `all-1200-minp4` RAM tier. If it improves full-dev and then held-out metrics, promote the profile into tracked `.Agent/profiles/`; otherwise document rejection and continue with layer/role slab candidates based on exposed wait.
+
 ## Current execution goal
 
 Goal for the current optimization cycle:
