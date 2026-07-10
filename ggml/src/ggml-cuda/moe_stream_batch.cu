@@ -10730,6 +10730,275 @@ static void updown_pair_profile_actual(
             updown_pair_active_hash(active_experts, n_active), cache_hits, cache_misses, pack_hits, pack_misses);
 }
 
+struct fused_upgate_down_shadow_profile {
+    std::atomic<uint64_t> calls{0};
+    std::atomic<uint64_t> rows{0};
+    std::atomic<uint64_t> decode_calls{0};
+    std::atomic<uint64_t> prompt_calls{0};
+    std::atomic<uint64_t> up_cache_misses{0};
+    std::atomic<uint64_t> gate_cache_misses{0};
+    std::atomic<uint64_t> down_cache_misses{0};
+    std::atomic<uint64_t> down_overlap_plannable{0};
+    std::atomic<uint64_t> down_missing_tensor{0};
+    std::atomic<uint64_t> down_missing_cache{0};
+    std::atomic<uint64_t> down_missing_pack{0};
+};
+
+static fused_upgate_down_shadow_profile g_fused_upgate_down_shadow;
+static std::atomic<bool> g_fused_upgate_down_shadow_report_registered{false};
+
+static bool fused_upgate_down_shadow_enabled() {
+    const char *env = std::getenv("GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT_SHADOW");
+    if (env && env[0] && env[0] != '0') return true;
+    const char *path = std::getenv("GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT_SHADOW_OUT");
+    return path && path[0];
+}
+
+static void fused_upgate_down_shadow_report_atexit() {
+    const uint64_t calls = g_fused_upgate_down_shadow.calls.load(std::memory_order_relaxed);
+    if (calls == 0) return;
+    std::fprintf(stderr,
+            "[moe_stream_batch] fused upgate/down shadow: calls=%lu prompt_calls=%lu decode_calls=%lu rows=%lu "
+            "up_cache_misses=%lu gate_cache_misses=%lu down_cache_misses=%lu down_overlap_plannable=%lu "
+            "down_missing_tensor=%lu down_missing_cache=%lu down_missing_pack=%lu\n",
+            (unsigned long)calls,
+            (unsigned long)g_fused_upgate_down_shadow.prompt_calls.load(std::memory_order_relaxed),
+            (unsigned long)g_fused_upgate_down_shadow.decode_calls.load(std::memory_order_relaxed),
+            (unsigned long)g_fused_upgate_down_shadow.rows.load(std::memory_order_relaxed),
+            (unsigned long)g_fused_upgate_down_shadow.up_cache_misses.load(std::memory_order_relaxed),
+            (unsigned long)g_fused_upgate_down_shadow.gate_cache_misses.load(std::memory_order_relaxed),
+            (unsigned long)g_fused_upgate_down_shadow.down_cache_misses.load(std::memory_order_relaxed),
+            (unsigned long)g_fused_upgate_down_shadow.down_overlap_plannable.load(std::memory_order_relaxed),
+            (unsigned long)g_fused_upgate_down_shadow.down_missing_tensor.load(std::memory_order_relaxed),
+            (unsigned long)g_fused_upgate_down_shadow.down_missing_cache.load(std::memory_order_relaxed),
+            (unsigned long)g_fused_upgate_down_shadow.down_missing_pack.load(std::memory_order_relaxed));
+}
+
+static void fused_upgate_down_shadow_csv_write(
+        const char *mode,
+        const char *up_tensor,
+        const char *gate_tensor,
+        const char *down_tensor,
+        size_t up_bytes,
+        size_t gate_bytes,
+        size_t down_bytes,
+        int n_active,
+        uint64_t active_hash,
+        int up_cache_hits,
+        int up_cache_misses,
+        int gate_cache_hits,
+        int gate_cache_misses,
+        int down_cache_hits,
+        int down_cache_misses,
+        int up_pack_hits,
+        int up_pack_misses,
+        int gate_pack_hits,
+        int gate_pack_misses,
+        int down_pack_hits,
+        int down_pack_misses,
+        int down_overlap_enabled_flag,
+        int down_overlap_plannable,
+        int all_roles_cache_hits,
+        int any_role_cache_miss,
+        int all_roles_cache_miss,
+        int up_gate_miss_pairs,
+        int up_down_miss_pairs,
+        int gate_down_miss_pairs) {
+    const char *path = std::getenv("GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT_SHADOW_OUT");
+    if (!path || !path[0]) return;
+
+    static std::mutex mu;
+    static bool header = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header) {
+        std::fprintf(f,
+                "seq,mode,up_tensor,gate_tensor,down_tensor,n_active,active_hash,"
+                "up_bytes,gate_bytes,down_bytes,up_cache_hits,up_cache_misses,"
+                "gate_cache_hits,gate_cache_misses,down_cache_hits,down_cache_misses,"
+                "up_pack_hits,up_pack_misses,gate_pack_hits,gate_pack_misses,"
+                "down_pack_hits,down_pack_misses,down_overlap_enabled,down_overlap_plannable,"
+                "all_roles_cache_hits,any_role_cache_miss,all_roles_cache_miss,"
+                "up_gate_miss_pairs,up_down_miss_pairs,gate_down_miss_pairs,"
+                "up_gate_same_size,up_down_same_size,gate_down_same_size\n");
+        header = true;
+    }
+
+    std::fprintf(f,
+            "%lu,%s,%s,%s,%s,%d,%lu,%lu,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+            (unsigned long)++seq,
+            mode ? mode : "",
+            up_tensor ? up_tensor : "",
+            gate_tensor ? gate_tensor : "",
+            down_tensor ? down_tensor : "",
+            n_active,
+            (unsigned long)active_hash,
+            (unsigned long)up_bytes,
+            (unsigned long)gate_bytes,
+            (unsigned long)down_bytes,
+            up_cache_hits,
+            up_cache_misses,
+            gate_cache_hits,
+            gate_cache_misses,
+            down_cache_hits,
+            down_cache_misses,
+            up_pack_hits,
+            up_pack_misses,
+            gate_pack_hits,
+            gate_pack_misses,
+            down_pack_hits,
+            down_pack_misses,
+            down_overlap_enabled_flag,
+            down_overlap_plannable,
+            all_roles_cache_hits,
+            any_role_cache_miss,
+            all_roles_cache_miss,
+            up_gate_miss_pairs,
+            up_down_miss_pairs,
+            gate_down_miss_pairs,
+            up_bytes == gate_bytes ? 1 : 0,
+            up_bytes == down_bytes ? 1 : 0,
+            gate_bytes == down_bytes ? 1 : 0);
+    std::fclose(f);
+}
+
+static void fused_upgate_down_shadow_record(
+        bool prompt_mode,
+        const char *up_tensor,
+        const char *gate_tensor,
+        const char *down_hint_tensor,
+        size_t up_bytes,
+        size_t gate_bytes,
+        const int *active_experts,
+        int n_active) {
+    if (!fused_upgate_down_shadow_enabled() || !active_experts || n_active <= 0) return;
+    if (!g_fused_upgate_down_shadow_report_registered.exchange(true)) {
+        std::atexit(fused_upgate_down_shadow_report_atexit);
+    }
+
+    char down_tensor[128] = {};
+    if (down_hint_tensor && down_hint_tensor[0]) {
+        std::snprintf(down_tensor, sizeof(down_tensor), "%s", down_hint_tensor);
+    } else if (!down_name_for_up_gate(up_tensor, down_tensor, sizeof(down_tensor))) {
+        ++g_fused_upgate_down_shadow.down_missing_tensor;
+    }
+
+    batch_vram_cache *up_cache = batch_cache_get(up_bytes);
+    batch_vram_cache *gate_cache = batch_cache_get(gate_bytes);
+
+    registered_tensor down_rt;
+    const bool have_down = down_tensor[0] && registered_tensor_lookup(down_tensor, &down_rt);
+    if (down_tensor[0] && !have_down) {
+        ++g_fused_upgate_down_shadow.down_missing_tensor;
+    }
+    const size_t down_bytes = have_down ? down_rt.expert_bytes : 0;
+    batch_vram_cache *down_cache = have_down ? batch_cache_get(down_rt.expert_bytes) : nullptr;
+    if (have_down && !down_cache) {
+        ++g_fused_upgate_down_shadow.down_missing_cache;
+    }
+
+    int up_cache_hits = 0;
+    int up_cache_misses = 0;
+    int gate_cache_hits = 0;
+    int gate_cache_misses = 0;
+    int down_cache_hits = 0;
+    int down_cache_misses = 0;
+    int up_pack_hits = 0;
+    int up_pack_misses = 0;
+    int gate_pack_hits = 0;
+    int gate_pack_misses = 0;
+    int down_pack_hits = 0;
+    int down_pack_misses = 0;
+    int down_overlap_plannable = 0;
+    int all_roles_cache_hits = 0;
+    int any_role_cache_miss = 0;
+    int all_roles_cache_miss = 0;
+    int up_gate_miss_pairs = 0;
+    int up_down_miss_pairs = 0;
+    int gate_down_miss_pairs = 0;
+    const bool down_overlap_can_run = current_down_overlap_enabled() && !prompt_mode && have_down && down_cache != nullptr;
+
+    for (int j = 0; j < n_active; ++j) {
+        const int expert = active_experts[j];
+        const bool up_hit = up_cache && batch_cache_find_slot(up_cache, batch_key_hash(up_tensor, expert)) >= 0;
+        const bool gate_hit = gate_cache && batch_cache_find_slot(gate_cache, batch_key_hash(gate_tensor, expert)) >= 0;
+        bool down_hit = false;
+        bool down_pack = false;
+        if (have_down && down_cache) {
+            const uintptr_t down_key = batch_key_hash(down_rt.name, expert);
+            down_hit = batch_cache_find_slot(down_cache, down_key) >= 0;
+            down_pack = expert_pack_lookup_impl(down_rt.name, expert, down_rt.expert_bytes, false) != nullptr;
+        }
+
+        up_hit ? ++up_cache_hits : ++up_cache_misses;
+        gate_hit ? ++gate_cache_hits : ++gate_cache_misses;
+        down_hit ? ++down_cache_hits : ++down_cache_misses;
+
+        expert_pack_lookup_impl(up_tensor, expert, up_bytes, false) ? ++up_pack_hits : ++up_pack_misses;
+        expert_pack_lookup_impl(gate_tensor, expert, gate_bytes, false) ? ++gate_pack_hits : ++gate_pack_misses;
+        if (have_down && down_cache) {
+            down_pack ? ++down_pack_hits : ++down_pack_misses;
+            if (!down_pack) ++g_fused_upgate_down_shadow.down_missing_pack;
+            if (down_overlap_can_run && !down_hit && down_pack) {
+                ++down_overlap_plannable;
+            }
+        }
+
+        if (up_hit && gate_hit && down_hit) ++all_roles_cache_hits;
+        if (!up_hit || !gate_hit || !down_hit) ++any_role_cache_miss;
+        if (!up_hit && !gate_hit && !down_hit) ++all_roles_cache_miss;
+        if (!up_hit && !gate_hit) ++up_gate_miss_pairs;
+        if (!up_hit && !down_hit) ++up_down_miss_pairs;
+        if (!gate_hit && !down_hit) ++gate_down_miss_pairs;
+    }
+
+    ++g_fused_upgate_down_shadow.calls;
+    if (prompt_mode) {
+        ++g_fused_upgate_down_shadow.prompt_calls;
+    } else {
+        ++g_fused_upgate_down_shadow.decode_calls;
+    }
+    g_fused_upgate_down_shadow.rows.fetch_add((uint64_t)n_active);
+    g_fused_upgate_down_shadow.up_cache_misses.fetch_add((uint64_t)up_cache_misses);
+    g_fused_upgate_down_shadow.gate_cache_misses.fetch_add((uint64_t)gate_cache_misses);
+    g_fused_upgate_down_shadow.down_cache_misses.fetch_add((uint64_t)down_cache_misses);
+    g_fused_upgate_down_shadow.down_overlap_plannable.fetch_add((uint64_t)down_overlap_plannable);
+
+    fused_upgate_down_shadow_csv_write(
+            prompt_mode ? "prompt" : "decode",
+            up_tensor,
+            gate_tensor,
+            have_down ? down_rt.name : down_tensor,
+            up_bytes,
+            gate_bytes,
+            down_bytes,
+            n_active,
+            updown_pair_active_hash(active_experts, n_active),
+            up_cache_hits,
+            up_cache_misses,
+            gate_cache_hits,
+            gate_cache_misses,
+            down_cache_hits,
+            down_cache_misses,
+            up_pack_hits,
+            up_pack_misses,
+            gate_pack_hits,
+            gate_pack_misses,
+            down_pack_hits,
+            down_pack_misses,
+            down_overlap_can_run ? 1 : 0,
+            down_overlap_plannable,
+            all_roles_cache_hits,
+            any_role_cache_miss,
+            all_roles_cache_miss,
+            up_gate_miss_pairs,
+            up_down_miss_pairs,
+            gate_down_miss_pairs);
+}
+
 static void preload_registered_down_for_active(const char *src_name, const int *active_experts, int n_active) {
     if (!down_prefetch_enabled() || !g_batch.prefetch_stream || !src_name || !active_experts || n_active <= 0) return;
 
@@ -11206,6 +11475,17 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const bool disambiguate_halves = shared_tensor_name || src0_up_data == src0_gate_data;
     std::snprintf(up_key_name, sizeof(up_key_name), "%s%s", src0_up_name ? src0_up_name : "up", disambiguate_halves ? ":up" : "");
     std::snprintf(gate_key_name, sizeof(gate_key_name), "%s%s", src0_gate_name ? src0_gate_name : "gate", disambiguate_halves ? ":gate" : "");
+    char down_shadow_name[128] = {};
+    down_name_for_up_gate(src0_up_name, down_shadow_name, sizeof(down_shadow_name));
+    fused_upgate_down_shadow_record(
+        prompt_mode,
+        up_key_name,
+        gate_key_name,
+        down_shadow_name,
+        up_expert_bytes,
+        gate_expert_bytes,
+        active_experts,
+        n_active);
 
     const char *profile_upgate_env = std::getenv("GGML_MOE_VRAM_PROFILE_UPGATE");
     const bool profile_upgate = !profile_upgate_env || !profile_upgate_env[0] || profile_upgate_env[0] != '0';

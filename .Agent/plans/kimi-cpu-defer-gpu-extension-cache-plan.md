@@ -4,6 +4,43 @@ Date: 2026-07-10
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Current execution goal
+
+Goal for the current optimization cycle:
+
+> Verify whether the DeepSeek-style CPU/defer main path plus GPU expert-cache extension can produce another reproducible Kimi gain, and if so implement the smallest safe change that reduces exposed expert-transfer wait while preserving general-prompt quality under the 16 GB host RAM gate.
+
+This is not a plan to copy DeepSeek's gate-only hotpool blindly. For Kimi, the current evidence says the bottleneck is mostly gate/up/down miss scheduling and exposed `io_uring_wait`, not standalone gate CPU compute.
+
+Done criteria:
+
+- Keep the active branch `vendor/kimi-deepseek-41d205-additive`.
+- Keep every risky change default-off until it has paired baseline/candidate evidence.
+- Use dev prompts for design and held-out prompts only for final validation.
+- A candidate is accepted only when it improves reproducible general-prompt token rate, passes semantic quality, stays below `15900000000` bytes host RAM, keeps TTFT within `+20%`, and is committed/pushed with full reproduction details.
+- A candidate that only improves one prompt, only improves hit rate, or only improves a noisy single run is rejected or left default-off.
+
+## Immediate execution plan
+
+1. Finish Phase 4B fused-path shadow documentation.
+   - Record that the shadow code is diagnostic/default-off.
+   - Record N32 dev3 quality, token rate, RAM, TTFT, and shadow cache-hit evidence.
+   - Commit and push only as diagnostic infrastructure if build and smoke remain clean.
+
+2. Decide whether actual fused up/gate/down co-submit is worth implementing.
+   - Proceed only if the shadow shows a large same-layer miss group that current-down overlap does not already cover.
+   - The expected benefit must be stated before implementation as a hard upper bound from `iouring_wait_us`, active expert bytes, and observed plannable rows.
+   - If implemented, start with default-off env and N32 dev3 A/B before any N96 run.
+
+3. If fused co-submit has weak upside, move to RAM/VRAM cache co-design.
+   - Replace low-value decode-time file cache with explicit expert cache only when profiling proves those pages are not needed by decode.
+   - Prefer layer/role-aware slabs for high-miss critical layers over random hot expert insertion.
+   - Measure whether RAM resident experts reduce exposed wait rather than merely moving bytes from SSD to RAM.
+
+4. Finalize only on general prompts.
+   - Dev prompt gains can guide implementation.
+   - SOTA claims must be based on held-out general prompts, not France-only or prompt-specific pack behavior.
+
 ## Goal
 
 Optimize Kimi under the actual runtime architecture:
@@ -558,6 +595,109 @@ Acceptance for shadow:
 - Shadow run quality passes.
 - Runtime overhead is low enough for diagnostic use.
 - The CSV provides enough evidence to calculate an upper bound before any actual prefetch implementation.
+
+### Phase 4B result: fused-path co-submit shadow implemented, diagnostic only
+
+Timestamp: 2026-07-10 13:45 CST.
+
+Source status:
+
+- Default-off diagnostic code added in `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- Env gates:
+  - `GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT_SHADOW=1`
+  - `GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT_SHADOW_OUT=<csv>`
+- No behavior change when the env is unset.
+- Build passed with the existing warning set:
+
+```bash
+cmake --build build-cuda-batch -j$(nproc)
+```
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4b-fused-shadow-n32-dev3-134523`
+
+Command:
+
+```bash
+OUT=/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4b-fused-shadow-n32-dev3-134523
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --repo /root/lfz/llama.cpp-vendor-kimi \
+  --prompt-file .Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root "$OUT" \
+  --mode dev \
+  --n 32 \
+  --max-prompts 3 \
+  --keep-going \
+  --memory-max 15900000000 \
+  --runtime-max-sec 600 \
+  --upgate-pct 62 \
+  --extra-runtime-env "GGML_MOE_RAM_TIER_MIB=1800
+GGML_MOE_RAM_TIER_PROFILE=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=1
+GGML_MOE_RAM_TIER_PIN_MIB=1800
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+GGML_MOE_RAM_BATCH_PROFILE_OUT=$OUT/ram-batch-profile.csv
+GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT_SHADOW=1
+GGML_MOE_FUSED_UPGATE_DOWN_COSUBMIT_SHADOW_OUT=$OUT/fused-upgate-down-shadow.csv"
+```
+
+Paired control:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase2a-upgate-pct-n32-dev3-132403/pct62`
+
+Result:
+
+| run | quality | token rate min | token rate median | token rate mean | TTFT median ms | iouring wait mean s | RAM peak GiB |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| control pct62 | 3/3 pass | 1.84 | 1.84 | 1.85 | 8537.31 | 18.99 | 13.55 |
+| fused shadow | 3/3 pass | 1.82 | 1.87 | 1.87 | 8662.96 | 18.52 | 13.55 |
+
+Shadow aggregate after filtering duplicate per-process CSV headers:
+
+- Rows: `5583`, all decode.
+- Active expert rows: `44664`.
+- Up cache hit rate: `44.08%`.
+- Gate cache hit rate: `44.17%`.
+- Down cache hit rate: `32.10%`.
+- All-role cache-hit rows: `32.10%`.
+- Down-overlap plannable rows: `25094 / 44664 = 56.18%`.
+- Pack lookup:
+  - up pack hits `44664`, misses `0`;
+  - gate pack hits `44664`, misses `0`;
+  - down pack hits `39432`, misses `0` for rows with a matching down tensor.
+
+Top same-layer all-role miss layers:
+
+| layer | active | all-role miss | any-role miss | down plannable | up miss | gate miss | down miss |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 5 | 744 | 528 | 603 | 603 | 528 | 528 | 603 |
+| 1 | 744 | 518 | 604 | 604 | 519 | 518 | 604 |
+| 4 | 744 | 516 | 588 | 588 | 517 | 516 | 588 |
+| 60 | 768 | 511 | 562 | 538 | 511 | 511 | 562 |
+| 3 | 744 | 496 | 563 | 563 | 497 | 496 | 563 |
+| 10 | 744 | 494 | 744 | 0 | 494 | 494 | 744 |
+| 29 | 744 | 489 | 560 | 560 | 489 | 489 | 560 |
+| 28 | 744 | 481 | 549 | 549 | 482 | 481 | 549 |
+
+Interpretation:
+
+- The DeepSeek gate-only lesson partially transfers, but the Kimi bottleneck is not a standalone gate CPU path.
+- Up and gate miss together almost exactly, and down miss is also high. Therefore a gate-only cache increase is unlikely to be enough.
+- The pack path is present for the measured up/gate/down rows; the remaining problem is residency and scheduling, not missing pack coverage.
+- Current-down overlap already has many plannable rows, so an actual fused co-submit must prove that it reduces exposed wait beyond the existing overlap rather than duplicating work.
+- Since the shadow run is diagnostic and min token rate did not improve, it is not a SOTA claim.
+
+Decision:
+
+- Keep the shadow path default-off.
+- Commit/push it only as diagnostic infrastructure with the above run path and rollback point.
+- Next candidate must be one of:
+  - exact fused-path up/gate/down co-submit only if it uses the shadow data to avoid duplicate current-down work;
+  - layer/role-aware RAM/VRAM cache reallocation for layers with high all-role miss;
+  - no-op if the expected upper bound is too small after subtracting current-down overlap.
 
 ## Phase 5: Commit and push protocol
 
