@@ -1850,6 +1850,83 @@ Next:
   - layer/role-aware RAM cache using memory currently occupied by low-value decode file cache;
   - pack layout that makes mixed-role active expert reads more contiguous and batchable.
 
+### Phase 4I plan: global scheduler shadow before real co-submit work
+
+Reason:
+
+- Phase 4A proved the standalone gate/up/down co-submit hook does not run on the current Kimi fused path.
+- Phase 4B proved there are many same-layer up/gate/down miss opportunities, but current-down overlap already handles many down rows.
+- Phase 4C proved simply starting down overlap earlier can lose VRAM/cache budget or create IO contention.
+- Phase 4H proved isolated single-role residency does not reduce the critical path.
+- Before changing scheduling again, we need to know whether demand reads frequently collide with already-active prefetch reads, or whether the runtime is mostly serialized by unavoidable per-layer dependency.
+
+Existing default-off diagnostic:
+
+- `GGML_MOE_GLOBAL_EXPERT_SCHED_SHADOW=1`
+- It records every expert-pack io_uring batch by `(source_idx, offset, nbytes)`.
+- It classifies a batch as prefetch when `trace_op` contains `prefetch` or `overlap`.
+- It reports:
+  - total batches and tasks;
+  - demand versus prefetch tasks;
+  - active duplicate reads;
+  - demand reads that hit active prefetch;
+  - prefetch reads that hit active demand;
+  - demand-demand and prefetch-prefetch overlap;
+  - max active set and batch histogram.
+
+Hypothesis:
+
+- If `demand_hit_prefetch` is material, a real scheduler could let demand wait on or steal the matching in-flight prefetch instead of issuing another read or stalling behind a separate batch.
+- If `active_duplicates` is near zero, queue starvation is mostly caused by sequential layer dependency and small known-active sets; a global scheduler will not help much.
+- If duplicates are mostly `prefetch_hit_prefetch` or `demand_hit_demand`, then the fix is deduplication/packing, not more aggressive prefetch.
+
+Theoretical upper bound:
+
+- Hard bound is the `iouring_wait_us` associated with duplicate active reads.
+- The shadow does not measure exact saved milliseconds per duplicate, so the first bound will be conservative:
+  - duplicate task ratio = `active_duplicates / tasks`;
+  - useful duplicate ratio = `demand_hit_prefetch / demand_tasks`;
+  - possible saved wait upper bound = current aggregate `iouring_wait_s * useful duplicate ratio`.
+- If useful duplicate ratio is below a few percent, skip implementation and move to RAM/pack layout.
+
+Experiment:
+
+1. Run cold-start N32 dev3 paired against current control shape.
+2. Candidate env adds only:
+
+```bash
+GGML_MOE_GLOBAL_EXPERT_SCHED_SHADOW=1
+```
+
+3. Keep the current reproducible control env:
+   - `UPGATE_PCT=62`
+   - `GGML_MOE_RAM_TIER_MIB=1800`
+   - `GGML_MOE_RAM_TIER_PROFILE=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv`
+   - `GGML_MOE_RAM_TIER_PIN=1`
+   - `GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1`
+   - `GGML_MOE_RAM_TIER_PRELOAD_THREADS=4`
+   - `MemoryMax=15900000000`
+   - `MemorySwapMax=0`
+
+Acceptance for diagnostic:
+
+- Quality must match control.
+- Host RAM must stay under the 16 GB gate.
+- TTFT must remain within `1.20x`; shadow overhead should be small.
+- The atexit global scheduler line must appear in stderr.
+- Proceed to implementation only if useful demand-prefetch overlap is large enough to justify a real default-off scheduler.
+
+Decision after diagnostic:
+
+- If useful demand-prefetch overlap is high:
+  - design a default-off scheduler that records active in-flight prefetch by `(source_idx, offset, nbytes)`;
+  - demand can wait on or reuse the prefetch completion event;
+  - duplicate reads must be suppressed;
+  - stale prefetch must be capped.
+- If useful overlap is low:
+  - do not implement global scheduler;
+  - move to storage layout: RAM tier replacement of low-value file cache and pack locality/role layout.
+
 ## Phase 5: Commit and push protocol
 
 For every accepted improvement:
