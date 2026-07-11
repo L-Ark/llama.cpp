@@ -3681,9 +3681,17 @@ static uint64_t moe_phase_delta_u64(uint64_t now, uint64_t prev) {
     return now >= prev ? now - prev : 0;
 }
 
+static std::atomic<int> g_moe_copy_runtime_phase{0}; // 0 unknown, 1 prompt eval, 2 decode/post-prompt.
+
 extern "C" void ggml_cuda_moe_stream_batch_phase_report(const char *label) {
     if (!label || !label[0]) {
         label = "unknown";
+    }
+    if (std::strcmp(label, "before_prompt_eval") == 0) {
+        g_moe_copy_runtime_phase.store(1, std::memory_order_relaxed);
+    } else if (std::strcmp(label, "after_prompt_eval") == 0 ||
+            std::strcmp(label, "after_generation") == 0) {
+        g_moe_copy_runtime_phase.store(2, std::memory_order_relaxed);
     }
     const moe_phase_counter_snapshot cur = moe_phase_snapshot_now();
     const moe_phase_counter_snapshot prev = g_moe_phase_last_valid ? g_moe_phase_last : moe_phase_counter_snapshot{};
@@ -7238,9 +7246,17 @@ static bool prompt_host_source_profile_enabled() {
     return path && path[0];
 }
 
+static const char *prompt_host_source_effective_phase() {
+    if (g_moe_copy_runtime_phase.load(std::memory_order_relaxed) == 1) {
+        return "prompt";
+    }
+    return g_moe_copy_phase ? g_moe_copy_phase : "unknown";
+}
+
 static bool prompt_host_source_profile_active() {
-    return prompt_host_source_profile_enabled() &&
-        g_moe_copy_phase && std::strcmp(g_moe_copy_phase, "prompt") == 0;
+    if (!prompt_host_source_profile_enabled()) return false;
+    if (g_moe_copy_runtime_phase.load(std::memory_order_relaxed) == 1) return true;
+    return g_moe_copy_phase && std::strcmp(g_moe_copy_phase, "prompt") == 0;
 }
 
 static int prompt_host_source_tensor_layer(const char *tensor) {
@@ -7319,7 +7335,7 @@ static void prompt_host_source_profile_record(
     std::fprintf(f,
             "%llu,%s,%s,%s,%d,%s,%d,%zu,%s,%d,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,%.6f\n",
             (unsigned long long)++seq,
-            g_moe_copy_phase ? g_moe_copy_phase : "unknown",
+            prompt_host_source_effective_phase(),
             op ? op : "",
             tensor ? tensor : "",
             prompt_host_source_tensor_layer(tensor),
