@@ -256,6 +256,168 @@ Next action:
    direct/io_uring reader; otherwise prioritize RAM/VRAM co-design and low-value
    page-cache replacement.
 
+## Current subgoal: materialized top1024 v2 payload shadow
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Materialize a wider but still bounded v2 payload pack from the dev-derived
+> `budget-8p0` hotset and run it only through the default-off shadow stage. This
+> tests whether a real payload pack larger than the 8-entry smoke can produce
+> enough runtime staged miss coverage to justify v2 direct/io_uring reader work.
+
+Why top1024:
+
+- Full `budget-120p0` is estimated at `128.84 GB` payload and is too close to
+  the remaining disk budget.
+- `budget-8p0` is a dev-prompt-selected hotset and already produced the known
+  8-entry payload smoke.
+- Top1024 from `budget-8p0` is estimated at `2.743 GiB` payload:
+  - down: `581` entries;
+  - gate: `216` entries;
+  - up: `227` entries.
+- This is large enough to expose real runtime coverage growth, while small
+  enough to keep disk and build time bounded.
+
+Execution plan:
+
+1. Build a real payload pack with:
+   - selected plan:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-hotset-bound-dev7/budget-8p0-selected-plan.tsv`;
+   - output dir:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024`;
+   - `--max-entries 1024`;
+   - include types `IQ1_S,Q2_K`.
+2. Verify the pack and manifest:
+   - selected entries: `1024`;
+   - pack bytes close to the estimated `2.743 GiB`;
+   - manifest row count: `1025` including header.
+3. Run N32 France with shadow stage only:
+   - cold start under `MemoryMax=15900000000`;
+   - output must still pass quality;
+   - no dispatch or logits changes;
+   - record coverage, staged rows, staged bytes, saved bytes, read wall, H2D,
+     sync, total wall, RAM peak, and TTFT.
+4. Decision:
+   - If staged miss saving remains far below multi-GiB in N32, stop v2 payload
+     expansion and pivot to RAM/VRAM co-design.
+   - If staged miss saving reaches multi-GiB and shadow overhead is plausible,
+     implement a v2 direct/io_uring shadow reader next.
+
+## Progress update: materialized top1024 v2 payload shadow
+
+Timestamp: 2026-07-11 CST.
+
+Build result:
+
+- Output dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024`.
+- Command:
+  `.Agent/run-tools/kimi_iq1s_selected_payload_pack.py --selected-plan-tsv /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-hotset-bound-dev7/budget-8p0-selected-plan.tsv --out-dir /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024 --max-entries 1024 --include-types IQ1_S,Q2_K`
+- Selected entries: `1024`.
+- Manifest rows: `1025` including header.
+- Payload bytes: `2945761280`.
+- Pack bytes: `2945953792`.
+- Pack size on disk: `2.8G`.
+- Build wall time: `24:06.40`.
+- Build max RSS: `2960104 KB`.
+- Disk after build: `/dev/root` `130G` available.
+- Builder stats:
+  - duplicate rows: `0`;
+  - missing tensor: `0`;
+  - invalid rows: `0`;
+  - type skipped: `0`;
+  - selected rows: `1024`.
+
+Shadow run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-stage-budget8-top1024-n32-france`.
+- Prompt:
+  `Please introduce France in a short paragraph.`
+- Extra env:
+  - `GGML_MOE_EXPERT_PACK_V2=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024/selected-iq1s-overlay-v2.expert-pack`
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024/selected-iq1s-overlay-manifest.tsv`
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE=1`
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE_OUT=<run>/v2-shadow-stage.csv`
+- Result:
+  - exit: `0`;
+  - quality: `pass`;
+  - output begins: `France is a country in Western Europe...`;
+  - TTFT: `8334.79 ms`;
+  - decode: `19449.45 ms / 31 runs = 1.59 tok/s`;
+  - RAM peak: `15144787968 bytes`;
+  - final file cache: `14462074880 bytes`;
+  - CSV rows: `1630`;
+  - decode CPU fallback: `hits=0 misses=0 bytes=0 fallback_gguf=0`;
+  - v2 preflight: `8174 / 68736` accepted entries, `16` full-cover calls.
+
+Shadow summary:
+
+- calls: `5583`;
+- covered entries: `5047`;
+- covered cache hits: `2826`;
+- staged entries: `2221`;
+- covered bytes: `13.551 GiB`;
+- covered saved bytes: `15.391 GiB`;
+- staged bytes: `5.976 GiB`;
+- staged saved bytes: `7.499 GiB`;
+- read wall: `2181.764 ms`;
+- H2D event time: `546.917 ms`;
+- sync wall: `542.067 ms`;
+- total shadow stage wall: `2771.305 ms`;
+- read/H2D failures: `0/0`;
+- observed debug-reader payload rate: `2.739 GiB/s`;
+- observed H2D payload rate: `10.927 GiB/s`;
+- IO-only saving estimate at `10.4 GiB/s`: `721.06 ms`.
+
+Role breakdown:
+
+| role | calls with coverage | covered | cache-hit covered | staged | covered GiB | covered saved GiB | staged GiB | staged saved GiB | read ms | H2D ms | total ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| down | 526 | 2215 | 987 | 1228 | 5.989 | 9.513 | 3.325 | 5.411 | 1136.004 | 273.763 | 1430.028 |
+| gate | 567 | 1414 | 925 | 489 | 3.776 | 2.846 | 1.306 | 0.995 | 503.878 | 144.729 | 654.259 |
+| up | 537 | 1418 | 914 | 504 | 3.786 | 3.031 | 1.346 | 1.094 | 541.882 | 128.425 | 687.019 |
+
+Interpretation:
+
+- Top1024 is the first materialized v2 payload candidate with multi-GiB staged
+  miss saving in runtime shadow.
+- It is still not a token-rate candidate:
+  - shadow uses debug `fseek/fread`, not direct/io_uring;
+  - it synchronizes every staged copy;
+  - decode regresses to `1.59 tok/s`, as expected for a measurement path;
+  - RAM peak rises to `15.14 GB`, still under the hard cap but close enough that
+    a production path must avoid building uncontrolled page cache from v2 reads.
+- Byte bound:
+  - default-off N32 decode was `16529.78 ms / 31 = 1.88 tok/s`;
+  - `2.0 tok/s` requires decode around `15500 ms`, or about `1030 ms` saving;
+  - staged saved bytes are `7.499 GiB`;
+  - IO-only at `10.4 GiB/s` gives about `721 ms`;
+  - if H2D savings are also exposed at roughly `10.9 GiB/s`, total transfer
+    saving can be around `1.4 s`, enough to justify the next engineering step.
+- But role criticality matters:
+  - up+gate staged saved bytes are only `2.089 GiB`;
+  - down contributes `5.411 GiB`, but down has more overlap from current down
+    prefetch;
+  - therefore a real implementation must measure exposed wait reduction, not
+    just total bytes.
+
+Decision:
+
+1. Do not expand immediately to top2048/top2992 until the reader path is fixed.
+2. Implement a default-off v2 direct/io_uring shadow reader for materialized v2
+   packs.
+3. The reader must avoid stdio page-cache behavior and report:
+   - v2 direct read bytes;
+   - v2 read wait;
+   - queue depth / batch size;
+   - H2D timing;
+   - RAM file-cache delta.
+4. Only after direct/io_uring shadow proves read+H2D can approach the existing
+   expert-pack path should partial dispatch be considered.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.
