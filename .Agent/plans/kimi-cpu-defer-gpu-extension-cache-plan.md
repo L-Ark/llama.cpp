@@ -1165,6 +1165,83 @@ Decision:
 - Promotion to real dispatch remains blocked until shadow coalescing proves
   lower exposed read/H2D time and France quality/RAM gates pass.
 
+## Current subgoal: runtime same-layer coalesced v2 shadow scheduler
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Implement a default-off runtime shadow scheduler that actually groups adjacent
+> same-layer v2 read candidates and measures local-ring io_uring timing, while
+> still leaving model output unchanged. This converts the offline CSV upper
+> bound into a real cold-start runtime measurement.
+
+Hypothesis:
+
+- The current v2 shadow reader submits one IO batch per runtime role call.
+- Offline grouping shows same-layer coalescing can reduce batches by about
+  `47-50%` and raise average jobs/batch from about `2.3` to about `4.3-4.6`.
+- If real runtime shadow grouping achieves a similar shift, v2 read rate should
+  move closer to the pure expert-pack IO bench and the case for a tiny real
+  dispatch prototype becomes stronger.
+
+Implementation plan:
+
+1. Add a new default-off env:
+   - `GGML_MOE_EXPERT_PACK_V2_SHADOW_COALESCE_SAME_LAYER=1`.
+2. Keep all existing default-off behavior unchanged.
+3. In shadow-only mode, collect staged v2 candidates into a pending same-layer
+   group instead of immediately staging each role call.
+4. Flush the pending group when:
+   - the next staged call belongs to a different layer;
+   - a same-layer `down` call is observed, because that normally closes the
+     layer's routed MoE work;
+   - a no-stage same-layer `down` call is observed and there is a pending group.
+5. Use the existing local-ring v2 io_uring reader for the pending group.
+6. Record separate coalesced counters:
+   - groups, source calls, candidates, bytes, saved bytes;
+   - read/H2D/sync/total wall;
+   - io_uring batches/jobs/wait/CQEs/inflight.
+7. Emit a coalesced CSV row using the existing shadow CSV schema, with
+   `phase=decode_coalesced_same_layer` and a role string summarizing the roles
+   included in the group.
+
+Validation plan:
+
+1. Build:
+   `cmake --build build-cuda-batch --target ggml-cuda -j2`.
+2. Default-off N32 France sanity:
+   - quality pass;
+   - RAM below `15900000000`;
+   - no shadow files;
+   - decode CPU fallback remains zero.
+3. Top1024 N32 France coalesced shadow:
+   - use the same top1024 pack as the previous local-ring run;
+   - enable `GGML_MOE_EXPERT_PACK_V2_SHADOW_COALESCE_SAME_LAYER=1`;
+   - compare against top1024 non-coalesced:
+     - staged entries: `2221`;
+     - read_ms: `988.880`;
+     - total shadow: `1526.050`;
+     - read rate: `6.043 GiB/s`;
+     - inflight avg/max: `2.17 / 8`.
+4. Top2048 N32 France coalesced shadow only if top1024 improves:
+   - compare against top2048 non-coalesced:
+     - staged entries: `3856`;
+     - read_ms: `1977.404`;
+     - total shadow: `2855.672`;
+     - read rate: `5.230 GiB/s`;
+     - inflight avg/max: `2.12 / 8`.
+
+Decision gate:
+
+- Continue toward a tiny real dispatch prototype only if coalesced shadow
+  improves read rate and lowers total shadow wall without RAM/quality
+  regressions.
+- If coalescing improves jobs/batch but not read_ms/total wall, the bottleneck
+  is not scheduler batch size alone; return to RAM/VRAM storage layout or
+  deeper overlap design.
+- No SOTA claim is allowed from this shadow scheduler.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.
