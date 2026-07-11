@@ -6388,6 +6388,62 @@ static void ggml_compute_forward_moe_up_gate(
         ggml_cuda_moe_stream_supports_type(gate_type) &&
         src1->type == GGML_TYPE_F32 &&
         dst->type == GGML_TYPE_F32;
+    const bool prompt_phase =
+        ggml_kimi_cpu_moe_runtime_prompt_phase(ids->ne[1] > 1);
+    bool kimi_cpu_moe_dispatch_profile_up = false;
+    bool kimi_cpu_moe_dispatch_profile_gate = false;
+    bool kimi_cpu_moe_upgate_batch_done = false;
+    int64_t kimi_cpu_moe_dispatch_active_rows = 0;
+    int64_t kimi_cpu_moe_dispatch_active_experts = 0;
+    const size_t kimi_cpu_moe_up_expert_bytes = (size_t) ne01 * nb01;
+    const size_t kimi_cpu_moe_gate_expert_bytes = (size_t) src0_gate->ne[1] * src0_gate->nb[1];
+    size_t kimi_cpu_moe_up_tensor_span_bytes = 0;
+    size_t kimi_cpu_moe_gate_tensor_span_bytes = 0;
+    uint64_t kimi_cpu_moe_up_resident_before = 0;
+    uint64_t kimi_cpu_moe_gate_resident_before = 0;
+    int kimi_cpu_moe_up_mincore_before_errno = 0;
+    int kimi_cpu_moe_gate_mincore_before_errno = 0;
+    uint64_t kimi_cpu_moe_dispatch_start_us = 0;
+
+    if (ith == 0) {
+        kimi_cpu_moe_dispatch_profile_up =
+            ggml_kimi_cpu_moe_dispatch_profile_enabled_for(src0_up->name, prompt_phase);
+        kimi_cpu_moe_dispatch_profile_gate =
+            ggml_kimi_cpu_moe_dispatch_profile_enabled_for(src0_gate->name, prompt_phase);
+        if (kimi_cpu_moe_dispatch_profile_up || kimi_cpu_moe_dispatch_profile_gate) {
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                const int64_t cne1 = matrix_row_counts[cur_a];
+                if (cne1 == 0) {
+                    continue;
+                }
+                kimi_cpu_moe_dispatch_active_experts++;
+                kimi_cpu_moe_dispatch_active_rows += cne1;
+            }
+            if (n_as > 0) {
+                kimi_cpu_moe_up_tensor_span_bytes =
+                    (size_t) ((uint64_t) (n_as - 1) * (uint64_t) nb02 +
+                              (uint64_t) ne01 * (uint64_t) nb01);
+                kimi_cpu_moe_gate_tensor_span_bytes =
+                    (size_t) ((uint64_t) (n_as - 1) * (uint64_t) gate_nb02 +
+                              (uint64_t) src0_gate->ne[1] * (uint64_t) src0_gate->nb[1]);
+            }
+            if (kimi_cpu_moe_dispatch_profile_up) {
+                kimi_cpu_moe_up_resident_before =
+                    ggml_kimi_cpu_moe_mincore_resident_bytes(
+                            src0_up->data,
+                            kimi_cpu_moe_up_tensor_span_bytes,
+                            &kimi_cpu_moe_up_mincore_before_errno);
+            }
+            if (kimi_cpu_moe_dispatch_profile_gate) {
+                kimi_cpu_moe_gate_resident_before =
+                    ggml_kimi_cpu_moe_mincore_resident_bytes(
+                            src0_gate->data,
+                            kimi_cpu_moe_gate_tensor_span_bytes,
+                            &kimi_cpu_moe_gate_mincore_before_errno);
+            }
+            kimi_cpu_moe_dispatch_start_us = ggml_time_us();
+        }
+    }
 
     if (use_gpu_stream) {
         if (ith == 0) {
@@ -6422,6 +6478,7 @@ static void ggml_compute_forward_moe_up_gate(
                 }
             }
             if (done) {
+                kimi_cpu_moe_upgate_batch_done = true;
                 memset(matrix_row_counts, 0, n_as*sizeof(int64_t));
             }
         }
@@ -6430,6 +6487,73 @@ static void ggml_compute_forward_moe_up_gate(
         ggml_barrier(params->threadpool);
         if (kimi_cpu_moe_profile && ith == 0) {
             ggml_kimi_cpu_moe_profile.up_gate.post_cuda_barrier_us += ggml_time_us() - kimi_cpu_moe_post_cuda_barrier_start;
+        }
+    }
+
+    if ((kimi_cpu_moe_dispatch_profile_up || kimi_cpu_moe_dispatch_profile_gate) && ith == 0) {
+        int64_t dispatch_fallback_rows = 0;
+        for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+            dispatch_fallback_rows += matrix_row_counts[cur_a];
+        }
+
+        const uint64_t wall_us = ggml_time_us() - kimi_cpu_moe_dispatch_start_us;
+        if (kimi_cpu_moe_dispatch_profile_up) {
+            int mincore_after_errno = 0;
+            const uint64_t resident_after =
+                ggml_kimi_cpu_moe_mincore_resident_bytes(
+                        src0_up->data,
+                        kimi_cpu_moe_up_tensor_span_bytes,
+                        &mincore_after_errno);
+            ggml_kimi_cpu_moe_dispatch_profile_write(
+                    prompt_phase,
+                    src0_up->name,
+                    src0_up->type,
+                    n_as,
+                    kimi_cpu_moe_dispatch_active_experts,
+                    kimi_cpu_moe_dispatch_active_rows,
+                    kimi_cpu_moe_up_expert_bytes,
+                    kimi_cpu_moe_up_tensor_span_bytes,
+                    use_gpu_stream,
+                    kimi_cpu_moe_upgate_batch_done,
+                    0,
+                    0,
+                    dispatch_fallback_rows,
+                    kimi_cpu_moe_up_resident_before,
+                    resident_after,
+                    kimi_cpu_moe_up_mincore_before_errno,
+                    mincore_after_errno,
+                    wall_us,
+                    kimi_cpu_moe_cuda_batch_this_us,
+                    0);
+        }
+        if (kimi_cpu_moe_dispatch_profile_gate) {
+            int mincore_after_errno = 0;
+            const uint64_t resident_after =
+                ggml_kimi_cpu_moe_mincore_resident_bytes(
+                        src0_gate->data,
+                        kimi_cpu_moe_gate_tensor_span_bytes,
+                        &mincore_after_errno);
+            ggml_kimi_cpu_moe_dispatch_profile_write(
+                    prompt_phase,
+                    src0_gate->name,
+                    src0_gate->type,
+                    n_as,
+                    kimi_cpu_moe_dispatch_active_experts,
+                    kimi_cpu_moe_dispatch_active_rows,
+                    kimi_cpu_moe_gate_expert_bytes,
+                    kimi_cpu_moe_gate_tensor_span_bytes,
+                    use_gpu_stream,
+                    kimi_cpu_moe_upgate_batch_done,
+                    0,
+                    0,
+                    dispatch_fallback_rows,
+                    kimi_cpu_moe_gate_resident_before,
+                    resident_after,
+                    kimi_cpu_moe_gate_mincore_before_errno,
+                    mincore_after_errno,
+                    wall_us,
+                    kimi_cpu_moe_cuda_batch_this_us,
+                    0);
         }
     }
 
