@@ -131,6 +131,51 @@ Current implementation step:
   - SOTA claim: none, because runtime behavior is unchanged unless
     `GGML_MOE_GPU_EXTENSION_COVERAGE_OUT` is set.
 
+First coverage run:
+
+- Timestamp: 2026-07-11 CST.
+- Commit: `561e0bd90 prof: audit Kimi GPU extension coverage`.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-gpu-extension-coverage-n32-france`.
+- Command shape:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0 ... env RUN=<run> N=32 PROFILE=1 PROMPT_ID=dev_france_coverage PROMPT_USER_TEXT='Please introduce France in a short paragraph.' EXTRA_RUNTIME_ENV='GGML_MOE_GPU_EXTENSION_COVERAGE_OUT=<run>/gpu-extension-coverage.csv; GGML_MOE_EXPERT_PACK_V2=<tiny-pack>' .Agent/run-tools/kimi-general-prompt-repro.sh`.
+- Result:
+  - quality: pass;
+  - output: `France is a country in Western Europe known for its rich history,
+    culture, and influence on art, fashion, and cuisine. Its capital, Paris, is
+    famous`;
+  - token rate: `1.66 tok/s`;
+  - TTFT: `9437.82 ms`;
+  - decode: `18692.28 ms / 31 runs`;
+  - RAM peak: `12766507008` bytes;
+  - CPU fallback profile: empty;
+  - expert-pack iouring: `39090` reads, `224038649856` bytes,
+    `18910801 us` wait, inflight avg `4.32`, max `8`;
+  - VRAM cache: down hit `57.7%`, upgate hit `45.4%`.
+- Coverage CSV:
+  - rows: `5760`;
+  - tiny v2 overlay rows with any hit: `67`;
+  - full homogeneous v2 cover calls: `0`;
+  - full-cover saved bytes: `0`;
+  - decode v2 hit rates are too low for a runtime bridge:
+    - up type `22`: `0.003346`;
+    - gate type `22`: `0.007488`;
+    - down type `11`: `0.002555`.
+- Decode attribution from profile CSV:
+  - up/gate wall: `12251.642 ms` total, about `395 ms/token`;
+  - up/gate wait: up `7206.880 ms`, gate `7682.755 ms`;
+  - largest up/gate pair: `up=22/gate=18/parallel_stage=1`, `6536.4 ms`
+    wall, up wait `4038.4 ms`, gate wait `4372.1 ms`;
+  - decode down wall: `5064.805 ms`, about `163 ms/token`;
+  - decode down stage: `4702.819 ms`, about `152 ms/token`.
+- Interpretation:
+  - this confirms that the tiny `GGMLMOEPACKv2` sidecar is useful as a reader
+    and coverage probe, but not as a promotable runtime overlay;
+  - the next behavior-changing optimization should target exposed mixed
+    `up/gate` wait first, then decode down staging;
+  - a v2/lower-byte bridge should wait until the pack/hotset can cover full
+    active calls or until a correct split-compute path exists.
+
 ## Active goal: Kimi lower-byte GPU-extension path
 
 Timestamp: 2026-07-11 CST.
