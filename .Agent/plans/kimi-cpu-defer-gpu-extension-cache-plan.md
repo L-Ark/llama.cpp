@@ -562,6 +562,113 @@ Decision gate:
   low page-cache growth and plausible exposed wait reduction, then implement a
   guarded partial dispatch smoke for the smallest safe role/layer subset.
 
+## Progress update: v2 direct single-entry shadow reader
+
+Timestamp: 2026-07-11 CST.
+
+Code status:
+
+- Implemented a default-off v2 shadow direct reader behind
+  `GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ=1`.
+- Normal v2 behavior is unchanged unless both shadow staging and direct-read env
+  are enabled.
+- v2 pack sources now optionally open an O_DIRECT fd when
+  `GGML_MOE_IO_BACKEND=direct|iouring|io_uring`.
+- Shadow staging now records direct/buffered reads, logical bytes, physical
+  direct bytes, direct fallbacks, read wall time, H2D event time, sync wall
+  time, and total wall time.
+- Build check passed:
+  `cmake --build build-cuda-batch --target ggml-cuda -j2`.
+
+Default-off validation:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-direct-final-default-off-n32`
+- Command shape:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0 env RUN=<run> N=32 PROMPT_ID=dev_france_v2_direct_default_off PROMPT_USER_TEXT="Please introduce France in a short paragraph." QUALITY_KEYWORDS="france,paris|europe|western" .Agent/run-tools/kimi-general-prompt-repro.sh`
+- Result:
+  - exit: `0`
+  - quality: `pass`
+  - output begins: `France is a country in Western Europe...`
+  - TTFT: `8612.13 ms`
+  - decode: `16523.18 ms / 31 runs = 1.88 tok/s`
+  - RAM peak: `12722835456 bytes`
+  - final file cache: `12050386944 bytes`
+  - decode CPU fallback: `hits=0 misses=0 bytes=0 fallback_gguf=0`
+  - shadow files: none
+
+Shadow direct validation:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-direct-budget8-top1024-n32-france`
+- Extra env:
+  - `GGML_MOE_EXPERT_PACK_V2=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024/selected-iq1s-overlay-v2.expert-pack`
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024/selected-iq1s-overlay-manifest.tsv`
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE=1`
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE_OUT=<run>/v2-shadow-stage.csv`
+  - `GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ=1`
+- Result:
+  - exit: `0`
+  - quality: `pass`
+  - output begins: `France is a country in Western Europe...`
+  - TTFT: `7506.54 ms`
+  - decode: `19349.75 ms / 31 runs = 1.60 tok/s`
+  - RAM peak: `12731265024 bytes`
+  - final file cache: `12052197376 bytes`
+  - decode CPU fallback: `hits=0 misses=0 bytes=0 fallback_gguf=0`
+  - v2 preflight: `accepted=8174/68736`, `full_cover_calls=16`,
+    `manifest_rows=1024`
+  - shadow report:
+    - calls: `5583`
+    - covered entries: `5047`
+    - covered cache hits: `2826`
+    - staged entries: `2221`
+    - staged bytes: `5.976 GiB`
+    - staged saved bytes: `7.499 GiB`
+    - direct reads: `2221`
+    - direct bytes: `5.976 GiB`
+    - direct physical bytes: `5.976 GiB`
+    - direct fallbacks: `0`
+    - buffered reads: `0`
+    - read failures / H2D failures / alloc failures: `0 / 0 / 0`
+    - read wall: `1763.693 ms`
+    - H2D event: `326.373 ms`
+    - sync wall: `316.206 ms`
+    - total shadow wall: `2130.667 ms`
+
+Role split:
+
+| role | staged | staged GiB | staged saved GiB | read ms | H2D ms | total ms |
+|---|---:|---:|---:|---:|---:|---:|
+| `down` | 1228 | 3.325 | 5.411 | 968.670 | 179.815 | 1171.920 |
+| `gate` | 489 | 1.306 | 0.995 | 384.086 | 71.622 | 461.567 |
+| `up` | 504 | 1.346 | 1.094 | 410.937 | 74.936 | 497.180 |
+| total | 2221 | 5.976 | 7.499 | 1763.693 | 326.373 | 2130.667 |
+
+Comparison with the prior buffered/fread top1024 shadow baseline:
+
+| reader | RAM peak | file cache final | read ms | H2D ms | total shadow ms | read rate |
+|---|---:|---:|---:|---:|---:|---:|
+| buffered `fread` | 15144787968 B | 14462074880 B | 2181.764 | 546.917 | 2771.305 | 2.739 GiB/s |
+| O_DIRECT single-entry | 12731265024 B | 12052197376 B | 1763.693 | 326.373 | 2130.667 | 3.389 GiB/s |
+
+Interpretation:
+
+- The direct reader fixes the page-cache problem for v2 shadow staging:
+  top1024 no longer adds roughly `2.4 GiB` of extra file cache over the
+  default-off run.
+- It is also faster than buffered debug reads, reducing shadow wall by
+  `640.638 ms`.
+- But single-entry direct pread is still far below the pure expert-pack IO
+  bench of about `10.0-10.4 GiB/s`; it reaches only about `3.39 GiB/s`.
+- Therefore this result is useful instrumentation and a safer storage path, but
+  it is not enough to justify real partial dispatch by itself.
+- The next implementation step should be a batched v2 io_uring shadow reader
+  or integration of v2 payload reads into the existing expert-pack batched
+  scheduler. Do not promote v2 dispatch until that path shows that the
+  `7.499 GiB` staged saved bytes can reduce exposed critical-path wait on dev
+  and held-out prompts.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.

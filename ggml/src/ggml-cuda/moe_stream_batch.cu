@@ -3912,6 +3912,19 @@ static bool expert_pack_load_source(const char *path, int32_t source_idx, std::v
     return true;
 }
 
+static bool expert_pack_v2_shadow_direct_read_enabled() {
+    return expert_pack_env_bool("GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ", false);
+}
+
+static bool expert_pack_v2_shadow_direct_open_allowed() {
+    if (!expert_pack_v2_shadow_direct_read_enabled()) return false;
+    const char *io_backend_env = std::getenv("GGML_MOE_IO_BACKEND");
+    return io_backend_env && (
+        std::strcmp(io_backend_env, "direct") == 0 ||
+        std::strcmp(io_backend_env, "iouring") == 0 ||
+        std::strcmp(io_backend_env, "io_uring") == 0);
+}
+
 static bool expert_pack_v2_load_source(const char *path, int32_t source_idx, std::vector<expert_pack_v2_entry> &entries) {
     if (!path || !path[0]) return false;
 
@@ -3971,6 +3984,20 @@ static bool expert_pack_v2_load_source(const char *path, int32_t source_idx, std
     std::snprintf(source.path, sizeof(source.path), "%s", path);
 #if !defined(_WIN32)
     source.fd_direct = -1;
+    if (expert_pack_v2_shadow_direct_open_allowed()) {
+#if defined(O_DIRECT)
+        source.fd_direct = ::open(path, O_RDONLY | O_DIRECT);
+#endif
+        if (source.fd_direct < 0) {
+            std::fprintf(stderr,
+                "[moe_stream_batch] expert pack v2: shadow direct open failed; using buffered debug reads: %s\n",
+                path);
+        } else {
+            std::fprintf(stderr,
+                "[moe_stream_batch] expert pack v2: shadow direct reads enabled: %s\n",
+                path);
+        }
+    }
 #endif
     g_expert_pack_v2.sources.push_back(source);
     std::fprintf(stderr, "[moe_stream_batch] expert pack v2: loaded %lu metadata entries from %s\n",
@@ -9297,6 +9324,12 @@ struct expert_pack_v2_shadow_stage_state {
     std::atomic<uint64_t> read_failures{0};
     std::atomic<uint64_t> h2d_failures{0};
     std::atomic<uint64_t> alloc_failures{0};
+    std::atomic<uint64_t> direct_reads{0};
+    std::atomic<uint64_t> direct_bytes{0};
+    std::atomic<uint64_t> direct_physical_bytes{0};
+    std::atomic<uint64_t> direct_fallbacks{0};
+    std::atomic<uint64_t> buffered_reads{0};
+    std::atomic<uint64_t> buffered_bytes{0};
     double alloc_ms = 0.0;
     double read_ms = 0.0;
     double h2d_ms = 0.0;
@@ -9337,6 +9370,8 @@ static void expert_pack_v2_shadow_stage_report() {
         "[moe_stream_batch] expert pack v2 shadow stage report: "
         "calls=%llu staged_calls=%llu active=%llu covered=%llu staged=%llu "
         "staged_bytes=%.3f GiB read_failures=%llu h2d_failures=%llu alloc_failures=%llu "
+        "direct_reads=%llu direct_bytes=%.3f GiB direct_physical=%.3f GiB "
+        "direct_fallbacks=%llu buffered_reads=%llu buffered_bytes=%.3f GiB "
         "alloc_ms=%.3f read_ms=%.3f h2d_ms=%.3f sync_ms=%.3f total_ms=%.3f "
         "host_capacity=%.3f MiB dev_capacity=%.3f MiB\n",
         (unsigned long long)calls,
@@ -9348,6 +9383,12 @@ static void expert_pack_v2_shadow_stage_report() {
         (unsigned long long)s.read_failures.load(std::memory_order_relaxed),
         (unsigned long long)s.h2d_failures.load(std::memory_order_relaxed),
         (unsigned long long)s.alloc_failures.load(std::memory_order_relaxed),
+        (unsigned long long)s.direct_reads.load(std::memory_order_relaxed),
+        s.direct_bytes.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0),
+        s.direct_physical_bytes.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0),
+        (unsigned long long)s.direct_fallbacks.load(std::memory_order_relaxed),
+        (unsigned long long)s.buffered_reads.load(std::memory_order_relaxed),
+        s.buffered_bytes.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0),
         s.alloc_ms,
         s.read_ms,
         s.h2d_ms,
@@ -9362,6 +9403,75 @@ struct expert_pack_v2_shadow_candidate {
     const expert_pack_v2_entry *entry = nullptr;
     bool cache_hit = false;
 };
+
+struct expert_pack_v2_shadow_read_result {
+    bool ok = false;
+    bool direct = false;
+    bool direct_attempted = false;
+    size_t nread = 0;
+    size_t physical_bytes = 0;
+};
+
+static expert_pack_v2_shadow_read_result expert_pack_v2_shadow_read_entry_to_host(
+        const expert_pack_v2_entry *entry,
+        const char *tensor_name,
+        int expert_idx,
+        void *dst,
+        size_t dst_capacity) {
+    expert_pack_v2_shadow_read_result result;
+    if (!entry || !dst || dst_capacity < (size_t)entry->nbytes || entry->nbytes == 0) {
+        return result;
+    }
+
+#if !defined(_WIN32)
+    if (expert_pack_v2_shadow_direct_read_enabled()) {
+        expert_pack_source *source = expert_pack_v2_source_for_entry(entry);
+        if (source && source->fd_direct >= 0) {
+            result.direct_attempted = true;
+            const size_t sz = (size_t)entry->nbytes;
+            const uint64_t alignment = expert_pack_direct_alignment();
+            const uint64_t aligned_offset = (entry->offset / alignment) * alignment;
+            const size_t prefix = (size_t)(entry->offset - aligned_offset);
+            const size_t read_sz = (size_t)align_up_u64((uint64_t)prefix + (uint64_t)sz, alignment);
+            result.physical_bytes = read_sz;
+            if ((entry->offset % alignment) == 0 &&
+                    ((uintptr_t)dst % alignment) == 0 &&
+                    read_sz <= dst_capacity &&
+                    read_sz == (size_t)align_up_u64((uint64_t)sz, alignment)) {
+                if (expert_pack_direct_pread_all(source->fd_direct, dst, read_sz, entry->offset)) {
+                    result.ok = true;
+                    result.direct = true;
+                    result.nread = sz;
+                    return result;
+                }
+            } else {
+                void *bounce = nullptr;
+                if (posix_memalign(&bounce, alignment, read_sz) == 0 && bounce) {
+                    const bool ok = expert_pack_direct_pread_all(source->fd_direct, bounce, read_sz, aligned_offset);
+                    if (ok) {
+                        std::memcpy(dst, (const char *)bounce + prefix, sz);
+                        result.ok = true;
+                        result.direct = true;
+                        result.nread = sz;
+                        free(bounce);
+                        return result;
+                    }
+                    free(bounce);
+                }
+            }
+        }
+    }
+#else
+    (void)entry;
+#endif
+
+    size_t nread = 0;
+    result.ok = ggml_cuda_moe_expert_pack_v2_read_debug(
+        tensor_name, expert_idx, dst, dst_capacity, &nread);
+    result.nread = nread;
+    result.direct = false;
+    return result;
+}
 
 static void expert_pack_v2_shadow_stage_record(
         const char *phase,
@@ -9497,11 +9607,13 @@ static void expert_pack_v2_shadow_stage_record(
                             "covered_saved_bytes,staged_bytes,staged_saved_bytes,"
                             "max_entry_bytes,host_capacity,dev_capacity,alloc_grew,"
                             "alloc_ms,read_ms,h2d_ms,sync_ms,total_ms,read_failures,"
-                            "h2d_failures\n");
+                            "h2d_failures,direct_reads,direct_bytes,"
+                            "direct_physical_bytes,direct_fallbacks,buffered_reads,"
+                            "buffered_bytes\n");
                         s.header_written = true;
                     }
                     std::fprintf(f,
-                        "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,0,%llu,%zu,%zu,%zu,0,0.000000,0.000000,0.000000,0.000000,0.000000,0,0\n",
+                        "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,0,%llu,%zu,%zu,%zu,0,0.000000,0.000000,0.000000,0.000000,0.000000,0,0,0,0,0,0,0,0\n",
                         (unsigned long long)call_idx,
                         phase ? phase : "",
                         role ? role : "",
@@ -9544,6 +9656,12 @@ static void expert_pack_v2_shadow_stage_record(
     uint64_t staged_bytes = 0;
     uint64_t read_failures = 0;
     uint64_t h2d_failures = 0;
+    uint64_t direct_reads = 0;
+    uint64_t direct_bytes = 0;
+    uint64_t direct_physical_bytes = 0;
+    uint64_t direct_fallbacks = 0;
+    uint64_t buffered_reads = 0;
+    uint64_t buffered_bytes = 0;
     bool alloc_grew = false;
 
     const auto total_t0 = std::chrono::steady_clock::now();
@@ -9569,15 +9687,26 @@ static void expert_pack_v2_shadow_stage_record(
 
         for (const expert_pack_v2_shadow_candidate &candidate : candidates) {
             const size_t entry_bytes = (size_t)candidate.entry->nbytes;
-            size_t nread = 0;
             const auto read_t0 = std::chrono::steady_clock::now();
-            const bool read_ok = ggml_cuda_moe_expert_pack_v2_read_debug(
-                tensor_name, candidate.expert_idx, s.host, s.host_sz, &nread);
+            const expert_pack_v2_shadow_read_result read_result =
+                expert_pack_v2_shadow_read_entry_to_host(
+                    candidate.entry, tensor_name, candidate.expert_idx, s.host, s.host_sz);
             const auto read_t1 = std::chrono::steady_clock::now();
             read_ms += std::chrono::duration<double, std::milli>(read_t1 - read_t0).count();
-            if (!read_ok || nread != entry_bytes) {
+            if (!read_result.ok || read_result.nread != entry_bytes) {
                 ++read_failures;
                 continue;
+            }
+            if (read_result.direct) {
+                ++direct_reads;
+                direct_bytes += entry_bytes;
+                direct_physical_bytes += read_result.physical_bytes;
+            } else {
+                ++buffered_reads;
+                buffered_bytes += entry_bytes;
+            }
+            if (read_result.direct_attempted && !read_result.direct) {
+                ++direct_fallbacks;
             }
             if (!s.event_failed) {
                 cudaEventRecord(s.copy_start, stream);
@@ -9619,6 +9748,12 @@ static void expert_pack_v2_shadow_stage_record(
     s.staged_bytes.fetch_add(staged_bytes, std::memory_order_relaxed);
     s.read_failures.fetch_add(read_failures, std::memory_order_relaxed);
     s.h2d_failures.fetch_add(h2d_failures, std::memory_order_relaxed);
+    s.direct_reads.fetch_add(direct_reads, std::memory_order_relaxed);
+    s.direct_bytes.fetch_add(direct_bytes, std::memory_order_relaxed);
+    s.direct_physical_bytes.fetch_add(direct_physical_bytes, std::memory_order_relaxed);
+    s.direct_fallbacks.fetch_add(direct_fallbacks, std::memory_order_relaxed);
+    s.buffered_reads.fetch_add(buffered_reads, std::memory_order_relaxed);
+    s.buffered_bytes.fetch_add(buffered_bytes, std::memory_order_relaxed);
     {
         std::lock_guard<std::mutex> lk(s.mu);
         s.alloc_ms += alloc_ms;
@@ -9638,13 +9773,15 @@ static void expert_pack_v2_shadow_stage_record(
                         "reject_no_entry,reject_unsupported,reject_manifest_mismatch,"
                         "reject_shape_mismatch,reject_not_smaller,covered_bytes,"
                         "covered_saved_bytes,staged_bytes,staged_saved_bytes,"
-                        "max_entry_bytes,host_capacity,dev_capacity,alloc_grew,"
-                        "alloc_ms,read_ms,h2d_ms,sync_ms,total_ms,read_failures,"
-                        "h2d_failures\n");
+                            "max_entry_bytes,host_capacity,dev_capacity,alloc_grew,"
+                            "alloc_ms,read_ms,h2d_ms,sync_ms,total_ms,read_failures,"
+                            "h2d_failures,direct_reads,direct_bytes,"
+                            "direct_physical_bytes,direct_fallbacks,buffered_reads,"
+                            "buffered_bytes\n");
                     s.header_written = true;
                 }
                 std::fprintf(f,
-                    "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%zu,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,%llu,%llu,%zu,%zu,%zu,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%llu,%llu\n",
+                    "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%zu,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,%llu,%llu,%zu,%zu,%zu,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu\n",
                     (unsigned long long)call_idx,
                     phase ? phase : "",
                     role ? role : "",
@@ -9680,7 +9817,13 @@ static void expert_pack_v2_shadow_stage_record(
                     sync_ms,
                     total_ms,
                     (unsigned long long)read_failures,
-                    (unsigned long long)h2d_failures);
+                    (unsigned long long)h2d_failures,
+                    (unsigned long long)direct_reads,
+                    (unsigned long long)direct_bytes,
+                    (unsigned long long)direct_physical_bytes,
+                    (unsigned long long)direct_fallbacks,
+                    (unsigned long long)buffered_reads,
+                    (unsigned long long)buffered_bytes);
                 std::fclose(f);
             }
         }
