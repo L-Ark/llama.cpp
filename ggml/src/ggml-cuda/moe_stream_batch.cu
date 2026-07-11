@@ -1483,6 +1483,8 @@ struct host_prefetch_state {
     std::mutex mu;
     std::condition_variable cv;
     std::thread worker;
+    std::atomic<uint64_t> ready_count{0};
+    std::atomic<uint64_t> empty_misses{0};
     uint64_t calls = 0;
     uint64_t matched = 0;
     uint64_t resync = 0;
@@ -1500,6 +1502,37 @@ struct host_prefetch_state {
     uint64_t planned_enqueued = 0;
     uint64_t planned_dequeued = 0;
     uint64_t planned_duplicate_skips = 0;
+};
+
+struct predictive_prefetch_layer_state {
+    int experts[16][8] = {};
+    int n_active[16] = {};
+    int cursor = 0;
+    int filled = 0;
+};
+
+struct predictive_prefetch_state {
+    bool inited = false;
+    bool enabled = false;
+    bool layers_all = false;
+    bool layer_enabled[128] = {};
+    bool role_up = true;
+    bool role_gate = true;
+    bool role_down = false;
+    int window = 4;
+    int topn = 1;
+    int max_active = 8;
+    int min_history = 4;
+    predictive_prefetch_layer_state layers[128];
+    std::mutex mu;
+    uint64_t calls = 0;
+    uint64_t layer_disabled = 0;
+    uint64_t prompt_skips = 0;
+    uint64_t no_history = 0;
+    uint64_t predicted = 0;
+    uint64_t submitted = 0;
+    uint64_t skipped_vram = 0;
+    uint64_t skipped_invalid = 0;
 };
 
 struct batch_ttft_trace_entry {
@@ -1520,6 +1553,7 @@ static std::vector<batch_route_trace_entry> g_route_trace;
 static std::vector<batch_route_detail_entry> g_route_detail;
 static trace_prefetch_state g_trace_prefetch;
 static host_prefetch_state g_host_prefetch;
+static predictive_prefetch_state g_predictive_prefetch;
 static std::mutex g_route_profile_mu;
 static std::mutex g_route_detail_mu;
 static const char * g_route_profile_out = nullptr;
@@ -5063,7 +5097,7 @@ static void host_prefetch_report_atexit() {
     if (!g_host_prefetch.enabled) return;
     std::fprintf(stderr,
         "[moe_stream_batch] host prefetch: calls=%lu matched=%lu resync=%lu submitted=%lu hits=%lu misses=%lu "
-        "evicted=%lu read_failures=%lu alloc_failures=%lu duplicate_skips=%lu profile_pinned_skips=%lu reserved_skips=%lu no_slot=%lu "
+        "empty_misses=%lu ready=%lu evicted=%lu read_failures=%lu alloc_failures=%lu duplicate_skips=%lu profile_pinned_skips=%lu reserved_skips=%lu no_slot=%lu "
         "planned_enqueued=%lu planned_dequeued=%lu planned_duplicate_skips=%lu scan_passes=%lu "
         "cursor=%zu produce_cursor=%zu/%zu skip=%zu used=%.2f MiB slots=%zu\n",
         g_host_prefetch.calls,
@@ -5072,6 +5106,8 @@ static void host_prefetch_report_atexit() {
         g_host_prefetch.submitted,
         g_host_prefetch.hits,
         g_host_prefetch.misses,
+        (unsigned long)g_host_prefetch.empty_misses.load(),
+        (unsigned long)g_host_prefetch.ready_count.load(),
         g_host_prefetch.evicted,
         g_host_prefetch.read_failures,
         g_host_prefetch.alloc_failures,
@@ -5105,6 +5141,11 @@ static size_t host_prefetch_env_mib(const char *name, size_t fallback_mib, size_
     if (value < lo_mib) value = lo_mib;
     if (value > hi_mib) value = hi_mib;
     return value * 1024ULL * 1024ULL;
+}
+
+static bool predictive_host_prefetch_requested() {
+    const char *env = std::getenv("GGML_MOE_PREDICTIVE_HOST_PREFETCH");
+    return env && env[0] && env[0] != '0';
 }
 
 static bool host_prefetch_slot_alloc(host_prefetch_slot &slot, size_t nbytes) {
@@ -5148,6 +5189,10 @@ static int host_prefetch_find_free_slot_locked(size_t nbytes) {
         slot.ready = false;
         slot.reserved = false;
         slot.entry = nullptr;
+        uint64_t ready = g_host_prefetch.ready_count.load(std::memory_order_relaxed);
+        while (ready > 0 && !g_host_prefetch.ready_count.compare_exchange_weak(
+                ready, ready - 1, std::memory_order_relaxed, std::memory_order_relaxed)) {
+        }
         ++g_host_prefetch.evicted;
     }
     const size_t alloc_sz = (size_t)align_up_u64((uint64_t)nbytes, (uint64_t)expert_pack_direct_alignment());
@@ -5280,6 +5325,7 @@ static void host_prefetch_worker() {
                 slot.reserved = false;
                 slot.ready = true;
                 g_host_prefetch.ready[host_prefetch_key(slot.tensor, slot.expert_idx, slot.nbytes)] = slot_idx;
+                g_host_prefetch.ready_count.fetch_add(1, std::memory_order_release);
                 ++g_host_prefetch.submitted;
             } else {
                 slot.ready = false;
@@ -5323,8 +5369,9 @@ static void host_prefetch_init_once() {
     if (g_host_prefetch.inited) return;
     const char *path = std::getenv("GGML_MOE_HOST_PREFETCH");
     const char *planned_env = std::getenv("GGML_MOE_PLANNED_HOST_PREFETCH");
+    const bool predictive_env = predictive_host_prefetch_requested();
     g_host_prefetch.planned_enabled = planned_env && planned_env[0] && planned_env[0] != '0';
-    if ((!path || !path[0]) && !g_host_prefetch.planned_enabled) {
+    if ((!path || !path[0]) && !g_host_prefetch.planned_enabled && !predictive_env) {
         g_host_prefetch.inited = true;
         return;
     }
@@ -5348,11 +5395,12 @@ static void host_prefetch_init_once() {
     g_host_prefetch.worker = std::thread(host_prefetch_worker);
     g_host_prefetch.cv.notify_all();
     std::fprintf(stderr,
-        "[moe_stream_batch] host prefetch: loaded %zu events from %s lead_events=%zu skip_events=%zu slots=%d max=%.2f MiB planned=%d\n",
+        "[moe_stream_batch] host prefetch: loaded %zu events from %s lead_events=%zu skip_events=%zu slots=%d max=%.2f MiB planned=%d predictive=%d\n",
         g_host_prefetch.trace.size(), (path && path[0]) ? path : "(none)",
         g_host_prefetch.lead_events, g_host_prefetch.skip_events, slots,
         g_host_prefetch.max_bytes / (1024.0 * 1024.0),
-        g_host_prefetch.planned_enabled ? 1 : 0);
+        g_host_prefetch.planned_enabled ? 1 : 0,
+        predictive_env ? 1 : 0);
 }
 
 static void host_prefetch_on_route(const char *tensor_name, int expert_idx, size_t expert_bytes) {
@@ -5381,11 +5429,15 @@ static void host_prefetch_on_route(const char *tensor_name, int expert_idx, size
     g_host_prefetch.cv.notify_one();
 }
 
-static void host_prefetch_submit_planned(const char *tensor_name, int expert_idx, size_t expert_bytes) {
+static bool host_prefetch_submit_common(
+        const char *tensor_name,
+        int expert_idx,
+        size_t expert_bytes,
+        bool require_planned_enabled) {
     host_prefetch_init_once();
-    if (!g_host_prefetch.enabled || !g_host_prefetch.planned_enabled ||
+    if (!g_host_prefetch.enabled || (require_planned_enabled && !g_host_prefetch.planned_enabled) ||
             !tensor_name || !tensor_name[0] || expert_idx < 0 || expert_bytes == 0) {
-        return;
+        return false;
     }
     batch_route_trace_entry e;
     e.seq = 0;
@@ -5398,16 +5450,275 @@ static void host_prefetch_submit_planned(const char *tensor_name, int expert_idx
     auto ready_it = g_host_prefetch.ready.find(key);
     if (ready_it != g_host_prefetch.ready.end()) {
         ++g_host_prefetch.planned_duplicate_skips;
-        return;
+        return false;
     }
     if (g_host_prefetch.planned_queued.find(key) != g_host_prefetch.planned_queued.end()) {
         ++g_host_prefetch.planned_duplicate_skips;
-        return;
+        return false;
     }
     g_host_prefetch.planned_queued[key] = g_host_prefetch.planned.size();
     g_host_prefetch.planned.push_back(e);
     ++g_host_prefetch.planned_enqueued;
     g_host_prefetch.cv.notify_one();
+    return true;
+}
+
+static void host_prefetch_submit_planned(const char *tensor_name, int expert_idx, size_t expert_bytes) {
+    (void)host_prefetch_submit_common(tensor_name, expert_idx, expert_bytes, true);
+}
+
+static bool host_prefetch_submit_predicted(const char *tensor_name, int expert_idx, size_t expert_bytes) {
+    return host_prefetch_submit_common(tensor_name, expert_idx, expert_bytes, false);
+}
+
+static void predictive_host_prefetch_report_atexit() {
+    std::lock_guard<std::mutex> lk(g_predictive_prefetch.mu);
+    if (!g_predictive_prefetch.enabled) return;
+    std::fprintf(stderr,
+        "[moe_stream_batch] predictive host prefetch: calls=%lu layer_disabled=%lu prompt_skips=%lu "
+        "no_history=%lu predicted=%lu submitted=%lu skipped_vram=%lu skipped_invalid=%lu "
+        "window=%d topn=%d max_active=%d min_history=%d roles=%s%s%s layers_all=%d\n",
+        g_predictive_prefetch.calls,
+        g_predictive_prefetch.layer_disabled,
+        g_predictive_prefetch.prompt_skips,
+        g_predictive_prefetch.no_history,
+        g_predictive_prefetch.predicted,
+        g_predictive_prefetch.submitted,
+        g_predictive_prefetch.skipped_vram,
+        g_predictive_prefetch.skipped_invalid,
+        g_predictive_prefetch.window,
+        g_predictive_prefetch.topn,
+        g_predictive_prefetch.max_active,
+        g_predictive_prefetch.min_history,
+        g_predictive_prefetch.role_up ? "up" : "",
+        g_predictive_prefetch.role_gate ? ",gate" : "",
+        g_predictive_prefetch.role_down ? ",down" : "",
+        g_predictive_prefetch.layers_all ? 1 : 0);
+}
+
+static bool predictive_prefetch_parse_layer_list(const char *env, bool *layers_all, bool layer_enabled[128]) {
+    if (!env || !env[0]) return false;
+    if (std::strcmp(env, "all") == 0 || std::strcmp(env, "*") == 0) {
+        *layers_all = true;
+        return true;
+    }
+    char buf[512];
+    std::snprintf(buf, sizeof(buf), "%s", env);
+    bool any = false;
+    char *save = nullptr;
+    for (char *tok = ::strtok_r(buf, ",;:", &save); tok; tok = ::strtok_r(nullptr, ",;:", &save)) {
+        while (*tok == ' ' || *tok == '\t') ++tok;
+        if (!*tok) continue;
+        char *end = nullptr;
+        long layer = std::strtol(tok, &end, 10);
+        if (end == tok || layer < 0 || layer >= 128) continue;
+        layer_enabled[layer] = true;
+        any = true;
+    }
+    return any;
+}
+
+static void predictive_prefetch_parse_roles(const char *env) {
+    if (!env || !env[0]) return;
+    g_predictive_prefetch.role_up = false;
+    g_predictive_prefetch.role_gate = false;
+    g_predictive_prefetch.role_down = false;
+    if (std::strstr(env, "all")) {
+        g_predictive_prefetch.role_up = true;
+        g_predictive_prefetch.role_gate = true;
+        g_predictive_prefetch.role_down = true;
+        return;
+    }
+    if (std::strstr(env, "upgate")) {
+        g_predictive_prefetch.role_up = true;
+        g_predictive_prefetch.role_gate = true;
+    }
+    if (std::strstr(env, "up")) g_predictive_prefetch.role_up = true;
+    if (std::strstr(env, "gate")) g_predictive_prefetch.role_gate = true;
+    if (std::strstr(env, "down")) g_predictive_prefetch.role_down = true;
+}
+
+static void predictive_host_prefetch_init_once() {
+    if (g_predictive_prefetch.inited) return;
+    std::lock_guard<std::mutex> lk(g_predictive_prefetch.mu);
+    if (g_predictive_prefetch.inited) return;
+    g_predictive_prefetch.inited = true;
+    if (!predictive_host_prefetch_requested()) return;
+
+    const char *layers_env = std::getenv("GGML_MOE_PREDICTIVE_HOST_PREFETCH_LAYERS");
+    if (!predictive_prefetch_parse_layer_list(
+            layers_env, &g_predictive_prefetch.layers_all, g_predictive_prefetch.layer_enabled)) {
+        std::fprintf(stderr,
+            "[moe_stream_batch] predictive host prefetch requested but no valid "
+            "GGML_MOE_PREDICTIVE_HOST_PREFETCH_LAYERS was provided\n");
+        return;
+    }
+    g_predictive_prefetch.window = host_prefetch_env_int("GGML_MOE_PREDICTIVE_HOST_PREFETCH_WINDOW", 4, 1, 16);
+    g_predictive_prefetch.topn = host_prefetch_env_int("GGML_MOE_PREDICTIVE_HOST_PREFETCH_TOPN", 1, 1, 16);
+    g_predictive_prefetch.max_active = host_prefetch_env_int("GGML_MOE_PREDICTIVE_HOST_PREFETCH_MAX_ACTIVE", 8, 1, 8);
+    g_predictive_prefetch.min_history = host_prefetch_env_int(
+        "GGML_MOE_PREDICTIVE_HOST_PREFETCH_MIN_HISTORY", g_predictive_prefetch.window, 1, 16);
+    if (g_predictive_prefetch.min_history > g_predictive_prefetch.window) {
+        g_predictive_prefetch.min_history = g_predictive_prefetch.window;
+    }
+    predictive_prefetch_parse_roles(std::getenv("GGML_MOE_PREDICTIVE_HOST_PREFETCH_ROLES"));
+    if (!g_predictive_prefetch.role_up && !g_predictive_prefetch.role_gate && !g_predictive_prefetch.role_down) {
+        std::fprintf(stderr, "[moe_stream_batch] predictive host prefetch disabled: no roles selected\n");
+        return;
+    }
+    g_predictive_prefetch.enabled = true;
+    std::atexit(predictive_host_prefetch_report_atexit);
+    std::fprintf(stderr,
+        "[moe_stream_batch] predictive host prefetch active: window=%d topn=%d max_active=%d min_history=%d roles=%s%s%s layers=%s\n",
+        g_predictive_prefetch.window,
+        g_predictive_prefetch.topn,
+        g_predictive_prefetch.max_active,
+        g_predictive_prefetch.min_history,
+        g_predictive_prefetch.role_up ? "up" : "",
+        g_predictive_prefetch.role_gate ? ",gate" : "",
+        g_predictive_prefetch.role_down ? ",down" : "",
+        g_predictive_prefetch.layers_all ? "all" : layers_env);
+}
+
+struct predictive_prefetch_candidate {
+    int expert = -1;
+    int count = 0;
+    int recent = 0;
+};
+
+static void predictive_prefetch_add_candidate(
+        std::vector<predictive_prefetch_candidate> &candidates,
+        int expert,
+        int recent) {
+    for (predictive_prefetch_candidate &cand : candidates) {
+        if (cand.expert == expert) {
+            ++cand.count;
+            cand.recent = std::max(cand.recent, recent);
+            return;
+        }
+    }
+    predictive_prefetch_candidate cand;
+    cand.expert = expert;
+    cand.count = 1;
+    cand.recent = recent;
+    candidates.push_back(cand);
+}
+
+static bool predictive_prefetch_submit_role(
+        const char *tensor_name,
+        int expert,
+        size_t expert_bytes) {
+    if (!tensor_name || !tensor_name[0] || expert < 0 || expert_bytes == 0) return false;
+    batch_vram_cache *cache = batch_cache_get(expert_bytes);
+    if (cache && batch_cache_find_slot(cache, batch_key_hash(tensor_name, expert)) >= 0) {
+        ++g_predictive_prefetch.skipped_vram;
+        return false;
+    }
+    return host_prefetch_submit_predicted(tensor_name, expert, expert_bytes);
+}
+
+static bool predictive_prefetch_down_tensor(
+        const char *down_name,
+        int expert,
+        size_t *expert_bytes_out) {
+    if (!down_name || !down_name[0] || expert < 0) return false;
+    std::lock_guard<std::mutex> lk(g_registered_mu);
+    for (const registered_tensor &t : g_registered_tensors) {
+        if (std::strcmp(t.name, down_name) == 0 && expert < t.n_as && t.expert_bytes > 0) {
+            if (expert_bytes_out) *expert_bytes_out = t.expert_bytes;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void predictive_host_prefetch_on_upgate(
+        bool prompt_mode,
+        const char *up_name,
+        const char *gate_name,
+        const char *down_name,
+        size_t up_expert_bytes,
+        size_t gate_expert_bytes,
+        const int *active_experts,
+        int n_active) {
+    predictive_host_prefetch_init_once();
+    if (!g_predictive_prefetch.enabled) return;
+
+    std::lock_guard<std::mutex> lk(g_predictive_prefetch.mu);
+    ++g_predictive_prefetch.calls;
+    if (prompt_mode) {
+        ++g_predictive_prefetch.prompt_skips;
+        return;
+    }
+    int layer = -1;
+    char kind[12] = {};
+    batch_route_detail_parse_name(up_name, layer, kind, sizeof(kind));
+    if (layer < 0 || layer >= 128 ||
+            (!g_predictive_prefetch.layers_all && !g_predictive_prefetch.layer_enabled[layer])) {
+        ++g_predictive_prefetch.layer_disabled;
+        return;
+    }
+
+    predictive_prefetch_layer_state &st = g_predictive_prefetch.layers[layer];
+    const int stored = std::min(std::min(n_active, g_predictive_prefetch.max_active), 8);
+    for (int i = 0; i < 8; ++i) {
+        st.experts[st.cursor][i] = i < stored ? active_experts[i] : -1;
+    }
+    st.n_active[st.cursor] = stored;
+    st.cursor = (st.cursor + 1) % g_predictive_prefetch.window;
+    if (st.filled < g_predictive_prefetch.window) ++st.filled;
+    if (st.filled < g_predictive_prefetch.min_history) {
+        ++g_predictive_prefetch.no_history;
+        return;
+    }
+
+    std::vector<predictive_prefetch_candidate> candidates;
+    candidates.reserve((size_t)g_predictive_prefetch.window * (size_t)g_predictive_prefetch.max_active);
+    for (int h = 0; h < st.filled; ++h) {
+        const int idx = (st.cursor - st.filled + h + g_predictive_prefetch.window) % g_predictive_prefetch.window;
+        const int recent = h + 1;
+        for (int j = 0; j < st.n_active[idx] && j < 8; ++j) {
+            const int expert = st.experts[idx][j];
+            if (expert >= 0) {
+                predictive_prefetch_add_candidate(candidates, expert, recent);
+            }
+        }
+    }
+    if (candidates.empty()) {
+        ++g_predictive_prefetch.no_history;
+        return;
+    }
+    std::sort(candidates.begin(), candidates.end(), [](const predictive_prefetch_candidate &a, const predictive_prefetch_candidate &b) {
+        if (a.count != b.count) return a.count > b.count;
+        if (a.recent != b.recent) return a.recent > b.recent;
+        return a.expert < b.expert;
+    });
+
+    const int limit = std::min((int)candidates.size(), g_predictive_prefetch.topn);
+    for (int i = 0; i < limit; ++i) {
+        const int expert = candidates[(size_t)i].expert;
+        ++g_predictive_prefetch.predicted;
+        if (g_predictive_prefetch.role_up) {
+            if (predictive_prefetch_submit_role(up_name, expert, up_expert_bytes)) {
+                ++g_predictive_prefetch.submitted;
+            }
+        }
+        if (g_predictive_prefetch.role_gate) {
+            if (predictive_prefetch_submit_role(gate_name, expert, gate_expert_bytes)) {
+                ++g_predictive_prefetch.submitted;
+            }
+        }
+        if (g_predictive_prefetch.role_down) {
+            size_t down_expert_bytes = 0;
+            if (predictive_prefetch_down_tensor(down_name, expert, &down_expert_bytes)) {
+                if (predictive_prefetch_submit_role(down_name, expert, down_expert_bytes)) {
+                    ++g_predictive_prefetch.submitted;
+                }
+            } else {
+                ++g_predictive_prefetch.skipped_invalid;
+            }
+        }
+    }
 }
 
 static bool host_prefetch_copy_h2d(
@@ -5419,6 +5730,10 @@ static bool host_prefetch_copy_h2d(
         cudaStream_t st) {
     host_prefetch_init_once();
     if (!g_host_prefetch.enabled || !pack_entry || !tensor_name || !tensor_name[0]) return false;
+    if (g_host_prefetch.ready_count.load(std::memory_order_acquire) == 0) {
+        g_host_prefetch.empty_misses.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
     void *host = nullptr;
     size_t slot_idx = SIZE_MAX;
     {
@@ -5446,6 +5761,10 @@ static bool host_prefetch_copy_h2d(
         slot.reserved = false;
         slot.entry = nullptr;
         g_host_prefetch.ready.erase(it);
+        uint64_t ready = g_host_prefetch.ready_count.load(std::memory_order_relaxed);
+        while (ready > 0 && !g_host_prefetch.ready_count.compare_exchange_weak(
+                ready, ready - 1, std::memory_order_acquire, std::memory_order_relaxed)) {
+        }
         ++g_host_prefetch.hits;
     }
     const bool ok = host && cudaMemcpyAsync(dst, host, sz, cudaMemcpyHostToDevice, st) == cudaSuccess;
@@ -12818,6 +13137,15 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
                 clear_stage_jobs(gate_jobs);
                 return mixed_overlap_fail("mixed_copy_gate");
             }
+            predictive_host_prefetch_on_upgate(
+                prompt_mode,
+                up_key_name,
+                gate_key_name,
+                down_shadow_name,
+                up_expert_bytes,
+                gate_expert_bytes,
+                active_experts,
+                n_active);
             if (profile && bc.ev_gate_compute_start) cudaEventRecord(bc.ev_gate_compute_start, bc.gate_stream);
             if (cudaMemsetAsync(bc.d_gate, 0, (size_t)n_active * (size_t)ne01 * sizeof(float), bc.gate_stream) != cudaSuccess) {
                 return mixed_overlap_fail("mixed_memset_gate");

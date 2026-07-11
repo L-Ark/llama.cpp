@@ -404,6 +404,104 @@ Predictive prefetch acceptance screen:
   - A/B must verify that total IO bytes do not rise enough to erase the wait
     reduction.
 
+Current implementation step: default-off predictive planned host prefetch
+
+- Timestamp: 2026-07-11 CST.
+- Code behavior:
+  - adds `GGML_MOE_PREDICTIVE_HOST_PREFETCH=1`;
+  - requires `GGML_MOE_PREDICTIVE_HOST_PREFETCH_LAYERS`, otherwise no
+    prediction is submitted;
+  - default window/top-n: `W=4`, `topn=1`;
+  - default roles: `up,gate`; down is supported by
+    `GGML_MOE_PREDICTIVE_HOST_PREFETCH_ROLES=all|down` but remains off for the
+    first A/B;
+  - uses the existing host-prefetch worker and planned queue;
+  - keeps existing `GGML_MOE_PLANNED_HOST_PREFETCH` semantics unchanged, so
+    enabling predictive prefetch does not automatically enable current-demand
+    planned prefetch;
+  - submits predictions only after current mixed up/gate copy is complete, to
+    avoid competing with the current layer's exposed up/gate miss load.
+- Build:
+  - command: `cmake --build build-cuda-batch --target ggml-cuda -j2`;
+  - result: passed; warnings are existing unused/missing-declaration/truncation
+    warnings.
+- First A/B env:
+  - `GGML_MOE_PREDICTIVE_HOST_PREFETCH=1`;
+  - `GGML_MOE_PREDICTIVE_HOST_PREFETCH_LAYERS=48,9,37,56,46`;
+  - `GGML_MOE_PREDICTIVE_HOST_PREFETCH_WINDOW=4`;
+  - `GGML_MOE_PREDICTIVE_HOST_PREFETCH_TOPN=1`;
+  - `GGML_MOE_PREDICTIVE_HOST_PREFETCH_ROLES=upgate`;
+  - `GGML_MOE_HOST_PREFETCH_SLOTS=16`;
+  - `GGML_MOE_HOST_PREFETCH_MAX_MIB=128`.
+- A/B prompts:
+  - `dev_japan_factual`;
+  - `dev_python_reverse`.
+- Promotion gate:
+  - quality must pass on both;
+  - average token rate must improve without a Python regression;
+  - host RAM must stay below `15900000000`;
+  - total expert-pack bytes and `io_uring_wait` must not rise enough to erase
+    the host-prefetch hit benefit.
+
+Result:
+
+- Code build:
+  - `cmake --build build-cuda-batch --target ggml-cuda -j2` passed;
+  - added a `ready_count` fast path so enabling host-prefetch with an empty
+    ready queue does not take the host-prefetch mutex for every demand miss.
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-predictive-prefetch-dev2-ab2`.
+- Candidate `precision5`:
+  - layers: `48,9,37,56,46`;
+  - Japan: quality pass, `1.65 tok/s`, TTFT `8955.81 ms`,
+    decode `18750.35 ms / 31`, RAM peak `12762730496`,
+    IO bytes `223.11 GB`, `io_uring_wait=19.07 s`;
+  - Python reverse: quality pass, `1.43 tok/s`, TTFT `9406.11 ms`,
+    decode `21680.66 ms / 31`, RAM peak `12759486464`,
+    IO bytes `255.88 GB`, `io_uring_wait=23.14 s`;
+  - predictive counters: `predicted=112`, `submitted=0`,
+    `skipped_vram=224`, `hits=0`.
+- Candidate `wait5`:
+  - layers: `14,33,32,28,29`;
+  - Japan: quality pass, `1.67 tok/s`, TTFT `9020.59 ms`,
+    decode `18545.44 ms / 31`, RAM peak `12769058816`,
+    IO bytes `223.11 GB`, `io_uring_wait=19.09 s`;
+  - Python reverse: quality pass, `1.52 tok/s`, TTFT `9395.73 ms`,
+    decode `20434.09 ms / 31`, RAM peak `12762267648`,
+    IO bytes `255.88 GB`, `io_uring_wait=21.81 s`;
+  - predictive counters: `predicted=140`, `submitted=0`,
+    `skipped_vram=280`, `hits=0`.
+- All-layer top-1 smoke:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-predictive-prefetch-all-smoke/dev_japan_all`;
+  - quality pass, `1.65 tok/s`, TTFT `9492.44 ms`,
+    decode `18802.33 ms / 31`, RAM peak `12767559680`;
+  - counters: `predicted=896`, `submitted=0`, `skipped_vram=1792`,
+    `hits=0`.
+- All-layer top-2 smoke:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-predictive-prefetch-top2-all-smoke/dev_japan_top2_all`;
+  - quality pass, `1.64 tok/s`, TTFT `8761.06 ms`,
+    decode `18891.12 ms / 31`, RAM peak `12779397120`;
+  - counters: `predicted=1792`, `submitted=2`, `skipped_vram=3582`,
+    `host_prefetch_hits=0`, `ready=2`.
+- Default-off smoke:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-predictive-defaultoff-france-smoke`;
+  - quality pass, `1.68 tok/s`, TTFT `9837.23 ms`,
+    decode `18501.71 ms / 31`, RAM peak `12768358400`;
+  - confirms default-off behavior remains in the normal N32 range.
+- Decision:
+  - do not promote predictive host prefetch as an optimization;
+  - keep only as default-off probe/instrumentation if retained in code;
+  - reason: high-confidence predicted experts are already resident in VRAM, so
+    prediction mostly becomes `skipped_vram`; the few second-rank submissions
+    did not produce host-prefetch hits.
+- Next direction:
+  - stop small-model/current-history expert prediction for now;
+  - focus on lowering bytes for nonresident experts or changing pack/layout so
+    existing demand reads become larger and more contiguous.
+
 ## Current execution goal: Kimi CPU/defer GPU-extension parity
 
 Timestamp: 2026-07-11 CST.
