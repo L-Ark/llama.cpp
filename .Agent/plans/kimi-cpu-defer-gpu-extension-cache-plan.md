@@ -941,6 +941,130 @@ Build-tool preparation:
      fallback, reject expansion and stay at top1024 for dispatch design.
    - No SOTA claim is allowed from this screen.
 
+## Progress update: top2048 v2 coverage and batchability screen
+
+Timestamp: 2026-07-11 CST.
+
+Builder preparation:
+
+- Added `--header-cache`, `--range-backend`, and `--range-timeout` to
+  `.Agent/run-tools/kimi_iq1s_selected_payload_pack.py`.
+- This was needed because the first top2048 build attempt waited on a remote
+  HTTPS header range for `5m22s` and produced no pack.
+- Metadata-only smoke:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048-metadata-cache-curl-smoke`
+  - selected entries: `2048`
+  - payload bytes: `5881774080`
+  - metadata-only pack bytes: `380928`
+
+Top2048 pack build:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048`
+- Command:
+  `.Agent/run-tools/kimi_iq1s_selected_payload_pack.py --selected-plan-tsv /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-hotset-bound-dev7/budget-8p0-selected-plan.tsv --out-dir <run> --max-entries 2048 --include-types IQ1_S,Q2_K --header-cache /root/lfz/tmp/gp32-iq1s-header-preflight/Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5.head16m --range-backend curl --range-timeout 120`
+- Result:
+  - selected entries: `2048`
+  - payload bytes: `5881774080`
+  - pack bytes: `5882155008`
+  - pack file:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-v2.expert-pack`
+  - manifest:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-manifest.tsv`
+  - wall time: `46:15.44`
+  - max RSS: `5827488 KB`
+
+Top2048 N32 shadow run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-iouring-localring-budget8-top2048-n32-france`
+- Prompt: `Please introduce France in a short paragraph.`
+- Extra env:
+  - `GGML_MOE_EXPERT_PACK_V2=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-v2.expert-pack`
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-manifest.tsv`
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE=1`
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE_OUT=<run>/v2-shadow-stage.csv`
+  - `GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ=1`
+  - `GGML_MOE_EXPERT_PACK_V2_SHADOW_IOURING_READ=1`
+- Result:
+  - exit: `0`
+  - quality: `pass`
+  - output begins: `France is a country in Western Europe...`
+  - TTFT: `8362.02 ms`
+  - decode: `20545.57 ms / 31 runs = 1.51 tok/s`
+  - RAM peak: `12749479936 bytes`
+  - final file cache: `12052774912 bytes`
+  - decode CPU fallback: `hits=0 misses=0 bytes=0 fallback_gguf=0`
+  - v2 preflight: `accepted=16505/68736`, `full_cover_calls=23`,
+    `manifest_rows=2048`
+  - shadow report:
+    - calls: `5583`
+    - staged calls: `1701`
+    - covered entries: `10647`
+    - staged entries: `3856`
+    - staged bytes: `10.342 GiB`
+    - staged saved bytes: `12.503 GiB`
+    - direct reads: `3856`
+    - direct bytes: `10.342 GiB`
+    - direct physical bytes: `10.342 GiB`
+    - direct fallbacks: `0`
+    - buffered reads: `0`
+    - io_uring batches/jobs: `1701 / 3856`
+    - submit calls / wait calls / CQEs: `1701 / 3856 / 3856`
+    - io_uring wait: `1378.066 ms`
+    - inflight avg/max: `2.12 / 8`
+    - read wall: `1977.404 ms`
+    - H2D event: `483.906 ms`
+    - sync wall: `471.391 ms`
+    - total shadow wall: `2855.672 ms`
+
+Role split:
+
+| role | staged | staged GiB | staged saved GiB | read ms | H2D ms | total ms | batches/jobs | inflight avg/max | read GiB/s |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `down` | 1926 | 5.188 | 8.512 | 911.652 | 240.211 | 1319.413 | 666 / 1926 | 2.46 / 8 | 5.691 |
+| `gate` | 1042 | 2.782 | 2.240 | 560.520 | 130.704 | 782.378 | 549 / 1042 | 1.81 / 7 | 4.964 |
+| `up` | 888 | 2.371 | 1.750 | 505.233 | 112.991 | 753.881 | 486 / 888 | 1.76 / 7 | 4.693 |
+| total | 3856 | 10.342 | 12.503 | 1977.404 | 483.906 | 2855.672 | 1701 / 3856 | 2.12 / 8 | 5.230 |
+
+Comparison against top1024 local-ring shadow:
+
+| pack | entries | staged | staged saved GiB | read ms | H2D ms | total shadow ms | read GiB/s | inflight avg/max |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| top1024 | 1024 | 2221 | 7.499 | 988.880 | 291.527 | 1526.050 | 6.043 | 2.17 / 8 |
+| top2048 | 2048 | 3856 | 12.503 | 1977.404 | 483.906 | 2855.672 | 5.230 | 2.12 / 8 |
+
+Interpretation:
+
+- Top2048 improves coverage and byte saving:
+  - accepted entries: `8174 -> 16505`;
+  - staged entries: `2221 -> 3856`;
+  - staged saved bytes: `7.499 GiB -> 12.503 GiB`.
+- But it does not improve the actual batchability bottleneck:
+  - average inflight regresses slightly from `2.17` to `2.12`;
+  - read rate regresses from `6.043 GiB/s` to `5.230 GiB/s`;
+  - total shadow wall increases from `1526.050 ms` to `2855.672 ms`.
+- This means pack expansion alone does not expose larger continuous IO queues.
+  The runtime still presents small per-call v2 candidate sets, especially for
+  up/gate where inflight stays below `2`.
+- Since the key hypothesis was improved inflight/read rate, top2048 fails the
+  batchability gate even though it improves saved bytes.
+
+Decision:
+
+- Do not build top2992 right now. It is likely to add more staged bytes but not
+  fix the per-call queue starvation.
+- Do not start broad real v2 dispatch from top2048. A synchronous dispatch path
+  would add too much exposed read/H2D/sync time unless it is fused into the
+  existing expert-pack scheduler or overlapped with current-path work.
+- Next priority:
+  1. scheduler-level batching/coalescing of v2 reads across adjacent roles or
+     nearby layer calls; or
+  2. a tiny default-off dispatch subset that reuses the existing expert-pack
+     batched scheduler and proves output correctness on France before any
+     larger coverage attempt.
+- No SOTA claim is made from this screen.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.
