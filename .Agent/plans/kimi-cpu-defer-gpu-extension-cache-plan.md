@@ -365,6 +365,113 @@ Next investigation:
 4. Only after identifying the actual refault source should RAM be reallocated
    from low-value page cache to explicit batch-coherent expert cache.
 
+### 2026-07-12 Phase B/C Follow-up: fadvise + host-source combined diagnostic
+
+Diagnostic branch:
+
+- `vendor/kimi-prompt-host-source-prof`
+- additional pushed commit:
+  - `657d90b9d diag: combine mmap fadvise with host source profile`
+- This commit combines the previous default-off
+  `LLAMA_MMAP_DONTNEED_FADVISE=1` hook with
+  `GGML_MOE_PROMPT_HOST_SOURCE_PROFILE_OUT`.
+- It remains diagnostic only and is not a SOTA optimization.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-fadvise-host-source-reasoning-n96-180742`
+- commit: `657d90b9d`
+- cgroup: `MemoryMax=15900000000`, `MemorySwapMax=0`
+- prompt:
+  `A train leaves at 3 PM and arrives 2 hours and 15 minutes later. What time does it arrive?`
+- quality: pass
+- output:
+  `... The train arrives at **5:15 PM**.`
+- TTFT: `216124.73 ms`
+- decode: `35321.04 ms / 61`, `1.73 tok/s`
+- memory peak: `15899996160`, exactly cgroup cap
+- CPU fallback remains zero:
+  `[kimi_cpu_fallback_pack_mmap] enabled=1 hits=0 misses=0 bytes=0 fallback_gguf=0`
+
+Memory phase result:
+
+| phase | file | active_file | inactive_file | interpretation |
+|---|---:|---:|---:|---|
+| `before_prompt_eval` | `1990483968` | `1939070976` | `10481664` | fadvise successfully clears most pre-prompt GGUF/file cache |
+| `after_prompt_eval` | `12992552960` | `6499905536` | `6348296192` | prompt eval refills about `11 GiB` of file cache despite fadvise |
+| `after_generation` | `13026619392` | `6510280704` | `6250762240` | decode keeps roughly the same file-cache footprint |
+
+Prompt host-source CSV:
+
+- file:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-fadvise-host-source-reasoning-n96-180742/prompt-host-source.csv`
+- rows: `24`
+- source distribution:
+  - `iouring`: `24`
+  - `host_mmap_staged`: `0`
+  - `host_mmap_direct`: `0`
+  - `pack_staged_read`: `0`
+  - `ram_tier`: `0`
+- role distribution:
+  - `up`: `8`
+  - `gate`: `8`
+  - `down`: `8`
+- tensor distribution:
+  - all rows are `blk.60.ffn_{up,gate,down}_exps.weight`
+
+Mincore after run:
+
+- file:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-fadvise-host-source-reasoning-n96-180742/file-cache-residency.txt`
+- GGUF shards cached: `12738666496` bytes, `11.864 GiB`
+- expert packs cached: `0`
+- dominant shards:
+  - shard `00009`: `9.610 GiB`
+  - shard `00010`: `2.247 GiB`
+
+Tensor-level mincore:
+
+- file:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-fadvise-host-source-reasoning-n96-180742/tensor-cache-00009-00010.txt`
+- shard `00009`, cached `9.610 GiB`:
+  - `down_exps`: `4.005 GiB`
+  - `up_exps`: `2.936 GiB`
+  - `gate_exps`: `2.669 GiB`
+  - top tensors are again `blk.54-58.ffn_{down,up,gate}_exps.weight`
+- shard `00010`, cached `2.247 GiB`:
+  - `blk.59.ffn_down_exps.weight`: `0.807 GiB`
+  - `blk.59.ffn_up_exps.weight`: `0.720 GiB`
+  - `blk.59.ffn_gate_exps.weight`: `0.720 GiB`
+
+Decision:
+
+- This rules out the CUDA expert-copy H2D path as the source of the late-layer
+  page-cache refill even when pre-prompt file cache starts low.
+- The refill happens during prompt eval, but outside the profiled CUDA
+  expert-copy path:
+  - possible CPU/backend prompt compute path touching GGUF `src0->data`;
+  - CPU fallback counters may not cover this path;
+  - backend/model mmap range handling may refault pages after drop;
+  - metadata/range probing is less likely because the resident bytes are large
+    tensor payload ranges, not only headers.
+
+Next required diagnostic:
+
+1. Run the same fadvise N96 prompt with CPU-side fallback/touch profiles enabled:
+   - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`;
+   - existing `GGML_MOE_CPU_FALLBACK_TOUCH_PROFILE` / source profile envs if
+     available in this branch.
+2. If existing CPU profiles do not cover the refault, add default-off CPU-side
+   instrumentation around `ggml_compute_forward_mul_mat_id` / Kimi MoE prompt
+   dispatch to record:
+   - layer/role/type;
+   - whether the path invokes CUDA extension;
+   - whether it reads `src0->data`;
+   - bytes touched and wall time.
+3. Only after this source is identified should we change RAM layout. Replacing
+   page cache with explicit RAM expert cache before knowing the refault source
+   risks fighting unavoidable prompt working-set refaults and can increase TTFT.
+
 ## 2026-07-12 Active Goal Snapshot
 
 Current branch: `vendor/kimi-deepseek-41d205-additive`
