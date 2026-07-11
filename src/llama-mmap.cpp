@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <cerrno>
 #include <algorithm>
+#include <cstdlib>
 
 #ifdef __has_include
     #if __has_include(<unistd.h>)
@@ -433,10 +434,11 @@ void llama_file::write_u32(uint32_t val) const { pimpl->write_u32(val); }
 struct llama_mmap::impl {
 #ifdef _POSIX_MAPPED_FILES
     std::vector<std::pair<size_t, size_t>> mapped_fragments;
+    int fd = -1;
 
     impl(struct llama_file * file, size_t prefetch, bool numa) {
         size = file->size();
-        int fd = file->file_id();
+        fd = file->file_id();
         int flags = MAP_SHARED;
         if (numa) { prefetch = 0; }
 #ifdef __linux__
@@ -479,6 +481,14 @@ struct llama_mmap::impl {
         }
     }
 
+    static bool dontneed_fadvise_enabled() {
+        static const bool enabled = []() {
+            const char * env = std::getenv("LLAMA_MMAP_DONTNEED_FADVISE");
+            return env && env[0] && env[0] != '0';
+        }();
+        return enabled;
+    }
+
     bool dontneed_fragment(size_t first, size_t last, size_t * len_out) {
         int page_size = sysconf(_SC_PAGESIZE);
         align_range(&first, &last, page_size);
@@ -499,6 +509,13 @@ struct llama_mmap::impl {
         if (madvise((uint8_t *) addr + first, len, MADV_DONTNEED)) {
             LLAMA_LOG_WARN("warning: madvise(..., MADV_DONTNEED) failed: %s\n", strerror(errno));
             return false;
+        }
+        if (dontneed_fadvise_enabled() && fd >= 0) {
+            const int rc = posix_fadvise(fd, (off_t) first, (off_t) len, POSIX_FADV_DONTNEED);
+            if (rc != 0) {
+                LLAMA_LOG_WARN("warning: posix_fadvise(..., POSIX_FADV_DONTNEED) failed: %s\n", strerror(rc));
+                return false;
+            }
         }
 #endif
         return true;
