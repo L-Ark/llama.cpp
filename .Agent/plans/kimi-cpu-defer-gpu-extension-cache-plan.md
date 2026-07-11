@@ -362,6 +362,90 @@ Next execution step:
 3. Implement real dispatch only for full-cover homogeneous calls, default-off,
    and A/B on N32 cold start first.
 
+### 2026-07-11 Artifact: top7down full-cover real payload pack
+
+Payload build:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-payload-eb2fead64-122235
+selected_plan=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-metadata-cf1bef649-121305/fullcover-top7down-selected-plan.tsv
+pack=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-payload-eb2fead64-122235/selected-iq1s-overlay-v2.expert-pack
+manifest=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-payload-eb2fead64-122235/selected-iq1s-overlay-manifest.tsv
+```
+
+Reproduce:
+
+```bash
+/usr/bin/time -v .Agent/run-tools/kimi_iq1s_selected_payload_pack.py \
+  --selected-plan-tsv /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-metadata-cf1bef649-121305/fullcover-top7down-selected-plan.tsv \
+  --out-dir /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-payload-eb2fead64-122235 \
+  --max-entries 2688 \
+  --include-types IQ1_S \
+  --range-backend curl \
+  --payload-chunk-mib 64
+```
+
+Build result:
+
+```text
+selected_entries=2688
+payload_bytes=7707033600
+pack_bytes=7707529216
+pack_sha256=e8bdd7aee68268f61bfbc9d8008dd127fc19651b73144af0bdabd3ba5d34cf74
+payload_write_mode=coalesced_chunked
+payload_groups=7
+payload_range_reads=119
+payload_streamed_bytes=7707033600
+payload_write_wall_sec=484.648
+elapsed_wall=8:14.49
+max_rss_kb=346104
+```
+
+Interpretation:
+
+- The chunked builder worked as intended: real pack generation used 7
+  contiguous tensor groups and bounded RSS to about `338 MiB`.
+- The artifact is large but reproducible from the selected-plan TSV and exact
+  command above.
+
+Payload smoke:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-payload-smoke-eb2fead64-123259
+mode=batch-pinned-reuse
+tensor=blk.7.ffn_down_exps.weight
+routes=5
+covered=3
+fallback=2
+ne00=2048
+ne01=7168
+payload_mib=8.203
+```
+
+Smoke timing:
+
+```text
+warm_iterations=4
+warm_avg_total_us=2585.366
+warm_avg_read_us=903.868
+warm_avg_h2d_ms=1.535
+warm_avg_kernel_ms=0.031
+warm_avg_sync_us=1495.927
+payload_mib_per_iter=8.203
+```
+
+Decision:
+
+- The real top7down payload pack is valid enough for runtime integration work:
+  metadata lookup, payload read, H2D, CUDA MMVQ, D2H validation, and row merge
+  all passed in the standalone smoke.
+- This is not a SOTA claim because inference runtime behavior is unchanged.
+- Next step is a small default-off runtime path for full-cover homogeneous v2
+  calls only. It should initially target down tensors in this top7 pack, avoid
+  partial split, and fall back to the existing v1 path unless every active
+  expert for the call is covered, shape-compatible, type-supported, and
+  smaller than the current representation.
+
 ## READ FIRST: active goal and immediate plan
 
 Timestamp: 2026-07-11 CST.
