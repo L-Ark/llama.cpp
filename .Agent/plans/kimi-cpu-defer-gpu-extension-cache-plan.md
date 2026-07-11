@@ -867,6 +867,108 @@ Next required diagnostic:
    kernel/filesystem behavior or remaining mmap touch sites around alias source
    handling.
 
+### 2026-07-12 Phase 1 Follow-up: sync-before-drop does not remove late-layer file cache
+
+Diagnostic branch:
+
+- `vendor/kimi-prompt-host-source-prof`
+- pushed diagnostic commit:
+  - `4656b8405 diag: gate sync before prompt mmap drop`
+
+Instrumentation:
+
+- Added default-off `LLAMA_SYNC_BEFORE_DROP_MMAP_AFTER_PROMPT`.
+- When enabled for batched prompt eval, `llama_context::decode()` calls
+  `synchronize()` before `model.drop_expert_mmap_pages_after_prompt()`.
+- Purpose: test whether post-prompt fadvise races asynchronous CUDA/H2D work
+  that still references GGUF mmap pages.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-sync-before-drop-reasoning-n96-200013`
+- prompt:
+  `A train leaves at 3 PM and arrives 2 hours and 15 minutes later. What time does it arrive?`
+- quality: pass, output contains `5:15 PM`
+- TTFT: `213839.38 ms`
+- decode: `37150.76 ms / 61`, `1.64 tok/s`
+- memory peak: `15899996160`
+- CPU fallback source entries: `0`
+- sync log: `synchronized before prompt mmap drop wall_ms=0.016`
+
+Observed expert-copy source profile:
+
+- total expert-copy payload: `310.859 GiB`
+- all observed explicit expert-copy reads used `fd_direct + io_uring`
+- `page_cache_bytes=0`
+- `buffered_bytes=0`
+- `direct_payload_bytes=0`
+- largest sources:
+  - inherited main pack: `159.182 GiB`
+  - down overlay: `4.482 GiB`
+  - GGUF alias direct/io_uring sources: about `147.195 GiB`
+
+Observed scheduler sparse-copy profile:
+
+- rows: `177`
+- phase: all rows are prompt phase `1`
+- total scheduler sparse-copy payload: `104.528 GiB`
+- role split:
+  - down: `41.790 GiB`
+  - gate: `32.736 GiB`
+  - up: `30.002 GiB`
+- late `blk.53-59` scheduler sparse-copy payload: `14.152 GiB`
+- source code path:
+  `ggml_backend_tensor_set_async(split_backend, input_cpy,
+  (const uint8_t *) input->data + expert_offset, expert_offset, bytes)`
+- this means the CPU/defer scheduler can still use GGUF mmap `input->data` as
+  the source for prompt sparse-copy, even when real CPU fallback compute is `0`.
+
+Mmap/drop profile under sync-before-drop:
+
+- rows: `52`
+- total profiled range length: `57.389 GiB`
+- resident before drop: `1.168 GiB`
+- resident after `madvise`: `1.168 GiB`
+- resident after `posix_fadvise`: `0`
+- shard `00009`: `0.972 GiB -> 0`
+- shard `00010`: `0.196 GiB -> 0`
+
+Final residency after the same run:
+
+- GGUF shards: `13.553 GiB`
+- expert packs: `0.005 GiB`
+- alias TSV: `0.010 GiB`
+- shard `00009`: `11.299 GiB`
+- shard `00010`: `2.247 GiB`
+
+Decision:
+
+- `synchronize()` before the post-prompt drop is not sufficient. It adds no
+  meaningful wait and does not reduce final late-layer GGUF file cache.
+- `posix_fadvise` still proves it can drop the profiled ranges to `0` during
+  the call, so the final `13.55 GiB` is a post-drop refault.
+- The refault is not from explicit expert-pack reads and not from real CPU
+  fallback compute.
+- The most important identified source is now the CPU/defer scheduler sparse
+  copy path that still reads prompt active expert slices from GGUF mmap
+  `input->data`. This path is part of the CPU/defer GPU-extension architecture:
+  CPU owns dispatch, but its copy source is still the original GGUF mmap.
+
+Next required diagnostic before RAM/VRAM cache re-layout:
+
+1. Add a default-off delayed second drop:
+   - after the normal prompt drop, sleep for a configurable short interval;
+   - run `drop_expert_mmap_pages_after_prompt()` again;
+   - profile whether shard `00009`/`00010` final residency falls.
+2. If delayed second drop works, the issue is a short-latency async/pageable
+   source refault after scheduler sparse-copy. Then evaluate a production-safe
+   late prompt drop point or pinned/pack source replacement.
+3. If delayed second drop does not work, decode or post-prompt code still
+   actively touches the GGUF mmap source. Then prioritize redirecting scheduler
+   sparse-copy source to expert pack/RAM source for prompt as well as decode.
+4. Do not promote `LLAMA_SYNC_BEFORE_DROP_MMAP_AFTER_PROMPT` as an optimization;
+   it is a negative diagnostic result only.
+
 ## 2026-07-12 Active Goal: DeepSeek-style CPU/defer GPU-extension on Kimi
 
 ### Goal
