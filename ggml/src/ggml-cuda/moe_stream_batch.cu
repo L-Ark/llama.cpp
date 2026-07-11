@@ -4519,7 +4519,9 @@ static bool expert_pack_v2_override_preflight_env_enabled() {
     const char *override = std::getenv("GGML_MOE_EXPERT_PACK_V2_OVERRIDE");
     if (override && override[0] && override[0] != '0') return true;
     const char *split_plan = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN");
-    return split_plan && split_plan[0] && split_plan[0] != '0';
+    if (split_plan && split_plan[0] && split_plan[0] != '0') return true;
+    const char *control = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_CONTROL_PROFILE");
+    return control && control[0] && control[0] != '0';
 }
 
 static const char * expert_pack_v2_override_profile_path() {
@@ -4865,6 +4867,16 @@ static const char * expert_pack_v2_partial_split_plan_path() {
     return path && path[0] ? path : nullptr;
 }
 
+static bool expert_pack_v2_partial_split_control_enabled() {
+    const char *env = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_CONTROL_PROFILE");
+    return env && env[0] && env[0] != '0';
+}
+
+static const char * expert_pack_v2_partial_split_control_path() {
+    const char *path = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_CONTROL_OUT");
+    return path && path[0] ? path : nullptr;
+}
+
 static uint64_t expert_pack_v2_partial_split_plan_max_calls() {
     const char *env = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN_MAX_CALLS");
     if (!env || !env[0]) return 0;
@@ -4884,14 +4896,20 @@ static void expert_pack_v2_partial_split_plan_record(
         size_t logical_nb01,
         batch_vram_cache *cache,
         const int *active_experts,
+        const int32_t *dst_ids,
+        const int32_t *flat_dst_ids,
         int n_active) {
-    if (!expert_pack_v2_partial_split_plan_enabled()) return;
+    const bool plan_enabled = expert_pack_v2_partial_split_plan_enabled();
+    const bool control_enabled = expert_pack_v2_partial_split_control_enabled();
+    if (!plan_enabled && !control_enabled) return;
     if (!tensor_name || !tensor_name[0] || !active_experts || n_active <= 0 || logical_nbytes == 0) {
         return;
     }
 
     const char *path = expert_pack_v2_partial_split_plan_path();
-    if (!path || !path[0]) return;
+    const char *control_path = expert_pack_v2_partial_split_control_path();
+    if (plan_enabled && (!path || !path[0]) && (!control_enabled || !control_path || !control_path[0])) return;
+    if (!plan_enabled && (!control_path || !control_path[0])) return;
 
     expert_pack_v2_override_preflight_init_once();
     if (!g_expert_pack_v2_override_preflight.enabled) return;
@@ -4923,6 +4941,7 @@ static void expert_pack_v2_partial_split_plan_record(
     uint64_t covered_miss_saved_bytes = 0;
     std::vector<unsigned char> covered_flags((size_t)n_active, 0);
 
+    const auto control_t0 = control_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     for (int j = 0; j < n_active; ++j) {
         const int expert_idx = active_experts[j];
         const bool cache_hit = cache && batch_cache_find_slot(cache, batch_key_hash(tensor_name, expert_idx)) >= 0;
@@ -4992,6 +5011,7 @@ static void expert_pack_v2_partial_split_plan_record(
             homogeneous = false;
         }
     }
+    const auto control_t1 = control_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     int covered_runs = 0;
     int uncovered_runs = 0;
@@ -5024,6 +5044,7 @@ static void expert_pack_v2_partial_split_plan_record(
             max_uncovered_run = std::max(max_uncovered_run, current_run);
         }
     }
+    const auto control_t2 = control_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     const int uncovered = n_active - covered;
     const bool full_cover = covered == n_active && homogeneous;
@@ -5037,78 +5058,222 @@ static void expert_pack_v2_partial_split_plan_record(
     const double partial_miss_saved_ratio = logical_miss_bytes > 0 ?
         (double)covered_miss_saved_bytes / (double)logical_miss_bytes : 0.0;
 
-    static std::mutex profile_mu;
-    static bool header_written = false;
-    static uint64_t seq = 0;
-    std::lock_guard<std::mutex> profile_lk(profile_mu);
-    FILE *f = std::fopen(path, "a");
-    if (!f) return;
-    if (!header_written) {
-        std::fprintf(f,
-            "seq,call_idx,phase,role,tensor,logical_type,logical_nbytes,"
-            "logical_ne00,logical_ne01,logical_nb01,n_active,cache_hits,"
-            "covered,uncovered,covered_cache_hits,full_cover,no_cover,"
-            "homogeneous,covered_runs,uncovered_runs,transitions,"
-            "first_covered,last_covered,max_covered_run,max_uncovered_run,"
-            "packed_type,packed_nbytes,packed_ne00,packed_ne01,packed_nb01,"
-            "logical_total_bytes,logical_miss_bytes,covered_bytes,"
-            "covered_saved_bytes,covered_miss_bytes,covered_miss_saved_bytes,"
-            "partial_saved_ratio,partial_miss_saved_ratio,"
-            "reject_no_manifest,reject_not_allowed,reject_no_entry,"
-            "reject_unsupported,reject_manifest_mismatch,reject_shape_mismatch,"
-            "reject_not_smaller,compute_groups,extra_compute_groups\n");
-        header_written = true;
+    double control_lookup_us = 0.0;
+    double control_run_us = 0.0;
+    double control_map_us = 0.0;
+    double control_total_us = 0.0;
+    int dst_nonmonotonic = 0;
+    int covered_dst_nonmonotonic = 0;
+    int uncovered_dst_nonmonotonic = 0;
+    int covered_route_first = -1;
+    int covered_route_last = -1;
+    int uncovered_route_first = -1;
+    int uncovered_route_last = -1;
+    int covered_dst_first = -1;
+    int covered_dst_last = -1;
+    int uncovered_dst_first = -1;
+    int uncovered_dst_last = -1;
+    if (control_enabled) {
+        std::vector<int32_t> covered_route_ids;
+        std::vector<int32_t> uncovered_route_ids;
+        std::vector<int32_t> covered_expert_ids;
+        std::vector<int32_t> uncovered_expert_ids;
+        std::vector<int32_t> covered_dst_rows;
+        std::vector<int32_t> uncovered_dst_rows;
+        covered_route_ids.reserve((size_t)covered);
+        uncovered_route_ids.reserve((size_t)uncovered);
+        covered_expert_ids.reserve((size_t)covered);
+        uncovered_expert_ids.reserve((size_t)uncovered);
+        covered_dst_rows.reserve((size_t)covered);
+        uncovered_dst_rows.reserve((size_t)uncovered);
+
+        int prev_dst = INT_MIN;
+        int prev_covered_dst = INT_MIN;
+        int prev_uncovered_dst = INT_MIN;
+        for (int j = 0; j < n_active; ++j) {
+            const int32_t dst = flat_dst_ids ? flat_dst_ids[j] : (dst_ids ? dst_ids[j] : (int32_t)j);
+            if (prev_dst != INT_MIN && dst < prev_dst) {
+                ++dst_nonmonotonic;
+            }
+            prev_dst = dst;
+            if (covered_flags[(size_t)j]) {
+                if (covered_route_first < 0) {
+                    covered_route_first = j;
+                    covered_dst_first = dst;
+                }
+                covered_route_last = j;
+                covered_dst_last = dst;
+                if (prev_covered_dst != INT_MIN && dst < prev_covered_dst) {
+                    ++covered_dst_nonmonotonic;
+                }
+                prev_covered_dst = dst;
+                covered_route_ids.push_back((int32_t)j);
+                covered_expert_ids.push_back((int32_t)active_experts[j]);
+                covered_dst_rows.push_back(dst);
+            } else {
+                if (uncovered_route_first < 0) {
+                    uncovered_route_first = j;
+                    uncovered_dst_first = dst;
+                }
+                uncovered_route_last = j;
+                uncovered_dst_last = dst;
+                if (prev_uncovered_dst != INT_MIN && dst < prev_uncovered_dst) {
+                    ++uncovered_dst_nonmonotonic;
+                }
+                prev_uncovered_dst = dst;
+                uncovered_route_ids.push_back((int32_t)j);
+                uncovered_expert_ids.push_back((int32_t)active_experts[j]);
+                uncovered_dst_rows.push_back(dst);
+            }
+        }
+        const auto control_t3 = std::chrono::steady_clock::now();
+        control_lookup_us = std::chrono::duration<double, std::micro>(control_t1 - control_t0).count();
+        control_run_us = std::chrono::duration<double, std::micro>(control_t2 - control_t1).count();
+        control_map_us = std::chrono::duration<double, std::micro>(control_t3 - control_t2).count();
+        control_total_us = std::chrono::duration<double, std::micro>(control_t3 - control_t0).count();
     }
-    std::fprintf(f,
-        "%llu,%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%zu,%ld,%ld,%zu,%llu,%llu,%llu,%llu,%llu,%llu,%.9f,%.9f,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
-        (unsigned long long)++seq,
-        (unsigned long long)call_idx,
-        phase ? phase : "",
-        role ? role : "",
-        tensor_name,
-        logical_type,
-        logical_nbytes,
-        (long)logical_ne00,
-        (long)logical_ne01,
-        logical_nb01,
-        n_active,
-        cache_hits,
-        covered,
-        uncovered,
-        covered_cache_hits,
-        full_cover ? 1 : 0,
-        no_cover ? 1 : 0,
-        homogeneous ? 1 : 0,
-        covered_runs,
-        uncovered_runs,
-        transitions,
-        first_covered,
-        last_covered,
-        max_covered_run,
-        max_uncovered_run,
-        packed_type,
-        packed_nbytes,
-        (long)packed_ne00,
-        (long)packed_ne01,
-        packed_nb01,
-        (unsigned long long)logical_total_bytes,
-        (unsigned long long)logical_miss_bytes,
-        (unsigned long long)covered_bytes,
-        (unsigned long long)covered_saved_bytes,
-        (unsigned long long)covered_miss_bytes,
-        (unsigned long long)covered_miss_saved_bytes,
-        partial_saved_ratio,
-        partial_miss_saved_ratio,
-        reject_no_manifest,
-        reject_not_allowed,
-        reject_no_entry,
-        reject_unsupported,
-        reject_manifest_mismatch,
-        reject_shape_mismatch,
-        reject_not_smaller,
-        compute_groups,
-        extra_compute_groups);
-    std::fclose(f);
+
+    if (plan_enabled && path && path[0]) {
+        static std::mutex profile_mu;
+        static bool header_written = false;
+        static uint64_t seq = 0;
+        std::lock_guard<std::mutex> profile_lk(profile_mu);
+        FILE *f = std::fopen(path, "a");
+        if (f) {
+            if (!header_written) {
+                std::fprintf(f,
+                    "seq,call_idx,phase,role,tensor,logical_type,logical_nbytes,"
+                    "logical_ne00,logical_ne01,logical_nb01,n_active,cache_hits,"
+                    "covered,uncovered,covered_cache_hits,full_cover,no_cover,"
+                    "homogeneous,covered_runs,uncovered_runs,transitions,"
+                    "first_covered,last_covered,max_covered_run,max_uncovered_run,"
+                    "packed_type,packed_nbytes,packed_ne00,packed_ne01,packed_nb01,"
+                    "logical_total_bytes,logical_miss_bytes,covered_bytes,"
+                    "covered_saved_bytes,covered_miss_bytes,covered_miss_saved_bytes,"
+                    "partial_saved_ratio,partial_miss_saved_ratio,"
+                    "reject_no_manifest,reject_not_allowed,reject_no_entry,"
+                    "reject_unsupported,reject_manifest_mismatch,reject_shape_mismatch,"
+                    "reject_not_smaller,compute_groups,extra_compute_groups\n");
+                header_written = true;
+            }
+            std::fprintf(f,
+                "%llu,%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%zu,%ld,%ld,%zu,%llu,%llu,%llu,%llu,%llu,%llu,%.9f,%.9f,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+                (unsigned long long)++seq,
+                (unsigned long long)call_idx,
+                phase ? phase : "",
+                role ? role : "",
+                tensor_name,
+                logical_type,
+                logical_nbytes,
+                (long)logical_ne00,
+                (long)logical_ne01,
+                logical_nb01,
+                n_active,
+                cache_hits,
+                covered,
+                uncovered,
+                covered_cache_hits,
+                full_cover ? 1 : 0,
+                no_cover ? 1 : 0,
+                homogeneous ? 1 : 0,
+                covered_runs,
+                uncovered_runs,
+                transitions,
+                first_covered,
+                last_covered,
+                max_covered_run,
+                max_uncovered_run,
+                packed_type,
+                packed_nbytes,
+                (long)packed_ne00,
+                (long)packed_ne01,
+                packed_nb01,
+                (unsigned long long)logical_total_bytes,
+                (unsigned long long)logical_miss_bytes,
+                (unsigned long long)covered_bytes,
+                (unsigned long long)covered_saved_bytes,
+                (unsigned long long)covered_miss_bytes,
+                (unsigned long long)covered_miss_saved_bytes,
+                partial_saved_ratio,
+                partial_miss_saved_ratio,
+                reject_no_manifest,
+                reject_not_allowed,
+                reject_no_entry,
+                reject_unsupported,
+                reject_manifest_mismatch,
+                reject_shape_mismatch,
+                reject_not_smaller,
+                compute_groups,
+                extra_compute_groups);
+            std::fclose(f);
+        }
+    }
+
+    if (control_enabled && control_path && control_path[0]) {
+        static std::mutex control_mu;
+        static bool control_header_written = false;
+        static uint64_t control_seq = 0;
+        std::lock_guard<std::mutex> control_lk(control_mu);
+        FILE *f = std::fopen(control_path, "a");
+        if (f) {
+            if (!control_header_written) {
+                std::fprintf(f,
+                    "seq,call_idx,phase,role,tensor,n_active,covered,uncovered,"
+                    "full_cover,no_cover,homogeneous,covered_runs,uncovered_runs,"
+                    "transitions,extra_compute_groups,cache_hits,covered_cache_hits,"
+                    "logical_nbytes,covered_miss_saved_bytes,partial_miss_saved_ratio,"
+                    "lookup_us,run_us,map_us,total_us,us_per_active,us_per_extra_group,"
+                    "dst_nonmonotonic,covered_dst_nonmonotonic,uncovered_dst_nonmonotonic,"
+                    "covered_route_first,covered_route_last,uncovered_route_first,"
+                    "uncovered_route_last,covered_dst_first,covered_dst_last,"
+                    "uncovered_dst_first,uncovered_dst_last\n");
+                control_header_written = true;
+            }
+            const double us_per_active = n_active > 0 ? control_total_us / (double)n_active : 0.0;
+            const double us_per_extra_group = extra_compute_groups > 0 ?
+                control_total_us / (double)extra_compute_groups : 0.0;
+            std::fprintf(f,
+                "%llu,%llu,%s,%s,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%zu,%llu,%.9f,%.3f,%.3f,%.3f,%.3f,%.6f,%.6f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+                (unsigned long long)++control_seq,
+                (unsigned long long)call_idx,
+                phase ? phase : "",
+                role ? role : "",
+                tensor_name,
+                n_active,
+                covered,
+                uncovered,
+                full_cover ? 1 : 0,
+                no_cover ? 1 : 0,
+                homogeneous ? 1 : 0,
+                covered_runs,
+                uncovered_runs,
+                transitions,
+                extra_compute_groups,
+                cache_hits,
+                covered_cache_hits,
+                logical_nbytes,
+                (unsigned long long)covered_miss_saved_bytes,
+                partial_miss_saved_ratio,
+                control_lookup_us,
+                control_run_us,
+                control_map_us,
+                control_total_us,
+                us_per_active,
+                us_per_extra_group,
+                dst_nonmonotonic,
+                covered_dst_nonmonotonic,
+                uncovered_dst_nonmonotonic,
+                covered_route_first,
+                covered_route_last,
+                uncovered_route_first,
+                uncovered_route_last,
+                covered_dst_first,
+                covered_dst_last,
+                uncovered_dst_first,
+                uncovered_dst_last);
+            std::fclose(f);
+        }
+    }
 }
 
 static bool expert_pack_page_cache_preload_source(expert_pack_source &source, const char *mode) {
@@ -13087,6 +13252,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         up_nb01,
         cache,
         active_experts,
+        dst_ids,
+        flat_dst_ids,
         n_active);
     expert_pack_v2_call_coverage_record(
         prompt_mode ? "prompt_upgate" : "decode_upgate",
@@ -13123,6 +13290,8 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         gate_nb01,
         cache,
         active_experts,
+        dst_ids,
+        flat_dst_ids,
         n_active);
 
     const char *profile_upgate_env = std::getenv("GGML_MOE_VRAM_PROFILE_UPGATE");
@@ -15237,6 +15406,8 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         nb01,
         cache,
         active_experts,
+        dst_ids,
+        nullptr,
         n_active);
 
     if (profile) cudaEventRecord(bc.ev_start, st);

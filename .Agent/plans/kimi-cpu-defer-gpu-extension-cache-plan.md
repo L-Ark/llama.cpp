@@ -315,6 +315,120 @@ Next decision:
   work: lower-byte pack layout, coalesced v2 reads, or RAM/VRAM cache
   co-design before attempting broad dispatch again.
 
+## Progress update: partial-split control-plane overhead profile
+
+Timestamp: 2026-07-11 CST.
+
+Patch scope prepared:
+
+- Added a default-off runtime control-plane profiler for v2 partial split.
+- New envs:
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_CONTROL_PROFILE=1`;
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_CONTROL_OUT=<csv>`.
+- The profiler reuses the manifest-gated v2 lookup path and records the CPU
+  cost of:
+  - v2 allowlist/metadata/cache checks;
+  - covered/uncovered run construction;
+  - compact route/expert/dst row vector construction.
+- It also records merge-order risk fields:
+  `dst_nonmonotonic`, `covered_dst_nonmonotonic`,
+  `uncovered_dst_nonmonotonic`, route first/last, and dst first/last.
+- It does not read v2 payload data, does not launch v2 kernels, does not merge
+  outputs, and does not change model output.
+
+Build:
+
+- Command: `cmake --build build-cuda-batch --target ggml-cuda -j2`.
+- Result: pass. Only pre-existing warning classes were emitted.
+
+Default-off regression run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-control-defaultoff-n32-france`.
+- Prompt: `Please introduce France in a short paragraph.`
+- Command:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000
+  -p MemorySwapMax=0 env RUN=<run> N=32 PROFILE=1
+  PROMPT_ID=dev_france_control_defaultoff
+  PROMPT_USER_TEXT='Please introduce France in a short paragraph.'
+  QUALITY_KEYWORDS='france,paris|europe|western'
+  .Agent/run-tools/kimi-general-prompt-repro.sh`.
+- Quality: pass.
+- Token rate: `1.69 tok/s`.
+- TTFT: `8112.03 ms`.
+- Decode: `18327.99 ms / 31`, or `591.23 ms/token`.
+- Host RAM peak: `12766982144` bytes.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+- No v2/preflight/planner/control files were produced.
+
+Held-out sky control-profile run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-control-profile-n32-heldout-sky`.
+- Prompt: `Explain why the sky appears blue in a short paragraph.`
+- Command shape:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000
+  -p MemorySwapMax=0 env RUN=<run> N=32 PROFILE=1
+  PROMPT_ID=heldout_sky_partial_split_control
+  PROMPT_USER_TEXT='Explain why the sky appears blue in a short paragraph.'
+  QUALITY_KEYWORDS='sky,blue|scattering|atmosphere'
+  EXTRA_RUNTIME_ENV='<v2 pack + manifest + control profile envs>'
+  .Agent/run-tools/kimi-general-prompt-repro.sh`.
+- v2 metadata-only pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-metadataonly-dev7-budget120/selected-iq1s-overlay-v2.expert-pack`.
+- Manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-metadataonly-dev7-budget120/selected-iq1s-overlay-manifest.tsv`.
+- Control CSV:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-control-profile-n32-heldout-sky/v2-partial-split-control.csv`.
+- Quality: pass.
+- Token rate: `1.69 tok/s`; profiler overhead means this is a sanity check
+  only.
+- TTFT: `9678.91 ms`.
+- Decode: `18293.26 ms / 31`, or `590.11 ms/token`.
+- Host RAM peak: `12797775872` bytes.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+
+Held-out control-plane overhead summary:
+
+- Rows: `5760` calls.
+- Decode all:
+  - calls `5583`;
+  - active rows `44664`;
+  - covered rows `36976`;
+  - extra groups `4129`;
+  - total CPU control time `41.18 ms`;
+  - average `7.38 us/call`;
+  - p95 `9.88 us/call`;
+  - p99 `19.81 us/call`.
+- Decode partial calls only:
+  - calls `4129`;
+  - total CPU control time `30.72 ms`;
+  - average `7.44 us/extra group`;
+  - p95 `9.86 us/extra group`;
+  - p99 `20.59 us/extra group`.
+- By role:
+  - `decode_upgate/up`: `15.65 ms` total, p95 `11.68 us/call`;
+  - `decode_upgate/gate`: `14.16 ms` total, p95 `10.23 us/call`;
+  - `decode_down/down`: `11.37 ms` total, p95 `7.74 us/call`.
+
+Interpretation:
+
+- CPU split/control bookkeeping is not the blocker. The measured held-out
+  partial-call p95 is about `0.010 ms/group`, far below the conservative
+  `0.354 ms/group` IO-only overhead budget from candidate screening.
+- The remaining unknowns are real dispatch costs:
+  - v2 payload read and staging;
+  - v2 H2D;
+  - v2 kernel time;
+  - current-path fallback kernel time for uncovered rows;
+  - merge/scatter and synchronization.
+- The next runtime experiment should therefore move past control-plane profiling
+  and implement a default-off dispatch smoke for decode rows, but with detailed
+  stage timers. If those later stages exceed the budget, the fix should target
+  pack layout/coalescing or RAM/VRAM storage policy, not the CPU row planner.
+
 ## Current goal and plan checkpoint: 2026-07-11 CST
 
 This section is the current working contract. All later experiments, commits,
