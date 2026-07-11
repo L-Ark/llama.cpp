@@ -87,6 +87,109 @@ prompt-specific pack：释放 decode 阶段低价值 GGUF file cache，把 host 
 expert cache，优先测试低命中率且 exposed wait 高的整层 up/gate 或完整 layer slab，
 并比较 RAM->VRAM H2D、SSD->RAM/VRAM IO、queue fragmentation 和 TTFT 摊销。
 
+### 2026-07-12 Result: K2048 v2 Down-group Pack Rejected
+
+Precheck:
+
+- candidate:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-general-coverage-analysis/down-group-greedy-k2048.manifest.tsv`;
+- selected entries: `2048`;
+- predicted payload bytes: `5967560704`, `5.558 GiB`;
+- three-trace down decode groups: `5583`;
+- full-cover groups: `905 / 5583 = 16.21%`;
+- homogeneous full-cover groups: `905 / 5583 = 16.21%`;
+- France full-cover groups: `505 / 1861 = 27.14%`;
+- conclusion: the candidate passes the runtime homogeneous precheck, but only
+  covers down groups. It still leaves up/gate misses and most down groups on the
+  existing path.
+
+Pack artifact:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-kimi-v2-down-group-k2048-payload`;
+- pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-kimi-v2-down-group-k2048-payload/selected-iq1s-overlay-v2.expert-pack`;
+- manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-kimi-v2-down-group-k2048-payload/selected-iq1s-overlay-manifest.tsv`;
+- sha256:
+  `b27a81975614fd520e7364bf767c3f0c3b5a2242b0389d51f717b914e0929e2e`;
+- build method: copy-reuse previous payload packs plus parallel range reads;
+- copied: `1151` entries, `3.077 GiB`;
+- downloaded: `897` entries, `2.481 GiB`, `713` range groups, `8` workers;
+- build wall time: `2:17.61`;
+- max RSS during build: `2755588 KiB`.
+
+Control baseline:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-nextgoal-baseline-n32-france-213337`;
+- prompt: `Please introduce France in a short paragraph.`;
+- quality: pass;
+- TTFT: `11493.86 ms`;
+- decode: `20102.13 ms / 31`, `1.54 tok/s`;
+- memory peak: `12767100928`;
+- CPU fallback profile: `0` entries;
+- decode iouring bytes: `149178925056`;
+- decode iouring wait: `11196355 us`.
+
+Buffered v2 full-cover down A/B:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-down-group-k2048-n32-france-062044`;
+- quality: pass;
+- TTFT: `11615.40 ms`;
+- decode: `24212.54 ms / 31`, `1.28 tok/s`;
+- memory peak: `15899996160`, hit the hard cgroup limit;
+- v2 accepted calls: `197 / 2038`;
+- v2 overlap accepted: `19 / 899`;
+- v2 copied bytes: `3.252 GiB`;
+- v2 saved bytes: `6.624 GiB`;
+- v2 read time: `3339.102 ms`;
+- v2 H2D enqueue time: `375.779 ms`;
+- v2 total time: `3772.042 ms`;
+- decode iouring bytes: `143335456768`;
+- decode iouring wait: `10794616 us`;
+- result: rejected. It saved main-path bytes but introduced buffered v2 reads,
+  page cache pressure, and extra pageable H2D work. Token rate regressed from
+  `1.54` to `1.28`.
+
+Direct-read v2 full-cover down A/B:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-down-group-k2048-direct-n32-france-222416`;
+- extra env:
+  `GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ=1`;
+- quality: pass;
+- TTFT: `12442.24 ms`;
+- decode: `21880.28 ms / 31`, `1.42 tok/s`;
+- memory peak: `12864970752`;
+- v2 accepted calls: `197 / 2038`;
+- v2 overlap accepted: `19 / 899`;
+- v2 copied bytes: `3.252 GiB`;
+- v2 saved bytes: `6.624 GiB`;
+- v2 read time: `1158.185 ms`;
+- v2 H2D enqueue time: `499.920 ms`;
+- v2 total time: `1716.005 ms`;
+- decode iouring bytes: `143335456768`;
+- decode iouring wait: `10946256 us`;
+- result: rejected. Direct read removes the page-cache blowup, but the path is
+  still slower than the baseline because it performs per-entry v2 pread/bounce
+  and pageable H2D outside the main batched io_uring/pinned staging path.
+
+Decision:
+
+- Do not promote K2048 v2 full-cover down as SOTA.
+- Do not spend more time materializing larger K4096 down-only packs unless the
+  runtime path is first changed to use batched io_uring/O_DIRECT with pinned
+  staging and enough queue depth.
+- The next viable v2 direction is not "more down entries"; it is a real v2
+  transport path that shares the main expert-pack scheduler:
+  full active group -> coalesced v2 jobs -> batched io_uring -> pinned staging ->
+  H2D -> GPU compute.
+- If that is not implemented immediately, move to the RAM/VRAM storage plan:
+  replace low-value decode GGUF page cache with explicit RAM/VRAM expert tiers
+  selected by exposed wait, not by prompt-specific frequency alone.
+
 ## 2026-07-12 Run Goal: recover reproducible Kimi SOTA, then validate CPU/defer GPU-extension wins
 
 ### Goal
