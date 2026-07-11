@@ -448,6 +448,154 @@ Next action:
   preload TTFT, RAM peak, file-cache displacement, refault/reclaim, upgate wall,
   down regression, endpoint token rate, and held-out quality.
 
+### 2026-07-11 Up/gate RAM tier screen
+
+Purpose:
+
+- Test whether replacing low-value file cache with explicit host-RAM expert
+  cache helps the current upgate bottleneck.
+- Keep this diagnostic prompt-dev only. The profile below is generated from
+  France regression plus the batteries short-answer dev run; the cloud/business
+  long prompt remains reserved for validation.
+
+Profile generation:
+
+```text
+full blk28 upgate profile:
+  path=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-upgate-layer-profiles/blk28-upgate-full384.profile.csv
+  entries=768
+  bytes=3963617280
+  size=3780 MiB
+  tensors=blk.28 gate + blk.28 up, all 384 experts
+
+top64 four-layer upgate profile:
+  path=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-upgate-layer-profiles/dev-france-batteries-blk28-31-33-51-upgate-top64.profile.csv
+  dev_runs=France baseline + batteries baseline
+  layers=blk.28, blk.31, blk.33, blk.51
+  tensors=gate + up
+  top_k_per_tensor=64
+  entries=512
+  bytes=2642411520
+  size=2520 MiB
+```
+
+Common RAM-tier env:
+
+```text
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+GGML_MOE_RAM_BATCH_PROFILE_OUT=$RUN/ram-batch-profile.csv
+```
+
+Result A: full `blk.28` upgate pageable RAM tier
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260711-815b-clean-ram-blk28-upgate-pageable-france-n96-141134
+profile=blk28-upgate-full384.profile.csv
+GGML_MOE_RAM_TIER_MIB=3900
+quality=pass
+TTFT=13244.48 ms
+decode=57965.58 ms / 85 runs
+token_rate=1.47 tok/s
+baseline_token_rate=1.46 tok/s
+memory.peak=15899996160
+workingset_refault_file=667
+RAM tier loaded=768 entries, 3780.00 MiB
+RAM tier hits=1028 / 85754 total, hit_rate=1.2%
+expert_pack_iouring_wait=39374.169 ms
+baseline_iouring_wait=39931.036 ms
+upgate_wall_sum=39562.596 ms
+baseline_upgate_wall_sum=40099.953 ms
+blk28_upgate_wall=927.308 ms
+baseline_blk28_upgate_wall=859.186 ms
+```
+
+Decision:
+
+- Reject.
+- It hits the 16GB cgroup hard limit and causes file-cache churn/refaults.
+- Although total upgate wall drops slightly, the targeted `blk.28` wall gets
+  worse. The RAM tier changes wait distribution rather than removing the real
+  critical-path cost.
+
+Result B: four-layer top64 upgate pageable RAM tier
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260711-815b-clean-ram-top64-upgate4-pageable-france-n96-141505
+profile=dev-france-batteries-blk28-31-33-51-upgate-top64.profile.csv
+GGML_MOE_RAM_TIER_MIB=2600
+quality=pass
+TTFT=12607.23 ms
+decode=56537.22 ms / 85 runs
+token_rate=1.50 tok/s
+baseline_token_rate=1.46 tok/s
+depth16_token_rate=1.53 tok/s
+memory.peak=15479513088
+workingset_refault_file=33
+RAM tier loaded=512 entries, 2520.00 MiB
+RAM tier hits=2154 / 85754 total, hit_rate=2.5%
+expert_pack_iouring_wait=36465.825 ms
+baseline_iouring_wait=39931.036 ms
+upgate_wall_sum=38689.554 ms
+baseline_upgate_wall_sum=40099.953 ms
+```
+
+Decision:
+
+- Useful diagnostic but not accepted as an improvement.
+- It is better than the clean baseline, but still worse than the no-code
+  depth16/refill8 candidate (`1.53 tok/s`) and consumes much more host RAM.
+- The explicit RAM tier can reduce bytes/wait, but the endpoint gain is too
+  small relative to RAM pressure.
+
+Result C: depth16/refill8 plus four-layer top64 RAM tier
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260711-815b-clean-depth16-ram-top64-upgate4-france-n96-141707
+env=MOE_IO_DEPTH=16, MOE_IO_REFILL_BATCH=8, PINNED_SLOTS=16 plus top64 RAM tier
+outcome=terminated after 6min01s diagnostic stall
+CPU time consumed=18.643s
+metrics.txt=missing
+stdout.txt=empty
+observed_service_memory=14.1G with only 624MiB available in the cgroup
+```
+
+Decision:
+
+- Reject.
+- The combination stalls during cold-start/model initialization under the 16GB
+  cgroup and is not operationally acceptable.
+- Do not stack explicit multi-GB RAM tier with larger pinned staging unless a
+  future design first proves memory headroom and initialization progress.
+
+Interpretation:
+
+- RAM can replace some SSD reads, but current RAM-tier forms do not move the
+  endpoint enough:
+  - full layer is too expensive and hits the memory limit;
+  - top64 is safer but still less effective than simply increasing IO depth;
+  - combining both pressure sources stalls cold start.
+- This suggests the main problem is not just where expert bytes live. The gate/up
+  path still does not expose enough sustained batchable work to the IO scheduler,
+  and RAM hits still need H2D before compute.
+
+Next action:
+
+1. Stop expanding RAM tier until there is a code-level scheduler change.
+2. Inspect and modify the gate/up IO path so it can actually use deeper/bigger
+   batches, matching the down/expert-pack depth16 candidate:
+   - identify why gate iouring profile still reports `inflight_max=8` under
+     `MOE_IO_DEPTH=16`;
+   - make gate/up staging consume the configured depth/refill or add a separate
+     default-off env for gate/up depth;
+   - keep default behavior unchanged until A/B proves benefit.
+3. After gate/up depth is fixed, rerun:
+   - France N96 baseline vs candidate;
+   - cloud/business long held-out N96;
+   - RAM peak, TTFT, fallback, iouring wait, upgate wall, and quality.
+
 ## 当前阶段 Goal 与 Plan：default-off v2 full-cover down dispatch A/B
 
 Timestamp: 2026-07-11 CST.
