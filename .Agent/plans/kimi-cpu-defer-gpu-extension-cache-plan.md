@@ -4,6 +4,103 @@ Date: 2026-07-10
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Current execution goal: Kimi CPU/defer GPU-extension parity
+
+Timestamp: 2026-07-11 CST.
+
+This is the current authoritative goal and plan. Older sections below remain as
+audit history, but new work should follow this section first.
+
+Goal:
+
+> Reuse the successful DeepSeek CPU/defer + GPU expert-cache extension pattern
+> for Kimi without changing the user-visible model behavior. For Kimi this does
+> not mean "remove CPU fallback" first, because the current stable profile already
+> shows decode CPU fallback at zero. The real goal is to make the CPU/defer MoE
+> scheduler hand off more `gate/up/down` expert residency, transfer, and compute
+> work to the GPU extension with less exposed wait. The immediate target is a
+> pushed, cold-start, prompt-general, reproducible improvement to stable
+> `>2 tok/s`; the product target remains stable `>5 tok/s` for random prompts on
+> a 16 GB host-RAM machine with one 32 GB RTX 5090-class GPU.
+
+Hard gates:
+
+- Cold start only. Drop caches before accepted measurements.
+- Host RAM peak below `15900000000` bytes, including page cache, mmap pages,
+  pinned/pageable expert buffers, helper processes, and cgroup accounting.
+- Use VRAM aggressively, but do not exceed the TTFT gate or create host reclaim
+  instability.
+- Paired TTFT must stay within `1.20x` of the baseline used for that experiment.
+- Mandatory quality gate: `Please introduce France in a short paragraph.` must
+  be coherent and semantically correct.
+- Optimization must be prompt-general. Held-out prompts must not be used for
+  hotset, layer, threshold, pack, or cache-policy selection.
+- Every accepted SOTA must be pushed and reproducible. The commit body must
+  include improvement size, exact env, exact command, prompt split, run
+  directory, quality result, TTFT/RAM/VRAM/IO/H2D/fallback metrics, and rollback
+  commit.
+
+Why the DeepSeek idea is relevant to Kimi:
+
+- The transferable idea is architectural: keep CPU/defer as the MoE scheduler,
+  but treat GPU as an expert-cache and expert-compute extension.
+- Kimi should not blindly copy the DeepSeek gate-only optimization. Current Kimi
+  stable runs already report decode CPU fallback at zero, so the main exposed
+  loss is expert movement/staging wait rather than missing GPU math kernels.
+- The next Kimi win must therefore come from higher GPU-extension coverage,
+  better queue continuity, fewer bytes per active expert, or a more useful
+  RAM/VRAM/SSD residency split.
+
+Plan:
+
+1. Reproduce the current stable baseline before new optimization.
+   - Use the current pushed branch and record commit, rollback point, model,
+     env, prompt split, command, and run directory.
+   - Run at least one cold-start N32 smoke and one N96 profile on dev prompts.
+   - Record token rate, TTFT, host RAM peak, VRAM use, page-cache split,
+     expert-pack bytes, H2D bytes, `io_uring_wait`, staging wall time, compute
+     time, direct reads, and CPU fallback count.
+
+2. Add a default-off GPU-extension coverage audit before changing behavior.
+   - For each MoE call, log layer, role, active experts, cache hits/misses,
+     source type, packed type if available, bytes requested, bytes transferred,
+     `io_uring_wait`, H2D time, compute time, and whether the call was served by
+     current GPU extension or had to use a residual path.
+   - Confirm whether Kimi's slow calls are `gate`, `up`, `down`, mixed
+     `up/gate`, or scheduler gaps between calls.
+   - This audit must be behavior-neutral and default-off.
+
+3. Prioritize experiments by measured critical-path seconds.
+   - If gate wait is still exposed on Kimi, test a DeepSeek-style gate hotpool
+     parity path first.
+   - If mixed `up/gate` remains the largest row, prioritize paired `up/gate`
+     residency and transfer scheduling.
+   - If down wait is exposed after up/gate work, extend the same mechanism to
+     same-layer `up/gate/down` demand scheduling.
+   - If byte volume is the largest bound, use the `GGMLMOEPACKv2` lower-byte
+     overlay only where the runtime can consume the smaller representation
+     correctly; otherwise keep it as a profiling tool, not an SOTA claim.
+   - If host RAM is filled by low-value file-backed pages, replace only the
+     measured low-value portion with explicit, batchable expert RAM residency.
+
+4. Validate every candidate as an A/B, then either promote or revert.
+   - First run small N32 quality and accounting checks.
+   - Then run N96 dev profile and compare against the paired cold-start
+     baseline.
+   - Promote only if token rate improves, TTFT stays within gate, host RAM stays
+     below cap, quality passes, and profiling shows the critical-path wait was
+     actually reduced.
+   - If token rate falls, quality degrades, TTFT exceeds gate, or the profile
+     only moves time elsewhere, revert the behavior change and keep only useful
+     default-off instrumentation.
+
+5. Report and commit discipline.
+   - Update this plan before each new implementation step.
+   - Record timestamped results after each run.
+   - Push immediately after any accepted improvement.
+   - Never call a result SOTA unless the pushed commit plus documented command
+     can reproduce it from cold start.
+
 ## Active goal: Kimi lower-byte GPU-extension path
 
 Timestamp: 2026-07-11 CST.
