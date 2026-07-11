@@ -4517,7 +4517,9 @@ static bool expert_pack_v2_override_preflight_env_enabled() {
     const char *preflight = std::getenv("GGML_MOE_EXPERT_PACK_V2_OVERRIDE_PREFLIGHT");
     if (preflight && preflight[0] && preflight[0] != '0') return true;
     const char *override = std::getenv("GGML_MOE_EXPERT_PACK_V2_OVERRIDE");
-    return override && override[0] && override[0] != '0';
+    if (override && override[0] && override[0] != '0') return true;
+    const char *split_plan = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN");
+    return split_plan && split_plan[0] && split_plan[0] != '0';
 }
 
 static const char * expert_pack_v2_override_profile_path() {
@@ -4850,6 +4852,262 @@ static void expert_pack_v2_override_preflight_record(
         (unsigned long long)logical_nbytes * (unsigned long long)n_active,
         (unsigned long long)accepted_bytes,
         (unsigned long long)accepted_saved_bytes);
+    std::fclose(f);
+}
+
+static bool expert_pack_v2_partial_split_plan_enabled() {
+    const char *env = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN");
+    return env && env[0] && env[0] != '0';
+}
+
+static const char * expert_pack_v2_partial_split_plan_path() {
+    const char *path = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN_OUT");
+    return path && path[0] ? path : nullptr;
+}
+
+static uint64_t expert_pack_v2_partial_split_plan_max_calls() {
+    const char *env = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN_MAX_CALLS");
+    if (!env || !env[0]) return 0;
+    char *end = nullptr;
+    const unsigned long long v = std::strtoull(env, &end, 10);
+    return end && *end == '\0' ? (uint64_t)v : 0;
+}
+
+static void expert_pack_v2_partial_split_plan_record(
+        const char *phase,
+        const char *role,
+        const char *tensor_name,
+        int logical_type,
+        size_t logical_nbytes,
+        int64_t logical_ne00,
+        int64_t logical_ne01,
+        size_t logical_nb01,
+        batch_vram_cache *cache,
+        const int *active_experts,
+        int n_active) {
+    if (!expert_pack_v2_partial_split_plan_enabled()) return;
+    if (!tensor_name || !tensor_name[0] || !active_experts || n_active <= 0 || logical_nbytes == 0) {
+        return;
+    }
+
+    const char *path = expert_pack_v2_partial_split_plan_path();
+    if (!path || !path[0]) return;
+
+    expert_pack_v2_override_preflight_init_once();
+    if (!g_expert_pack_v2_override_preflight.enabled) return;
+
+    static std::atomic<uint64_t> observed_calls{0};
+    const uint64_t call_idx = observed_calls.fetch_add(1, std::memory_order_relaxed) + 1;
+    const uint64_t max_calls = expert_pack_v2_partial_split_plan_max_calls();
+    if (max_calls > 0 && call_idx > max_calls) return;
+
+    int cache_hits = 0;
+    int covered = 0;
+    int covered_cache_hits = 0;
+    int reject_no_manifest = 0;
+    int reject_not_allowed = 0;
+    int reject_no_entry = 0;
+    int reject_unsupported = 0;
+    int reject_manifest_mismatch = 0;
+    int reject_shape_mismatch = 0;
+    int reject_not_smaller = 0;
+    bool homogeneous = true;
+    int packed_type = -1;
+    size_t packed_nbytes = 0;
+    int64_t packed_ne00 = 0;
+    int64_t packed_ne01 = 0;
+    size_t packed_nb01 = 0;
+    uint64_t covered_bytes = 0;
+    uint64_t covered_saved_bytes = 0;
+    uint64_t covered_miss_bytes = 0;
+    uint64_t covered_miss_saved_bytes = 0;
+    std::vector<unsigned char> covered_flags((size_t)n_active, 0);
+
+    for (int j = 0; j < n_active; ++j) {
+        const int expert_idx = active_experts[j];
+        const bool cache_hit = cache && batch_cache_find_slot(cache, batch_key_hash(tensor_name, expert_idx)) >= 0;
+        if (cache_hit) {
+            ++cache_hits;
+        }
+
+        if (!g_expert_pack_v2_override_preflight.manifest_loaded) {
+            ++reject_no_manifest;
+            continue;
+        }
+
+        const auto allowed_it = g_expert_pack_v2_override_preflight.manifest.find(
+            expert_pack_v2_override_key(tensor_name, expert_idx));
+        if (allowed_it == g_expert_pack_v2_override_preflight.manifest.end()) {
+            ++reject_not_allowed;
+            continue;
+        }
+        const expert_pack_v2_override_manifest_entry &allowed = allowed_it->second;
+        const expert_pack_v2_entry *entry = expert_pack_v2_lookup(tensor_name, expert_idx);
+        if (!entry) {
+            ++reject_no_entry;
+            continue;
+        }
+        if (entry->packed_type != allowed.packed_type ||
+                (size_t)entry->nbytes != allowed.packed_nbytes ||
+                entry->ne00 != allowed.ne00 ||
+                entry->ne01 != allowed.ne01 ||
+                (size_t)entry->nb01 != allowed.nb01) {
+            ++reject_manifest_mismatch;
+            continue;
+        }
+        if (!expert_pack_v2_packed_type_supported(entry->packed_type)) {
+            ++reject_unsupported;
+            continue;
+        }
+        if (entry->ne00 != logical_ne00 || entry->ne01 != logical_ne01) {
+            ++reject_shape_mismatch;
+            continue;
+        }
+        if ((size_t)entry->nbytes >= logical_nbytes) {
+            ++reject_not_smaller;
+            continue;
+        }
+
+        covered_flags[(size_t)j] = 1;
+        ++covered;
+        if (cache_hit) {
+            ++covered_cache_hits;
+        } else {
+            covered_miss_bytes += (uint64_t)logical_nbytes;
+            covered_miss_saved_bytes += (uint64_t)(logical_nbytes - (size_t)entry->nbytes);
+        }
+        covered_bytes += (uint64_t)entry->nbytes;
+        covered_saved_bytes += (uint64_t)(logical_nbytes - (size_t)entry->nbytes);
+        if (packed_type < 0) {
+            packed_type = entry->packed_type;
+            packed_nbytes = (size_t)entry->nbytes;
+            packed_ne00 = entry->ne00;
+            packed_ne01 = entry->ne01;
+            packed_nb01 = (size_t)entry->nb01;
+        } else if (packed_type != entry->packed_type ||
+                packed_nbytes != (size_t)entry->nbytes ||
+                packed_ne00 != entry->ne00 ||
+                packed_ne01 != entry->ne01 ||
+                packed_nb01 != (size_t)entry->nb01) {
+            homogeneous = false;
+        }
+    }
+
+    int covered_runs = 0;
+    int uncovered_runs = 0;
+    int transitions = 0;
+    int prev = -1;
+    int first_covered = -1;
+    int last_covered = -1;
+    int max_covered_run = 0;
+    int max_uncovered_run = 0;
+    int current_run = 0;
+    for (int j = 0; j < n_active; ++j) {
+        const int flag = covered_flags[(size_t)j] ? 1 : 0;
+        if (flag && first_covered < 0) first_covered = j;
+        if (flag) last_covered = j;
+        if (flag != prev) {
+            if (prev >= 0) ++transitions;
+            if (flag) {
+                ++covered_runs;
+            } else {
+                ++uncovered_runs;
+            }
+            current_run = 1;
+            prev = flag;
+        } else {
+            ++current_run;
+        }
+        if (flag) {
+            max_covered_run = std::max(max_covered_run, current_run);
+        } else {
+            max_uncovered_run = std::max(max_uncovered_run, current_run);
+        }
+    }
+
+    const int uncovered = n_active - covered;
+    const bool full_cover = covered == n_active && homogeneous;
+    const bool no_cover = covered == 0;
+    const int compute_groups = (covered > 0 ? 1 : 0) + (uncovered > 0 ? 1 : 0);
+    const int extra_compute_groups = compute_groups > 0 ? compute_groups - 1 : 0;
+    const uint64_t logical_total_bytes = (uint64_t)logical_nbytes * (uint64_t)n_active;
+    const uint64_t logical_miss_bytes = (uint64_t)logical_nbytes * (uint64_t)(n_active - cache_hits);
+    const double partial_saved_ratio = logical_total_bytes > 0 ?
+        (double)covered_saved_bytes / (double)logical_total_bytes : 0.0;
+    const double partial_miss_saved_ratio = logical_miss_bytes > 0 ?
+        (double)covered_miss_saved_bytes / (double)logical_miss_bytes : 0.0;
+
+    static std::mutex profile_mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> profile_lk(profile_mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+            "seq,call_idx,phase,role,tensor,logical_type,logical_nbytes,"
+            "logical_ne00,logical_ne01,logical_nb01,n_active,cache_hits,"
+            "covered,uncovered,covered_cache_hits,full_cover,no_cover,"
+            "homogeneous,covered_runs,uncovered_runs,transitions,"
+            "first_covered,last_covered,max_covered_run,max_uncovered_run,"
+            "packed_type,packed_nbytes,packed_ne00,packed_ne01,packed_nb01,"
+            "logical_total_bytes,logical_miss_bytes,covered_bytes,"
+            "covered_saved_bytes,covered_miss_bytes,covered_miss_saved_bytes,"
+            "partial_saved_ratio,partial_miss_saved_ratio,"
+            "reject_no_manifest,reject_not_allowed,reject_no_entry,"
+            "reject_unsupported,reject_manifest_mismatch,reject_shape_mismatch,"
+            "reject_not_smaller,compute_groups,extra_compute_groups\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+        "%llu,%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%zu,%ld,%ld,%zu,%llu,%llu,%llu,%llu,%llu,%llu,%.9f,%.9f,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+        (unsigned long long)++seq,
+        (unsigned long long)call_idx,
+        phase ? phase : "",
+        role ? role : "",
+        tensor_name,
+        logical_type,
+        logical_nbytes,
+        (long)logical_ne00,
+        (long)logical_ne01,
+        logical_nb01,
+        n_active,
+        cache_hits,
+        covered,
+        uncovered,
+        covered_cache_hits,
+        full_cover ? 1 : 0,
+        no_cover ? 1 : 0,
+        homogeneous ? 1 : 0,
+        covered_runs,
+        uncovered_runs,
+        transitions,
+        first_covered,
+        last_covered,
+        max_covered_run,
+        max_uncovered_run,
+        packed_type,
+        packed_nbytes,
+        (long)packed_ne00,
+        (long)packed_ne01,
+        packed_nb01,
+        (unsigned long long)logical_total_bytes,
+        (unsigned long long)logical_miss_bytes,
+        (unsigned long long)covered_bytes,
+        (unsigned long long)covered_saved_bytes,
+        (unsigned long long)covered_miss_bytes,
+        (unsigned long long)covered_miss_saved_bytes,
+        partial_saved_ratio,
+        partial_miss_saved_ratio,
+        reject_no_manifest,
+        reject_not_allowed,
+        reject_no_entry,
+        reject_unsupported,
+        reject_manifest_mismatch,
+        reject_shape_mismatch,
+        reject_not_smaller,
+        compute_groups,
+        extra_compute_groups);
     std::fclose(f);
 }
 
@@ -12818,6 +13076,18 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         cache,
         active_experts,
         n_active);
+    expert_pack_v2_partial_split_plan_record(
+        prompt_mode ? "prompt_upgate" : "decode_upgate",
+        "up",
+        up_key_name,
+        src0_up_type_int,
+        up_expert_bytes,
+        ne00,
+        ne01,
+        up_nb01,
+        cache,
+        active_experts,
+        n_active);
     expert_pack_v2_call_coverage_record(
         prompt_mode ? "prompt_upgate" : "decode_upgate",
         "gate",
@@ -12831,6 +13101,18 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         active_experts,
         n_active);
     expert_pack_v2_override_preflight_record(
+        prompt_mode ? "prompt_upgate" : "decode_upgate",
+        "gate",
+        gate_key_name,
+        src0_gate_type_int,
+        gate_expert_bytes,
+        ne00,
+        ne01,
+        gate_nb01,
+        cache,
+        active_experts,
+        n_active);
+    expert_pack_v2_partial_split_plan_record(
         prompt_mode ? "prompt_upgate" : "decode_upgate",
         "gate",
         gate_key_name,
@@ -14933,6 +15215,18 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         active_experts,
         n_active);
     expert_pack_v2_override_preflight_record(
+        rows_stride > 8 ? "prompt_batch" : "decode_down",
+        is_prompt_up ? "up" : (is_prompt_gate ? "gate" : "down"),
+        src0_name,
+        src0_type_int,
+        src0_bytes,
+        ne00,
+        ne01,
+        nb01,
+        cache,
+        active_experts,
+        n_active);
+    expert_pack_v2_partial_split_plan_record(
         rows_stride > 8 ? "prompt_batch" : "decode_down",
         is_prompt_up ? "up" : (is_prompt_gate ? "gate" : "down"),
         src0_name,

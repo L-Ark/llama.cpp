@@ -83,6 +83,139 @@ Execution plan for this goal:
    - The next experiment must be chosen from the latest measured bottleneck,
      not from a stale optimization idea.
 
+## Progress update: runtime partial-split shadow planner
+
+Timestamp: 2026-07-11 CST.
+
+Commit scope prepared:
+
+- Added a default-off runtime planner for v2 partial expert replacement.
+- New envs:
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN=1` enables the planner;
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN_OUT=<csv>` writes one row per
+    real runtime `up/gate/down` call;
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN_MAX_CALLS=<n>` optionally caps
+    profiling rows.
+- The planner reuses the v2 metadata index and the manifest-gated safety checks
+  from override preflight: exact `(tensor, expert_idx)` allowlist, type/shape
+  match, supported packed type, and packed payload smaller than the current
+  logical payload.
+- Dispatch remains disabled. This patch does not read v2 payload bytes, does
+  not launch a replacement kernel, and does not change model output.
+
+Planner CSV fields:
+
+- Real active route split: `covered`, `uncovered`, `covered_runs`,
+  `uncovered_runs`, `transitions`, first/last/max run positions.
+- Cache-aware saving estimate: `covered_saved_bytes` and
+  `covered_miss_saved_bytes`; the latter is the more important critical-path
+  estimate because a row already in VRAM cache is not an SSD miss.
+- Dispatch complexity estimate: `compute_groups` and `extra_compute_groups`,
+  where partial rows generally imply one v2 group plus one current-path group.
+- Reject reason split: no manifest, not allowlisted, no v2 entry, unsupported,
+  manifest mismatch, shape mismatch, and not smaller.
+
+Build:
+
+- Command: `cmake --build build-cuda-batch --target ggml-cuda -j2`.
+- Result: pass. Only pre-existing warning classes were emitted.
+
+Default-off regression run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-partial-split-plan-defaultoff-n32-france`.
+- Prompt: `Please introduce France in a short paragraph.`
+- Command:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000
+  -p MemorySwapMax=0 env RUN=<run> N=32 PROFILE=1
+  PROMPT_ID=dev_france_partial_split_defaultoff
+  PROMPT_USER_TEXT='Please introduce France in a short paragraph.'
+  QUALITY_KEYWORDS='france,paris|europe|western'
+  .Agent/run-tools/kimi-general-prompt-repro.sh`.
+- Quality: pass.
+- Token rate: `1.69 tok/s`.
+- TTFT: `8678.19 ms`.
+- Decode: `18299.42 ms / 31`, or `590.30 ms/token`.
+- Host RAM peak: `12767264768` bytes.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+- No planner/preflight/v2 files were produced. Default-off behavior is
+  preserved for this instrumentation patch.
+
+Planner run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-partial-split-plan-dev7-budget120-n32-heldout-sky`.
+- Prompt: `Explain why the sky appears blue in a short paragraph.`
+- Command shape:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000
+  -p MemorySwapMax=0 env RUN=<run> N=32 PROFILE=1
+  PROMPT_ID=heldout_sky_partial_split_plan
+  PROMPT_USER_TEXT='Explain why the sky appears blue in a short paragraph.'
+  QUALITY_KEYWORDS='sky,blue|scattering|atmosphere'
+  EXTRA_RUNTIME_ENV='<v2 pack + manifest + planner envs>'
+  .Agent/run-tools/kimi-general-prompt-repro.sh`.
+- v2 metadata-only pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-metadataonly-dev7-budget120/selected-iq1s-overlay-v2.expert-pack`.
+- Manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-metadataonly-dev7-budget120/selected-iq1s-overlay-manifest.tsv`.
+- Planner CSV:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-partial-split-plan-dev7-budget120-n32-heldout-sky/v2-partial-split-plan.csv`.
+- Quality: pass.
+- Token rate: `1.70 tok/s`. This is a sanity check only; planner CSV overhead
+  means this is not a SOTA candidate.
+- TTFT: `10398.42 ms`.
+- Decode: `18260.31 ms / 31`, or `589.04 ms/token`.
+- Host RAM peak: `12797509632` bytes.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+- v2 manifest loaded: `44642` rows, `0` bad rows.
+- v2 active coverage: `63219 / 72984 = 86.62%`.
+- Full-cover calls: `1455 / 5760 = 25.26%`.
+- Partial-cover calls: `4305 / 5760 = 74.74%`.
+- No-cover calls: `0`.
+- All rejected rows were not allowlisted: `9765`; no type, shape, missing-entry,
+  manifest, or size rejects.
+- Total planner saved bytes: `165.36 GiB`.
+- Miss-weighted saved bytes: `112.21 GiB`.
+- Overall miss-weighted saved ratio: `43.49%`.
+
+Held-out sky split by role:
+
+- `decode_upgate/up`: `11921 / 14888 = 80.07%` covered,
+  `20.31%` full-cover calls, `12.28 GiB` miss-weighted saved bytes.
+- `decode_upgate/gate`: `12361 / 14888 = 83.03%` covered,
+  `27.08%` full-cover calls, `15.11 GiB` miss-weighted saved bytes.
+- `decode_down/down`: `12694 / 14888 = 85.26%` covered,
+  `30.74%` full-cover calls, `16.54 GiB` miss-weighted saved bytes.
+- Prompt rows also show high row coverage, but prompt optimization is not the
+  next bottleneck unless TTFT remains within the `+20%` gate.
+
+Interpretation:
+
+- Full-call-only v2 override is not sufficient. Only `25.26%` of real calls are
+  full-cover on the held-out prompt, so replacing only full calls would leave
+  most critical-path misses untouched.
+- Partial split is the necessary next lower-byte experiment. It has enough
+  miss-weighted byte saving to plausibly cross the `>2 tok/s` milestone, but it
+  adds one extra compute group for every partial call (`4305` calls in this
+  N32 run). The implementation must therefore keep split bookkeeping, scatter,
+  and second-kernel overhead below the saved `io_uring_wait + H2D` time.
+- Up/gate remains the priority for Kimi. The planner shows `27.39 GiB`
+  decode miss-weighted saving across `up+gate`, and those roles sit on the
+  exposed critical path before down can be fully overlapped.
+
+Next decision:
+
+- Implement a guarded, default-off partial dispatch for covered rows only after
+  a tiny payload runtime smoke proves row ordering and merge correctness.
+- First target the role/layer groups with high coverage and low segmentation.
+  Avoid broad dispatch if row segmentation causes too many small groups or
+  scatter overhead dominates.
+- Promotion gate remains unchanged: no SOTA claim until dev and held-out
+  cold-start runs improve token rate while passing RAM, TTFT, fallback, direct
+  read, and quality gates.
+
 ## Current goal and plan checkpoint: 2026-07-11 CST
 
 This section is the current working contract. All later experiments, commits,
