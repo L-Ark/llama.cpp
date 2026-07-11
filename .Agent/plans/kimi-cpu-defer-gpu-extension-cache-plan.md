@@ -4,6 +4,145 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 当前阶段 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
+
+Timestamp: 2026-07-11 CST.
+
+### Goal
+
+验证 DeepSeek SOTA 中“CPU/defer MoE 主调度方 + GPU expert-cache
+extension”的方法，是否能在 Kimi 当前 vendor 分支上形成可泛化、可复现的
+token-rate 提升。
+
+本阶段的目标不是做 France prompt-specific pack，也不是继续接受 dirty run
+里的偶然速度；目标是得到一个干净、可回退、可复现的 Kimi 优化路径：
+
+- 主部署约束：16GB host RAM hard limit，包含 page cache、mmap file pages、
+  pinned buffer、allocator overhead、helper process memory。
+- GPU 约束：单张 32GB RTX 5090，尽可能把高收益 expert 和计算留在 VRAM。
+- 工作负载：随机/general prompt，不能只针对已知 prompt 或用于建 pack/profile
+  的 prompt。
+- 正确性门槛：`Please introduce France in a short paragraph.` 必须输出语义
+  正确、连贯的 France 介绍；general held-out prompts 也必须语义正确。
+- 性能门槛：TTFT 不能超过同一 cold-start baseline 的 `+20%`；decode CPU
+  fallback 不能变多；host RAM peak 必须 `<15900000000` bytes。
+- 复现门槛：任何新 SOTA 必须来自 clean pushed commit；commit message body
+  必须记录提升幅度、env、复现命令、prompt/test set、RAM/TTFT/quality gate、
+  fallback/direct-read 证据和 rollback point。
+
+短期 milestone：
+
+- 在当前 Kimi vendor 分支上，先把可泛化 N96 token rate 稳定推进到 `>2 tok/s`。
+- 该结果必须至少覆盖 France regression prompt + held-out general prompts，不能
+  只用一个调参 prompt 证明。
+
+长期目标：
+
+- 在 16GB host RAM + 32GB 5090 + cold start 下，让随机用户 prompt 稳定达到
+  `>5 tok/s`，并保持语义正确。
+
+### 当前判断
+
+DeepSeek 的方法对 Kimi 有迁移价值，但不能直接假设收益等价。
+
+可迁移的核心不是“把 GPU 当 CPU fallback”，而是：
+
+- CPU/defer MoE path 仍然是主调度方；
+- 在该路径内部，为高频或关键 expert 增加 GPU extension；
+- expert 通过 pack/cache/RAM/VRAM tier 提前或快速进入 VRAM；
+- gate/up/down 在 GPU 上执行，失败时才落回原 CPU/defer fallback；
+- 只有 critical path 上的 miss/wait 被减少，endpoint token rate 才会提升。
+
+对 Kimi 需要重新验证的点：
+
+- 当前 Kimi 的 gate/up/down 哪些 role、哪些 layer 仍实际走 CPU/defer 慢路径；
+- `n_cpu_moe`、GPU extension、expert pack、current-down-overlap、RAM tier 之间
+  的真实调用关系；
+- gate 是否像 DeepSeek 一样是最关键的收益点，还是 Kimi 的瓶颈已经转移到
+  up/down IO wait、H2D staging 或 cache scheduling；
+- 任何 RAM tier/page-cache 替换是否真的减少 critical-path wait，而不是只提高
+  hit rate 或搬运字节统计。
+
+### Plan
+
+1. 固定 clean baseline 与 rollback point。
+   - 当前分支：`vendor/kimi-deepseek-41d205-additive`。
+   - 当前可回退的 clean pushed point：`76b70c979`，除非后续 merge 改变基线。
+   - 当前未提交的 `moe_stream_batch.cu` v2-overlap 实验只能算 diagnostic，不能作为
+     SOTA claim。
+   - 先重新跑 N96 cold-start baseline，记录 France + held-out general prompt 的
+     token rate、TTFT、RAM/page-cache、VRAM、CPU fallback、io_uring wait、H2D、
+     staging、compute。
+
+2. 确认 Kimi CPU/defer 与 GPU extension 的真实边界。
+   - 给 gate/up/down 的 dispatch 增加或复用 profile，按 layer/role 统计：
+     `CPU/defer entered`、`GPU extension accepted`、`GPU cache hit/miss`、
+     `expert pack read`、`RAM tier hit`、`CPU fallback`。
+   - 重点回答：Kimi 当前是否也存在“前若干层 MoE 默认由 CPU/defer 调度，但可通过
+     GPU extension 加速”的结构。
+   - 若 gate 已经稳定 GPU 化且不在 critical path，下一步不再盲目复制 DeepSeek
+     gate-only 策略。
+
+3. 做 gate-only 的小规模 A/B，而不是直接大改。
+   - 设计 default-off env，例如只启用 gate hot/cache path，不改变默认 SOTA。
+   - 先跑 N32 smoke，再跑 N96 cold-start。
+   - 判断指标不是 gate hit rate，而是 endpoint decode time 是否减少，以及
+     io_uring wait / CPU fallback / H2D staging 是否按预期变化。
+   - 如果 gate-only 对 Kimi 没有收益，记录 reject reason，转向 up/down critical
+     path。
+
+4. 扩展到 up/gate/down paired cache 与更早预取。
+   - 若 profile 证明某些 layer/role 的 miss 暴露在 critical path 上，则优先让同一层
+     routing 结果出来后，将 gate+up+down miss 统一排进更大的 IO scheduler。
+   - 先做 default-off A/B，观察 batch size、inflight depth、SSD bandwidth、H2D
+     wall、down staging wall 是否改善。
+   - 只有当联合 batch 减少实际 wait，才继续优化；如果只是多读字节或挤掉有用 cache，
+     必须回退。
+
+5. RAM/VRAM 分层重新设计，替换低价值 page cache。
+   - 在 decode 阶段精确审计 16GB RAM：anonymous、pinned、file-backed GGUF pages、
+     expert pack pages、page cache、mmap refault。
+   - 找出 decode 不再使用或低收益的 file pages，并在 prompt 后释放。
+   - 用释放出的 RAM 放结构化 expert cache，而不是依赖不可控 Linux page cache。
+   - 候选策略按收益/风险排序：
+     - VRAM：最 hot 且跨 prompt 稳定的 expert；
+     - RAM pinned/pageable tier：次 hot 或 low-hit critical layer 的完整 gate/up
+       role；
+     - SSD pack：cold expert，保持大 batch、连续布局、O_DIRECT/io_uring。
+   - 所有 RAM tier 实验必须同时记录 preload TTFT 成本、decode wait saving、
+     refault/reclaim、RAM peak、batch fragmentation。
+
+6. 泛化与 held-out 规则。
+   - 调参 prompts 与 test prompts 分离。
+   - 不允许用 held-out prompts 建 expert pack、hot profile 或 RAM tier profile。
+   - accepted SOTA 必须汇报 test set 平均值、最慢 prompt、France regression prompt、
+     以及任意明显失败样例。
+
+7. 提交、push 与回退规则。
+   - 有符合所有 hard gates 的提升时，立刻 commit + push。
+   - commit message body 必须包含：baseline SHA、candidate SHA、rollback SHA、
+     提升幅度、完整 env、复现命令、prompt/test set、RAM peak、TTFT、decode time、
+     token rate、quality answer、fallback/direct-read integrity、run directory。
+   - 性能下降、准确率下降、TTFT 超过 `+20%`、RAM 超限、不可复现、或默认路径被影响，
+     都必须回退或保持 default-off，并在本文件记录 reject reason。
+
+### 下一步执行入口
+
+下一次实施从 Step 1 开始，不直接写优化代码：
+
+```bash
+# 1. 确认 clean pushed baseline / dirty diff
+git status --short
+git rev-parse HEAD
+
+# 2. N96 cold-start baseline: France regression
+# 3. N96 cold-start baseline: held-out general prompts
+# 4. 汇总 per-token profile 和 RAM/page-cache/VRAM breakdown
+```
+
+只有 profile 证明 gate/up/down 中某个 role 的 GPU extension 能减少 critical-path
+wait，才进入对应的 default-off A/B patch。
+
 ## 当前阶段 Goal 与 Plan：default-off v2 full-cover down dispatch A/B
 
 Timestamp: 2026-07-11 CST.
