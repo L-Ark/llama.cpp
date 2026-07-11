@@ -17731,3 +17731,147 @@ Decision:
 - Treat this as a manifest coverage finding: v2 can only help if it covers a
   materially larger fraction of critical-path active experts, especially the
   current-down overlap calls.
+
+### 2026-07-12 General-prompt v2 coverage analysis
+
+Purpose:
+
+- Estimate whether a better v2 manifest can make current-down overlap useful
+  for general prompts.
+- Avoid a France-only or prompt-specific pack.
+- Use route traces only as coverage data; do not treat N32 short-output runs as
+  final quality SOTA.
+
+Input route traces:
+
+- France dev trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-nextgoal-baseline-n32-france-213337`
+  - quality: pass;
+  - token rate: `1.54 tok/s`;
+  - TTFT: `11493.86 ms`;
+  - decode: `20102.13 ms / 31`;
+  - memory peak: `12767100928 bytes`.
+- Intelligence dev trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-general-trace-n32-intelligence-215022`
+  - quality: pass;
+  - token rate: `1.69 tok/s`;
+  - TTFT: `7072.38 ms`;
+  - decode: `18291.41 ms / 31`;
+  - memory peak: `12601888768 bytes`.
+- HKUST held-out trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-general-trace-n32-hkust-215125`
+  - quality: fail due N32 truncation/dangling output, not semantic collapse;
+  - token rate: `1.71 tok/s`;
+  - TTFT: `8737.38 ms`;
+  - decode: `18101.93 ms / 31`;
+  - memory peak: `12758892544 bytes`;
+  - output started correctly:
+    `The Hong Kong University of Science and Technology (HKUST) is a leading
+    research university located in Clear Water Bay, Hong Kong. Established in
+    1991,`.
+
+Current top2048 v2 manifest coverage:
+
+- Manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-manifest.tsv`
+- Rows: `2048`.
+- Aggregate events across three traces: `201960`.
+- Event coverage: `38931 / 201960 = 19.277%`.
+- Role event coverage:
+  - up: `14.890%`;
+  - gate: `16.885%`;
+  - down: `26.055%`.
+- Down decode full-cover groups:
+  - groups: `5583`;
+  - full covered: `29 / 5583 = 0.519%`;
+  - any-entry covered: `3230 / 5583 = 57.854%`.
+
+Interpretation:
+
+- The current top2048 pack has some per-entry overlap, but nearly never covers
+  all active experts in a down call.
+- This explains why runtime v2 full-cover down accepted only a tiny number of
+  calls and current-down v2 overlap had `overlap_reject_no_entry=899`.
+- Full-cover v2 dispatch is extremely sensitive to manifest selection: partial
+  coverage of a down group does not help the current full-cover path.
+
+Available metadata universe:
+
+- Metadata manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-metadataonly-dev7-budget120/selected-iq1s-overlay-manifest.tsv`
+- Rows: `44642`.
+- Aggregate event coverage if all metadata rows were materialized:
+  - event coverage: `90.030%`;
+  - up: `88.500%`;
+  - gate: `90.340%`;
+  - down: `91.249%`;
+  - down decode full-cover groups: `2775 / 5583 = 49.704%`.
+
+Frequency topK simulation constrained by metadata rows:
+
+| K | event coverage | up | gate | down | down full-cover | packed size |
+|---:|---:|---:|---:|---:|---:|---:|
+| `2048` | `28.877%` | `28.642%` | `28.887%` | `29.101%` | `0.054%` | `5.53 GiB` |
+| `4096` | `42.235%` | `41.848%` | `42.274%` | `42.583%` | `0.591%` | `11.06 GiB` |
+| `8192` | `58.520%` | `57.989%` | `58.584%` | `58.987%` | `2.776%` | `22.13 GiB` |
+| `16384` | `76.274%` | `75.452%` | `76.499%` | `76.872%` | `14.043%` | `44.20 GiB` |
+| `24576` | `86.206%` | `84.984%` | `86.487%` | `87.148%` | `34.766%` | `66.20 GiB` |
+
+Conclusion:
+
+- Pure frequency topK is not suitable for the current full-cover down path.
+- It improves individual event coverage, but full-cover group coverage stays
+  low until the pack becomes very large.
+
+Group-aware down candidate simulation:
+
+- Method:
+  - reconstruct consecutive same-tensor route groups from `route-trace.csv`;
+  - keep only down decode-like groups with `n_active <= 8`;
+  - require all group entries to exist in the 44642-row metadata universe;
+  - greedily select complete down active groups by `occurrence_count / new_keys`.
+- Finding:
+  - coverable down decode groups: `2775`;
+  - unique group patterns: `2772`;
+  - repeat patterns: `3`;
+  - max repeat count: `2`.
+
+| K | selected entries | down full-cover | total event coverage | up coverage | gate coverage | down coverage | packed size |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| `512` | `512` | `231 / 2775 = 8.324%` | `1.820%` | `0.000%` | `0.000%` | `5.460%` | `1.43 GiB` |
+| `1024` | `1024` | `438 / 2775 = 15.784%` | `3.544%` | `0.000%` | `0.000%` | `10.633%` | `2.82 GiB` |
+| `2048` | `2048` | `905 / 2775 = 32.613%` | `7.461%` | `0.000%` | `0.000%` | `22.384%` | `5.56 GiB` |
+| `4096` | `4096` | `1866 / 2775 = 67.243%` | `15.334%` | `0.000%` | `0.000%` | `46.001%` | `11.03 GiB` |
+| `6331` | `6331` | `2775 / 2775 = 100.000%` | `23.216%` | `0.000%` | `0.000%` | `69.648%` | `17.19 GiB` |
+
+Generated candidate manifests:
+
+- Output directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-general-coverage-analysis`
+- Summary:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-general-coverage-analysis/summary.txt`
+- K2048 down-group candidate:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-general-coverage-analysis/down-group-greedy-k2048.manifest.tsv`
+  - selected entries: `2048`;
+  - down full-cover: `905 / 2775 = 32.613%`;
+  - packed bytes: `5967560704`, about `5.558 GiB`.
+- K4096 down-group candidate:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-general-coverage-analysis/down-group-greedy-k4096.manifest.tsv`
+  - selected entries: `4096`;
+  - down full-cover: `1866 / 2775 = 67.243%`;
+  - packed bytes: `11839586304`, about `11.026 GiB`.
+
+Decision:
+
+- The next v2 runtime experiment should not use the existing top2048 manifest.
+- A down-group-aware K2048 materialized pack is the smallest worthwhile
+  candidate for current-down overlap because it keeps pack size similar to the
+  current top2048 pack while raising predicted full-cover down coverage from
+  `0.519%` to `32.613%`.
+- K4096 is the stronger coverage candidate but roughly doubles pack size to
+  `11.026 GiB`; test K2048 first unless pack build cost is negligible.
+- This path still only addresses down/current-down overlap. It does not solve
+  up/gate miss time, so even a successful K2048/K4096 test is unlikely to reach
+  `5 tok/s` by itself. It is still a plausible step toward the nearer
+  `>= 2 tok/s` milestone if it reduces exposed down wait without increasing
+  TTFT/RAM beyond gates.
