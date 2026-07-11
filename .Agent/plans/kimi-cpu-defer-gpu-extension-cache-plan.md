@@ -4,6 +4,87 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 本轮 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
+
+Timestamp: 2026-07-11 CST.
+
+### Goal
+
+在当前 Kimi 分支 `vendor/kimi-deepseek-41d205-additive` 上，验证并推进
+DeepSeek SOTA 中的核心思想：
+
+> 不是把整个模型切到 GPU backend，而是在 `CPU/defer MoE scheduler` 仍然作为
+> 主调度路径的前提下，给 `gate/up/down` expert 增加可控的 GPU
+> expert-cache/streaming extension，使原本会暴露在 critical path 上的
+> expert 读取、staging、H2D、同步或计算开销被减少。
+
+Kimi 的阶段目标：
+
+- 先恢复并稳定复现当前 prompt-general SOTA rollback point。
+- 再证明该 GPU-extension 思路是否能带来新的可复现提升。
+- 短期目标是 held-out/general prompts cold-start decode `>2 tok/s`。
+- 产品目标仍然是随机用户 prompt 在 `16GB host RAM + 32GB RTX 5090` 下稳定
+  `>5 tok/s`，同时语义正确、TTFT 不超过 baseline `+20%`。
+
+关键判断：
+
+- 这个方向对 Kimi **可能有用**，但不能照搬 DeepSeek 的 gate-only 结论。
+- DeepSeek 的大提升来自把 CPU/defer 路径中的 gate work 接到 GPU
+  hot/cache extension；Kimi 当前稳定路径已经基本做到 decode CPU fallback
+  为 0，所以 Kimi 的收益必须来自更低的 exposed wait、更多有效 overlap、
+  更少 active expert bytes、或更可控的 RAM/VRAM expert residency。
+- 如果 profiling 证明 Kimi 的 exposed stall 是 mixed `up/gate/down`，则必须
+  按 role group 或 layer group 优化，不能只优化 gate。
+
+### Hard Gates
+
+任何新 SOTA 必须同时满足：
+
+- Cold start only。
+- Host RAM peak `<15900000000` bytes，包含 page cache、pinned memory、
+  anonymous RAM、mmap/file-backed pages、helper processes、cgroup accounting。
+- TTFT 不超过所选 baseline 的 `+20%`。
+- `Please introduce France in a short paragraph.` 必须语义正确、连贯。
+- 必须通过 held-out prompts；调参 prompt 不能作为最终 SOTA 证据。
+- 必须记录并可复现：baseline SHA、candidate SHA、rollback SHA、完整 env、
+  命令、prompt split、run directory、token rate、TTFT、RAM/page-cache/VRAM、
+  IO/H2D/staging/compute/fallback、质量输出。
+- 符合约束的提升要立即 commit + push；不符合约束的改动必须 default-off 或回退。
+
+### Execution Plan
+
+1. Reproduce rollback baseline。
+   - 在当前 HEAD 先做 cold-start baseline，至少包含一个 dev prompt 和一个
+     held-out prompt。
+   - 记录 endpoint token rate、TTFT、RAM peak、active/inactive file cache、
+     VRAM hit rate by role、expert read bytes、`io_uring_wait`、staging wall、
+     H2D、up/gate compute、down compute、sync gap、CPU fallback。
+   - 这次 run directory 作为本轮 rollback reference。
+
+2. Audit Kimi 的 CPU/defer GPU-extension 边界。
+   - 确认 `n_cpu_moe` 下哪些 `gate/up/down` 已经被 GPU extension 接住。
+   - 明确还有哪些路径仍然是 blocking staging、低 inflight IO、不可 overlap H2D、
+     或 residual CPU/defer。
+   - 如果 CPU fallback 仍然为 0，则不再把 fallback removal 当作主目标。
+
+3. 做 default-off replacement profile。
+   - 先不改变 logits、不改变采样、不改变主路径输出。
+   - 对每次 `gate/up/down` active expert miss 统计：v1 bytes、v2/compact bytes、
+     可替换数量、理论 saved bytes、是否同层/同 role 可 coalesce。
+   - 输出 CSV 和 atexit summary，用于判断是否值得做真实 dispatch。
+
+4. 做小规模 real-dispatch A/B。
+   - 只在 profile 显示收益最大的 layer/role group 上打开。
+   - 优先尝试 mixed `up/gate/down` group，而不是 gate-only。
+   - 每次只接受 endpoint token rate 提升、TTFT 合规、RAM 合规、质量合格的结果。
+
+5. 推进 `>2 tok/s` 小目标。
+   - 如果 v2/compact bytes 路径能降低 critical-path bytes，就实现 real
+     replacement 并跑 held-out validation。
+   - 如果 bytes 降低无法转化为 endpoint gain，则转向 scheduling：same-layer
+     coalescing、更早 next-layer prefetch、更高 inflight、H2D/compute overlap。
+   - 每个候选都先写入计划，再实验，再记录结果；禁止只凭单 prompt 宣称 SOTA。
+
 ## READ FIRST: active goal and immediate plan
 
 Timestamp: 2026-07-11 CST.
