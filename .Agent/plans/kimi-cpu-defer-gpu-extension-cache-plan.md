@@ -76,19 +76,27 @@ kernel 计算。因此下一阶段的主要问题不是再做一个泛泛的 CPU
      upgate compute、down compute、CPU fallback、RAM/file cache；
    - 明确离 `2 tok/s` 和 `5 tok/s` 还差的主要秒数。
 
-2. Run v2 partial-split planning and bound only.
-   - 使用当前 `UPGATE_PCT=72` baseline 的真实 route/profile；
-   - 只做 planner/control/bound，不把 shadow-read 结果作为 SOTA；
-   - 目标是判断低字节 up/gate 替换是否有足够理论收益；
-   - 如果 bound 不能接近 `>=2 tok/s`，停止该方向，避免实现无收益路径。
+2. Build a wait-weighted critical-path report.
+   - 用当前保护配置重新跑 profile，不用已拒绝的优化 flag；
+   - 按 `runtime_load:up`、`runtime_load:gate`、`runtime_load:down`、
+     `current_down_overlap:down` 分层统计 wait、bytes、jobs、batch depth、H2D、
+     VRAM hit/miss 和 RAM/file cache；
+   - 对 `>=2 tok/s` 明确计算缺口：France N32 需要 decode 约 `<=15500 ms`，
+     相比 `19471.45 ms` 需要稳定省下约 `3971 ms`；held-out deploy 相比
+     `19993.04 ms` 需要省下约 `4493 ms`；
+   - 只选择理论可省时间超过这个缺口且不会破坏质量/RAM/TTFT gate 的候选。
 
-3. Design up/gate-first replacement candidate.
-   - 不再优先扩大 down；
-   - 先针对 exposed wait 最高的 up/gate layer/role 做 pack layout 或 low-byte
-     replacement 候选；
-   - 计算理论上限：可减少的 miss bytes、critical wait、expected tok/s upper bound；
-   - 实测不符合预期时，必须解释 gap：batch depth、H2D、kernel sync、cache eviction、
-     page reclaim 或 compute contention。
+3. Test storage/scheduler candidates that do not change expert numerics.
+   - 不再把 up/gate IQ1_S 低字节替换作为下一条主线：12/24/64 GiB preflight 已经
+     证明 margin 不足；
+   - 不重复 broad adjacent coalesce、overlap-only coalesce、early current-down overlap：
+     这些路径已有 rejection；
+   - 新候选必须是 default-off，并优先满足：
+     - demand read 不等待整组 coalesced read 完成；
+     - demand 可以接管已经 inflight 的 prefetch，不能重复读取；
+     - 不让 down overlap 抢占 up/gate critical read；
+     - 目标是提高 runtime 有效 batch depth 和降低 exposed `io_uring_wait_us`，
+       不是单纯减少 CQE 或增加 hit rate。
 
 4. Evaluate explicit RAM tier only after page-cache audit.
    - 先确认 decode 阶段 active_file/inactive_file 具体由哪些 GGUF shard/ranges 组成；
@@ -105,10 +113,29 @@ kernel 计算。因此下一阶段的主要问题不是再做一个泛泛的 CPU
 
 ### Immediate Next Step
 
-下一步先执行 `UPGATE_PCT=72` baseline 上的 v2 partial-split planning/bound：它不改变
-当前 SOTA 路径，只回答一个问题：是否存在足够大的 up/gate 低字节替换收益，可以作为
-冲 `>=2 tok/s` 的工程方向。如果答案是否定的，转向 up/gate pack layout、coalesced
-read scheduler 和显式 RAM/VRAM 分层缓存。
+下一步不是继续实现 up/gate IQ1_S 低字节 runtime path。该方向已经被 12/24/64 GiB
+preflight 拒绝。
+
+下一步执行顺序：
+
+1. 在当前保护配置上重跑 fresh cold-start N32 profile：
+   - France；
+   - 一个 held-out/general prompt；
+   - 打开 `io-wait-trace`、`io-read-trace`、copy profile、IO batch profile、
+     current-down overlap profile、fallback profile 和 RAM/file cache snapshot。
+2. 生成 wait-weighted layer/role 报告，列出 top exposed seconds：
+   - 哪些层/role 的 miss 真正在 critical path；
+   - 每个候选最多能省多少 ms；
+   - 是否足以把 France 和 held-out 同时推到 `>=2 tok/s`。
+3. 只从报告里选择一个 default-off 候选进入 A/B：
+   - 非阻塞 routed-read scheduler / inflight handoff；
+   - role-split 或 group-aware pack layout；
+   - page-cache audit 后的显式 RAM/VRAM tier。
+4. 如果候选没有理论上限，或理论上限不到 `~4.5 s` decode saving，就不实现，直接记录
+   rejection。
+
+这轮 goal 是形成一个可执行、可复现的 `>=2 tok/s` 路线，而不是再堆叠无法解释的
+profile-specific 配置。
 
 ### 2026-07-12 Result: current v2 partial-split bound is not enough
 
