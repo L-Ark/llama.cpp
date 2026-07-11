@@ -195,6 +195,137 @@ Next direction:
    coalesced routed-read scheduling and explicit RAM/VRAM tiering with a
    page-cache audit.
 
+### 2026-07-12 Result: up/gate low-byte bound is the next viable candidate
+
+Purpose:
+
+- after rejecting current down-only partial split, estimate whether an up/gate
+  low-byte hotset could plausibly reach the near-term `>=2 tok/s` target;
+- use the same two general prompts as the partial-split bound;
+- do only offline/static bound work; no runtime dispatch changes.
+
+Inputs:
+
+- France route profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-partialsplit-plan-upgate72-france-n32-232220/route-profile.csv`
+- Held-out deploy route profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-partialsplit-plan-upgate72-deploy-n32-232419/route-profile.csv`
+
+Static low-byte hotset sweep:
+
+- Output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-lowbyte-hotset-bound/upgate-lowbyte-hotset-sweep.md`
+- Scope: `kind=up,gate`;
+- baseline: `1.55 tok/s`;
+- target: `2.0 tok/s`;
+- candidate up/gate entries: `22734`.
+
+Key rows:
+
+| packed ratio | entries | event cov | hybrid byte ratio | ideal transfer-only tok/s |
+|---:|---:|---:|---:|---:|
+| `0.276` | `2048` | `0.3806` | `0.7236` | `2.142` |
+| `0.276` | `4096` | `0.5432` | `0.6062` | `2.557` |
+| `0.550` | `4096` | `0.5432` | `0.7552` | `2.052` |
+| `0.550` | `8192` | `0.7383` | `0.6678` | `2.321` |
+
+Interpretation:
+
+- If an up/gate low-byte representation can truly replace current v1 reads on
+  the miss path, `>=2 tok/s` is plausible in a transfer-only bound.
+- This is still optimistic because it excludes runtime dispatch overhead,
+  mixed-role synchronization, payload materialization, and quality risk.
+- The bound says the direction is worth a controlled prototype, not that it is
+  already an accepted optimization.
+
+IQ1_S budgeted hotset bound:
+
+- Output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget-bound/report.md`
+- Scope: `kind=up,gate`;
+- remote asset: `mradermacher/Kimi-K2.7-Code-i1-GGUF`, `i1-IQ1_S`;
+- selected-plan TSVs are in:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget-bound/`.
+
+Key rows:
+
+| budget | selected entries | estimated pack | hybrid byte ratio | runtime compatible |
+|---:|---:|---:|---:|---|
+| `8 GiB` | `2995` | `7.998 GiB` | `0.7949` | `False` |
+| `12 GiB` | `4493` | `11.998 GiB` | `0.7499` | `False` |
+| `16 GiB` | `5991` | `15.999 GiB` | `0.7149` | `False` |
+| `24 GiB` | `8987` | `23.999 GiB` | `0.6631` | `False` |
+
+Interpretation:
+
+- `12 GiB` is the first IQ1_S up/gate hotset budget that clearly crosses the
+  `2 tok/s` transfer-only threshold on the two-prompt bound.
+- It is not directly runtime compatible with the current IQ3 main model:
+  the selected IQ1_S payload has different `nbytes/src0_type`, and the
+  inference path must explicitly override type/shape and use mixed-type GPU
+  kernels.
+- This matches prior standalone smoke results: v2 IQ1_S/Q2_K payloads can be
+  read, copied, computed, and merged, but runtime inference still needs a
+  default-off replacement path that replaces v1 reads rather than shadow-reading
+  a second payload.
+
+Current storage/profile evidence:
+
+- Storage candidate reports:
+  - France:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-lowbyte-hotset-bound/storage-candidate-france.md`
+  - Held-out deploy:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-lowbyte-hotset-bound/storage-candidate-deploy.md`
+- France top up/gate buckets by decode wall:
+  `blk14`, `blk39`, `blk1`, `blk29`, `blk28`, `blk32`, `blk30`, `blk53`.
+- Held-out deploy top up/gate buckets by decode wall:
+  `blk14`, `blk28`, `blk50`, `blk42`, `blk36`, `blk30`, `blk52`, `blk37`,
+  `blk43`, `blk53`, `blk29`.
+- Compute time in those rows is small, typically `~7-23 ms` per N32 bucket
+  except `blk1`; wait/stage dominates.
+
+Decision:
+
+- Next implementation direction is an up/gate-first low-byte replacement
+  prototype, not more down-only partial-split work.
+- Start from the `12 GiB` IQ1_S up/gate selected plan as the first serious
+  candidate because it is the smallest budget with a clear `>=2 tok/s`
+  transfer-only margin.
+- Keep it default-off and dev-only until endpoint A/B proves token-rate gain
+  with quality, RAM, TTFT, and fallback gates.
+
+Prototype plan:
+
+1. Materialize an up/gate IQ1_S payload pack from
+   `budget-12p0-selected-plan.tsv`.
+2. First run preflight/planner only:
+   - confirm real `decode_upgate:up` and `decode_upgate:gate` accepted coverage;
+   - estimate `partial_io_h2d` ceiling on France and held-out deploy;
+   - reject if the bound falls below `2 tok/s` after overhead allowance.
+3. If bound passes, implement a default-off endpoint prototype that:
+   - intercepts only covered up/gate misses;
+   - replaces current v1 expert-pack reads rather than adding shadow reads;
+   - uses persistent pinned staging;
+   - batches same-layer up/gate reads where possible;
+   - calls the existing mixed-type GPU MMVQ path with the packed type/shape;
+   - falls back to the existing path for uncovered entries.
+4. Admission requires:
+   - `0` fallback or fully attributed fallback;
+   - France quality pass;
+   - held-out quality pass;
+   - TTFT <= `+20%`;
+   - memory.peak < `15.9 GB`;
+   - endpoint token-rate improvement on at least France and one held-out prompt;
+   - run dirs, commands, envs, profile CSVs, and rollback commit recorded.
+5. If endpoint A/B fails despite positive byte bound, profile the gap in this
+   order:
+   - duplicated reads instead of true replacement;
+   - insufficient runtime batch depth;
+   - per-entry synchronization;
+   - H2D/pinned slot contention;
+   - cache eviction of down/upgate slots;
+   - quality loss from IQ1_S up/gate replacement.
+
 ## 2026-07-12 Goal: verify DeepSeek-style CPU/defer GPU extension on Kimi
 
 ### Goal
