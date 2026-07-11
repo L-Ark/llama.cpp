@@ -4,12 +4,92 @@ Date: 2026-07-10
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Immediate goal: Kimi CPU/defer GPU-extension usefulness check
+
+Timestamp: 2026-07-11 CST.
+
+This is the next concrete execution goal after comparing the DeepSeek SOTA
+path with Kimi.
+
+Goal:
+
+> Determine whether the DeepSeek-style CPU/defer main scheduler plus GPU
+> expert-cache extension can still produce a reproducible, prompt-general Kimi
+> gain from the current codebase. The short target is to recover and exceed the
+> stable prompt-general `>2 tok/s` line without regressing the current zero
+> decode CPU-fallback behavior. The product target remains stable `>5 tok/s`
+> for random user prompts on one 32 GB RTX 5090-class GPU with host RAM strictly
+> below 16 GB.
+
+Why this is not a direct DeepSeek copy:
+
+- DeepSeek's large gain came from moving important CPU/defer gate work into a
+  VRAM-resident GPU extension path.
+- Current Kimi profiles already show decode CPU fallback at zero in the stable
+  configuration, so the first question is not "which missing kernel is falling
+  back to CPU".
+- Kimi's current exposed loss is mainly stalled expert movement and staging:
+  `up/gate` wait, `down` staging, queue drain, and imperfect VRAM/RAM/SSD
+  residency.
+- Therefore the Kimi version of the DeepSeek idea is: keep CPU/defer as the
+  scheduler, but make its GPU extension cover the critical expert residency,
+  transfer, and compute path with less exposed wait.
+
+Plan:
+
+1. Re-establish the exact baseline on this branch.
+   - Run one cold-start N32 smoke and one N96 profile with the current stable
+     config.
+   - Record token rate, TTFT, RAM peak, VRAM use, page-cache split, expert-pack
+     bytes, H2D bytes, direct reads, `io_uring_wait`, staging wall, compute
+     wall, and CPU fallback count.
+   - The baseline must include the quality prompt
+     `Please introduce France in a short paragraph.` and at least one
+     non-France dev prompt.
+
+2. Audit CPU/defer GPU-extension coverage before changing behavior.
+   - Use `GGML_MOE_GPU_EXTENSION_COVERAGE_OUT` and existing profile CSVs to
+     split time by role: `gate`, `up`, `down`, prompt, and decode.
+   - Confirm whether any remaining slow path is a real CPU fallback, a GPU
+     extension miss, a staging wait, an H2D wait, or a scheduler gap.
+   - Do not implement a gate-only hotpool unless the profile proves gate is
+     still on the exposed critical path.
+
+3. Test Kimi-specific GPU-extension improvements in priority order.
+   - First priority: reduce exposed mixed `up/gate` wait without losing useful
+     overlap between up compute and gate movement.
+   - Second priority: improve `down` staging only where it is still exposed
+     after `up/gate`.
+   - Third priority: replace low-value decode-time file-backed RAM pages with a
+     batchable explicit expert RAM tier, but only when it reduces critical-path
+     wait and stays under the host RAM cap.
+   - Fourth priority: lower-byte or duplicate-on-disk expert layouts only when
+     the runtime can consume them correctly for full active calls.
+
+4. Keep the optimization prompt-general.
+   - Use dev prompts only for tuning cache, layer, threshold, pack, or RAM-tier
+     decisions.
+   - Keep held-out prompts untouched until final validation.
+   - Reject any change that only improves one prompt or one hand-picked hotset.
+
+5. Promotion and rollback rule.
+   - Promote only after paired cold-start A/B results show higher token rate,
+     coherent output, TTFT within `1.20x`, host RAM below
+     `15900000000` bytes, and profile evidence that critical-path wait fell.
+   - If performance drops, quality regresses, TTFT exceeds the gate, or time
+     merely moves elsewhere, revert the behavior change and retain only useful
+     default-off instrumentation or docs.
+   - Every accepted SOTA commit must be pushed and must include exact env,
+     command, prompt split, run directory, metrics, quality output, and rollback
+     commit in the commit body.
+
 ## Current execution goal: Kimi CPU/defer GPU-extension parity
 
 Timestamp: 2026-07-11 CST.
 
-This is the current authoritative goal and plan. Older sections below remain as
-audit history, but new work should follow this section first.
+This section remains the broader constraint set and audit context. The
+immediate execution entry point is the section above; older sections below
+remain as audit history.
 
 Goal:
 
