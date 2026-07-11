@@ -1399,6 +1399,104 @@ Decision:
     enough and the dependency only blocks compute, not read;
   - do not expand top2992 until real dispatch shows top2048 bytes can pay back.
 
+## Current subgoal: tiny real up+gate staging coalescing prototype
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Convert the successful same-layer v2 shadow coalescing result into the
+> smallest safe real-runtime A/B prototype. The first target is `up+gate`
+> staging in the fused Kimi up/gate path, not `down`, because `up` and `gate`
+> are already adjacent, use the same routed expert ids, and have no extra
+> activation dependency between read scheduling and compute.
+
+Why this is the next bottleneck:
+
+- The latest shadow result showed that runtime role-call fragmentation is real:
+  - top1024 shadow batches fell from `953` to `481`;
+  - average jobs/batch rose from `2.33` to `4.62`;
+  - `iouring_wait` fell by `366.214 ms`;
+  - shadow `read_ms` fell by `387.882 ms`.
+- Current real decode still reports small runtime IO batches in the main expert
+  pack path:
+  - default-off sanity run `20260711-kimi-coalesce-defaultoff-n32-france-47706fcd-dirty`;
+  - expert pack iouring: `batches=5760`, `jobs=39090`,
+    `inflight_avg=4.32`, `inflight_max=8`;
+  - upgate/gate staging remains split into separate stage/copy queues.
+- The expected win is not more GPU compute. It is lower exposed staging wait by
+  submitting related `up` and `gate` misses together so the IO queue sees a
+  larger batch sooner.
+
+Important constraints:
+
+- This must be default-off until it improves real decode token rate.
+- It must preserve the existing CPU/defer scheduler and GPU-extension compute
+  path. Only staging order/batch submission may change.
+- It must not change VRAM cache keys, cache slots, expert tensors, active
+  expert ids, or fused up/gate math.
+- It must pass cold-start France quality and stay below `15900000000` bytes
+  host RAM.
+- No SOTA claim is allowed unless the real decode path improves on held-out
+  prompts, not only on dev France.
+
+Implementation design:
+
+1. Audit existing real up/gate staging before editing.
+   - Identify where `plan_tensor`, `copy_stage_jobs`, and `stage_tensor` are
+     used in `ggml_cuda_moe_stream_up_gate_batch`.
+   - Confirm whether up and gate jobs can be represented by the same
+     `stage_copy_job` vector without losing per-role destination slot/cache
+     information.
+   - Confirm whether the current `parallel_stage` path already overlaps up and
+     gate enough that co-submit cannot help.
+
+2. Add instrumentation before behavior change if the current counters are not
+   enough.
+   - Log per-call up jobs, gate jobs, combined jobs, stage wall, iouring batch
+     histogram, and whether the call used serial, parallel, or co-submit mode.
+   - Keep this instrumentation low overhead and default-off if it writes CSV.
+
+3. Implement the smallest default-off real prototype only if the audit proves
+   the data structures are compatible.
+   - Proposed env:
+     `GGML_MOE_STREAM_UP_GATE_COSUBMIT_STAGE=1`.
+   - In the fused up/gate path, plan both tensors first.
+   - If both plans are valid and both roles use compatible pack/pinned staging,
+     submit a combined job group through a single staging call or a new
+     co-submit helper.
+   - After staging, launch up and gate compute exactly as before.
+   - If any compatibility check fails, fall back to the existing path for that
+     call.
+
+4. Reject criteria.
+   - If combined staging increases wall time, decreases token rate, increases
+     TTFT by more than `20%`, raises RAM peak near the cgroup cap, or only
+     improves a prompt-specific dev case, leave the prototype default-off and
+     do not promote it.
+   - If the audit finds up/gate are already fully overlapped and the exposed
+     wait is actually down/H2D/sync, do not force this implementation. Record
+     the reason and move to down preissue or RAM/VRAM tier work.
+
+Validation plan:
+
+1. Build:
+   `cmake --build build-cuda-batch --target ggml-cuda -j2`.
+2. Default-off N32 France:
+   - quality pass;
+   - RAM `<15900000000`;
+   - token rate within normal noise of the rollback baseline.
+3. Default-on N32 France A/B:
+   - same command/env plus `GGML_MOE_STREAM_UP_GATE_COSUBMIT_STAGE=1`;
+   - compare token rate, TTFT, RAM peak, expert pack iouring batch histogram,
+     pinned staging gate/up counters, up/gate profile `stage_ms`, `up_wait_ms`,
+     `gate_wait_ms`, and output quality.
+4. If N32 improves, run N96 dev and then held-out prompts.
+5. Commit/push only if the result is reproducible and the commit body includes:
+   exact env, commands, prompts, run directories, quality output, TTFT,
+   decode token rate, RAM/page-cache metrics, IO/H2D/staging metrics, baseline
+   SHA, candidate SHA, and rollback point.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.
