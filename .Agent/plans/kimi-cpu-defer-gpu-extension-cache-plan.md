@@ -83,6 +83,83 @@ Execution plan for this goal:
    - The next experiment must be chosen from the latest measured bottleneck,
      not from a stale optimization idea.
 
+## Immediate goal: validate the DeepSeek-style GPU extension on Kimi
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Prove or reject whether the DeepSeek-style CPU/defer main scheduler plus GPU
+> expert-cache extension can improve Kimi in a prompt-general way. The concrete
+> short-term target is a reproducible `>2 tok/s` held-out cold-start result under
+> the existing 16 GB host RAM, TTFT, quality, and commit/push gates.
+
+Important distinction:
+
+- DeepSeek gained a large step by moving gate work from the CPU/defer path into
+  a VRAM-resident GPU extension.
+- Kimi cannot assume the same win, because current stable Kimi profiles already
+  show decode CPU fallback is mostly removed. For Kimi, the only acceptable win
+  is lower exposed wait in the real critical path: fewer bytes, better batching,
+  better VRAM/RAM residency, or better overlap of expert staging with compute.
+- Therefore this plan must measure `gate/up/down` separately before any
+  promotion. A change that only improves cache hit rate, page-cache size, or
+  standalone IO bandwidth is not a SOTA candidate unless token rate, TTFT, RAM,
+  and output quality all pass.
+
+Plan:
+
+1. Rebuild the current reproducible baseline.
+   - Use the active branch `vendor/kimi-deepseek-41d205-additive`.
+   - Run one dev prompt and one held-out prompt with cold start and
+     `MemoryMax=15900000000`.
+   - Record prompt tokens, TTFT, decode token rate, RAM peak, active/inactive
+     file cache, direct reads, `io_uring_wait`, H2D, staging wall time,
+     up/gate compute, down compute, and CPU fallback.
+
+2. Confirm where Kimi still benefits from the GPU extension.
+   - Check whether `gate`, `up`, or `down` ever still execute on CPU in prompt
+     or decode.
+   - Check whether `n_cpu_moe` routes Kimi through the CPU/defer scheduler in a
+     way that still allows GPU extension acceleration.
+   - If fallback is already zero, treat the bottleneck as transfer/staging
+     critical path, not CPU compute.
+
+3. Profile the current VRAM and RAM layout by role.
+   - List which `gate/up/down` experts are resident in VRAM, which are served by
+     RAM/pinned/page-cache paths, and which still come from SSD.
+   - Identify low-value decode page cache that can be replaced by controlled
+     expert residency.
+   - Do not add RAM slabs unless the profile shows they reduce exposed wait more
+     than they increase TTFT, H2D, reclaim, or refault cost.
+
+4. Add a default-off runtime shadow stage for v2 partial expert payloads.
+   - Observe real Kimi routes and stage only v2-covered rows into persistent
+     pinned buffers and scratch VRAM.
+   - Do not change logits, cache admission, routing, sampling, or final output.
+   - Log covered rows, fallback rows, bytes saved, read wall time, H2D event
+     time, sync wall time, allocation growth, and reject reasons.
+
+5. Decide the next implementation from the measured bound.
+   - If v2 shadow staging shows enough critical-path savings, implement a
+     guarded v2 direct/io_uring reader and then a default-off partial dispatch.
+   - If v2 staging is not enough, prioritize RAM/VRAM co-design: up/gate-first
+     residency, batch-friendly layer/role slabs, and removal of low-value GGUF
+     file cache after prompt.
+   - If both fail, move to lower-byte expert representations or prediction/
+     prefetch, but only after a new bottleneck profile says transfer wait is
+     still dominant.
+
+6. Acceptance and reproducibility.
+   - A candidate must pass France plus held-out prompts with semantically
+     correct output.
+   - It must keep host RAM below `15900000000` bytes and TTFT within `+20%`.
+   - It must include exact env, command, prompt split, run directories, metrics,
+     baseline/candidate SHA, and rollback point in both this plan and the commit
+     body.
+   - Any failed candidate remains default-off or is reverted, with the failure
+     reason recorded here.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.
