@@ -4384,6 +4384,133 @@ static void expert_pack_v2_shadow_profile_record(
     std::fclose(f);
 }
 
+struct expert_pack_v2_full_cover_down_state {
+    std::atomic<uint64_t> calls{0};
+    std::atomic<uint64_t> accepted_calls{0};
+    std::atomic<uint64_t> rejected_not_decode_down{0};
+    std::atomic<uint64_t> rejected_special_path{0};
+    std::atomic<uint64_t> rejected_bad_cache_key{0};
+    std::atomic<uint64_t> rejected_no_entry{0};
+    std::atomic<uint64_t> rejected_unsupported{0};
+    std::atomic<uint64_t> rejected_shape{0};
+    std::atomic<uint64_t> rejected_homogeneous{0};
+    std::atomic<uint64_t> rejected_not_smaller{0};
+    std::atomic<uint64_t> cache_hits{0};
+    std::atomic<uint64_t> cache_misses{0};
+    std::atomic<uint64_t> copied_entries{0};
+    std::atomic<uint64_t> copied_bytes{0};
+    std::atomic<uint64_t> saved_bytes{0};
+    std::atomic<uint64_t> read_us{0};
+    std::atomic<uint64_t> h2d_enqueue_us{0};
+    std::atomic<uint64_t> total_us{0};
+    std::atomic<uint64_t> insert_failures{0};
+    std::atomic<uint64_t> read_failures{0};
+    std::atomic<uint64_t> h2d_failures{0};
+    std::atomic<bool> report_registered{false};
+};
+
+static expert_pack_v2_full_cover_down_state g_expert_pack_v2_full_cover_down;
+
+static bool expert_pack_v2_full_cover_down_enabled() {
+    return expert_pack_env_bool("GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN", false);
+}
+
+static const char * expert_pack_v2_full_cover_down_profile_path() {
+    const char *path = std::getenv("GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_PROFILE_OUT");
+    return path && path[0] ? path : nullptr;
+}
+
+static void expert_pack_v2_full_cover_down_profile_record(
+        const char *event,
+        const char *reason,
+        const char *tensor_name,
+        int logical_type,
+        int packed_type,
+        int n_active,
+        size_t logical_nbytes,
+        size_t packed_nbytes,
+        int cache_hits,
+        int cache_misses,
+        int copied_entries,
+        uint64_t copied_bytes,
+        uint64_t saved_bytes,
+        uint64_t read_us,
+        uint64_t h2d_enqueue_us,
+        uint64_t total_us) {
+    const char *path = expert_pack_v2_full_cover_down_profile_path();
+    if (!path || !path[0]) return;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,event,reason,tensor,logical_type,packed_type,n_active,"
+                "logical_nbytes,packed_nbytes,cache_hits,cache_misses,"
+                "copied_entries,copied_bytes,saved_bytes,read_us,h2d_enqueue_us,total_us\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%s,%s,%s,%d,%d,%d,%zu,%zu,%d,%d,%d,%lu,%lu,%lu,%lu,%lu\n",
+            (unsigned long)++seq,
+            event ? event : "",
+            reason ? reason : "",
+            tensor_name ? tensor_name : "",
+            logical_type,
+            packed_type,
+            n_active,
+            logical_nbytes,
+            packed_nbytes,
+            cache_hits,
+            cache_misses,
+            copied_entries,
+            (unsigned long)copied_bytes,
+            (unsigned long)saved_bytes,
+            (unsigned long)read_us,
+            (unsigned long)h2d_enqueue_us,
+            (unsigned long)total_us);
+    std::fclose(f);
+}
+
+static void expert_pack_v2_full_cover_down_report() {
+    const expert_pack_v2_full_cover_down_state &s = g_expert_pack_v2_full_cover_down;
+    const uint64_t calls = s.calls.load(std::memory_order_relaxed);
+    if (calls == 0) return;
+    std::fprintf(stderr,
+            "[moe_stream_batch] expert pack v2 full-cover down: "
+            "calls=%lu accepted=%lu reject_not_decode_down=%lu reject_special_path=%lu "
+            "reject_bad_cache_key=%lu reject_no_entry=%lu reject_unsupported=%lu "
+            "reject_shape=%lu reject_homogeneous=%lu reject_not_smaller=%lu "
+            "cache_hits=%lu cache_misses=%lu copied_entries=%lu copied_bytes=%.3f GiB "
+            "saved_bytes=%.3f GiB insert_failures=%lu read_failures=%lu h2d_failures=%lu "
+            "read_ms=%.3f h2d_enqueue_ms=%.3f total_ms=%.3f\n",
+            (unsigned long)calls,
+            (unsigned long)s.accepted_calls.load(std::memory_order_relaxed),
+            (unsigned long)s.rejected_not_decode_down.load(std::memory_order_relaxed),
+            (unsigned long)s.rejected_special_path.load(std::memory_order_relaxed),
+            (unsigned long)s.rejected_bad_cache_key.load(std::memory_order_relaxed),
+            (unsigned long)s.rejected_no_entry.load(std::memory_order_relaxed),
+            (unsigned long)s.rejected_unsupported.load(std::memory_order_relaxed),
+            (unsigned long)s.rejected_shape.load(std::memory_order_relaxed),
+            (unsigned long)s.rejected_homogeneous.load(std::memory_order_relaxed),
+            (unsigned long)s.rejected_not_smaller.load(std::memory_order_relaxed),
+            (unsigned long)s.cache_hits.load(std::memory_order_relaxed),
+            (unsigned long)s.cache_misses.load(std::memory_order_relaxed),
+            (unsigned long)s.copied_entries.load(std::memory_order_relaxed),
+            s.copied_bytes.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0),
+            s.saved_bytes.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0),
+            (unsigned long)s.insert_failures.load(std::memory_order_relaxed),
+            (unsigned long)s.read_failures.load(std::memory_order_relaxed),
+            (unsigned long)s.h2d_failures.load(std::memory_order_relaxed),
+            s.read_us.load(std::memory_order_relaxed) / 1000.0,
+            s.h2d_enqueue_us.load(std::memory_order_relaxed) / 1000.0,
+            s.total_us.load(std::memory_order_relaxed) / 1000.0);
+}
+
 static void expert_pack_v2_call_coverage_record(
         const char *phase,
         const char *role,
@@ -16858,6 +16985,110 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         }
     }
 
+    bool v2_full_down_active = false;
+    int v2_full_down_packed_type = -1;
+    size_t v2_full_down_nbytes = 0;
+    int64_t v2_full_down_nb01 = 0;
+    char v2_full_down_cache_name[128] = {};
+    const expert_pack_v2_entry *v2_full_down_entries[MOE_STREAM_MAX_ACTIVE] = {};
+    int v2_full_down_slots[MOE_STREAM_MAX_ACTIVE];
+    std::fill_n(v2_full_down_slots, MOE_STREAM_MAX_ACTIVE, -1);
+    std::vector<char> v2_full_down_host;
+
+    auto v2_full_down_profile_reject = [&](std::atomic<uint64_t> &counter, const char *reason) {
+        counter.fetch_add(1, std::memory_order_relaxed);
+        expert_pack_v2_full_cover_down_profile_record(
+                "reject",
+                reason,
+                src0_name,
+                src0_type_int,
+                -1,
+                n_active,
+                src0_bytes,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0);
+    };
+
+    if (expert_pack_v2_full_cover_down_enabled()) {
+        expert_pack_v2_full_cover_down_state &v2_state = g_expert_pack_v2_full_cover_down;
+        v2_state.calls.fetch_add(1, std::memory_order_relaxed);
+        if (!v2_state.report_registered.exchange(true)) {
+            std::atexit(expert_pack_v2_full_cover_down_report);
+        }
+
+        if (!(rows_stride <= 8 && is_down && !is_prompt_up && !is_prompt_gate)) {
+            v2_full_down_profile_reject(v2_state.rejected_not_decode_down, "not_decode_down");
+        } else if (down_hit_only || q4_parity_run || mxfp4_probe_run || mxfp4_q80_compat_candidate ||
+                mxfp4_f32_exact_candidate || down_q8k_requested || shadow_error) {
+            v2_full_down_profile_reject(v2_state.rejected_special_path, "special_path");
+        } else {
+            const int cache_name_len = std::snprintf(
+                    v2_full_down_cache_name, sizeof(v2_full_down_cache_name),
+                    "%s:v2full", src0_name ? src0_name : "");
+            if (cache_name_len <= 0 || (size_t)cache_name_len >= sizeof(v2_full_down_cache_name)) {
+                v2_full_down_profile_reject(v2_state.rejected_bad_cache_key, "bad_cache_key");
+            } else {
+                bool v2_plan_ok = true;
+                const expert_pack_v2_entry *first_entry = nullptr;
+                for (int j = 0; j < n_active; ++j) {
+                    const int expert_idx = active_experts[j];
+                    const expert_pack_v2_entry *entry = expert_pack_v2_lookup(src0_name, expert_idx);
+                    if (!entry) {
+                        v2_full_down_profile_reject(v2_state.rejected_no_entry, "no_entry");
+                        v2_plan_ok = false;
+                        break;
+                    }
+                    if (!expert_pack_v2_packed_type_supported(entry->packed_type)) {
+                        v2_full_down_profile_reject(v2_state.rejected_unsupported, "unsupported_type");
+                        v2_plan_ok = false;
+                        break;
+                    }
+                    if (entry->ne00 != ne00 || entry->ne01 != ne01 || entry->nb01 == 0) {
+                        v2_full_down_profile_reject(v2_state.rejected_shape, "shape_mismatch");
+                        v2_plan_ok = false;
+                        break;
+                    }
+                    if ((size_t)entry->nbytes == 0 || (size_t)entry->nbytes >= src0_bytes ||
+                            (size_t)entry->nbytes > cache->slot_sz) {
+                        v2_full_down_profile_reject(v2_state.rejected_not_smaller, "not_smaller");
+                        v2_plan_ok = false;
+                        break;
+                    }
+                    if (!first_entry) {
+                        first_entry = entry;
+                    } else if (entry->packed_type != first_entry->packed_type ||
+                            entry->nbytes != first_entry->nbytes ||
+                            entry->ne00 != first_entry->ne00 ||
+                            entry->ne01 != first_entry->ne01 ||
+                            entry->nb01 != first_entry->nb01) {
+                        v2_full_down_profile_reject(v2_state.rejected_homogeneous, "not_homogeneous");
+                        v2_plan_ok = false;
+                        break;
+                    }
+                    v2_full_down_entries[j] = entry;
+                }
+                if (v2_plan_ok && first_entry) {
+                    v2_full_down_active = true;
+                    v2_full_down_packed_type = first_entry->packed_type;
+                    v2_full_down_nbytes = (size_t)first_entry->nbytes;
+                    v2_full_down_nb01 = first_entry->nb01;
+                    v2_full_down_host.resize(v2_full_down_nbytes * (size_t)n_active);
+                    v2_state.accepted_calls.fetch_add(1, std::memory_order_relaxed);
+                    v2_state.saved_bytes.fetch_add(
+                            (uint64_t)(src0_bytes - v2_full_down_nbytes) * (uint64_t)n_active,
+                            std::memory_order_relaxed);
+                }
+            }
+        }
+    }
+
     struct down_stage_copy_job {
         int slot = -1;
         void *dst = nullptr;
@@ -16929,24 +17160,82 @@ extern "C" bool ggml_cuda_moe_stream_batch(
 
     std::vector<down_stage_copy_job> down_jobs_a;
     std::vector<down_stage_copy_job> down_jobs_b;
+    int v2_full_down_cache_hits = 0;
+    int v2_full_down_cache_misses = 0;
+    int v2_full_down_copied_entries = 0;
+    uint64_t v2_full_down_copied_bytes = 0;
+    uint64_t v2_full_down_read_us = 0;
+    uint64_t v2_full_down_h2d_enqueue_us = 0;
+    const auto v2_full_down_total_t0 = v2_full_down_active ?
+        std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+
+    auto clear_v2_full_down_slots = [&]() {
+        for (int j = 0; j < n_active; ++j) {
+            if (v2_full_down_slots[j] >= 0) {
+                batch_cache_clear_slot(cache, v2_full_down_slots[j]);
+                v2_full_down_slots[j] = -1;
+            }
+        }
+    };
 
     for (int j = 0; j < n_active; ++j) {
         const char *expert_host = (const char *)src0_data + (size_t)active_experts[j] * nb02;
-        const uintptr_t cache_key = batch_key_hash(src0_name, active_experts[j]);
+        const char *cache_name = v2_full_down_active ? v2_full_down_cache_name : src0_name;
+        const size_t cache_bytes = v2_full_down_active ? v2_full_down_nbytes : src0_bytes;
+        const uintptr_t cache_key = batch_key_hash(cache_name, active_experts[j]);
         batch_route_profile_hit(src0_name, active_experts[j], src0_bytes);
         int cache_slot = batch_cache_lookup_slot(cache, cache_key);
         const bool cache_hit = cache_slot >= 0;
         expert_pack_v2_shadow_profile_record(
                 "down", src0_name, active_experts[j], src0_type_int,
-                src0_bytes, cache_hit ? "cache_hit" : "cache_miss");
+                src0_bytes,
+                v2_full_down_active ?
+                    (cache_hit ? "v2full_cache_hit" : "v2full_cache_miss") :
+                    (cache_hit ? "cache_hit" : "cache_miss"));
         if (cache_slot < 0) {
             if (down_hit_only) {
                 return decline("down_cache_miss_hit_only");
             }
             ++down_profile_cache_misses;
-            cache_slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, st, true, false,
-                    nullptr, 0, !down_parallel_stage, src0_name, active_experts[j]);
-            if (down_parallel_stage && cache_slot >= 0) {
+            if (v2_full_down_active) {
+                ++v2_full_down_cache_misses;
+                cache_slot = batch_cache_insert_slot(cache, cache_key, nullptr, cache_bytes, st, true, false,
+                        nullptr, 0, false, cache_name, active_experts[j]);
+                if (cache_slot < 0) {
+                    g_expert_pack_v2_full_cover_down.insert_failures.fetch_add(1, std::memory_order_relaxed);
+                    clear_v2_full_down_slots();
+                    return decline("v2_full_cover_down_cache_insert");
+                }
+                v2_full_down_slots[j] = cache_slot;
+                void *dst_slot = (char *)cache->pool + (size_t)cache_slot * cache->slot_sz;
+                char *host_slot = v2_full_down_host.data() + (size_t)j * v2_full_down_nbytes;
+                const auto read_t0 = std::chrono::steady_clock::now();
+                const expert_pack_v2_shadow_read_result read_result =
+                    expert_pack_v2_shadow_read_entry_to_host(
+                            v2_full_down_entries[j], src0_name, active_experts[j],
+                            host_slot, v2_full_down_nbytes);
+                const auto read_t1 = std::chrono::steady_clock::now();
+                v2_full_down_read_us += (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(read_t1 - read_t0).count();
+                if (!read_result.ok || read_result.nread != v2_full_down_nbytes) {
+                    g_expert_pack_v2_full_cover_down.read_failures.fetch_add(1, std::memory_order_relaxed);
+                    clear_v2_full_down_slots();
+                    return decline("v2_full_cover_down_read");
+                }
+                const auto h2d_t0 = std::chrono::steady_clock::now();
+                if (cudaMemcpyAsync(dst_slot, host_slot, v2_full_down_nbytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+                    g_expert_pack_v2_full_cover_down.h2d_failures.fetch_add(1, std::memory_order_relaxed);
+                    clear_v2_full_down_slots();
+                    return decline("v2_full_cover_down_h2d");
+                }
+                const auto h2d_t1 = std::chrono::steady_clock::now();
+                v2_full_down_h2d_enqueue_us += (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(h2d_t1 - h2d_t0).count();
+                ++v2_full_down_copied_entries;
+                v2_full_down_copied_bytes += (uint64_t)v2_full_down_nbytes;
+            } else {
+                cache_slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, st, true, false,
+                        nullptr, 0, !down_parallel_stage, src0_name, active_experts[j]);
+            }
+            if (!v2_full_down_active && down_parallel_stage && cache_slot >= 0) {
                 const expert_pack_entry *pack_entry = expert_pack_lookup(src0_name, active_experts[j], src0_bytes);
                 void *dst_slot = (char *)cache->pool + (size_t)cache_slot * cache->slot_sz;
                 down_stage_copy_job job;
@@ -16966,6 +17255,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
             }
         } else {
             ++down_profile_cache_hits;
+            if (v2_full_down_active) {
+                ++v2_full_down_cache_hits;
+            }
             batch_ttft_trace_record("cache_hit", src0_name, active_experts[j], src0_bytes, true, false, false, 0.0);
         }
         if (cache_slot < 0) return decline("cache_insert");
@@ -17015,6 +17307,37 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         bc.h_ids_src1[j] = j;
         bc.h_ids_dst[j] = dst_ids[j];
         bc.h_bounds[j] = j;
+    }
+    if (v2_full_down_active) {
+        const auto v2_full_down_total_t1 = std::chrono::steady_clock::now();
+        const uint64_t v2_full_down_total_us =
+            (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
+                    v2_full_down_total_t1 - v2_full_down_total_t0).count();
+        expert_pack_v2_full_cover_down_state &v2_state = g_expert_pack_v2_full_cover_down;
+        v2_state.cache_hits.fetch_add((uint64_t)v2_full_down_cache_hits, std::memory_order_relaxed);
+        v2_state.cache_misses.fetch_add((uint64_t)v2_full_down_cache_misses, std::memory_order_relaxed);
+        v2_state.copied_entries.fetch_add((uint64_t)v2_full_down_copied_entries, std::memory_order_relaxed);
+        v2_state.copied_bytes.fetch_add(v2_full_down_copied_bytes, std::memory_order_relaxed);
+        v2_state.read_us.fetch_add(v2_full_down_read_us, std::memory_order_relaxed);
+        v2_state.h2d_enqueue_us.fetch_add(v2_full_down_h2d_enqueue_us, std::memory_order_relaxed);
+        v2_state.total_us.fetch_add(v2_full_down_total_us, std::memory_order_relaxed);
+        expert_pack_v2_full_cover_down_profile_record(
+                "accepted",
+                "ok",
+                src0_name,
+                src0_type_int,
+                v2_full_down_packed_type,
+                n_active,
+                src0_bytes,
+                v2_full_down_nbytes,
+                v2_full_down_cache_hits,
+                v2_full_down_cache_misses,
+                v2_full_down_copied_entries,
+                v2_full_down_copied_bytes,
+                (uint64_t)(src0_bytes - v2_full_down_nbytes) * (uint64_t)n_active,
+                v2_full_down_read_us,
+                v2_full_down_h2d_enqueue_us,
+                v2_full_down_total_us);
     }
     if (updown_paired_down_name_ok) {
         int paired_jobs = 0;
@@ -17119,6 +17442,8 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const float *d_src1_run = use_handoff ? g_handoff.d_data : (const float *)bc.d_src1_f32;
     const int64_t src1_run_stride = use_handoff ? g_handoff.ne01 : ne00;
     const int32_t *src1_rows = use_handoff ? bc.h_ids_dst : nullptr;
+    const ggml_type run_src0_type = v2_full_down_active ? (ggml_type)v2_full_down_packed_type : src0_type;
+    const int64_t run_nb01 = v2_full_down_active ? v2_full_down_nb01 : nb01;
     mxfp4_stage_trace("pre_kernel");
     if (mxfp4_q80_compat_candidate) {
         static std::atomic<int> first_mxfp4_q80_compat{0};
@@ -17157,9 +17482,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
             return decline("launch_down_q8k_batch");
         }
     } else if (!launch_moe_mmvq_compact_batch(
-                src0_type,
+                run_src0_type,
                 (const char *)cache->pool, bc.h_x_ids, cache->slot_sz,
-                ne00, ne01, nb01, d_src1_run, src1_run_stride, src1_rows,
+                ne00, ne01, run_nb01, d_src1_run, src1_run_stride, src1_rows,
                 bc.d_src1_q8, (float *)bc.d_dst, n_active, st)) {
             mxfp4_stage_trace("launch_moe_mmvq_compact_batch_fail");
             return decline("launch_moe_mmvq_compact_batch");

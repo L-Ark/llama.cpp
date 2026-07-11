@@ -71,6 +71,194 @@ down dispatch` 是否能把当前 decode critical path 中的 down expert 读取
      v2 batch staging、same-layer coalescing 或更早 next-layer prefetch。
    - 若质量、TTFT、RAM 或默认路径失败：回退或禁用本路径，并在文档中记录失败原因。
 
+### 2026-07-11 Implementation Result: default-off v2 full-cover down dispatch
+
+Code status:
+
+- Implemented a default-off runtime path guarded by
+  `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN=1`.
+- The path only accepts decode down calls where all active experts are covered by
+  v2 pack entries and the entries are homogeneous in packed type, shape, `nb01`,
+  and payload bytes.
+- It uses a distinct cache key suffix `:v2full`, so compact payload bytes cannot
+  be reused accidentally by the original v1 tensor cache key.
+- It rejects prompt, hit-only, mxfp4 probe/q80, Q8K down, shadow-error, missing
+  v2 entry, unsupported type, shape mismatch, heterogeneous entries, and payloads
+  that are not smaller than the original expert bytes.
+- It records a summary at exit and optional per-call CSV via
+  `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_PROFILE_OUT`.
+
+Build:
+
+```bash
+cmake --build build-cuda-batch -j2
+```
+
+Build result:
+
+- success;
+- only existing warning classes were emitted.
+
+Default-off smoke:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-defaultoff-n32-224a20967-125234
+```
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO=/root/lfz/llama.cpp-vendor-kimi \
+      RUN=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-defaultoff-n32-224a20967-125234 \
+      N=32 PROFILE=1 COPY_PROFILE=1 \
+      PROMPT_ID=v2_fullcover_defaultoff_n32_france \
+      PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+      QUALITY_KEYWORDS="france,paris|europe|western europe" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+Result:
+
+```text
+quality=pass
+output=France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous
+TTFT=11548.75 ms
+decode=20181.92 ms / 31 runs
+token_rate=1.54 tok/s
+memory.peak=12769579008
+fallback-profile entries=0
+v2 full-cover report absent, as expected
+```
+
+This verifies that the default-off code path does not trigger in the standard
+SOTA environment.
+
+v2 enabled, buffered read:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-on-n32-224a20967-125435
+```
+
+Extra env:
+
+```text
+GGML_MOE_EXPERT_PACK_V2=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-payload-eb2fead64-122235/selected-iq1s-overlay-v2.expert-pack
+GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN=1
+GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_PROFILE_OUT=$RUN/v2-full-cover-down.csv
+```
+
+Result:
+
+```text
+quality=pass
+TTFT=11505.39 ms
+decode=24489.57 ms / 31 runs
+token_rate=1.27 tok/s
+memory.peak=15899996160
+v2 accepted=217 / calls=2038
+v2 cache_hits=440 cache_misses=1296
+v2 copied=1296 entries, 3.461 GiB
+v2 saved_bytes=7.708 GiB theoretical
+v2 read_ms=3627.348
+v2 h2d_enqueue_ms=373.287
+v2 total_ms=4088.339
+```
+
+Reject reason:
+
+- Fails performance gate: slower than default-off `1.54 tok/s`.
+- Fails RAM gate: `memory.peak` hits the 16GB cgroup limit.
+- Root cause: initial implementation used buffered v2 reads, which brought v2
+  pack data into file cache and added synchronous per-entry read/H2D work.
+
+v2 enabled, direct read:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-on-direct-n32-224a20967-125618
+```
+
+Extra env:
+
+```text
+GGML_MOE_EXPERT_PACK_V2=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-payload-eb2fead64-122235/selected-iq1s-overlay-v2.expert-pack
+GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN=1
+GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ=1
+GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_PROFILE_OUT=$RUN/v2-full-cover-down.csv
+```
+
+Result:
+
+```text
+quality=pass
+TTFT=11389.93 ms
+decode=22101.90 ms / 31 runs
+token_rate=1.40 tok/s
+memory.peak=12814811136
+v2 accepted=217 / calls=2038
+v2 cache_hits=440 cache_misses=1296
+v2 copied=1296 entries, 3.461 GiB
+v2 saved_bytes=7.708 GiB theoretical
+v2 read_ms=1400.053
+v2 h2d_enqueue_ms=390.098
+v2 total_ms=1869.451
+```
+
+Reject reason:
+
+- RAM gate passes after direct read.
+- Performance still regresses: `1.40 tok/s` versus default-off `1.54 tok/s`.
+- Direct read reduces v2 read overhead by about `2.23s`, but endpoint is still
+  slower because the path is currently serial per-entry and does not use the
+  existing io_uring/pinned batch staging pipeline.
+
+v2 enabled, direct read, current-down-overlap disabled:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-direct-nooverlap-n32-224a20967-125806
+```
+
+Extra env adds:
+
+```text
+GGML_MOE_CURRENT_DOWN_OVERLAP=0
+```
+
+Result:
+
+```text
+quality=pass
+TTFT=11626.04 ms
+decode=27292.26 ms / 31 runs
+token_rate=1.14 tok/s
+memory.peak=12841029632
+v2 accepted=217 / calls=2038
+v2 copied=1297 entries, 3.463 GiB
+v2 read_ms=1709.321
+v2 h2d_enqueue_ms=472.960
+v2 total_ms=2246.533
+```
+
+Reject reason:
+
+- Disabling current-down-overlap globally makes endpoint much slower.
+- This confirms that v2 replacement cannot simply disable the existing down
+  overlap mechanism; it must become v2-aware at the covered layer/role granularity.
+
+Decision:
+
+- Do not promote v2 full-cover down as SOTA.
+- Keep the implementation default-off as a reproducible diagnostic path only.
+- Current stable SOTA/default path remains unchanged.
+- Next implementation, if continuing this direction, must avoid duplicating v1
+  current-down-overlap work and must batch v2 reads:
+  - make current-down-overlap v2-aware so a down expert that will be consumed via
+    `:v2full` is not also prefetched into the original v1 key;
+  - replace per-entry v2 read/H2D with an io_uring/direct/pinned batch path;
+  - record whether actual v1 iouring bytes decrease by the same order as v2
+    saved bytes, not only whether v2 copied bytes are smaller.
+
 ## 本轮 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
 
 Timestamp: 2026-07-11 CST.
