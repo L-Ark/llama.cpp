@@ -308,9 +308,6 @@ def write_pack(path: Path, selected: list[dict], data_start: int, metadata_only:
             payloads.append(read_concat_range(IQ1S_PART_URLS, IQ1S_PART_BYTES, src_offset, int(item["packed_nbytes"])))
         offset = align_up(offset + int(item["packed_nbytes"]), PACK_ALIGNMENT)
 
-    if metadata_only:
-        return manifest
-
     with path.open("wb") as f:
         f.write(PACK_HEADER.pack(PACK_MAGIC, 2, PACK_HEADER.size, len(manifest), pack_data_start))
         for row in manifest:
@@ -326,9 +323,10 @@ def write_pack(path: Path, selected: list[dict], data_start: int, metadata_only:
                 0,
             ))
         f.truncate(pack_data_start)
-        for row, payload in zip(manifest, payloads):
-            f.seek(int(row["pack_offset"]))
-            f.write(payload)
+        if not metadata_only:
+            for row, payload in zip(manifest, payloads):
+                f.seek(int(row["pack_offset"]))
+                f.write(payload)
     return manifest
 
 
@@ -424,7 +422,7 @@ def main() -> int:
     write_manifest(manifest_tsv, manifest)
 
     payload_bytes = sum(int(row["packed_nbytes"]) for row in manifest)
-    pack_bytes = 0 if args.metadata_only else pack_path.stat().st_size
+    pack_bytes = pack_path.stat().st_size
     result = {
         "kind": "kimi_iq1s_selected_payload_pack",
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),

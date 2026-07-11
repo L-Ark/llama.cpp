@@ -190,6 +190,127 @@ Next decision:
   pause lower-byte work and return to up/gate scheduling/layout or RAM/VRAM
   storage-policy work.
 
+## Progress update: dev7 budget-120 v2 metadata-only coverage
+
+Timestamp: 2026-07-11 CST.
+
+Tooling fix:
+
+- Updated `.Agent/run-tools/kimi_iq1s_selected_payload_pack.py` so
+  `--metadata-only` still writes a valid `GGMLMOEPACKv2` header/index file.
+- Metadata-only mode now skips payload range downloads but produces a loadable
+  v2 sidecar for runtime preflight. This is required to test large lower-byte
+  candidate coverage without downloading or storing a 96-120 GiB payload.
+- The tool now records actual index-file `pack_bytes` instead of `0`.
+
+Candidate:
+
+- Selected plan:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-hotset-bound-dev7/budget-120p0-selected-plan.tsv`.
+- Selection source: 7 dev prompt profiles, not held-out prompts.
+- Theoretical bound from the existing budget report:
+  - selected entries: `44642`;
+  - selected tensors: `180`;
+  - estimated payload bytes: `128839811072`;
+  - hybrid byte ratio across dev prompts: `0.5223`;
+  - dev prompt selected-byte coverage: about `96.2-98.5%`.
+- Metadata-only candidate output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-metadataonly-dev7-budget120`.
+- Pack index:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-metadataonly-dev7-budget120/selected-iq1s-overlay-v2.expert-pack`.
+- Manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-metadataonly-dev7-budget120/selected-iq1s-overlay-manifest.tsv`.
+- Build result:
+  - selected entries: `44642`;
+  - metadata-only pack index size: `8216576` bytes;
+  - estimated payload bytes if materialized: `128839811072`;
+  - builder stats: no duplicate, missing, regex-skipped, type-skipped, or
+    invalid rows.
+
+Dev quality/preflight run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-dev7-budget120-preflight-n32-france`.
+- Prompt: `Please introduce France in a short paragraph.`
+- Quality: pass.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous`.
+- Token rate with diagnostic preflight: `1.68 tok/s`.
+- TTFT: `9066.32 ms`.
+- Decode: `18434.39 ms / 31`, or `594.66 ms/token`.
+- Host RAM peak: `12796219392` bytes.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+- Preflight totals:
+  - calls: `5760`;
+  - active entries: `68736`;
+  - accepted entries: `67657` (`98.43%`);
+  - full-cover calls: `4910` (`85.24%`);
+  - reject not allowlisted: `1079`;
+  - no manifest, no entry, unsupported, manifest mismatch, shape mismatch, and
+    not-smaller rejects: all `0`;
+  - accepted saved bytes: `188448669696`;
+  - logical total bytes: `390196101120`.
+- By phase:
+  - decode down full-cover: `1672/1861` (`89.84%`);
+  - decode gate full-cover: `1620/1861` (`87.05%`);
+  - decode up full-cover: `1546/1861` (`83.07%`);
+  - prompt full-cover is lower, especially up (`12/59`), but accepted-entry
+    coverage remains high.
+
+Held-out preflight run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-dev7-budget120-preflight-n32-heldout-sky`.
+- Prompt: `Explain why the sky appears blue in a short paragraph.`
+- This prompt was not used to select the dev7 budget-120 hotset.
+- Quality: pass.
+- Output:
+  `The sky appears blue because sunlight interacts with molecules and tiny
+  particles in Earth's atmosphere. Sunlight is made up of different colors of
+  light, each with different wavelengths.`
+- Token rate with diagnostic preflight: `1.68 tok/s`.
+- TTFT: `10008.28 ms`.
+- Decode: `18410.85 ms / 31`, or `593.90 ms/token`.
+- Host RAM peak: `12794122240` bytes.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+- Preflight totals:
+  - calls: `5760`;
+  - active entries: `72984`;
+  - accepted entries: `63219` (`86.62%`);
+  - full-cover calls: `1455` (`25.26%`);
+  - reject not allowlisted: `9765`;
+  - no manifest, no entry, unsupported, manifest mismatch, shape mismatch, and
+    not-smaller rejects: all `0`;
+  - accepted saved bytes: `177555718144`;
+  - logical total bytes: `414302601216`.
+- By decode phase:
+  - decode down full-cover: `572/1861` (`30.74%`);
+  - decode gate full-cover: `504/1861` (`27.08%`);
+  - decode up full-cover: `378/1861` (`20.31%`).
+
+Decision:
+
+- The lower-byte metadata path is now proven at runtime preflight scale:
+  manifest validation, v2 lookup, shape/type matching, and smaller-byte checks
+  all pass for a large dev-derived candidate.
+- A full-call-only dispatch can probably help dev prompts, but it is not yet a
+  strong prompt-general SOTA mechanism. Held-out full-cover is only `25.26%`
+  even though accepted-entry coverage is `86.62%`.
+- The next lower-byte design should not require every active expert in a call to
+  be v2-covered. The better direction is a partial-covered split dispatch:
+  run covered experts through v2 lower-byte slots and uncovered experts through
+  the current path, then combine compact rows into the same output buffer.
+- Before implementing split dispatch, update the theoretical bound using
+  held-out accepted-entry coverage rather than dev full-cover coverage. The
+  candidate has enough accepted entries to be interesting, but the quality and
+  scheduling risks are higher than the tiny preflight path.
+- Do not materialize the 120 GiB payload or call this SOTA until split dispatch
+  or a better prompt-general full-cover selection passes cold-start quality,
+  RAM, TTFT, and held-out gates.
+
 ## Active goal: verify DeepSeek-style CPU/defer GPU-extension on Kimi
 
 Timestamp: 2026-07-11 CST.
