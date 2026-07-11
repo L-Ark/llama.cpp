@@ -293,6 +293,93 @@ Decision:
     RAM-dominant or up/gate-dominant batches; it must show a new offline bound
     that clears `2 tok/s` before runtime A/B.
 
+Lower-byte implementation plan after the bound:
+
+- Timestamp: 2026-07-11 CST.
+- Current-head smoke run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-lowerbyte-current-head-smoke`.
+- Tiny selected v2 pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack`.
+- Tiny selected v2 manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv`.
+- Result: current-head MMVQ smoke still passes for all `8` selected entries:
+  - `Q2_K` down entries for `blk.1` experts `23` and `116`;
+  - `IQ1_S` gate entries for `blk.1` experts `23`, `116`, and `197`;
+  - `IQ1_S` up entries for `blk.1` experts `23`, `116`, and `197`.
+
+Known cleared blockers:
+
+- `GGMLMOEPACKv2` metadata parse/read works on the current CUDA batch library.
+- Real selected `IQ1_S`/`Q2_K` payload bytes can be copied to GPU.
+- The exported CUDA MMVQ path can consume those payloads and return finite,
+  nonzero outputs on the RTX 5090.
+
+Known remaining blockers:
+
+- The model runtime still does not use v2 packed entries in place of the current
+  IQ3/IQ2/Q4 expert tensors.
+- Normal pack lookup is keyed by the current tensor `nbytes`, while v2 lower-byte
+  entries intentionally have different `packed_nbytes`.
+- The fused up/gate and down paths still receive the current GGUF tensor type as
+  their effective compute type unless a guarded override is added.
+- Tiny 8-entry coverage is not enough to affect real prompts; it is only a
+  quality/dispatch smoke target.
+
+Concrete next lower-byte steps:
+
+1. Add a default-off v2 override dispatch gate.
+   - Proposed env:
+     `GGML_MOE_EXPERT_PACK_V2_OVERRIDE=1`.
+   - Additional safety env for the first smoke:
+     `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=<manifest.tsv>`.
+   - Only allow exact `(tensor, expert)` keys listed in the manifest.
+   - Reject any entry whose `ne00`, `ne01`, `nb01`, or packed type mismatches
+     the manifest.
+   - Fall back to the current IQ3 path for every unsupported or uncovered call.
+
+2. Scope the first runtime bridge to tiny quality smoke, not performance.
+   - Start with the existing 8-entry pack.
+   - Dispatch v2 entries only when the runtime can keep the original output
+     shape and use the v2 `packed_type` as the effective MMVQ input type.
+   - Record counters:
+     - v2 lookups;
+     - v2 accepted entries;
+     - v2 rejected entries by reason;
+     - v2 H2D bytes;
+     - normal-pack fallback count;
+     - kernel type used;
+     - output quality.
+   - First validation prompt:
+     `Please introduce France in a short paragraph.`
+   - Promotion criterion for this step is only "quality remains coherent and
+     no crash"; no token-rate SOTA claim is allowed.
+
+3. Build a small full-active coverage quality pack only after tiny smoke passes.
+   - Use dev traces only to select one or a few complete active calls where
+     every active up/gate/down expert has a lower-byte source.
+   - Prefer covering full active call groups over isolated experts; partial
+     coverage is useful for dispatch testing but weak for quality/performance.
+   - Run N32 quality prompts and compare exact output quality against the
+     current baseline.
+   - Reject immediately if the answer to the France prompt is semantically
+     wrong or incoherent.
+
+4. Only then consider a performance-sized lower-byte pack.
+   - Based on the current bound, a meaningful pack likely needs effective byte
+     ratio near `0.35` or better, and historical IQ1_S selected overlays need
+     about `96-120 GiB` before they approach the `>2 tok/s` byte target.
+   - Before building such a pack, verify disk headroom and rollback assets.
+   - Run paired cold-start N32 first, then N96 only if N32 quality, TTFT, RAM,
+     and counters pass.
+
+5. Do not promote until all standard gates pass.
+   - Cold start.
+   - Host RAM peak below `15900000000` bytes.
+   - TTFT within `1.20x`.
+   - Prompt-general validation, with held-out prompts untouched until final.
+   - Full commit body with env, command, run dirs, quality output, metrics, and
+     rollback commit.
+
 ## Current execution goal: prompt-general Kimi `>2 tok/s` through storage layout
 
 Timestamp: 2026-07-11 CST.
