@@ -186,6 +186,65 @@ Next candidates:
   优化重心正式切到 RAM/VRAM explicit storage 和 lower-byte expert representation。
 - 任何性能实验前必须先把实验设计和 rollback point 写回本文件。
 
+### Phase B/C Implementation Gate: prompt host-source profile
+
+Purpose:
+
+- 解释当前 after-prompt/drop 后仍然出现的 late-layer GGUF expert page cache：
+  `blk.54-59.ffn_{up,gate,down}_exps.weight`。
+- 确认这些 pages 是否由 prompt eval 中某条 expert copy 路径从 GGUF
+  `src0->data`/host mmap 读取造成，还是由其它 mmap/backend 行为造成。
+- 该改动只做 default-off instrumentation，不作为 token-rate SOTA。
+
+Implementation:
+
+1. 在 clean worktree 中实现 env-gated CSV：
+   `GGML_MOE_PROMPT_HOST_SOURCE_PROFILE_OUT=$RUN/prompt-host-source.csv`。
+2. 在 CUDA MoE batch runtime 中增加 thread-local phase scope：
+   - up/gate path 使用已有 `prompt_mode`；
+   - down/batch path 使用 `rows_stride > 8`；
+   - 只记录 `phase=prompt`，避免 decode N96 日志过大。
+3. 在最终 expert copy 分流点记录实际来源：
+   - `iouring`: expert pack O_DIRECT/io_uring -> pinned slot -> H2D；
+   - `ram_tier`: explicit RAM tier -> H2D；
+   - `pack_staged_read`: pack buffered/direct read -> pinned slot -> H2D；
+   - `host_mmap_staged`: `memcpy(slot.host, host_data, sz)`，会 touch GGUF mmap；
+   - `host_mmap_direct`: `cudaMemcpyAsync(dst, host_data, ...)`，会 touch GGUF mmap；
+   - `pack_read_failed` / `stage_unavailable` only for diagnosis.
+4. CSV 字段必须至少包含：
+   `seq,phase,op,tensor,layer,role,expert_idx,bytes,source,pack_present,
+   ram_hit,used_iouring,used_host_data,host_data_nonnull,pack_source_idx,
+   pack_source_page_cache,pack_source_fd_direct,pack_offset,pack_nbytes,wall_ms`。
+5. 不允许改变调度、cache、H2D 或 fallback 行为；默认关闭时代码路径只做一个
+   env check。
+
+Experiment:
+
+1. 从当前 pushed branch 创建 clean diagnostic worktree：
+   `/root/lfz/llama.cpp-vendor-kimi-prompt-hostdata-prof`。
+2. 构建 `build-cuda-batch/bin/llama-completion`。
+3. 在 `MemoryMax=15900000000`、`MemorySwapMax=0` 下跑 N32 或 N96 cold-start
+   diagnostic：
+   - `GGML_MOE_PHASE_REPORT=1`
+   - `GGML_MOE_PROMPT_HOST_SOURCE_PROFILE_OUT=$RUN/prompt-host-source.csv`
+   - 当前 SOTA env 与 expert pack/alias 保持一致。
+4. 跑后同时采集：
+   - `prompt-host-source.csv`；
+   - phase report；
+   - mincore shard/tensor residency；
+   - CPU fallback/pack fallback counters。
+
+Decision:
+
+- 如果 CSV 出现 `host_mmap_*` 且集中在 `blk.54-59`，下一步是修正对应
+  prompt copy/fallback 路径，让它强制走 expert pack/RAM tier，避免污染 page
+  cache。
+- 如果 CSV 全部是 `iouring`/`ram_tier`/`pack_staged_read`，但 mincore 仍显示
+  late-layer GGUF page cache，则问题不在 expert copy 分流，而要继续查 backend
+  mmap registration、metadata/range probing 或 `madvise`/`fadvise` 的实际生效。
+- 无论哪种结果，都必须写回本 plan；只有后续真正减少 RAM/page-cache、TTFT 或
+  decode wall 且过全部 hard gates，才允许标为 SOTA。
+
 ## 2026-07-12 Active Goal Snapshot
 
 Current branch: `vendor/kimi-deepseek-41d205-additive`
