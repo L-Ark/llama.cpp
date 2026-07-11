@@ -13,6 +13,7 @@
 #include "llama.h"
 
 #include <atomic>
+#include <chrono>
 #include <cinttypes>
 #include <cmath>
 #include <cstdlib>
@@ -24,6 +25,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 //
@@ -2255,6 +2257,30 @@ int llama_context::decode(const llama_batch & batch_inp) {
                     __func__, (double) (t_sync_end_us - t_sync_start_us) / 1000.0);
         }
         model.drop_expert_mmap_pages_after_prompt();
+        const char * second_drop_delay_env = std::getenv("LLAMA_SECOND_DROP_EXPERT_MMAP_AFTER_PROMPT_US");
+        if (second_drop_delay_env && second_drop_delay_env[0] && second_drop_delay_env[0] != '0') {
+            char * end = nullptr;
+            const long long delay_us = std::strtoll(second_drop_delay_env, &end, 10);
+            if (end != second_drop_delay_env && delay_us >= 0) {
+                if (delay_us > 0) {
+                    std::this_thread::sleep_for(std::chrono::microseconds(delay_us));
+                }
+                const char * second_drop_sync_env = std::getenv("LLAMA_SECOND_DROP_EXPERT_MMAP_AFTER_PROMPT_SYNC");
+                if (second_drop_sync_env && second_drop_sync_env[0] && second_drop_sync_env[0] != '0') {
+                    const int64_t t_sync_start_us = ggml_time_us();
+                    synchronize();
+                    const int64_t t_sync_end_us = ggml_time_us();
+                    LLAMA_LOG_INFO("%s: synchronized before second prompt mmap drop wall_ms=%.3f\n",
+                            __func__, (double) (t_sync_end_us - t_sync_start_us) / 1000.0);
+                }
+                LLAMA_LOG_INFO("%s: running delayed second prompt mmap drop delay_us=%lld\n",
+                        __func__, delay_us);
+                model.drop_expert_mmap_pages_after_prompt();
+            } else {
+                LLAMA_LOG_WARN("%s: invalid LLAMA_SECOND_DROP_EXPERT_MMAP_AFTER_PROMPT_US=%s\n",
+                        __func__, second_drop_delay_env);
+            }
+        }
     }
 
     return 0;
