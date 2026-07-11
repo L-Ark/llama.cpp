@@ -1846,6 +1846,162 @@ static bool ggml_kimi_split_profile_enabled() {
     return enabled;
 }
 
+static const char * ggml_backend_sched_tensor_name(const ggml_tensor * tensor);
+
+struct ggml_kimi_moe_copy_profile_key {
+    int phase = 0;
+    int layer = -1;
+    std::string role;
+    std::string tensor;
+    std::string node;
+    std::string src_backend;
+    std::string dst_backend;
+
+    bool operator<(const ggml_kimi_moe_copy_profile_key & other) const {
+        return std::tie(phase, layer, role, tensor, node, src_backend, dst_backend) <
+               std::tie(other.phase, other.layer, other.role, other.tensor, other.node, other.src_backend, other.dst_backend);
+    }
+};
+
+struct ggml_kimi_moe_copy_profile_value {
+    uint64_t calls = 0;
+    uint64_t ranges = 0;
+    uint64_t used_experts = 0;
+    uint64_t payload_bytes = 0;
+    uint64_t copy_bytes = 0;
+    uint64_t late_layer_calls = 0;
+};
+
+static std::mutex g_kimi_moe_copy_profile_mutex;
+static std::map<ggml_kimi_moe_copy_profile_key, ggml_kimi_moe_copy_profile_value> g_kimi_moe_copy_profile;
+
+static const char * ggml_kimi_moe_copy_profile_path() {
+    static const char * path = []() -> const char * {
+        const char * env = getenv("GGML_SCHED_MOE_COPY_PROFILE_OUT");
+        return env && env[0] ? env : nullptr;
+    }();
+    return path;
+}
+
+static int ggml_kimi_moe_copy_layer(const char * name) {
+    int layer = -1;
+    if (name && sscanf(name, "blk.%d.", &layer) == 1) {
+        return layer;
+    }
+    return -1;
+}
+
+static const char * ggml_kimi_moe_copy_role(const char * name) {
+    if (!name) {
+        return "unknown";
+    }
+    if (strstr(name, "ffn_down_exps")) {
+        return "down";
+    }
+    if (strstr(name, "ffn_gate_exps")) {
+        return "gate";
+    }
+    if (strstr(name, "ffn_up_exps")) {
+        return "up";
+    }
+    if (strstr(name, "ffn_gate_up_exps")) {
+        return "gate_up";
+    }
+    return "unknown";
+}
+
+static void ggml_kimi_moe_copy_profile_report() {
+    const char * path = ggml_kimi_moe_copy_profile_path();
+    if (!path) {
+        return;
+    }
+    std::vector<std::pair<ggml_kimi_moe_copy_profile_key, ggml_kimi_moe_copy_profile_value>> rows;
+    {
+        std::lock_guard<std::mutex> lock(g_kimi_moe_copy_profile_mutex);
+        rows.reserve(g_kimi_moe_copy_profile.size());
+        for (const auto & kv : g_kimi_moe_copy_profile) {
+            rows.push_back(kv);
+        }
+    }
+    std::sort(rows.begin(), rows.end(), [](const auto & a, const auto & b) {
+        if (a.second.copy_bytes != b.second.copy_bytes) {
+            return a.second.copy_bytes > b.second.copy_bytes;
+        }
+        return a.first < b.first;
+    });
+    FILE * f = fopen(path, "w");
+    if (!f) {
+        return;
+    }
+    fprintf(f,
+            "phase,layer,late_53_59,role,tensor,node,src_backend,dst_backend,"
+            "calls,ranges,used_experts,payload_bytes,copy_bytes\n");
+    for (const auto & row : rows) {
+        const ggml_kimi_moe_copy_profile_key & key = row.first;
+        const ggml_kimi_moe_copy_profile_value & val = row.second;
+        fprintf(f,
+                "%d,%d,%d,%s,%s,%s,%s,%s,"
+                "%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n",
+                key.phase,
+                key.layer,
+                key.layer >= 53 && key.layer <= 59 ? 1 : 0,
+                key.role.c_str(),
+                key.tensor.c_str(),
+                key.node.c_str(),
+                key.src_backend.c_str(),
+                key.dst_backend.c_str(),
+                val.calls,
+                val.ranges,
+                val.used_experts,
+                val.payload_bytes,
+                val.copy_bytes);
+    }
+    fclose(f);
+}
+
+static bool ggml_kimi_moe_copy_profile_enabled() {
+    static bool enabled = []() {
+        const bool on = ggml_kimi_moe_copy_profile_path() != nullptr;
+        if (on) {
+            atexit(ggml_kimi_moe_copy_profile_report);
+        }
+        return on;
+    }();
+    return enabled;
+}
+
+static void ggml_kimi_moe_copy_profile_record(
+        const ggml_tensor * input,
+        const ggml_tensor * node,
+        ggml_backend_t input_backend,
+        ggml_backend_t split_backend,
+        uint64_t ranges,
+        uint64_t used_experts,
+        uint64_t payload_bytes,
+        uint64_t copy_bytes) {
+    if (!ggml_kimi_moe_copy_profile_enabled() || input == nullptr || node == nullptr) {
+        return;
+    }
+    ggml_kimi_moe_copy_profile_key key;
+    key.phase = g_kimi_split_profile_phase;
+    key.layer = ggml_kimi_moe_copy_layer(ggml_backend_sched_tensor_name(input));
+    key.role = ggml_kimi_moe_copy_role(ggml_backend_sched_tensor_name(input));
+    key.tensor = ggml_backend_sched_tensor_name(input);
+    key.node = ggml_backend_sched_tensor_name(node);
+    key.src_backend = input_backend ? ggml_backend_name(input_backend) : "<null>";
+    key.dst_backend = split_backend ? ggml_backend_name(split_backend) : "<null>";
+    std::lock_guard<std::mutex> lock(g_kimi_moe_copy_profile_mutex);
+    ggml_kimi_moe_copy_profile_value & val = g_kimi_moe_copy_profile[key];
+    val.calls++;
+    val.ranges += ranges;
+    val.used_experts += used_experts;
+    val.payload_bytes += payload_bytes;
+    val.copy_bytes += copy_bytes;
+    if (key.layer >= 53 && key.layer <= 59) {
+        val.late_layer_calls++;
+    }
+}
+
 static bool ggml_kimi_split_moe_assign_profile_enabled() {
     static const bool enabled = []() {
         const char * env = getenv("GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE");
@@ -2843,7 +2999,9 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                         }
 
                         // group consecutive experts and copy them together
+                        size_t copy_payload_bytes = 0;
                         size_t copy_bytes = 0;
+                        size_t used_count = 0;
                         int copy_ranges = 0;
                         auto copy_experts = [&](int32_t first_id, int32_t last_id) {
                             const size_t expert_offset = first_id * expert_size;
@@ -2859,10 +3017,10 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                                 // this is necessary for MMQ in the CUDA backend
                                 bytes);
 
-                            if (moe_log) {
-                                copy_bytes += bytes;
-                                copy_ranges++;
-                            }
+                            copy_payload_bytes += expert_size_copy;
+                            copy_bytes += bytes;
+                            used_count += (size_t) (last_id - first_id + 1);
+                            copy_ranges++;
                         };
 
                         int id = 0;
@@ -2891,10 +3049,20 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                             copy_experts(first_id, last_id);
                         }
 
+                        ggml_kimi_moe_copy_profile_record(
+                                input,
+                                node,
+                                input_backend,
+                                split_backend,
+                                (uint64_t) copy_ranges,
+                                (uint64_t) used_count,
+                                (uint64_t) copy_payload_bytes,
+                                (uint64_t) copy_bytes);
+
                         if (moe_log) {
                             std::string used_ids_str;
                             std::string used_id_counts_str;
-                            size_t used_count = 0;
+                            size_t logged_used_count = 0;
                             for (int64_t i = 0; i < n_expert; ++i) {
                                 if (!ggml_bitset_get(used_ids.data(), i)) {
                                     continue;
@@ -2909,8 +3077,9 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                                 used_id_counts_str += std::to_string(i);
                                 used_id_counts_str += ":";
                                 used_id_counts_str += std::to_string(id_counts[i]);
-                                used_count++;
+                                logged_used_count++;
                             }
+                            GGML_ASSERT(logged_used_count == used_count);
 
                             GGML_LOG_INFO(
                                 "%s: moe_copy split=%d input=%d tensor=%s node=%s ids=%s src_backend=%s dst_backend=%s n_expert=%lld expert_size=%zu used=%zu used_bytes=%zu ranges=%d copy_bytes=%zu id_counts=[%s] ids=[%s]\n",
@@ -2925,7 +3094,7 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                                 (long long) n_expert,
                                 expert_size,
                                 used_count,
-                                used_count * expert_size,
+                                copy_payload_bytes,
                                 copy_ranges,
                                 copy_bytes,
                                 used_id_counts_str.c_str(),
