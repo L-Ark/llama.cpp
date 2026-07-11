@@ -216,6 +216,105 @@ Next decision:
   cold-start runs improve token rate while passing RAM, TTFT, fallback, direct
   read, and quality gates.
 
+## Progress update: partial-split candidate screening
+
+Timestamp: 2026-07-11 CST.
+
+Tool added:
+
+- `.Agent/run-tools/kimi_v2_partial_split_candidate_summary.py`
+- Inputs:
+  - `--planner-csv <v2-partial-split-plan.csv>`;
+  - optional `--metrics <metrics.txt>`;
+  - `--target-tps`, default `2.0`;
+  - `--io-gib-s`, default `10.4`;
+  - optional `--include-h2d --h2d-gib-s <rate>`.
+- Outputs:
+  - markdown report;
+  - tensor-level TSV sorted by miss-weighted byte saving.
+- Purpose: convert raw planner rows into dispatch portfolios before writing
+  real replacement code. It estimates whether each portfolio has enough
+  miss-weighted byte saving to cross `>2 tok/s`, and how much overhead is
+  allowed per extra compute group.
+
+Dev France planner run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-partial-split-plan-dev7-budget120-n32-france`.
+- Prompt: `Please introduce France in a short paragraph.`
+- Quality: pass.
+- Token rate: `1.65 tok/s`; planner overhead means this is not a SOTA number.
+- TTFT: `9209.94 ms`.
+- Decode: `18745.21 ms / 31`, or `604.68 ms/token`.
+- Host RAM peak: `12799451136` bytes.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+- v2 active coverage: `67657 / 68736 = 98.43%`.
+- Full-cover calls: `4910 / 5760 = 85.24%`.
+- Reports:
+  - IO-only:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-candidate-summary-dev-france/report.md`;
+  - IO+H2D:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-candidate-summary-dev-france/report-io-h2d.md`.
+
+Dev France IO-only portfolio summary:
+
+- Required saving for `2 tok/s`: `3245.21 ms` total.
+- `decode_all`: `53.426 GiB` miss-weighted saving, estimated `5137.2 ms`,
+  `745` extra groups, overhead budget `2.540 ms/group`.
+- `decode_full_cover_only`: `48.283 GiB`, estimated `4642.6 ms`, no extra
+  groups. This would be enough for France.
+- `decode_upgate_all`: `32.605 GiB`, estimated `3135.1 ms`, `556` extra
+  groups. This is slightly short under IO-only.
+
+Held-out sky comparison:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-partial-split-plan-dev7-budget120-n32-heldout-sky`.
+- Reports:
+  - IO-only:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-candidate-summary/report.md`;
+  - IO+H2D:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-candidate-summary/report-io-h2d.md`.
+- IO-only required saving for `2 tok/s`: `2760.31 ms` total.
+- `decode_all`: `43.930 GiB`, estimated `4224.0 ms`, `4129` extra groups,
+  overhead budget only `0.354 ms/group`.
+- `decode_full_cover_only`: `14.691 GiB`, estimated `1412.6 ms`, not enough.
+- `decode_upgate_all`: `27.386 GiB`, estimated `2633.3 ms`, slightly short
+  under IO-only.
+- IO+H2D gives `decode_all` an estimated `6054.5 ms` saving and
+  `0.798 ms/group` overhead budget, but H2D may be partially overlapped, so
+  IO-only remains the conservative acceptance model.
+
+Interpretation:
+
+- Dev France alone would incorrectly suggest a simpler full-cover-only path.
+  That is not prompt-general: held-out full-cover saving is far below the
+  `>2 tok/s` requirement.
+- The next implementation should not tune layer/tensor choices from held-out
+  routes. The held-out result is used here only as a generalization warning and
+  bound check.
+- A prompt-general candidate must implement real decode partial split across
+  all roles, or at least a dev-set-selected subset that remains positive on
+  held-out. Full-cover-only is a useful smoke path, but it should not be the
+  optimization target.
+- The critical engineering target is low overhead. On held-out IO-only bounds,
+  broad `decode_all` partial split can cross `2 tok/s` only if split, scatter,
+  and extra kernel overhead stay below about `0.35 ms` per extra group. With
+  H2D savings counted, the budget rises to about `0.80 ms/group`.
+
+Next decision:
+
+- Implement a default-off partial dispatch smoke that uses the same decode
+  control path for `up/gate/down`, but can be restricted to a dev-selected
+  frozen policy before held-out validation.
+- Measure overhead separately before enabling broad dispatch:
+  row split build time, v2 read/stage time, current-path fallback time, v2
+  kernel time, fallback kernel time, merge/scatter time, and synchronization.
+- If measured overhead exceeds the held-out budget, fall back to storage policy
+  work: lower-byte pack layout, coalesced v2 reads, or RAM/VRAM cache
+  co-design before attempting broad dispatch again.
+
 ## Current goal and plan checkpoint: 2026-07-11 CST
 
 This section is the current working contract. All later experiments, commits,
