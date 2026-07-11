@@ -11445,3 +11445,193 @@ Immediate next action:
 3. Pick at most two RAM slab candidates from measured critical misses.
 4. Implement only the first env-gated candidate after updating this plan with
    its expected upper bound.
+
+## Progress update: strict storage baseline from current HEAD
+
+Timestamp: 2026-07-11 CST.
+
+Commit:
+
+- `3254d897b docs: define Kimi storage hierarchy goal`
+
+Run artifacts:
+
+- N32 diagnostic profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-storage-baseline-n32-france-3254d897`
+- N96 endpoint baseline:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-storage-baseline-n96-france-3254d897`
+- Analysis output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-storage-baseline-analysis-3254d897`
+
+Commands:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p RuntimeMaxSec=300 -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-storage-baseline-n32-france-3254d897 \
+      N=32 PROFILE=1 COPY_PROFILE=1 \
+      PROMPT_ID=dev_france_storage_baseline_n32 \
+      PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+      QUALITY_KEYWORDS="france,paris|europe|western" \
+      EXTRA_RUNTIME_ENV="<io batch/locality profile envs>" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+
+systemd-run --wait --collect --same-dir \
+  -p RuntimeMaxSec=360 -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-storage-baseline-n96-france-3254d897 \
+      N=96 PROFILE=0 COPY_PROFILE=0 \
+      PROMPT_ID=dev_france_storage_baseline_n96 \
+      PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+      QUALITY_KEYWORDS="france,paris|europe|western" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+Results:
+
+| run | quality | TTFT | decode | token rate | RAM peak | CPU fallback | direct reads |
+|---|---|---:|---:|---:|---:|---:|---:|
+| N32 diagnostic profile | pass | `11905.90 ms` | `21938.26 ms / 31` | `1.41 tok/s` | `12777787392` | `0` | `0` |
+| N96 endpoint baseline | pass | `7968.38 ms` | `46966.29 ms / 85` | `1.81 tok/s` | `12727816192` | `0` | `0` |
+
+N96 output:
+
+```text
+France is a country in Western Europe known for its rich history, culture,
+and influence on art, fashion, and cuisine. Its capital, Paris, is famous for
+landmarks like the Eiffel Tower and the Louvre Museum. France is also known
+for its beautiful countryside, wine regions, and historic cities such as Lyon
+and Marseille. It plays a major role in European and global politics as a
+founding member of the European Union.
+```
+
+N96 storage counters:
+
+- expert-pack iouring traffic: `491342774272 bytes` (`457.62 GiB`);
+- iouring wait: `49750.593 ms`;
+- iouring batches/jobs: `15465 / 85754`;
+- inflight average/max: `3.84 / 8`;
+- batch histogram: `1:385, 2-4:6613, 5-8:8290, gt32:177`;
+- down VRAM cache hit rate: `61.4%`;
+- upgate VRAM cache hit rate: `43.5%`;
+- current-down overlap worker: `6660.107 ms`.
+
+RAM/page-cache evidence:
+
+- Final N96 cgroup memory:
+  - `file=12055465984` (`11.23 GiB`);
+  - `active_file=12026818560` (`11.20 GiB`);
+  - `inactive_file=28442624`;
+  - `file_mapped=32768`;
+  - `workingset_refault_file=0`;
+  - `pgscan_direct=0`, `pgsteal_direct=0`.
+- `mincore()` file-cache residency after the N96 run:
+  - GGUF shards: `10.994 GiB`;
+  - expert packs: `0.005 GiB`;
+  - alias TSV: `0.010 GiB`.
+- Therefore the current `file` cache is not an efficient expert cache. It is
+  almost entirely clean GGUF shard page cache. Because decode direct reads are
+  `0`, CPU fallback is `0`, expert-pack iouring bytes are large, and
+  refault/direct reclaim are `0`, a large fraction of this file cache is a
+  plausible replacement pool for explicit RAM expert residency.
+
+N32 diagnostic bottleneck:
+
+- copy-profile total profiled copy wall: `134524 ms`;
+- expert-pack miss wall: `0 ms`;
+- expert-pack hit wall: `134524 ms` over `208.65 GiB`;
+- by role:
+  - gate runtime load: `44235 ms` over `61.67 GiB`;
+  - up runtime load: `40080 ms` over `57.13 GiB`;
+  - down runtime load: `37196 ms` over `64.45 GiB`;
+  - current-down overlap: `13013 ms` over `25.40 GiB`.
+
+Top N32 decode up/gate buckets:
+
+| layer | types | wall | wait | compute | misses | hit rate |
+|---:|---|---:|---:|---:|---:|---:|
+| 14 | `22/18` | `393.9 ms` | `441.9 ms` | `18.8 ms` | `248` | `50.0%` |
+| 54 | `22/18` | `381.5 ms` | `423.2 ms` | `15.9 ms` | `246` | `50.4%` |
+| 28 | `22/18` | `350.2 ms` | `373.2 ms` | `7.3 ms` | `328` | `33.9%` |
+| 29 | `22/18` | `342.0 ms` | `371.3 ms` | `7.7 ms` | `336` | `32.3%` |
+| 1 | `22/22` | `322.2 ms` | `587.2 ms` | `32.5 ms` | `346` | `30.2%` |
+
+Top N32 decode down buckets:
+
+| layer | type | wall | stage | kernel | misses | hit rate |
+|---:|---|---:|---:|---:|---:|---:|
+| 4 | `23` | `199.9 ms` | `194.8 ms` | `3.0 ms` | `200` | `19.4%` |
+| 24 | `23` | `191.8 ms` | `186.9 ms` | `3.0 ms` | `187` | `24.6%` |
+| 10 | `2` | `184.3 ms` | `179.1 ms` | `3.0 ms` | `188` | `24.2%` |
+| 1 | `11` | `181.6 ms` | `175.1 ms` | `4.1 ms` | `212` | `14.5%` |
+| 7 | `2` | `179.3 ms` | `174.3 ms` | `3.1 ms` | `184` | `25.8%` |
+
+Top copy-wall overlap with candidates:
+
+- `blk.1.ffn_up_exps.weight`: `1261.7 ms`, `1.06 GiB`;
+- `blk.1.ffn_gate_exps.weight`: `1120.0 ms`, `1.06 GiB`;
+- `blk.4.ffn_down_exps.weight`: `1304.8 ms`, `2.03 GiB`;
+- `blk.28.ffn_gate_exps.weight`: `955.2 ms`, `1.28 GiB`;
+- `blk.29.ffn_gate_exps.weight`: `992.5 ms`, `1.25 GiB`.
+
+Next implementation candidates:
+
+1. Candidate A: default-off pageable RAM slab for full `blk.1` up+gate.
+   - Why first:
+     - early layer, so stalls are least hidden by later work;
+     - low upgate hit rate (`30.2%`);
+     - largest combined up+gate copy wall overlap in the profile;
+     - compute is small compared with wait.
+   - Approximate RAM cost:
+     - up full layer: about `1.7-2.0 GiB`;
+     - gate full layer: about `1.7-2.0 GiB`;
+     - total: about `3.4-4.0 GiB`.
+   - N32 upper bound:
+     - up/gate exposed wait for this bucket is at most `~587 ms` in the
+       diagnostic profile;
+     - N96 upper bound should scale to roughly `1.5-1.8 s` before overhead.
+   - Expected endpoint effect:
+     - this candidate alone may not guarantee `>2 tok/s`, but it is the best
+       first test of replacing low-value GGUF page cache with controlled,
+       batch-friendly expert residency.
+
+2. Candidate B: default-off pageable RAM slab for full `blk.4` down, only if
+   Candidate A does not regress TTFT/refaults.
+   - Why second:
+     - highest down decode wall and highest copy-wall bucket;
+     - down is less dominant than up/gate, but previous local experiments
+       around `blk.4` down showed possible endpoint upside.
+   - Approximate RAM cost:
+     - full down layer: about `2.8-3.0 GiB`.
+   - N32 upper bound:
+     - down exposed stage for this bucket is at most `~195 ms`;
+     - N96 upper bound should be below `~0.6 s` before overhead.
+
+Reject criteria for RAM slabs:
+
+- TTFT increases by more than `20%` versus the endpoint baseline;
+- memory peak approaches `15900000000` bytes;
+- `workingset_refault_file`, `pgscan_direct`, or `pgsteal_direct` become
+  material;
+- mixed RAM/SSD reads fragment batches enough to reduce endpoint token rate;
+- quality output becomes incoherent or fails keywords;
+- CPU fallback or direct reads become nonzero.
+
+New diagnostic tools added for reproducibility:
+
+- `.Agent/run-tools/kimi_file_cache_residency.py`
+  - uses `mincore()` to attribute page-cache residency to GGUF shards,
+    expert packs, alias files, or other files;
+  - output:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-storage-baseline-analysis-3254d897/file-cache-residency-after-n96.csv`.
+- `.Agent/run-tools/kimi_storage_candidate_summary.py`
+  - summarizes up/gate, down, copy wall, and page-cache residency into one
+    candidate report;
+  - output:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-storage-baseline-analysis-3254d897/storage-candidate-summary-n32.md`.
+
+Decision:
+
+- Proceed to Candidate A only after updating this plan with the exact runtime
+  env flag and storage semantics.
+- The implementation must be default-off and must not alter the current SOTA
+  path unless the flag is set.
