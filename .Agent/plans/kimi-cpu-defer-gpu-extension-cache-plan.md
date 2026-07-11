@@ -4,6 +4,94 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## READ FIRST: active goal and immediate plan
+
+Timestamp: 2026-07-11 CST.
+
+Final product goal:
+
+> On Kimi, serve random user prompts with stable decode speed above `5 tok/s`
+> on a single 32 GB RTX 5090-class GPU while total host RAM, including page
+> cache and helper processes, remains below `16 GB`.
+
+Current stage goal:
+
+> First produce a reproducible, prompt-general cold-start result above
+> `2 tok/s`, then use the same measurement discipline to continue toward
+> `5 tok/s`. The next accepted result must come from a pushed commit and must
+> pass semantic quality, RAM, TTFT, and held-out-prompt gates.
+
+Current known baseline and constraints:
+
+- Stable storage baseline rollback point: `3254d897b`.
+- Baseline N96 France endpoint: `1.81 tok/s`, TTFT `7968.38 ms`, RAM peak
+  `12727816192` bytes, CPU fallback `0`, direct reads `0`.
+- Current branch keeps Kimi decode CPU fallback effectively removed; remaining
+  speed limit is exposed expert transfer/staging/H2D/synchronization, not a
+  generic CPU fallback problem.
+- Full-layer or compact RAM slabs have not yet produced a prompt-general win.
+  Candidate A hit the RAM cap and was rejected. Candidate C stayed under the
+  cap but had no reliable mean token-rate gain and is also rejected below.
+- The strongest active direction is lower-byte expert representation plus a
+  direct/io_uring-compatible read path, because it attacks bytes on the real
+  critical path without relying on Linux page cache as an implicit cache.
+
+Hard rules for every future SOTA claim:
+
+- Cold start only.
+- Host RAM peak must stay below `15900000000` bytes, including page cache,
+  pinned memory, anonymous RAM, mmap/file-backed pages, helper processes, and
+  cgroup accounting.
+- TTFT must stay within `+20%` of the chosen baseline.
+- Quality must pass `Please introduce France in a short paragraph.` with a
+  coherent semantic answer and must pass held-out prompts that were not used
+  for tuning.
+- Optimizations must be prompt-general. Dev prompts may guide profiling and
+  selection; held-out prompts may only be used for final validation.
+- A successful candidate must be committed and pushed immediately. The commit
+  body must include baseline SHA, candidate SHA, rollback SHA, exact env and
+  command, prompt split, run directories, token rate, TTFT, RAM/page-cache/VRAM
+  metrics, IO/H2D/staging/compute/fallback metrics, and quality output.
+- A failed candidate must remain default-off or be reverted, and the rejection
+  reason must be recorded in this document before moving to the next idea.
+
+Immediate execution plan:
+
+1. Reproduce the current pushed baseline before any new behavior change.
+   - Use one dev prompt and at least one held-out prompt.
+   - Record endpoint token rate, TTFT, RAM peak, active/inactive file cache,
+     VRAM hit rate by role, expert read bytes, `io_uring_wait`, staging wall,
+     H2D, up/gate compute, down compute, synchronization gaps, and CPU
+     fallback.
+   - Treat this run as the rollback reference for the next experiment.
+
+2. Continue the v2 lower-byte expert path only if the bound remains large.
+   - Use shadow-only instrumentation first; no logits or sampling changes.
+   - Compare top1024/top2048 coverage, staged saved bytes, average inflight,
+     read rate, H2D cost, and file-cache growth.
+   - Promote to real default-off dispatch only if shadow data shows enough
+     exposed critical-path saving to cross `>2 tok/s` after overhead.
+
+3. Keep RAM/VRAM storage changes evidence-driven.
+   - Do not add more RAM slabs just to fill memory.
+   - Replace page cache only with expert data that has measured prompt-general
+     reuse, batch-friendly layout, and lower endpoint time.
+   - Prefer compact role/layer profiles over full all-expert layers unless a
+     new multi-prompt screen proves full-layer residency saves more exposed
+     wait than it adds in TTFT, H2D, reclaim, and scheduling overhead.
+
+4. If v2 byte reduction cannot deliver `>2 tok/s`, pivot to scheduling.
+   - Measure whether the issue is low per-call inflight, missing next-layer
+     prefetch, or overlap failure between up/gate compute and down movement.
+   - Test default-off coalescing/prefetch candidates with A/B runs before any
+     held-out evaluation.
+
+5. Promote only reproducible wins.
+   - Run dev A/B first.
+   - Run held-out validation once the candidate passes dev and constraints.
+   - Commit and push only after a candidate improves held-out decode token rate
+     while preserving RAM, TTFT, and semantic quality.
+
 ## Current goal: Kimi GPU-extension path to reproducible >2 tok/s
 
 This is the top-level goal for the current branch. It supersedes any older
@@ -11963,3 +12051,86 @@ If rejected:
 - Stop RAM slab work as a primary route.
 - Return to lower-byte v2 expert representation or another byte-reduction
   method with a larger theoretical gap to `>2 tok/s`.
+
+## Candidate C result: rejected compact blk1 upgate RAM slab
+
+Timestamp: 2026-07-11 CST.
+
+Control runs:
+
+- N32 dev sweep:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-dev-n32-profile-808f627b`
+- N48 math control:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-dev-linear-n48-profile-808f627b/dev_linear_equation`
+
+Candidate runs:
+
+- N32 dev sweep:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-candidateC-dev-n32-profile-3bf8345a`
+- N48 math run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-candidateC-linear-n48-profile-3bf8345a/dev_linear_equation`
+- A/B report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-candidateC-analysis-3bf8345a/summary.md`
+
+Candidate env:
+
+```text
+GGML_MOE_RAM_TIER_MIB=2500
+GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-profiles-808f627b/dev7-blk1-upgate-active-budget2500.profile.csv
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+GGML_MOE_RAM_BATCH_PROFILE_OUT=$RUN/ram-batch-profile.csv
+```
+
+Aggregate result:
+
+- Decision: reject.
+- Mean control token rate: `1.590 tok/s`.
+- Mean candidate token rate: `1.587 tok/s`.
+- Mean token-rate delta: `-0.003 tok/s`.
+- Max TTFT ratio: `1.144`, within the `+20%` gate.
+- Max candidate RAM peak: `14303961088` bytes, below the hard cap.
+- Max candidate refaults: `0`.
+- Max candidate direct reclaim: `pgscan_direct=0`, `pgsteal_direct=0`.
+- RAM tier hits: `2618 / 297094 = 0.88%`.
+- RAM tier H2D: `11.46 GiB`.
+- `blk.1` wait improved by `178.82 ms`, but total `blk.1` wall worsened by
+  `163.55 ms`, so the local wait reduction did not become endpoint speed.
+
+Per-prompt result:
+
+| prompt | control | Candidate C | delta | TTFT ratio | decode delta | note |
+|---|---:|---:|---:|---:|---:|---|
+| `dev_france_regression` | `1.65` | `1.69` | `+0.04` | `1.102` | `-419.9 ms` | pass |
+| `dev_japan_factual` | `1.64` | `1.66` | `+0.02` | `1.038` | `-216.9 ms` | pass |
+| `dev_photosynthesis_factual` | `1.62` | `1.64` | `+0.02` | `1.053` | `-283.3 ms` | pass |
+| `dev_python_reverse` | `1.48` | `1.46` | `-0.02` | `1.144` | `+149.5 ms` | pass |
+| `dev_zh_france` | `1.88` | `1.71` | `-0.17` | `1.048` | `+1680.8 ms` | pass |
+| `dev_mixed_summary` | `1.52` | `1.51` | `-0.01` | `1.115` | `+220.6 ms` | pass |
+| `dev_linear_equation` N48 | `1.34` | `1.44` | `+0.10` | `1.036` | `-1725.8 ms` | pass |
+
+Interpretation:
+
+- Candidate C is safe from a RAM/TTFT perspective, but it is not a
+  prompt-general token-rate improvement.
+- The RAM tier hit rate is too low to justify the extra residency and H2D
+  scheduling complexity.
+- The Chinese prompt regression shows that dev-selected compact RAM slabs can
+  still be unstable across prompt shapes.
+- Do not run held-out validation for this candidate.
+- Do not promote or push a SOTA claim from Candidate C.
+- RAM slabs remain available only as small supporting components after a new
+  bottleneck profile proves a larger prompt-general bound.
+
+Next direction after rejection:
+
+1. Continue from the pushed branch with Candidate C default-off.
+2. Reproduce the current pushed baseline before another behavior change.
+3. Prefer v2 lower-byte expert representation and direct/io_uring-compatible
+   payload reads as the next primary route, because that path has measured
+   multi-GiB byte-saving potential.
+4. If v2 cannot improve exposed critical-path time, pivot to scheduler-level
+   improvements: larger per-call inflight, earlier next-layer prefetch, or
+   coalesced up/gate/down read scheduling.
