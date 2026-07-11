@@ -669,6 +669,147 @@ Interpretation:
   `7.499 GiB` staged saved bytes can reduce exposed critical-path wait on dev
   and held-out prompts.
 
+## Progress update: v2 batched io_uring shadow reader
+
+Timestamp: 2026-07-11 CST.
+
+Code status:
+
+- Implemented a default-off v2 batched shadow reader behind
+  `GGML_MOE_EXPERT_PACK_V2_SHADOW_IOURING_READ=1`.
+- The reader is shadow-only:
+  - it does not change logits, routing, cache admission, or model output;
+  - it is active only when v2 shadow staging is enabled;
+  - it still requires direct-readable v2 pack sources.
+- It batches the v2-covered staged candidates within one runtime call, reads
+  them into a larger pinned host scratch area, then performs H2D timing into the
+  existing scratch device buffer.
+- CSV/report fields now include v2 shadow io_uring batches, jobs, submit calls,
+  wait calls, CQEs, wait time, inflight sum/samples, and max inflight.
+
+Rejected attempt:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-iouring-budget8-top1024-n32-france`
+- Design: persistent shadow io_uring stored in the global shadow state, honoring
+  `GGML_MOE_IO_SQPOLL`.
+- Outcome:
+  - killed after `4min 41.806s`;
+  - output had only reached `France is`;
+  - GPU util was `0%`;
+  - main thread kernel stack was stuck in `io_cqring_wait`;
+  - multiple `iou-sqp-*` threads existed.
+- Decision:
+  - reject persistent/SQPOLL shadow ring for now;
+  - keep the main expert-pack SQPOLL path untouched;
+  - isolate v2 shadow io_uring with a local non-SQPOLL ring and wait timeout.
+
+Small-sample validation:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-iouring-localring-top1024-n8-max400-france`
+- Extra env:
+  - `N=8`
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE_MAX_CALLS=400`
+  - `GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ=1`
+  - `GGML_MOE_EXPERT_PACK_V2_SHADOW_IOURING_READ=1`
+- Result:
+  - exit: `0`
+  - quality: `pass`
+  - TTFT: `7732.01 ms`
+  - decode: `4486.22 ms / 7 runs = 1.56 tok/s`
+  - RAM peak: `12742385664 bytes`
+  - shadow report:
+    - calls: `400`
+    - staged calls: `120`
+    - staged entries: `399`
+    - staged bytes: `1.073 GiB`
+    - direct bytes: `1.073 GiB`
+    - io_uring batches/jobs: `120 / 399`
+    - io_uring wait: `105.984 ms`
+    - inflight avg/max: `2.58 / 8`
+    - read wall: `167.580 ms`
+    - H2D event: `50.330 ms`
+    - total shadow wall: `323.840 ms`
+
+Full N32 validation:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-iouring-localring-budget8-top1024-n32-france`
+- Extra env:
+  - `GGML_MOE_EXPERT_PACK_V2=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024/selected-iq1s-overlay-v2.expert-pack`
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024/selected-iq1s-overlay-manifest.tsv`
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE=1`
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE_OUT=<run>/v2-shadow-stage.csv`
+  - `GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ=1`
+  - `GGML_MOE_EXPERT_PACK_V2_SHADOW_IOURING_READ=1`
+- Result:
+  - exit: `0`
+  - quality: `pass`
+  - output begins: `France is a country in Western Europe...`
+  - TTFT: `7741.87 ms`
+  - decode: `18575.16 ms / 31 runs = 1.67 tok/s`
+  - RAM peak: `12748857344 bytes`
+  - final file cache: `12052197376 bytes`
+  - decode CPU fallback: `hits=0 misses=0 bytes=0 fallback_gguf=0`
+  - v2 preflight: `accepted=8174/68736`, `full_cover_calls=16`,
+    `manifest_rows=1024`
+  - shadow report:
+    - calls: `5583`
+    - staged calls: `953`
+    - staged entries: `2221`
+    - staged bytes: `5.976 GiB`
+    - staged saved bytes: `7.499 GiB`
+    - direct reads: `2221`
+    - direct bytes: `5.976 GiB`
+    - direct physical bytes: `5.976 GiB`
+    - direct fallbacks: `0`
+    - buffered reads: `0`
+    - io_uring batches/jobs: `953 / 2221`
+    - submit calls / wait calls / CQEs: `953 / 2221 / 2221`
+    - io_uring wait: `656.525 ms`
+    - inflight avg/max: `2.17 / 8`
+    - read wall: `988.880 ms`
+    - H2D event: `291.527 ms`
+    - sync wall: `284.022 ms`
+    - total shadow wall: `1526.050 ms`
+
+Role split:
+
+| role | staged | staged GiB | staged saved GiB | read ms | H2D ms | total ms | batches/jobs | inflight avg/max |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `down` | 1228 | 3.325 | 5.411 | 497.830 | 163.009 | 786.666 | 434 / 1228 | 2.46 / 8 |
+| `gate` | 489 | 1.306 | 0.995 | 238.681 | 62.737 | 344.018 | 255 / 489 | 1.82 / 7 |
+| `up` | 504 | 1.346 | 1.094 | 252.369 | 65.781 | 395.366 | 264 / 504 | 1.83 / 7 |
+| total | 2221 | 5.976 | 7.499 | 988.880 | 291.527 | 1526.050 | 953 / 2221 | 2.17 / 8 |
+
+Reader comparison on the same top1024 N32 France shadow workload:
+
+| reader | RAM peak | file cache final | read ms | H2D ms | total shadow ms | read rate |
+|---|---:|---:|---:|---:|---:|---:|
+| buffered `fread` | 15144787968 B | 14462074880 B | 2181.764 | 546.917 | 2771.305 | 2.739 GiB/s |
+| O_DIRECT single-entry | 12731265024 B | 12052197376 B | 1763.693 | 326.373 | 2130.667 | 3.389 GiB/s |
+| local-ring io_uring batch | 12748857344 B | 12052197376 B | 988.880 | 291.527 | 1526.050 | 6.043 GiB/s |
+
+Interpretation:
+
+- Batched v2 io_uring is materially better than single-entry direct read:
+  - read wall improves by `774.813 ms`;
+  - total shadow wall improves by `604.617 ms`;
+  - read rate improves from `3.389 GiB/s` to `6.043 GiB/s`.
+- It still does not reach the pure IO bench limit of `10.0-10.4 GiB/s` because
+  real decode calls expose only `2.17` average inflight jobs for this top1024
+  coverage. Queue depth is not the limit; per-call route coverage is.
+- The reader remains an instrumentation/storage-path improvement, not a SOTA
+  dispatch result. A real v2 dispatch would only be worth trying if it can
+  integrate these lower-byte payloads into the existing runtime scheduling
+  without adding a second exposed H2D/sync sequence.
+- Next implementation candidate:
+  - either merge v2 payload reads into the existing expert-pack batched
+    scheduler for actual dispatch on a tiny safe subset;
+  - or improve coverage/batchability first, because top1024 average inflight is
+    too low to use the 10 GiB/s storage ceiling.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.

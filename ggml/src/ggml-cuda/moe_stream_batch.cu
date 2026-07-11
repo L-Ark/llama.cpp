@@ -3916,8 +3916,13 @@ static bool expert_pack_v2_shadow_direct_read_enabled() {
     return expert_pack_env_bool("GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ", false);
 }
 
+static bool expert_pack_v2_shadow_iouring_read_enabled() {
+    return expert_pack_env_bool("GGML_MOE_EXPERT_PACK_V2_SHADOW_IOURING_READ", false);
+}
+
 static bool expert_pack_v2_shadow_direct_open_allowed() {
-    if (!expert_pack_v2_shadow_direct_read_enabled()) return false;
+    if (!expert_pack_v2_shadow_direct_read_enabled() &&
+            !expert_pack_v2_shadow_iouring_read_enabled()) return false;
     const char *io_backend_env = std::getenv("GGML_MOE_IO_BACKEND");
     return io_backend_env && (
         std::strcmp(io_backend_env, "direct") == 0 ||
@@ -9330,6 +9335,19 @@ struct expert_pack_v2_shadow_stage_state {
     std::atomic<uint64_t> direct_fallbacks{0};
     std::atomic<uint64_t> buffered_reads{0};
     std::atomic<uint64_t> buffered_bytes{0};
+    std::atomic<uint64_t> iouring_batches{0};
+    std::atomic<uint64_t> iouring_jobs{0};
+    std::atomic<uint64_t> iouring_submit_calls{0};
+    std::atomic<uint64_t> iouring_wait_calls{0};
+    std::atomic<uint64_t> iouring_cqes{0};
+    std::atomic<uint64_t> iouring_wait_us{0};
+    std::atomic<uint64_t> iouring_inflight_sum{0};
+    std::atomic<uint64_t> iouring_inflight_samples{0};
+    std::atomic<uint64_t> iouring_inflight_max{0};
+#if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
+    io_uring *uring = nullptr;
+    size_t uring_depth = 0;
+#endif
     double alloc_ms = 0.0;
     double read_ms = 0.0;
     double h2d_ms = 0.0;
@@ -9372,6 +9390,9 @@ static void expert_pack_v2_shadow_stage_report() {
         "staged_bytes=%.3f GiB read_failures=%llu h2d_failures=%llu alloc_failures=%llu "
         "direct_reads=%llu direct_bytes=%.3f GiB direct_physical=%.3f GiB "
         "direct_fallbacks=%llu buffered_reads=%llu buffered_bytes=%.3f GiB "
+        "iouring_batches=%llu iouring_jobs=%llu iouring_submit_calls=%llu "
+        "iouring_wait_calls=%llu iouring_cqes=%llu iouring_wait_ms=%.3f "
+        "iouring_inflight_avg=%.2f iouring_inflight_max=%llu "
         "alloc_ms=%.3f read_ms=%.3f h2d_ms=%.3f sync_ms=%.3f total_ms=%.3f "
         "host_capacity=%.3f MiB dev_capacity=%.3f MiB\n",
         (unsigned long long)calls,
@@ -9389,6 +9410,16 @@ static void expert_pack_v2_shadow_stage_report() {
         (unsigned long long)s.direct_fallbacks.load(std::memory_order_relaxed),
         (unsigned long long)s.buffered_reads.load(std::memory_order_relaxed),
         s.buffered_bytes.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0),
+        (unsigned long long)s.iouring_batches.load(std::memory_order_relaxed),
+        (unsigned long long)s.iouring_jobs.load(std::memory_order_relaxed),
+        (unsigned long long)s.iouring_submit_calls.load(std::memory_order_relaxed),
+        (unsigned long long)s.iouring_wait_calls.load(std::memory_order_relaxed),
+        (unsigned long long)s.iouring_cqes.load(std::memory_order_relaxed),
+        s.iouring_wait_us.load(std::memory_order_relaxed) / 1000.0,
+        s.iouring_inflight_samples.load(std::memory_order_relaxed) > 0 ?
+            (double)s.iouring_inflight_sum.load(std::memory_order_relaxed) /
+                (double)s.iouring_inflight_samples.load(std::memory_order_relaxed) : 0.0,
+        (unsigned long long)s.iouring_inflight_max.load(std::memory_order_relaxed),
         s.alloc_ms,
         s.read_ms,
         s.h2d_ms,
@@ -9471,6 +9502,236 @@ static expert_pack_v2_shadow_read_result expert_pack_v2_shadow_read_entry_to_hos
     result.nread = nread;
     result.direct = false;
     return result;
+}
+
+struct expert_pack_v2_shadow_iouring_result {
+    bool attempted = false;
+    bool completed = false;
+    uint64_t staged_bytes = 0;
+    uint64_t read_failures = 0;
+    uint64_t h2d_failures = 0;
+    uint64_t direct_reads = 0;
+    uint64_t direct_bytes = 0;
+    uint64_t direct_physical_bytes = 0;
+    uint64_t direct_fallbacks = 0;
+    uint64_t batches = 0;
+    uint64_t jobs = 0;
+    uint64_t submit_calls = 0;
+    uint64_t wait_calls = 0;
+    uint64_t cqes = 0;
+    uint64_t wait_us = 0;
+    uint64_t inflight_sum = 0;
+    uint64_t inflight_samples = 0;
+    uint64_t inflight_max = 0;
+    double read_ms = 0.0;
+    double h2d_ms = 0.0;
+    double sync_ms = 0.0;
+};
+
+static expert_pack_v2_shadow_iouring_result expert_pack_v2_shadow_iouring_stage_candidates(
+        expert_pack_v2_shadow_stage_state &s,
+        const std::vector<expert_pack_v2_shadow_candidate> &candidates,
+        size_t slot_sz,
+        cudaStream_t stream) {
+    expert_pack_v2_shadow_iouring_result result;
+#if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
+    if (!expert_pack_v2_shadow_iouring_read_enabled() || candidates.empty() ||
+            !s.host || !s.dev || slot_sz == 0) {
+        return result;
+    }
+    result.attempted = true;
+
+    const size_t alignment = expert_pack_direct_alignment();
+    if (((uintptr_t)s.host % alignment) != 0) {
+        result.direct_fallbacks += candidates.size();
+        return result;
+    }
+    const size_t depth = std::min(expert_pack_io_depth(), candidates.size());
+    if (depth == 0) {
+        return result;
+    }
+
+    struct read_plan {
+        size_t candidate_idx = 0;
+        int fd = -1;
+        uint64_t offset = 0;
+        size_t read_sz = 0;
+        size_t prefix = 0;
+        size_t payload_sz = 0;
+        bool ok = false;
+    };
+
+    std::vector<read_plan> plans;
+    plans.reserve(candidates.size());
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        const expert_pack_v2_entry *entry = candidates[i].entry;
+        expert_pack_source *source = expert_pack_v2_source_for_entry(entry);
+        if (!entry || !source || source->fd_direct < 0 || entry->nbytes <= 0) {
+            return result;
+        }
+        const size_t payload_sz = (size_t)entry->nbytes;
+        const uint64_t aligned_offset = (entry->offset / alignment) * alignment;
+        const size_t prefix = (size_t)(entry->offset - aligned_offset);
+        const size_t read_sz = (size_t)align_up_u64((uint64_t)prefix + (uint64_t)payload_sz, alignment);
+        if (read_sz == 0 || read_sz > slot_sz || read_sz > (size_t)UINT_MAX) {
+            return result;
+        }
+        void *slot_ptr = (char *)s.host + i * slot_sz;
+        if (((uintptr_t)slot_ptr % alignment) != 0) {
+            return result;
+        }
+        plans.push_back({i, source->fd_direct, aligned_offset, read_sz, prefix, payload_sz, false});
+    }
+    if (plans.empty()) {
+        result.completed = true;
+        return result;
+    }
+
+    struct scoped_iouring {
+        io_uring ring;
+        bool ready = false;
+        ~scoped_iouring() {
+            if (ready) {
+                io_uring_queue_exit(&ring);
+            }
+        }
+    } local_ring;
+    // Keep the shadow profiler isolated from the main expert-pack SQPOLL rings.
+    if (io_uring_queue_init((unsigned)depth, &local_ring.ring, 0) != 0) {
+        result.direct_fallbacks += plans.size();
+        return result;
+    }
+    local_ring.ready = true;
+    io_uring *ring_io = &local_ring.ring;
+
+    auto submit_plan = [&](size_t plan_idx) -> bool {
+        read_plan &plan = plans[plan_idx];
+        io_uring_sqe *sqe = io_uring_get_sqe(ring_io);
+        if (!sqe) return false;
+        void *dst = (char *)s.host + plan_idx * slot_sz;
+        io_uring_prep_read(sqe, plan.fd, dst, (unsigned)plan.read_sz, (off_t)plan.offset);
+        io_uring_sqe_set_data64(sqe, (uint64_t)plan_idx + 1);
+        return true;
+    };
+
+    const auto read_t0 = std::chrono::steady_clock::now();
+    size_t next_plan = 0;
+    size_t inflight = 0;
+    while (next_plan < plans.size() && inflight < depth) {
+        if (!submit_plan(next_plan)) {
+            result.direct_fallbacks += plans.size() - next_plan;
+            return result;
+        }
+        ++next_plan;
+        ++inflight;
+    }
+    if (inflight == 0) {
+        return result;
+    }
+    if (io_uring_submit(ring_io) < 0) {
+        result.direct_fallbacks += plans.size();
+        return result;
+    }
+    result.submit_calls += 1;
+
+    size_t completed = 0;
+    while (completed < plans.size()) {
+        result.inflight_sum += inflight;
+        ++result.inflight_samples;
+        result.inflight_max = std::max<uint64_t>(result.inflight_max, (uint64_t)inflight);
+
+        io_uring_cqe *cqe = nullptr;
+        const auto wait_t0 = std::chrono::steady_clock::now();
+        ++result.wait_calls;
+        __kernel_timespec timeout;
+        timeout.tv_sec = 5;
+        timeout.tv_nsec = 0;
+        const int wait_rc = io_uring_wait_cqe_timeout(ring_io, &cqe, &timeout);
+        const auto wait_t1 = std::chrono::steady_clock::now();
+        result.wait_us += (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(wait_t1 - wait_t0).count();
+        if (wait_rc != 0 || !cqe) {
+            result.read_failures += plans.size() - completed;
+            return result;
+        }
+
+        const uint64_t data = io_uring_cqe_get_data64(cqe);
+        const size_t plan_idx = data == 0 ? SIZE_MAX : (size_t)data - 1;
+        if (plan_idx < plans.size() && cqe->res == (int)plans[plan_idx].read_sz) {
+            plans[plan_idx].ok = true;
+            ++result.direct_reads;
+            result.direct_bytes += plans[plan_idx].payload_sz;
+            result.direct_physical_bytes += plans[plan_idx].read_sz;
+        } else {
+            ++result.read_failures;
+        }
+        io_uring_cqe_seen(ring_io, cqe);
+        ++result.cqes;
+        ++completed;
+        --inflight;
+
+        if (next_plan < plans.size()) {
+            if (!submit_plan(next_plan)) {
+                result.direct_fallbacks += plans.size() - next_plan;
+                return result;
+            }
+            ++next_plan;
+            ++inflight;
+            if (io_uring_submit(ring_io) < 0) {
+                result.direct_fallbacks += plans.size() - completed;
+                return result;
+            }
+            ++result.submit_calls;
+        }
+    }
+    const auto read_t1 = std::chrono::steady_clock::now();
+    result.read_ms = std::chrono::duration<double, std::milli>(read_t1 - read_t0).count();
+    result.batches = 1;
+    result.jobs = plans.size();
+
+    for (size_t i = 0; i < plans.size(); ++i) {
+        const read_plan &plan = plans[i];
+        if (!plan.ok) continue;
+        const char *payload = (const char *)s.host + i * slot_sz + plan.prefix;
+        if (!s.event_failed) {
+            cudaEventRecord(s.copy_start, stream);
+        }
+        if (cudaMemcpyAsync(s.dev, payload, plan.payload_sz, cudaMemcpyHostToDevice, stream) != cudaSuccess) {
+            ++result.h2d_failures;
+            continue;
+        }
+        if (!s.event_failed) {
+            cudaEventRecord(s.copy_done, stream);
+            const auto sync_t0 = std::chrono::steady_clock::now();
+            if (cudaEventSynchronize(s.copy_done) != cudaSuccess) {
+                ++result.h2d_failures;
+                continue;
+            }
+            const auto sync_t1 = std::chrono::steady_clock::now();
+            result.sync_ms += std::chrono::duration<double, std::milli>(sync_t1 - sync_t0).count();
+            float copy_ms = 0.0f;
+            if (cudaEventElapsedTime(&copy_ms, s.copy_start, s.copy_done) == cudaSuccess) {
+                result.h2d_ms += (double)copy_ms;
+            }
+        } else {
+            const auto sync_t0 = std::chrono::steady_clock::now();
+            if (cudaStreamSynchronize(stream) != cudaSuccess) {
+                ++result.h2d_failures;
+                continue;
+            }
+            const auto sync_t1 = std::chrono::steady_clock::now();
+            result.sync_ms += std::chrono::duration<double, std::milli>(sync_t1 - sync_t0).count();
+        }
+        result.staged_bytes += plan.payload_sz;
+    }
+    result.completed = true;
+    return result;
+#else
+    (void)s;
+    (void)candidates;
+    (void)slot_sz;
+    (void)stream;
+    return result;
+#endif
 }
 
 static void expert_pack_v2_shadow_stage_record(
@@ -9609,11 +9870,14 @@ static void expert_pack_v2_shadow_stage_record(
                             "alloc_ms,read_ms,h2d_ms,sync_ms,total_ms,read_failures,"
                             "h2d_failures,direct_reads,direct_bytes,"
                             "direct_physical_bytes,direct_fallbacks,buffered_reads,"
-                            "buffered_bytes\n");
+                            "buffered_bytes,iouring_batches,iouring_jobs,"
+                            "iouring_submit_calls,iouring_wait_calls,iouring_cqes,"
+                            "iouring_wait_us,iouring_inflight_sum,"
+                            "iouring_inflight_samples,iouring_inflight_max\n");
                         s.header_written = true;
                     }
                     std::fprintf(f,
-                        "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,0,%llu,%zu,%zu,%zu,0,0.000000,0.000000,0.000000,0.000000,0.000000,0,0,0,0,0,0,0,0\n",
+                        "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,0,%llu,%zu,%zu,%zu,0,0.000000,0.000000,0.000000,0.000000,0.000000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n",
                         (unsigned long long)call_idx,
                         phase ? phase : "",
                         role ? role : "",
@@ -9662,6 +9926,15 @@ static void expert_pack_v2_shadow_stage_record(
     uint64_t direct_fallbacks = 0;
     uint64_t buffered_reads = 0;
     uint64_t buffered_bytes = 0;
+    uint64_t iouring_batches = 0;
+    uint64_t iouring_jobs = 0;
+    uint64_t iouring_submit_calls = 0;
+    uint64_t iouring_wait_calls = 0;
+    uint64_t iouring_cqes = 0;
+    uint64_t iouring_wait_us = 0;
+    uint64_t iouring_inflight_sum = 0;
+    uint64_t iouring_inflight_samples = 0;
+    uint64_t iouring_inflight_max = 0;
     bool alloc_grew = false;
 
     const auto total_t0 = std::chrono::steady_clock::now();
@@ -9670,7 +9943,18 @@ static void expert_pack_v2_shadow_stage_record(
         const auto alloc_t0 = std::chrono::steady_clock::now();
         const size_t old_host_sz = s.host_sz;
         const size_t old_dev_sz = s.dev_sz;
-        if (!ensure_host_pinned(s.host, s.host_sz, max_entry_bytes) ||
+        const size_t shadow_alignment = expert_pack_direct_alignment();
+        const bool use_iouring_shadow = expert_pack_v2_shadow_iouring_read_enabled();
+        const size_t shadow_slot_sz = use_iouring_shadow ?
+            (size_t)align_up_u64((uint64_t)max_entry_bytes, (uint64_t)shadow_alignment) :
+            max_entry_bytes;
+        if (shadow_slot_sz == 0 ||
+                (use_iouring_shadow && candidates.size() > SIZE_MAX / shadow_slot_sz)) {
+            s.alloc_failures.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+        const size_t host_need = use_iouring_shadow ? shadow_slot_sz * candidates.size() : max_entry_bytes;
+        if (!ensure_host_pinned(s.host, s.host_sz, host_need) ||
                 !ensure_dev(s.dev, s.dev_sz, max_entry_bytes)) {
             s.alloc_failures.fetch_add(1, std::memory_order_relaxed);
             return;
@@ -9685,7 +9969,35 @@ static void expert_pack_v2_shadow_stage_record(
         const auto alloc_t1 = std::chrono::steady_clock::now();
         alloc_ms = std::chrono::duration<double, std::milli>(alloc_t1 - alloc_t0).count();
 
-        for (const expert_pack_v2_shadow_candidate &candidate : candidates) {
+        bool used_iouring_shadow = false;
+        if (use_iouring_shadow) {
+            const expert_pack_v2_shadow_iouring_result io_result =
+                expert_pack_v2_shadow_iouring_stage_candidates(s, candidates, shadow_slot_sz, stream);
+            if (io_result.attempted && io_result.completed) {
+                used_iouring_shadow = true;
+                staged_bytes += io_result.staged_bytes;
+                read_failures += io_result.read_failures;
+                h2d_failures += io_result.h2d_failures;
+                direct_reads += io_result.direct_reads;
+                direct_bytes += io_result.direct_bytes;
+                direct_physical_bytes += io_result.direct_physical_bytes;
+                direct_fallbacks += io_result.direct_fallbacks;
+                iouring_batches += io_result.batches;
+                iouring_jobs += io_result.jobs;
+                iouring_submit_calls += io_result.submit_calls;
+                iouring_wait_calls += io_result.wait_calls;
+                iouring_cqes += io_result.cqes;
+                iouring_wait_us += io_result.wait_us;
+                iouring_inflight_sum += io_result.inflight_sum;
+                iouring_inflight_samples += io_result.inflight_samples;
+                iouring_inflight_max = std::max<uint64_t>(iouring_inflight_max, io_result.inflight_max);
+                read_ms += io_result.read_ms;
+                h2d_ms += io_result.h2d_ms;
+                sync_ms += io_result.sync_ms;
+            }
+        }
+
+        if (!used_iouring_shadow) for (const expert_pack_v2_shadow_candidate &candidate : candidates) {
             const size_t entry_bytes = (size_t)candidate.entry->nbytes;
             const auto read_t0 = std::chrono::steady_clock::now();
             const expert_pack_v2_shadow_read_result read_result =
@@ -9754,6 +10066,15 @@ static void expert_pack_v2_shadow_stage_record(
     s.direct_fallbacks.fetch_add(direct_fallbacks, std::memory_order_relaxed);
     s.buffered_reads.fetch_add(buffered_reads, std::memory_order_relaxed);
     s.buffered_bytes.fetch_add(buffered_bytes, std::memory_order_relaxed);
+    s.iouring_batches.fetch_add(iouring_batches, std::memory_order_relaxed);
+    s.iouring_jobs.fetch_add(iouring_jobs, std::memory_order_relaxed);
+    s.iouring_submit_calls.fetch_add(iouring_submit_calls, std::memory_order_relaxed);
+    s.iouring_wait_calls.fetch_add(iouring_wait_calls, std::memory_order_relaxed);
+    s.iouring_cqes.fetch_add(iouring_cqes, std::memory_order_relaxed);
+    s.iouring_wait_us.fetch_add(iouring_wait_us, std::memory_order_relaxed);
+    s.iouring_inflight_sum.fetch_add(iouring_inflight_sum, std::memory_order_relaxed);
+    s.iouring_inflight_samples.fetch_add(iouring_inflight_samples, std::memory_order_relaxed);
+    expert_pack_atomic_max(s.iouring_inflight_max, iouring_inflight_max);
     {
         std::lock_guard<std::mutex> lk(s.mu);
         s.alloc_ms += alloc_ms;
@@ -9777,11 +10098,14 @@ static void expert_pack_v2_shadow_stage_record(
                             "alloc_ms,read_ms,h2d_ms,sync_ms,total_ms,read_failures,"
                             "h2d_failures,direct_reads,direct_bytes,"
                             "direct_physical_bytes,direct_fallbacks,buffered_reads,"
-                            "buffered_bytes\n");
+                            "buffered_bytes,iouring_batches,iouring_jobs,"
+                            "iouring_submit_calls,iouring_wait_calls,iouring_cqes,"
+                            "iouring_wait_us,iouring_inflight_sum,"
+                            "iouring_inflight_samples,iouring_inflight_max\n");
                     s.header_written = true;
                 }
                 std::fprintf(f,
-                    "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%zu,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,%llu,%llu,%zu,%zu,%zu,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu\n",
+                    "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%zu,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,%llu,%llu,%zu,%zu,%zu,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu\n",
                     (unsigned long long)call_idx,
                     phase ? phase : "",
                     role ? role : "",
@@ -9823,7 +10147,16 @@ static void expert_pack_v2_shadow_stage_record(
                     (unsigned long long)direct_physical_bytes,
                     (unsigned long long)direct_fallbacks,
                     (unsigned long long)buffered_reads,
-                    (unsigned long long)buffered_bytes);
+                    (unsigned long long)buffered_bytes,
+                    (unsigned long long)iouring_batches,
+                    (unsigned long long)iouring_jobs,
+                    (unsigned long long)iouring_submit_calls,
+                    (unsigned long long)iouring_wait_calls,
+                    (unsigned long long)iouring_cqes,
+                    (unsigned long long)iouring_wait_us,
+                    (unsigned long long)iouring_inflight_sum,
+                    (unsigned long long)iouring_inflight_samples,
+                    (unsigned long long)iouring_inflight_max);
                 std::fclose(f);
             }
         }
