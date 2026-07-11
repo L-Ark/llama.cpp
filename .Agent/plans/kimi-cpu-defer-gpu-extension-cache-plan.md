@@ -260,6 +260,164 @@ Decision:
   - stay default-off until N32 quality, N96 dev, and held-out gates pass.
 - No SOTA claim is made from this smoke.
 
+## Current subgoal: batched/reused-buffer v2 split smoke
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Measure whether the v2 partial-split path still looks viable after removing
+> the obviously bad standalone-smoke overhead: per-row CUDA allocation/free and
+> per-row stream synchronization. This remains a standalone timing smoke, not a
+> runtime dispatch and not a SOTA result.
+
+Why this is the next step:
+
+- The previous timing smoke showed merge/scatter and fallback fill are tiny.
+- It also showed the naive per-row structure is not acceptable:
+  - post-first read is `1.7-3.5 ms/row` for a `2.734 MiB` payload;
+  - post-first H2D is about `1.0 ms/row`;
+  - per-row `cudaMalloc/cudaFree` adds about `0.35 ms/row`;
+  - the first v2 MMVQ call pays a one-time `36-37 ms` cold/lazy cost.
+- The current exported single-row `ggml_cuda_moe_stream_mmvq_dev` interface
+  does not prove a fused multi-expert kernel. The next smoke should therefore
+  validate the safer implementation shape first: multiple preallocated slots,
+  queued H2D + MMVQ work, and one final stream synchronization.
+
+Plan:
+
+1. Extend `.Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp` with a
+   batched/reused-buffer path.
+   - Keep the existing per-row timing output for comparison.
+   - Allocate device slots once for all covered rows.
+   - Read all covered v2 payloads into host buffers.
+   - Enqueue H2D + memset + single-row MMVQ for each covered slot.
+   - Synchronize once after all covered rows are queued.
+   - Copy D2H and merge rows after the batch completes.
+   - Reuse the same correctness checks as the per-row path.
+
+2. Measure these stages separately:
+   - lookup;
+   - host payload allocation;
+   - payload read;
+   - one-time CUDA allocation;
+   - total H2D event time;
+   - total kernel event time;
+   - single batch sync wall time;
+   - D2H;
+   - merge/scatter;
+   - total covered batch wall time.
+
+3. Decision gate:
+   - If reusable slots reduce covered post-first cost materially versus
+     `5.45-7.36 ms/row`, continue toward a default-off runtime partial split
+     prototype.
+   - If read + H2D alone remains too large, switch priority back to storage
+     layout and RAM/VRAM residency instead of adding runtime dispatch
+     complexity.
+   - If the one-time cold kernel cost remains visible per process, record it as
+     TTFT/cold-start overhead and do not hide it in steady decode numbers.
+
+4. Reproducibility:
+   - Save build/run commands and stdout/stderr in a new run directory.
+   - Update this plan with the measured table before commit.
+   - Commit and push the smoke change with run directory, metrics, and rollback
+     point in the commit body.
+
+## Progress update: batched/reused-buffer v2 split smoke
+
+Timestamp: 2026-07-11 CST.
+
+Code change:
+
+- Extended `.Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp` with an
+  optional fourth argument:
+  - `per-row` keeps the previous timing path and remains the default;
+  - `batch` uses one preallocated device slot per covered row, reads all covered
+    v2 payloads, enqueues H2D + single-row MMVQ work for all covered rows, and
+    synchronizes once before D2H verification and merge.
+- Existing correctness checks remain active for both modes.
+- This is still a standalone smoke only. It does not alter model inference.
+
+Run directory:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-batch-smoke
+```
+
+Commands:
+
+```bash
+# Build
+g++ -std=c++17 -O2 \
+  .Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp \
+  -I/usr/local/cuda/include \
+  -L/usr/local/cuda/lib64 -lcudart -ldl \
+  -o /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-batch-smoke/kimi_moepack_v2_partial_split_smoke
+
+# Per-row regression
+LD_LIBRARY_PATH=build-cuda-batch/bin:/usr/local/cuda/lib64 \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-batch-smoke/kimi_moepack_v2_partial_split_smoke \
+  build-cuda-batch/bin/libggml-cuda.so \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv \
+  per-row
+
+# Batched/reused-buffer timing
+LD_LIBRARY_PATH=build-cuda-batch/bin:/usr/local/cuda/lib64 \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-batch-smoke/kimi_moepack_v2_partial_split_smoke \
+  build-cuda-batch/bin/libggml-cuda.so \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv \
+  batch
+```
+
+Inputs:
+
+- selected tensor: `blk.1.ffn_up_exps.weight`
+- route shape: `5` routes total, `3` v2-covered rows, `2` fallback rows
+- covered row payload: `2.734 MiB` each, `8.203 MiB` total
+
+Results:
+
+| mode | correctness | covered total | read | H2D | kernel | notes |
+|---|---|---:|---:|---:|---:|---|
+| `per-row` regression | pass | `50.981 ms` | `8.589 ms` | `1.761 ms` | `31.953 ms` | post-first routes `4.539 ms` and `7.162 ms` |
+| `batch` reused slots | pass | `45.532 ms` wall | `1.965 ms` | `1.867 ms` | `30.169 ms` | one batch sync `0.092 ms`; one-time device alloc/events `0.502 ms` |
+
+Batched per-route details:
+
+- route `0`: includes cold/lazy kernel, `34.765 ms` total, `30.146 ms` kernel;
+- route `2`: post-first, `5.205 ms` total, `0.754 ms` read,
+  `0.687 ms` H2D, `0.012 ms` kernel;
+- route `4`: post-first, `4.525 ms` total, `0.397 ms` read,
+  `0.532 ms` H2D, `0.012 ms` kernel.
+
+Interpretation:
+
+- The safer batched/reused-buffer control shape works and passes row-placement
+  validation.
+- Removing per-row CUDA alloc/free and per-row sync helps, but it does not
+  remove the dominant steady costs. Post-first rows still take several
+  milliseconds because payload allocation/read and H2D dominate.
+- The first v2 MMVQ route still pays a cold/lazy kernel cost around `30 ms` in
+  this process. This must count against cold-start/TTFT if a runtime path
+  triggers it.
+- Merge/scatter and fallback fill remain negligible.
+
+Decision:
+
+- Do not implement runtime partial split as per-row dispatch.
+- A runtime partial-split prototype is only worth continuing if it also adds:
+  - reusable pinned host staging, not fresh pageable vectors;
+  - batch-friendly v2 payload layout/read scheduling;
+  - real overlap with current-path work or expert IO;
+  - accounting for the first-kernel cold cost.
+- If these cannot be implemented cleanly, return priority to RAM/VRAM
+  storage-layout work because byte savings alone are not translating into a
+  clear token-rate path yet.
+- No SOTA claim is made from this smoke.
+
 ## Progress update: runtime partial-split shadow planner
 
 Timestamp: 2026-07-11 CST.
