@@ -438,6 +438,103 @@ The latest rejected experiments show:
 Therefore the next useful test is a static, prompt-agnostic RAM layout that
 removes repeated SSD reads without introducing a concurrent SSD worker.
 
+### 2026-07-11 static RAM tier screen results
+
+Generated cross-prompt profiles:
+
+- Directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-static-ram-tier-crossprompt`
+- Dev runs used:
+  - France:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-mixedio-defaultoff-depth16-france-n96-145901`
+  - batteries:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-815b-clean-baseline-batteries-n96-135148`
+  - cloud/business:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-815b-clean-baseline-cloudbiz-n96-135319`
+- Profile construction:
+  - aggregate `copy-profile.csv` by `(tensor, expert_idx, expert_bytes)`;
+  - require candidate appears in at least two dev prompts;
+  - score by `io_wait_ms + 0.25*h2d_ms + 0.10*wall_ms`, with prompt coverage
+    and layer pressure weighting;
+  - exclude approximate current VRAM hotset from the first profile.
+
+Profiles:
+
+| profile | entries | resident bytes | selected IO sum | selected H2D sum |
+|---|---:|---:|---:|---:|
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-static-ram-tier-crossprompt/ram-tier-crossprompt-512m.profile.csv` | `85` | `511.66 MiB` | `8666.4 ms` | `645.8 ms` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-static-ram-tier-crossprompt/ram-tier-crossprompt-1024m.profile.csv` | `167` | `1022.88 MiB` | `15220.0 ms` | `1186.5 ms` |
+
+Runtime env shape:
+
+```bash
+GGML_MOE_RAM_TIER_PROFILE=<profile>
+GGML_MOE_RAM_TIER_MIB=<512|1024>
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=2
+PINNED_SLOTS=16
+MOE_IO_DEPTH=16
+MOE_IO_REFILL_BATCH=8
+```
+
+Results:
+
+| run | profile | quality | TTFT | decode | token rate | RAM peak | RAM tier hit |
+|---|---|---|---:|---:|---:|---:|---:|
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-staticram512-crossprompt-france-n32-152859` | crossprompt 512MiB, VRAM excluded | pass | `10643.84 ms` | `20391.35 ms / 31` | `1.52 tok/s` | `13374910464` | `241 / 39090 = 0.6%` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-staticram1024-crossprompt-france-n32-153013` | crossprompt 1024MiB, VRAM excluded | pass | `10942.26 ms` | `20974.49 ms / 31` | `1.48 tok/s` | `13918429184` | `426 / 39090 = 1.1%` |
+
+Sanity profile without VRAM exclusion:
+
+- Directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-static-ram-tier-crossprompt-noexclude`
+- Purpose: verify whether low hit rate came from the RAM tier mechanism or from
+  over-aggressive exclusion of hot entries already covered by VRAM.
+
+| profile | entries | resident bytes | selected IO sum |
+|---|---:|---:|---:|
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-static-ram-tier-crossprompt-noexclude/ram-tier-crossprompt-noexclude-512m.profile.csv` | `85` | `508.16 MiB` | `14577.8 ms` |
+
+Runtime result:
+
+| run | profile | quality | TTFT | decode | token rate | RAM peak | RAM tier hit |
+|---|---|---|---:|---:|---:|---:|---:|
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-staticram512-noexclude-france-n32-153246` | no-exclude 512MiB | pass | `10422.03 ms` | `20421.00 ms / 31` | `1.52 tok/s` | `13361709056` | `582 / 39090 = 1.5%` |
+
+Decision:
+
+- Reject the current static RAM tier profiles as SOTA candidates.
+- The RAM tier mechanism loads and serves resident entries correctly, but the
+  hit rate is too low to move endpoint token rate.
+- Increasing resident bytes from `512MiB` to `1024MiB` increases RAM pressure
+  and TTFT without improving endpoint speed.
+- Removing the VRAM exclusion increases hit rate only to `1.5%`, still too low.
+- Do not run N96/held-out expansion for this profile family; the N32 smoke does
+  not justify it.
+
+Root cause:
+
+- The currently useful hotset is already mostly handled by VRAM cache/current
+  down overlap.
+- The remaining SSD misses are high-cardinality and prompt-sensitive; a small
+  static RAM tier selected from cross-prompt frequency does not cover enough of
+  the active miss stream.
+- Host RAM used as unpinned static cache still cannot remove H2D, so very low
+  hit rates do not overcome preload and memory pressure.
+
+Next direction:
+
+- Stop spending time on larger RAM tiers unless the candidate profile can show
+  much higher predicted hit coverage before runtime.
+- Focus on one of:
+  1. reducing bytes per expert representation;
+  2. changing VRAM allocation between up/gate/down using measured marginal hit
+     value rather than fixed split;
+  3. improving current-down/upgate overlap only if it reduces endpoint
+     `up-gate-profile/down-batch wall_ms`, not just aggregate wait.
+
 ## 当前阶段 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
 
 Timestamp: 2026-07-11 CST.
