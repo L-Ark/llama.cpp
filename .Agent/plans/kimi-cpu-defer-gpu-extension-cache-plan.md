@@ -114,6 +114,78 @@ extension，而不是传统的 GPU backend 失败后 CPU fallback。
 - TTFT gate、RAM gate、quality gate 全通过；
 - rollback commit 明确。
 
+### 2026-07-12 France N96 Check After Source-Replacement Port
+
+Run:
+
+- path:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-main-sched-pack-source-replace-france-n96-205842`;
+- branch: `vendor/kimi-deepseek-41d205-additive`;
+- head: `c2eadb8b970a18ad1e7b395c12e2dfd7fa1b1198`;
+- status: dirty during the run because local default-off source-replacement
+  code and existing `moe_stream_batch.cu` v2 overlap work were present;
+- prompt:
+  `Please introduce France in a short paragraph.`;
+- cgroup: `MemoryMax=15900000000`, `MemorySwapMax=0`;
+- key env:
+  `GGML_MOE_PHASE_REPORT=1`,
+  `GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE=1`,
+  `LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT=1`,
+  `LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT=1`.
+
+Result:
+
+- quality: pass; output is coherent and correctly describes France;
+- TTFT: `7420.22 ms`;
+- decode: `46603.06 ms / 85`, `1.82 tok/s`;
+- memory peak: `12786118656` bytes, below the 16 GB hard limit;
+- final memory: file-backed pages dominate:
+  `file=12057526272`, `active_file=12029579264`,
+  `inactive_file=27680768`;
+- CPU fallback source profile: `0` entries;
+- expert pack main path:
+  `iouring_reads=85754`, `iouring_bytes=491342774272`,
+  `iouring_wait_us=47960654`;
+- VRAM cache:
+  down hit rate `61.4%`, upgate hit rate `43.5%`;
+- source replacement profile:
+  `ranges_attempted=0`, `ranges_replaced=0`, `ranges_fallback=0`.
+
+Interpretation:
+
+The default-off source-replacement implementation builds, but this Kimi run did
+not enter the scheduler sparse-copy path that reads expert ranges from GGUF
+`src0->data`. The active path already uses expert pack + io_uring + GPU
+extension, and CPU fallback is zero for this prompt. Therefore the DeepSeek
+lesson applies mainly as architecture confirmation: Kimi already has the
+CPU/defer GPU-extension bridge for the observed critical expert work. The
+remaining bottleneck is not CPU expert compute or GGUF expert fallback; it is
+exposed expert movement and low upgate/down cache hit rate.
+
+File-cache residency after the run:
+
+- GGUF shards cached: `11804367616` bytes, `10.994 GiB`;
+- alias TSV cached: `11005336` bytes, `0.010 GiB`;
+- expert pack cached: `5210112` bytes, `0.005 GiB`.
+
+The page cache is therefore almost entirely GGUF shard pages, not expert-pack
+pages. Since decode expert transfer still reads hundreds of GiB through
+io_uring, this GGUF file cache is not an efficient expert cache. The next
+optimization pass should treat it as reclaimable only after proving dense/mmap
+pages are not refaulted, then replace the freed RAM with an explicit expert RAM
+tier whose contents are selected by measured exposed wait, not by raw hit rate.
+
+Immediate next decision:
+
+1. Do not promote source replacement itself as a Kimi SOTA improvement unless a
+   future profile shows nonzero scheduler sparse-copy replacements and endpoint
+   speedup.
+2. Preserve the diagnostic hook only as default-off infrastructure if it can be
+   committed without mixing unrelated experimental changes.
+3. Continue optimization from the measured bottleneck:
+   `~47.96 s` total io_uring wait, upgate hit rate `43.5%`, down hit rate
+   `61.4%`, and `~11 GiB` low-value GGUF file cache occupying host RAM.
+
 ## 2026-07-12 Current Goal: validate CPU/defer GPU-extension transfer to Kimi
 
 ### Goal
