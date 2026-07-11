@@ -292,6 +292,76 @@ Next A/B experiment: prompt-agnostic online LFU/LRU cache policy
     structural approach: per-layer byte/layout changes, lower-byte full-active
     overlay, or earlier true next-layer prefetch.
 
+Result:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-online-lfu-dev2-ab`.
+- Baseline:
+  - Japan: quality pass, `1.70 tok/s`, TTFT `8190.17 ms`,
+    decode `18198.73 ms / 31`, RAM peak `12769767424`,
+    IO bytes `223.11 GB`, `io_uring_wait=18.87 s`, down hit `59.5%`,
+    upgate hit `44.4%`;
+  - Python reverse: quality pass, `1.54 tok/s`, TTFT `8761.89 ms`,
+    decode `20114.04 ms / 31`, RAM peak `12759830528`,
+    IO bytes `255.88 GB`, `io_uring_wait=21.60 s`, down hit `57.0%`,
+    upgate hit `37.0%`.
+- Candidate with online `lfu_lru`:
+  - Japan: quality fail (`missing_keyword:asia|tokyo|island`),
+    `1.25 tok/s`, TTFT `8519.61 ms`, decode `24756.42 ms / 31`,
+    RAM peak `12763054080`, IO bytes `306.64 GB`,
+    `io_uring_wait=25.65 s`, down hit `28.8%`, upgate hit `30.7%`;
+  - Python reverse: quality fail (`repeat_collapse`), `1.13 tok/s`,
+    TTFT `9128.27 ms`, decode `27547.87 ms / 31`,
+    RAM peak `12756643840`, IO bytes `335.20 GB`,
+    `io_uring_wait=28.74 s`, down hit `24.2%`, upgate hit `26.0%`.
+- Decision:
+  - reject online `lfu_lru`;
+  - current expert reuse is not well served by a global frequency policy. It
+    likely retains stale early high-frequency experts and evicts later
+    layer-local entries, which increases down prefetch demand, total IO, and
+    exposed wait.
+- Cache-policy conclusion:
+  - stop env-only cache-policy experiments for this stage;
+  - fixed offline hotsets, profile-guided LFU, and online LFU all reduce
+    prompt-general quality/performance on the dev2 validation;
+  - future cache changes must be structurally constrained by layer/role/phase
+    or must prove lower-byte full-active consumption, not only alter global
+    eviction priority.
+
+Next structural direction: reduce exposed bytes before global eviction tuning
+
+- Timestamp: 2026-07-11 CST.
+- Bottleneck after dev4 current baseline:
+  - `up/gate` remains the largest aggregate exposed term;
+  - `io_uring` is not saturated like the pure IO bench because runtime submits
+    small layer-local batches after routing is known;
+  - cache-policy changes made queue work larger, not smaller.
+- Priority 1: true next-layer prefetch feasibility.
+  - Instrument when layer `L+1` gate/top-k becomes known relative to completion
+    of layer `L` down compute.
+  - If there is usable slack, enqueue next-layer up/gate/down miss reads
+    earlier without changing compute order.
+  - Required proof: `io_uring_wait` and role wall decrease while total IO bytes
+    do not increase materially.
+- Priority 2: role/layer pack layout for larger contiguous batches.
+  - Use existing route traces to identify layer/role buckets with persistent
+    low hit and high wait.
+  - Build a duplicate pack layout for those buckets that stores adjacent
+    same-layer active experts contiguously by role and size, so one miss group
+    becomes fewer larger reads.
+  - This trades disk space for read efficiency without relying on prompt-specific
+    hotsets.
+- Priority 3: lower-byte full-active runtime path.
+  - The tiny v2 overlay was rejected because active-call coverage was too low.
+  - Revisit only if a generated pack can cover complete active calls for the
+    targeted layers/roles, or if split-compute is implemented correctly.
+- Priority 4: explicit RAM tier only after page-cache value audit.
+  - RAM should hold batchable, high-value expert data only if it replaces
+    measured low-value decode file pages and does not fragment SSD batches.
+  - Whole-layer or large pinned RAM admission must be re-tested only with
+    prompt-general dev/held-out validation, because previous full-layer/pinned
+    attempts were unstable.
+
 ## Current execution goal: Kimi CPU/defer GPU-extension parity
 
 Timestamp: 2026-07-11 CST.
