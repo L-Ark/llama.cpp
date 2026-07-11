@@ -254,6 +254,55 @@ Result:
     transferred bytes with a broader full-active low-byte pack, or scheduling
     future-layer prefetch before the layer reaches the blocking point.
 
+Next A/B experiment: VRAM cache split upgate percentage
+
+- Timestamp: 2026-07-11 CST.
+- Motivation:
+  - coverage/profile showed upgate hit around `45%` and down hit around
+    `57-64%`;
+  - hypothesis A: giving more VRAM to up/gate may reduce the dominant mixed
+    upgate wait;
+  - hypothesis B: giving less VRAM to up/gate may improve down/current-down
+    overlap enough to reduce total exposed wait.
+- Cold-start N32 France profile sweep:
+  - run root:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-upgate-cache-pct-ab`;
+  - all runs used `PROFILE=1`, 16 GB cgroup, same prompt and current runtime
+    env; only `UPGATE_PCT` changed.
+
+| pct | quality | tok/s | TTFT ms | decode ms | IO GiB | IO wait s | up hit | gate hit | upgate wall s | down hit | down wall s |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 50 | pass | 1.62 | 8390.12 | 19152.88 | 213.57 | 20.39 | 0.347 | 0.347 | 13.192 | 0.702 | 4.601 |
+| 55 | pass | 1.77 | 7371.90 | 17494.35 | 209.67 | 18.23 | 0.376 | 0.376 | 11.813 | 0.701 | 4.377 |
+| 62 | pass | 1.66 | 8725.62 | 18726.22 | 208.65 | 19.03 | 0.455 | 0.455 | 12.237 | 0.639 | 5.088 |
+| 75 | pass | 1.53 | 8954.26 | 20324.25 | 237.57 | 20.37 | 0.482 | 0.481 | 12.612 | 0.483 | 6.123 |
+| 80 | pass | 1.51 | 8516.07 | 20513.24 | 234.78 | 20.26 | 0.502 | 0.502 | 12.619 | 0.483 | 6.301 |
+
+- France-only interpretation:
+  - `UPGATE_PCT=55` is best on this prompt, because it preserves down hit around
+    `70%` while not increasing upgate wall;
+  - raising upgate to `75/80` is harmful: small upgate hit gains are outweighed
+    by down cache loss, more IO bytes, and slower decode.
+- Prompt-general check:
+  - run root:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-upgate55-general-smoke`;
+  - paired cold-start N32, `PROFILE=0`, same prompt/env except `UPGATE_PCT`.
+
+| prompt | pct 62 tok/s | pct 55 tok/s | quality | decision |
+| --- | ---: | ---: | --- | --- |
+| `dev_japan_factual` | 1.89 | 1.89 | pass/pass | neutral |
+| `dev_python_reverse` | 1.70 | 1.56 | pass/pass | worse |
+
+- Decision:
+  - do not promote `UPGATE_PCT=55` as a prompt-general default;
+  - keep the current `UPGATE_PCT=62` for now;
+  - avoid tuning global VRAM split from a single prompt.
+- Next direction:
+  - if revisiting cache split, learn a per-layer/per-role cache policy from a
+    dev prompt set and validate on held-out prompts;
+  - global pct alone is too coarse because it improves down-heavy prompts and
+    hurts upgate-heavy/code prompts differently.
+
 ## Active goal: Kimi lower-byte GPU-extension path
 
 Timestamp: 2026-07-11 CST.
