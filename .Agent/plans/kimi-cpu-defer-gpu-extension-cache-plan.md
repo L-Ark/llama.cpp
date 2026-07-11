@@ -479,6 +479,103 @@ Next implementation plan after this screen:
      `<=1.20x`, prompt-general validation, and the full reproducibility commit
      protocol.
 
+## Phase 5D preflight result: metadata passes, runtime override is still blocked
+
+Timestamp: 2026-07-11 CST.
+
+New tool:
+
+- `.Agent/run-tools/kimi_iq1s_mixed_type_preflight.py`
+
+Purpose:
+
+- Validate selected IQ1_S/Q2_K overlay metadata against the current IQ3_S expert
+  inventory before any C++ runtime change.
+- Produce a manifest with tensor, expert, layer, role, current type/nbytes,
+  current offsets, override type/nbytes, expected override row stride, and
+  explicit blockers.
+- This is metadata-only. It does not download weights, build a pack, run a
+  model, or claim SOTA.
+
+Runs:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-mixed-type-preflight-budget8/report.md
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-mixed-type-preflight-budget96/report.md
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-mixed-type-preflight-budget120/report.md
+```
+
+Commands:
+
+```bash
+.Agent/run-tools/kimi_iq1s_mixed_type_preflight.py \
+  --inventory-tsv .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv \
+  --selected-plan-tsv /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-hotset-bound-dev7/budget-8p0-selected-plan.tsv \
+  --out-dir /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-mixed-type-preflight-budget8
+
+.Agent/run-tools/kimi_iq1s_mixed_type_preflight.py \
+  --inventory-tsv .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv \
+  --selected-plan-tsv /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-hotset-bound-dev7/budget-96p0-selected-plan.tsv \
+  --out-dir /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-mixed-type-preflight-budget96
+
+.Agent/run-tools/kimi_iq1s_mixed_type_preflight.py \
+  --inventory-tsv .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv \
+  --selected-plan-tsv /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-hotset-bound-dev7/budget-120p0-selected-plan.tsv \
+  --out-dir /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-mixed-type-preflight-budget120
+```
+
+Results:
+
+| selected plan | entries | metadata OK | runtime-ready now | source-offset entries | selected-entry byte ratio |
+|---|---:|---:|---:|---:|---:|
+| `budget-8p0` | 2992 | 2992 | 0 | 0 | 0.4564 |
+| `budget-96p0` | 35777 | 35777 | 0 | 0 | 0.4955 |
+| `budget-120p0` | 44642 | 44642 | 0 | 0 | 0.5021 |
+
+For the `budget-120p0` manifest:
+
+- `IQ1_S`: `44210` entries, current `236.433 GiB`, override `118.053 GiB`,
+  selected-entry ratio `0.4993`.
+- `Q2_K`: `432` entries, current `2.538 GiB`, override `1.938 GiB`,
+  selected-entry ratio `0.7636`.
+
+Important distinction:
+
+- The preflight selected-entry byte ratio is the ratio among entries actually
+  selected for overlay.
+- The earlier selected-hotset hybrid byte ratio includes unselected traffic that
+  remains on current IQ3_S bytes. For example, the `120 GiB` plan is
+  `0.5223x` hybrid traffic but `0.5021x` among selected entries.
+
+Blockers found on every selected entry:
+
+1. `missing_source_offset`
+   - The selected-plan TSV has tensor/expert/type/nbytes but no source offset.
+   - Runtime cannot read the override payload until a range builder adds source
+     offsets or creates a sidecar payload pack.
+
+2. `fast_path_type_not_admitted_now`
+   - Current Kimi one-stream fast path does not admit `IQ1_S` or `Q2_K` through
+     `ggml_cuda_moe_stream_supports_type()`.
+   - CUDA kernels may have lower-level support, but this Kimi path currently
+     gates them out.
+
+3. `runtime_nbytes_differs_from_current`
+   - The normal one-pack path is keyed by current `(tensor, expert, nbytes)`.
+   - IQ1_S/Q2_K override entries have different bytes from the current IQ3_S
+     expert tensors and therefore cannot be a drop-in replacement.
+
+Decision:
+
+- The metadata shape/type/bytes gate passes for all tested selected entries.
+- Runtime integration is still blocked by source-offset/payload absence and
+  mixed-type override support.
+- The next code change should be a default-off source-offset/payload manifest
+  builder for a tiny selected subset, not a large pack or a direct runtime type
+  override.
+- Only after a tiny payload exists should the runtime path add mixed-type lookup
+  and `IQ1_S`/`Q2_K` dispatch guards for an N32 quality smoke.
+
 ## Phase 5B goal: transfer the CPU/defer GPU-extension idea to Kimi safely
 
 Timestamp: 2026-07-11 CST.
