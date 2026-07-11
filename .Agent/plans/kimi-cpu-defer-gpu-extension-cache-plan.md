@@ -11274,3 +11274,174 @@ For every accepted improvement:
 7. Push to the active `vendor/*kimi*` branch.
 
 Rejected experiments remain documented with run paths and reason for rejection.
+
+## Current goal: Kimi storage-led GPU-extension path
+
+Timestamp: 2026-07-11 CST.
+
+Background:
+
+- The current Kimi runtime is not a simple "GPU main path with CPU fallback".
+  For the CPU/defer MoE layers, the CPU scheduler remains the owner of routing
+  and dispatch, while CUDA is used as a GPU expert-cache extension for selected
+  expert tensors.
+- This is similar in spirit to the DeepSeek SOTA pattern, where the large win
+  came from moving CPU/defer gate work into a VRAM hot/cache + GPU compute path.
+- For Kimi, the current profile shows that CPU fallback is already `0` in the
+  measured path. The bottleneck is no longer unsupported CPU compute; it is
+  exposed expert movement and staging wait:
+  - up/gate decode wall: `14265.132 ms`;
+  - up/gate compute: only `410.890 ms` total;
+  - expert-pack iouring wait: `16721.155 ms`;
+  - main-ring H2D: `9531.533 ms`;
+  - gate-ring H2D: `1736.527 ms`.
+- Naive same-byte up/gate co-submit has already been tested and rejected. It
+  improved raw IO counters but hurt or failed endpoint token rate because it
+  disturbed the existing copy/compute overlap.
+
+Final task goal:
+
+> On a cold-start machine with `<=16 GB` total host RAM and a `32 GB` RTX 5090,
+> make Kimi serve random user prompts with stable semantic quality and a stable
+> decode rate above `5 tok/s`. All accepted optimizations must be prompt-general,
+> reproducible, keep TTFT within `+20%` of the accepted baseline, keep CPU
+> fallback at `0` where the current path has `0`, and use VRAM/RAM/SSD as an
+> explicit expert hierarchy rather than relying on accidental Linux page cache.
+
+Current phase goal:
+
+> Recover a reproducible, prompt-general `>2 tok/s` milestone first, then use
+> the same measurement loop to decide whether the next jump toward `5 tok/s`
+> should come from RAM-resident expert slabs, a smaller-byte v2 expert
+> representation, or a hybrid of both.
+
+Success gates for this phase:
+
+- Cold start only, launched through `systemd-run` with
+  `MemoryMax=15900000000` and `MemorySwapMax=0`.
+- Host RAM peak must stay below `15900000000` bytes, including page cache.
+- Held-out prompts must not be used for tuning. They are only for final
+  validation after dev prompts pass.
+- The prompt `Please introduce France in a short paragraph.` must remain
+  semantically correct and coherent.
+- Every promoted SOTA must include exact reproduction commands, run
+  directories, env vars, prompt set, output text, TTFT, decode token rate,
+  RAM/page-cache distribution, IO/H2D/staging counters, commit SHA, and
+  rollback point.
+
+## Current plan: explicit VRAM/RAM/SSD expert hierarchy
+
+Timestamp: 2026-07-11 CST.
+
+Hypothesis:
+
+> Kimi can reuse the DeepSeek CPU/defer GPU-extension idea, but the useful
+> Kimi version is not "move more fallback math to GPU" because current fallback
+> is already `0`. The useful version is to make the CPU/defer scheduler choose
+> from a better expert storage hierarchy: hottest experts in VRAM, next-hot or
+> low-hit whole-layer slabs in controlled host RAM, and cold experts on SSD via
+> expert pack. The target is lower exposed up/gate staging wait without losing
+> overlap or inflating TTFT.
+
+Step 1: establish a strict current baseline.
+
+- Run one N32 cold-start dev prompt and one N96 cold-start dev prompt from the
+  current HEAD.
+- Record:
+  - decode token rate;
+  - TTFT;
+  - output text and quality gate;
+  - `memory.peak`;
+  - active/inactive file cache;
+  - anonymous/pinned/process memory;
+  - CPU fallback rows;
+  - direct reads;
+  - up/gate wait and compute;
+  - down stage and compute;
+  - expert-pack iouring and H2D counters.
+- This baseline is the rollback point for the next change.
+
+Step 2: classify decode RAM by usefulness.
+
+- During decode, identify which `file` pages are:
+  - GGUF dense/attention/norm/output pages that are still needed;
+  - GGUF expert pages refaulted by prompt or decode fallback;
+  - expert-pack pages, if any;
+  - alias/manifest/tooling files;
+  - low-value prompt residue that is not touched again in decode.
+- Use `/proc/<pid>/smaps_rollup`, `/proc/<pid>/smaps`, cgroup memory stats,
+  major/minor fault counters, and existing run logs.
+- The output must be a table of reclaimable bytes and non-reclaimable bytes,
+  not an assumption.
+
+Step 3: design RAM expert slabs only from measured critical misses.
+
+- Do not place a global hotset into RAM blindly.
+- Build candidates from dev prompt traces only:
+  - full up+gate for one low-hit critical layer;
+  - full up only for one low-hit critical layer;
+  - full gate only for one low-hit critical layer;
+  - compact next-hot slabs selected by miss-weighted exposed wait;
+  - optional down slabs only if down is proven to be on the critical path.
+- Prefer layouts that are contiguous in the expert pack so RAM->VRAM reads can
+  stay batch-friendly.
+- Reject candidates that save bytes but fragment batches enough to raise
+  endpoint decode time.
+
+Step 4: run default-off RAM slab A/B.
+
+- Add or reuse an env-gated RAM tier path. It must be default-off.
+- Preload must begin as early as possible in cold start only if TTFT remains
+  within `+20%`.
+- For each candidate, compare against the strict baseline:
+  - N32 dev first;
+  - N96 dev only if N32 improves;
+  - held-out prompts only after dev passes.
+- Required counters:
+  - RAM slab bytes;
+  - VRAM expert-cache bytes;
+  - SSD expert-pack bytes;
+  - RAM->VRAM H2D bytes and wall time;
+  - SSD->RAM/pinned read bytes and wall time;
+  - iouring queue depth and batch histogram;
+  - up/gate wait deltas by layer and role;
+  - page-cache refault deltas.
+
+Step 5: compare with smaller-byte v2 representation.
+
+- If RAM slabs cannot reach `>2 tok/s` without TTFT or reclaim regressions,
+  return to the v2 lower-byte path.
+- Do not materialize the oversized budget-120 pack until disk space is
+  intentionally freed.
+- Select a smaller prompt-general dev-derived v2 portfolio that has:
+  - better miss-weighted saving per extra group than top2048;
+  - enough theoretical margin after read/H2D/kernel/sync overhead;
+  - no held-out prompt tuning.
+- Only implement runtime partial split if batched/reused-buffer smoke timing
+  shows enough margin.
+
+Step 6: commit and push discipline.
+
+- Update this plan before each implementation attempt.
+- Commit and push immediately only when an optimization improves endpoint
+  decode under all constraints.
+- If a candidate regresses token rate, semantic quality, TTFT, RAM cap, or
+  fallback status, revert the code path or leave it default-off and document
+  the rejection with run paths.
+- Commit bodies for promoted SOTA must contain:
+  - improvement size over rollback baseline;
+  - exact env and commands;
+  - dev and held-out prompt split;
+  - output quality text;
+  - TTFT and decode rate;
+  - RAM/page-cache/VRAM distribution;
+  - IO/H2D/staging metrics;
+  - commit SHA and rollback point.
+
+Immediate next action:
+
+1. Run the strict current N32/N96 baseline again from HEAD.
+2. Produce the decode RAM usefulness table.
+3. Pick at most two RAM slab candidates from measured critical misses.
+4. Implement only the first env-gated candidate after updating this plan with
+   its expected upper bound.
