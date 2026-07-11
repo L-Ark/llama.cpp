@@ -4,6 +4,188 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Active Goal: DeepSeek-style CPU/defer GPU-extension on Kimi
+
+### Goal
+
+验证并推进 DeepSeek SOTA 中的核心思想在 Kimi 上是否仍有可迁移收益：
+
+- DeepSeek 的关键收益不是“GPU 主路径失败后 fallback 到 CPU”，而是
+  `CPU/defer MoE scheduler` 仍作为主调度方，同时给这个路径接入
+  `VRAM expert cache + GPU compute` extension。
+- 对 Kimi 来说，必须先用 profile 证明 `gate/up/down` 是否还有真实
+  CPU/defer slow-path 或 GGUF `src0->data` fallback。如果已经是 `0 fallback`，
+  就不能把“再把 gate 放 VRAM”当作主要优化目标。
+- 当前阶段目标是从当前可复现泛化 SOTA 约 `1.8-1.9 tok/s` 推进到稳定
+  `>2.0 tok/s`，同时保留长期 `>5 tok/s` 目标。
+
+最终验收仍按全局 hard gates：
+
+1. `16 GB` host RAM hard limit，包含 page cache、mmap、pinned、anon、
+   kernel accounting，运行时必须低于 `MemoryMax=15900000000`。
+2. 单卡 `32 GB RTX 5090`，尽可能用满 VRAM，但不能牺牲正确性或 TTFT。
+3. cold start；不允许 warm cache 或手工预热。
+4. 泛化 prompt 优化，不允许 prompt-specific expert pack/hotset 作为 SOTA。
+5. `Please introduce France in a short paragraph.` 必须语义正确、连贯；
+   held-out prompt 只能最终测试，不能用于选 hotset/profile/threshold。
+6. TTFT 不超过 matching baseline 的 `+20%`。
+7. prompt/decode CPU fallback 不允许增加；baseline 为 `0 fallback` 时，
+   candidate 也必须保持 `0 fallback`。
+8. 每个 SOTA 必须来自 clean pushed commit，并在 commit body 写清复现命令、
+   env、prompt/test set、输出、RAM/VRAM/page-cache、TTFT、decode rate、
+   fallback、rollback point。
+
+### Working Hypothesis
+
+DeepSeek 方法对 Kimi“有用”的部分是架构模式，而不是直接复制 gate-only
+cache 策略：
+
+- 如果 Kimi 仍有 `gate/up/down` 落在 CPU/defer slow compute 或 GGUF mmap
+  fallback，应该先补 GPU extension，收益可能较大。
+- 如果 Kimi 已经 `0 fallback`，则 DeepSeek 式 gate-only 优化空间已基本用完；
+  下一步应优化 CPU/defer scheduler 调 GPU extension 时的 expert 存储和搬运：
+  VRAM 放最热 critical experts，RAM 放 batch-coherent 次热/低命中 layer slab，
+  SSD 只放冷 expert。
+- 当前 profile 已显示主要 exposed time 更像是 `runtime_load up/gate wait`、
+  late-layer GGUF page-cache residue、H2D/staging 和 io_uring queue continuity，
+  而不是算子 compute 本身。
+
+### Plan
+
+#### Phase A: Recover a clean, reproducible baseline
+
+Purpose: 先确认当前代码还能稳定复现 Kimi SOTA，而不是在不可复现结果上继续优化。
+
+Steps:
+
+1. 使用 clean worktree 和 pushed commit 复现一个 N96 cold-start baseline。
+2. 至少跑：
+   - mandatory France prompt；
+   - 一个 dev general prompt；
+   - 一个 held-out prompt，只记录结果，不用于调参。
+3. 记录：
+   - TTFT、decode wall、decode tok/s、prefill tok/s；
+   - `memory.peak`、`anon/file/active_file/inactive_file/pinned`；
+   - VRAM cache split、hit/miss；
+   - expert-pack reads/bytes、io_uring wait、H2D；
+   - prompt/decode CPU fallback 和 GGUF fallback。
+
+Exit condition:
+
+- baseline 可复现，且能作为后续 A/B 的 matching control。
+- 如果 baseline 不可复现，先停止优化，定位 commit/env/pack/profile 差异。
+
+#### Phase B: CPU/defer GPU-extension coverage audit
+
+Purpose: 回答“DeepSeek gate 放 VRAM 的方法对 Kimi 是否还有直接收益”。
+
+Steps:
+
+1. 增加或复用 default-off profile，按 layer/role 记录：
+   - `CPU/defer entered`；
+   - `GPU extension accepted`；
+   - `VRAM hit/miss`；
+   - `RAM tier hit/miss`；
+   - `expert pack read`；
+   - `GGUF src0->data host read`；
+   - `CPU fallback compute`。
+2. 对 prompt 和 decode 分开统计 `gate/up/down`。
+3. 特别确认 `n_cpu_moe` 下的 Kimi MoE 是否只是 CPU scheduler 调 GPU
+   extension，还是仍有某些 role 在 CPU slow path 计算。
+4. 输出每个 fallback bucket 的 layer、role、type、bytes、wall time、原因。
+
+Accept path:
+
+- 如果发现高成本 fallback bucket，先补对应 role 的 GPU extension，default-off
+  A/B，先 N32，再 N96，再 held-out。
+
+Reject path:
+
+- 如果 fallback 已经为 `0`，就明确记录：Kimi 当前主要瓶颈不是 DeepSeek 那种
+  “gate CPU slow path”，后续不再做 gate-only 复制。
+
+#### Phase C: Explain and eliminate low-value decode RAM/page-cache
+
+Purpose: 让 16GB host RAM 从不可控 file cache 变成显式 expert cache。
+
+Steps:
+
+1. 继续用 mincore/tensor-range profile 定位 decode 阶段 file cache：
+   - GGUF dense/attention/norm/output；
+   - GGUF expert tensor pages；
+   - expert pack pages；
+   - alias TSV 和其它小文件。
+2. 针对当前发现的 `blk.54-59.ffn_{up,gate,down}_exps.weight` late-layer
+   page cache，定位它们是在 prompt eval 还是 decode 中被谁 touch。
+3. 写 default-off instrumentation，记录 prompt 阶段所有 `src0->data`/host mmap
+   作为 H2D source 的事件，区分：
+   - pack io_uring source；
+   - RAM tier source；
+   - host mmap/GGUF source；
+   - pack missing 或 pack copy failed 后 fallback。
+4. 如果是 accidental mmap touch，修正访问路径，避免 prompt 后产生低价值
+   GGUF expert page cache。
+5. 如果是不可避免的 prompt working set，则在 prompt 后释放，并只把释放出的
+   RAM 用于显式 expert cache，不能让 Linux page cache 自然占满。
+
+Exit condition:
+
+- 能精确解释 decode 阶段 16GB RAM 里每个大块的来源和用途。
+- 能证明哪些 page cache 可以安全替换成 expert cache。
+
+#### Phase D: RAM/VRAM storage re-layout A/B
+
+Purpose: 基于 Phase B/C 的证据，把 RAM 和 VRAM 用在真正减少 critical-path wait
+的 expert 上。
+
+Candidate order:
+
+1. 保持当前 VRAM cache 作为 control，先只替换低价值 RAM/file cache。
+2. RAM tier 优先测试 batch-coherent 结构，而不是 scattered prompt hotset：
+   - critical low-hit layer 的完整 `gate+up` slab；
+   - critical low-hit layer 的完整 `gate+up+down` slab；
+   - 多层 wait-weighted 但 pack-layout 相邻的 compact tier。
+3. 对每个 candidate 先理论估算：
+   - 可减少的 exposed `io_uring_wait` 上限；
+   - 常驻 RAM 成本；
+   - 预加载 TTFT 成本；
+   - RAM->VRAM H2D 成本；
+   - 是否会把 SSD batch 切碎。
+4. 实测必须记录 endpoint token rate，而不是只记录 RAM hit rate。
+
+Accept condition:
+
+- N32 dev3 先显示 decode wall 或 exposed wait 下降；
+- N96 France 和 general dev 继续成立；
+- held-out mean/median 不下降；
+- RAM、TTFT、quality、fallback 全部过 gate；
+- 立刻 commit + push，并写完整 reproducibility body。
+
+#### Phase E: If storage-only cannot reach `>2 tok/s`
+
+Purpose: 避免继续在低上限方向消耗时间。
+
+Next candidates:
+
+1. lower-byte expert representation：按 role 和 expert 重要性做差异化压缩，
+   目标是直接减少 SSD/RAM->VRAM 字节，而不是只换缓存位置。
+2. pack locality：按实际 general prompt traces 重排 pack，让同层/同role/相邻
+   active experts 更容易被大批量读取。
+3. prediction/prefetch：只有在 acceptance rate 足够高，并且能提前产生可用
+   expert IDs 时才进入 runtime 实现。
+4. CUDA graph 只作为 launch overhead 优化，不作为主线；当前主要瓶颈不是 kernel
+   launch。
+
+### Immediate Next Step
+
+下一步先执行 Phase B/C 的最小 default-off instrumentation：
+
+- 目标不是改变性能，而是证明 late-layer GGUF page cache 是否来自 prompt/decode
+  的 host mmap touch。
+- 如果 profile 证明 Kimi 已经没有 DeepSeek gate-style CPU slow path，就把当前
+  优化重心正式切到 RAM/VRAM explicit storage 和 lower-byte expert representation。
+- 任何性能实验前必须先把实验设计和 rollback point 写回本文件。
+
 ## 2026-07-12 Active Goal Snapshot
 
 Current branch: `vendor/kimi-deepseek-41d205-additive`
