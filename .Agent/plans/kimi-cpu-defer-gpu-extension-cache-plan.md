@@ -424,6 +424,128 @@ Phase 5C next implementation target:
    - aggregate demand `io_uring_wait` decreases, not merely source bytes;
    - output quality passes.
 
+## Phase 5C screen result: whole RAM slabs are batchable but too small a lever
+
+Timestamp: 2026-07-11 CST.
+
+New tool:
+
+- `.Agent/run-tools/kimi_phase5c_ram_slab_screen.py`
+
+Run:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5c-ram-slab-screen-dev7
+```
+
+Command:
+
+```text
+.Agent/run-tools/kimi_phase5c_ram_slab_screen.py \
+  --input-root /root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343 \
+  --route-profile-root /root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-cpu-defer-gpu-ext-phase1-profile-n32-dev3-130834 \
+  --out-dir /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5c-ram-slab-screen-dev7 \
+  --max-jobs 8 \
+  --contig-window-mib 512 1024 2048 \
+  --contig-top-per-source 8
+```
+
+Inputs:
+
+- Dev-only trace root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343`.
+- Seven dev prompts; held-out/test prompts were not used.
+- Decode-like filter: `jobs <= 8`.
+- Route-profile root for simulated current VRAM overlap:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-cpu-defer-gpu-ext-phase1-profile-n32-dev3-130834`.
+
+Aggregate:
+
+- decode-like rows: `195895`;
+- decode-like batches: `38806`;
+- decode runs: `217`;
+- total traced batch wait: `117855.875 ms`;
+- traced batch wait per decode token: `543.115 ms/token`;
+- simulated VRAM hotset entries: `2458`.
+
+Important findings:
+
+1. Tiny contiguous windows are not useful runtime targets.
+   - They rank high by `wait/GiB`, but cover only about `0.03-0.13 ms/token`
+     each.
+   - Most top contiguous windows are mixed-risk batches, meaning they would
+     remove a few reads from otherwise SSD-backed batches and could reduce SSD
+     batch size rather than improve the critical path.
+   - Many of the top tiny windows overlap current simulated VRAM hot entries.
+
+2. Whole layer/role slabs are batch-friendly.
+   - They convert whole per-layer role demand batches into RAM hits:
+     `ram_only == hit_batches` and `mixed_risk == 0` for the top layer slabs.
+   - This is the correct structure if testing RAM residency, because it avoids
+     the SSD/RAM fragmentation problem seen with scattered hot entries.
+
+3. The upper bound is too small to be the main path to `2 tok/s`.
+
+Top layer/upgate slabs:
+
+| candidate | resident MiB | wait ms/token | ram-only batches | VRAM overlap MiB |
+|---|---:|---:|---:|---:|
+| `blk.29.upgate` | 2845.91 | 7.456 | 434 | 109.16 |
+| `blk.8.upgate` | 2757.16 | 7.312 | 432 | 153.90 |
+| `blk.28.upgate` | 2698.05 | 7.295 | 434 | 110.92 |
+| `blk.9.upgate` | 2757.13 | 7.091 | 434 | 174.46 |
+| `blk.7.upgate` | 2737.42 | 7.080 | 434 | 170.86 |
+
+Top full-layer slabs:
+
+| candidate | resident MiB | wait ms/token | ram-only batches | VRAM overlap MiB |
+|---|---:|---:|---:|---:|
+| `blk.8.all` | 4962.62 | 10.995 | 649 | 287.78 |
+| `blk.7.all` | 4927.10 | 10.696 | 651 | 336.24 |
+| `blk.9.all` | 4962.57 | 10.672 | 651 | 331.96 |
+| `blk.29.all` | 4584.96 | 10.415 | 651 | 151.27 |
+
+Greedy budget bounds:
+
+| candidate family | budget MiB | selected | resident MiB | wait ms/token |
+|---|---:|---:|---:|---:|
+| `layer_upgate` | 2048 | 1 | 1220.2 | 2.58 |
+| `layer_upgate` | 4096 | 2 | 3454.3 | 8.93 |
+| `layer_upgate` | 8192 | 4 | 7976.4 | 21.34 |
+| `layer_upgate` | 10240 | 4 | 9115.8 | 25.18 |
+| `layer_all` | 4096 | 1 | 4086.4 | 9.76 |
+| `layer_all` | 8192 | 2 | 7908.9 | 18.78 |
+| `layer_all` | 10240 | 2 | 7908.9 | 18.78 |
+
+Interpretation:
+
+- The clean file cache pool is large, but a batch-safe RAM slab consumes GiB per
+  layer and only saves single-digit to low-double-digit ms/token.
+- To move from about `1.5 tok/s` toward `2 tok/s`, the required saving is on the
+  order of `165 ms/token`. Even a very large `~10 GiB` layer-slab plan only has
+  a traced wait upper bound of about `19-25 ms/token`, before H2D, RAM copy,
+  scheduler, and TTFT costs.
+- Therefore RAM slabs are not the main path to `2 tok/s`. They may still be
+  worth one small pageable A/B if we want a low-risk incremental improvement,
+  but only with modest expectations and strict TTFT/refault gates.
+
+Decision:
+
+- Do not spend the next major runtime phase on multi-GiB whole-layer RAM slabs
+  as the primary optimization.
+- If testing RAM at all, use one default-off pageable candidate such as
+  `blk.29.upgate` or a small greedy `layer_upgate` profile, and treat success as
+  incremental rather than SOTA-defining unless measured N96 gains exceed the
+  bound/noise expectation.
+- For the main path toward `>2 tok/s` and eventually `>5 tok/s`, move to lower
+  byte-per-expert methods or a higher-coverage second-tier cache that does not
+  require whole layer residency:
+  - lower-byte expert representation;
+  - role-specific compressed RAM tier;
+  - GPU-resident partial expert representation;
+  - predictor only if a stronger signal than route-trace co-occurrence is
+    measured.
+
 Execution plan:
 
 1. Commit and push the profiling-only coverage fix.
