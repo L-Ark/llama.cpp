@@ -80,6 +80,77 @@ N96 cold-start token rate 从当前稳定区间 `1.4-1.5 tok/s` 推向 `>2 tok/s
 - 已知稳定 no-code candidate：`MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 PINNED_SLOTS=16`
 - 所有新结果必须能从 clean pushed commit + documented env 复现。
 
+### 2026-07-11 mixed-size up/gate 联合 IO A/B 结果
+
+Implementation status:
+
+- Code patch built successfully in an isolated worktree.
+- Test binary:
+  `/root/lfz/llama.cpp-vendor-kimi-815b-clean/build-cuda-batch/bin/llama-completion`
+- Source status during test:
+  only `ggml/src/ggml-cuda/moe_stream_batch.cu` was dirty in the isolated
+  worktree; main worktree dirty experiments were not touched.
+- Feature flags:
+  `GGML_MOE_UP_GATE_COMBINED_STAGE=1`
+  and `GGML_MOE_UP_GATE_COMBINED_MIXED_IO=1`.
+- IO config for comparable runs:
+  `MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 PINNED_SLOTS=16`.
+- All runs were cold start under:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0`.
+
+Smoke/default-off:
+
+| run | flags | N | quality | TTFT | decode | token rate | RAM peak | fallback |
+|---|---|---:|---|---:|---:|---:|---:|---|
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-mixedio-defaultoff-france-n32-144953` | default depth8/slots12 | 32 | pass | `11654.77 ms` | `20437.63 ms / 31` | `1.52 tok/s` | `12771045376` | empty |
+
+Correct depth16 A/B:
+
+| run | flags | N | quality | TTFT | decode | token rate | iouring wait | RAM peak | fallback |
+|---|---|---:|---|---:|---:|---:|---:|---:|---|
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-mixedio-defaultoff-depth16-france-n32-145541` | default-off depth16 | 32 | pass | `10529.96 ms` | `20544.37 ms / 31` | `1.51 tok/s` | `15166.414 ms` | `12820172800` | empty |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-mixedio-on-depth16-france-n32-145424` | mixed IO on depth16 | 32 | pass | `10344.99 ms` | `20486.89 ms / 31` | `1.51 tok/s` | `13703.512 ms` | `12823101440` | empty |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-mixedio-defaultoff-depth16-france-n96-145901` | default-off depth16 | 96 | pass | `10014.61 ms` | `57595.19 ms / 85` | `1.48 tok/s` | `36710.347 ms` | `12865003520` | empty |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-mixedio-on-depth16-france-n96-145706` | mixed IO on depth16 | 96 | pass | `10492.53 ms` | `57265.17 ms / 85` | `1.48 tok/s` | `32231.063 ms` | `12867354624` | empty |
+
+Profile comparison for N96:
+
+| metric | default-off depth16 | mixed IO on depth16 |
+|---|---:|---:|
+| `up-gate-profile wall_ms sum` | `39417.549 ms` | `39482.356 ms` |
+| `down-batch-profile wall_ms sum` | `24443.827 ms` | `24524.196 ms` |
+| copy-profile total job IO wall sum | `318166.579 ms` | `322524.401 ms` |
+| copy-profile total H2D sum | `25149.838 ms` | `25027.032 ms` |
+| total endpoint decode wall | `57595.19 ms` | `57265.17 ms` |
+
+Decision:
+
+- Reject this mixed-size up/gate combined IO patch as a SOTA candidate.
+- It is correct and stable under the smoke gates:
+  - semantic quality passed;
+  - host RAM stayed below 16GB;
+  - CPU fallback profile stayed empty;
+  - TTFT stayed within the `+20%` gate.
+- But it does not produce a meaningful endpoint token-rate gain:
+  - N32 endpoint is effectively tied;
+  - N96 endpoint remains `1.48 tok/s`;
+  - up/gate and down wall-time sums are not reduced.
+- The apparent win in aggregate `iouring_wait` does not translate into endpoint
+  speed because the current implementation mostly shifts work between staging
+  rings and changes batch accounting. It does not reduce the exposed up/gate
+  or down wall time on the critical path.
+
+Follow-up:
+
+- Do not push the code patch as SOTA.
+- If this direction is revisited, require a lower-level proof that the changed
+  scheduler reduces `up-gate-profile wall_ms` or endpoint decode wall, not only
+  aggregate `iouring_wait`.
+- The next optimization should target bytes moved on the critical path, real
+  cross-layer prediction/prefetch, or RAM/VRAM tiering that replaces low-value
+  file cache with high-value expert cache. Same-layer up/gate mixed-size batching
+  alone is not enough in the current runtime.
+
 ## 当前阶段 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
 
 Timestamp: 2026-07-11 CST.
