@@ -298,6 +298,60 @@ Next implementation plan:
 4. Only if the fixed oracle path shows endpoint benefit, proceed to predictive
    prompt-agnostic A/B.
 
+### 2026-07-11 host prefetch slot-fix A/B results
+
+Implementation tested in isolated worktrees only:
+
+- `/root/lfz/llama.cpp-vendor-kimi-hostprefetch-fix-50bf`
+- `/root/lfz/llama.cpp-vendor-kimi-815b-clean`
+
+Patch shape:
+
+- Prefer non-ready prefetch slots whose retained `capacity >= alloc_sz`.
+- Back off on `free_slot < 0` instead of tight rescanning.
+- Second revision disabled ready-slot eviction by default, with an optional
+  debug env `GGML_MOE_HOST_PREFETCH_EVICT_READY=1`.
+
+Results:
+
+| run | patch | config | quality | TTFT | decode | token rate | RAM peak | host prefetch |
+|---|---|---|---|---:|---:|---:|---:|---|
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-hostprefetch-slotfix-oracle1g-depth16-france-n32-151819` | slot reuse + backoff, evict ready | 1GiB / lead2048 | pass | `10484.66 ms` | `20944.14 ms / 31` | `1.48 tok/s` | `12909543424` | `submitted=16373 hits=367 evicted=16002 no_slot=0 used=25.81 MiB` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-hostprefetch-slotfix-oracle1g-lead256-france-n32-151931` | slot reuse + backoff, evict ready | 1GiB / lead256 | pass | `10522.14 ms` | `20872.49 ms / 31` | `1.49 tok/s` | `12907020288` | `submitted=17537 hits=403 evicted=17130 no_slot=0 used=25.81 MiB` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-hostprefetch-slotfix2-oracle1g-lead256-france-n32-152210` | slot reuse + backoff, no ready eviction | 1GiB / lead256 | pass | `11645.03 ms` | `21518.93 ms / 31` | `1.44 tok/s` | `13961416704` | `submitted=3651 hits=3477 evicted=0 no_slot=41472 used=1023.75 MiB` |
+
+Interpretation:
+
+- The implementation fix can solve the pathological `no_slot` busy loop:
+  - ready eviction enabled: `no_slot=0`, but it evicts useful future entries and
+    collapses hits;
+  - ready eviction disabled: hits recover, and `no_slot` drops by orders of
+    magnitude versus the original, but endpoint speed is still worse than
+    baseline.
+- Even oracle trace prefetch does not beat the no-prefetch depth16 baseline.
+  It saves some SSD-side reads, but adds background read pressure, H2D enqueue
+  overhead, and TTFT/RAM pressure.
+
+Decision:
+
+- Reject host prefetch as the next SOTA path in its current architecture.
+- Do not run predictive prefetch held-out A/B; oracle did not provide endpoint
+  benefit.
+- Do not push the code patch as a performance improvement.
+- Revert the test patch from isolated worktrees after recording the results.
+
+Next direction:
+
+- RAM should not be used for speculative per-entry prefetch with the current
+  worker design.
+- The next RAM/VRAM storage experiment should be explicit and static enough to
+  avoid competing with decode IO:
+  - cross-prompt hot expert RAM resident profile, or
+  - role/layer-specific RAM slab loaded once before decode, or
+  - lower-byte expert representation that reduces required H2D/SSD bytes.
+- Acceptance remains endpoint token rate, not host-prefetch hit count or reduced
+  iouring bytes alone.
+
 ## 当前阶段 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
 
 Timestamp: 2026-07-11 CST.
