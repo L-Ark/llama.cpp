@@ -1065,6 +1065,106 @@ Decision:
      larger coverage attempt.
 - No SOTA claim is made from this screen.
 
+## Current subgoal: same-layer v2 IO coalescing screen
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Quantify whether scheduler-level coalescing can fix the v2 queue starvation
+> that top2048 expansion did not fix. The first target is same-layer
+> `up/gate/down` coalescing: group adjacent v2 shadow rows from the same layer
+> into a single theoretical IO batch.
+
+Why this is the next step:
+
+- Pack expansion increased bytes but did not increase useful inflight:
+  - top1024 inflight avg/max: `2.17 / 8`;
+  - top2048 inflight avg/max: `2.12 / 8`.
+- The runtime still presents small per-call v2 candidate sets. Adding more pack
+  entries only creates more small batches.
+- The CSV order shows adjacent rows often correspond to the same layer's
+  `up`, `gate`, and `down` work. A scheduler that can issue these reads as one
+  group may increase IO batch size without changing the pack content.
+
+Tool:
+
+- Added `.Agent/run-tools/kimi_v2_shadow_coalesce_analysis.py`.
+- Inputs:
+  - one or more `--csv name=/path/to/v2-shadow-stage.csv`;
+  - optional `--out <report.md>`.
+- Analysis:
+  - filters staged rows;
+  - computes current per-call jobs/batch distribution;
+  - groups adjacent decode rows with the same parsed `blk.<layer>` id;
+  - reports theoretical jobs/batch distribution, batch reduction, groups with
+    at least 8 jobs, multi-role group composition, and saved bytes inside
+    multi-row groups.
+
+Run:
+
+- Directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-coalesce-analysis`
+- Command:
+  `.Agent/run-tools/kimi_v2_shadow_coalesce_analysis.py --csv top1024=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-iouring-localring-budget8-top1024-n32-france/v2-shadow-stage.csv --csv top2048=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-iouring-localring-budget8-top2048-n32-france/v2-shadow-stage.csv --out <run>/report.md`
+
+Results:
+
+| pack | current batches | current avg jobs | same-layer batches | same-layer avg jobs | p90 jobs | groups >= 8 jobs | batch reduction |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| top1024 | 953 | 2.33 | 481 | 4.62 | 11 | 86 / 481 = 17.9% | 472 = 49.5% |
+| top2048 | 1701 | 2.27 | 907 | 4.25 | 10 | 143 / 907 = 15.8% | 794 = 46.7% |
+
+Top1024 role grouping:
+
+- multi groups: `271`;
+- multi-group jobs: `1777`;
+- multi-group saved bytes: `5.533 GiB`;
+- role sets:
+  - `down+gate+up`: `201`;
+  - `gate+up`: `45`;
+  - `down+up`: `18`;
+  - `down+gate`: `7`.
+
+Top2048 role grouping:
+
+- multi groups: `486`;
+- multi-group jobs: `3020`;
+- multi-group saved bytes: `8.990 GiB`;
+- role sets:
+  - `down+gate+up`: `308`;
+  - `gate+up`: `160`;
+  - `down+up`: `18`.
+
+Interpretation:
+
+- Same-layer cross-role coalescing is a better next target than top2992 pack
+  expansion:
+  - it roughly halves the number of v2 IO batches;
+  - it nearly doubles average jobs/batch;
+  - it creates many groups at or above depth `8`, which is where the current
+    pure IO bench is efficient.
+- The result is still an upper-bound screen:
+  - it assumes adjacent same-layer rows can be scheduled together without
+    violating dependencies;
+  - down may depend on up/gate activation, so a real implementation may only be
+    able to preissue down reads, not compute down early;
+  - up and gate are the safer first coalescing target because they are naturally
+    paired in the existing runtime.
+
+Decision:
+
+- Do not continue pack expansion until scheduler-level coalescing is tested.
+- Next implementation should be a default-off shadow scheduler that groups
+  adjacent same-layer v2 read candidates and measures actual local-ring
+  io_uring read_ms/inflight without changing output.
+- First implementation target:
+  - coalesce `decode_upgate/up + decode_upgate/gate` for the same layer;
+  - record whether adding `decode_down/down` to the same IO batch is safe and
+    beneficial as a shadow-only prefetch.
+- Promotion to real dispatch remains blocked until shadow coalescing proves
+  lower exposed read/H2D time and France quality/RAM gates pass.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.
