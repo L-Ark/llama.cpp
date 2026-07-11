@@ -573,6 +573,177 @@ Decision:
   priority to RAM/VRAM storage-layout work.
 - No SOTA claim is made from this smoke.
 
+## Current subgoal: persistent pinned pool v2 split smoke
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Remove the temporary `cudaHostAlloc/cudaFree` noise from the standalone v2
+> partial-split smoke and measure the steady cost of a persistent pinned staging
+> pool. This tests the only partial-split shape still worth considering for
+> runtime: pinned host buffers and device slots allocated once, then reused
+> across repeated read/H2D/kernel iterations.
+
+Why this is the next step:
+
+- `batch-pinned` proved pinned staging reduces H2D, but per-call pin/free is too
+  expensive:
+  - H2D improved from `2.730 ms` to `0.887 ms` in the primary batch run;
+  - H2D improved from `1.881 ms` to `1.011 ms` in the repeat batch run;
+  - pinned `src1` allocation was `1.525-3.602 ms`;
+  - pinned free was about `3.0 ms`.
+- The runtime already has pinned staging concepts, so the relevant question is
+  persistent-pool steady cost, not one-shot pin/free cost.
+
+Plan:
+
+1. Add a `batch-pinned-reuse` mode to
+   `.Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp`.
+   - Allocate pinned payload buffers once.
+   - Allocate pinned `src1` once.
+   - Allocate device slots/events once.
+   - Repeat the read -> H2D -> MMVQ -> D2H -> merge sequence for several
+     iterations in one process.
+   - Report per-iteration totals and a warm summary excluding iteration `0`.
+
+2. Measure:
+   - one-time pinned host allocation;
+   - one-time device allocation/events;
+   - per-iteration payload read;
+   - per-iteration H2D event time;
+   - per-iteration kernel event time;
+   - per-iteration sync/D2H/merge/fallback;
+   - warm average over iterations after the first.
+
+3. Decision gate:
+   - If warm read+H2D is small enough to fit the planner budget and post-warm
+     total improves materially over `batch-pinned`, continue toward a
+     default-off runtime partial-split prototype using existing pinned stage
+     rings.
+   - If warm read+H2D remains several milliseconds per tiny covered set without
+     real overlap, stop partial-split runtime work and switch priority back to
+     RAM/VRAM layout and IO scheduling.
+   - No SOTA claim is allowed from this smoke.
+
+4. Reproducibility:
+   - Save build/run commands and stdout/stderr in a new run directory.
+   - Update this plan with the measured result before commit.
+   - Commit and push with run directory, metrics, interpretation, and rollback
+     point.
+
+## Progress update: persistent pinned pool v2 split smoke
+
+Timestamp: 2026-07-11 CST.
+
+Code change:
+
+- Added `batch-pinned-reuse` mode to
+  `.Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp`.
+- The mode allocates pinned host payload buffers, pinned `src1`, device slots,
+  and CUDA events once, then runs five repeated
+  `read -> H2D -> MMVQ -> D2H -> merge` iterations in the same process.
+- Iteration `0` is treated as cold/warmup. The tool reports every iteration and
+  a warm summary excluding iteration `0`.
+- This remains standalone smoke work and does not alter inference.
+
+Run directory:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-pinned-reuse-smoke
+```
+
+Command:
+
+```bash
+LD_LIBRARY_PATH=build-cuda-batch/bin:/usr/local/cuda/lib64 \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-pinned-reuse-smoke/kimi_moepack_v2_partial_split_smoke \
+  build-cuda-batch/bin/libggml-cuda.so \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv \
+  batch-pinned-reuse
+```
+
+Inputs:
+
+- selected tensor: `blk.1.ffn_up_exps.weight`
+- route shape: `5` routes total, `3` v2-covered rows, `2` fallback rows
+- covered payload per iteration: `8.203 MiB` total, `2.734 MiB` per covered row
+- iterations: `5`
+
+Final verified run:
+
+| iter | total | read | H2D | kernel | sync | D2H | note |
+|---:|---:|---:|---:|---:|---:|---:|---|
+| `0` | `27.572 ms` | `4.113 ms` | `3.115 ms` | `20.165 ms` | `1.921 ms` | `0.054 ms` | cold kernel |
+| `1` | `6.160 ms` | `2.596 ms` | `3.461 ms` | `0.036 ms` | `3.405 ms` | `0.036 ms` | still settling |
+| `2` | `2.618 ms` | `1.595 ms` | `0.928 ms` | `0.036 ms` | `0.896 ms` | `0.027 ms` | warm |
+| `3` | `1.857 ms` | `0.856 ms` | `0.906 ms` | `0.036 ms` | `0.881 ms` | `0.027 ms` | warm |
+| `4` | `1.617 ms` | `0.600 ms` | `0.921 ms` | `0.036 ms` | `0.896 ms` | `0.026 ms` | warm |
+
+One-time setup in the final run:
+
+- lookup: `0.166 ms`;
+- pinned payload allocation: `11.243 ms`;
+- pinned `src1` allocation/fill: `3.164 ms`;
+- device allocation/events: `0.486 ms`;
+- cleanup/free: `3.210 ms`.
+
+Warm summary from the tool, excluding only iteration `0`:
+
+- warm avg total: `3.063 ms`;
+- warm avg read: `1.412 ms`;
+- warm avg H2D: `1.554 ms`;
+- warm avg kernel: `0.036 ms`;
+- warm avg sync wall: `1.519 ms`.
+
+More stable tail average, iterations `2-4`:
+
+- avg total: `2.031 ms`;
+- avg read: `1.017 ms`;
+- avg H2D: `0.918 ms`;
+- avg kernel: `0.036 ms`.
+
+Repeat trend:
+
+- first reuse run: warm avg total `2.931 ms`, read `1.188 ms`,
+  H2D `1.650 ms`; iterations `2-4` were `2.039 ms`, `1.710 ms`,
+  `1.531 ms`;
+- second reuse run: warm avg total `1.827 ms`, read `0.836 ms`,
+  H2D `0.899 ms`; iterations `2-4` were `1.785 ms`, `1.540 ms`,
+  `1.483 ms`;
+- final reuse run: warm avg total `3.063 ms`, read `1.412 ms`,
+  H2D `1.554 ms`; iterations `2-4` were `2.618 ms`, `1.857 ms`,
+  `1.617 ms`.
+
+Interpretation:
+
+- Persistent pinned staging removes the per-call `cudaHostAlloc/cudaFree`
+  problem and gives the best standalone partial-split numbers so far.
+- After warmup, `8.203 MiB` of covered payload can be read, copied to GPU,
+  computed, copied back for verification, and merged in about `1.5-2.6 ms` in
+  this tiny smoke.
+- The kernel is no longer material after cold start: about `0.036 ms` for all
+  three covered rows.
+- Remaining exposed cost is read + H2D/sync.
+- Important limitation: the debug v2 reader and repeated in-process reads may
+  benefit from file cache. Runtime expert-pack reads differ, so any accepted
+  implementation must remeasure under cold-start inference, 16 GB host RAM, and
+  real io_uring/direct behavior.
+
+Decision:
+
+- Partial split is worth one more default-off runtime measurement step.
+- The next step must not replace outputs yet. It should:
+  - reuse existing pinned stage rings or an equivalent persistent pinned pool;
+  - enqueue covered-row v2 read/H2D where routes are known;
+  - keep current-path output unchanged;
+  - measure whether v2 read/H2D can overlap with uncovered/current-path work
+    under N32 cold start.
+- A synchronous replacement path with no overlap is unlikely to produce a
+  robust token-rate win.
+- No SOTA claim is made from this smoke.
+
 ## Progress update: runtime partial-split shadow planner
 
 Timestamp: 2026-07-11 CST.

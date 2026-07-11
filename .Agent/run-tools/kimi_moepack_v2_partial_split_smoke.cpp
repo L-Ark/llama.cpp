@@ -106,6 +106,14 @@ struct device_slot {
     cudaEvent_t kernel_stop = nullptr;
 };
 
+struct reuse_summary {
+    int iterations = 0;
+    int warm_iterations = 0;
+    route_timing one_time;
+    route_timing all_iters;
+    route_timing warm_iters;
+};
+
 using steady_clock = std::chrono::steady_clock;
 
 static double elapsed_us(
@@ -635,6 +643,299 @@ static bool run_v2_entries_batched(
     return true;
 }
 
+static bool run_v2_entries_batched_reuse(
+        lookup_fn lookup,
+        read_fn read,
+        mmvq_fn mmvq,
+        std::vector<route> & routes,
+        const manifest_entry & base,
+        cudaStream_t stream,
+        std::vector<float> & final_dst,
+        int iterations,
+        reuse_summary & summary,
+        std::vector<route_timing> & iter_timings) {
+    std::vector<int> covered_route_ids;
+    for (int i = 0; i < (int)routes.size(); ++i) {
+        if (routes[(size_t)i].covered) {
+            covered_route_ids.push_back(i);
+        }
+    }
+    if (covered_route_ids.empty() || iterations <= 0) {
+        return false;
+    }
+
+    const size_t n_covered = covered_route_ids.size();
+    const size_t src1_bytes = (size_t)base.ne00 * sizeof(float);
+    const size_t dst_bytes = (size_t)base.ne01 * sizeof(float);
+    const size_t q8_bytes = q8_1_scratch_bytes(base.ne00);
+
+    std::vector<void *> host_src0_pinned(n_covered, nullptr);
+    std::vector<uint8_t *> host_src0_ptrs(n_covered, nullptr);
+    void * host_src1_pinned = nullptr;
+    float * host_src1_ptr = nullptr;
+    std::vector<device_slot> slots(n_covered);
+
+    auto cleanup = [&]() {
+        for (device_slot & slot : slots) {
+            free_device_slot(slot);
+        }
+        for (void *& p : host_src0_pinned) {
+            if (p) {
+                cudaFreeHost(p);
+                p = nullptr;
+            }
+        }
+        if (host_src1_pinned) {
+            cudaFreeHost(host_src1_pinned);
+            host_src1_pinned = nullptr;
+        }
+    };
+
+    bool ok = true;
+    steady_clock::time_point t0;
+
+    for (size_t j = 0; j < n_covered; ++j) {
+        route & r = routes[(size_t)covered_route_ids[j]];
+        route_timing & timing = r.timing;
+        timing = route_timing{};
+        timing.covered = true;
+        timing.expert_idx = r.expert_idx;
+        timing.dst_id = r.dst_id;
+        timing.packed_type = r.entry.packed_type;
+
+        int packed_type = 0;
+        int64_t ne00 = 0;
+        int64_t ne01 = 0;
+        size_t nb01 = 0;
+        size_t nbytes = 0;
+        t0 = steady_clock::now();
+        if (!lookup(r.entry.tensor.c_str(), r.entry.expert_idx, &packed_type, &ne00, &ne01, &nb01, &nbytes)) {
+            std::fprintf(stderr, "reuse lookup failed tensor=%s expert=%d\n", r.entry.tensor.c_str(), r.entry.expert_idx);
+            cleanup();
+            return false;
+        }
+        timing.lookup_us = elapsed_us(t0, steady_clock::now());
+        summary.one_time.lookup_us += timing.lookup_us;
+        if (packed_type != r.entry.packed_type || ne00 != r.entry.ne00 ||
+                ne01 != r.entry.ne01 || nb01 != r.entry.nb01 || nbytes != r.entry.nbytes) {
+            std::fprintf(stderr, "reuse metadata mismatch tensor=%s expert=%d\n", r.entry.tensor.c_str(), r.entry.expert_idx);
+            cleanup();
+            return false;
+        }
+        timing.ne00 = ne00;
+        timing.ne01 = ne01;
+        timing.payload_bytes = nbytes;
+        timing.src1_bytes = src1_bytes;
+        timing.dst_bytes = dst_bytes;
+        timing.q8_bytes = q8_bytes;
+
+        t0 = steady_clock::now();
+        void * p = nullptr;
+        if (!check_cuda(cudaHostAlloc(&p, nbytes, cudaHostAllocDefault), "reuse cudaHostAlloc src0")) {
+            timing.host_src0_alloc_us = elapsed_us(t0, steady_clock::now());
+            cleanup();
+            return false;
+        }
+        timing.host_src0_alloc_us = elapsed_us(t0, steady_clock::now());
+        summary.one_time.host_src0_alloc_us += timing.host_src0_alloc_us;
+        host_src0_pinned[j] = p;
+        host_src0_ptrs[j] = (uint8_t *)p;
+    }
+
+    t0 = steady_clock::now();
+    if (!check_cuda(cudaHostAlloc(&host_src1_pinned, src1_bytes, cudaHostAllocDefault), "reuse cudaHostAlloc src1")) {
+        summary.one_time.host_src1_us = elapsed_us(t0, steady_clock::now());
+        cleanup();
+        return false;
+    }
+    host_src1_ptr = (float *)host_src1_pinned;
+    for (int64_t i = 0; i < base.ne00; ++i) {
+        host_src1_ptr[(size_t)i] = ((int)(i % 23) - 11) * 0.025f;
+    }
+    summary.one_time.host_src1_us = elapsed_us(t0, steady_clock::now());
+
+    t0 = steady_clock::now();
+    for (size_t j = 0; j < n_covered; ++j) {
+        route & r = routes[(size_t)covered_route_ids[j]];
+        device_slot & slot = slots[j];
+        ok = ok && check_cuda(cudaMalloc(&slot.d_src0, r.entry.nbytes), "reuse cudaMalloc d_src0");
+        ok = ok && check_cuda(cudaMalloc((void **)&slot.d_src1, src1_bytes), "reuse cudaMalloc d_src1");
+        ok = ok && check_cuda(cudaMalloc(&slot.d_src1_q8, q8_bytes), "reuse cudaMalloc d_src1_q8");
+        ok = ok && check_cuda(cudaMalloc((void **)&slot.d_dst, dst_bytes), "reuse cudaMalloc d_dst");
+        ok = ok && check_cuda(cudaEventCreate(&slot.h2d_start), "reuse cudaEventCreate h2d_start");
+        ok = ok && check_cuda(cudaEventCreate(&slot.h2d_stop), "reuse cudaEventCreate h2d_stop");
+        ok = ok && check_cuda(cudaEventCreate(&slot.kernel_start), "reuse cudaEventCreate kernel_start");
+        ok = ok && check_cuda(cudaEventCreate(&slot.kernel_stop), "reuse cudaEventCreate kernel_stop");
+        if (!ok) {
+            break;
+        }
+    }
+    summary.one_time.cuda_alloc_us = elapsed_us(t0, steady_clock::now());
+    if (!ok) {
+        cleanup();
+        return false;
+    }
+
+    iter_timings.clear();
+    iter_timings.reserve((size_t)iterations);
+    for (int iter = 0; iter < iterations; ++iter) {
+        route_timing it;
+        it.covered = true;
+        const steady_clock::time_point iter_start = steady_clock::now();
+
+        for (size_t j = 0; j < n_covered; ++j) {
+            route & r = routes[(size_t)covered_route_ids[j]];
+            size_t nread = 0;
+            t0 = steady_clock::now();
+            if (!read(r.entry.tensor.c_str(), r.entry.expert_idx, host_src0_ptrs[j], r.entry.nbytes, &nread) ||
+                    nread != r.entry.nbytes) {
+                std::fprintf(stderr, "reuse read failed iter=%d tensor=%s expert=%d nread=%zu nbytes=%zu\n",
+                        iter, r.entry.tensor.c_str(), r.entry.expert_idx, nread, r.entry.nbytes);
+                cleanup();
+                return false;
+            }
+            const double read_us = elapsed_us(t0, steady_clock::now());
+            routes[(size_t)covered_route_ids[j]].timing.read_us = read_us;
+            it.read_us += read_us;
+            it.payload_bytes += r.entry.nbytes;
+        }
+
+        for (size_t j = 0; j < n_covered; ++j) {
+            route & r = routes[(size_t)covered_route_ids[j]];
+            device_slot & slot = slots[j];
+            ok = ok && check_cuda(cudaEventRecord(slot.h2d_start, stream), "reuse record h2d_start");
+            ok = ok && check_cuda(cudaMemcpyAsync(slot.d_src0, host_src0_ptrs[j], r.entry.nbytes, cudaMemcpyHostToDevice, stream), "reuse copy src0 H2D");
+            ok = ok && check_cuda(cudaMemcpyAsync(slot.d_src1, host_src1_ptr, src1_bytes, cudaMemcpyHostToDevice, stream), "reuse copy src1 H2D");
+            ok = ok && check_cuda(cudaMemsetAsync(slot.d_dst, 0, dst_bytes, stream), "reuse memset dst");
+            ok = ok && check_cuda(cudaEventRecord(slot.h2d_stop, stream), "reuse record h2d_stop");
+            ok = ok && check_cuda(cudaEventRecord(slot.kernel_start, stream), "reuse record kernel_start");
+            if (ok) {
+                ok = mmvq(r.entry.packed_type, slot.d_src0, r.entry.ne01, r.entry.ne00, r.entry.nb01,
+                        slot.d_src1, slot.d_src1_q8, slot.d_dst, stream);
+            }
+            ok = ok && check_cuda(cudaEventRecord(slot.kernel_stop, stream), "reuse record kernel_stop");
+            if (!ok) {
+                break;
+            }
+        }
+        t0 = steady_clock::now();
+        ok = ok && check_cuda(cudaStreamSynchronize(stream), "reuse stream sync");
+        it.sync_us = elapsed_us(t0, steady_clock::now());
+        if (!ok) {
+            cleanup();
+            return false;
+        }
+
+        for (size_t j = 0; j < n_covered; ++j) {
+            route & r = routes[(size_t)covered_route_ids[j]];
+            device_slot & slot = slots[j];
+            float h2d_elapsed_ms = 0.0f;
+            float kernel_elapsed_ms = 0.0f;
+            ok = ok && check_cuda(cudaEventElapsedTime(&h2d_elapsed_ms, slot.h2d_start, slot.h2d_stop), "reuse elapsed h2d");
+            ok = ok && check_cuda(cudaEventElapsedTime(&kernel_elapsed_ms, slot.kernel_start, slot.kernel_stop), "reuse elapsed kernel");
+            r.timing.h2d_ms = (double)h2d_elapsed_ms;
+            r.timing.kernel_ms = (double)kernel_elapsed_ms;
+            it.h2d_ms += r.timing.h2d_ms;
+            it.kernel_ms += r.timing.kernel_ms;
+        }
+        if (!ok) {
+            cleanup();
+            return false;
+        }
+
+        for (size_t j = 0; j < n_covered; ++j) {
+            route & r = routes[(size_t)covered_route_ids[j]];
+            device_slot & slot = slots[j];
+            r.values.assign((size_t)base.ne01, 0.0f);
+            t0 = steady_clock::now();
+            ok = ok && check_cuda(cudaMemcpy(r.values.data(), slot.d_dst, dst_bytes, cudaMemcpyDeviceToHost), "reuse copy dst D2H");
+            const double d2h_us = elapsed_us(t0, steady_clock::now());
+            r.timing.d2h_us = d2h_us;
+            it.d2h_us += d2h_us;
+            if (!ok) {
+                cleanup();
+                return false;
+            }
+            double sum_abs = 0.0;
+            for (float v : r.values) {
+                if (!std::isfinite(v)) {
+                    ok = false;
+                    break;
+                }
+                sum_abs += std::fabs((double)v);
+            }
+            if (!ok || sum_abs <= 0.0) {
+                std::fprintf(stderr, "reuse covered output invalid iter=%d route=%d expert=%d\n",
+                        iter, covered_route_ids[j], r.expert_idx);
+                cleanup();
+                return false;
+            }
+            float * dst_row = final_dst.data() + (size_t)r.dst_id * (size_t)base.ne01;
+            t0 = steady_clock::now();
+            std::memcpy(dst_row, r.values.data(), dst_bytes);
+            const double merge_us = elapsed_us(t0, steady_clock::now());
+            r.timing.merge_us = merge_us;
+            r.timing.total_us = r.timing.read_us + r.timing.h2d_ms * 1000.0 +
+                r.timing.kernel_ms * 1000.0 + r.timing.d2h_us + r.timing.merge_us;
+            it.merge_us += merge_us;
+        }
+
+        for (int i = 0; i < (int)routes.size(); ++i) {
+            route & r = routes[(size_t)i];
+            if (r.covered) {
+                continue;
+            }
+            r.timing = route_timing{};
+            r.timing.covered = false;
+            r.timing.expert_idx = r.expert_idx;
+            r.timing.dst_id = r.dst_id;
+            t0 = steady_clock::now();
+            r.values.resize((size_t)base.ne01);
+            for (int64_t col = 0; col < base.ne01; ++col) {
+                r.values[(size_t)col] = fallback_value(i, col);
+            }
+            r.timing.fallback_fill_us = elapsed_us(t0, steady_clock::now());
+            float * dst_row = final_dst.data() + (size_t)r.dst_id * (size_t)base.ne01;
+            t0 = steady_clock::now();
+            std::memcpy(dst_row, r.values.data(), dst_bytes);
+            r.timing.merge_us = elapsed_us(t0, steady_clock::now());
+            r.timing.total_us = r.timing.fallback_fill_us + r.timing.merge_us;
+            it.fallback_fill_us += r.timing.fallback_fill_us;
+            it.merge_us += r.timing.merge_us;
+        }
+
+        it.total_us = elapsed_us(iter_start, steady_clock::now());
+        iter_timings.push_back(it);
+        summary.all_iters.read_us += it.read_us;
+        summary.all_iters.h2d_ms += it.h2d_ms;
+        summary.all_iters.kernel_ms += it.kernel_ms;
+        summary.all_iters.sync_us += it.sync_us;
+        summary.all_iters.d2h_us += it.d2h_us;
+        summary.all_iters.merge_us += it.merge_us;
+        summary.all_iters.fallback_fill_us += it.fallback_fill_us;
+        summary.all_iters.total_us += it.total_us;
+        summary.all_iters.payload_bytes += it.payload_bytes;
+        if (iter > 0) {
+            summary.warm_iters.read_us += it.read_us;
+            summary.warm_iters.h2d_ms += it.h2d_ms;
+            summary.warm_iters.kernel_ms += it.kernel_ms;
+            summary.warm_iters.sync_us += it.sync_us;
+            summary.warm_iters.d2h_us += it.d2h_us;
+            summary.warm_iters.merge_us += it.merge_us;
+            summary.warm_iters.fallback_fill_us += it.fallback_fill_us;
+            summary.warm_iters.total_us += it.total_us;
+            summary.warm_iters.payload_bytes += it.payload_bytes;
+        }
+    }
+
+    t0 = steady_clock::now();
+    cleanup();
+    summary.one_time.cuda_free_us = elapsed_us(t0, steady_clock::now());
+    summary.iterations = iterations;
+    summary.warm_iterations = std::max(0, iterations - 1);
+    return true;
+}
+
 static bool choose_group(
         const std::vector<manifest_entry> & entries,
         std::vector<manifest_entry> & chosen) {
@@ -672,7 +973,7 @@ static bool choose_group(
 
 int main(int argc, char ** argv) {
     if (argc != 4 && argc != 5) {
-        std::fprintf(stderr, "usage: %s LIBGGML_CUDA_SO V2_EXPERT_PACK MANIFEST_TSV [per-row|batch|batch-pinned]\n", argv[0]);
+        std::fprintf(stderr, "usage: %s LIBGGML_CUDA_SO V2_EXPERT_PACK MANIFEST_TSV [per-row|batch|batch-pinned|batch-pinned-reuse]\n", argv[0]);
         return 2;
     }
     const char * lib_path = argv[1];
@@ -681,7 +982,8 @@ int main(int argc, char ** argv) {
     const char * mode = argc == 5 ? argv[4] : "per-row";
     const bool batch_mode = std::strcmp(mode, "batch") == 0;
     const bool batch_pinned_mode = std::strcmp(mode, "batch-pinned") == 0;
-    const bool batch_like_mode = batch_mode || batch_pinned_mode;
+    const bool batch_pinned_reuse_mode = std::strcmp(mode, "batch-pinned-reuse") == 0;
+    const bool batch_like_mode = batch_mode || batch_pinned_mode || batch_pinned_reuse_mode;
     const bool per_row_mode = std::strcmp(mode, "per-row") == 0;
     if (!batch_like_mode && !per_row_mode) {
         std::fprintf(stderr, "unknown mode: %s\n", mode);
@@ -765,7 +1067,15 @@ int main(int argc, char ** argv) {
     const int n_rows = (int)routes.size();
     std::vector<float> final_dst((size_t)n_rows * (size_t)base.ne01, std::numeric_limits<float>::quiet_NaN());
     route_timing batch_timing;
-    if (batch_like_mode) {
+    reuse_summary reuse_timing;
+    std::vector<route_timing> reuse_iter_timings;
+    if (batch_pinned_reuse_mode) {
+        if (!run_v2_entries_batched_reuse(lookup, read, mmvq, routes, base, stream, final_dst, 5, reuse_timing, reuse_iter_timings)) {
+            cudaStreamDestroy(stream);
+            dlclose(handle);
+            return 1;
+        }
+    } else if (batch_like_mode) {
         if (!run_v2_entries_batched(lookup, read, mmvq, routes, base, stream, final_dst, batch_timing, batch_pinned_mode)) {
             cudaStreamDestroy(stream);
             dlclose(handle);
@@ -890,7 +1200,7 @@ int main(int argc, char ** argv) {
             total.merge_us / (double)n_rows,
             total.total_us / (double)measured_covered);
     }
-    if (batch_like_mode) {
+    if (batch_mode || batch_pinned_mode) {
         std::printf(
             "timing_batch_summary covered=%d fallback=%d payload_mib=%.3f lookup_us=%.3f host_src0_alloc_us=%.3f read_us=%.3f host_src1_us=%.3f cuda_alloc_us=%.3f h2d_ms=%.3f kernel_ms=%.3f batch_sync_us=%.3f d2h_us=%.3f cuda_free_us=%.3f merge_us=%.3f fallback_fill_us=%.3f total_us=%.3f\n",
             measured_covered, measured_fallback, (double)batch_timing.payload_bytes / 1048576.0,
@@ -899,6 +1209,35 @@ int main(int argc, char ** argv) {
             batch_timing.kernel_ms, batch_timing.sync_us, batch_timing.d2h_us,
             batch_timing.cuda_free_us, batch_timing.merge_us,
             batch_timing.fallback_fill_us, batch_timing.total_us);
+    }
+    if (batch_pinned_reuse_mode) {
+        for (size_t i = 0; i < reuse_iter_timings.size(); ++i) {
+            const route_timing & it = reuse_iter_timings[i];
+            std::printf(
+                "timing_reuse_iter iter=%zu payload_mib=%.3f read_us=%.3f h2d_ms=%.3f kernel_ms=%.3f sync_us=%.3f d2h_us=%.3f merge_us=%.3f fallback_fill_us=%.3f total_us=%.3f\n",
+                i, (double)it.payload_bytes / 1048576.0, it.read_us, it.h2d_ms,
+                it.kernel_ms, it.sync_us, it.d2h_us, it.merge_us,
+                it.fallback_fill_us, it.total_us);
+        }
+        const double warm_div = reuse_timing.warm_iterations > 0 ? (double)reuse_timing.warm_iterations : 1.0;
+        std::printf(
+            "timing_reuse_summary iterations=%d warm_iterations=%d payload_mib_per_iter=%.3f one_time_lookup_us=%.3f one_time_host_src0_alloc_us=%.3f one_time_host_src1_us=%.3f one_time_cuda_alloc_us=%.3f one_time_cuda_free_us=%.3f all_total_us=%.3f warm_avg_total_us=%.3f warm_avg_read_us=%.3f warm_avg_h2d_ms=%.3f warm_avg_kernel_ms=%.3f warm_avg_sync_us=%.3f warm_avg_d2h_us=%.3f warm_avg_merge_us=%.3f warm_avg_fallback_fill_us=%.3f\n",
+            reuse_timing.iterations, reuse_timing.warm_iterations,
+            reuse_iter_timings.empty() ? 0.0 : (double)reuse_iter_timings[0].payload_bytes / 1048576.0,
+            reuse_timing.one_time.lookup_us,
+            reuse_timing.one_time.host_src0_alloc_us,
+            reuse_timing.one_time.host_src1_us,
+            reuse_timing.one_time.cuda_alloc_us,
+            reuse_timing.one_time.cuda_free_us,
+            reuse_timing.all_iters.total_us,
+            reuse_timing.warm_iters.total_us / warm_div,
+            reuse_timing.warm_iters.read_us / warm_div,
+            reuse_timing.warm_iters.h2d_ms / warm_div,
+            reuse_timing.warm_iters.kernel_ms / warm_div,
+            reuse_timing.warm_iters.sync_us / warm_div,
+            reuse_timing.warm_iters.d2h_us / warm_div,
+            reuse_timing.warm_iters.merge_us / warm_div,
+            reuse_timing.warm_iters.fallback_fill_us / warm_div);
     }
     for (int i = 0; i < n_rows; ++i) {
         const route & r = routes[(size_t)i];
