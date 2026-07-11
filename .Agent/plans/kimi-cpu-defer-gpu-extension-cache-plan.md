@@ -11837,3 +11837,129 @@ Next direction:
 5. A/B it under the same cold-start constraints.
 6. If the multi-dev compact bound still cannot save enough endpoint time, stop
    spending effort on RAM slabs and return to lower-byte v2 representation.
+
+## Candidate C gate: multi-dev compact blk1 upgate RAM slab
+
+Timestamp: 2026-07-11 CST.
+
+Dev-only trace set:
+
+- Sweep root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-dev-n32-profile-808f627b`
+- Supplemental quality-pass math trace:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-dev-linear-n48-profile-808f627b/dev_linear_equation`
+- Prompt split:
+  - dev prompts only from `.Agent/evals/kimi-general-dev-prompts.jsonl`;
+  - held-out prompts from `.Agent/evals/kimi-general-test-prompts.jsonl` remain
+    unused.
+- Quality:
+  - N32 sweep: `6/7` pass;
+  - `dev_linear_equation` N32 failed because the answer truncated before `7`;
+  - `dev_linear_equation` N48 rerun passed with output ending in `x = 7`.
+
+Valid dev traces used for selection:
+
+- `dev_france_regression` N32;
+- `dev_japan_factual` N32;
+- `dev_photosynthesis_factual` N32;
+- `dev_python_reverse` N32;
+- `dev_zh_france` N32;
+- `dev_mixed_summary` N32;
+- `dev_linear_equation` N48.
+
+Multi-dev RAM slab screen:
+
+- Output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-dev-screen-808f627b`
+- Inputs:
+  - `7` dev traces;
+  - decode-like rows: `199882`;
+  - decode-like batches: `39563`;
+  - decode runs: `220`;
+  - total batch wait: `118601.132 ms`;
+  - total wait: `539.096 ms/token`;
+  - `max_jobs=8`;
+  - simulated VRAM hotset entries: `2458`.
+
+Top prompt-general layer/role bounds:
+
+| candidate | prompts | resident | wait bound |
+|---|---:|---:|---:|
+| `blk.1.upgate` | `7` | `2440.36 MiB` | `7.569 ms/token` |
+| `blk.29.upgate` | `7` | `2845.91 MiB` | `7.177 ms/token` |
+| `blk.28.upgate` | `7` | `2707.89 MiB` | `7.085 ms/token` |
+| `blk.7.upgate` | `7` | `2757.12 MiB` | `6.989 ms/token` |
+| `blk.1.gate` | `7` | `1220.18 MiB` | `3.841 ms/token` |
+| `blk.1.up` | `7` | `1220.18 MiB` | `3.727 ms/token` |
+
+Bound interpretation:
+
+- Candidate C cannot bridge the current gap to `>2 tok/s` alone.
+- Even the best prompt-general compact slab only saves about
+  `7.569 ms/token` in the screen's optimistic wait accounting.
+- For a normal N96-sized response, that is only about `0.64 s` before runtime
+  overhead.
+- Candidate C is therefore a final storage-model validation:
+  - if it improves endpoint speed without refault/TTFT regressions, RAM slabs
+    may still be useful as one small component;
+  - if it is neutral or slower, stop RAM slab work and return to lower-byte v2
+    representation, because the RAM bound is too small.
+
+Generated Candidate C profile:
+
+- Tool:
+  `.Agent/run-tools/kimi_make_compact_ram_profile_from_traces.py`
+- Output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-profiles-808f627b/dev7-blk1-upgate-active-budget2500.profile.csv`
+- Report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-profiles-808f627b/dev7-blk1-upgate-active-budget2500.report.json`
+- Contents:
+  - selected entries: `544`;
+  - selected bytes: `2558902272`;
+  - selected size: `2440.36 MiB`;
+  - `blk.1.gate`: `272` entries, `1279451136` bytes;
+  - `blk.1.up`: `272` entries, `1279451136` bytes.
+
+Runtime env for Candidate C:
+
+```text
+GGML_MOE_RAM_TIER_MIB=2500
+GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-compact-profiles-808f627b/dev7-blk1-upgate-active-budget2500.profile.csv
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+GGML_MOE_RAM_BATCH_PROFILE_OUT=$RUN/ram-batch-profile.csv
+```
+
+A/B plan:
+
+1. Use the existing dev N32 profile sweep as control.
+2. Run Candidate C on the same dev prompt file with `PROFILE=1` and IO/RAM
+   profiles enabled.
+3. Compare only against valid control prompts:
+   - six N32 quality-pass prompts from the sweep;
+   - `dev_linear_equation` N48 control for math.
+4. Required metrics:
+   - quality per prompt;
+   - mean/min token rate;
+   - TTFT ratio per prompt;
+   - RAM peak and refault/direct reclaim;
+   - RAM tier hit rate and bytes;
+   - iouring bytes/wait deltas;
+   - `blk.1` up/gate wall delta.
+
+Reject Candidate C if:
+
+- mean dev token rate does not improve;
+- any quality-pass control prompt becomes quality fail;
+- RAM peak hits the cgroup cap or refaults become material;
+- TTFT exceeds `+20%` on any prompt;
+- RAM hit rate remains too low to matter.
+
+If rejected:
+
+- Do not test held-out prompts.
+- Stop RAM slab work as a primary route.
+- Return to lower-byte v2 expert representation or another byte-reduction
+  method with a larger theoretical gap to `>2 tok/s`.
