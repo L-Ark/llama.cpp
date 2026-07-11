@@ -4,6 +4,229 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Current Goal: recover reproducible Kimi SOTA, then push past 2 tok/s
+
+Current branch: `vendor/kimi-deepseek-41d205-additive`
+
+Current pushed reference: `3cd5c9814`
+
+### Goal
+
+在当前 Kimi vendor 代码上建立一个可以随时回退、随时复现的优化主线：
+
+- target machine: `16 GB` host RAM hard limit, including page cache, mmap
+  file-backed pages, pinned memory, anonymous memory, and kernel accounting;
+- accelerator: one `32 GB RTX 5090`;
+- workload: cold-start inference for arbitrary/general user prompts, not
+  prompt-specific packs or prompt-specific hotsets;
+- short-term performance target: recover the best reproducible general-prompt
+  Kimi SOTA and push stable decode above `2 tok/s`;
+- long-term performance target: stable `>5 tok/s` decode under the same memory,
+  cold-start, quality, and reproducibility gates;
+- quality gate: `Please introduce France in a short paragraph.` must remain
+  semantically correct and coherent, and SOTA must also pass held-out general
+  prompts that were not used for profile, pack, hotset, threshold, or cache
+  selection.
+
+The immediate engineering goal is not to blindly copy the DeepSeek gate-cache
+optimization. The DeepSeek lesson is the architecture:
+
+> `CPU/defer MoE scheduler` can remain the owner of MoE dispatch while a
+> `VRAM expert cache + GPU compute` extension handles expensive expert work.
+
+For Kimi, this only gives a direct new win if profiling shows remaining
+`gate/up/down` CPU slow-path work or GGUF `src0->data` fallback. If Kimi is
+already `0 fallback`, then the next gains must come from expert storage layout,
+IO scheduling, RAM/VRAM tiering, and lower-byte expert representation.
+
+### Hard Gates
+
+Every accepted optimization must satisfy all gates below:
+
+1. Cold start only. No warm-cache or manual preload result can be promoted.
+2. Run under `MemoryMax=15900000000` and `MemorySwapMax=0`.
+3. Host RAM peak must stay below the hard limit, including page cache.
+4. TTFT must not exceed the matching baseline by more than `20%`.
+5. Prompt and decode CPU fallback must not increase. If the matching baseline is
+   `0 fallback`, the candidate must also be `0 fallback`.
+6. The France prompt must pass quality, and held-out prompts must pass before a
+   result can be called global SOTA.
+7. The result must be reproducible from a clean pushed commit. If it cannot be
+   reproduced, it is rejected and cannot remain the rollback point.
+8. Commit message body for every accepted SOTA must include:
+   improvement magnitude, exact env, exact command, prompt/test set, output or
+   quality summary, RAM/page-cache/VRAM, TTFT, decode rate, fallback status, and
+   rollback point.
+
+### Current Baseline To Protect
+
+The current reproducible general baseline from the historical records is:
+
+- France N96 non-profile: about `1.90 tok/s`, quality pass, CPU fallback `0`;
+- dev general sweep: min `1.510`, median `1.840`, mean `1.786`, quality `7/7`;
+- held-out sweep: min `1.600`, median `1.825`, mean `1.812`, quality `6/6`;
+- RAM tier `blk1_gate_full384` hit rate is only about `0.6-0.7%`, so it is a
+  reproduction knob, not an efficient final RAM strategy;
+- after fadvise diagnostics, prompt eval can refill about `11-12 GiB` late-layer
+  GGUF expert file cache even when pre-prompt file cache starts low;
+- prompt host-source profile shows observed prompt CUDA expert copies are
+  `iouring` from expert pack, not `host_mmap_*`, so the remaining file-cache
+  refill likely happens outside the CUDA expert-copy H2D path.
+
+Before promoting any new optimization, rerun at least one clean baseline prompt
+and compare against this control.
+
+### Execution Plan
+
+#### Phase 0: Re-establish one clean control run
+
+Purpose: avoid optimizing against a stale or non-reproducible number.
+
+Steps:
+
+1. Use a clean worktree on `vendor/kimi-deepseek-41d205-additive`.
+2. Run one N96 cold-start general prompt with the current accepted SOTA env.
+3. Record TTFT, decode wall, token rate, output, `memory.peak`, file/anon split,
+   CPU fallback, expert-pack bytes, io_uring wait, H2D, and VRAM/RAM cache
+   settings.
+4. If the control cannot reproduce the expected range, stop and diagnose
+   commit/env/pack/profile drift before new optimization.
+
+Exit condition:
+
+- A fresh control run exists and can be used as the matching baseline for A/B.
+
+#### Phase 1: CPU-side prompt/source audit
+
+Purpose: identify why late-layer GGUF expert pages enter page cache during
+prompt eval even though CUDA expert-copy source profiling showed only expert
+pack `iouring` rows.
+
+Steps:
+
+1. Run the same fadvise N96 prompt with CPU-side profiles enabled:
+   - `GGML_KIMI_CPU_MOE_FALLBACK_PROFILE_OUT`;
+   - `GGML_MOE_CPU_FALLBACK_TOUCH_PROFILE`;
+   - `GGML_MOE_CPU_FALLBACK_SOURCE_PROFILE_OUT`, if available.
+2. If existing profiles do not explain the refault, add default-off
+   instrumentation around `ggml_compute_forward_mul_mat_id` and Kimi MoE prompt
+   dispatch:
+   - layer/role/type;
+   - whether CPU/defer entered;
+   - whether GPU extension accepted;
+   - whether `src0->data` was touched;
+   - bytes touched;
+   - wall time;
+   - source: pack, RAM tier, GGUF mmap, CPU compute fallback, or metadata-only.
+3. Keep instrumentation default-off and do not change runtime behavior.
+
+Decision:
+
+- If real CPU slow-path or GGUF fallback remains, implement the missing GPU
+  extension first.
+- If fallback is truly zero and refault is unrelated to expert compute, move to
+  explicit RAM/VRAM storage work.
+
+#### Phase 2: Replace low-value page cache with explicit expert cache
+
+Purpose: make host RAM hold high-yield data instead of uncontrolled GGUF
+file-backed residue.
+
+Steps:
+
+1. Classify decode-stage RAM:
+   - dense/attention/norm/output GGUF pages;
+   - GGUF expert tensor pages;
+   - expert-pack pages;
+   - alias/index pages;
+   - pinned staging;
+   - anonymous runtime allocations.
+2. Mark pages as replaceable only when profile proves decode does not need them
+   or they are accidental prompt residue.
+3. Add or reuse post-prompt drop hooks for those ranges only.
+4. Use freed RAM for explicit expert cache candidates:
+   - cross-prompt second-tier hot experts excluding current VRAM residents;
+   - critical low-hit layer full `gate+up` slab;
+   - critical low-hit layer full `gate+up+down` slab only if modeled RAM cost
+     fits without reclaim;
+   - pack-layout-adjacent compact tier that can be batch H2D efficiently.
+5. Prefer pageable RAM cache for large resident slabs at first. Use pinned memory
+   only for bounded staging windows or if A/B proves a pinned resident slab
+   improves endpoint rate without increasing reclaim/refault.
+
+Metrics:
+
+- saved SSD bytes;
+- saved exposed `io_uring_wait`;
+- added RAM lookup/copy cost;
+- H2D bytes and wall time;
+- queue fragmentation when some experts come from RAM and others from SSD;
+- endpoint decode token rate;
+- TTFT and memory peak.
+
+Accept condition:
+
+- endpoint token rate improves on dev prompt and does not regress held-out
+  prompts;
+- quality, TTFT, RAM, and fallback gates pass.
+
+#### Phase 3: IO queue continuity and larger same-layer scheduling waves
+
+Purpose: reduce queue断流 without duplicating reads.
+
+Steps:
+
+1. Profile whether queue idle time comes from late routing, too-small
+   same-layer batches, scheduler gaps, H2D sync points, or compute dependency.
+2. Add a default-off scheduler A/B that submits same-layer known
+   `up/gate/down` misses as one larger read scheduling wave after routing.
+3. Preserve compute order and correctness; coalesce only read submission and
+   staging when safe.
+4. Record submitted entries per wave, inflight avg/max, queue empty time,
+   duplicate bytes, replaced v1 bytes, and endpoint rate.
+
+Accept condition:
+
+- token rate improves because exposed wait falls, not just because total read
+  bytes rise.
+
+#### Phase 4: Lower-byte expert representation
+
+Purpose: cache placement alone is unlikely to reach `5 tok/s`; reduce the
+bytes that must move for all roles.
+
+Steps:
+
+1. Continue from the existing v2/IQ1S smoke results only if the runtime path
+   replaces v1 reads rather than shadow-reading.
+2. Start with default-off runtime dispatch for a small covered subset.
+3. Measure replaced v1 bytes, v2 bytes, net saved bytes, added dequant/compute
+   cost, quality output, and endpoint token rate.
+4. Use differentiated compression by expert importance:
+   - high-traffic/high-quality-sensitive experts keep higher quality;
+   - second-tier experts can use smaller representation if held-out quality
+     passes;
+   - cold experts stay on SSD v1 until there is evidence to convert them.
+
+Accept condition:
+
+- endpoint token rate improves on general prompts;
+- quality gate passes, especially reasoning/factual prompts;
+- no prompt-specific selection is used for SOTA.
+
+### Immediate Next Step
+
+Run Phase 1 first:
+
+1. Audit existing CPU fallback/touch/source profile fields in
+   `ggml/src/ggml-cpu/ggml-cpu.c`.
+2. Run one fadvise + CPU-source diagnostic on N96.
+3. Write the result back into this document before changing RAM layout.
+
+Only after the source of prompt-time late-layer GGUF page-cache refill is known
+should the next implementation attempt replace page cache with explicit RAM
+expert cache.
+
 ## 2026-07-12 Active Goal: DeepSeek-style CPU/defer GPU-extension on Kimi
 
 ### Goal
