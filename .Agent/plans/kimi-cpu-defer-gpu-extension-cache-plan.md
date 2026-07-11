@@ -535,6 +535,78 @@ Next direction:
   3. improving current-down/upgate overlap only if it reduces endpoint
      `up-gate-profile/down-batch wall_ms`, not just aggregate wait.
 
+## 2026-07-11 fixed VRAM split screen
+
+### Goal
+
+Test whether changing the fixed VRAM partition between up/gate cache and down
+cache can improve general-prompt token rate without code changes.
+
+Default env:
+
+```bash
+VRAM_MIB=15000
+GGML_MOE_VRAM_CACHE_SPLIT=1
+GGML_MOE_VRAM_CACHE_SPLIT_MAX_MIB=6
+GGML_MOE_VRAM_CACHE_UPGATE_PCT=62
+MOE_IO_DEPTH=16
+MOE_IO_REFILL_BATCH=8
+PINNED_SLOTS=16
+```
+
+Offline LRU screen:
+
+- Simulated `route-trace.csv` for France, cloud/business and batteries.
+- `UPGATE_PCT=70` looked good for France/batteries by miss bytes, but had
+  already failed endpoint N96 (`1.47 tok/s`, worse than baseline).
+- `UPGATE_PCT=40` looked potentially better for cloud/business and gives down
+  many more slots:
+  - default `62`: upgate `1735` slots, down `723` slots;
+  - pct `40`: upgate `1119` slots, down `1142` slots.
+
+Runtime A/B:
+
+| prompt | config | run | quality | TTFT | decode | token rate | RAM peak | split hits |
+|---|---|---|---|---:|---:|---:|---:|---|
+| France N32 | PCT40 | `/root/lfz/runs/vendor-kimi-token-rate/20260711-upgate40-depth16-france-n32-153806` | pass | `10298.82 ms` | `20206.19 ms / 31` | `1.53 tok/s` | `12820201472` | down `63.8%`, upgate `38.2%` |
+| cloud/business N32 | PCT40 | `/root/lfz/runs/vendor-kimi-token-rate/20260711-upgate40-depth16-cloudbiz-n32-153929` | pass | `14746.90 ms` | `21243.44 ms / 31` | `1.46 tok/s` | `12824555520` | down `62.2%`, upgate `41.8%` |
+| cloud/business N32 | PCT62 default | `/root/lfz/runs/vendor-kimi-token-rate/20260711-upgate62-depth16-cloudbiz-n32-154051` | pass | `13649.34 ms` | `21473.91 ms / 31` | `1.44 tok/s` | `12820357120` | down `58.5%`, upgate `45.8%` |
+| France N96 | PCT40 | `/root/lfz/runs/vendor-kimi-token-rate/20260711-upgate40-depth16-france-n96-154206` | pass | `10081.92 ms` | `55214.78 ms / 85` | `1.54 tok/s` | `12865867776` | down `67.5%`, upgate `36.9%` |
+| cloud/business N96 | PCT40 | `/root/lfz/runs/vendor-kimi-token-rate/20260711-upgate40-depth16-cloudbiz-n96-154405` | pass | `13751.40 ms` | `64781.40 ms / 95` | `1.47 tok/s` | `12871143424` | down `66.3%`, upgate `37.3%` |
+| intelligence N96 held-out | PCT62 default | `/root/lfz/runs/vendor-kimi-token-rate/20260711-upgate62-depth16-intelligence-n96-154622` | pass | `8603.97 ms` | `63493.70 ms / 95` | `1.50 tok/s` | `12690759680` | down `62.2%`, upgate `42.2%` |
+| intelligence N96 held-out | PCT40 | `/root/lfz/runs/vendor-kimi-token-rate/20260711-upgate40-depth16-intelligence-n96-154811` | pass | `8407.55 ms` | `64198.03 ms / 95` | `1.48 tok/s` | `12692283392` | down `68.5%`, upgate `35.4%` |
+
+Decision:
+
+- Reject fixed `UPGATE_PCT=40` as a stable general-prompt SOTA.
+- It helps down-heavy prompts:
+  - France N96: `1.48 -> 1.54 tok/s` versus recent default depth16;
+  - cloud/business N96: `1.44 -> 1.47 tok/s`.
+- But it regresses a new held-out prompt:
+  - intelligence N96: `1.50 -> 1.48 tok/s`.
+- The tradeoff is clear in the counters:
+  - down hit rate improves substantially;
+  - upgate hit rate falls sharply;
+  - whether the endpoint improves depends on prompt/layer behavior.
+
+Conclusion:
+
+- A single fixed split is too blunt for stable general-prompt improvement.
+- Keep default `UPGATE_PCT=62` as the safer general setting for now.
+- PCT40 can be kept as a diagnostic/down-heavy prompt option, but not as SOTA.
+
+Next direction:
+
+1. Dynamic/adaptive split:
+   - start with default split;
+   - use early decode/profile counters to detect down-heavy behavior;
+   - only then shift future capacity toward down, without hurting upgate-heavy
+     prompts.
+2. Lower-byte expert representation:
+   - fixed split only moves misses between roles;
+   - to reach `>2 tok/s` and eventually `>5 tok/s`, the stronger lever is to
+     reduce bytes moved per miss.
+
 ## 当前阶段 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
 
 Timestamp: 2026-07-11 CST.
