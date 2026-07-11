@@ -11729,3 +11729,111 @@ Reject Candidate A immediately if:
 - CPU fallback or direct reads become nonzero;
 - `blk.1` wait falls but endpoint decode regresses due to RAM/SSD batch
   fragmentation or preload cost.
+
+## Candidate A result: reject full blk1 up+gate RAM slab
+
+Timestamp: 2026-07-11 CST.
+
+Control run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-blk1-ram-control-n32-france-e133ccef`
+- quality: pass;
+- TTFT: `12102.17 ms`;
+- decode: `20568.69 ms / 31 = 1.51 tok/s`;
+- RAM peak: `12777783296`;
+- CPU fallback/direct reads: `0 / 0`;
+- `workingset_refault_file=0`.
+
+Candidate A run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-blk1-upgate-ramtier3500-n32-france-e133ccef`
+- env:
+  - `GGML_MOE_RAM_TIER_MIB=3500`;
+  - `GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-slab-profiles/blk1-upgate-full384.profile.csv`;
+  - `GGML_MOE_RAM_TIER_SKIP=0`;
+  - `GGML_MOE_RAM_TIER_PIN=0`;
+  - `GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1`;
+  - `GGML_MOE_RAM_TIER_PRELOAD_THREADS=4`.
+- quality: pass;
+- TTFT: `12611.25 ms`, within `+20%`;
+- decode: `20640.63 ms / 31 = 1.50 tok/s`, slower than control;
+- RAM peak: `15899996160`, exactly at cgroup cap;
+- `workingset_refault_file=668`;
+- CPU fallback/direct reads: `0 / 0`.
+
+RAM tier counters:
+
+- loaded: `768` entries, `3444.00 MiB` into anonymous mmap;
+- pinned: `0`;
+- hits: `486 / 39090 = 1.2%`;
+- resident: `3500.00 MiB`;
+- H2D from RAM tier: `2285273088 bytes`;
+- direct preload bytes: `3611295744`;
+- direct failures/fallbacks: `0 / 0`.
+
+Local effect:
+
+| bucket | control | Candidate A | delta |
+|---|---:|---:|---:|
+| `blk.1` up/gate wall | `320.296 ms` | `218.519 ms` | `-101.777 ms` |
+| `blk.1` up_wait | `273.884 ms` | `143.072 ms` | `-130.812 ms` |
+| `blk.1` gate_wait | `312.872 ms` | `211.106 ms` | `-101.767 ms` |
+
+Global effect:
+
+- The local `blk.1` improvement did not translate to endpoint improvement.
+- Total decode regressed by `71.94 ms`.
+- Host RAM hit the cgroup cap and caused file refaults.
+- The slab was too coarse:
+  - full prompt-general `blk.1` up+gate costs `3444 MiB`;
+  - this N32 decode actually used only about `915 MiB` of `blk.1` upgate
+    unique entries in the decode-like IO trace;
+  - RAM hit rate was only `1.2%` of all expert loads.
+
+Decision:
+
+- Reject Candidate A as a promoted optimization.
+- Do not run N96 for this candidate.
+- Keep the path default-off.
+- Do not test more full-layer-all-expert slabs as the next step unless a
+  multi-prompt screen proves the whole layer has high prompt-general coverage.
+
+Follow-up screen:
+
+- Tool:
+  `.Agent/run-tools/kimi_phase5c_ram_slab_screen.py`
+- Output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-blk1-ram-ab-analysis/ram-slab-screen-control-n32`
+- Inputs:
+  - control `io-read-trace.csv`;
+  - control `route-profile.csv`;
+  - `max_jobs=8`;
+  - roles `up,gate,down`.
+- Result:
+  - decode-like rows: `25917`;
+  - decode-like batches: `5583`;
+  - total batch wait: `11748.971 ms`;
+  - total wait: `378.999 ms/token`;
+  - top layer-upgate prompt-specific bound:
+    - `blk.1.upgate`: `914.81 MiB`, `6.534 ms/token`;
+    - `blk.28.upgate`: `935.16 MiB`, `5.537 ms/token`;
+    - `blk.9.upgate`: `846.58 MiB`, `5.291 ms/token`;
+    - `blk.7.upgate`: `807.19 MiB`, `5.170 ms/token`.
+- Interpretation:
+  - compact active-entry slabs have much better bytes/use ratio than full
+    all-384 slabs;
+  - however a single-prompt active-entry slab is prompt-specific and cannot be
+    accepted as SOTA;
+  - the next candidate must be selected from multiple dev prompts and validated
+    only once on held-out prompts.
+
+Next direction:
+
+1. Build a multi-dev prompt IO trace set with no held-out prompts.
+2. Run `kimi_phase5c_ram_slab_screen.py` across that dev set.
+3. Select a compact prompt-general RAM slab budget, likely `1-2 GiB`, not a
+   full all-expert layer.
+4. Generate the runtime RAM tier profile from the selected entries.
+5. A/B it under the same cold-start constraints.
+6. If the multi-dev compact bound still cannot save enough endpoint time, stop
+   spending effort on RAM slabs and return to lower-byte v2 representation.
