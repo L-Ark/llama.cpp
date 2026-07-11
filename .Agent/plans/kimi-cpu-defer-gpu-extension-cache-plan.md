@@ -4,6 +4,116 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Run Goal: recover reproducible Kimi SOTA, then validate CPU/defer GPU-extension wins
+
+### Goal
+
+本轮目标是在当前 `vendor/kimi-deepseek-41d205-additive` 代码线上，先恢复一个
+可复现、可回退、可 push 的 Kimi SOTA，再判断 DeepSeek 的
+`CPU/defer main path + GPU expert-cache extension` 经验是否能继续转化为
+Kimi 的有效提升。
+
+验收目标固定如下：
+
+- 必须冷启动，`MemoryMax=15900000000`，`MemorySwapMax=0`；
+- host RAM 统计必须包括 page cache、GGUF mmap file-backed pages、
+  pinned/pageable host buffers、allocator overhead 和 cgroup kernel 记账；
+- 目标环境是单卡 `32 GB RTX 5090`，尽量让有效 expert/compute 使用 VRAM，
+  但不能用不可控 page cache 冒充稳定缓存；
+- 优化目标是泛化 prompt，不允许把 prompt-specific pack/hotset 当成 SOTA；
+- mandatory quality gate:
+  `Please introduce France in a short paragraph.` 必须语义正确、连贯；
+- 每个新提升都必须有完整复现方法、run 目录、环境变量、prompt/test set、
+  TTFT、decode token rate、prompt token rate、RAM/VRAM、fallback、IO/H2D
+  profile、quality 输出和 rollback commit；
+- 短期目标：恢复并保护当前可复现 Kimi SOTA，然后稳定突破 `2 tok/s`；
+- 长期目标：在同样限制下向随机用户 prompt 稳定 `>5 tok/s` 推进。
+
+### Current Hypothesis
+
+DeepSeek 的大幅提升来自把原本 CPU/defer 路径里的 gate expert 接到
+`VRAM hot/cache + GPU compute`，本质是给 CPU/defer 主路径加 GPU
+extension，而不是传统的 GPU backend 失败后 CPU fallback。
+
+对 Kimi 是否有用，要分情况判断：
+
+1. 如果 Kimi 仍有 prompt/decode expert matmul 在 CPU 上算，或者 scheduler
+   仍从 GGUF mmap `src0->data` 取 expert，那么同类 GPU extension/source
+   replacement 很可能有用。
+2. 如果 Kimi 已经做到 critical `gate/up/down` 都进 GPU extension 且
+   fallback=0，那么简单照搬“把 gate 放 VRAM”不会带来 DeepSeek 那种量级的
+   提升；下一步收益更可能来自 RAM/VRAM cache 布局、pack 读取布局、批量
+   scheduling 和减少 exposed io_uring wait。
+3. 当前最重要的已验证方向是：把 CPU/defer scheduler 的 expert copy source
+   从 GGUF mmap 替换为 expert pack/RAM source，避免 prompt/decode 期间制造
+   低价值 GGUF file cache，并把 host RAM 腾给显式 expert cache。
+
+### Execution Plan
+
+#### Step 0: Protect the baseline
+
+- 确认当前分支、当前 commit、远端状态和 dirty files。
+- 复现一个已接受的 Kimi SOTA control run。
+- 如果 control 不复现，停止优化，先定位 commit/env/pack/config drift。
+
+#### Step 1: Port and guard source replacement
+
+- 将 diagnostic branch 中已验证的 default-off
+  `GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE=1` source replacement 移植到当前
+  Kimi 分支。
+- 保持默认行为不变；只有显式 env 打开时才改变 scheduler copy source。
+- 不破坏当前 dirty worktree 中已有的 v2 current-down overlap 代码；如无法干净
+  stage，只先记录为未提交诊断改动，不混入 unrelated changes。
+
+#### Step 2: Cold-start verification
+
+- 先跑 N96 cold-start smoke，确认：
+  - output quality pass；
+  - CPU fallback source entries 为 0；
+  - GGUF file cache 不再回到 13-14 GiB；
+  - memory peak 低于 16 GB；
+  - TTFT 不超过 control 的 20% gate。
+- 再跑 mandatory France gate，并记录完整输出。
+
+#### Step 3: Bottleneck profile after RAM cleanup
+
+在 source replacement 生效后重新 profile 每 token 时间分解：
+
+- expert read / io_uring wait；
+- RAM tier read；
+- pinned staging；
+- H2D；
+- gate/up/down GPU compute；
+- CPU fallback；
+- scheduler sync；
+- active/inactive file cache；
+- VRAM expert cache hit/miss。
+
+明确离 `2 tok/s` 和 `5 tok/s` 还差在哪些秒数，而不是只看 hit rate。
+
+#### Step 4: RAM/VRAM storage redesign
+
+只有在 Step 3 证明 file cache 已变成低价值空间后，才把 reclaimed RAM 用作
+显式 expert cache：
+
+- VRAM: hottest and most latency-critical experts；
+- RAM: second-tier experts or full critical layer/role slabs；
+- SSD: cold experts；
+- 优先测试低命中率但 critical wait 高的 layer/role；
+- A/B 必须比较 endpoint token rate、TTFT、RAM peak、H2D bytes、io wait、
+  queue fragmentation 和 output quality。
+
+#### Step 5: Promotion rule
+
+任何新结果只有同时满足以下条件才可以称为 SOTA：
+
+- clean commit 可复现；
+- commit 已 push；
+- run 目录和复现命令写入 plan；
+- mandatory France + held-out prompts 通过；
+- TTFT gate、RAM gate、quality gate 全通过；
+- rollback commit 明确。
+
 ## 2026-07-12 Current Goal: validate CPU/defer GPU-extension transfer to Kimi
 
 ### Goal
