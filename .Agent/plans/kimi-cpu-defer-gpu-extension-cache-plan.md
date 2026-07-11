@@ -292,6 +292,75 @@ Runtime A/B result:
     with independent work, or split "large SSD read" from "per-expert H2D
     staging" so coalesced disk reads can still feed many small GPU transfers.
 
+## H2D coalescing opportunity check
+
+Timestamp: 2026-07-11 CST.
+
+Status: default-off instrumentation and one cold-start profile; no runtime
+behavior change and no SOTA claim.
+
+Implementation:
+
+- Add a guarded `GGML_MOE_H2D_COALESCE_PROFILE_OUT` call inside the io_uring
+  expert-pack copy path.
+- The profiler records, per io_uring batch:
+  - logical copy count;
+  - theoretical coalesced copy count;
+  - host-contiguous source pairs;
+  - device-destination-contiguous pairs;
+  - pairs where both are contiguous.
+- It is profile-only. It does not change read order, H2D copies, cache
+  placement, or default env.
+
+Run:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-h2d-coalesce-profile/baseline_japan`.
+- Prompt:
+  `Please introduce Japan in a short paragraph.`
+- Command shape:
+  current `kimi-general-prompt-repro.sh`, cold-start systemd cgroup
+  `MemoryMax=15900000000`, `N=32`, `PROFILE=1`, plus:
+  `GGML_MOE_H2D_COALESCE_PROFILE_OUT=$RUN/h2d-coalesce-profile.csv`.
+
+Result:
+
+- Quality: pass.
+- TTFT: `8375.86 ms`.
+- Decode: `18812.17 ms / 31`.
+- Token rate: `1.65 tok/s`.
+- RAM peak: `12765462528`.
+- Expert pack:
+  - `iouring_reads=39075`;
+  - `iouring_bytes=223114035200`;
+  - `iouring_wait_us=18926235`;
+  - `cqes=39075`;
+  - `inflight_avg=4.28`.
+- H2D coalesce profile:
+  - rows: `5742`;
+  - total copies: `39075`;
+  - theoretical coalesced copies: `39075`;
+  - saved copies: `0`;
+  - host-contiguous pairs: `0`;
+  - dst-contiguous pairs: `0`;
+  - both-contiguous pairs: `0`;
+  - runtime_load copies: `34847`, saved `0`;
+  - current_down_overlap copies: `4228`, saved `0`.
+
+Decision:
+
+- Reject standalone H2D coalescing as the next primary optimization.
+- In the current baseline, io_uring groups are single-expert groups, so there
+  are no contiguous host slices to merge.
+- The earlier clustered overlay test created host-contiguous groups, but it
+  regressed by reducing IO parallelism while bytes stayed constant. Therefore
+  H2D coalescing would only be worth revisiting together with a byte-reducing
+  pack format or a scheduler that keeps IO depth high.
+- Next optimization should focus on:
+  - reducing bytes per demanded expert with a quality-validated representation;
+  - or raising true independent IO queue depth through prediction/prefetch that
+    is not already covered by VRAM hits.
+
 ## Immediate goal: Kimi CPU/defer GPU-extension usefulness check
 
 Timestamp: 2026-07-11 CST.

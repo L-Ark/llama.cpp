@@ -7321,6 +7321,54 @@ static bool expert_pack_iouring_copy_jobs(
             std::fclose(f);
         }
     }
+    if (h2d_coalesce_profile_enabled()) {
+        size_t copy_count = 0;
+        size_t coalesced_copy_count = 0;
+        size_t host_contiguous_pairs = 0;
+        size_t dst_contiguous_pairs = 0;
+        size_t both_contiguous_pairs = 0;
+        for (const iouring_group_plan &group : group_plans) {
+            if (group.slices.empty()) {
+                continue;
+            }
+            ++coalesced_copy_count;
+            copy_count += group.slices.size();
+            for (size_t i = 1; i < group.slices.size(); ++i) {
+                const iouring_group_slice &prev_slice = group.slices[i - 1];
+                const iouring_group_slice &cur_slice = group.slices[i];
+                const iouring_read_plan &prev_plan = read_plans[prev_slice.plan_idx];
+                const iouring_read_plan &cur_plan = read_plans[cur_slice.plan_idx];
+                const Job &prev_job = jobs[prev_plan.job_idx];
+                const Job &cur_job = jobs[cur_plan.job_idx];
+                const bool host_contig =
+                    prev_slice.payload_offset + expert_bytes == cur_slice.payload_offset;
+                const uintptr_t prev_dst = reinterpret_cast<uintptr_t>(prev_job.dst);
+                const uintptr_t cur_dst = reinterpret_cast<uintptr_t>(cur_job.dst);
+                const bool dst_contig = prev_dst + expert_bytes == cur_dst;
+                if (host_contig) {
+                    ++host_contiguous_pairs;
+                }
+                if (dst_contig) {
+                    ++dst_contiguous_pairs;
+                }
+                if (host_contig && dst_contig) {
+                    ++both_contiguous_pairs;
+                } else {
+                    ++coalesced_copy_count;
+                }
+            }
+        }
+        h2d_coalesce_profile_record(
+                trace_op,
+                jobs.size(),
+                group_plans.size(),
+                copy_count,
+                coalesced_copy_count,
+                host_contiguous_pairs,
+                dst_contiguous_pairs,
+                both_contiguous_pairs,
+                expert_bytes);
+    }
     expert_pack_record_iouring_batch(group_plans.size());
     ring.iouring_batches += 1;
     ring.iouring_jobs += group_plans.size();
