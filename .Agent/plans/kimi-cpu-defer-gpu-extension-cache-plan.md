@@ -4,6 +4,157 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Goal: verify DeepSeek-style CPU/defer GPU extension on Kimi
+
+### Goal
+
+验证 DeepSeek SOTA 里“CPU/defer MoE 主调度 + GPU expert-cache extension”的
+成功原因是否可以迁移到 Kimi，并在不改变双方已有功能的前提下，把 Kimi 当前可复现
+SOTA 继续推高。
+
+本阶段的短期目标不是直接冲 `5 tok/s`，而是先达到一个可复现的小目标：
+
+- cold-start、`16 GB host RAM`、单张 `32 GB RTX 5090`;
+- 泛化 prompt，不使用 prompt-specific hotset/pack;
+- prompt 和 decode 阶段 CPU fallback 保持 `0` 或明确解释剩余项;
+- N32 general prompt decode rate 稳定高于当前 `~1.5-1.8 tok/s`，优先冲
+  `>=2 tok/s`;
+- TTFT 相比同 commit control 不超过 `+20%`;
+- mandatory quality prompt
+  `Please introduce France in a short paragraph.` 语义正确、连贯;
+- 所有结果必须有 run directory、命令、环境变量、profile、commit 和 rollback
+  point，保证可以复现和回退。
+
+长期目标仍然是：在用户随机输入 prompt 时，Kimi 在该硬件和 RAM 约束下稳定达到
+`>5 tok/s`，所有中间优化都必须服务于这个任务。
+
+### Applicability Hypothesis
+
+DeepSeek 的关键提升不是“GPU 主路径失败后 CPU fallback”，而是：
+
+1. MoE 层由 CPU/defer backend 负责调度;
+2. gate/up/down expert 仍然可以通过 hotpool/cache/pack 进入 VRAM;
+3. CPU/defer 路径在拿到 expert 后调用 GPU kernel 计算;
+4. 只有 GPU extension 未接住时才落到真正 CPU fallback。
+
+Kimi 可能适用，但不能直接假设有效。当前 Kimi 的已知差异是：
+
+- Kimi 当前 SOTA 主要瓶颈已经不是 CPU fallback，而是 expert movement 暴露在
+  critical path 上，尤其是 up/gate miss、down miss 和 io_uring queue 断流;
+- Kimi 已经有 expert pack、v2 down full-cover、current-down overlap、prompt
+  0 fallback 等改动，新增优化必须证明是在减少 exposed wait，而不是只改变 hit
+  rate;
+- 如果 gate/up 仍有 CPU/defer 慢路径或未充分进入 GPU extension，那么 DeepSeek
+  的 gate/hotpool 思路对 Kimi 有价值;
+- 如果 Kimi 已经几乎全部由 GPU extension 接住，则下一步应转向 VRAM/RAM cache
+  layout、IO scheduler、expert 表示压缩，而不是重复 DeepSeek gate-only 方案。
+
+### Execution Plan
+
+1. 复现当前 SOTA 和 control。
+   - baseline commit: `7e9c3dbed`;
+   - branch: `vendor/kimi-deepseek-41d205-additive`;
+   - 先跑 N32 France cold-start，再跑至少一个 held-out general prompt;
+   - 记录 TTFT、decode tok/s、memory.peak、inactive/active file、VRAM、CPU
+     fallback、iouring wait、H2D、per-role hit/miss 和完整输出。
+
+2. 做 Kimi backend attribution。
+   - 对每个 layer/role 统计 gate/up/down 的实际执行路径：
+     `GPU extension hit`、`GPU extension miss`、`CPU fallback`、`pack read`、
+     `GGUF/mmap read`、`RAM tier read`;
+   - 特别确认 `n_cpu_moe` 下前若干层是否仍是 CPU/defer 主调度;
+   - 输出 per-layer exposed wait top list，找出最值得优化的 layer/role。
+
+3. 验证 DeepSeek-style gate/up VRAM extension 是否有效。
+   - default-off env，不作为默认 SOTA;
+   - 先只测 gate hot/all-in-VRAM 的小范围 A/B;
+   - 如果 gate 的 exposed wait 明显下降，再测 up+gate paired cache;
+   - 不先扩大 down cache，避免把 VRAM 花在已经可 overlap 的路径上。
+
+4. 验证 aggressive routed-read scheduler。
+   - routing 一出来后，统一把本层 up/gate/down miss 排进一个更大的 read
+     scheduler;
+   - 目标是提升 runtime batch depth，而不是增加总读量;
+   - 如果 batch depth 提升但 token rate 不升，必须定位新增同步、H2D、cache
+     eviction 或 stream contention。
+
+5. 验证 RAM/VRAM 分层缓存。
+   - 先释放 decode 阶段低价值 GGUF file-backed page cache;
+   - RAM 只放能够批量高效送入 VRAM 的 expert slab，不使用零碎随机缓存;
+   - 优先测试 exposed wait 高、hotset 覆盖差的整层 gate 或 up+gate;
+   - 比较 SSD->VRAM、RAM->VRAM、pageable RAM、pinned RAM 四种路径的真实
+     critical-path 贡献。
+
+6. Promotion rule。
+   - 只有同时满足 quality、RAM、TTFT、cold-start、泛化 prompt 和可复现要求，
+     才能 commit/push 为 SOTA;
+   - commit message body 必须包含提升幅度、环境、复现命令、prompt/test set、
+     RAM/TTFT/quality gate、profile 文件和 rollback point;
+   - 任何下降、不可复现或只对单 prompt 有效的结果都写入 rejected section，并
+     回退代码或保持 default-off。
+
+### Immediate Next Experiment
+
+当前工作区有一个尚未提交的 v2 current-down overlap 改动，目标是让 overlap 路径
+复用已验证的 batched io_uring/pinned transport，而不是旧的逐 entry read/H2D 路径。
+
+下一步只做 default-off A/B：
+
+- control: commit `7e9c3dbed` 的 v2 down iouring、overlap off;
+- candidate: v2 down iouring、overlap on、current-down overlap 走 batched
+  io_uring transport;
+- prompt: `Please introduce France in a short paragraph.`;
+- N32 cold-start，`MemoryMax=15900000000`、`MemorySwapMax=0`;
+- 如果 candidate 没有提升或 TTFT/RAM/quality 不过 gate，记录 rejected，并回退这
+  个未提交改动。
+
+### 2026-07-12 Result: v2 current-down overlap batched iouring rejected
+
+Candidate:
+
+- code state: uncommitted experiment on top of `7e9c3dbed`;
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-overlap-iouring-n32-france-224908`;
+- prompt: `Please introduce France in a short paragraph.`;
+- env:
+  `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN=1`,
+  `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_OVERLAP=1`,
+  `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_IOURING=1`;
+- quality: pass;
+- TTFT: `12564.11 ms`;
+- decode: `20477.49 ms / 31`, `1.51 tok/s`;
+- memory peak: `12770758656` bytes;
+- current-down overlap: `calls=992`, `planned_jobs=4235`,
+  `completed_jobs=4235`, `submitted_batches=896`,
+  `worker_us=3062680`;
+- v2 full-cover down: `accepted=197 / 2038`,
+  `overlap_accepted=19 / 899`, `copied_bytes=3.252 GiB`,
+  `saved_bytes=6.624 GiB`, `read_ms=331.870`,
+  `h2d_enqueue_ms=13.934`, `total_ms=379.166`;
+- decode iouring delta after prompt:
+  `iouring_bytes=147139887104`, `iouring_wait_us=11796479`.
+
+Comparison:
+
+- control baseline:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-nextgoal-baseline-n32-france-213337`,
+  `1.54 tok/s`, TTFT `11493.86 ms`;
+- accepted v2 iouring with overlap off:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-down-group-k2048-iouring-nooverlap-n32-france-223533`,
+  `1.56 tok/s`, TTFT `12091.79 ms`.
+
+Decision:
+
+- rejected. Although the new overlap path reused the batched iouring/pinned
+  helper and stayed within RAM/quality gates, it regressed decode rate to
+  `1.51 tok/s`.
+- The likely issue is not raw v2 copy cost: v2 total time fell to `379.166 ms`.
+  The net regression comes from extra overlap worker/synchronization and cache
+  interaction while the dominant up/gate miss path remains unchanged.
+- Action: revert the uncommitted `moe_stream_batch.cu` experiment, keep this
+  result as a rejected A/B, and move next to backend attribution plus gate/up
+  VRAM-extension tests.
+
 ## 2026-07-12 Active Goal and Immediate Plan
 
 ### Active Goal
