@@ -245,6 +245,126 @@ Decision:
 - 无论哪种结果，都必须写回本 plan；只有后续真正减少 RAM/page-cache、TTFT 或
   decode wall 且过全部 hard gates，才允许标为 SOTA。
 
+### 2026-07-12 Phase B/C Result: prompt host-source profile rules out CUDA expert-copy mmap touch
+
+Diagnostic branch:
+
+- `vendor/kimi-prompt-host-source-prof`
+- pushed commits:
+  - `65671748d diag: add kimi prompt host source profile`
+  - `11fa4e372 diag: track prompt phase for host source profile`
+- This is diagnostic instrumentation only. It is not a runtime SOTA.
+
+Why the second commit was needed:
+
+- First N32 run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-prompt-host-source-reasoning-n32-174630`
+- `GGML_MOE_PROMPT_HOST_SOURCE_PROFILE_OUT` was present in `env.txt`, but no CSV
+  was emitted.
+- Phase report showed prompt eval still did `24` expert-pack iouring reads, so
+  the issue was phase classification: prompt eval can enter decode-shaped batch
+  calls with `rows_stride <= 8`.
+- Fix: use `ggml_cuda_moe_stream_batch_phase_report(before_prompt_eval/
+  after_prompt_eval/after_generation)` to mark the runtime prompt window.
+
+Validated N96 diagnostic run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-prompt-host-source-reasoning-n96-175501`
+- commit: `11fa4e372`
+- cgroup: `MemoryMax=15900000000`, `MemorySwapMax=0`
+- prompt:
+  `A train leaves at 3 PM and arrives 2 hours and 15 minutes later. What time does it arrive?`
+- quality: pass
+- output:
+  `... The train arrives at **5:15 PM**.`
+- TTFT: `228319.23 ms`
+- decode: `35600.78 ms / 61`, `1.71 tok/s`
+- memory peak: `15899996160`, exactly cgroup cap
+- final memory:
+  - file: `12771524608`
+  - active_file: `11037679616`
+  - inactive_file: `1733656576`
+  - pgmajfault: `16809`
+  - workingset_refault_file: `21327`
+  - pgscan_direct: `51587454`
+- CPU fallback remains zero:
+  `[kimi_cpu_fallback_pack_mmap] enabled=1 hits=0 misses=0 bytes=0 fallback_gguf=0`
+
+Prompt host-source CSV:
+
+- file:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-prompt-host-source-reasoning-n96-175501/prompt-host-source.csv`
+- rows: `24`
+- source distribution:
+  - `iouring`: `24`
+  - `host_mmap_staged`: `0`
+  - `host_mmap_direct`: `0`
+  - `pack_staged_read`: `0`
+  - `ram_tier`: `0`
+- role distribution:
+  - `up`: `8`
+  - `gate`: `8`
+  - `down`: `8`
+- tensor distribution:
+  - all rows are `blk.60.ffn_{up,gate,down}_exps.weight`
+- conclusion:
+  prompt-stage CUDA expert copies are going through expert pack O_DIRECT/
+  io_uring and are not touching GGUF `src0->data`.
+
+Mincore after run:
+
+- file:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-prompt-host-source-reasoning-n96-175501/file-cache-residency.txt`
+- GGUF shards cached: `12627398656` bytes, `11.760 GiB`
+- expert packs cached: `5210112` bytes, `0.005 GiB`
+- dominant shards:
+  - shard `00009`: `9.506 GiB`
+  - shard `00010`: `2.247 GiB`
+
+Tensor-level mincore:
+
+- file:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-prompt-host-source-reasoning-n96-175501/tensor-cache-00009-00010.txt`
+- shard `00009`, cached `9.507 GiB`:
+  - `down_exps`: `3.871 GiB`
+  - `up_exps`: `2.945 GiB`
+  - `gate_exps`: `2.691 GiB`
+  - top tensors are `blk.54-58.ffn_{down,up,gate}_exps.weight`
+- shard `00010`, cached `2.247 GiB`:
+  - `blk.59.ffn_down_exps.weight`: `0.807 GiB`
+  - `blk.59.ffn_up_exps.weight`: `0.720 GiB`
+  - `blk.59.ffn_gate_exps.weight`: `0.720 GiB`
+
+Decision:
+
+- The late-layer GGUF page cache is not explained by CUDA expert-copy fallback
+  from `src0->data`.
+- Do not spend the next iteration on `batch_cache_copy_h2d()` host-mmap
+  fallback fixes; the prompt GPU extension path is already using expert pack
+  iouring for the observed prompt copies.
+- This also reinforces that Kimi is not currently blocked by DeepSeek-style
+  gate CPU slow-path fallback: prompt/decode fallback counters remain zero.
+
+Next investigation:
+
+1. Combine this host-source profile with the earlier default-off fadvise branch,
+   or rebase the fadvise hook onto the diagnostic branch, so `before_prompt_eval`
+   file cache starts low while host-source CSV is active.
+2. If fadvise + host-source still shows no `host_mmap_*` rows but `blk.54-59`
+   GGUF expert pages reappear, the source is outside CUDA expert-copy:
+   - backend/model mmap registration;
+   - GGUF metadata/range probing;
+   - model load/drop sequence retaining or refaulting mapped pages;
+   - CPU-side prompt path outside the profiled GPU extension.
+3. Add a second diagnostic around `llama_mmap::dontneed_fragment()` and model
+   loader/drop ranges:
+   - per-range mincore before and after `madvise`;
+   - optional `fadvise` result;
+   - whether ranges are still mapped and immediately refaulted.
+4. Only after identifying the actual refault source should RAM be reallocated
+   from low-value page cache to explicit batch-coherent expert cache.
+
 ## 2026-07-12 Active Goal Snapshot
 
 Current branch: `vendor/kimi-deepseek-41d205-additive`
