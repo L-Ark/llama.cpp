@@ -12449,3 +12449,140 @@ Decision:
   - report read/H2D/kernel/sync by role.
 - Only after same-layer mixed-role smoke passes should runtime default-off
   dispatch be attempted.
+
+## Progress update: same-layer mixed up/gate/down v2 dispatch smoke
+
+Timestamp: 2026-07-11 CST.
+
+Purpose:
+
+> Move the standalone v2 dispatch smoke from a single tensor group to a
+> same-layer mixed-role group. This verifies that one candidate dispatch wave
+> can handle `up`, `gate`, and `down` entries with different logical shapes,
+> while preserving row placement and avoiding per-entry synchronization.
+
+Code change:
+
+- Extended `.Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp` with
+  mode `mixed-layer-reuse`.
+- Existing modes remain available:
+  - `per-row`;
+  - `batch`;
+  - `batch-pinned`;
+  - `batch-pinned-reuse`.
+- `mixed-layer-reuse`:
+  - selects the best same-layer group with at least two same-shape entries for
+    each role;
+  - uses the current top2048 manifest and selected `blk.6`;
+  - includes `2` covered `up`, `2` covered `gate`, `2` covered `down`, and
+    one fallback row for each role;
+  - allocates persistent pinned payload and activation buffers;
+  - allocates persistent device slots and CUDA events;
+  - runs five repeated `read -> H2D -> MMVQ -> D2H -> merge` iterations;
+  - synchronizes once per mixed dispatch iteration, not once per entry;
+  - verifies finite non-zero covered outputs and row placement for different
+    output widths.
+
+Build:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-mixed-layer-smoke-bd45c9e
+mkdir -p "$RUN"
+g++ -std=c++17 -O2 \
+  .Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp \
+  -I/usr/local/cuda/include \
+  -L/usr/local/cuda/lib64 -lcudart -ldl \
+  -o "$RUN/kimi_moepack_v2_partial_split_smoke"
+```
+
+Inputs:
+
+- v2 pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-v2.expert-pack`
+- manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-manifest.tsv`
+- selected layer: `blk.6`
+- route shape:
+  - total routes: `9`;
+  - covered routes: `6`;
+  - fallback routes: `3`;
+  - covered payload per iteration: `16.406 MiB`.
+- covered entries:
+  - up: experts `17`, `29`, shape `ne00=7168`, `ne01=2048`;
+  - gate: experts `17`, `29`, shape `ne00=7168`, `ne01=2048`;
+  - down: experts `4`, `17`, shape `ne00=2048`, `ne01=7168`.
+
+Strict cold-cache cgroup run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-mixed-layer-smoke-cold-bd45c9e`
+- Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-mixed-layer-smoke-cold-bd45c9e/run.sh
+```
+
+- The script runs:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`;
+  - `LD_LIBRARY_PATH=build-cuda-batch/bin:/usr/local/cuda/lib64`;
+  - `kimi_moepack_v2_partial_split_smoke build-cuda-batch/bin/libggml-cuda.so <top2048 pack> <top2048 manifest> mixed-layer-reuse`.
+- cgroup `memory.max`: `15899996160`
+- cgroup `memory.peak`: `384720896`
+- Result: pass.
+
+Cold-cache timing summary:
+
+```text
+kimi_moepack_v2_partial_split_smoke pass mode=mixed-layer-reuse layer=6 routes=9 covered=6 fallback=3 payload_mib=16.406
+timing_mixed_reuse_summary iterations=5 warm_iterations=4 payload_mib_per_iter=16.406 one_time_lookup_us=6126.707 one_time_host_src0_alloc_us=14351.967 one_time_host_src1_us=1792.104 one_time_cuda_alloc_us=839.728 one_time_cuda_free_us=5991.914 all_total_us=107732.691 warm_avg_total_us=5206.956 warm_avg_read_us=4031.884 warm_avg_h2d_ms=0.921 warm_avg_kernel_ms=0.068 warm_avg_sync_us=866.175 warm_avg_d2h_us=65.501 warm_avg_merge_us=44.583 warm_avg_fallback_fill_us=24.046
+```
+
+Warm role split from the final iteration:
+
+| role | covered | fallback | payload | read | H2D | kernel | D2H | merge | fallback fill | total |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `up` | `2` | `1` | `5.469 MiB` | `1084.658 us` | `0.303 ms` | `0.024 ms` | `22.271 us` | `7.611 us` | `4.101 us` | `1444.817 us` |
+| `gate` | `2` | `1` | `5.469 MiB` | `1054.380 us` | `0.305 ms` | `0.023 ms` | `17.710 us` | `8.142 us` | `4.089 us` | `1411.585 us` |
+| `down` | `2` | `1` | `5.469 MiB` | `1050.580 us` | `0.312 ms` | `0.022 ms` | `26.430 us` | `34.872 us` | `14.299 us` | `1459.749 us` |
+
+Regression check:
+
+- Existing `batch-pinned-reuse` mode was rerun on the same binary and top2048
+  inputs.
+- Result: pass.
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-mixed-layer-smoke-bd45c9e/batch-pinned-reuse-regression.stdout.txt`
+
+Interpretation:
+
+- The same-layer mixed-role dispatch control shape works as a standalone
+  smoke:
+  - mixed `up/gate/down` entries can be computed with their own shapes;
+  - a single stream synchronization covers all entries in the mixed wave;
+  - row placement works despite different output widths;
+  - role-level kernel time is negligible after warmup.
+- The cold-cache warm average is still dominated by read time:
+  - `16.406 MiB` payload costs `4.032 ms` warm read;
+  - H2D costs `0.921 ms`;
+  - MMVQ kernel costs `0.068 ms`.
+- This result supports a runtime prototype only if the runtime path uses
+  coalesced direct/io_uring reads and replaces current v1 expert-pack loads for
+  covered entries. Adding this as a second read path would be a regression.
+
+Decision:
+
+- The prerequisite for runtime default-off mixed-role v2 dispatch is now
+  passed.
+- The next implementation step may move into inference, but must stay
+  default-off and smoke-scoped:
+  1. start with one layer/role subset, preferably the same `blk.6` mixed group;
+  2. intercept only covered v2 entries that would otherwise miss VRAM;
+  3. replace, not duplicate, the current v1 staging for those entries;
+  4. use persistent pinned staging and same-layer coalesced scheduling;
+  5. report replaced v1 bytes, v2 bytes, net saved bytes, read wait, H2D,
+     kernel, sync, RAM peak, TTFT, token rate, and quality.
+- Do not run held-out prompts until a dev prompt endpoint A/B shows a real
+  token-rate gain under the RAM and TTFT gates.

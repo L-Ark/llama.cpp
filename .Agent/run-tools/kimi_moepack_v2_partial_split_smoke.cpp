@@ -213,8 +213,47 @@ static bool same_shape(const manifest_entry & a, const manifest_entry & b) {
         a.nbytes == b.nbytes;
 }
 
+static std::string tensor_role(const std::string & tensor) {
+    if (tensor.find("ffn_up_exps") != std::string::npos) return "up";
+    if (tensor.find("ffn_gate_exps") != std::string::npos) return "gate";
+    if (tensor.find("ffn_down_exps") != std::string::npos) return "down";
+    return "other";
+}
+
+static int tensor_layer(const std::string & tensor) {
+    const size_t pos = tensor.find("blk.");
+    if (pos == std::string::npos) return -1;
+    const size_t start = pos + 4;
+    size_t end = start;
+    while (end < tensor.size() && tensor[end] >= '0' && tensor[end] <= '9') {
+        ++end;
+    }
+    if (end == start) return -1;
+    return std::stoi(tensor.substr(start, end - start));
+}
+
 static float fallback_value(int route_id, int64_t col) {
     return -1000.0f - (float)route_id * 0.25f - (float)(col % 17) * 0.001f;
+}
+
+static void add_timing(route_timing & dst, const route_timing & src) {
+    dst.payload_bytes += src.payload_bytes;
+    dst.src1_bytes += src.src1_bytes;
+    dst.dst_bytes += src.dst_bytes;
+    dst.q8_bytes += src.q8_bytes;
+    dst.lookup_us += src.lookup_us;
+    dst.host_src0_alloc_us += src.host_src0_alloc_us;
+    dst.read_us += src.read_us;
+    dst.host_src1_us += src.host_src1_us;
+    dst.cuda_alloc_us += src.cuda_alloc_us;
+    dst.h2d_ms += src.h2d_ms;
+    dst.kernel_ms += src.kernel_ms;
+    dst.sync_us += src.sync_us;
+    dst.d2h_us += src.d2h_us;
+    dst.cuda_free_us += src.cuda_free_us;
+    dst.merge_us += src.merge_us;
+    dst.fallback_fill_us += src.fallback_fill_us;
+    dst.total_us += src.total_us;
 }
 
 static bool run_v2_entry(
@@ -936,6 +975,388 @@ static bool run_v2_entries_batched_reuse(
     return true;
 }
 
+struct mixed_layer_bucket {
+    std::vector<manifest_entry> up;
+    std::vector<manifest_entry> gate;
+    std::vector<manifest_entry> down;
+};
+
+static std::vector<manifest_entry> same_shape_prefix(std::vector<manifest_entry> entries, size_t n) {
+    std::sort(entries.begin(), entries.end(), [](const manifest_entry & a, const manifest_entry & b) {
+        return a.expert_idx < b.expert_idx;
+    });
+    if (entries.empty()) return {};
+    const manifest_entry base = entries[0];
+    std::vector<manifest_entry> out;
+    for (const manifest_entry & e : entries) {
+        if (e.packed_type == base.packed_type &&
+                e.ne00 == base.ne00 &&
+                e.ne01 == base.ne01 &&
+                e.nb01 == base.nb01 &&
+                e.nbytes == base.nbytes) {
+            out.push_back(e);
+            if (out.size() >= n) break;
+        }
+    }
+    return out;
+}
+
+static bool choose_mixed_layer_routes(
+        const std::vector<manifest_entry> & entries,
+        std::vector<route> & routes,
+        int & selected_layer) {
+    std::unordered_map<int, mixed_layer_bucket> by_layer;
+    for (const manifest_entry & e : entries) {
+        const int layer = tensor_layer(e.tensor);
+        const std::string role = tensor_role(e.tensor);
+        if (layer < 0) continue;
+        if (role == "up") {
+            by_layer[layer].up.push_back(e);
+        } else if (role == "gate") {
+            by_layer[layer].gate.push_back(e);
+        } else if (role == "down") {
+            by_layer[layer].down.push_back(e);
+        }
+    }
+
+    int best_layer = -1;
+    size_t best_score = 0;
+    for (const auto & kv : by_layer) {
+        const mixed_layer_bucket & b = kv.second;
+        const size_t min_role = std::min(b.up.size(), std::min(b.gate.size(), b.down.size()));
+        if (min_role < 2) continue;
+        const size_t score = min_role * 1000000ull + b.up.size() + b.gate.size() + b.down.size();
+        if (best_layer < 0 || score > best_score || (score == best_score && kv.first < best_layer)) {
+            best_layer = kv.first;
+            best_score = score;
+        }
+    }
+    if (best_layer < 0) return false;
+
+    mixed_layer_bucket b = by_layer[best_layer];
+    std::vector<manifest_entry> up = same_shape_prefix(b.up, 2);
+    std::vector<manifest_entry> gate = same_shape_prefix(b.gate, 2);
+    std::vector<manifest_entry> down = same_shape_prefix(b.down, 2);
+    if (up.size() < 2 || gate.size() < 2 || down.size() < 2) return false;
+
+    routes.clear();
+    std::unordered_set<int> used_up;
+    std::unordered_set<int> used_gate;
+    std::unordered_set<int> used_down;
+    auto add_covered = [&](const manifest_entry & entry, int dst) {
+        route r;
+        r.covered = true;
+        r.entry = entry;
+        r.expert_idx = entry.expert_idx;
+        r.dst_id = dst;
+        routes.push_back(std::move(r));
+    };
+    auto add_fallback = [&](const manifest_entry & shape, const std::unordered_set<int> & used, int dst) {
+        int expert = 0;
+        while (used.count(expert)) ++expert;
+        route r;
+        r.covered = false;
+        r.entry = shape;
+        r.expert_idx = expert;
+        r.dst_id = dst;
+        routes.push_back(std::move(r));
+    };
+
+    used_up.insert(up[0].expert_idx);
+    used_up.insert(up[1].expert_idx);
+    used_gate.insert(gate[0].expert_idx);
+    used_gate.insert(gate[1].expert_idx);
+    used_down.insert(down[0].expert_idx);
+    used_down.insert(down[1].expert_idx);
+
+    add_covered(up[0], 6);
+    add_fallback(up[0], used_up, 0);
+    add_covered(gate[0], 4);
+    add_fallback(gate[0], used_gate, 1);
+    add_covered(down[0], 8);
+    add_fallback(down[0], used_down, 2);
+    add_covered(up[1], 7);
+    add_covered(gate[1], 5);
+    add_covered(down[1], 3);
+
+    selected_layer = best_layer;
+    return true;
+}
+
+static bool run_v2_entries_mixed_layer_reuse(
+        lookup_fn lookup,
+        read_fn read,
+        mmvq_fn mmvq,
+        std::vector<route> & routes,
+        cudaStream_t stream,
+        int iterations,
+        reuse_summary & summary,
+        std::vector<route_timing> & iter_timings,
+        std::vector<std::vector<float>> & final_rows) {
+    std::vector<int> covered_route_ids;
+    int max_dst = -1;
+    for (int i = 0; i < (int)routes.size(); ++i) {
+        max_dst = std::max(max_dst, routes[(size_t)i].dst_id);
+        if (routes[(size_t)i].covered) {
+            covered_route_ids.push_back(i);
+        }
+    }
+    if (covered_route_ids.empty() || iterations <= 0 || max_dst < 0) {
+        return false;
+    }
+
+    const size_t n_covered = covered_route_ids.size();
+    std::vector<void *> host_src0_pinned(n_covered, nullptr);
+    std::vector<uint8_t *> host_src0_ptrs(n_covered, nullptr);
+    std::vector<void *> host_src1_pinned(n_covered, nullptr);
+    std::vector<float *> host_src1_ptrs(n_covered, nullptr);
+    std::vector<device_slot> slots(n_covered);
+
+    auto cleanup = [&]() {
+        for (device_slot & slot : slots) {
+            free_device_slot(slot);
+        }
+        for (void *& p : host_src0_pinned) {
+            if (p) {
+                cudaFreeHost(p);
+                p = nullptr;
+            }
+        }
+        for (void *& p : host_src1_pinned) {
+            if (p) {
+                cudaFreeHost(p);
+                p = nullptr;
+            }
+        }
+    };
+
+    bool ok = true;
+    steady_clock::time_point t0;
+
+    for (size_t j = 0; j < n_covered; ++j) {
+        route & r = routes[(size_t)covered_route_ids[j]];
+        route_timing & timing = r.timing;
+        timing = route_timing{};
+        timing.covered = true;
+        timing.expert_idx = r.expert_idx;
+        timing.dst_id = r.dst_id;
+        timing.packed_type = r.entry.packed_type;
+
+        int packed_type = 0;
+        int64_t ne00 = 0;
+        int64_t ne01 = 0;
+        size_t nb01 = 0;
+        size_t nbytes = 0;
+        t0 = steady_clock::now();
+        if (!lookup(r.entry.tensor.c_str(), r.entry.expert_idx, &packed_type, &ne00, &ne01, &nb01, &nbytes)) {
+            std::fprintf(stderr, "mixed lookup failed tensor=%s expert=%d\n", r.entry.tensor.c_str(), r.entry.expert_idx);
+            cleanup();
+            return false;
+        }
+        timing.lookup_us = elapsed_us(t0, steady_clock::now());
+        summary.one_time.lookup_us += timing.lookup_us;
+        if (packed_type != r.entry.packed_type || ne00 != r.entry.ne00 ||
+                ne01 != r.entry.ne01 || nb01 != r.entry.nb01 || nbytes != r.entry.nbytes) {
+            std::fprintf(stderr, "mixed metadata mismatch tensor=%s expert=%d\n", r.entry.tensor.c_str(), r.entry.expert_idx);
+            cleanup();
+            return false;
+        }
+        timing.ne00 = ne00;
+        timing.ne01 = ne01;
+        timing.payload_bytes = nbytes;
+        timing.src1_bytes = (size_t)ne00 * sizeof(float);
+        timing.dst_bytes = (size_t)ne01 * sizeof(float);
+        timing.q8_bytes = q8_1_scratch_bytes(ne00);
+
+        t0 = steady_clock::now();
+        void * p0 = nullptr;
+        if (!check_cuda(cudaHostAlloc(&p0, nbytes, cudaHostAllocDefault), "mixed cudaHostAlloc src0")) {
+            cleanup();
+            return false;
+        }
+        timing.host_src0_alloc_us = elapsed_us(t0, steady_clock::now());
+        summary.one_time.host_src0_alloc_us += timing.host_src0_alloc_us;
+        host_src0_pinned[j] = p0;
+        host_src0_ptrs[j] = (uint8_t *)p0;
+
+        t0 = steady_clock::now();
+        void * p1 = nullptr;
+        if (!check_cuda(cudaHostAlloc(&p1, timing.src1_bytes, cudaHostAllocDefault), "mixed cudaHostAlloc src1")) {
+            cleanup();
+            return false;
+        }
+        host_src1_pinned[j] = p1;
+        host_src1_ptrs[j] = (float *)p1;
+        for (int64_t i = 0; i < ne00; ++i) {
+            host_src1_ptrs[j][(size_t)i] = ((int)((i + r.expert_idx) % 23) - 11) * 0.025f;
+        }
+        timing.host_src1_us = elapsed_us(t0, steady_clock::now());
+        summary.one_time.host_src1_us += timing.host_src1_us;
+    }
+
+    t0 = steady_clock::now();
+    for (size_t j = 0; j < n_covered; ++j) {
+        route & r = routes[(size_t)covered_route_ids[j]];
+        device_slot & slot = slots[j];
+        ok = ok && check_cuda(cudaMalloc(&slot.d_src0, r.entry.nbytes), "mixed cudaMalloc d_src0");
+        ok = ok && check_cuda(cudaMalloc((void **)&slot.d_src1, r.timing.src1_bytes), "mixed cudaMalloc d_src1");
+        ok = ok && check_cuda(cudaMalloc(&slot.d_src1_q8, r.timing.q8_bytes), "mixed cudaMalloc d_src1_q8");
+        ok = ok && check_cuda(cudaMalloc((void **)&slot.d_dst, r.timing.dst_bytes), "mixed cudaMalloc d_dst");
+        ok = ok && check_cuda(cudaEventCreate(&slot.h2d_start), "mixed cudaEventCreate h2d_start");
+        ok = ok && check_cuda(cudaEventCreate(&slot.h2d_stop), "mixed cudaEventCreate h2d_stop");
+        ok = ok && check_cuda(cudaEventCreate(&slot.kernel_start), "mixed cudaEventCreate kernel_start");
+        ok = ok && check_cuda(cudaEventCreate(&slot.kernel_stop), "mixed cudaEventCreate kernel_stop");
+        if (!ok) break;
+    }
+    summary.one_time.cuda_alloc_us = elapsed_us(t0, steady_clock::now());
+    if (!ok) {
+        cleanup();
+        return false;
+    }
+
+    final_rows.assign((size_t)max_dst + 1, {});
+    iter_timings.clear();
+    iter_timings.reserve((size_t)iterations);
+    for (int iter = 0; iter < iterations; ++iter) {
+        route_timing it;
+        it.covered = true;
+        const steady_clock::time_point iter_start = steady_clock::now();
+
+        for (size_t j = 0; j < n_covered; ++j) {
+            route & r = routes[(size_t)covered_route_ids[j]];
+            size_t nread = 0;
+            t0 = steady_clock::now();
+            if (!read(r.entry.tensor.c_str(), r.entry.expert_idx, host_src0_ptrs[j], r.entry.nbytes, &nread) ||
+                    nread != r.entry.nbytes) {
+                std::fprintf(stderr, "mixed read failed iter=%d tensor=%s expert=%d nread=%zu nbytes=%zu\n",
+                        iter, r.entry.tensor.c_str(), r.entry.expert_idx, nread, r.entry.nbytes);
+                cleanup();
+                return false;
+            }
+            const double read_us = elapsed_us(t0, steady_clock::now());
+            r.timing.read_us = read_us;
+            it.read_us += read_us;
+            it.payload_bytes += r.entry.nbytes;
+        }
+
+        for (size_t j = 0; j < n_covered; ++j) {
+            route & r = routes[(size_t)covered_route_ids[j]];
+            device_slot & slot = slots[j];
+            ok = ok && check_cuda(cudaEventRecord(slot.h2d_start, stream), "mixed record h2d_start");
+            ok = ok && check_cuda(cudaMemcpyAsync(slot.d_src0, host_src0_ptrs[j], r.entry.nbytes, cudaMemcpyHostToDevice, stream), "mixed copy src0 H2D");
+            ok = ok && check_cuda(cudaMemcpyAsync(slot.d_src1, host_src1_ptrs[j], r.timing.src1_bytes, cudaMemcpyHostToDevice, stream), "mixed copy src1 H2D");
+            ok = ok && check_cuda(cudaMemsetAsync(slot.d_dst, 0, r.timing.dst_bytes, stream), "mixed memset dst");
+            ok = ok && check_cuda(cudaEventRecord(slot.h2d_stop, stream), "mixed record h2d_stop");
+            ok = ok && check_cuda(cudaEventRecord(slot.kernel_start, stream), "mixed record kernel_start");
+            if (ok) {
+                ok = mmvq(r.entry.packed_type, slot.d_src0, r.entry.ne01, r.entry.ne00, r.entry.nb01,
+                        slot.d_src1, slot.d_src1_q8, slot.d_dst, stream);
+            }
+            ok = ok && check_cuda(cudaEventRecord(slot.kernel_stop, stream), "mixed record kernel_stop");
+            if (!ok) break;
+        }
+
+        t0 = steady_clock::now();
+        ok = ok && check_cuda(cudaStreamSynchronize(stream), "mixed stream sync");
+        it.sync_us = elapsed_us(t0, steady_clock::now());
+        if (!ok) {
+            cleanup();
+            return false;
+        }
+
+        for (size_t j = 0; j < n_covered; ++j) {
+            route & r = routes[(size_t)covered_route_ids[j]];
+            device_slot & slot = slots[j];
+            float h2d_elapsed_ms = 0.0f;
+            float kernel_elapsed_ms = 0.0f;
+            ok = ok && check_cuda(cudaEventElapsedTime(&h2d_elapsed_ms, slot.h2d_start, slot.h2d_stop), "mixed elapsed h2d");
+            ok = ok && check_cuda(cudaEventElapsedTime(&kernel_elapsed_ms, slot.kernel_start, slot.kernel_stop), "mixed elapsed kernel");
+            r.timing.h2d_ms = (double)h2d_elapsed_ms;
+            r.timing.kernel_ms = (double)kernel_elapsed_ms;
+            it.h2d_ms += r.timing.h2d_ms;
+            it.kernel_ms += r.timing.kernel_ms;
+        }
+        if (!ok) {
+            cleanup();
+            return false;
+        }
+
+        for (size_t j = 0; j < n_covered; ++j) {
+            route & r = routes[(size_t)covered_route_ids[j]];
+            device_slot & slot = slots[j];
+            r.values.assign((size_t)r.entry.ne01, 0.0f);
+            t0 = steady_clock::now();
+            ok = ok && check_cuda(cudaMemcpy(r.values.data(), slot.d_dst, r.timing.dst_bytes, cudaMemcpyDeviceToHost), "mixed copy dst D2H");
+            const double d2h_us = elapsed_us(t0, steady_clock::now());
+            r.timing.d2h_us = d2h_us;
+            it.d2h_us += d2h_us;
+            if (!ok) {
+                cleanup();
+                return false;
+            }
+            double sum_abs = 0.0;
+            for (float v : r.values) {
+                if (!std::isfinite(v)) {
+                    ok = false;
+                    break;
+                }
+                sum_abs += std::fabs((double)v);
+            }
+            if (!ok || sum_abs <= 0.0) {
+                std::fprintf(stderr, "mixed covered output invalid iter=%d route=%d expert=%d role=%s\n",
+                        iter, covered_route_ids[j], r.expert_idx, tensor_role(r.entry.tensor).c_str());
+                cleanup();
+                return false;
+            }
+            t0 = steady_clock::now();
+            final_rows[(size_t)r.dst_id] = r.values;
+            const double merge_us = elapsed_us(t0, steady_clock::now());
+            r.timing.merge_us = merge_us;
+            r.timing.total_us = r.timing.read_us + r.timing.h2d_ms * 1000.0 +
+                r.timing.kernel_ms * 1000.0 + r.timing.d2h_us + r.timing.merge_us;
+            it.merge_us += merge_us;
+        }
+
+        for (int i = 0; i < (int)routes.size(); ++i) {
+            route & r = routes[(size_t)i];
+            if (r.covered) continue;
+            r.timing = route_timing{};
+            r.timing.covered = false;
+            r.timing.expert_idx = r.expert_idx;
+            r.timing.dst_id = r.dst_id;
+            r.timing.ne00 = r.entry.ne00;
+            r.timing.ne01 = r.entry.ne01;
+            r.timing.dst_bytes = (size_t)r.entry.ne01 * sizeof(float);
+            t0 = steady_clock::now();
+            r.values.resize((size_t)r.entry.ne01);
+            for (int64_t col = 0; col < r.entry.ne01; ++col) {
+                r.values[(size_t)col] = fallback_value(i, col);
+            }
+            r.timing.fallback_fill_us = elapsed_us(t0, steady_clock::now());
+            t0 = steady_clock::now();
+            final_rows[(size_t)r.dst_id] = r.values;
+            r.timing.merge_us = elapsed_us(t0, steady_clock::now());
+            r.timing.total_us = r.timing.fallback_fill_us + r.timing.merge_us;
+            it.fallback_fill_us += r.timing.fallback_fill_us;
+            it.merge_us += r.timing.merge_us;
+        }
+
+        it.total_us = elapsed_us(iter_start, steady_clock::now());
+        iter_timings.push_back(it);
+        add_timing(summary.all_iters, it);
+        if (iter > 0) {
+            add_timing(summary.warm_iters, it);
+        }
+    }
+
+    t0 = steady_clock::now();
+    cleanup();
+    summary.one_time.cuda_free_us = elapsed_us(t0, steady_clock::now());
+    summary.iterations = iterations;
+    summary.warm_iterations = std::max(0, iterations - 1);
+    return true;
+}
+
 static bool choose_group(
         const std::vector<manifest_entry> & entries,
         std::vector<manifest_entry> & chosen) {
@@ -973,7 +1394,7 @@ static bool choose_group(
 
 int main(int argc, char ** argv) {
     if (argc != 4 && argc != 5) {
-        std::fprintf(stderr, "usage: %s LIBGGML_CUDA_SO V2_EXPERT_PACK MANIFEST_TSV [per-row|batch|batch-pinned|batch-pinned-reuse]\n", argv[0]);
+        std::fprintf(stderr, "usage: %s LIBGGML_CUDA_SO V2_EXPERT_PACK MANIFEST_TSV [per-row|batch|batch-pinned|batch-pinned-reuse|mixed-layer-reuse]\n", argv[0]);
         return 2;
     }
     const char * lib_path = argv[1];
@@ -983,9 +1404,10 @@ int main(int argc, char ** argv) {
     const bool batch_mode = std::strcmp(mode, "batch") == 0;
     const bool batch_pinned_mode = std::strcmp(mode, "batch-pinned") == 0;
     const bool batch_pinned_reuse_mode = std::strcmp(mode, "batch-pinned-reuse") == 0;
+    const bool mixed_layer_reuse_mode = std::strcmp(mode, "mixed-layer-reuse") == 0;
     const bool batch_like_mode = batch_mode || batch_pinned_mode || batch_pinned_reuse_mode;
     const bool per_row_mode = std::strcmp(mode, "per-row") == 0;
-    if (!batch_like_mode && !per_row_mode) {
+    if (!batch_like_mode && !per_row_mode && !mixed_layer_reuse_mode) {
         std::fprintf(stderr, "unknown mode: %s\n", mode);
         return 2;
     }
@@ -999,9 +1421,18 @@ int main(int argc, char ** argv) {
         return 1;
     }
     std::vector<manifest_entry> group;
-    if (!choose_group(entries, group)) {
-        std::fprintf(stderr, "no tensor group with at least two same-shape v2 entries\n");
-        return 1;
+    std::vector<route> mixed_routes;
+    int mixed_layer = -1;
+    if (mixed_layer_reuse_mode) {
+        if (!choose_mixed_layer_routes(entries, mixed_routes, mixed_layer)) {
+            std::fprintf(stderr, "no same-layer mixed up/gate/down v2 route group\n");
+            return 1;
+        }
+    } else {
+        if (!choose_group(entries, group)) {
+            std::fprintf(stderr, "no tensor group with at least two same-shape v2 entries\n");
+            return 1;
+        }
     }
 
     void * handle = dlopen(lib_path, RTLD_NOW | RTLD_LOCAL);
@@ -1026,6 +1457,149 @@ int main(int argc, char ** argv) {
     if (!check_cuda(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), "cudaStreamCreate")) {
         dlclose(handle);
         return 1;
+    }
+
+    if (mixed_layer_reuse_mode) {
+        reuse_summary mixed_timing;
+        std::vector<route_timing> mixed_iter_timings;
+        std::vector<std::vector<float>> mixed_final_rows;
+        if (!run_v2_entries_mixed_layer_reuse(
+                    lookup, read, mmvq, mixed_routes, stream, 5,
+                    mixed_timing, mixed_iter_timings, mixed_final_rows)) {
+            cudaStreamDestroy(stream);
+            dlclose(handle);
+            return 1;
+        }
+
+        bool ok = true;
+        for (int i = 0; i < (int)mixed_routes.size(); ++i) {
+            const route & r = mixed_routes[(size_t)i];
+            if (r.dst_id < 0 || (size_t)r.dst_id >= mixed_final_rows.size() ||
+                    mixed_final_rows[(size_t)r.dst_id].size() != (size_t)r.entry.ne01) {
+                std::fprintf(stderr, "mixed final row missing route=%d dst=%d role=%s ne01=%ld\n",
+                        i, r.dst_id, tensor_role(r.entry.tensor).c_str(), (long)r.entry.ne01);
+                ok = false;
+                continue;
+            }
+            const std::vector<float> & dst_row = mixed_final_rows[(size_t)r.dst_id];
+            const int64_t probes[] = {0, 1, r.entry.ne01 / 2, r.entry.ne01 - 1};
+            for (int64_t col : probes) {
+                const float got = dst_row[(size_t)col];
+                const float want = r.values[(size_t)col];
+                if (std::fabs(got - want) > 1e-6f) {
+                    std::fprintf(stderr,
+                            "mixed row placement mismatch route=%d covered=%d role=%s expert=%d dst=%d col=%ld got=%g want=%g\n",
+                            i, r.covered ? 1 : 0, tensor_role(r.entry.tensor).c_str(),
+                            r.expert_idx, r.dst_id, (long)col, (double)got, (double)want);
+                    ok = false;
+                }
+            }
+            for (float v : dst_row) {
+                if (!std::isfinite(v)) {
+                    std::fprintf(stderr, "mixed final row non-finite route=%d dst=%d role=%s\n",
+                            i, r.dst_id, tensor_role(r.entry.tensor).c_str());
+                    ok = false;
+                    break;
+                }
+            }
+        }
+
+        cudaStreamDestroy(stream);
+        dlclose(handle);
+        if (!ok) {
+            return 1;
+        }
+
+        int covered = 0;
+        int fallback = 0;
+        route_timing total;
+        struct role_accum {
+            int covered = 0;
+            int fallback = 0;
+            route_timing timing;
+        };
+        std::unordered_map<std::string, role_accum> by_role;
+        for (const route & r : mixed_routes) {
+            const std::string role = tensor_role(r.entry.tensor);
+            role_accum & acc = by_role[role];
+            if (r.covered) {
+                ++covered;
+                ++acc.covered;
+                add_timing(total, r.timing);
+                add_timing(acc.timing, r.timing);
+            } else {
+                ++fallback;
+                ++acc.fallback;
+                total.fallback_fill_us += r.timing.fallback_fill_us;
+                total.merge_us += r.timing.merge_us;
+                total.total_us += r.timing.total_us;
+                acc.timing.fallback_fill_us += r.timing.fallback_fill_us;
+                acc.timing.merge_us += r.timing.merge_us;
+                acc.timing.total_us += r.timing.total_us;
+            }
+        }
+        const double payload_mib = (double)total.payload_bytes / 1048576.0;
+        std::printf(
+            "kimi_moepack_v2_partial_split_smoke pass mode=%s layer=%d routes=%zu covered=%d fallback=%d payload_mib=%.3f pack=%s manifest=%s\n",
+            mode, mixed_layer, mixed_routes.size(), covered, fallback, payload_mib, pack_path, manifest_path);
+        std::printf(
+            "timing_mixed_summary covered=%d fallback=%d payload_mib=%.3f lookup_us=%.3f host_src0_alloc_us=%.3f read_us=%.3f host_src1_us=%.3f cuda_alloc_us=%.3f h2d_ms=%.3f kernel_ms=%.3f sync_us=%.3f d2h_us=%.3f cuda_free_us=%.3f merge_us=%.3f fallback_fill_us=%.3f total_us=%.3f\n",
+            covered, fallback, payload_mib, total.lookup_us, total.host_src0_alloc_us,
+            total.read_us, total.host_src1_us, total.cuda_alloc_us, total.h2d_ms,
+            total.kernel_ms, total.sync_us, total.d2h_us, total.cuda_free_us,
+            total.merge_us, total.fallback_fill_us, total.total_us);
+        if (mixed_timing.iterations > 0) {
+            const double payload_per_iter_mib = (double)mixed_timing.all_iters.payload_bytes /
+                1048576.0 / (double)mixed_timing.iterations;
+            const double warm = (double)std::max(1, mixed_timing.warm_iterations);
+            std::printf(
+                "timing_mixed_reuse_summary iterations=%d warm_iterations=%d payload_mib_per_iter=%.3f one_time_lookup_us=%.3f one_time_host_src0_alloc_us=%.3f one_time_host_src1_us=%.3f one_time_cuda_alloc_us=%.3f one_time_cuda_free_us=%.3f all_total_us=%.3f warm_avg_total_us=%.3f warm_avg_read_us=%.3f warm_avg_h2d_ms=%.3f warm_avg_kernel_ms=%.3f warm_avg_sync_us=%.3f warm_avg_d2h_us=%.3f warm_avg_merge_us=%.3f warm_avg_fallback_fill_us=%.3f\n",
+                mixed_timing.iterations, mixed_timing.warm_iterations, payload_per_iter_mib,
+                mixed_timing.one_time.lookup_us, mixed_timing.one_time.host_src0_alloc_us,
+                mixed_timing.one_time.host_src1_us, mixed_timing.one_time.cuda_alloc_us,
+                mixed_timing.one_time.cuda_free_us, mixed_timing.all_iters.total_us,
+                mixed_timing.warm_iters.total_us / warm,
+                mixed_timing.warm_iters.read_us / warm,
+                mixed_timing.warm_iters.h2d_ms / warm,
+                mixed_timing.warm_iters.kernel_ms / warm,
+                mixed_timing.warm_iters.sync_us / warm,
+                mixed_timing.warm_iters.d2h_us / warm,
+                mixed_timing.warm_iters.merge_us / warm,
+                mixed_timing.warm_iters.fallback_fill_us / warm);
+        }
+        for (size_t i = 0; i < mixed_iter_timings.size(); ++i) {
+            const route_timing & t = mixed_iter_timings[i];
+            std::printf(
+                "timing_mixed_iter iter=%zu payload_mib=%.3f read_us=%.3f h2d_ms=%.3f kernel_ms=%.3f sync_us=%.3f d2h_us=%.3f merge_us=%.3f fallback_fill_us=%.3f total_us=%.3f\n",
+                i, (double)t.payload_bytes / 1048576.0, t.read_us, t.h2d_ms,
+                t.kernel_ms, t.sync_us, t.d2h_us, t.merge_us, t.fallback_fill_us,
+                t.total_us);
+        }
+        for (const char * role_name : {"up", "gate", "down"}) {
+            const auto it = by_role.find(role_name);
+            if (it == by_role.end()) continue;
+            const role_accum & acc = it->second;
+            std::printf(
+                "timing_mixed_role role=%s covered=%d fallback=%d payload_mib=%.3f read_us=%.3f h2d_ms=%.3f kernel_ms=%.3f d2h_us=%.3f merge_us=%.3f fallback_fill_us=%.3f total_us=%.3f\n",
+                role_name, acc.covered, acc.fallback,
+                (double)acc.timing.payload_bytes / 1048576.0,
+                acc.timing.read_us, acc.timing.h2d_ms, acc.timing.kernel_ms,
+                acc.timing.d2h_us, acc.timing.merge_us,
+                acc.timing.fallback_fill_us, acc.timing.total_us);
+        }
+        for (int i = 0; i < (int)mixed_routes.size(); ++i) {
+            const route & r = mixed_routes[(size_t)i];
+            double sum_abs = 0.0;
+            for (float v : r.values) sum_abs += std::fabs((double)v);
+            const route_timing & t = r.timing;
+            std::printf(
+                "mixed_route row=%d dst=%d role=%s tensor=%s expert=%d covered=%d ne00=%ld ne01=%ld sum_abs=%.6e payload_bytes=%zu read_us=%.3f h2d_ms=%.3f kernel_ms=%.3f d2h_us=%.3f merge_us=%.3f fallback_fill_us=%.3f total_us=%.3f\n",
+                i, r.dst_id, tensor_role(r.entry.tensor).c_str(), r.entry.tensor.c_str(),
+                r.expert_idx, r.covered ? 1 : 0, (long)r.entry.ne00, (long)r.entry.ne01,
+                sum_abs, r.entry.nbytes, t.read_us, t.h2d_ms, t.kernel_ms,
+                t.d2h_us, t.merge_us, t.fallback_fill_us, t.total_us);
+        }
+        return 0;
     }
 
     const int covered_count = std::min<int>(3, (int)group.size());
