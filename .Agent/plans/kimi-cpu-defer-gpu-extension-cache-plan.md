@@ -91,6 +91,127 @@ Kimi 在 cold start、随机泛化 prompt 下稳定输出，并把 decode token 
    只有三者都过质量、RAM、TTFT、fallback、可复现 gate，才能 commit/push 并标为
    SOTA；否则保持 default-off、记录 rejection，并回到 rollback point。
 
+### 2026-07-12 Phase 5A Result: default-off `fadvise` page-cache drop rejected as SOTA
+
+Purpose:
+
+- Test whether adding `posix_fadvise(POSIX_FADV_DONTNEED)` after existing
+  `madvise(MADV_DONTNEED)` can clear low-value GGUF mmap page cache and reduce
+  the reasoning-prompt TTFT long tail.
+- Keep the code path default-off behind `LLAMA_MMAP_DONTNEED_FADVISE=1`.
+
+Candidate worktree:
+
+- `/root/lfz/llama.cpp-vendor-kimi-phase-fadvise`
+- base code reference: `ff7a891622897bf61c203bdfb5e16f20018ecb6f`
+- source patch: `src/llama-mmap.cpp` only, default-off env-gated
+  `posix_fadvise(..., POSIX_FADV_DONTNEED)` inside `dontneed_fragment()`.
+- This patch is not promoted or pushed as SOTA.
+
+Baseline phase run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-phase-report-ramtier-reasoning-n96-164746`
+- prompt:
+  `A train leaves at 3 PM and arrives 2 hours and 15 minutes later. What time does it arrive?`
+- quality: pass
+- TTFT: `229628.67 ms`
+- decode: `36770.76 ms / 61`, `1.66 tok/s`
+- memory peak: `15899996160` bytes, exactly cgroup cap
+- final file cache: `12770320384` bytes
+- final `workingset_refault_file`: `21659`
+- final `pgscan_direct`: `51548662`
+- prompt-phase expert-pack IO: only `24` iouring reads,
+  `140378112` bytes, `28694 us` wait
+- after prompt eval:
+  - file: `12969623552`
+  - active_file: `11337863168`
+  - inactive_file: `1487491072`
+  - refault: `18428`
+  - pgscan_direct: `51507190`
+
+Candidate `fadvise` run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-fadvise-ramtier-reasoning-n96-170837`
+- added env:
+  - `GGML_MOE_PHASE_REPORT=1`
+  - `LLAMA_MMAP_DONTNEED_FADVISE=1`
+  - current RAM-tier SOTA env, including `blk1_gate_full384.csv`
+- quality: pass
+- output:
+  `I need to find the arrival time by adding 2 hours and 15 minutes to 3 PM... The train arrives at 5:15 PM.`
+- TTFT: `222871.06 ms`
+- decode: `35576.37 ms / 61`, `1.71 tok/s`
+- memory peak: `15899996160` bytes, exactly cgroup cap
+- final file cache: `12865179648` bytes
+- final `workingset_refault_file`: `9957`
+- final `pgscan_direct`: `46517788`
+- prompt-phase expert-pack IO remains tiny:
+  `24` iouring reads, `140378112` bytes, `29457 us` wait
+- CPU fallback remains zero:
+  `[kimi_cpu_fallback_pack_mmap] enabled=1 hits=0 misses=0 bytes=0 fallback_gguf=0`
+
+Phase comparison:
+
+| metric | baseline | fadvise | interpretation |
+|---|---:|---:|---|
+| `before_prompt_eval file` | `11939524608` | `1987334144` | fadvise clears initial dense/GGUF file cache effectively |
+| `after_prompt_eval file` | `12969623552` | `12995432448` | prompt eval refaults enough GGUF pages to refill file cache |
+| `after_prompt_eval active_file` | `11337863168` | `2719846400` | fadvise changes LRU state; pages become mostly inactive |
+| `after_prompt_eval inactive_file` | `1487491072` | `10131161088` | large low-value inactive file cache remains reclaimable but still counted under 16GB |
+| final refault | `21659` | `9957` | refault pressure improves but does not disappear |
+| final `pgscan_direct` | `51548662` | `46517788` | direct reclaim improves about 10%, still huge |
+| TTFT | `229.63s` | `222.87s` | only about 3% improvement |
+| decode rate | `1.66 tok/s` | `1.71 tok/s` | small improvement, not enough for promotion |
+| memory peak | cap | cap | SOTA memory gate still fails |
+
+Final file-cache residency after candidate:
+
+- GGUF shards: `12721483776` bytes, `11.848 GiB`
+- expert packs: `4845568` bytes, `0.005 GiB`
+- shard `00009`: `9.594 GiB`
+- shard `00010`: `2.247 GiB`
+- other GGUF shards: near zero
+
+Tensor-level breakdown:
+
+- shard `00009`, cached `9.594 GiB`, `29 / 126` tensors:
+  - `down_exps`: `3.990 GiB`
+  - `up_exps`: `2.924 GiB`
+  - `gate_exps`: `2.679 GiB`
+  - top cached tensors are late-layer experts:
+    `blk.54-58.ffn_{down,up,gate}_exps.weight`
+- shard `00010`, cached `2.247 GiB`, `3 / 26` tensors:
+  - `blk.59.ffn_down_exps.weight`: `0.807 GiB`
+  - `blk.59.ffn_up_exps.weight`: `0.720 GiB`
+  - `blk.59.ffn_gate_exps.weight`: `0.720 GiB`
+
+Decision:
+
+- Reject `LLAMA_MMAP_DONTNEED_FADVISE=1` as a SOTA optimization.
+- Do not push the default-off source patch as a promoted runtime change.
+- Keep the run as evidence: file-cache cleanup before prompt works, but the
+  actual TTFT long tail is caused by prompt eval refaulting late-layer GGUF
+  expert tensor pages and hitting cgroup reclaim.
+
+Next plan:
+
+1. Stop treating generic page-cache drop as sufficient. It reduces initial
+   residue but cannot prevent prompt eval from refaulting `blk.54-59` expert
+   GGUF pages.
+2. Locate why prompt eval touches late-layer GGUF expert tensors despite zero
+   CPU fallback and tiny prompt expert-pack IO:
+   - audit prompt eval tensor access path for `src0->data`, CPU/defer scheduler
+     metadata access, alias/GGUF direct-read path, and quant/type checks;
+   - instrument per-tensor major faults or mmap-touch events during prompt eval;
+   - distinguish actual weight reads from metadata/shape/range probes.
+3. Only after this is explained, design RAM replacement:
+   - if those pages are unavoidable prompt-eval data, RAM must be reserved for a
+     more useful explicit expert cache only after prompt eval;
+   - if they are accidental mmap touches, fix the access path so prompt eval does
+     not populate late-layer GGUF expert page cache at all.
+4. Continue to enforce: no SOTA promotion until memory peak is below the 16GB
+   gate, TTFT is stable, fallback remains zero, and held-out prompts pass.
+
 ## Current Goal And Execution Plan: Kimi CPU/defer GPU-extension cache path
 
 Timestamp: 2026-07-11 CST.
