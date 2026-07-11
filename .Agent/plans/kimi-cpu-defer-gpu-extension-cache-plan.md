@@ -219,6 +219,79 @@ Next runtime A/B plan:
    - if the overlay hurts generalization, do not promote it and do not call it
      SOTA.
 
+Runtime A/B result:
+
+- Timestamp: 2026-07-11 CST.
+- Candidate artifact built:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-dev2-upgate-greedypair-overlay.expert-pack`.
+- Build report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-layout-trace-dev2-n32/overlay-plan/greedypair-dev2-upgate-build.json`.
+- Build stats:
+  - entries: `19246`;
+  - payload bytes copied: `98490155008`;
+  - final pack size: `98493083648`;
+  - build wall time: `4:36.56`;
+  - max RSS: `107148 KB`.
+- A/B run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-upgate-greedypair-ab`.
+- Baseline `dev_japan_factual`:
+  - quality: pass;
+  - TTFT: `9090.12 ms`;
+  - decode: `18387.02 ms / 31`;
+  - token rate: `1.69 tok/s`;
+  - RAM peak: `12767883264`;
+  - `iouring_wait_us=17714011`;
+  - `cqes=39075`;
+  - `inflight_avg=4.26`.
+- Candidate `dev_japan_factual`, depth 8:
+  - env:
+    `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA=<candidate>`,
+    `GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1`,
+    `GGML_MOE_IO_ADJACENT_COALESCE=1`,
+    `GGML_MOE_IO_ADJACENT_MAX_GAP=4096`;
+  - quality: pass;
+  - TTFT: `10301.29 ms`;
+  - decode: `20210.10 ms / 31`;
+  - token rate: `1.53 tok/s`;
+  - RAM peak: `12992634880`;
+  - `iouring_wait_us=20922293`;
+  - `cqes=30009`;
+  - `inflight_avg=3.91`;
+  - adjacent coalesce:
+    `groups=7751`, `slices=16817`, `extents_saved=9066`,
+    `physical_bytes=90125615104`, `payload_bytes=90125615104`,
+    `max_group_jobs=3`.
+- Candidate `dev_japan_factual`, depth 16 probe:
+  - quality: pass;
+  - TTFT: `8946.23 ms`;
+  - decode: `20005.85 ms / 31`;
+  - token rate: `1.55 tok/s`;
+  - RAM peak: `12996317184`;
+  - `iouring_wait_us=20215581`;
+  - `cqes=30009`;
+  - `inflight_avg=4.35`;
+  - still below baseline.
+- Decision:
+  - reject the duplicate clustered overlay + adjacent coalesce behavior;
+  - stop the paired test after the first dev prompt because it already fails
+    the performance gate;
+  - delete the 92GB candidate artifact to restore disk space;
+  - keep only the default-off tooling and docs.
+- Root cause:
+  - the clustered overlay reduced completion count (`39075 -> 30009`) but did
+    not reduce transferred bytes (`223.1 GB` stayed the same);
+  - coalesced groups were small (`max_group_jobs=3`) and turned many reads into
+    larger staging slots (`up/gate` slot sizes around `13-16 MiB`);
+  - larger reads reduced effective queue continuity and increased
+    `io_uring_wait`, so per-read overhead was not the dominant bottleneck in
+    this path.
+- Updated implication:
+  - pack physical layout alone is not enough unless the runtime can coalesce
+    SSD reads without inflating exposed staging/H2D latency;
+  - future work should either lower bytes per expert, raise true queue depth
+    with independent work, or split "large SSD read" from "per-expert H2D
+    staging" so coalesced disk reads can still feed many small GPU transfers.
+
 ## Immediate goal: Kimi CPU/defer GPU-extension usefulness check
 
 Timestamp: 2026-07-11 CST.
