@@ -1023,6 +1023,192 @@ static bool ggml_moe_stream_one_gpu_only_filter_matches(const char * name) {
     return ggml_moe_name_filter_matches_any(getenv("GGML_MOE_STREAM_ONE_GPU_ONLY_FILTER"), name);
 }
 
+static const char * ggml_kimi_cpu_moe_dispatch_profile_out(void) {
+    static int initialized = 0;
+    static const char * out = NULL;
+    if (!initialized) {
+        initialized = 1;
+        out = getenv("GGML_KIMI_CPU_MOE_DISPATCH_PROFILE_OUT");
+    }
+    return out;
+}
+
+static bool ggml_kimi_cpu_moe_dispatch_profile_enabled_for(const char * name, bool prompt_phase) {
+    const char * out = ggml_kimi_cpu_moe_dispatch_profile_out();
+    if (!out || !out[0]) {
+        return false;
+    }
+
+    const char * prompt_only = getenv("GGML_KIMI_CPU_MOE_DISPATCH_PROFILE_PROMPT_ONLY");
+    if (prompt_only && prompt_only[0] && prompt_only[0] != '0' && !prompt_phase) {
+        return false;
+    }
+
+    const char * filter = getenv("GGML_KIMI_CPU_MOE_DISPATCH_PROFILE_FILTER");
+    if (filter && filter[0]) {
+        return ggml_moe_name_filter_matches_any(filter, name);
+    }
+
+    return true;
+}
+
+static FILE * ggml_kimi_cpu_moe_dispatch_profile_fp(void) {
+    static FILE * fp = NULL;
+    static bool failed = false;
+
+    if (fp || failed) {
+        return fp;
+    }
+
+    const char * out = ggml_kimi_cpu_moe_dispatch_profile_out();
+    if (!out || !out[0]) {
+        failed = true;
+        return NULL;
+    }
+
+    fp = fopen(out, "w");
+    if (!fp) {
+        fprintf(stderr, "[kimi_cpu_moe_dispatch_profile] open failed: %s\n", out);
+        failed = true;
+        return NULL;
+    }
+
+    fprintf(fp,
+            "seq,phase,tensor,role,src0_type,n_as,active_experts,active_rows,"
+            "expert_bytes,tensor_span_bytes,batch_eligible,batch_done,"
+            "single_attempts,single_accepts,fallback_rows,resident_before_bytes,"
+            "resident_after_bytes,resident_delta_bytes,mincore_before_errno,"
+            "mincore_after_errno,wall_us,cuda_batch_us,cuda_single_us\n");
+    fflush(fp);
+
+    return fp;
+}
+
+static uint64_t ggml_kimi_cpu_moe_mincore_resident_bytes(const void * ptr, size_t size, int * err_out) {
+    if (err_out) {
+        *err_out = 0;
+    }
+
+#if defined(__linux__) || defined(__gnu_linux__)
+    if (!ptr || size == 0) {
+        return 0;
+    }
+
+    const long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) {
+        if (err_out) {
+            *err_out = EINVAL;
+        }
+        return 0;
+    }
+
+    const uintptr_t begin = (uintptr_t) ptr;
+    const uintptr_t end = begin + size;
+    const uintptr_t aligned_begin = begin & ~(uintptr_t) (page_size - 1);
+    const uintptr_t aligned_end = (end + (uintptr_t) page_size - 1) & ~(uintptr_t) (page_size - 1);
+    if (aligned_end <= aligned_begin) {
+        return 0;
+    }
+
+    const size_t len = (size_t) (aligned_end - aligned_begin);
+    const size_t pages = len / (size_t) page_size;
+    unsigned char * vec = (unsigned char *) malloc(pages);
+    if (!vec) {
+        if (err_out) {
+            *err_out = ENOMEM;
+        }
+        return 0;
+    }
+
+    if (mincore((void *) aligned_begin, len, vec) != 0) {
+        if (err_out) {
+            *err_out = errno;
+        }
+        free(vec);
+        return 0;
+    }
+
+    uint64_t resident = 0;
+    for (size_t i = 0; i < pages; ++i) {
+        if (vec[i] & 1) {
+            resident += (uint64_t) page_size;
+        }
+    }
+    free(vec);
+    return resident;
+#else
+    (void) ptr;
+    (void) size;
+    return 0;
+#endif
+}
+
+static void ggml_kimi_cpu_moe_dispatch_profile_write(
+        bool prompt_phase,
+        const char * tensor_name,
+        enum ggml_type src0_type,
+        int64_t n_as,
+        int64_t active_experts,
+        int64_t active_rows,
+        size_t expert_bytes,
+        size_t tensor_span_bytes,
+        bool batch_eligible,
+        bool batch_done,
+        int64_t single_attempts,
+        int64_t single_accepts,
+        int64_t fallback_rows,
+        uint64_t resident_before,
+        uint64_t resident_after,
+        int mincore_before_errno,
+        int mincore_after_errno,
+        uint64_t wall_us,
+        uint64_t cuda_batch_us,
+        uint64_t cuda_single_us) {
+    FILE * fp = ggml_kimi_cpu_moe_dispatch_profile_fp();
+    if (!fp) {
+        return;
+    }
+
+    static int seq = 0;
+    const char * role = ggml_kimi_cpu_moe_tensor_role(tensor_name);
+    const int64_t resident_delta =
+        resident_after >= resident_before ?
+        (int64_t) (resident_after - resident_before) :
+        -(int64_t) (resident_before - resident_after);
+
+    flockfile(fp);
+    const int cur_seq = seq++;
+    fprintf(fp,
+            "%d,%s,%s,%s,%d,%" PRId64 ",%" PRId64 ",%" PRId64 ","
+            "%zu,%zu,%d,%d,%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRIu64 ","
+            "%" PRIu64 ",%" PRId64 ",%d,%d,%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n",
+            cur_seq,
+            prompt_phase ? "prompt" : "decode",
+            tensor_name ? tensor_name : "",
+            role ? role : "",
+            (int) src0_type,
+            n_as,
+            active_experts,
+            active_rows,
+            expert_bytes,
+            tensor_span_bytes,
+            batch_eligible ? 1 : 0,
+            batch_done ? 1 : 0,
+            single_attempts,
+            single_accepts,
+            fallback_rows,
+            resident_before,
+            resident_after,
+            resident_delta,
+            mincore_before_errno,
+            mincore_after_errno,
+            wall_us,
+            cuda_batch_us,
+            cuda_single_us);
+    fflush(fp);
+    funlockfile(fp);
+}
+
 static void ggml_moe_fallback_reason_profile_report(void) {
     if (!ggml_moe_fallback_reason_profile.enabled ||
             !ggml_moe_fallback_reason_profile.out ||
@@ -5034,6 +5220,41 @@ static void ggml_compute_forward_mul_mat_id(
     bool kimi_cpu_moe_batch_done = false;
     int64_t kimi_cpu_moe_single_attempts = 0;
     int64_t kimi_cpu_moe_single_accepts = 0;
+    const bool prompt_phase = ids->ne[1] > 1;
+    bool kimi_cpu_moe_dispatch_profile = false;
+    int64_t kimi_cpu_moe_dispatch_active_rows = 0;
+    int64_t kimi_cpu_moe_dispatch_active_experts = 0;
+    size_t kimi_cpu_moe_dispatch_expert_bytes = (size_t) ne01 * nb01;
+    size_t kimi_cpu_moe_dispatch_tensor_span_bytes = 0;
+    uint64_t kimi_cpu_moe_dispatch_resident_before = 0;
+    int kimi_cpu_moe_dispatch_mincore_before_errno = 0;
+    uint64_t kimi_cpu_moe_dispatch_start_us = 0;
+
+    if (ith == 0) {
+        kimi_cpu_moe_dispatch_profile =
+            ggml_kimi_cpu_moe_dispatch_profile_enabled_for(src0->name, prompt_phase);
+        if (kimi_cpu_moe_dispatch_profile) {
+            for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+                const int64_t cne1 = matrix_row_counts[cur_a];
+                if (cne1 == 0) {
+                    continue;
+                }
+                kimi_cpu_moe_dispatch_active_experts++;
+                kimi_cpu_moe_dispatch_active_rows += cne1;
+            }
+            if (n_as > 0) {
+                kimi_cpu_moe_dispatch_tensor_span_bytes =
+                    (size_t) ((uint64_t) (n_as - 1) * (uint64_t) nb02 +
+                              (uint64_t) ne01 * (uint64_t) nb01);
+            }
+            kimi_cpu_moe_dispatch_resident_before =
+                ggml_kimi_cpu_moe_mincore_resident_bytes(
+                        src0->data,
+                        kimi_cpu_moe_dispatch_tensor_span_bytes,
+                        &kimi_cpu_moe_dispatch_mincore_before_errno);
+            kimi_cpu_moe_dispatch_start_us = ggml_time_us();
+        }
+    }
 
     if (use_gpu_stream_batch) {
         if (ith == 0) {
@@ -5646,6 +5867,41 @@ static void ggml_compute_forward_mul_mat_id(
                         dst);
             }
         }
+    }
+    if (kimi_cpu_moe_dispatch_profile && ith == 0) {
+        int64_t dispatch_fallback_rows = 0;
+        for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+            dispatch_fallback_rows += matrix_row_counts[cur_a];
+        }
+
+        int mincore_after_errno = 0;
+        const uint64_t resident_after =
+            ggml_kimi_cpu_moe_mincore_resident_bytes(
+                    src0->data,
+                    kimi_cpu_moe_dispatch_tensor_span_bytes,
+                    &mincore_after_errno);
+        const uint64_t wall_us = ggml_time_us() - kimi_cpu_moe_dispatch_start_us;
+        ggml_kimi_cpu_moe_dispatch_profile_write(
+                prompt_phase,
+                src0->name,
+                src0->type,
+                n_as,
+                kimi_cpu_moe_dispatch_active_experts,
+                kimi_cpu_moe_dispatch_active_rows,
+                kimi_cpu_moe_dispatch_expert_bytes,
+                kimi_cpu_moe_dispatch_tensor_span_bytes,
+                use_gpu_stream_batch,
+                kimi_cpu_moe_batch_done,
+                kimi_cpu_moe_single_attempts,
+                kimi_cpu_moe_single_accepts,
+                dispatch_fallback_rows,
+                kimi_cpu_moe_dispatch_resident_before,
+                resident_after,
+                kimi_cpu_moe_dispatch_mincore_before_errno,
+                mincore_after_errno,
+                wall_us,
+                kimi_cpu_moe_cuda_batch_this_us,
+                kimi_cpu_moe_cuda_single_this_us);
     }
     if (ds4_sparse_fused_mmvq_membership && ith == 0) {
         const uint64_t ds4_sparse_fused_mmvq_fallback_us =
