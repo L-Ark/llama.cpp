@@ -46,6 +46,86 @@ Hard gates before any result can be called SOTA:
   run directories, token rate, TTFT, RAM/VRAM/page-cache metrics,
   IO/H2D/staging/compute/fallback metrics, quality result, and rollback point.
 
+## Current execution goal: DeepSeek CPU/defer pattern on Kimi
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Prove or reject, on the current Kimi branch, whether the DeepSeek-style
+> `CPU/defer scheduler + GPU expert-cache/compute extension` can create another
+> reproducible Kimi token-rate gain. The immediate target is a held-out,
+> prompt-general result above `2 tok/s`; the product target remains stable
+> random-prompt `>5 tok/s` on a 16 GB host-RAM machine with one 32 GB
+> RTX 5090-class GPU.
+
+Key judgment:
+
+- This idea is potentially useful for Kimi, but only at the architecture level.
+  The DeepSeek gain came from catching work that nominally lived in the
+  CPU/defer MoE path and executing it through a GPU expert-cache extension.
+- Kimi's current stable path already reports near-zero decode CPU fallback, so
+  the next Kimi gain is unlikely to come from simply "moving fallback to GPU".
+  It must come from lower exposed `io_uring_wait`, fewer staging gaps, better
+  `gate/up/down` residency, larger effective IO batches, lower H2D overhead, or
+  fewer bytes per active expert.
+- Gate-only caching must not be copied blindly from DeepSeek. It is accepted
+  only if Kimi profiling shows gate misses still dominate exposed wait. If
+  Kimi stalls are mixed across `up/gate/down`, optimize the roles as a group.
+
+Plan for this execution cycle:
+
+1. Reproduce the current Kimi baseline before changing behavior.
+   - Use cold start, `MemoryMax=15900000000`, one dev prompt, and at least one
+     held-out prompt that was not used for tuning.
+   - Record token rate, TTFT, RAM peak, active/inactive file cache, VRAM
+     residency, role-level hit/miss, `io_uring_wait`, staging wall, H2D,
+     up/gate compute, down compute, and CPU fallback.
+   - This baseline SHA and run directory are the rollback point.
+
+2. Audit the CPU/defer GPU-extension boundary.
+   - Confirm which Kimi `gate/up/down` calls are already handled by the GPU
+     extension and which still use residual CPU/defer or blocking staging paths.
+   - If decode CPU fallback stays zero, do not spend time on fallback removal;
+     focus on exposed wait inside the GPU-extension path.
+   - Verify whether `n_cpu_moe` is still acting as the scheduler boundary that
+     makes the DeepSeek pattern transferable.
+
+3. Rank bottlenecks by critical-path seconds per token.
+   - Split per-token time into routing/top-k, up/gate read, up/gate staging,
+     up/gate H2D, up/gate compute, down read, down staging, down H2D, down
+     compute, synchronization gaps, and CPU fallback.
+   - Compare role-level exposed wait against the pure IO bench ceiling. If
+     runtime batch depth is the issue, prioritize same-layer coalescing or
+     prediction/prefetch; if byte volume is the issue, prioritize v2 payloads or
+     lower-byte expert representations.
+
+4. Run default-off A/B candidates only.
+   - Candidate A: gate-first GPU-extension cache parity, only if gate is the
+     measured exposed bottleneck.
+   - Candidate B: up/gate-first cache expansion, if up/gate misses block the
+     current layer before down can be overlapped.
+   - Candidate C: same-layer `up/gate/down` IO coalescing, if small runtime
+     batches are leaving SSD bandwidth unused.
+   - Candidate D: RAM/VRAM co-designed expert tier, only after low-value page
+     cache is measured and replaced by higher-value expert data without
+     increasing TTFT beyond the `+20%` gate.
+   - Candidate E: v2 lower-byte payload integration, if the profile shows that
+     bytes per active expert remain the dominant lower bound.
+
+5. Promote only reproducible held-out wins.
+   - A promoted result must pass France semantic quality, pass held-out prompt
+     quality, keep host RAM below `15900000000` bytes, keep TTFT within `+20%`,
+     and improve held-out decode token rate.
+   - Commit and push immediately after promotion. The commit body must include
+     baseline/candidate SHA, rollback SHA, exact commands/env, prompt split,
+     run directories, token rate, TTFT, RAM/page-cache/VRAM metrics,
+     IO/H2D/staging/compute/fallback metrics, and the exact answer used for the
+     quality gate.
+   - If a candidate improves hit rate but not token rate, increases reclaim or
+     refaults, depends on a prompt-specific hotset, or fails quality, leave it
+     default-off or revert it before continuing.
+
 ## Goal update: Kimi transfer of the DeepSeek GPU-extension idea
 
 Timestamp: 2026-07-11 CST.
