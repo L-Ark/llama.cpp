@@ -91,6 +91,127 @@ Key interpretation:
   `blk.51`, `blk.31`, `blk.32`, and `blk.52`. These are dev-profile
   candidates only; held-out prompts must not be used to choose layers.
 
+## Phase 5D goal: lower-byte expert residency to reach stable `>2 tok/s`
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Move the next Kimi optimization round from "more host RAM residency" to
+> "fewer bytes per useful expert" while keeping the current CPU/defer scheduler
+> and GPU expert-cache extension. The immediate target is a reproducible
+> prompt-general N96 improvement from the current `~1.5 tok/s` profile toward
+> stable `>2 tok/s` under the 16 GB host-RAM cap. The strategic goal remains
+> stable `>5 tok/s` on random prompts, but no candidate may be promoted unless
+> it is cold-start, quality-safe, TTFT-safe, and pushed with full reproduction
+> details.
+
+Why this is now the main path:
+
+- Current Kimi decode already has `CPU fallback: 0`, so the DeepSeek
+  gate-hotpool lesson applies as a scheduling/cache architecture pattern, not as
+  a literal CPU-fallback removal task.
+- Phase 5B rejected route-trace future-layer prefetch as the next runtime
+  change: `H=1/B=16` co-occurrence recall was only `0.3057`, and `B=32` would
+  waste about `26.95 GiB/token`.
+- Phase 5C showed that replacing page cache with batch-safe whole layer RAM
+  slabs is structurally clean but too small: even `~10 GiB` of slab residency
+  only covered about `19-25 ms/token`, while reaching `2 tok/s` needs roughly
+  `165 ms/token` of saving from the current profile.
+- The remaining large term is expert bytes and exposed transfer/staging wait:
+  the corrected N96 profile moved `491342774272` expert-pack bytes and spent
+  `37155.156 ms` in `io_uring_wait`, with up/gate at about
+  `455.555 ms/token` and down at about `173.197 ms/token`.
+
+Phase 5D execution plan:
+
+1. Re-establish the reproducible baseline before changing runtime behavior.
+   - Use the current pushed branch `vendor/kimi-deepseek-41d205-additive`.
+   - Cold-start N32 smoke and N96 paired run.
+   - Record prompt split, command, run directory, token rate, TTFT, host RAM
+     peak, VRAM usage, page-cache split, expert-pack bytes, H2D bytes,
+     `io_uring_wait`, CPU fallback count, direct read count, and exact output.
+   - The France prompt remains a mandatory quality gate, but it must not be the
+     only prompt used for promotion.
+
+2. Compute a lower-byte upper bound before implementation.
+   - Reuse dev-only route traces and tools such as
+     `.Agent/run-tools/kimi_quant_scaled_cache_bound.py` and
+     `.Agent/run-tools/kimi_byte_reduction_target_bound.py`.
+   - Sweep byte ratios such as `1.0`, `0.827`, `0.696`, `0.563`, `0.505`,
+     `0.4`, `0.3`, `0.25`, and `0.2`.
+   - Estimate for each ratio:
+     - effective VRAM expert-cache capacity;
+     - prompt-general hit-rate change;
+     - expert bytes per token;
+     - required SSD bandwidth;
+     - exposed wait lower bound;
+     - projected token rate at N96.
+   - Continue only if the bound can plausibly close at least the `~165 ms/token`
+     gap to `2 tok/s` on dev prompts without using held-out prompts for tuning.
+
+3. Select a role-specific lower-byte candidate.
+   - Prioritize the role/layer groups that dominate exposed wait, especially
+     mixed up/gate, before down-only work.
+   - Consider role-specific byte ratios rather than one global compression level:
+     gate/up may justify more aggressive compact representation if quality is
+     stable; down may need a safer ratio if output quality is more sensitive.
+   - Do not assume a format such as NVFP4 is usable until the code path,
+     quantization source, dequant/compute kernel, and quality result are proven.
+   - The first candidate should be default-off and limited to dev-selected
+     profiles so it can be reverted without touching the stable SOTA path.
+
+4. Implement only after the theoretical bound is strong enough.
+   - Preserve CPU/defer as the owner of routing and execution order.
+   - Keep GPU as the expert-cache/compute extension.
+   - Keep existing expert-pack demand path for misses.
+   - Add counters that separate:
+     - compressed-cache hits;
+     - normal VRAM hits;
+     - RAM-tier hits, if any;
+     - SSD/io_uring misses;
+     - decompression/dequant time;
+     - H2D bytes;
+     - quality-risk fallback.
+   - The implementation must show that lower bytes reduce critical-path wait,
+     not merely report higher cache hit rate.
+
+5. Validate promotion with prompt-general gates.
+   - Dev prompts guide design.
+   - Held-out prompts are used only after dev passes.
+   - Required quality checks include `Please introduce France in a short
+     paragraph.` and at least one non-France held-out prompt.
+   - Promote only if:
+     - N96 token rate improves on prompt-general validation;
+     - minimum/median behavior does not collapse on new prompts;
+     - TTFT ratio is `<= 1.20x`;
+     - host RAM peak is `< 15900000000` bytes;
+     - CPU fallback and direct reads stay at the intended values;
+     - output remains coherent and semantically correct.
+
+6. Commit/push discipline for every accepted result.
+   - Update this plan before each implementation attempt.
+   - If a candidate passes all gates, commit and push immediately.
+   - The commit body must include:
+     - before/after token rate and improvement size;
+     - exact branch, commit, env, and command;
+     - prompt split and run directories;
+     - TTFT, RAM, VRAM, page-cache, IO, H2D, and fallback metrics;
+     - exact quality output or quality summary;
+     - rollback commit.
+   - If performance, quality, RAM, or TTFT fails, revert the runtime change or
+     leave it default-off and document the rejection. It must not be called SOTA.
+
+Fallback if Phase 5D bound is weak:
+
+- Do not implement a low-byte runtime path just to create a code change.
+- Return to narrower transfer scheduling work:
+  - exact-byte scheduler improvements;
+  - up/gate+down unified demand scheduling;
+  - pack layout that increases contiguous demand reads;
+  - one small pageable RAM slab A/B only if it is clearly default-off and
+    measured against TTFT/refault gates.
+
 ## Phase 5B goal: transfer the CPU/defer GPU-extension idea to Kimi safely
 
 Timestamp: 2026-07-11 CST.
