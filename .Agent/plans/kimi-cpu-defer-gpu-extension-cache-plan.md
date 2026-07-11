@@ -12336,3 +12336,116 @@ Next execution plan:
 4. First run dispatch smoke only on dev prompts.
 5. Run held-out validation only if dev A/B improves endpoint token rate while
    preserving RAM, TTFT, and quality.
+
+## Progress update: top2048 v2 persistent pinned dispatch smoke
+
+Timestamp: 2026-07-11 CST.
+
+Purpose:
+
+> Verify, on the current `top2048` materialized v2 payload pack, that the lower
+> byte IQ1_S/Q2_K payloads can actually be read, copied to GPU, computed through
+> `ggml_cuda_moe_stream_mmvq_dev`, and merged with fallback rows. This is a
+> standalone smoke test and does not change model inference.
+
+Commit under test:
+
+- Branch: `vendor/kimi-deepseek-41d205-additive`
+- HEAD before this doc update: `7182598e5`
+
+Build:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-top2048-dispatch-smoke-7182598e
+mkdir -p "$RUN"
+g++ -std=c++17 -O2 \
+  .Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp \
+  -I/usr/local/cuda/include \
+  -L/usr/local/cuda/lib64 -lcudart -ldl \
+  -o "$RUN/kimi_moepack_v2_partial_split_smoke"
+```
+
+Inputs:
+
+- v2 pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-v2.expert-pack`
+- manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-manifest.tsv`
+- selected smoke tensor: `blk.7.ffn_up_exps.weight`
+- route shape: `5` rows, `3` covered v2 rows and `2` fallback rows
+- covered payload: `8.203 MiB` per iteration, `2.734 MiB` per covered row
+
+Strict cold-cache cgroup run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-top2048-dispatch-smoke-cold-peak-7182598e`
+- Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-top2048-dispatch-smoke-cold-peak-7182598e/run.sh
+```
+
+- The script runs:
+  - `sync`;
+  - `echo 3 > /proc/sys/vm/drop_caches`;
+  - `LD_LIBRARY_PATH=build-cuda-batch/bin:/usr/local/cuda/lib64`;
+  - `kimi_moepack_v2_partial_split_smoke build-cuda-batch/bin/libggml-cuda.so <top2048 pack> <top2048 manifest> batch-pinned-reuse`.
+- cgroup `memory.max`: `15899996160`
+- cgroup `memory.peak`: `370880512`
+- Result: pass.
+
+Cold-cache timing summary:
+
+```text
+kimi_moepack_v2_partial_split_smoke pass mode=batch-pinned-reuse tensor=blk.7.ffn_up_exps.weight routes=5 covered=3 fallback=2 ne00=7168 ne01=2048
+timing_reuse_summary iterations=5 warm_iterations=4 payload_mib_per_iter=8.203 one_time_lookup_us=4901.494 one_time_host_src0_alloc_us=7161.374 one_time_host_src1_us=1772.816 one_time_cuda_alloc_us=413.594 one_time_cuda_free_us=3344.719 all_total_us=54661.519 warm_avg_total_us=1856.362 warm_avg_read_us=1302.024 warm_avg_h2d_ms=0.458 warm_avg_kernel_ms=0.035 warm_avg_sync_us=429.442 warm_avg_d2h_us=29.000 warm_avg_merge_us=1.556 warm_avg_fallback_fill_us=8.206
+```
+
+Non-cgroup exploratory run:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-top2048-dispatch-smoke-7182598e`
+- `batch-pinned-reuse` passed.
+- `batch-pinned` passed.
+- Same selected tensor and route shape.
+- Important observation:
+  - cold iteration pays lazy kernel and read cost;
+  - after warmup, kernel time for all three covered rows is about
+    `0.034-0.036 ms`;
+  - remaining warm cost is read + H2D/sync, not compute.
+
+Interpretation:
+
+- The v2 top2048 payload is compute-usable, not just readable:
+  `ggml_cuda_moe_stream_mmvq_dev` accepts the selected IQ1_S entries and
+  produces finite, non-zero outputs.
+- Persistent pinned staging is the only viable shape:
+  - cgroup cold-cache warm average for `8.203 MiB` covered payload was
+    `1.856 ms` total;
+  - warm read was `1.302 ms`;
+  - warm H2D event was `0.458 ms`;
+  - warm kernel was only `0.035 ms`;
+  - one-time pinned setup/free is milliseconds and must not happen per token.
+- This smoke still does not prove endpoint speed:
+  - it uses the debug v2 reader, not the runtime v2 io_uring reader;
+  - it uses a single tensor group, not same-layer mixed `up/gate/down`;
+  - it does not replace current v1 expert-pack reads inside inference;
+  - it does not validate logits or quality.
+
+Decision:
+
+- Prerequisite for a real default-off v2 dispatch path is passed: v2 payloads
+  can be computed and merged in a controlled standalone smoke.
+- Do not implement full runtime dispatch yet.
+- The next implementation should be a standalone same-layer mixed-role dispatch
+  smoke:
+  - select one layer with top2048 entries across `up`, `gate`, and `down`;
+  - read the covered payloads as one coalesced group;
+  - compute each entry with the correct per-role `ne00/ne01/nb01`;
+  - avoid per-entry synchronization;
+  - verify finite outputs and row placement for different shapes;
+  - report read/H2D/kernel/sync by role.
+- Only after same-layer mixed-role smoke passes should runtime default-off
+  dispatch be attempted.
