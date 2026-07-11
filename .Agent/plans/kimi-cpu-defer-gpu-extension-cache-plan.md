@@ -4,6 +4,87 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Current goal and plan checkpoint: 2026-07-11 CST
+
+This section is the current working contract. All later experiments, commits,
+and SOTA claims for this branch must be checked against it before promotion.
+
+Goal:
+
+> Build a prompt-general Kimi optimization path for one 32 GB RTX 5090-class GPU
+> and strict 16 GB host RAM, starting from the current stable code, with the
+> next measurable milestone at reproducible held-out `>2 tok/s` and the product
+> target at stable random-prompt `>5 tok/s`.
+
+Scope for the next phase:
+
+- Treat the DeepSeek result as an architecture pattern, not a direct patch:
+  keep the CPU/defer MoE scheduler, but make the GPU expert-cache/streaming
+  extension handle more useful `gate/up/down` work with less exposed wait.
+- Kimi's current stable path already has decode CPU fallback and direct reads at
+  zero in the measured runs, so the next gain must come from reducing
+  transfer/staging wait, improving useful VRAM/RAM residency, or lowering bytes
+  per active expert while preserving quality.
+- The highest-priority bottleneck remains mixed up/gate critical-path time. On
+  current profiles, up/gate dominates down and residual compute, so candidates
+  must name which up/gate rows they reduce and by how many ms/token.
+
+Hard constraints:
+
+- Cold start only.
+- Host RAM peak must stay below `15900000000` bytes, including page cache,
+  pinned memory, mmap/file-backed pages, helper processes, and cgroup
+  accounting.
+- Use VRAM aggressively, but TTFT must not exceed baseline by more than `20%`.
+- Output quality must pass on `Please introduce France in a short paragraph.`
+  and on held-out prompts; the France answer must be coherent and semantically
+  correct.
+- Optimization must be prompt-general. Held-out prompts cannot be used to choose
+  expert hotsets, thresholds, layer slabs, pack order, or replacement policy.
+- Every accepted improvement must be committed and pushed immediately with a
+  reproducible commit body: baseline/candidate SHAs, exact commands/env,
+  prompts, run directories, token rate, TTFT, RAM/VRAM/page-cache metrics,
+  IO/H2D/staging/compute/fallback metrics, quality result, and rollback point.
+
+Immediate execution plan:
+
+1. Reconfirm the current baseline on a dev prompt.
+   - Run cold-start N32 and one N96/profile when needed.
+   - Record token rate, TTFT, decode ms/token, RAM split, page cache, VRAM cache
+     hit rates, `io_uring_wait`, staging wall, H2D wall, compute wall, direct
+     reads, and CPU fallback.
+
+2. Separate DeepSeek-transferable work from Kimi-specific bottlenecks.
+   - Confirm whether any gate/up/down role still misses the GPU extension.
+   - If fallback remains zero, do not spend time on "CPU fallback removal" as a
+     claimed optimization.
+   - Focus on exposed up/gate transfer/staging wait and queue continuity.
+
+3. Test only bounded candidates.
+   - Before implementation, calculate the best-case ms/token saving from expert
+     bytes, expected hit/miss movement, SSD bandwidth, H2D bandwidth, and
+     compute cost.
+   - Reject candidates whose theoretical bound cannot plausibly move
+     prompt-general throughput toward `>2 tok/s`.
+
+4. Candidate order.
+   - First: paired up/gate residency or scheduling improvements that reduce the
+     current dominant mixed up/gate rows.
+   - Second: RAM/VRAM storage-layout changes that replace low-value page cache
+     with batch-friendly expert slabs without fragmenting SSD batches.
+   - Third: lower-byte expert representation through a default-off v2 override
+     bridge, starting with tiny quality smoke and only scaling after correctness
+     is proven.
+   - Later: prediction/prefetch only if it can create sustained queue depth
+     without prompt-specific tuning.
+
+5. Promotion rule.
+   - Promote and push only if dev and held-out cold-start runs pass token-rate,
+     TTFT, RAM, quality, and reproducibility gates.
+   - If a candidate is slower, exceeds RAM, raises TTFT too much, or fails
+     quality, revert it or leave it default-off and document the rejection. It
+     must not be called SOTA.
+
 ## Active goal: verify DeepSeek-style CPU/defer GPU-extension on Kimi
 
 Timestamp: 2026-07-11 CST.
