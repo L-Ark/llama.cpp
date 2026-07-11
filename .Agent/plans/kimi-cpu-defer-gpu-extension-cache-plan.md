@@ -4,6 +4,159 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Active Goal: turn unused host RAM into useful expert cache
+
+### Goal
+
+在当前 Kimi vendor 代码上，恢复并稳定复现当前全局 SOTA，然后以
+`RAM/VRAM expert storage layout` 为主线继续优化 decode token rate。
+
+目标机器和任务边界固定如下：
+
+- hardware: `16 GB` host RAM hard limit plus one `32 GB RTX 5090`;
+- memory rule: host RAM limit includes page cache, mmap file-backed pages,
+  pinned memory, pageable anonymous memory, allocator overhead, and kernel
+  accounting;
+- workload: cold-start inference for random/general user prompts, not a
+  prompt-specific pack, prompt-specific hotset, or warm-cache result;
+- correctness: every promoted result must preserve coherent semantic output;
+  `Please introduce France in a short paragraph.` is mandatory, and final SOTA
+  must also pass held-out prompts not used for profiling or tuning;
+- short-term target: recover the reproducible general-prompt SOTA range and
+  push stable decode above `2 tok/s`;
+- long-term target: approach stable `>5 tok/s` by reducing exposed expert
+  transfer time, not by relying on uncontrolled Linux page cache.
+
+The current hypothesis is:
+
+1. decode main path already uses expert pack plus GPU extension for observed
+   Kimi MoE work, and CPU fallback is currently not the primary bottleneck;
+2. decode-stage host RAM still contains many GGUF file-backed pages that are not
+   an efficient, explicit expert cache;
+3. token rate can improve if low-value file-backed pages are replaced by an
+   explicit RAM tier that stores high-yield experts in a layout that can be
+   transferred to VRAM in large, predictable batches;
+4. a RAM tier is useful only if it reduces exposed SSD/io_uring wait more than
+   it adds RAM lookup, host copy, H2D scheduling, reclaim, and queue
+   fragmentation cost.
+
+### Non-negotiable SOTA Rule
+
+No new number may be called SOTA unless it is reproducible from a clean pushed
+commit. Each accepted optimization must be committed and pushed immediately with
+a message body containing:
+
+- baseline commit and rollback commit;
+- exact branch, commit, model path, pack path, and command;
+- exact environment variables and cgroup settings;
+- prompt set, held-out prompt set, and full quality gate result;
+- TTFT, decode token rate, prompt token rate if available, memory peak,
+  anon/file/page-cache split, VRAM use, fallback count, expert read bytes,
+  H2D bytes, and io_uring wait;
+- the measured improvement and why the result is considered generalizable.
+
+If a result cannot be reproduced, it is downgraded to a diagnostic observation
+and cannot remain the rollback point.
+
+### Immediate Plan
+
+#### Step 1: Reproduce the current control
+
+Run one cold-start N96 general prompt from the current pushed Kimi SOTA config
+under:
+
+- `MemoryMax=15900000000`;
+- `MemorySwapMax=0`;
+- no manual page-cache warming;
+- current accepted VRAM/RAM/cache knobs.
+
+Record:
+
+- output text and quality pass/fail;
+- TTFT, decode wall time, decode token rate, prompt token rate if available;
+- `memory.peak`, `anon`, `file`, `active_file`, `inactive_file`;
+- expert-pack bytes, direct/io_uring/page-cache read counters;
+- CPU fallback and GGUF fallback counters;
+- per-role transfer and compute profile when enabled.
+
+Exit condition: the control reproduces the accepted SOTA range. If it does not,
+stop optimization and diagnose commit/env/pack drift first.
+
+#### Step 2: Identify replaceable host RAM
+
+Use cold-start profiling to classify decode-stage host RAM into:
+
+- GGUF dense/attention/norm/output pages;
+- GGUF expert tensor pages refaulted after prompt;
+- expert-pack file pages;
+- alias/index/metadata pages;
+- pinned staging;
+- pageable anonymous runtime memory;
+- allocator and kernel overhead.
+
+For each class, answer with measurements:
+
+- when it was loaded;
+- whether decode reads it again;
+- whether dropping it causes refault, TTFT regression, decode regression, or
+  fallback regression;
+- whether it can be replaced by explicit expert cache without exceeding 16 GB.
+
+Only pages proven low-value or accidental prompt residue can be reclaimed for a
+RAM expert tier.
+
+#### Step 3: Build explicit RAM expert tier candidates
+
+Test RAM layouts in increasing risk order:
+
+1. second-tier cross-prompt hot experts that are not already VRAM resident;
+2. low-hit critical layer full `gate` or full `up` slab;
+3. same critical layer full `gate+up` slab;
+4. full `gate+up+down` slab only if RAM model shows enough safety margin;
+5. compact pack-adjacent RAM layout where nearby experts are stored together so
+   RAM to VRAM transfer can still be batched efficiently.
+
+For every candidate, compare pageable resident RAM against pinned resident RAM.
+Pinned is accepted only if it improves endpoint decode rate without causing
+reclaim, refault, TTFT regression, or smaller SSD batches that erase the gain.
+
+#### Step 4: Co-design RAM tier with VRAM cache and IO scheduler
+
+The cache policy must avoid making SSD batches too small or fragmented. For each
+candidate, record:
+
+- which experts are served from VRAM, RAM, and SSD;
+- which experts are evicted first when a new expert enters VRAM;
+- SSD batch size before and after RAM tier;
+- RAM batch size and H2D batch size;
+- exposed `io_uring_wait` saved;
+- extra RAM lookup/copy/H2D cost introduced;
+- endpoint token rate, not only hit rate.
+
+Preferred policy:
+
+- VRAM: hottest experts and latency-critical roles;
+- RAM: second-tier experts or full low-hit critical layer slabs where SSD misses
+  often expose wait;
+- SSD: cold experts and roles whose miss time is already hidden by overlap.
+
+#### Step 5: Promote only generalizable wins
+
+A candidate can be promoted only after:
+
+- it beats the matching control on at least one dev prompt;
+- it does not regress held-out prompts;
+- France remains semantically correct and coherent;
+- TTFT stays within the allowed bound;
+- host RAM remains below the cgroup limit with no swap;
+- fallback remains zero if the control is zero;
+- the run is reproducible from a pushed commit.
+
+If the RAM-tier plan fails to push stable decode above `2 tok/s`, the next plan
+branch is lower-byte expert representation plus read-replacement, not
+shadow-reading: prove that smaller expert bytes actually replace v1 bytes on the
+critical path before measuring endpoint speed.
+
 ## 2026-07-12 Current Goal: recover reproducible Kimi SOTA, then push past 2 tok/s
 
 Current branch: `vendor/kimi-deepseek-41d205-additive`
