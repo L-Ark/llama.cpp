@@ -186,6 +186,149 @@ Immediate next decision:
    `~47.96 s` total io_uring wait, upgate hit rate `43.5%`, down hit rate
    `61.4%`, and `~11 GiB` low-value GGUF file cache occupying host RAM.
 
+### 2026-07-12 Lazy RAM Tier A/B: rejected as primary route
+
+Goal:
+
+- Test whether the `~11 GiB` low-value GGUF page cache can be replaced by a
+  prompt-agnostic adaptive RAM expert cache.
+- Unlike static RAM slabs, lazy RAM has no prompt-specific profile and no
+  cold-start expert preload: an expert enters RAM only after repeated SSD
+  reads during the current run.
+
+Implementation tested:
+
+- local dirty diagnostic only; not promoted and not committed;
+- default-off envs:
+  `GGML_MOE_RAM_TIER_LAZY_MIB`,
+  `GGML_MOE_RAM_TIER_LAZY_MIN_COUNT`,
+  `GGML_MOE_RAM_TIER_LAZY_ROLES`,
+  `GGML_MOE_RAM_TIER_LAZY_PIN`,
+  `GGML_MOE_RAM_TIER_DEFER_H2D`;
+- after failed A/B, code was reverted back to the pre-lazy worktree state and
+  rebuilt successfully.
+
+Control:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-lazy-ram-ab-france-n96-211203/control`;
+- prompt:
+  `Please introduce France in a short paragraph.`;
+- quality: pass;
+- TTFT: `7667.92 ms`;
+- decode: `45255.25 ms / 85`, `1.88 tok/s`;
+- memory peak: `12782796800`;
+- expert pack:
+  `iouring_reads=85754`,
+  `iouring_bytes=491342774272`,
+  `iouring_wait_us=46838809`.
+
+Candidate 1: pageable lazy 2 GiB
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-lazy-ram-ab-france-n96-211203/lazy2g_min2_all`;
+- env:
+  `GGML_MOE_RAM_TIER_LAZY_MIB=2048`,
+  `GGML_MOE_RAM_TIER_LAZY_MIN_COUNT=2`,
+  `GGML_MOE_RAM_TIER_LAZY_ROLES=all`;
+- quality: pass;
+- TTFT: `7513.52 ms`;
+- decode: `48606.55 ms / 85`, `1.75 tok/s`;
+- memory peak: `14937231360`;
+- RAM tier:
+  `hits=2299/85754`, `2.7%`,
+  `used=2045.86 MiB`,
+  `pinned=0`,
+  `lazy_fills=371`,
+  `h2d_bytes=13757857792`;
+- expert pack:
+  `iouring_reads=83455`,
+  `iouring_bytes=477584916480`,
+  `iouring_wait_us=44876458`.
+
+Interpretation:
+
+- SSD/io_uring wait fell by about `1.96 s`, but endpoint decode regressed by
+  `3.35 s`.
+- Pageable RAM H2D and batch/scheduling effects outweighed saved SSD wait.
+- Reject.
+
+Candidate 2: pinned lazy 1 GiB
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-lazy-ram-pin1g-france-n96-211732`;
+- env:
+  `GGML_MOE_RAM_TIER_LAZY_MIB=1024`,
+  `GGML_MOE_RAM_TIER_LAZY_PIN=1`,
+  `GGML_MOE_RAM_TIER_LAZY_MIN_COUNT=2`,
+  `GGML_MOE_RAM_TIER_LAZY_ROLES=all`;
+- quality: pass;
+- TTFT: `8344.27 ms`, within the `+20%` gate relative to control;
+- decode: `45352.86 ms / 85`, `1.87 tok/s`;
+- memory peak: `13860941824`;
+- RAM tier:
+  `hits=878/85754`, `1.0%`,
+  `used=1023.20 MiB`,
+  `pinned=1024.00 MiB`,
+  `lazy_fills=180`,
+  `h2d_bytes=5392973824`;
+- expert pack:
+  `iouring_reads=84876`,
+  `iouring_bytes=485949800448`,
+  `iouring_wait_us=45618130`.
+
+Interpretation:
+
+- Pinning removes the severe pageable regression, but the endpoint still does
+  not beat control.
+- Hit rate is too low; saved SSD wait is roughly consumed by extra H2D and
+  scheduling overhead.
+- Reject as optimization.
+
+Candidate 3: pinned lazy 1 GiB with deferred RAM H2D
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-lazy-ram-pin1g-deferh2d-france-n96-212258`;
+- additional env:
+  `GGML_MOE_RAM_TIER_DEFER_H2D=1`;
+- quality: pass;
+- TTFT: `8778.81 ms`;
+- decode: `45827.73 ms / 85`, `1.85 tok/s`;
+- memory peak: `13860417536`;
+- RAM tier:
+  `hits=878/85754`, `1.0%`,
+  `used=1023.20 MiB`,
+  `pinned=1024.00 MiB`;
+- expert pack:
+  `iouring_reads=84876`,
+  `iouring_bytes=485949800448`,
+  `iouring_wait_us=47213224`.
+
+Interpretation:
+
+- Deferring RAM H2D until after initial SSD submit did not help; io_uring wait
+  increased and endpoint regressed.
+- Reject and revert code.
+
+File-cache residency remained unchanged for control and lazy candidates:
+
+- GGUF shard page cache: `11804367616` bytes, `10.994 GiB`;
+- alias TSV: `11005336` bytes;
+- expert pack page cache: `5210112` bytes.
+
+Decision:
+
+- Do not continue expanding lazy RAM tier as the primary path.
+- The current RAM-tier representation can save SSD reads, but under N96 the
+  prompt-general hit rate is only `1-3%`, and RAM H2D / scheduling cost
+  consumes the saved wait.
+- Static full/compact slabs and lazy RAM cache have now both failed to produce
+  a prompt-general endpoint improvement.
+- Next primary direction should move away from storing full expert bytes in
+  host RAM and toward lower-byte expert representation or pack-layout/scheduler
+  changes that reduce bytes on the critical path without adding separate
+  RAM->VRAM traffic.
+
 ## 2026-07-12 Current Goal: validate CPU/defer GPU-extension transfer to Kimi
 
 ### Goal
