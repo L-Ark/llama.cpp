@@ -341,6 +341,104 @@ Next required diagnostic:
 3. Only after this range-level source is known should we convert the low-value
    file cache into explicit RAM expert cache.
 
+### 2026-07-12 Phase 1 Follow-up: fadvise clears profiled ranges, later decode refaults them
+
+Diagnostic branch:
+
+- `vendor/kimi-prompt-host-source-prof`
+- pushed diagnostic commit:
+  - `05be78ee6 diag: profile mmap dontneed residency`
+
+Instrumentation:
+
+- Added default-off `LLAMA_MMAP_DONTNEED_PROFILE_OUT`.
+- Added `LLAMA_MMAP_DONTNEED_PROFILE_FILTER` so profiling can be restricted to
+  shard path substrings such as `00009-of-00010,00010-of-00010`.
+- For each profiled `llama_mmap::dontneed_fragment()` range, CSV records:
+  `path`, `first`, `len`, resident bytes before `madvise`, resident bytes after
+  `madvise`, resident bytes after optional `posix_fadvise`, return codes,
+  errno values, and wall time.
+- Default behavior is unchanged unless the profile env is set.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-mmap-dontneed-residency-reasoning-n96-185933`
+- commit: `05be78ee6`
+- prompt:
+  `A train leaves at 3 PM and arrives 2 hours and 15 minutes later. What time does it arrive?`
+- quality: pass, output contains `5:15 PM`
+- TTFT: `214805.34 ms`
+- decode: `35771.21 ms / 61`, `1.71 tok/s`
+- memory peak: `15899996160`, still cgroup cap
+- CPU fallback source entries: `0`
+
+Mmap/drop profile:
+
+- rows: `52`
+- filtered shards:
+  - `Kimi-K2.7-Code-IQ3_S-00009-of-00010.gguf`
+  - `Kimi-K2.7-Code-IQ3_S-00010-of-00010.gguf`
+- total profiled range length: `57.389 GiB`
+  - shard `00009`: `44.645 GiB`
+  - shard `00010`: `12.744 GiB`
+- total resident before drop: `1.168 GiB`
+  - shard `00009`: `0.972 GiB`
+  - shard `00010`: `0.196 GiB`
+- total resident after `madvise(MADV_DONTNEED)`: still `1.168 GiB`
+- total resident after `posix_fadvise(POSIX_FADV_DONTNEED)`: `0`
+
+Phase memory from the same run:
+
+| phase | file bytes | active_file | inactive_file | notes |
+|---|---:|---:|---:|---|
+| `before_prompt_eval` | `1990606848` | `1939066880` | `10629120` | fadvise starts with low file cache |
+| `after_prompt_eval` | `14818394112` | `6724050944` | `7949836288` | file cache returns to about `14.8 GB` immediately after prompt/drop |
+| `after_generation` | `14854230016` | `6734303232` | `7854374912` | decode keeps the high file-cache footprint |
+
+Final file-cache residency:
+
+- GGUF shards: `14549880832` bytes, `13.551 GiB`
+- expert packs: `4845568` bytes, `0.005 GiB`
+- alias TSV: `0.010 GiB`
+- dominant files:
+  - shard `00009`: `11.297 GiB`
+  - shard `00010`: `2.247 GiB`
+
+Decision:
+
+- `madvise(MADV_DONTNEED)` alone does not remove the profiled pages.
+- `posix_fadvise(POSIX_FADV_DONTNEED)` does remove the profiled shard ranges:
+  resident bytes go to `0` for `00009`/`00010` ranges during the drop call.
+- Therefore the late-layer GGUF file-cache footprint observed at the end is a
+  post-drop refault, not a failure of the fadvise hook for those ranges.
+- The post-drop refault is not explained by CPU fallback or CPU/defer GPU
+  dispatch, so the remaining likely source is decode-time read source handling:
+  GGUF alias source reads may still populate page cache somewhere despite the
+  "io_uring direct reads enabled" log, or another backend path is reading GGUF
+  shard payload after the drop.
+
+Next required diagnostic:
+
+1. Add a default-off per-source read profile in the expert-pack runtime:
+   - source path / source index;
+   - `page_cache` flag;
+   - `fd_direct` value;
+   - iouring bytes and jobs;
+   - direct `pread` bytes;
+   - buffered fallback bytes;
+   - role/layer aggregate if cheap.
+2. Run the same N96 prompt with this profile enabled and check whether shard
+   `00009`/`00010` bytes are coming from:
+   - true O_DIRECT/io_uring reads;
+   - direct read fallback;
+   - buffered `FILE*` reads;
+   - page-cache source path;
+   - another non expert-pack path.
+3. If GGUF alias reads are buffered, fix that path before RAM re-layout.
+4. If they are true direct reads yet page cache still refaults, investigate
+   kernel/filesystem behavior or remaining mmap touch sites around alias source
+   handling.
+
 ## 2026-07-12 Active Goal: DeepSeek-style CPU/defer GPU-extension on Kimi
 
 ### Goal
