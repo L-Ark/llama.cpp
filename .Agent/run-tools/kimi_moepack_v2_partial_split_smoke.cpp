@@ -360,7 +360,8 @@ static bool run_v2_entries_batched(
         const manifest_entry & base,
         cudaStream_t stream,
         std::vector<float> & final_dst,
-        route_timing & batch_timing) {
+        route_timing & batch_timing,
+        bool pinned_host) {
     const steady_clock::time_point total_start = steady_clock::now();
     std::vector<int> covered_route_ids;
     for (int i = 0; i < (int)routes.size(); ++i) {
@@ -377,9 +378,26 @@ static bool run_v2_entries_batched(
     const size_t dst_bytes = (size_t)base.ne01 * sizeof(float);
     const size_t q8_bytes = q8_1_scratch_bytes(base.ne00);
 
-    std::vector<std::vector<uint8_t>> host_src0(n_covered);
-    std::vector<float> host_src1;
+    std::vector<std::vector<uint8_t>> host_src0_owned(n_covered);
+    std::vector<void *> host_src0_pinned(n_covered, nullptr);
+    std::vector<uint8_t *> host_src0_ptrs(n_covered, nullptr);
+    std::vector<float> host_src1_owned;
+    void * host_src1_pinned = nullptr;
+    float * host_src1_ptr = nullptr;
     std::vector<device_slot> slots(n_covered);
+
+    auto free_host_buffers = [&]() {
+        for (void *& p : host_src0_pinned) {
+            if (p) {
+                cudaFreeHost(p);
+                p = nullptr;
+            }
+        }
+        if (host_src1_pinned) {
+            cudaFreeHost(host_src1_pinned);
+            host_src1_pinned = nullptr;
+        }
+    };
 
     bool ok = true;
     steady_clock::time_point t0;
@@ -401,12 +419,14 @@ static bool run_v2_entries_batched(
         t0 = steady_clock::now();
         if (!lookup(r.entry.tensor.c_str(), r.entry.expert_idx, &packed_type, &ne00, &ne01, &nb01, &nbytes)) {
             std::fprintf(stderr, "batch lookup failed tensor=%s expert=%d\n", r.entry.tensor.c_str(), r.entry.expert_idx);
+            free_host_buffers();
             return false;
         }
         timing.lookup_us = elapsed_us(t0, steady_clock::now());
         if (packed_type != r.entry.packed_type || ne00 != r.entry.ne00 ||
                 ne01 != r.entry.ne01 || nb01 != r.entry.nb01 || nbytes != r.entry.nbytes) {
             std::fprintf(stderr, "batch metadata mismatch tensor=%s expert=%d\n", r.entry.tensor.c_str(), r.entry.expert_idx);
+            free_host_buffers();
             return false;
         }
         timing.ne00 = ne00;
@@ -417,23 +437,46 @@ static bool run_v2_entries_batched(
         timing.q8_bytes = q8_bytes;
 
         t0 = steady_clock::now();
-        host_src0[j].resize(nbytes);
+        if (pinned_host) {
+            void * p = nullptr;
+            if (!check_cuda(cudaHostAlloc(&p, nbytes, cudaHostAllocDefault), "batch cudaHostAlloc src0")) {
+                timing.host_src0_alloc_us = elapsed_us(t0, steady_clock::now());
+                free_host_buffers();
+                return false;
+            }
+            host_src0_pinned[j] = p;
+            host_src0_ptrs[j] = (uint8_t *)p;
+        } else {
+            host_src0_owned[j].resize(nbytes);
+            host_src0_ptrs[j] = host_src0_owned[j].data();
+        }
         timing.host_src0_alloc_us = elapsed_us(t0, steady_clock::now());
         size_t nread = 0;
         t0 = steady_clock::now();
-        if (!read(r.entry.tensor.c_str(), r.entry.expert_idx, host_src0[j].data(), host_src0[j].size(), &nread) ||
+        if (!read(r.entry.tensor.c_str(), r.entry.expert_idx, host_src0_ptrs[j], nbytes, &nread) ||
                 nread != nbytes) {
             std::fprintf(stderr, "batch read failed tensor=%s expert=%d nread=%zu nbytes=%zu\n",
                     r.entry.tensor.c_str(), r.entry.expert_idx, nread, nbytes);
+            free_host_buffers();
             return false;
         }
         timing.read_us = elapsed_us(t0, steady_clock::now());
     }
 
     t0 = steady_clock::now();
-    host_src1.resize((size_t)base.ne00);
+    if (pinned_host) {
+        if (!check_cuda(cudaHostAlloc(&host_src1_pinned, src1_bytes, cudaHostAllocDefault), "batch cudaHostAlloc src1")) {
+            batch_timing.host_src1_us = elapsed_us(t0, steady_clock::now());
+            free_host_buffers();
+            return false;
+        }
+        host_src1_ptr = (float *)host_src1_pinned;
+    } else {
+        host_src1_owned.resize((size_t)base.ne00);
+        host_src1_ptr = host_src1_owned.data();
+    }
     for (int64_t i = 0; i < base.ne00; ++i) {
-        host_src1[(size_t)i] = ((int)(i % 23) - 11) * 0.025f;
+        host_src1_ptr[(size_t)i] = ((int)(i % 23) - 11) * 0.025f;
     }
     batch_timing.host_src1_us = elapsed_us(t0, steady_clock::now());
 
@@ -458,6 +501,7 @@ static bool run_v2_entries_batched(
         for (device_slot & slot : slots) {
             free_device_slot(slot);
         }
+        free_host_buffers();
         return false;
     }
 
@@ -465,8 +509,8 @@ static bool run_v2_entries_batched(
         route & r = routes[(size_t)covered_route_ids[j]];
         device_slot & slot = slots[j];
         ok = ok && check_cuda(cudaEventRecord(slot.h2d_start, stream), "batch record h2d_start");
-        ok = ok && check_cuda(cudaMemcpyAsync(slot.d_src0, host_src0[j].data(), r.entry.nbytes, cudaMemcpyHostToDevice, stream), "batch copy src0 H2D");
-        ok = ok && check_cuda(cudaMemcpyAsync(slot.d_src1, host_src1.data(), src1_bytes, cudaMemcpyHostToDevice, stream), "batch copy src1 H2D");
+        ok = ok && check_cuda(cudaMemcpyAsync(slot.d_src0, host_src0_ptrs[j], r.entry.nbytes, cudaMemcpyHostToDevice, stream), "batch copy src0 H2D");
+        ok = ok && check_cuda(cudaMemcpyAsync(slot.d_src1, host_src1_ptr, src1_bytes, cudaMemcpyHostToDevice, stream), "batch copy src1 H2D");
         ok = ok && check_cuda(cudaMemsetAsync(slot.d_dst, 0, dst_bytes, stream), "batch memset dst");
         ok = ok && check_cuda(cudaEventRecord(slot.h2d_stop, stream), "batch record h2d_stop");
         ok = ok && check_cuda(cudaEventRecord(slot.kernel_start, stream), "batch record kernel_start");
@@ -501,6 +545,7 @@ static bool run_v2_entries_batched(
         for (device_slot & slot : slots) {
             free_device_slot(slot);
         }
+        free_host_buffers();
         return false;
     }
 
@@ -560,6 +605,7 @@ static bool run_v2_entries_batched(
     for (device_slot & slot : slots) {
         free_device_slot(slot);
     }
+    free_host_buffers();
     batch_timing.cuda_free_us = elapsed_us(t0, steady_clock::now());
 
     for (int id : covered_route_ids) {
@@ -626,7 +672,7 @@ static bool choose_group(
 
 int main(int argc, char ** argv) {
     if (argc != 4 && argc != 5) {
-        std::fprintf(stderr, "usage: %s LIBGGML_CUDA_SO V2_EXPERT_PACK MANIFEST_TSV [per-row|batch]\n", argv[0]);
+        std::fprintf(stderr, "usage: %s LIBGGML_CUDA_SO V2_EXPERT_PACK MANIFEST_TSV [per-row|batch|batch-pinned]\n", argv[0]);
         return 2;
     }
     const char * lib_path = argv[1];
@@ -634,8 +680,10 @@ int main(int argc, char ** argv) {
     const char * manifest_path = argv[3];
     const char * mode = argc == 5 ? argv[4] : "per-row";
     const bool batch_mode = std::strcmp(mode, "batch") == 0;
+    const bool batch_pinned_mode = std::strcmp(mode, "batch-pinned") == 0;
+    const bool batch_like_mode = batch_mode || batch_pinned_mode;
     const bool per_row_mode = std::strcmp(mode, "per-row") == 0;
-    if (!batch_mode && !per_row_mode) {
+    if (!batch_like_mode && !per_row_mode) {
         std::fprintf(stderr, "unknown mode: %s\n", mode);
         return 2;
     }
@@ -717,8 +765,8 @@ int main(int argc, char ** argv) {
     const int n_rows = (int)routes.size();
     std::vector<float> final_dst((size_t)n_rows * (size_t)base.ne01, std::numeric_limits<float>::quiet_NaN());
     route_timing batch_timing;
-    if (batch_mode) {
-        if (!run_v2_entries_batched(lookup, read, mmvq, routes, base, stream, final_dst, batch_timing)) {
+    if (batch_like_mode) {
+        if (!run_v2_entries_batched(lookup, read, mmvq, routes, base, stream, final_dst, batch_timing, batch_pinned_mode)) {
             cudaStreamDestroy(stream);
             dlclose(handle);
             return 1;
@@ -842,7 +890,7 @@ int main(int argc, char ** argv) {
             total.merge_us / (double)n_rows,
             total.total_us / (double)measured_covered);
     }
-    if (batch_mode) {
+    if (batch_like_mode) {
         std::printf(
             "timing_batch_summary covered=%d fallback=%d payload_mib=%.3f lookup_us=%.3f host_src0_alloc_us=%.3f read_us=%.3f host_src1_us=%.3f cuda_alloc_us=%.3f h2d_ms=%.3f kernel_ms=%.3f batch_sync_us=%.3f d2h_us=%.3f cuda_free_us=%.3f merge_us=%.3f fallback_fill_us=%.3f total_us=%.3f\n",
             measured_covered, measured_fallback, (double)batch_timing.payload_bytes / 1048576.0,

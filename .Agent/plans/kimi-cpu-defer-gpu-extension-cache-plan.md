@@ -418,6 +418,161 @@ Decision:
   clear token-rate path yet.
 - No SOTA claim is made from this smoke.
 
+## Current subgoal: pinned host staging v2 split smoke
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Measure whether reading v2 payloads directly into pinned host staging reduces
+> the H2D/read portion enough to keep partial split alive as a runtime
+> candidate. This is still standalone smoke work; it does not change inference
+> behavior and cannot be called SOTA.
+
+Why this is the next step:
+
+- The batched/reused-buffer smoke showed the control shape works, but post-first
+  rows are still several milliseconds.
+- The remaining steady costs are mostly host payload allocation/read and H2D:
+  - post-first batched rows were `5.205 ms` and `4.525 ms`;
+  - H2D was `0.687 ms` and `0.532 ms` for `2.734 MiB`;
+  - kernel was only `0.012 ms` after the cold first route.
+- The main runtime already uses pinned staging concepts, so the next smoke
+  should compare pageable host vectors against pinned host staging before
+  deciding whether to prototype runtime partial split.
+
+Plan:
+
+1. Add a `batch-pinned` mode to
+   `.Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp`.
+   - Keep `per-row` and `batch` modes unchanged.
+   - Allocate pinned host payload buffers with `cudaHostAlloc`.
+   - Read v2 payloads directly into pinned host buffers.
+   - Allocate pinned host activation buffer for `src1`.
+   - Reuse the same device-slot batch path and one final stream sync.
+   - Preserve row-placement and finite-output correctness checks.
+
+2. Measure and compare:
+   - pinned host allocation time;
+   - payload read time into pinned memory;
+   - H2D event time from pinned memory;
+   - kernel event time;
+   - batch sync;
+   - D2H verification;
+   - merge/fallback.
+
+3. Decision gate:
+   - If pinned H2D/read materially improves versus pageable `batch`, continue
+     toward a default-off runtime prototype using existing pinned stage rings.
+   - If pinned only moves cost from H2D into allocation/read, then partial split
+     needs a real persistent pinned pool and overlap; otherwise it should be
+     deprioritized behind RAM/VRAM storage layout work.
+   - Any runtime prototype must still pass cold-start N32/N96 quality, RAM,
+     TTFT, and held-out gates before promotion.
+
+4. Reproducibility:
+   - Save build and all three mode commands in a new run directory.
+   - Update this plan with measured results before commit.
+   - Commit and push with run directory, metrics, interpretation, and rollback
+     point.
+
+## Progress update: pinned host staging v2 split smoke
+
+Timestamp: 2026-07-11 CST.
+
+Code change:
+
+- Added `batch-pinned` mode to
+  `.Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp`.
+- `per-row` and `batch` remain available and unchanged in behavior.
+- `batch-pinned`:
+  - allocates covered payload buffers with `cudaHostAlloc`;
+  - reads v2 payloads directly into pinned host memory;
+  - allocates pinned `src1` staging;
+  - reuses the same device-slot batch path and single final stream sync;
+  - preserves row-placement and finite-output checks.
+
+Run directory:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-pinned-smoke
+```
+
+Commands:
+
+```bash
+# Build
+g++ -std=c++17 -O2 \
+  .Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp \
+  -I/usr/local/cuda/include \
+  -L/usr/local/cuda/lib64 -lcudart -ldl \
+  -o /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-pinned-smoke/kimi_moepack_v2_partial_split_smoke
+
+# Modes
+LD_LIBRARY_PATH=build-cuda-batch/bin:/usr/local/cuda/lib64 \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-pinned-smoke/kimi_moepack_v2_partial_split_smoke \
+  build-cuda-batch/bin/libggml-cuda.so \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv \
+  <per-row|batch|batch-pinned>
+```
+
+Inputs:
+
+- selected tensor: `blk.1.ffn_up_exps.weight`
+- route shape: `5` routes total, `3` v2-covered rows, `2` fallback rows
+- covered row payload: `2.734 MiB` each, `8.203 MiB` total
+
+Results:
+
+Primary run:
+
+| mode | correctness | total wall | read | H2D | kernel | notes |
+|---|---|---:|---:|---:|---:|---|
+| `per-row` | pass | `50.724 ms` covered total | `8.505 ms` | `2.235 ms` | `31.535 ms` | per-row alloc/free |
+| `batch` pageable | pass | `35.077 ms` batch wall | `2.147 ms` | `2.730 ms` | `23.040 ms` | device alloc/events `0.516 ms`, free `0.334 ms` |
+| `batch-pinned` | pass | `33.952 ms` batch wall | `1.423 ms` | `0.887 ms` | `20.102 ms` | pinned `src1` alloc `1.525 ms`, free `3.047 ms` |
+
+Repeat run:
+
+| mode | correctness | total wall | read | H2D | kernel | notes |
+|---|---|---:|---:|---:|---:|---|
+| `batch` pageable repeat | pass | `50.401 ms` batch wall | `2.536 ms` | `1.881 ms` | `34.171 ms` | pageable alloc `10.354 ms` |
+| `batch-pinned` repeat | pass | `56.477 ms` batch wall | `3.971 ms` | `1.011 ms` | `34.309 ms` | pinned `src1` alloc `3.602 ms`, free `3.115 ms` |
+
+Post-first route comparison:
+
+| mode/run | route 2 total | route 2 H2D | route 4 total | route 4 H2D |
+|---|---:|---:|---:|---:|
+| `batch` primary | `3.838 ms` | `0.868 ms` | `3.424 ms` | `0.829 ms` |
+| `batch-pinned` primary | `3.013 ms` | `0.281 ms` | `2.650 ms` | `0.292 ms` |
+| `batch` repeat | `5.457 ms` | `0.675 ms` | `4.478 ms` | `0.556 ms` |
+| `batch-pinned` repeat | `4.929 ms` | `0.353 ms` | `5.767 ms` | `0.301 ms` |
+
+Interpretation:
+
+- Pinned staging materially improves H2D:
+  - primary total H2D fell from `2.730 ms` to `0.887 ms`;
+  - repeat total H2D fell from `1.881 ms` to `1.011 ms`;
+  - post-first route H2D generally fell from about `0.56-0.87 ms` to
+    `0.28-0.35 ms`.
+- Temporary pinned allocation/free is too expensive and noisy:
+  - pinned `src1` allocation was `1.525-3.602 ms`;
+  - pinned free was about `3.0 ms`;
+  - read into pinned memory ranged from `1.423 ms` to `3.971 ms`.
+- This validates pinned staging as a component, but rejects per-call
+  `cudaHostAlloc/cudaFree`.
+
+Decision:
+
+- Partial split should continue only if the runtime design uses persistent
+  pinned host staging pools and overlaps read/H2D with current-path work or
+  expert IO.
+- A runtime prototype that allocates pinned memory per call is rejected.
+- If persistent pinned staging plus overlap cannot be integrated cleanly, return
+  priority to RAM/VRAM storage-layout work.
+- No SOTA claim is made from this smoke.
+
 ## Progress update: runtime partial-split shadow planner
 
 Timestamp: 2026-07-11 CST.
