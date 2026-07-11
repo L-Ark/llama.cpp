@@ -83,6 +83,91 @@ Plan:
      command, prompt split, run directory, metrics, quality output, and rollback
      commit in the commit body.
 
+Current baseline for this goal:
+
+- Timestamp: 2026-07-11 CST.
+- Commit: `ddaafd1f7 docs: define Kimi GPU extension usefulness goal`.
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-current-dev4-n32-profile`.
+- Prompt split:
+  - dev tuning only:
+    `dev_france_regression`, `dev_japan_factual`,
+    `dev_photosynthesis_factual`, `dev_python_reverse`;
+  - held-out prompts remain unused for selection.
+- Command shape:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0 ... env RUN=<run> N=32 PROFILE=1 PROMPT_ID=<dev-id> PROMPT_USER_TEXT=<prompt> QUALITY_KEYWORDS=<keywords> .Agent/run-tools/kimi-general-prompt-repro.sh`.
+- Results:
+  - France: quality pass, `1.71 tok/s`, TTFT `8969.44 ms`,
+    decode `18175.30 ms / 31`, RAM peak `12766498816`;
+  - Japan: quality pass, `1.70 tok/s`, TTFT `8418.58 ms`,
+    decode `18194.00 ms / 31`, RAM peak `12769886208`;
+  - photosynthesis: quality pass, `1.67 tok/s`, TTFT `7396.14 ms`,
+    decode `18562.81 ms / 31`, RAM peak `12605837312`;
+  - Python reverse: quality pass, `1.54 tok/s`, TTFT `9135.70 ms`,
+    decode `20155.26 ms / 31`, RAM peak `12759814144`.
+- Aggregate:
+  - decode tokens: `124`;
+  - decode ms/token: `605.543`;
+  - approximate average decode rate: `1.65 tok/s`;
+  - expert-pack bytes per prompt: `218.8-255.9 GB`;
+  - `io_uring_wait` per prompt: `18.4-21.4 s`;
+  - upgate hit rate: `37.0-45.4%`;
+  - down hit rate: `57.0-59.5%`;
+  - decode CPU fallback: no fallback rows observed in this profile.
+- Wait-weighted screen:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-current-dev4-n32-profile/analysis/wait-weighted-screen.md`.
+- Interpretation:
+  - exposed time is still dominated by distributed `up/gate` misses;
+  - low-layer `down` staging is also visible but smaller than aggregate
+    `up/gate`;
+  - the next experiment should improve general VRAM residency, not use a
+    France-only hotset or whole-layer RAM admission.
+
+Next A/B experiment: dev4 budgeted VRAM profile pinning
+
+- Timestamp: 2026-07-11 CST.
+- Candidate profile:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-current-dev4-n32-profile/analysis/dev4-budgeted-upgate1024-down512.profile.csv`.
+- Generation command:
+  `python3 .Agent/run-tools/kimi_make_budgeted_hot_expert_profile.py --route-root <dev4-profile-root> --screen-csv <wait-weighted-screen.csv> --out-profile <profile.csv> --out-report <profile.md> --upgate-budget-mib 1024 --down-budget-mib 512 --min-prompts 3 --max-layers-per-role 12`.
+- Profile contents:
+  - entries: `277`;
+  - total: `1527.20 MiB`;
+  - upgate: `211` entries, `1019.70 MiB`, route count `7551`;
+  - down: `66` entries, `507.50 MiB`, route count `3142`;
+  - selection uses only dev prompts, weighted by layer/role ms/token and route
+    count per byte.
+- Runtime env under test:
+  - `GGML_MOE_VRAM_PROFILE=<profile.csv>`;
+  - `GGML_MOE_VRAM_PROFILE_PROTECT=1`;
+  - `GGML_MOE_VRAM_PROFILE_PRELOAD=1`;
+  - `GGML_MOE_VRAM_PROFILE_PIN_ON_INSERT=1`;
+  - `GGML_MOE_VRAM_PROFILE_PIN_MIN_COUNT=1`;
+  - `GGML_MOE_VRAM_CACHE_POLICY=profile_lfu_lru`;
+  - `GGML_MOE_VRAM_PROFILE_RESERVE_PCT=20`;
+  - keep `UPGATE_PCT=62`, `VRAM_MIB=15000`, `PINNED_SLOTS=12`.
+- Theory:
+  - the profile pins high-reuse, high-criticality experts in the existing VRAM
+    cache so repeated dev-general requests avoid SSD/io_uring staging;
+  - the hard upper bound is limited by selected repeated traffic, roughly a
+    single-digit percent of total expert-pack bytes in N32, so a successful
+    result is expected to be incremental rather than enough for `>2 tok/s`;
+  - a valid win must lower exposed `io_uring_wait` or role wall time, not only
+    increase hit rate.
+- Risks:
+  - cold preload can increase TTFT;
+  - pinned profile slots can evict useful dynamic cache entries and hurt
+    prompt-general performance;
+  - profile lookup normalizes some up/gate names to down names, so the run must
+    verify actual `preloads` and `pinned` counts in metrics.
+- Required paired validation:
+  - run N32 baseline and candidate on at least two dev prompts, including
+    `dev_python_reverse` because it is currently the slowest;
+  - compare token rate, TTFT, RAM peak, upgate/down hit rate, `preloads`,
+    `pinned`, `io_uring_wait`, and quality;
+  - if promising, expand to N96 dev and later held-out; if not, reject and keep
+    only this documented negative result.
+
 ## Current execution goal: Kimi CPU/defer GPU-extension parity
 
 Timestamp: 2026-07-11 CST.
