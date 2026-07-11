@@ -1497,6 +1497,205 @@ Validation plan:
    decode token rate, RAM/page-cache metrics, IO/H2D/staging metrics, baseline
    SHA, candidate SHA, and rollback point.
 
+Audit update before source edits:
+
+- Do not implement a new naive whole up/gate co-submit path.
+- Current source already has a default-off whole combined staging path:
+  `GGML_MOE_UP_GATE_COMBINED_STAGE=1`.
+- Historical Phase 7FX tested this path and rejected it:
+  - it reduced raw `iouring_wait_us` by about `2.27 s`;
+  - it created larger `9-16` job batches;
+  - endpoint n32 decode stayed within the baseline band and did not materially
+    improve;
+  - root cause: up compute had to wait for the combined up+gate copy group, so
+    the saved IO wait was consumed by lost copy/compute overlap.
+- Historical Phase 7LX then tested a more sophisticated shared-IO early-up
+  path:
+  - source patch `2553448a9`;
+  - reverted by `293934e00`;
+  - it improved raw IO counters but regressed endpoint decode from
+    `22962.85 ms / 31` to `23527.16 ms / 31`;
+  - root cause was likely extra synchronization, background-thread,
+    shared-ring, or stream-ordering overhead.
+- Therefore the implementation branch of this subgoal is rejected unless a new
+  profile proves a different synchronization design can remove the overhead
+  directly.
+
+Revised next action:
+
+1. Do not edit source for up/gate co-submit yet.
+2. Run a current-head strict cold-start profile with `PROFILE=1` on N32 France:
+   - collect `up-gate-profile.csv`, `down-batch-profile.csv`,
+     `route-profile.csv`, `route-trace.csv`, fallback profile, TTFT trace, and
+     existing stderr counters;
+   - keep Host RAM below `15900000000`;
+   - require France semantic quality pass.
+3. Parse the profile to identify the current largest exposed bucket:
+   - up/gate stage wait;
+   - up/gate compute;
+   - down/current-down worker;
+   - H2D/staging;
+   - prompt/TTFT reclaim or fallback.
+4. Choose the next source-level data-movement change only from current profile
+   evidence, not from the rejected up/gate co-submit family.
+
+Profile result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-current-head-profile-n32-france-901eda86`
+- Source:
+  `901eda86d docs: plan Kimi real upgate co-submit prototype`
+  with code from `4f1ad6505`.
+- Command shape:
+  `systemd-run --wait --collect --same-dir -p RuntimeMaxSec=300
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 env RUN=<run> N=32
+  PROFILE=1 COPY_PROFILE=1 PROMPT_ID=dev_france_current_head_profile
+  PROMPT_USER_TEXT="Please introduce France in a short paragraph."
+  QUALITY_KEYWORDS="france,paris|europe|western"
+  .Agent/run-tools/kimi-general-prompt-repro.sh`
+- Quality: pass.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous`
+- TTFT/prompt eval: `11541.01 ms / 17`.
+- Decode with profiling overhead: `21001.54 ms / 31 = 1.48 tok/s`.
+- Host RAM peak: `12769443840 bytes`.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+
+Current profile breakdown:
+
+| bucket | measured total |
+|---|---:|
+| up/gate decode wall | `14265.132 ms` |
+| up/gate up_wait | `7629.502 ms` |
+| up/gate gate_wait | `8238.250 ms` |
+| up/gate up_compute | `245.307 ms` |
+| up/gate gate_compute | `165.583 ms` |
+| down decode batch wall, inferred by `n_active<=8` | `5545.967 ms` |
+| down decode stage | `5199.448 ms` |
+| down decode kernel | `224.450 ms` |
+| current-down overlap worker | `3134.457 ms` |
+| expert-pack iouring wait | `16721.155 ms` |
+| pinned staging H2D, main ring | `9531.533 ms` |
+| pinned staging H2D, gate ring | `1736.527 ms` |
+
+Up/gate type split:
+
+| up type | gate type | calls | wall | up_wait | gate_wait | up jobs | gate jobs |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| `22` | `18` | `899` | `8191.382 ms` | `4238.170 ms` | `4722.555 ms` | `3661` | `3663` |
+| `22` | `22` | `558` | `3129.259 ms` | `2883.018 ms` | `2997.749 ms` | `2548` | `2548` |
+| `18` | `18` | `311` | `2405.757 ms` | `0.000 ms` | `0.000 ms` | `1473` | `1473` |
+| `18` | `22` | `93` | `538.734 ms` | `508.314 ms` | `517.946 ms` | `426` | `426` |
+
+Copy-profile role totals:
+
+| role | jobs | logical copied | summed io_wait | H2D event |
+|---|---:|---:|---:|---:|
+| down | `14090` | `89.856 GiB` | `48397.223 ms` | `4762.009 ms` |
+| gate | `12501` | `61.668 GiB` | `41701.273 ms` | `3319.868 ms` |
+| up | `12499` | `57.128 GiB` | `38348.294 ms` | `3186.184 ms` |
+
+Interpretation:
+
+- The largest endpoint bucket remains up/gate, not down:
+  - up/gate decode wall is about `14.27 s`;
+  - down decode batch wall is about `5.55 s`;
+  - current-down overlap worker is about `3.13 s`.
+- The up/gate problem is still mostly transfer/staging wait, not GPU math:
+  up/gate compute is only about `0.41 s` total in the profile.
+- However, same-byte up/gate IO coalescing is not the next implementation:
+  existing `GGML_MOE_UP_GATE_COMBINED_STAGE` and the later shared-IO early-up
+  patch both reduced raw IO counters but failed endpoint decode because they
+  disturbed the accepted copy/compute overlap shape.
+- Therefore the next source-level change must reduce bytes or improve
+  residency/layout, not merely combine the same full-size up/gate reads.
+
+Decision from this profile:
+
+- Reject further work on naive up/gate co-submit for this branch.
+- Keep the last successful v2 same-layer coalesced shadow tool as evidence that
+  runtime batch fragmentation is real, but do not promote it as SOTA.
+- The next practical candidates are:
+  1. lower-byte v2 partial split, because existing planner/control/smoke work
+     shows enough theoretical held-out room and low CPU control overhead;
+  2. RAM/VRAM storage layout that replaces low-value file cache with
+     batch-friendly expert data, if partial split runtime overhead is too high.
+- Before writing runtime replacement code, run one materialized-pack bound for
+  the currently available top2048 v2 payload and compare it against the larger
+  budget-120 metadata-only bound. This decides whether to prototype with the
+  already materialized small pack or whether the small pack cannot plausibly
+  move real token rate.
+
+Materialized top2048 planner result:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-top2048-partial-plan-n32-france-901eda86`
+- Pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-v2.expert-pack`
+- Manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-manifest.tsv`
+- Command shape:
+  `systemd-run --wait --collect --same-dir -p RuntimeMaxSec=240
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 env RUN=<run> N=32
+  PROMPT_ID=dev_france_top2048_partial_plan
+  PROMPT_USER_TEXT="Please introduce France in a short paragraph."
+  QUALITY_KEYWORDS="france,paris|europe|western"
+  EXTRA_RUNTIME_ENV="<top2048 v2 pack + manifest + partial plan envs>"
+  .Agent/run-tools/kimi-general-prompt-repro.sh`
+- Quality: pass.
+- TTFT: `7162.49 ms`.
+- Decode: `16304.77 ms / 31 = 1.90 tok/s`.
+- Host RAM peak: `12724568064 bytes`.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+- Planner CSV:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-top2048-partial-plan-n32-france-901eda86/v2-partial-split-plan.csv`
+
+Top2048 decode coverage:
+
+| phase/role | active | covered | coverage | full-cover calls | miss-weighted saved |
+|---|---:|---:|---:|---:|---:|
+| `decode_down/down` | `14888` | `4774` | `32.07%` | `20` | `8.512 GiB` |
+| `decode_upgate/gate` | `14888` | `3111` | `20.90%` | `2` | `2.241 GiB` |
+| `decode_upgate/up` | `14888` | `2762` | `18.55%` | `1` | `1.750 GiB` |
+| decode total | `44664` | `10647` | `23.84%` | `23 / 5583` | `12.504 GiB` |
+
+Top2048 bound:
+
+- IO-only upper bound at `10.4 GiB/s`:
+  `12.504 GiB / 10.4 GiB/s = 1.202 s` total, about `38.8 ms/token` for N32.
+- From the conservative default-off France run at `1.86 tok/s`, reaching
+  `2 tok/s` requires about `1.19 s` decode saving. The top2048 IO-only bound
+  leaves essentially no overhead budget.
+- From this planner run's faster `1.90 tok/s` sample, reaching `2 tok/s`
+  requires about `0.80 s` saving, leaving about `0.40 s` total overhead budget
+  over `3403` decode extra groups, or only about `0.12 ms/group`.
+- Existing partial-split smoke results are above that budget once read/H2D and
+  synchronization are included. Therefore top2048 is too small for a robust
+  runtime partial-split prototype.
+
+Storage constraint:
+
+- Current free disk under `/root/lfz` is about `124 GiB`.
+- The dev7 budget-120 v2 payload estimate is `128839811072 bytes`
+  (`~120 GiB` payload, before safety margin and temporary files).
+- Materializing budget-120 now has insufficient safety margin and would leave
+  little room for build outputs, run artifacts, and rollback data.
+
+Decision:
+
+- Do not implement real runtime partial split against the materialized top2048
+  pack as the next optimization; the theoretical margin is too narrow.
+- Do not materialize budget-120 until disk space is intentionally freed or a
+  smaller dev-derived portfolio is selected with a clear held-out bound.
+- Next source-level optimization should choose between:
+  - a smaller prompt-general v2 portfolio with enough up/gate miss-weighted
+    saving and fewer extra groups than top2048; or
+  - RAM/VRAM storage-layout work that replaces low-value file cache with
+    batch-friendly expert slabs without disturbing the current overlap.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.
