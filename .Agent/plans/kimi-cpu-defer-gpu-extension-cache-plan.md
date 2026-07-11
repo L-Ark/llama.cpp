@@ -301,6 +301,89 @@ Next A/B priority:
    - The current dirty v2-overlap work remains diagnostic until it can beat this
      clean baseline under the same gates.
 
+### 2026-07-11 No-code IO-depth/refill screen
+
+Hypothesis:
+
+- Runtime expert-pack IO is below the pure IO bench ceiling because the queue
+  often drains to small batches.
+- Increasing io_uring depth/refill and pinned staging slots might reduce exposed
+  wait without code changes.
+
+Candidate env:
+
+```text
+MOE_IO_DEPTH=16
+MOE_IO_REFILL_BATCH=8
+PINNED_SLOTS=16
+```
+
+France result:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260711-815b-clean-depth16-refill8-slots16-france-n96-135850
+quality=pass
+TTFT=9662.11 ms
+decode=55404.00 ms / 85 runs
+token_rate=1.53 tok/s
+baseline_token_rate=1.46 tok/s
+memory.peak=12865302528
+expert_pack_iouring_wait=34404.409 ms
+baseline_iouring_wait=39931.036 ms
+iouring_inflight_avg=4.58, inflight_max=16
+down H2D timed=19007.563 ms
+gate H2D timed=4998.755 ms
+current_down_overlap_worker=8210.402 ms
+```
+
+Held-out long answer result:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260711-815b-clean-depth16-refill8-slots16-cloudbiz-n96-140049
+quality=pass
+TTFT=13890.47 ms
+decode=66130.95 ms / 95 runs
+token_rate=1.44 tok/s
+baseline_token_rate=1.42 tok/s
+memory.peak=12871102464
+expert_pack_iouring_wait=41804.306 ms
+baseline_iouring_wait=44165.703 ms
+iouring_inflight_avg=4.68, inflight_max=16
+down H2D timed=22950.703 ms
+gate H2D timed=5844.314 ms
+current_down_overlap_worker=9798.615 ms
+```
+
+Decision:
+
+- This is a real but small candidate improvement:
+  - France: `1.46 -> 1.53 tok/s`;
+  - held-out long prompt: `1.42 -> 1.44 tok/s`.
+- RAM remains well under 16GB and quality passes.
+- It does not solve queue fragmentation:
+  - inflight average only moves from about `4.3-4.4` to `4.6-4.7`;
+  - batch histogram remains dominated by `2-8` jobs;
+  - gate iouring path still maxes at 8, so upgate critical path is mostly
+    unchanged.
+- Do not promote this alone as accepted new SOTA default yet. It should be kept
+  as a low-risk runtime candidate and retested with the next upgate-cache
+  changes. The larger opportunity remains reducing upgate misses/wait, not only
+  increasing queue depth.
+
+Next action:
+
+1. Run an upgate-priority VRAM split A/B on the same clean worktree.
+   - Baseline split: down hit `~61%`, upgate hit `~42-44%`.
+   - Test higher `GGML_MOE_VRAM_CACHE_UPGATE_PCT` while keeping total VRAM cache
+     under the same safety constraints.
+   - Measure whether upgate wall falls more than down wall rises.
+
+2. If upgate-priority VRAM split helps, combine it with the depth16/refill8
+   candidate and rerun France + held-out long prompt.
+
+3. If VRAM split does not help, move to explicit RAM tier for high-impact
+   up/gate layers selected from clean baseline upgate wall/miss profile.
+
 ## 当前阶段 Goal 与 Plan：default-off v2 full-cover down dispatch A/B
 
 Timestamp: 2026-07-11 CST.
