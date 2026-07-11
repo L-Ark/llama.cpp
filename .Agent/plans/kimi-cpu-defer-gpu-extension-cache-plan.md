@@ -149,6 +149,49 @@ Immediate next diagnostic before changing cache policy:
      experts and compare endpoint token rate, TTFT, refaults, and SSD batch
      fragmentation.
 
+Follow-up run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-source-plus-mmapdrop-reasoning-n96-193126`;
+- env added:
+  `LLAMA_MMAP_DONTNEED_PROFILE_OUT` and
+  `LLAMA_MMAP_DONTNEED_PROFILE_FILTER=00009-of-00010.gguf,00010-of-00010.gguf`;
+- quality: pass, output says `5:15 PM`;
+- TTFT: `224433.43 ms`;
+- decode: `37840.74 ms / 61`, `1.61 tok/s`;
+- source reads: still all observed expert-copy reads are `fd_direct +
+  io_uring`, no page-cache/buffered/direct fallback;
+- filtered mmap ranges:
+  - rows: `52`;
+  - total profiled length: `57.389 GiB`;
+  - resident before drop: `1.168 GiB`;
+  - resident after `madvise`: `1.168 GiB`;
+  - resident after `posix_fadvise`: `0`;
+  - shard 00009: `0.972 GiB -> 0`;
+  - shard 00010: `0.196 GiB -> 0`.
+
+Final residency after the same run:
+
+- GGUF shards: `13.550 GiB`;
+- expert packs: `0.005 GiB`;
+- alias TSV: `0.010 GiB`;
+- shard 00009: `11.296 GiB`;
+- shard 00010: `2.247 GiB`;
+- tensor attribution again shows `13.557 GiB` of expert tensor pages,
+  concentrated in `blk.53-59.ffn_{down,gate,up}_exps.weight`.
+
+Updated conclusion:
+
+- `posix_fadvise` works; the large late-layer file cache is not retained
+  because drop failed.
+- The pages are refaulted after the post-prompt drop, during generation or late
+  prompt/decode transition.
+- Because source-read profile still reports only O_DIRECT/io_uring expert-copy
+  reads, the refaulting caller is outside the explicit expert-copy path.
+- Next implementation step is a default-off `blk.53-59` mmap touch/caller
+  profile around non expert-copy GGUF tensor access. Cache-policy A/B should
+  wait until this caller is known.
+
 ### Immediate Plan
 
 #### Step 1: Reproduce the current control
