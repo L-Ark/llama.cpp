@@ -1047,6 +1047,142 @@ Next required implementation plan:
    - TTFT must not regress more than the existing drop/profile overhead;
    - endpoint token rate must not regress before using reclaimed RAM for cache.
 
+### 2026-07-12 Phase 1 Result: scheduler sparse-copy source replacement works
+
+Diagnostic branch:
+
+- `vendor/kimi-prompt-host-source-prof`
+- pushed diagnostic commit:
+  - `58de8e945 diag: replace scheduler moe copy source from pack`
+
+Implementation:
+
+- Added default-off `GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE`.
+- Added `GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE_PROFILE_OUT`.
+- Default scope is prompt-only:
+  `GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE_PROMPT_ONLY` defaults enabled.
+- Exported a v1 expert-pack read-to-host hook:
+  `ggml_cuda_moe_expert_pack_read_to_host(...)`.
+- The CPU/defer scheduler sparse-copy path now can, when enabled:
+  1. resolve each active `(tensor, expert_id)` to the existing expert-pack,
+     overlay, alias, or RAM-tier source;
+  2. read each expert into a temporary contiguous host buffer using the existing
+     explicit source path;
+  3. submit one H2D copy for the same expert range into the split backend;
+  4. fall back to the original GGUF mmap `input->data` source if any expert in
+     the range is missing or unreadable.
+- The split backend is synchronized after replacement copies so the temporary
+  host buffers remain valid before graph compute. This is conservative and
+  default-off.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-sched-pack-source-replace-reasoning-n96-204042`
+- prompt:
+  `A train leaves at 3 PM and arrives 2 hours and 15 minutes later. What time does it arrive?`
+- env additions:
+  - `GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE=1`
+  - `GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE_PROFILE_OUT=$RUN/sched-pack-source-profile.csv`
+  - `GGML_MOE_SOURCE_READ_PROFILE_OUT=$RUN/source-read-profile.csv`
+  - `GGML_SCHED_MOE_COPY_PROFILE_OUT=$RUN/sched-moe-copy-profile.csv`
+  - `LLAMA_MMAP_DONTNEED_PROFILE_OUT=$RUN/mmap-dontneed-profile.csv`
+  - `LLAMA_MMAP_DONTNEED_FADVISE=1`
+- cgroup:
+  - `MemoryMax=15900000000`
+  - `MemorySwapMax=0`
+- quality: pass, output contains `5:15 PM`
+- CPU fallback source entries: `0`
+
+Endpoint metrics:
+
+- TTFT / prompt eval: `76115.61 ms`
+- decode: `35768.69 ms / 61`, `1.71 tok/s`
+- memory peak: `12149727232` bytes, about `11.32 GiB`
+- final memory:
+  - `memory.current.final=814600192`
+  - `file=807399424`
+  - `anon=458752`
+  - `workingset_refault_file=0`
+
+Comparison with prior diagnostics:
+
+| run | TTFT | decode tok/s | memory peak | final GGUF shard cache |
+|---|---:|---:|---:|---:|
+| sync-before-drop only | `213839.38 ms` | `1.64` | `15899996160` | `13.553 GiB` |
+| force delayed second drop | `215903.06 ms` | `1.62` | `15899996160` | `13.555 GiB` |
+| scheduler pack-source replacement | `76115.61 ms` | `1.71` | `12149727232` | `0.515 GiB` |
+
+Scheduler pack-source profile:
+
+```text
+ranges_attempted=14028
+ranges_replaced=14028
+ranges_fallback=0
+experts_attempted=19794
+experts_read=19794
+bytes_replaced=112235672064
+gguf_source_bytes=39793410048
+read_us=50936478
+syncs=177
+sync_us=10149
+```
+
+Source-read profile:
+
+- prompt replacement added `19794` direct expert reads;
+- total direct payload from explicit sources: about `104.53 GiB`;
+- direct fallback: `0`;
+- page-cache reads: `0`;
+- buffered reads: `0`;
+- explicit decode path remains io_uring:
+  `iouring_reads=58392`, `iouring_bytes=333782335488`.
+
+Final file-cache residency:
+
+- GGUF shards: `553429760` bytes, `0.515 GiB`
+- expert packs: `4845568` bytes, `0.005 GiB`
+- alias TSV: `0.010 GiB`
+- shard `00009`: `0.115 GiB`, down from about `11.30 GiB`
+- shard `00010`: `0.0146 GiB`, down from about `2.247 GiB`
+
+Decision:
+
+- This confirms the source of the 13-14 GiB low-value host file cache:
+  CPU/defer scheduler sparse-copy was using GGUF mmap `input->data` as the
+  prompt H2D source even though real CPU fallback compute was `0`.
+- Replacing that source with explicit expert-pack/alias/RAM-tier reads removes
+  the late-layer GGUF page-cache footprint and leaves about `4.5 GiB` more
+  headroom under the `16 GB` host RAM limit.
+- It also substantially improves TTFT in this run because the cgroup no longer
+  thrashes around a 15.9 GB file-cache peak.
+- Decode token rate improves only modestly (`1.64 -> 1.71` versus the
+  sync-before-drop diagnostic), so this should be treated primarily as a host
+  RAM unlock and TTFT fix. The next token-rate gain should use the freed RAM for
+  explicit second-tier expert cache or larger batch-coherent RAM source.
+
+Promotion status:
+
+- Not yet global SOTA:
+  - only one dev prompt was tested;
+  - code is on diagnostic branch;
+  - held-out prompt and France quality gates still need to run;
+  - main Kimi branch currently has unrelated dirty `moe_stream_batch.cu`
+    changes, so the patch must be ported carefully without overwriting them.
+- Candidate for mainline default-off port after dirty-worktree ownership is
+  resolved.
+
+Immediate next steps:
+
+1. Port `58de8e945` to the main Kimi branch as default-off without disturbing
+   existing dirty changes.
+2. Run mandatory France and at least one held-out prompt with the source
+   replacement enabled.
+3. If quality/fallback/TTFT gates pass, use the freed host RAM for explicit RAM
+   expert cache:
+   - start with pageable second-tier hot experts;
+   - then test full low-hit critical layer/role slabs;
+   - require endpoint token-rate improvement, not just lower file cache.
+
 ## 2026-07-12 Active Goal: DeepSeek-style CPU/defer GPU-extension on Kimi
 
 ### Goal
