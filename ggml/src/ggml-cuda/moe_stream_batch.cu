@@ -4314,6 +4314,136 @@ static void expert_pack_v2_shadow_profile_record(
     std::fclose(f);
 }
 
+static void expert_pack_v2_call_coverage_record(
+        const char *phase,
+        const char *role,
+        const char *tensor_name,
+        int logical_type,
+        size_t logical_nbytes,
+        int64_t logical_ne00,
+        int64_t logical_ne01,
+        size_t logical_nb01,
+        batch_vram_cache *cache,
+        const int *active_experts,
+        int n_active) {
+    const char *path = std::getenv("GGML_MOE_GPU_EXTENSION_COVERAGE_OUT");
+    if (!path || !path[0] || !tensor_name || !tensor_name[0] ||
+            !active_experts || n_active <= 0 || logical_nbytes == 0) {
+        return;
+    }
+
+    int cache_hits = 0;
+    int v2_hits = 0;
+    int v2_supported_hits = 0;
+    int v2_smaller_hits = 0;
+    bool full_cover = true;
+    bool homogeneous = true;
+    int packed_type = -1;
+    size_t packed_nbytes = 0;
+    int64_t packed_ne00 = 0;
+    int64_t packed_ne01 = 0;
+    size_t packed_nb01 = 0;
+    uint64_t split_possible_bytes = 0;
+    uint64_t split_possible_saved_bytes = 0;
+
+    for (int j = 0; j < n_active; ++j) {
+        const int expert_idx = active_experts[j];
+        if (cache && batch_cache_find_slot(cache, batch_key_hash(tensor_name, expert_idx)) >= 0) {
+            ++cache_hits;
+        }
+
+        const expert_pack_v2_entry *entry = expert_pack_v2_lookup(tensor_name, expert_idx);
+        if (!entry) {
+            full_cover = false;
+            continue;
+        }
+
+        ++v2_hits;
+        const bool supported = expert_pack_v2_packed_type_supported(entry->packed_type);
+        if (supported) {
+            ++v2_supported_hits;
+        } else {
+            full_cover = false;
+        }
+        const size_t entry_nbytes = (size_t)entry->nbytes;
+        split_possible_bytes += (uint64_t)entry_nbytes;
+        if (entry_nbytes < logical_nbytes) {
+            ++v2_smaller_hits;
+            split_possible_saved_bytes += (uint64_t)(logical_nbytes - entry_nbytes);
+        }
+
+        if (packed_type < 0) {
+            packed_type = entry->packed_type;
+            packed_nbytes = entry_nbytes;
+            packed_ne00 = entry->ne00;
+            packed_ne01 = entry->ne01;
+            packed_nb01 = (size_t)entry->nb01;
+        } else if (packed_type != entry->packed_type ||
+                packed_nbytes != entry_nbytes ||
+                packed_ne00 != entry->ne00 ||
+                packed_ne01 != entry->ne01 ||
+                packed_nb01 != (size_t)entry->nb01) {
+            homogeneous = false;
+        }
+    }
+
+    const uint64_t logical_total_bytes = (uint64_t)logical_nbytes * (uint64_t)n_active;
+    const bool full_homogeneous_cover = full_cover && homogeneous && v2_supported_hits == n_active;
+    const uint64_t full_cover_bytes = full_homogeneous_cover ? (uint64_t)packed_nbytes * (uint64_t)n_active : 0;
+    const uint64_t full_cover_saved_bytes =
+        full_homogeneous_cover && logical_total_bytes > full_cover_bytes ?
+        logical_total_bytes - full_cover_bytes : 0;
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,phase,role,tensor,logical_type,logical_nbytes,logical_ne00,logical_ne01,"
+                "logical_nb01,n_active,cache_hits,cache_misses,v2_hits,v2_supported_hits,"
+                "v2_smaller_hits,full_cover,homogeneous,full_homogeneous_cover,packed_type,"
+                "packed_nbytes,packed_ne00,packed_ne01,packed_nb01,logical_total_bytes,"
+                "split_possible_bytes,split_possible_saved_bytes,full_cover_bytes,"
+                "full_cover_saved_bytes\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%lu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%zu,%ld,%ld,%zu,%llu,%llu,%llu,%llu,%llu\n",
+            (unsigned long)++seq,
+            phase ? phase : "",
+            role ? role : "",
+            tensor_name,
+            logical_type,
+            logical_nbytes,
+            (long)logical_ne00,
+            (long)logical_ne01,
+            logical_nb01,
+            n_active,
+            cache_hits,
+            n_active - cache_hits,
+            v2_hits,
+            v2_supported_hits,
+            v2_smaller_hits,
+            full_cover ? 1 : 0,
+            homogeneous ? 1 : 0,
+            full_homogeneous_cover ? 1 : 0,
+            packed_type,
+            packed_nbytes,
+            (long)packed_ne00,
+            (long)packed_ne01,
+            packed_nb01,
+            (unsigned long long)logical_total_bytes,
+            (unsigned long long)split_possible_bytes,
+            (unsigned long long)split_possible_saved_bytes,
+            (unsigned long long)full_cover_bytes,
+            (unsigned long long)full_cover_saved_bytes);
+    std::fclose(f);
+}
+
 static bool expert_pack_page_cache_preload_source(expert_pack_source &source, const char *mode) {
     if (!source.page_cache || !source.file || !mode || !mode[0] || mode[0] == '0') {
         return true;
@@ -11922,6 +12052,30 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         gate_expert_bytes,
         active_experts,
         n_active);
+    expert_pack_v2_call_coverage_record(
+        prompt_mode ? "prompt_upgate" : "decode_upgate",
+        "up",
+        up_key_name,
+        src0_up_type_int,
+        up_expert_bytes,
+        ne00,
+        ne01,
+        up_nb01,
+        cache,
+        active_experts,
+        n_active);
+    expert_pack_v2_call_coverage_record(
+        prompt_mode ? "prompt_upgate" : "decode_upgate",
+        "gate",
+        gate_key_name,
+        src0_gate_type_int,
+        gate_expert_bytes,
+        ne00,
+        ne01,
+        gate_nb01,
+        cache,
+        active_experts,
+        n_active);
 
     const char *profile_upgate_env = std::getenv("GGML_MOE_VRAM_PROFILE_UPGATE");
     const bool profile_upgate = !profile_upgate_env || !profile_upgate_env[0] || profile_upgate_env[0] != '0';
@@ -13991,6 +14145,18 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     const bool updown_paired_down_name_ok =
         updown_paired_read && down_name_for_up_gate(src0_name, updown_paired_down_name, sizeof(updown_paired_down_name));
     preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, src0_bytes, st);
+    expert_pack_v2_call_coverage_record(
+        rows_stride > 8 ? "prompt_batch" : "decode_down",
+        is_prompt_up ? "up" : (is_prompt_gate ? "gate" : "down"),
+        src0_name,
+        src0_type_int,
+        src0_bytes,
+        ne00,
+        ne01,
+        nb01,
+        cache,
+        active_experts,
+        n_active);
 
     if (profile) cudaEventRecord(bc.ev_start, st);
 

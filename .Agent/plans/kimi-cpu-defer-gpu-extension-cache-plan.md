@@ -101,6 +101,36 @@ Plan:
    - Never call a result SOTA unless the pushed commit plus documented command
      can reproduce it from cold start.
 
+Current implementation step:
+
+- Timestamp: 2026-07-11 CST.
+- Add a default-off GPU-extension coverage audit under
+  `GGML_MOE_GPU_EXTENSION_COVERAGE_OUT`.
+- Scope:
+  - record one CSV row per `up`, `gate`, or `down` batch call;
+  - include phase, role, tensor, logical type/shape/bytes, active routes,
+    current VRAM cache hits/misses, v2 overlay hits, v2 supported hits,
+    homogeneous full-cover status, and theoretical byte savings for full-cover
+    or split-overlay paths;
+  - do not change cache state, scheduling, expert bytes, or compute dispatch.
+- Purpose:
+  - decide whether Kimi can benefit from a DeepSeek-style gate hotpool parity
+    path, paired `up/gate` residency, same-layer `up/gate/down` scheduling, or
+    lower-byte `GGMLMOEPACKv2` runtime consumption;
+  - reject overlay/runtime work if the profile shows low full-active coverage or
+    only non-critical byte savings.
+- Promotion rule:
+  - this step is instrumentation only and cannot be called SOTA;
+  - behavior changes may start only after a cold-start N32/N96 profile shows
+    where the exposed wait sits.
+- Verification:
+  - command:
+    `cmake --build build-cuda-batch --target ggml-cuda -j2`;
+  - result: passed, rebuilt `bin/libggml-cuda.so`;
+  - warnings: existing unused/missing-declaration/truncation warnings only;
+  - SOTA claim: none, because runtime behavior is unchanged unless
+    `GGML_MOE_GPU_EXTENSION_COVERAGE_OUT` is set.
+
 ## Active goal: Kimi lower-byte GPU-extension path
 
 Timestamp: 2026-07-11 CST.
