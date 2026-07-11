@@ -35,6 +35,17 @@
 #include <sys/sysctl.h>
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+extern "C" bool ggml_cuda_moe_expert_pack_read_to_host(
+        const char * tensor_name,
+        int expert_idx,
+        size_t nbytes,
+        void * dst,
+        size_t dst_capacity,
+        size_t * nread,
+        int * source_is_gguf) __attribute__((weak));
+#endif
+
 
 // backend buffer type
 
@@ -1846,6 +1857,176 @@ static bool ggml_kimi_split_profile_enabled() {
     return enabled;
 }
 
+struct ggml_kimi_sched_pack_source_profile {
+    uint64_t ranges_attempted = 0;
+    uint64_t ranges_replaced = 0;
+    uint64_t ranges_fallback = 0;
+    uint64_t experts_attempted = 0;
+    uint64_t experts_read = 0;
+    uint64_t bytes_replaced = 0;
+    uint64_t gguf_source_bytes = 0;
+    uint64_t read_us = 0;
+    uint64_t syncs = 0;
+    uint64_t sync_us = 0;
+};
+
+static std::mutex g_kimi_sched_pack_source_profile_mutex;
+static ggml_kimi_sched_pack_source_profile g_kimi_sched_pack_source_profile;
+
+static bool ggml_kimi_env_enabled(const char * name) {
+    const char * env = getenv(name);
+    return env && env[0] && env[0] != '0';
+}
+
+static const char * ggml_kimi_sched_pack_source_profile_path() {
+    static const char * path = []() -> const char * {
+        const char * env = getenv("GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE_PROFILE_OUT");
+        return env && env[0] ? env : nullptr;
+    }();
+    return path;
+}
+
+static void ggml_kimi_sched_pack_source_profile_report() {
+    const char * path = ggml_kimi_sched_pack_source_profile_path();
+    if (!path) {
+        return;
+    }
+    ggml_kimi_sched_pack_source_profile p;
+    {
+        std::lock_guard<std::mutex> lock(g_kimi_sched_pack_source_profile_mutex);
+        p = g_kimi_sched_pack_source_profile;
+    }
+    FILE * f = fopen(path, "w");
+    if (!f) {
+        return;
+    }
+    fprintf(f, "ranges_attempted,ranges_replaced,ranges_fallback,experts_attempted,experts_read,bytes_replaced,gguf_source_bytes,read_us,syncs,sync_us\n");
+    fprintf(f, "%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n",
+            p.ranges_attempted,
+            p.ranges_replaced,
+            p.ranges_fallback,
+            p.experts_attempted,
+            p.experts_read,
+            p.bytes_replaced,
+            p.gguf_source_bytes,
+            p.read_us,
+            p.syncs,
+            p.sync_us);
+    fclose(f);
+}
+
+static bool ggml_kimi_sched_pack_source_enabled() {
+    static const bool enabled = []() {
+        const bool on = ggml_kimi_env_enabled("GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE");
+        if (on && ggml_kimi_sched_pack_source_profile_path()) {
+            atexit(ggml_kimi_sched_pack_source_profile_report);
+        }
+        return on;
+    }();
+    return enabled;
+}
+
+static bool ggml_kimi_sched_pack_source_prompt_only() {
+    static const bool enabled = []() {
+        const char * env = getenv("GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE_PROMPT_ONLY");
+        return !(env && env[0] && env[0] == '0');
+    }();
+    return enabled;
+}
+
+static bool ggml_kimi_sched_pack_source_symbol_available() {
+#if defined(__GNUC__) || defined(__clang__)
+    return ggml_cuda_moe_expert_pack_read_to_host != nullptr;
+#else
+    return false;
+#endif
+}
+
+static bool ggml_kimi_sched_pack_source_read_range(
+        const char * tensor_name,
+        int32_t first_id,
+        int32_t last_id,
+        size_t expert_size,
+        size_t padding_end,
+        std::vector<std::vector<uint8_t>> & buffers,
+        const void ** out_ptr,
+        size_t * out_bytes) {
+#if defined(__GNUC__) || defined(__clang__)
+    if (!ggml_kimi_sched_pack_source_symbol_available() || !tensor_name || !tensor_name[0] ||
+            first_id < 0 || last_id < first_id || expert_size == 0) {
+        return false;
+    }
+
+    const size_t n_experts = (size_t) (last_id - first_id + 1);
+    const size_t payload_bytes = n_experts * expert_size;
+    const size_t bytes = payload_bytes + padding_end;
+    std::vector<uint8_t> buffer(bytes);
+    if (padding_end > 0) {
+        memset(buffer.data() + payload_bytes, 0, padding_end);
+    }
+
+    const int64_t t_start_us = ggml_time_us();
+    uint64_t experts_read = 0;
+    uint64_t gguf_source_bytes = 0;
+    bool ok = true;
+    for (int32_t expert = first_id; expert <= last_id; ++expert) {
+        size_t nread = 0;
+        int source_is_gguf = 0;
+        void * dst = buffer.data() + (size_t) (expert - first_id) * expert_size;
+        if (!ggml_cuda_moe_expert_pack_read_to_host(
+                    tensor_name, expert, expert_size, dst, expert_size, &nread, &source_is_gguf) ||
+                nread != expert_size) {
+            ok = false;
+            break;
+        }
+        ++experts_read;
+        if (source_is_gguf) {
+            gguf_source_bytes += expert_size;
+        }
+    }
+    const uint64_t read_us = (uint64_t) (ggml_time_us() - t_start_us);
+
+    {
+        std::lock_guard<std::mutex> lock(g_kimi_sched_pack_source_profile_mutex);
+        g_kimi_sched_pack_source_profile.ranges_attempted++;
+        g_kimi_sched_pack_source_profile.experts_attempted += n_experts;
+        g_kimi_sched_pack_source_profile.experts_read += experts_read;
+        g_kimi_sched_pack_source_profile.read_us += read_us;
+        if (ok) {
+            g_kimi_sched_pack_source_profile.ranges_replaced++;
+            g_kimi_sched_pack_source_profile.bytes_replaced += bytes;
+            g_kimi_sched_pack_source_profile.gguf_source_bytes += gguf_source_bytes;
+        } else {
+            g_kimi_sched_pack_source_profile.ranges_fallback++;
+        }
+    }
+
+    if (!ok) {
+        return false;
+    }
+    buffers.emplace_back(std::move(buffer));
+    *out_ptr = buffers.back().data();
+    *out_bytes = bytes;
+    return true;
+#else
+    (void) tensor_name;
+    (void) first_id;
+    (void) last_id;
+    (void) expert_size;
+    (void) padding_end;
+    (void) buffers;
+    (void) out_ptr;
+    (void) out_bytes;
+    return false;
+#endif
+}
+
+static void ggml_kimi_sched_pack_source_profile_record_sync(uint64_t sync_us) {
+    std::lock_guard<std::mutex> lock(g_kimi_sched_pack_source_profile_mutex);
+    g_kimi_sched_pack_source_profile.syncs++;
+    g_kimi_sched_pack_source_profile.sync_us += sync_us;
+}
+
 static bool ggml_kimi_split_moe_assign_profile_enabled() {
     static const bool enabled = []() {
         const char * env = getenv("GGML_KIMI_SPLIT_MOE_ASSIGN_PROFILE");
@@ -2737,6 +2918,11 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
         ggml_backend_t split_backend = sched->backends[split_backend_id];
         const int64_t split_start_us = split_profile ? ggml_time_us() : 0;
         std::vector<ggml_backend_sched_moe_restore> moe_restores;
+        std::vector<std::vector<uint8_t>> moe_pack_source_buffers;
+        bool moe_pack_source_used = false;
+        const bool moe_pack_source_try =
+            ggml_kimi_sched_pack_source_enabled() &&
+            (!ggml_kimi_sched_pack_source_prompt_only() || g_kimi_split_profile_phase == 1);
 
         // copy the input tensors to the split backend
         for (int input_id = 0; input_id < split->n_inputs; input_id++) {
@@ -2851,16 +3037,37 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                             const size_t padding = std::min<size_t>(expert_size, 512);
                             const size_t padding_end = last_id < n_expert - 1 ? padding : 0;
                             const size_t bytes = expert_size_copy + padding_end;
+                            const void * copy_src = (const uint8_t *)input->data + expert_offset;
+                            size_t copy_src_bytes = bytes;
+
+                            if (moe_pack_source_try) {
+                                const void * pack_src = nullptr;
+                                size_t pack_src_bytes = 0;
+                                if (ggml_kimi_sched_pack_source_read_range(
+                                            ggml_backend_sched_tensor_name(input),
+                                            first_id,
+                                            last_id,
+                                            expert_size,
+                                            padding_end,
+                                            moe_pack_source_buffers,
+                                            &pack_src,
+                                            &pack_src_bytes) &&
+                                        pack_src != nullptr && pack_src_bytes == bytes) {
+                                    copy_src = pack_src;
+                                    copy_src_bytes = pack_src_bytes;
+                                    moe_pack_source_used = true;
+                                }
+                            }
 
                             ggml_backend_tensor_set_async(split_backend,
                                 input_cpy,
-                                (const uint8_t *)input->data + expert_offset, expert_offset,
+                                copy_src, expert_offset,
                                 // copy a bit extra at the to ensure there are no NaNs in the padding of the last expert
                                 // this is necessary for MMQ in the CUDA backend
-                                bytes);
+                                copy_src_bytes);
 
                             if (moe_log) {
-                                copy_bytes += bytes;
+                                copy_bytes += copy_src_bytes;
                                 copy_ranges++;
                             }
                         };
@@ -2946,6 +3153,12 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                     }
                 }
             }
+        }
+
+        if (moe_pack_source_used) {
+            const int64_t t_sync_start_us = ggml_time_us();
+            ggml_backend_synchronize(split_backend);
+            ggml_kimi_sched_pack_source_profile_record_sync((uint64_t) (ggml_time_us() - t_sync_start_us));
         }
 
         auto restore_moe_cache_nodes = [&]() {
