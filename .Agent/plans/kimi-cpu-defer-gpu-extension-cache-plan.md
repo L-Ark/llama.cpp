@@ -810,6 +810,116 @@ Interpretation:
   - or improve coverage/batchability first, because top1024 average inflight is
     too low to use the 10 GiB/s storage ceiling.
 
+## Current subgoal: top2048/top2992 v2 coverage and batchability screen
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Decide whether expanding the materialized v2 payload pack can improve real
+> runtime coverage and per-call io_uring batchability enough to justify a
+> default-off runtime dispatch prototype. This is still shadow-only and not a
+> SOTA claim.
+
+Why this is the next step:
+
+- The top1024 materialized pack has enough bytes to be interesting, but its
+  real runtime batchability is limited:
+  - staged saved bytes: `7.499 GiB`;
+  - v2 shadow io_uring read rate: `6.043 GiB/s`;
+  - average inflight: `2.17`;
+  - max inflight: `8`.
+- The pure IO bench can reach about `10.0-10.4 GiB/s`, so the gap is not the
+  SSD alone. The current materialized coverage exposes too few v2 candidates
+  per runtime call to keep the queue full.
+- The earlier instruction to avoid top2048/top2992 expansion was conditional on
+  the reader path being fixed. The local-ring batched v2 shadow reader now
+  removes the buffered page-cache issue and is safe enough for a coverage
+  screen.
+
+Hypothesis:
+
+- Increasing materialized entries from `1024` to `2048` should increase:
+  - v2 accepted entries;
+  - staged entries;
+  - staged saved bytes;
+  - average inflight per v2 shadow batch.
+- If average inflight rises materially, read rate should move closer to the
+  `10.0-10.4 GiB/s` storage ceiling.
+- If staged bytes rise but average inflight remains near `2`, then pack
+  expansion alone does not fix the scheduler/batchability problem and real
+  dispatch should wait for a scheduling change.
+
+Theoretical upper bound:
+
+- For top1024, shadow staged saved bytes were `7.499 GiB`.
+- If top2048 roughly doubles staged saved bytes to about `15 GiB`, the maximum
+  IO-only saving at `10.4 GiB/s` is about `1.44 s` on N32 France.
+- At the observed top1024 v2 shadow read rate of `6.043 GiB/s`, the same
+  `15 GiB` would take about `2.48 s` to read, so the useful gain depends on
+  improving inflight and avoiding extra exposed H2D/sync.
+- The `>2 tok/s` target from a `~1.7 tok/s` N32/N96 baseline requires several
+  seconds of decode saving, so top2048 must either show substantially higher
+  staged saved bytes or prove that the dispatch path can overlap with current
+  expert IO/compute.
+
+Plan:
+
+1. Build materialized top2048 v2 payload pack from the existing dev-derived
+   budget-8 selected plan.
+   - Source selected plan:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-hotset-bound-dev7/budget-8p0-selected-plan.tsv`
+   - Builder:
+     `.Agent/run-tools/kimi_iq1s_selected_payload_pack.py`
+   - Output root:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048`
+   - Use `--max-entries 2048 --include-types IQ1_S,Q2_K`.
+
+2. Run N32 France shadow profile with the current local-ring v2 io_uring reader.
+   - Cold start under `MemoryMax=15900000000` and `MemorySwapMax=0`.
+   - Envs:
+     - `GGML_MOE_EXPERT_PACK_V2=<top2048 pack>`
+     - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=<top2048 manifest>`
+     - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE=1`
+     - `GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ=1`
+     - `GGML_MOE_EXPERT_PACK_V2_SHADOW_IOURING_READ=1`
+   - Required checks:
+     - quality pass on France;
+     - RAM below `15900000000`;
+     - decode CPU fallback remains zero;
+     - no buffered v2 shadow reads;
+     - file cache remains close to default-off and does not repeat the old
+       `fread` page-cache growth.
+
+3. Aggregate and compare against top1024.
+   - Compare:
+     - accepted entries;
+     - full-cover calls;
+     - staged entries and staged saved bytes;
+     - direct bytes and physical bytes;
+     - read_ms, H2D_ms, sync_ms, total shadow wall;
+     - read rate;
+     - io_uring batches/jobs;
+     - inflight average/max;
+     - role split for `up/gate/down`.
+   - Use top1024 local-ring baseline:
+     - staged entries: `2221`;
+     - staged saved bytes: `7.499 GiB`;
+     - read_ms: `988.880`;
+     - H2D_ms: `291.527`;
+     - total shadow: `1526.050`;
+     - read rate: `6.043 GiB/s`;
+     - inflight avg/max: `2.17 / 8`.
+
+4. Decision gate.
+   - If top2048 materially improves staged saved bytes and inflight, continue
+     to top2992 or a tiny default-off dispatch subset.
+   - If top2048 improves saved bytes but not inflight/read rate, prioritize
+     scheduler-level batching/coalescing before dispatch.
+   - If top2048 increases RAM/TTFT, reduces quality, or causes v2 buffered
+     fallback, reject expansion and stay at top1024 for dispatch design.
+   - No SOTA claim is allowed from this screen.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.
