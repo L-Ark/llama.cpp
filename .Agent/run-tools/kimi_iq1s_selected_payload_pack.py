@@ -158,22 +158,40 @@ def parse_gguf_header(data: bytes) -> tuple[dict[str, object], dict[str, TensorI
     return metadata, tensors, data_start
 
 
-def range_get(url: str, start: int, end_inclusive: int, timeout: int = 180) -> bytes:
+def range_get_urllib(url: str, start: int, end_inclusive: int, timeout: int) -> bytes:
     req = urllib.request.Request(url, headers={
         "Range": f"bytes={start}-{end_inclusive}",
         "User-Agent": "kimi-iq1s-selected-payload/1.0",
     })
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = resp.read()
-    except Exception:
-        cmd = [
-            "curl", "-L", "--fail", "--retry", "5", "--silent", "--show-error",
-            "--range", f"{start}-{end_inclusive}",
-            "--user-agent", "kimi-iq1s-selected-payload/1.0",
-            url,
-        ]
-        data = subprocess.check_output(cmd, timeout=timeout)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read()
+
+
+def range_get_curl(url: str, start: int, end_inclusive: int, timeout: int) -> bytes:
+    cmd = [
+        "curl", "-L", "--fail", "--retry", "5", "--retry-delay", "1",
+        "--connect-timeout", "30", "--max-time", str(timeout),
+        "--silent", "--show-error",
+        "--range", f"{start}-{end_inclusive}",
+        "--user-agent", "kimi-iq1s-selected-payload/1.0",
+        url,
+    ]
+    return subprocess.check_output(cmd, timeout=timeout + 30)
+
+
+def range_get(url: str, start: int, end_inclusive: int, timeout: int = 180,
+              backend: str = "auto") -> bytes:
+    if backend == "curl":
+        data = range_get_curl(url, start, end_inclusive, timeout)
+    elif backend == "urllib":
+        data = range_get_urllib(url, start, end_inclusive, timeout)
+    elif backend == "auto":
+        try:
+            data = range_get_urllib(url, start, end_inclusive, timeout)
+        except Exception:
+            data = range_get_curl(url, start, end_inclusive, timeout)
+    else:
+        raise ValueError(f"unsupported range backend: {backend}")
     expected = end_inclusive - start + 1
     if len(data) != expected:
         raise RuntimeError(
@@ -182,7 +200,8 @@ def range_get(url: str, start: int, end_inclusive: int, timeout: int = 180) -> b
     return data
 
 
-def read_concat_range(urls: list[str], part_bytes: list[int], start: int, nbytes: int) -> bytes:
+def read_concat_range(urls: list[str], part_bytes: list[int], start: int, nbytes: int,
+                      backend: str = "auto", timeout: int = 180) -> bytes:
     out = bytearray()
     prefix = 0
     end = start + nbytes
@@ -192,7 +211,7 @@ def read_concat_range(urls: list[str], part_bytes: list[int], start: int, nbytes
         if start < part_end and end > part_start:
             local_start = max(start, part_start) - part_start
             local_end = min(end, part_end) - part_start
-            out.extend(range_get(url, local_start, local_end - 1))
+            out.extend(range_get(url, local_start, local_end - 1, timeout=timeout, backend=backend))
         prefix = part_end
     if len(out) != nbytes:
         raise RuntimeError(f"concat range short read start={start} nbytes={nbytes} got={len(out)}")
@@ -293,7 +312,8 @@ def load_selected(path: Path, tensors: dict[str, TensorInfo], max_entries: int, 
     return selected, stats
 
 
-def write_pack(path: Path, selected: list[dict], data_start: int, metadata_only: bool) -> list[dict]:
+def write_pack(path: Path, selected: list[dict], data_start: int, metadata_only: bool,
+               range_backend: str, range_timeout: int) -> list[dict]:
     pack_data_start = align_up(PACK_HEADER.size + len(selected) * PACK_ENTRY.size, PACK_ALIGNMENT)
     offset = pack_data_start
     payloads: list[bytes] = []
@@ -305,7 +325,9 @@ def write_pack(path: Path, selected: list[dict], data_start: int, metadata_only:
         row["pack_offset"] = offset
         manifest.append(row)
         if not metadata_only:
-            payloads.append(read_concat_range(IQ1S_PART_URLS, IQ1S_PART_BYTES, src_offset, int(item["packed_nbytes"])))
+            payloads.append(read_concat_range(
+                IQ1S_PART_URLS, IQ1S_PART_BYTES, src_offset, int(item["packed_nbytes"]),
+                backend=range_backend, timeout=range_timeout))
         offset = align_up(offset + int(item["packed_nbytes"]), PACK_ALIGNMENT)
 
     with path.open("wb") as f:
@@ -397,6 +419,13 @@ def main() -> int:
     parser.add_argument("--tensor-regex", default="")
     parser.add_argument("--exclude-tensor-regex", default="")
     parser.add_argument("--header-bytes", type=int, default=16 * 1024 * 1024)
+    parser.add_argument(
+        "--header-cache",
+        type=Path,
+        default=None,
+        help="Optional local GGUF part1 header cache. If present, use it instead of a remote range request.")
+    parser.add_argument("--range-backend", choices=("auto", "urllib", "curl"), default="auto")
+    parser.add_argument("--range-timeout", type=int, default=180)
     parser.add_argument("--metadata-only", action="store_true")
     args = parser.parse_args()
 
@@ -407,7 +436,16 @@ def main() -> int:
     if invalid_types:
         raise ValueError(f"unsupported include types: {sorted(invalid_types)}")
 
-    header = range_get(IQ1S_PART_URLS[0], 0, args.header_bytes - 1)
+    if args.header_cache is not None and args.header_cache.exists():
+        header = args.header_cache.read_bytes()
+        if len(header) < args.header_bytes:
+            raise RuntimeError(
+                f"header cache too small: {args.header_cache} got={len(header)} need={args.header_bytes}")
+        header = header[:args.header_bytes]
+    else:
+        header = range_get(
+            IQ1S_PART_URLS[0], 0, args.header_bytes - 1,
+            timeout=args.range_timeout, backend=args.range_backend)
     metadata, tensors, data_start = parse_gguf_header(header)
     selected, stats = load_selected(
         args.selected_plan_tsv, tensors, args.max_entries, include_types,
@@ -418,7 +456,9 @@ def main() -> int:
     args.out_dir.mkdir(parents=True, exist_ok=True)
     pack_path = args.out_dir / "selected-iq1s-overlay-v2.expert-pack"
     manifest_tsv = args.out_dir / "selected-iq1s-overlay-manifest.tsv"
-    manifest = write_pack(pack_path, selected, data_start, args.metadata_only)
+    manifest = write_pack(
+        pack_path, selected, data_start, args.metadata_only,
+        args.range_backend, args.range_timeout)
     write_manifest(manifest_tsv, manifest)
 
     payload_bytes = sum(int(row["packed_nbytes"]) for row in manifest)
@@ -433,6 +473,9 @@ def main() -> int:
         "max_entries": args.max_entries,
         "include_types": sorted(include_types),
         "header_bytes": args.header_bytes,
+        "header_cache": str(args.header_cache) if args.header_cache is not None else "",
+        "range_backend": args.range_backend,
+        "range_timeout": args.range_timeout,
         "gguf_data_start": data_start,
         "metadata": {
             "version": metadata.get("version"),
@@ -453,7 +496,10 @@ def main() -> int:
             f"--out-dir {args.out_dir}",
             f"--max-entries {args.max_entries}",
             f"--include-types {args.include_types}",
-        ] + (["--metadata-only"] if args.metadata_only else [])),
+        ] + ([f"--header-cache {args.header_cache}"] if args.header_cache is not None else []) +
+            ([f"--range-backend {args.range_backend}"] if args.range_backend != "auto" else []) +
+            ([f"--range-timeout {args.range_timeout}"] if args.range_timeout != 180 else []) +
+            (["--metadata-only"] if args.metadata_only else [])),
     }
     (args.out_dir / "report.json").write_text(
         json.dumps(result, indent=2, sort_keys=True, default=json_default) + "\n",

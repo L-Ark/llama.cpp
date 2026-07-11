@@ -874,6 +874,27 @@ Plan:
    - Output root:
      `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048`
    - Use `--max-entries 2048 --include-types IQ1_S,Q2_K`.
+   - Use the existing local GGUF header cache to avoid refetching the first
+     16 MiB header range:
+     `/root/lfz/tmp/gp32-iq1s-header-preflight/Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5.head16m`.
+   - Use `--range-backend curl --range-timeout 120` for payload ranges so
+     stalled remote reads fail/retry instead of hanging indefinitely.
+
+Build-tool preparation:
+
+- First top2048 attempt without header cache was stopped after `5m22s`.
+- It had not written a pack or manifest yet and was waiting on an HTTPS socket
+  while re-fetching the remote header range.
+- Added reproducibility-only builder options:
+  - `--header-cache <path>`;
+  - `--range-backend auto|urllib|curl`;
+  - `--range-timeout <seconds>`.
+- Metadata-only smoke with these options passed:
+  - run:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048-metadata-cache-curl-smoke`;
+  - selected entries: `2048`;
+  - payload bytes: `5881774080`;
+  - pack bytes in metadata-only mode: `380928`.
 
 2. Run N32 France shadow profile with the current local-ring v2 io_uring reader.
    - Cold start under `MemoryMax=15900000000` and `MemorySwapMax=0`.
