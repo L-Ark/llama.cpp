@@ -384,6 +384,70 @@ Next action:
 3. If VRAM split does not help, move to explicit RAM tier for high-impact
    up/gate layers selected from clean baseline upgate wall/miss profile.
 
+### 2026-07-11 Upgate-priority VRAM split screen
+
+Hypothesis:
+
+- Clean baseline has down hit `~61%` but upgate hit only `~42-44%`.
+- Moving more of the fixed 15GB VRAM expert cache budget from down to upgate
+  might reduce the dominant upgate wall time.
+
+Candidate env:
+
+```text
+UPGATE_PCT=70
+VRAM_MIB=15000
+MOE_IO_DEPTH=8
+MOE_IO_REFILL_BATCH=4
+PINNED_SLOTS=12
+```
+
+France result:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260711-815b-clean-upgate70-france-n96-140458
+quality=pass
+TTFT=11051.00 ms
+decode=58014.68 ms / 85 runs
+token_rate=1.47 tok/s
+baseline_token_rate=1.46 tok/s
+memory.peak=12811481088
+expert_pack_iouring_wait=40206.651 ms
+baseline_iouring_wait=39931.036 ms
+down_slots=571, baseline_down_slots=723
+down_hit_rate=61.2%, baseline_down_hit_rate=61.4%
+upgate_slots=1959, baseline_upgate_slots=1735
+upgate_hit_rate=44.5%, baseline_upgate_hit_rate=43.5%
+down H2D timed=18646.172 ms
+gate H2D timed=4720.677 ms
+```
+
+Decision:
+
+- Reject as a standalone optimization.
+- The extra upgate slots only improve upgate hit by about `+1.0 pp`, and the
+  endpoint change `1.46 -> 1.47 tok/s` is too small to treat as a reproducible
+  improvement.
+- This suggests the upgate miss distribution is broad enough that simply moving
+  a few GB of VRAM cache budget is inefficient.
+- Do not combine this with depth16 yet; first design a more structured
+  up/gate cache candidate.
+
+Next action:
+
+- Select stable high-wall upgate layers using the clean baseline profile, not
+  France-only hotness.
+- Layers that appear in both France and held-out long prompt top upgate wall
+  lists include:
+  - `blk.28`
+  - `blk.31`
+  - `blk.33`
+  - `blk.51`
+- Next experiment should test an explicit RAM/VRAM tier for one or more of
+  these up/gate roles, with prompt-start preload and strict accounting for:
+  preload TTFT, RAM peak, file-cache displacement, refault/reclaim, upgate wall,
+  down regression, endpoint token rate, and held-out quality.
+
 ## 当前阶段 Goal 与 Plan：default-off v2 full-cover down dispatch A/B
 
 Timestamp: 2026-07-11 CST.
