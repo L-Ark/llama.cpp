@@ -4,6 +4,255 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Current Goal And Execution Plan: Kimi CPU/defer GPU-extension cache path
+
+Timestamp: 2026-07-11 CST.
+
+### Goal
+
+The active goal is to make Kimi decode fast on a constrained target machine:
+
+- hardware envelope: `16 GB` host RAM hard limit, including page cache and all
+  process-external memory, plus one `32 GB` RTX 5090;
+- workload: cold-start inference for arbitrary user prompts, not a prompt-specific
+  benchmark;
+- correctness gate: every accepted optimization must keep output semantically
+  correct and coherent. The prompt `Please introduce France in a short paragraph.`
+  remains a mandatory quality gate, but SOTA must be decided on held-out
+  general prompts;
+- performance gate: TTFT must not increase by more than `20%` versus the
+  matching baseline;
+- reproducibility gate: every SOTA must be reproducible from a clean commit,
+  pushed branch, exact command, exact env, exact prompt set, and recorded output.
+
+Immediate target: recover and stabilize a reproducible general-prompt Kimi SOTA,
+then push it above `2 tok/s` decode. Final target remains stable `>5 tok/s`
+decode for random prompts under the same RAM and quality gates.
+
+### Current Interpretation
+
+The DeepSeek result suggests an important architectural pattern:
+
+- the CPU/defer MoE path can be the main scheduler, not merely a slow fallback;
+- large gains happen when that CPU/defer path gets a GPU expert-cache extension
+  for the expensive expert roles;
+- if gate/up/down stay in CPU/defer slow compute or slow GGUF fallback, adding a
+  GPU extension can produce a large token-rate jump;
+- if Kimi already has zero prompt/decode fallback and gate/up/down are already
+  served by the GPU extension, then the next bottleneck is no longer arithmetic
+  placement. It is expert representation, IO queue continuity, staging, H2D, and
+  explicit RAM/VRAM cache layout.
+
+Therefore the next Kimi work must first prove which case we are in. Do not
+assume a DeepSeek-style gate fix will help Kimi unless profiling shows remaining
+Kimi gate/up/down CPU/defer slow-path work.
+
+### Non-negotiable SOTA Rules
+
+Any result can be called SOTA only if all items below are true:
+
+1. It is produced from a clean, pushed commit on the current Kimi vendor branch.
+2. The run is cold start and executed under `MemoryMax=15900000000` and
+   `MemorySwapMax=0`.
+3. It records exact env vars, model paths, pack paths, command, git commit,
+   prompt text, output text, TTFT, prefill rate, decode rate, decode wall time,
+   CPU fallback, RAM peak, page-cache/file breakdown when relevant, and VRAM
+   cache settings.
+4. It passes quality on the mandatory France prompt and on the held-out test
+   prompts. Held-out prompts must not be used to choose cache profiles, hotsets,
+   packs, or thresholds.
+5. TTFT is within `+20%` of the matching baseline.
+6. Host RAM peak stays below the hard limit including page cache.
+7. The exact run can be repeated and gives the same conclusion. If a result
+   cannot be reproduced, it is marked rejected and cannot remain the rollback
+   point.
+8. The commit message body must include:
+   - improvement magnitude;
+   - exact environment;
+   - exact reproduce command;
+   - prompt/test set;
+   - RAM, TTFT, quality gate, and fallback status;
+   - rollback point.
+
+### Baseline To Re-establish Before More Code
+
+Before implementing a new optimization, rerun the current accepted baseline from
+a clean worktree:
+
+- branch: `vendor/kimi-deepseek-41d205-additive`;
+- current pushed doc/code point: `866461c4b9c3d1391399926d91fa91a2e352e738`;
+- candidate runtime knobs: existing stable general configuration, especially
+  `MOE_IO_DEPTH=16`, `MOE_IO_REFILL_BATCH=8`, `PINNED_SLOTS=16`, and the current
+  default VRAM split unless a specific A/B says otherwise;
+- prompts:
+  - mandatory quality/dev: `Please introduce France in a short paragraph.`;
+  - general dev: one infrastructure or deployment prompt;
+  - held-out test: at least two prompts that are not used for profile, pack, or
+    threshold selection.
+
+The baseline report must include per-token critical-path breakdown:
+
+- expert read wait;
+- pinned/pageable staging;
+- H2D;
+- up/gate compute;
+- down compute;
+- CPU fallback bytes and calls;
+- same-layer and next-layer overlap;
+- page-cache/file-backed memory that survives into decode.
+
+### Phase 1: CPU/defer GPU-extension Coverage Audit
+
+Purpose: decide whether the DeepSeek gate-extension lesson still has direct
+upside for Kimi.
+
+Steps:
+
+1. Run N96 cold-start profiling and dump fallback by role/layer/type.
+2. Confirm whether prompt and decode have true zero fallback for Kimi expert
+   roles. Separate:
+   - real CPU compute fallback;
+   - CPU/defer scheduler calling GPU extension;
+   - GGUF `src0->data` fallback;
+   - unsupported quant/type fallback.
+3. For every remaining fallback bucket, record:
+   - tensor type;
+   - role: `gate`, `up`, `down`, shared/dense;
+   - layer;
+   - bytes;
+   - wall time;
+   - why the GPU extension did not catch it.
+4. Only if a high-cost fallback bucket remains, implement the missing GPU
+   extension default-off and test it first on France N32, then N96, then held-out
+   prompts.
+
+Accept condition:
+
+- CPU fallback decreases on the critical path;
+- endpoint decode token rate improves;
+- quality, TTFT, and RAM gates pass.
+
+Reject condition:
+
+- fallback counters improve but endpoint rate does not;
+- compute becomes faster while IO/staging stalls grow;
+- prompt-specific gain fails held-out prompts.
+
+### Phase 2: Explicit RAM/VRAM Expert Storage Plan
+
+Purpose: stop letting low-value Linux page cache consume most host RAM while
+decode still reads hundreds of GiB from SSD.
+
+Working hypothesis:
+
+- decode should not rely on uncontrolled GGUF mmap/page-cache pages as the main
+  expert cache;
+- RAM should be converted into explicit, high-yield expert storage only after
+  we identify pages that decode does not need;
+- VRAM should hold the most valuable experts; RAM should hold the next tier only
+  if it reduces exposed wait rather than merely increasing hit-rate counters.
+
+Steps:
+
+1. Profile decode RAM after prompt:
+   - per GGUF shard file-backed pages;
+   - dense/attention/norm/output pages;
+   - expert GGUF pages re-faulted by fallback;
+   - expert-pack pages, if any;
+   - pinned staging;
+   - anonymous runtime allocations.
+2. Mark low-value pages:
+   - prompt-only fallback pages;
+   - GGUF expert pages no longer needed after zero fallback;
+   - shard pages that are not touched during decode;
+   - readahead/file pages that do not reduce exposed wait.
+3. Test explicit eviction after prompt with `madvise`/drop hooks only where
+   correctness and TTFT are unchanged.
+4. Replace freed RAM with explicit expert cache candidates:
+   - first screen pageable RAM cache, because large pinned slabs can reduce
+     system flexibility and cause reclaim/refault stalls;
+   - pin only small staging windows that are actually in the H2D path;
+   - test whole-layer or whole-role slabs only for layers with high exposed
+     wait and poor VRAM hit coverage.
+5. For each RAM-tier design, measure:
+   - saved SSD read wait;
+   - added RAM lookup/copy cost;
+   - H2D volume and wall time;
+   - IO batch fragmentation when some experts are RAM hits and others SSD hits;
+   - endpoint token rate, not just hit rate.
+
+Initial candidates:
+
+- critical low-hit layer `up+gate` slab;
+- critical low-hit layer full `gate+up+down` slab only if its modeled RAM cost
+  fits without reclaim;
+- cross-prompt second-tier hotset excluding experts already resident in VRAM;
+- no prompt-specific hotset is allowed.
+
+### Phase 3: IO Queue Continuity And Combined Scheduling
+
+Purpose: reduce exposed `io_uring_wait` by keeping the device queue fed without
+duplicating reads.
+
+Steps:
+
+1. Re-profile whether the queue breaks because routing is late, batch size is
+   small, scheduler submission is delayed, or sync points block progress.
+2. For one layer at a time, test a default-off scheduler that submits all known
+   same-layer `up/gate/down` misses as one scheduling wave after routing.
+3. Preserve role-specific compute order, but coalesce read submission and H2D
+   staging where safe.
+4. Add metrics:
+   - submitted entries per wave;
+   - inflight avg/max;
+   - queue empty time;
+   - replaced v1 bytes;
+   - duplicate-read bytes, which must stay zero.
+
+Accept only if endpoint decode rate improves on held-out prompts.
+
+### Phase 4: Lower-byte Expert Representation
+
+Recent bounds show that cache placement alone is unlikely to reach `>5 tok/s`.
+For N96 default-style runs, roughly `42%` of moved bytes are `down`, `28%` are
+`up`, and `30%` are `gate`. A down-only reduction cannot reach the next target.
+
+Observed upper-bound estimates:
+
+| prompt | current decode | moved bytes | down 50% bound | up+gate 50% bound | all-role 50% bound |
+|---|---:|---:|---:|---:|---:|
+| France N96 | `1.48 tok/s` | `457.6 GiB` | `~1.77 tok/s` | `~1.91 tok/s` | `~2.44 tok/s` |
+| cloud/business N96 | `1.44 tok/s` | `552.5 GiB` | `~1.72 tok/s` | `~1.86 tok/s` | `~2.36 tok/s` |
+| intelligence N96 | `1.50 tok/s` | `495.2 GiB` | `~1.78 tok/s` | `~1.91 tok/s` | `~2.41 tok/s` |
+
+Plan:
+
+1. Do not continue down-only compression as the main path.
+2. Screen all-role or at least `up+gate` lower-byte overlays, using offline
+   coverage and route traces before runtime integration.
+3. If v2/IQ1S overlay is used, it must replace the corresponding v1 expert-pack
+   read. Shadow reads are diagnostic only and cannot be accepted as an
+   optimization.
+4. Compression priority should be adaptive:
+   - highest-traffic experts keep higher quality representation;
+   - lower-traffic but still frequent experts may use smaller representation;
+   - held-out quality decides acceptance, not only perplexity-free smoke tests.
+5. Record exact saved bytes, added dequant/compute cost, quality output, and
+   endpoint rate.
+
+### Immediate Next Actions
+
+1. Re-run one clean general baseline and record the full critical-path profile.
+2. Audit CPU/defer GPU-extension coverage and prove whether any remaining Kimi
+   gate/up/down work is actually CPU slow-path.
+3. If fallback remains, implement the missing extension default-off and A/B it.
+4. If fallback is already zero, prioritize explicit RAM/VRAM storage and
+   all-role lower-byte representation, because IO bytes and queue continuity are
+   the limiting factors.
+5. After each accepted improvement, immediately commit and push with the full
+   reproducibility body. If it fails any gate, revert or leave it default-off and
+   mark it rejected in this document.
+
 ## 当前执行批次 Goal 与 Plan：default-off mixed-size up/gate 联合 IO
 
 Timestamp: 2026-07-11 CST.
