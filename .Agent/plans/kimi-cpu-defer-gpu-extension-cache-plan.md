@@ -58,6 +58,97 @@ a message body containing:
 If a result cannot be reproduced, it is downgraded to a diagnostic observation
 and cannot remain the rollback point.
 
+### 2026-07-12 Diagnostic Evidence: source reads are not using page cache
+
+Diagnostic branch and commit:
+
+- branch: `vendor/kimi-prompt-host-source-prof`;
+- commit: `ff7b46fc0 diag: profile expert pack reads by source`;
+- profile env: `GGML_MOE_SOURCE_READ_PROFILE_OUT`;
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-source-read-profile-reasoning-n96-192136`.
+
+Run configuration:
+
+- cold start N96 reasoning prompt:
+  `A train leaves at 3 PM and arrives 2 hours and 15 minutes later. What time
+  does it arrive?`;
+- cgroup: `MemoryMax=15900000000`, `MemorySwapMax=0`;
+- command includes `--defer-experts -ngl 99`;
+- current inherited control still uses
+  `kimi-iq3s-france-l12-upgate-v2.expert-pack`, so this diagnostic is evidence
+  for read-path attribution only. It is not promoted as a general SOTA result.
+
+Observed result:
+
+- quality: pass, output says `5:15 PM`;
+- TTFT: `222596.60 ms`;
+- decode: `37781.04 ms / 61`, `1.61 tok/s`;
+- memory peak: `15899996160`;
+- final file memory: `14.69 GiB`;
+- CPU fallback source entries: `0`;
+- expert pack counters:
+  `iouring_reads=58392`, `iouring_bytes=333782335488`,
+  `read_failures=0`, `direct_reads=0`, `page_cache_reads=0`.
+
+Per-source read profile:
+
+- all observed expert-copy reads used `fd_direct + io_uring`;
+- no observed expert-copy read used page-cache, buffered fallback, or direct
+  fallback;
+- total io_uring payload: `310.86 GiB`;
+- inherited main pack: `159.18 GiB`;
+- down overlay: `4.48 GiB`;
+- GGUF alias sources: `147.19 GiB`, about `47.35%` of read payload.
+
+File-cache residency after the same run:
+
+- GGUF shards: `13.551 GiB`;
+- expert packs: `0.005 GiB`;
+- alias TSV: `0.010 GiB`;
+- shard 00009: `11.297 GiB`;
+- shard 00010: `2.247 GiB`.
+
+Tensor-range attribution for shard 00009/00010:
+
+- expert tensor pages account for `13.558 GiB`, effectively all of the final
+  GGUF shard residency;
+- dominant ranges are `blk.53-59.ffn_{down,gate,up}_exps.weight`;
+- top examples:
+  `blk.58.down=0.961 GiB`, `blk.57.down=0.881 GiB`,
+  `blk.59.down=0.808 GiB`, `blk.59.gate=0.721 GiB`,
+  `blk.59.up=0.721 GiB`.
+
+Conclusion:
+
+- The previous assumption that expert pack reads themselves create the large
+  decode-stage page cache is wrong for this run.
+- The explicit expert-copy path is already direct/io_uring and bypasses page
+  cache.
+- The remaining `13-14 GiB` file cache is GGUF expert tensor mmap/file-backed
+  residency, concentrated in late layers, and must be treated as uncontrolled
+  RAM occupancy until proven useful.
+- A RAM optimization must therefore either:
+  1. prevent or drop this late-layer GGUF expert residency and replace it with
+     explicit RAM expert cache; or
+  2. intentionally reuse the same bytes through a controlled RAM source path
+     that batches RAM to VRAM efficiently.
+
+Immediate next diagnostic before changing cache policy:
+
+1. Combine `GGML_MOE_SOURCE_READ_PROFILE_OUT` with
+   `LLAMA_MMAP_DONTNEED_PROFILE_OUT` filtered to shard 00009/00010.
+2. Prove whether the late-layer pages survive post-prompt fadvise or are
+   dropped and then refaulted during decode.
+3. If they refault, add a default-off touch profile around the non expert-copy
+   GGUF mmap paths for `blk.53-59` to identify the caller.
+4. Only after that, A/B a replacement policy:
+   - drop these pages after prompt and reserve the memory for explicit RAM
+     expert tier; versus
+   - use a controlled page-cache/pageable-RAM source for the same late-layer
+     experts and compare endpoint token rate, TTFT, refaults, and SSD batch
+     fragmentation.
+
 ### Immediate Plan
 
 #### Step 1: Reproduce the current control
