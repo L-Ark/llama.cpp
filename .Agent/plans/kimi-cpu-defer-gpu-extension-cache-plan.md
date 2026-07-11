@@ -311,6 +311,83 @@ Decision:
   or a better prompt-general full-cover selection passes cold-start quality,
   RAM, TTFT, and held-out gates.
 
+## Progress update: partial-covered v2 split dispatch bound
+
+Timestamp: 2026-07-11 CST.
+
+New analysis tool:
+
+- Added `.Agent/run-tools/kimi_v2_partial_split_bound.py`.
+- Inputs:
+  - run directory with `metrics.txt`;
+  - `v2-override-preflight.csv`.
+- Outputs:
+  - full-call-only byte/time bound;
+  - partial-covered split byte/time bound;
+  - per phase/role accepted coverage, full-cover rate, saved bytes, miss-weighted
+    saved ratio, and token-rate ceilings.
+- This is an offline bound only. It does not change runtime behavior or claim
+  SOTA.
+
+Report:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-bound-dev-heldout/report.md`.
+- JSON:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-bound-dev-heldout/report.json`.
+
+Command:
+
+```bash
+.Agent/run-tools/kimi_v2_partial_split_bound.py \
+  --run /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-dev7-budget120-preflight-n32-france \
+  --run /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-dev7-budget120-preflight-n32-heldout-sky \
+  --out-json /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-bound-dev-heldout/report.json \
+  --out-md /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-bound-dev-heldout/report.md
+```
+
+Key result:
+
+| run | accepted entries | full-cover calls | partial saved | full saved | partial miss ratio | full miss ratio |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| France dev | `98.43%` | `85.24%` | `175.507 GiB` | `132.767 GiB` | `48.04%` | `32.56%` |
+| Sky held-out | `86.62%` | `25.26%` | `165.362 GiB` | `33.389 GiB` | `43.42%` | `5.89%` |
+
+Token-rate ceiling from measured pools:
+
+| run | mode | measured pool | saved ms/token | ceiling tok/s |
+| --- | --- | ---: | ---: | ---: |
+| France dev | full `io_uring_wait` only | `18430.43 ms` | `193.60` | `2.49` |
+| France dev | partial `io_uring_wait` only | `18430.43 ms` | `285.62` | `3.24` |
+| France dev | partial `io_uring_wait + H2D` | `29876.14 ms` | `462.99` | `7.59` |
+| Sky held-out | full `io_uring_wait` only | `18647.35 ms` | `35.44` | `1.79` |
+| Sky held-out | full `io_uring_wait + H2D` | `30216.36 ms` | `57.43` | `1.86` |
+| Sky held-out | partial `io_uring_wait` only | `18647.35 ms` | `261.21` | `3.01` |
+| Sky held-out | partial `io_uring_wait + H2D` | `30216.36 ms` | `423.27` | `5.86` |
+
+Interpretation:
+
+- Full-call-only v2 dispatch is not sufficient for prompt-general progress.
+  Held-out full-call coverage is too low, and even the `io_uring_wait + H2D`
+  ceiling is only `1.86 tok/s`.
+- Partial-covered split dispatch is the first lower-byte path with enough
+  held-out theoretical room:
+  - to exceed `2 tok/s`, held-out partial split needs to save about `93.9
+    ms/token`; the conservative `io_uring_wait`-only bound offers `261.2
+    ms/token`, leaving about `167 ms/token` for split overhead and imperfect
+    realization;
+  - to reach `5 tok/s`, held-out partial split must approach the
+    `io_uring_wait + H2D` bound and keep new overhead below about `29 ms/token`.
+- Therefore the next implementation should not start with a large full-call-only
+  v2 dispatch. It should either:
+  - implement a default-off partial split dispatch smoke on the already
+    materialized tiny v2 payload pack, to validate row mapping and output
+    combination; or
+  - improve pack selection for held-out full-cover before any payload
+    materialization.
+- Because the actual 120 GiB payload is not materialized and quality of IQ1_S
+  replacement is still unproven, any split-dispatch implementation must remain
+  default-off and begin with N32 quality smoke before performance claims.
+
 ## Active goal: verify DeepSeek-style CPU/defer GPU-extension on Kimi
 
 Timestamp: 2026-07-11 CST.
