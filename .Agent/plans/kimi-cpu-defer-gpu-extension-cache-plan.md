@@ -17492,3 +17492,151 @@ Every accepted commit must include, in the commit body or linked plan section:
 If the result cannot be reproduced from those instructions after a fresh
 cold-start run, it must be marked invalid and the branch must roll back to the
 last reproducible SOTA.
+
+### 2026-07-12 Execution Update: baseline, source replacement, v2 A/B
+
+Run status:
+
+- branch: `vendor/kimi-deepseek-41d205-additive`;
+- HEAD: `be3e5ffebed291cac307ed047ee735505ee38e68`;
+- worktree: dirty because of default-off
+  `ggml/src/ggml-cuda/moe_stream_batch.cu` v2 current-down overlap experiment;
+- all runs used:
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - cold start with `sync; echo 3 > /proc/sys/vm/drop_caches`;
+  - prompt: `Please introduce France in a short paragraph.`;
+  - quality keywords: `france|french,europe|european,paris|culture|history`;
+  - N32 endpoint test.
+
+Baseline profile:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-nextgoal-baseline-n32-france-213337`
+- Result:
+  - quality: pass;
+  - output: `France is a country in Western Europe known for its rich history,
+    culture, and influence on art, fashion, and cuisine. Its capital, Paris, is
+    famous`;
+  - TTFT: `11493.86 ms`;
+  - decode: `20102.13 ms / 31 tokens`;
+  - token rate: `1.54 tok/s`;
+  - memory peak: `12767100928 bytes`;
+  - CPU fallback profile: `0` entries;
+  - `kimi_cpu_fallback_pack_mmap`: `hits=0 misses=0 bytes=0 fallback_gguf=0`.
+
+Baseline decode phase counters:
+
+- expert-pack decode delta:
+  - `iouring_reads=25893`;
+  - `iouring_bytes=149178925056` bytes, about `138.93 GiB`;
+  - `iouring_wait_us=11196355`, about `11.20 s`;
+  - `iouring_h2d=25893`.
+- copy-profile decode role split:
+  - up: `8100` rows, `37.088 GiB`, summed IO wait `25.049 s`,
+    H2D `2.095 s`;
+  - gate: `8102` rows, `39.863 GiB`, summed IO wait `27.729 s`,
+    H2D `2.254 s`;
+  - down: `9691` rows, `61.983 GiB`, summed IO wait `31.083 s`,
+    H2D `3.355 s`.
+- up/gate profile:
+  - calls: `1861`;
+  - summed wall: `13.770 s`;
+  - avg wall: `7.399 ms/call`;
+  - summed kernel: `10.480 s`;
+  - summed up wait: `7.416 s`;
+  - summed gate wait: `8.011 s`;
+  - total up+gate misses: `16218`.
+- down decode profile:
+  - calls: `1861`;
+  - summed wall: `5.234 s`;
+  - avg wall: `2.813 ms/call`;
+  - summed stage: `4.897 s`;
+  - summed kernel: `0.223 s`;
+  - misses: `5375`;
+  - hits: `9513`.
+- Current bottleneck interpretation:
+  - no measurable CPU fallback remains on this run;
+  - the critical path is still expert movement and synchronization around
+    up/gate/down, not unsupported CPU compute;
+  - DeepSeek-style CPU/defer GPU-extension cannot be assumed useful for Kimi
+    unless a later profile finds non-zero fallback work.
+
+Source replacement diagnostic:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-nextgoal-source-replace-n32-france-213639`
+- Extra env:
+  - `GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE=1`;
+  - `GGML_SCHED_MOE_COPY_EXPERT_PACK_SOURCE_PROFILE_OUT=$RUN/sched-pack-source-profile.csv`.
+- Result:
+  - quality: pass;
+  - TTFT: `8449.28 ms`;
+  - decode: `18033.86 ms / 31 tokens`;
+  - token rate: `1.72 tok/s`;
+  - memory peak: `12763705344 bytes`;
+  - source replacement profile:
+    `ranges_attempted=0,ranges_replaced=0,ranges_fallback=0,experts_attempted=0,experts_read=0`.
+- Decision:
+  - source replacement is a diagnostic no-op for current Kimi;
+  - do not treat this run as an accepted speedup because the enabled feature did
+    not replace any source range;
+  - DeepSeek's CPU/defer source-replacement mechanism is not the next primary
+    Kimi optimization path.
+
+V2 full-cover down + current-down overlap A/B:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-nextgoal-v2full-down-overlap-n32-france-213825`
+- Extra env:
+  - `GGML_MOE_EXPERT_PACK_V2=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-v2.expert-pack`;
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-manifest.tsv`;
+  - `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN=1`;
+  - `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_OVERLAP=1`;
+  - `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_PROFILE_OUT=$RUN/v2-full-cover-down.csv`.
+- Result:
+  - quality: pass;
+  - TTFT: `12557.83 ms`;
+  - decode: `21336.64 ms / 31 tokens`;
+  - token rate: `1.45 tok/s`;
+  - memory peak: `13442801664 bytes`.
+- V2 report:
+  - full-cover down calls: `2038`;
+  - accepted: `18`;
+  - rejected `not_decode_down`: `177`;
+  - rejected `no_entry`: `1843`;
+  - copied entries: `144`;
+  - copied bytes: `0.385 GiB`;
+  - saved bytes: `0.662 GiB`;
+  - v2 read time: `400.041 ms`;
+  - v2 total time: `480.869 ms`;
+  - overlap calls: `899`;
+  - overlap accepted: `0`;
+  - overlap rejected: `899`.
+- Compared with baseline:
+  - token rate regressed from `1.54` to `1.45 tok/s`;
+  - decode increased by `1234.51 ms`;
+  - TTFT increased by `1063.97 ms`;
+  - memory peak increased by about `676.7 MB`;
+  - decode bytes fell only from `138.934 GiB` to `138.005 GiB`;
+  - down decode wall increased from `5.234 s` to `6.099 s`;
+  - up/gate wall increased from `13.770 s` to `14.159 s`.
+- Decision:
+  - reject this v2 top2048 full-cover-down configuration as a SOTA candidate;
+  - coverage is too small to matter;
+  - current dirty current-down v2 overlap path did not accept any overlap work;
+  - do not run N96 or held-out prompts for this candidate;
+  - do not commit the dirty CUDA diff as an accepted optimization.
+
+Next action:
+
+- Keep source replacement and full-byte RAM tiers deprioritized for Kimi unless
+  new profiling contradicts the current evidence.
+- The next useful v2 direction must increase coverage substantially before
+  runtime A/B:
+  - build a larger or better-selected v2 manifest that covers frequent
+    up/gate/down miss groups, not only sparse down full-cover cases;
+  - fix or redesign current-down v2 overlap so it keys by the actual down tensor
+    for the same layer rather than failing all overlap attempts;
+  - continue to require default-off runtime gates and N32 proof before any N96
+    or held-out prompt run.
