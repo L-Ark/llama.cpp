@@ -20,6 +20,7 @@ bool ggml_cuda_moe_stream_register_tensor(int, const char *, const void *, int64
 bool ggml_cuda_moe_stream_cache_contains(const char *, size_t, int) { return false; }
 const void * ggml_cuda_moe_stream_cache_dev_ptr(const char *, size_t, int) { return nullptr; }
 void ggml_cuda_moe_stream_batch_phase_report(const char *) {}
+int ggml_cuda_moe_stream_batch_prompt_phase_active(void) { return 0; }
 bool ggml_cuda_moe_iq2_xxs_q8k_selftest(void) { return false; }
 bool ggml_cuda_moe_stream_up_gate_batch(int, int, const char *, const void *, const char *, const void *, int64_t, int64_t, int64_t, size_t, size_t, size_t, size_t, size_t, size_t, const float *, size_t, size_t, float *, size_t, size_t, int, float, const int64_t *, const ggml_moe_row_mapping *, int64_t) { return false; }
 const void * ggml_cuda_moe_expert_pack_mmap_ptr(const char *, int, size_t) { return nullptr; }
@@ -3682,6 +3683,10 @@ static uint64_t moe_phase_delta_u64(uint64_t now, uint64_t prev) {
 }
 
 static std::atomic<int> g_moe_copy_runtime_phase{0}; // 0 unknown, 1 prompt eval, 2 decode/post-prompt.
+
+extern "C" int ggml_cuda_moe_stream_batch_prompt_phase_active(void) {
+    return g_moe_copy_runtime_phase.load(std::memory_order_relaxed) == 1 ? 1 : 0;
+}
 
 extern "C" void ggml_cuda_moe_stream_batch_phase_report(const char *label) {
     if (!label || !label[0]) {

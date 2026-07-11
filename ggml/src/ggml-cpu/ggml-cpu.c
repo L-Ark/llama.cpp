@@ -78,6 +78,7 @@ typedef struct { int32_t i1; int32_t i2; } ggml_moe_stream_row_mapping;
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_available(void);
 __attribute__((weak)) extern void ggml_cuda_moe_stream_sync(void);
+__attribute__((weak)) extern int ggml_cuda_moe_stream_batch_prompt_phase_active(void);
 __attribute__((weak)) extern bool ggml_cuda_moe_stream_one(
     int src0_type_int,
     const char * src0_name,
@@ -1050,6 +1051,13 @@ static bool ggml_kimi_cpu_moe_dispatch_profile_enabled_for(const char * name, bo
     }
 
     return true;
+}
+
+static bool ggml_kimi_cpu_moe_runtime_prompt_phase(bool fallback_prompt_phase) {
+    if (ggml_cuda_moe_stream_batch_prompt_phase_active) {
+        return ggml_cuda_moe_stream_batch_prompt_phase_active() != 0;
+    }
+    return fallback_prompt_phase;
 }
 
 static FILE * ggml_kimi_cpu_moe_dispatch_profile_fp(void) {
@@ -5220,7 +5228,8 @@ static void ggml_compute_forward_mul_mat_id(
     bool kimi_cpu_moe_batch_done = false;
     int64_t kimi_cpu_moe_single_attempts = 0;
     int64_t kimi_cpu_moe_single_accepts = 0;
-    const bool prompt_phase = ids->ne[1] > 1;
+    const bool prompt_phase =
+        ggml_kimi_cpu_moe_runtime_prompt_phase(ids->ne[1] > 1);
     bool kimi_cpu_moe_dispatch_profile = false;
     int64_t kimi_cpu_moe_dispatch_active_rows = 0;
     int64_t kimi_cpu_moe_dispatch_active_experts = 0;
