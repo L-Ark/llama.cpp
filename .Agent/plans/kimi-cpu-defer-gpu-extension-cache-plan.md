@@ -83,6 +83,82 @@ Execution plan for this goal:
    - The next experiment must be chosen from the latest measured bottleneck,
      not from a stale optimization idea.
 
+## Current subgoal: v2 partial-split payload timing gate
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Before implementing real runtime partial-split dispatch, measure whether the
+> v2 replacement path can actually pay for itself after payload read, H2D,
+> replacement kernel, fallback-row compute, and merge/scatter are included. The
+> near-term target is to decide whether this path can move held-out Kimi decode
+> from the current reproducible `~1.69 tok/s` range toward `>2 tok/s` without
+> violating cold-start, 16 GB host RAM, TTFT, or quality gates.
+
+Why this is the next gate:
+
+- The default-off shadow planner showed enough byte-level upside on held-out
+  prompts: `decode_all` covered about `43.930 GiB` of miss-weighted bytes and
+  estimated `4224.0 ms` IO-only saving, while `>2 tok/s` needs about
+  `2760.31 ms` decode saving on the held-out sky run.
+- The control-plane profiler showed bookkeeping is not the blocker:
+  held-out decode partial rows cost about `30.72 ms` total for `4129` extra
+  groups, with p95 around `0.010 ms/group`, far below the conservative
+  `0.354 ms/group` IO-only budget.
+- The unmeasured risk is now the real data path: v2 payload read, H2D staging,
+  v2 MMVQ kernel, current-path fallback-row compute, output merge/scatter, and
+  synchronization. These can invalidate the planner bound if they serialize or
+  require per-row allocation.
+
+Plan:
+
+1. Extend the existing standalone smoke
+   `.Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp`.
+   - Keep it outside the main runtime and default-off.
+   - Add timers for v2 metadata lookup, payload read, CUDA allocation,
+     source H2D, replacement kernel, D2H verification copy, merge/scatter, and
+     fallback-row fill.
+   - Preserve the existing correctness checks: covered rows must produce finite
+     nonzero output, fallback rows must remain in the correct destination rows,
+     and the final merged output must pass row-placement validation.
+
+2. Run the timing smoke against the existing tiny materialized payload pack.
+   - Pack:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack`
+   - Manifest:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv`
+   - Save build command, exact smoke command, stdout, stderr, git SHA, and
+     metrics under a new run directory.
+
+3. Interpret the smoke result with explicit limitations.
+   - The smoke uses only a tiny payload pack, so it is not a token-rate result.
+   - If it uses per-row `cudaMalloc/cudaFree`, that number is an upper bound on
+     a naive implementation, not the target runtime design.
+   - A viable runtime implementation must reuse buffers and batch covered rows;
+     otherwise the extra groups from partial split will likely erase the byte
+     savings.
+
+4. Decision gate.
+   - Proceed to a guarded default-off runtime partial-split dispatch only if
+     timing shows payload read + H2D + kernel + merge can fit inside the
+     per-extra-group budget implied by the held-out planner.
+   - If timing is dominated by allocation, synchronization, or merge overhead,
+     do not promote partial split yet. First design reusable staging buffers or
+     reject this path and return to RAM/VRAM storage layout optimization.
+   - No SOTA claim is allowed from this smoke. SOTA requires cold-start N96
+     held-out evaluation with quality pass, RAM peak below `15900000000` bytes,
+     TTFT within `+20%`, and exact reproduction commands.
+
+Reproducibility requirement for this subgoal:
+
+- Update this plan before code changes.
+- Commit and push the smoke/profiling change even if the result only rejects
+  the idea, because the rejection data prevents repeating the same experiment.
+- The commit body must include the run directory, build command, smoke command,
+  payload pack/manifest paths, measured timing table, interpretation, and
+  rollback point.
+
 ## Progress update: runtime partial-split shadow planner
 
 Timestamp: 2026-07-11 CST.
