@@ -46,6 +46,76 @@ Hard gates before any result can be called SOTA:
   run directories, token rate, TTFT, RAM/VRAM/page-cache metrics,
   IO/H2D/staging/compute/fallback metrics, quality result, and rollback point.
 
+## Goal update: Kimi transfer of the DeepSeek GPU-extension idea
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Determine whether the DeepSeek SOTA mechanism, namely a CPU/defer MoE main
+> scheduler extended by GPU-resident expert cache and streaming compute, can be
+> made useful for Kimi without changing Kimi correctness or existing DeepSeek
+> functionality. The short-term target is a reproducible prompt-general Kimi
+> result above `2 tok/s`; the long-term target remains stable random-prompt
+> output above `5 tok/s` under the strict `16 GB` host RAM cap.
+
+What is being tested:
+
+- DeepSeek's transferable part is the scheduling architecture: CPU/defer remains
+  the owner of routed MoE execution, while hot or staged `gate/up/down` experts
+  are intercepted by a GPU extension before slow CPU/defer compute happens.
+- For Kimi, this is not automatically a CPU-fallback fix. Current stable Kimi
+  decode profiles already show decode CPU fallback is near zero. Therefore the
+  useful Kimi version must reduce exposed `io_uring_wait`, staging gaps, H2D
+  stalls, or redundant expert movement on the real critical path.
+- A Kimi win must be prompt-general. Any policy trained or selected from dev
+  prompts must be evaluated on held-out prompts that were not used for tuning.
+
+Plan:
+
+1. Re-establish the current reproducible Kimi baseline.
+   - Use cold start, `MemoryMax=15900000000`, the current SOTA command template,
+     one dev prompt, and at least one held-out prompt.
+   - Record token rate, TTFT, RAM peak, file cache, VRAM residency, expert-cache
+     hit/miss by role, direct reads, `io_uring_wait`, staging wall time, H2D,
+     up/gate compute, down compute, and CPU fallback.
+   - This baseline is the rollback point for all experiments in this section.
+
+2. Audit whether Kimi has the same exploitable CPU/defer path as DeepSeek.
+   - Confirm how `n_cpu_moe` routes Kimi `gate/up/down` work today.
+   - For each role, classify execution as GPU-extension hit, GPU-extension miss
+     followed by SSD/RAM staging, or true CPU fallback.
+   - If decode fallback remains zero, do not optimize for fallback removal;
+     optimize only the measured transfer/staging critical path.
+
+3. Compare Kimi role priorities against the DeepSeek gate-first result.
+   - Measure whether Kimi `gate` misses block more exposed time than `up` or
+     `down` misses.
+   - Test default-off gate-heavy residency only if profiling shows gate is still
+     exposed on the critical path.
+   - If Kimi bottleneck is mixed `up/gate/down` transfer, use paired or
+     role-aware cache policies instead of copying DeepSeek's gate-only policy.
+
+4. Implement only default-off A/B candidates.
+   - Candidate A: gate-first GPU-extension cache parity, if gate is exposed.
+   - Candidate B: up/gate-first cache expansion, if up/gate misses dominate.
+   - Candidate C: paired `up/gate/down` scheduling or v2 lower-byte payloads,
+     if the profile shows larger batches or fewer bytes can reduce exposed
+     `io_uring_wait`.
+   - Candidate D: RAM/VRAM co-designed expert tiers only after low-value decode
+     page cache is measured and explicitly replaced by higher-value expert data.
+
+5. Promote or reject by hard metrics only.
+   - Promote only if token rate improves on held-out prompts, France quality is
+     semantically correct, TTFT is within `+20%`, host RAM remains below
+     `15900000000` bytes, and the exact run is reproducible from a pushed commit.
+   - Reject or keep default-off if hit rate improves but token rate does not, if
+     TTFT grows too much, if RAM/page-cache reclaim increases stalls, or if the
+     result only works on the tuning prompt.
+   - Every promoted result must update this file and the commit body with the
+     exact env, commands, prompt split, run directories, metrics, quality output,
+     baseline SHA, candidate SHA, and rollback SHA.
+
 Execution plan for this goal:
 
 1. Reprofile the current branch on one dev prompt and one held-out prompt.
