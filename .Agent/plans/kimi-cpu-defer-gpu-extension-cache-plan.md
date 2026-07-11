@@ -160,6 +160,102 @@ Plan:
    - Any failed candidate remains default-off or is reverted, with the failure
      reason recorded here.
 
+## Progress update: runtime v2 shadow staging profile
+
+Timestamp: 2026-07-11 CST.
+
+Commit scope:
+
+- Implemented a default-off runtime shadow stage behind
+  `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE=1`.
+- The path observes real Kimi decode routes, applies the existing v2 manifest
+  and shape/type safety checks, and stages only v2-covered VRAM-cache misses
+  through a persistent pinned host buffer into scratch VRAM.
+- It does not change logits, routing, cache admission, sampling, or output.
+- It records CSV fields for covered rows, cache hits, staged rows, bytes saved,
+  allocation growth, read wall time, H2D event time, sync wall time, total wall
+  time, and failure counts.
+- It treats CUDA default stream `0` as valid.
+- It no longer requires packed `nb01` to equal the logical GGUF tensor stride;
+  packed stride is validated by the v2 manifest, while logical shape equality is
+  checked with `ne00/ne01`.
+
+Default-off validation:
+
+- Run: `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-stage-final-default-off-n32`
+- Command shape:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0 env RUN=<run> N=32 PROMPT_ID=dev_france_final_default_off PROMPT_USER_TEXT="Please introduce France in a short paragraph." QUALITY_KEYWORDS="france,paris|europe|western" .Agent/run-tools/kimi-general-prompt-repro.sh`
+- Result:
+  - exit: `0`
+  - quality: `pass`
+  - output begins: `France is a country in Western Europe...`
+  - TTFT: `7632.82 ms`
+  - decode: `16529.78 ms / 31 runs = 1.88 tok/s`
+  - RAM peak: `12723949568 bytes`
+  - shadow files: none
+  - decode CPU fallback: `hits=0 misses=0 bytes=0 fallback_gguf=0`
+
+Shadow-on diagnostic:
+
+- Run: `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-stage-on-n32-covered`
+- Extra env:
+  - `GGML_MOE_EXPERT_PACK_V2=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack`
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv`
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE=1`
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE_OUT=<run>/v2-shadow-stage.csv`
+- Result:
+  - exit: `0`
+  - quality: `pass`
+  - TTFT: `8071.39 ms`
+  - decode: `16925.96 ms / 31 runs = 1.83 tok/s`
+  - RAM peak: `12755234816 bytes`
+  - CSV rows: `64`
+  - shadow summary:
+    - calls: `5583`
+    - covered entries: `104`
+    - covered cache hits: `58`
+    - staged entries: `46`
+    - staged bytes: `159.25 MiB`
+    - estimated saved bytes for staged entries: `74.59 MiB`
+    - read wall: `47.334 ms`
+    - H2D event time: `14.338 ms`
+    - sync wall: `14.191 ms`
+    - total shadow stage wall: `72.098 ms`
+    - read/H2D failures: `0/0`
+
+Breakdown:
+
+| role | tensor | calls with coverage | covered | cache-hit covered | staged | staged MiB | saved MiB | read ms | H2D ms | total ms |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| up | `blk.1.ffn_up_exps.weight` | 23 | 39 | 25 | 14 | 38.281 | 24.500 | 17.152 | 3.429 | 24.235 |
+| gate | `blk.1.ffn_gate_exps.weight` | 23 | 39 | 25 | 14 | 38.281 | 24.500 | 12.218 | 3.391 | 15.780 |
+| down | `blk.1.ffn_down_exps.weight` | 18 | 26 | 8 | 18 | 82.688 | 25.594 | 17.964 | 7.517 | 32.083 |
+
+Interpretation:
+
+- The runtime shadow path works and is safe as a default-off measurement tool.
+- The current 8-entry v2 pack is far too narrow for a token-rate candidate:
+  it covers only `104 / 44664` observed shadow-stage active decode entries and
+  stages only `46` entries in N32.
+- The measured data path is not the immediate blocker at this small scale:
+  `159.25 MiB` staged costs `72.10 ms` total with the debug `fseek/fread`
+  reader. That implies a rough observed shadow-stage payload rate of about
+  `2.21 GiB/s`, but this is not the intended final reader and includes
+  synchronization overhead.
+- The byte saving for this pack is only `74.59 MiB` in N32, far below the
+  multi-GiB critical-path saving required to cross `>2 tok/s`.
+- Therefore do not promote v2 dispatch from this pack. The next useful v2 step
+  is either a much wider prompt-general v2 pack plus direct/io_uring reader, or
+  pivot back to RAM/VRAM layout if widening v2 cannot cover enough misses.
+
+Next action:
+
+1. Keep runtime shadow staging default-off.
+2. Add/derive a wider prompt-general candidate manifest before testing dispatch.
+3. If a wider manifest shows multi-GiB staged miss coverage, implement a v2
+   direct/io_uring reader; otherwise prioritize RAM/VRAM co-design and low-value
+   page-cache replacement.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.

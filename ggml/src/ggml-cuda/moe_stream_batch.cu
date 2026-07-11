@@ -4521,7 +4521,9 @@ static bool expert_pack_v2_override_preflight_env_enabled() {
     const char *split_plan = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN");
     if (split_plan && split_plan[0] && split_plan[0] != '0') return true;
     const char *control = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_CONTROL_PROFILE");
-    return control && control[0] && control[0] != '0';
+    if (control && control[0] && control[0] != '0') return true;
+    const char *shadow_stage = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE");
+    return shadow_stage && shadow_stage[0] && shadow_stage[0] != '0';
 }
 
 static const char * expert_pack_v2_override_profile_path() {
@@ -9275,6 +9277,416 @@ static bool ensure_host_pinned(void *&p, size_t &cur, size_t need) {
     return true;
 }
 
+struct expert_pack_v2_shadow_stage_state {
+    std::mutex mu;
+    void *host = nullptr;
+    size_t host_sz = 0;
+    void *dev = nullptr;
+    size_t dev_sz = 0;
+    cudaEvent_t copy_start = nullptr;
+    cudaEvent_t copy_done = nullptr;
+    bool event_failed = false;
+    bool header_written = false;
+    bool report_registered = false;
+    std::atomic<uint64_t> calls{0};
+    std::atomic<uint64_t> staged_calls{0};
+    std::atomic<uint64_t> active_entries{0};
+    std::atomic<uint64_t> covered_entries{0};
+    std::atomic<uint64_t> staged_entries{0};
+    std::atomic<uint64_t> staged_bytes{0};
+    std::atomic<uint64_t> read_failures{0};
+    std::atomic<uint64_t> h2d_failures{0};
+    std::atomic<uint64_t> alloc_failures{0};
+    double alloc_ms = 0.0;
+    double read_ms = 0.0;
+    double h2d_ms = 0.0;
+    double sync_ms = 0.0;
+    double total_ms = 0.0;
+};
+
+static expert_pack_v2_shadow_stage_state g_expert_pack_v2_shadow_stage;
+
+static bool expert_pack_v2_shadow_stage_enabled() {
+    const char *env = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE");
+    return env && env[0] && env[0] != '0';
+}
+
+static const char * expert_pack_v2_shadow_stage_path() {
+    const char *path = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE_OUT");
+    return path && path[0] ? path : nullptr;
+}
+
+static uint64_t expert_pack_v2_shadow_stage_max_calls() {
+    const char *env = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE_MAX_CALLS");
+    if (!env || !env[0]) return 0;
+    char *end = nullptr;
+    const unsigned long long v = std::strtoull(env, &end, 10);
+    return end && *end == '\0' ? (uint64_t)v : 0;
+}
+
+static bool expert_pack_v2_shadow_stage_prompt_enabled() {
+    const char *env = std::getenv("GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE_PROMPT");
+    return env && env[0] && env[0] != '0';
+}
+
+static void expert_pack_v2_shadow_stage_report() {
+    expert_pack_v2_shadow_stage_state &s = g_expert_pack_v2_shadow_stage;
+    const uint64_t calls = s.calls.load(std::memory_order_relaxed);
+    if (calls == 0) return;
+    std::fprintf(stderr,
+        "[moe_stream_batch] expert pack v2 shadow stage report: "
+        "calls=%llu staged_calls=%llu active=%llu covered=%llu staged=%llu "
+        "staged_bytes=%.3f GiB read_failures=%llu h2d_failures=%llu alloc_failures=%llu "
+        "alloc_ms=%.3f read_ms=%.3f h2d_ms=%.3f sync_ms=%.3f total_ms=%.3f "
+        "host_capacity=%.3f MiB dev_capacity=%.3f MiB\n",
+        (unsigned long long)calls,
+        (unsigned long long)s.staged_calls.load(std::memory_order_relaxed),
+        (unsigned long long)s.active_entries.load(std::memory_order_relaxed),
+        (unsigned long long)s.covered_entries.load(std::memory_order_relaxed),
+        (unsigned long long)s.staged_entries.load(std::memory_order_relaxed),
+        s.staged_bytes.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0),
+        (unsigned long long)s.read_failures.load(std::memory_order_relaxed),
+        (unsigned long long)s.h2d_failures.load(std::memory_order_relaxed),
+        (unsigned long long)s.alloc_failures.load(std::memory_order_relaxed),
+        s.alloc_ms,
+        s.read_ms,
+        s.h2d_ms,
+        s.sync_ms,
+        s.total_ms,
+        s.host_sz / (1024.0 * 1024.0),
+        s.dev_sz / (1024.0 * 1024.0));
+}
+
+struct expert_pack_v2_shadow_candidate {
+    int expert_idx = -1;
+    const expert_pack_v2_entry *entry = nullptr;
+    bool cache_hit = false;
+};
+
+static void expert_pack_v2_shadow_stage_record(
+        const char *phase,
+        const char *role,
+        const char *tensor_name,
+        int logical_type,
+        size_t logical_nbytes,
+        int64_t logical_ne00,
+        int64_t logical_ne01,
+        size_t logical_nb01,
+        batch_vram_cache *cache,
+        const int *active_experts,
+        int n_active,
+        cudaStream_t stream) {
+    if (!expert_pack_v2_shadow_stage_enabled()) return;
+    if (!phase || !phase[0] || std::strncmp(phase, "decode", 6) != 0) {
+        if (!expert_pack_v2_shadow_stage_prompt_enabled()) return;
+    }
+    if (!tensor_name || !tensor_name[0] || !active_experts || n_active <= 0 ||
+            logical_nbytes == 0) {
+        return;
+    }
+
+    static std::atomic<uint64_t> observed_calls{0};
+    const uint64_t call_idx = observed_calls.fetch_add(1, std::memory_order_relaxed) + 1;
+    const uint64_t max_calls = expert_pack_v2_shadow_stage_max_calls();
+    if (max_calls > 0 && call_idx > max_calls) return;
+
+    expert_pack_v2_override_preflight_init_once();
+    if (!g_expert_pack_v2_override_preflight.enabled) return;
+
+    std::vector<expert_pack_v2_shadow_candidate> candidates;
+    candidates.reserve((size_t)n_active);
+    int cache_hits = 0;
+    int covered = 0;
+    int covered_cache_hits = 0;
+    int reject_no_manifest = 0;
+    int reject_not_allowed = 0;
+    int reject_no_entry = 0;
+    int reject_unsupported = 0;
+    int reject_manifest_mismatch = 0;
+    int reject_shape_mismatch = 0;
+    int reject_not_smaller = 0;
+    uint64_t covered_bytes = 0;
+    uint64_t covered_saved_bytes = 0;
+    uint64_t staged_saved_bytes = 0;
+    size_t max_entry_bytes = 0;
+
+    for (int j = 0; j < n_active; ++j) {
+        const int expert_idx = active_experts[j];
+        const bool cache_hit = cache && batch_cache_find_slot(cache, batch_key_hash(tensor_name, expert_idx)) >= 0;
+        if (cache_hit) {
+            ++cache_hits;
+        }
+        if (!g_expert_pack_v2_override_preflight.manifest_loaded) {
+            ++reject_no_manifest;
+            continue;
+        }
+        const auto allowed_it = g_expert_pack_v2_override_preflight.manifest.find(
+            expert_pack_v2_override_key(tensor_name, expert_idx));
+        if (allowed_it == g_expert_pack_v2_override_preflight.manifest.end()) {
+            ++reject_not_allowed;
+            continue;
+        }
+        const expert_pack_v2_override_manifest_entry &allowed = allowed_it->second;
+        const expert_pack_v2_entry *entry = expert_pack_v2_lookup(tensor_name, expert_idx);
+        if (!entry) {
+            ++reject_no_entry;
+            continue;
+        }
+        if (entry->packed_type != allowed.packed_type ||
+                (size_t)entry->nbytes != allowed.packed_nbytes ||
+                entry->ne00 != allowed.ne00 ||
+                entry->ne01 != allowed.ne01 ||
+                (size_t)entry->nb01 != allowed.nb01) {
+            ++reject_manifest_mismatch;
+            continue;
+        }
+        if (!expert_pack_v2_packed_type_supported(entry->packed_type)) {
+            ++reject_unsupported;
+            continue;
+        }
+        if (entry->ne00 != logical_ne00 || entry->ne01 != logical_ne01) {
+            ++reject_shape_mismatch;
+            continue;
+        }
+        if ((size_t)entry->nbytes >= logical_nbytes) {
+            ++reject_not_smaller;
+            continue;
+        }
+
+        ++covered;
+        covered_bytes += (uint64_t)entry->nbytes;
+        covered_saved_bytes += (uint64_t)(logical_nbytes - (size_t)entry->nbytes);
+        if (cache_hit) {
+            ++covered_cache_hits;
+            continue;
+        }
+        expert_pack_v2_shadow_candidate candidate;
+        candidate.expert_idx = expert_idx;
+        candidate.entry = entry;
+        candidate.cache_hit = false;
+        candidates.push_back(candidate);
+        max_entry_bytes = std::max(max_entry_bytes, (size_t)entry->nbytes);
+        staged_saved_bytes += (uint64_t)(logical_nbytes - (size_t)entry->nbytes);
+    }
+
+    expert_pack_v2_shadow_stage_state &s = g_expert_pack_v2_shadow_stage;
+    s.calls.fetch_add(1, std::memory_order_relaxed);
+    s.active_entries.fetch_add((uint64_t)n_active, std::memory_order_relaxed);
+    s.covered_entries.fetch_add((uint64_t)covered, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lk(s.mu);
+        if (!s.report_registered) {
+            std::atexit(expert_pack_v2_shadow_stage_report);
+            s.report_registered = true;
+        }
+    }
+    if (candidates.empty()) {
+        if (covered > 0) {
+            std::lock_guard<std::mutex> lk(s.mu);
+            const char *path = expert_pack_v2_shadow_stage_path();
+            if (path && path[0]) {
+                FILE *f = std::fopen(path, "a");
+                if (f) {
+                    if (!s.header_written) {
+                        std::fprintf(f,
+                            "seq,phase,role,tensor,logical_type,logical_nbytes,logical_ne00,"
+                            "logical_ne01,logical_nb01,n_active,cache_hits,covered,"
+                            "covered_cache_hits,staged,reject_no_manifest,reject_not_allowed,"
+                            "reject_no_entry,reject_unsupported,reject_manifest_mismatch,"
+                            "reject_shape_mismatch,reject_not_smaller,covered_bytes,"
+                            "covered_saved_bytes,staged_bytes,staged_saved_bytes,"
+                            "max_entry_bytes,host_capacity,dev_capacity,alloc_grew,"
+                            "alloc_ms,read_ms,h2d_ms,sync_ms,total_ms,read_failures,"
+                            "h2d_failures\n");
+                        s.header_written = true;
+                    }
+                    std::fprintf(f,
+                        "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,0,%llu,%zu,%zu,%zu,0,0.000000,0.000000,0.000000,0.000000,0.000000,0,0\n",
+                        (unsigned long long)call_idx,
+                        phase ? phase : "",
+                        role ? role : "",
+                        tensor_name,
+                        logical_type,
+                        logical_nbytes,
+                        (long)logical_ne00,
+                        (long)logical_ne01,
+                        logical_nb01,
+                        n_active,
+                        cache_hits,
+                        covered,
+                        covered_cache_hits,
+                        0,
+                        reject_no_manifest,
+                        reject_not_allowed,
+                        reject_no_entry,
+                        reject_unsupported,
+                        reject_manifest_mismatch,
+                        reject_shape_mismatch,
+                        reject_not_smaller,
+                        (unsigned long long)covered_bytes,
+                        (unsigned long long)covered_saved_bytes,
+                        (unsigned long long)staged_saved_bytes,
+                        max_entry_bytes,
+                        s.host_sz,
+                        s.dev_sz);
+                    std::fclose(f);
+                }
+            }
+        }
+        return;
+    }
+
+    double alloc_ms = 0.0;
+    double read_ms = 0.0;
+    double h2d_ms = 0.0;
+    double sync_ms = 0.0;
+    double total_ms = 0.0;
+    uint64_t staged_bytes = 0;
+    uint64_t read_failures = 0;
+    uint64_t h2d_failures = 0;
+    bool alloc_grew = false;
+
+    const auto total_t0 = std::chrono::steady_clock::now();
+    {
+        std::lock_guard<std::mutex> lk(s.mu);
+        const auto alloc_t0 = std::chrono::steady_clock::now();
+        const size_t old_host_sz = s.host_sz;
+        const size_t old_dev_sz = s.dev_sz;
+        if (!ensure_host_pinned(s.host, s.host_sz, max_entry_bytes) ||
+                !ensure_dev(s.dev, s.dev_sz, max_entry_bytes)) {
+            s.alloc_failures.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+        alloc_grew = s.host_sz != old_host_sz || s.dev_sz != old_dev_sz;
+        if (!s.copy_start && cudaEventCreate(&s.copy_start) != cudaSuccess) {
+            s.event_failed = true;
+        }
+        if (!s.copy_done && cudaEventCreate(&s.copy_done) != cudaSuccess) {
+            s.event_failed = true;
+        }
+        const auto alloc_t1 = std::chrono::steady_clock::now();
+        alloc_ms = std::chrono::duration<double, std::milli>(alloc_t1 - alloc_t0).count();
+
+        for (const expert_pack_v2_shadow_candidate &candidate : candidates) {
+            const size_t entry_bytes = (size_t)candidate.entry->nbytes;
+            size_t nread = 0;
+            const auto read_t0 = std::chrono::steady_clock::now();
+            const bool read_ok = ggml_cuda_moe_expert_pack_v2_read_debug(
+                tensor_name, candidate.expert_idx, s.host, s.host_sz, &nread);
+            const auto read_t1 = std::chrono::steady_clock::now();
+            read_ms += std::chrono::duration<double, std::milli>(read_t1 - read_t0).count();
+            if (!read_ok || nread != entry_bytes) {
+                ++read_failures;
+                continue;
+            }
+            if (!s.event_failed) {
+                cudaEventRecord(s.copy_start, stream);
+            }
+            if (cudaMemcpyAsync(s.dev, s.host, entry_bytes, cudaMemcpyHostToDevice, stream) != cudaSuccess) {
+                ++h2d_failures;
+                continue;
+            }
+            if (!s.event_failed) {
+                cudaEventRecord(s.copy_done, stream);
+                const auto sync_t0 = std::chrono::steady_clock::now();
+                if (cudaEventSynchronize(s.copy_done) != cudaSuccess) {
+                    ++h2d_failures;
+                    continue;
+                }
+                const auto sync_t1 = std::chrono::steady_clock::now();
+                sync_ms += std::chrono::duration<double, std::milli>(sync_t1 - sync_t0).count();
+                float copy_ms = 0.0f;
+                if (cudaEventElapsedTime(&copy_ms, s.copy_start, s.copy_done) == cudaSuccess) {
+                    h2d_ms += (double)copy_ms;
+                }
+            } else {
+                const auto sync_t0 = std::chrono::steady_clock::now();
+                if (cudaStreamSynchronize(stream) != cudaSuccess) {
+                    ++h2d_failures;
+                    continue;
+                }
+                const auto sync_t1 = std::chrono::steady_clock::now();
+                sync_ms += std::chrono::duration<double, std::milli>(sync_t1 - sync_t0).count();
+            }
+            staged_bytes += (uint64_t)entry_bytes;
+        }
+    }
+    const auto total_t1 = std::chrono::steady_clock::now();
+    total_ms = std::chrono::duration<double, std::milli>(total_t1 - total_t0).count();
+
+    s.staged_calls.fetch_add(1, std::memory_order_relaxed);
+    s.staged_entries.fetch_add((uint64_t)candidates.size(), std::memory_order_relaxed);
+    s.staged_bytes.fetch_add(staged_bytes, std::memory_order_relaxed);
+    s.read_failures.fetch_add(read_failures, std::memory_order_relaxed);
+    s.h2d_failures.fetch_add(h2d_failures, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lk(s.mu);
+        s.alloc_ms += alloc_ms;
+        s.read_ms += read_ms;
+        s.h2d_ms += h2d_ms;
+        s.sync_ms += sync_ms;
+        s.total_ms += total_ms;
+        const char *path = expert_pack_v2_shadow_stage_path();
+        if (path && path[0]) {
+            FILE *f = std::fopen(path, "a");
+            if (f) {
+                if (!s.header_written) {
+                    std::fprintf(f,
+                        "seq,phase,role,tensor,logical_type,logical_nbytes,logical_ne00,"
+                        "logical_ne01,logical_nb01,n_active,cache_hits,covered,"
+                        "covered_cache_hits,staged,reject_no_manifest,reject_not_allowed,"
+                        "reject_no_entry,reject_unsupported,reject_manifest_mismatch,"
+                        "reject_shape_mismatch,reject_not_smaller,covered_bytes,"
+                        "covered_saved_bytes,staged_bytes,staged_saved_bytes,"
+                        "max_entry_bytes,host_capacity,dev_capacity,alloc_grew,"
+                        "alloc_ms,read_ms,h2d_ms,sync_ms,total_ms,read_failures,"
+                        "h2d_failures\n");
+                    s.header_written = true;
+                }
+                std::fprintf(f,
+                    "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%zu,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,%llu,%llu,%zu,%zu,%zu,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%llu,%llu\n",
+                    (unsigned long long)call_idx,
+                    phase ? phase : "",
+                    role ? role : "",
+                    tensor_name,
+                    logical_type,
+                    logical_nbytes,
+                    (long)logical_ne00,
+                    (long)logical_ne01,
+                    logical_nb01,
+                    n_active,
+                    cache_hits,
+                    covered,
+                    covered_cache_hits,
+                    candidates.size(),
+                    reject_no_manifest,
+                    reject_not_allowed,
+                    reject_no_entry,
+                    reject_unsupported,
+                    reject_manifest_mismatch,
+                    reject_shape_mismatch,
+                    reject_not_smaller,
+                    (unsigned long long)covered_bytes,
+                    (unsigned long long)covered_saved_bytes,
+                    (unsigned long long)staged_bytes,
+                    (unsigned long long)staged_saved_bytes,
+                    max_entry_bytes,
+                    s.host_sz,
+                    s.dev_sz,
+                    alloc_grew ? 1 : 0,
+                    alloc_ms,
+                    read_ms,
+                    h2d_ms,
+                    sync_ms,
+                    total_ms,
+                    (unsigned long long)read_failures,
+                    (unsigned long long)h2d_failures);
+                std::fclose(f);
+            }
+        }
+    }
+}
+
 static bool gpu_handoff_enabled() {
     const char *env = std::getenv("GGML_MOE_GPU_HANDOFF");
     return env && env[0] && env[0] != '0';
@@ -13255,6 +13667,19 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         dst_ids,
         flat_dst_ids,
         n_active);
+    expert_pack_v2_shadow_stage_record(
+        prompt_mode ? "prompt_upgate" : "decode_upgate",
+        "up",
+        up_key_name,
+        src0_up_type_int,
+        up_expert_bytes,
+        ne00,
+        ne01,
+        up_nb01,
+        cache,
+        active_experts,
+        n_active,
+        st);
     expert_pack_v2_call_coverage_record(
         prompt_mode ? "prompt_upgate" : "decode_upgate",
         "gate",
@@ -13293,6 +13718,19 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         dst_ids,
         flat_dst_ids,
         n_active);
+    expert_pack_v2_shadow_stage_record(
+        prompt_mode ? "prompt_upgate" : "decode_upgate",
+        "gate",
+        gate_key_name,
+        src0_gate_type_int,
+        gate_expert_bytes,
+        ne00,
+        ne01,
+        gate_nb01,
+        cache,
+        active_experts,
+        n_active,
+        st);
 
     const char *profile_upgate_env = std::getenv("GGML_MOE_VRAM_PROFILE_UPGATE");
     const bool profile_upgate = !profile_upgate_env || !profile_upgate_env[0] || profile_upgate_env[0] != '0';
@@ -15409,6 +15847,19 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         dst_ids,
         nullptr,
         n_active);
+    expert_pack_v2_shadow_stage_record(
+        rows_stride > 8 ? "prompt_batch" : "decode_down",
+        is_prompt_up ? "up" : (is_prompt_gate ? "gate" : "down"),
+        src0_name,
+        src0_type_int,
+        src0_bytes,
+        ne00,
+        ne01,
+        nb01,
+        cache,
+        active_experts,
+        n_active,
+        st);
 
     if (profile) cudaEventRecord(bc.ev_start, st);
 
