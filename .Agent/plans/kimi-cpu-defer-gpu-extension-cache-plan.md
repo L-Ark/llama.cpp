@@ -1,8 +1,133 @@
 # Kimi CPU/defer GPU-extension cache optimization plan
 
-Date: 2026-07-10
+Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
+
+## Current execution goal: prompt-general Kimi `>2 tok/s` through storage layout
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> On the current `vendor/kimi-deepseek-41d205-additive` branch, improve
+> prompt-general Kimi decode throughput by making expert storage and transfer
+> more efficient, without changing model semantics. The immediate measurable
+> target is stable cold-start `>2 tok/s` on held-out/general prompts under
+> strict host RAM `<16 GB` and one 32 GB RTX 5090-class GPU. The product target
+> remains stable `>5 tok/s` for random user prompts.
+
+Non-negotiable constraints for this phase:
+
+- Host RAM must remain below `15900000000` bytes, including page cache and all
+  process memory.
+- Every accepted run must be cold start under the memory cgroup; warm-cache
+  results are not SOTA.
+- The prompt `Please introduce France in a short paragraph.` must remain
+  semantically correct and coherent, but optimization must be prompt-general,
+  not France-specific.
+- Dev prompts may be used for design and tuning; held-out prompts may only be
+  used for final validation.
+- TTFT must not exceed the paired baseline by more than `20%`.
+- Any accepted performance improvement must be committed and pushed
+  immediately with a reproducible commit body.
+- If token rate drops, quality regresses, TTFT violates the gate, RAM exceeds
+  the limit, or profiling shows time only moved elsewhere, reject or revert the
+  behavior change. Default-off instrumentation can remain if it does not affect
+  default behavior.
+
+Reproducibility requirement for every future SOTA commit:
+
+- commit SHA and rollback SHA;
+- exact branch, build target, model/assets, expert pack paths, and alias TSV;
+- exact command and environment variables;
+- prompt split and which prompts were dev versus held-out;
+- token rate, decode ms/token, TTFT, RAM peak, VRAM/expert-cache settings,
+  page-cache split, `io_uring_wait`, read bytes/jobs, staging wall, H2D wall,
+  compute wall, and CPU fallback count;
+- exact quality output or a saved output path;
+- run directory containing logs, profiles, and generated analysis.
+
+Latest profile finding that drives this plan:
+
+- Current N32 dev-general traces still spend most exposed time in expert
+  movement, especially `io_uring_wait`.
+- Pure IO can reach roughly `10.0-10.4 GiB/s`, but decode runtime does not keep
+  a deep continuous queue because routing exposes expert IDs layer by layer.
+- A fresh two-prompt layout screen showed current pack offsets almost never
+  allow adjacent read coalescing:
+  - current read jobs: `56943`;
+  - current extents after physical adjacency: `56135`;
+  - ideal per layer/role/tensor layout extents: `19242`;
+  - static `first_use` layout extents: `36216`;
+  - static `greedy_pair` layout extents: `31556`.
+- Estimated upper bound from static duplicate clustered pack layout:
+  - `first_use`: about `2.27-2.30 tok/s` on the profiled N32 prompts;
+  - `greedy_pair`: about `2.43-2.45 tok/s`;
+  - ideal dynamic layout bound: about `2.9 tok/s`.
+- Therefore the next useful optimization should target physical pack layout and
+  controlled RAM/VRAM residency, not another fixed prompt-specific hotset.
+
+Execution plan:
+
+1. Preserve the current reproducible baseline.
+   - Re-run one cold-start baseline before each behavior A/B.
+   - Record full metrics and quality output.
+   - Treat the current pushed HEAD as a rollback point unless a later accepted
+     SOTA commit supersedes it.
+
+2. Make pack layout measurable and reproducible.
+   - Commit the IO trace layout screen tool used to compute current, static,
+     and ideal coalescing bounds.
+   - Save the exact trace inputs and analysis reports for every layout claim.
+   - Do not call a layout result SOTA unless it is validated by runtime A/B,
+     not just an offline bound.
+
+3. Build a default-off duplicate clustered overlay pack A/B.
+   - Prefer a duplicate overlay rather than rewriting the main pack so rollback
+     is immediate.
+   - Start with static `greedy_pair` order because it has the best offline
+     bound among simple prompt-general layouts.
+   - Keep separate measurements for `up`, `gate`, `down`, and `up+gate` so we
+     can see whether coalescing saves critical-path wait or only reduces read
+     count.
+   - Required pass condition: lower `io_uring_wait`, read jobs, and decode
+     ms/token without increasing TTFT beyond `1.20x`, RAM beyond the cap, or
+     quality failures.
+
+4. Rework RAM usage only after low-value file cache is identified.
+   - Profile decode-stage `active_file`/`inactive_file` by file and timestamp:
+     GGUF dense pages, GGUF expert refault pages, alias/index pages, pack pages,
+     and runtime buffers.
+   - Release or avoid low-value decode file cache only when it is proven not to
+     be used by decode.
+   - Replace freed RAM with explicit expert storage only if it is batch-friendly
+     and reduces exposed wait.
+
+5. Design a controlled RAM tier.
+   - VRAM stores the hottest experts that avoid H2D and SSD on the critical
+     path.
+   - RAM stores second-tier experts or complete low-hit critical layer/role
+     slabs only when the slab can be served in large batches.
+   - SSD stores cold experts in a layout optimized for coalesced reads.
+   - Avoid large pinned slabs unless profiling proves they beat pageable or
+     file-backed alternatives; large pinning can hurt scheduler/reclaim behavior
+     even if it removes SSD reads.
+
+6. Validate prompt generalization.
+   - Tune only on dev prompts.
+   - Validate candidates on held-out prompts and at least one newly written
+     prompt that was not used in layout/profile construction.
+   - A result is not global SOTA if it only wins on prompts used to select
+     experts or pack order.
+
+7. Promotion rule.
+   - Commit and push immediately only after a candidate passes metrics,
+     quality, TTFT, RAM, and reproducibility gates.
+   - Commit message body must include the full SOTA reproduction details listed
+     above.
+   - Update this plan with the run root, metrics, decision, and rollback point
+     before starting the next optimization.
 
 ## Immediate goal: Kimi CPU/defer GPU-extension usefulness check
 
