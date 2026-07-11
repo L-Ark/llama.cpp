@@ -749,6 +749,82 @@ Decision:
   this v2 sidecar plus explicit mixed-type dispatch guards. It must start with
   this tiny pack and N32 quality smoke, not a large pack.
 
+## Phase 5D runtime reader smoke: v2 sidecar parse/read is verified
+
+Timestamp: 2026-07-11 CST.
+
+New tool:
+
+- `.Agent/run-tools/kimi_moepack_v2_runtime_smoke.cpp`
+
+Purpose:
+
+- Validate the already-built CUDA batch runtime's `GGMLMOEPACKv2` debug reader
+  without loading a model.
+- The tool uses `dlopen`/`dlsym` against `build-cuda-batch/bin/libggml-cuda.so`
+  and calls the real exported symbols:
+  - `ggml_cuda_moe_expert_pack_v2_lookup_debug`;
+  - `ggml_cuda_moe_expert_pack_v2_read_debug`.
+- This remains default-off and does not change inference behavior.
+
+Run directory:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-v2-runtime-smoke
+```
+
+Commands:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-v2-runtime-smoke
+mkdir -p "$RUN"
+
+.Agent/run-tools/kimi_moepack_v2_synthetic_test.py --out-dir "$RUN"
+
+g++ -std=c++17 -O2 \
+  .Agent/run-tools/kimi_moepack_v2_runtime_smoke.cpp \
+  -ldl \
+  -o "$RUN/kimi_moepack_v2_runtime_smoke"
+
+LD_LIBRARY_PATH=build-cuda-batch/bin \
+  "$RUN/kimi_moepack_v2_runtime_smoke" \
+  build-cuda-batch/bin/libggml-cuda.so \
+  "$RUN/synthetic-v2.expert-pack"
+
+LD_LIBRARY_PATH=build-cuda-batch/bin \
+  "$RUN/kimi_moepack_v2_runtime_smoke" \
+  build-cuda-batch/bin/libggml-cuda.so \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv
+```
+
+Results:
+
+- Synthetic v2 pack:
+  - generated `2` entries;
+  - runtime reader loaded `2` metadata entries;
+  - lookup/read passed;
+  - synthetic payload byte-pattern verification passed.
+- Tiny selected IQ1_S/Q2_K overlay pack:
+  - runtime reader loaded `8` metadata entries;
+  - manifest mode checked all `8` rows;
+  - lookup metadata matched `packed_type`, `packed_nbytes`, `packed_ne00`,
+    `packed_ne01`, and `packed_nb01`;
+  - `read_debug` returned the expected byte count for every entry.
+
+Decision:
+
+- The `GGMLMOEPACKv2` parse/read blocker is cleared for the current
+  `build-cuda-batch/bin/libggml-cuda.so` and the 8-entry selected overlay pack.
+- This is still not a runnable lower-byte inference path:
+  - the current batch v2 reader is debug/shadow only;
+  - one-pack compute/cache lookup still uses current `(tensor, expert, nbytes)`;
+  - the Kimi one-stream type gate still rejects `IQ1_S`/`Q2_K`;
+  - no quality or token-rate run has been performed with the overlay.
+- The next implementation step should be a guarded runtime bridge from v2
+  lookup/read to a tiny smoke compute path, or an explicit rejection if
+  `IQ1_S`/`Q2_K` kernels cannot support the selected roles.
+
 ## Phase 5B goal: transfer the CPU/defer GPU-extension idea to Kimi safely
 
 Timestamp: 2026-07-11 CST.
