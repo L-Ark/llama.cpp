@@ -326,6 +326,161 @@ Prototype plan:
    - cache eviction of down/upgate slots;
    - quality loss from IQ1_S up/gate replacement.
 
+### 2026-07-12 Result: up/gate IQ1_S preflight is not enough for runtime work
+
+Purpose:
+
+- validate the optimistic up/gate low-byte bound with real runtime
+  preflight/planner calls;
+- test whether a practical up/gate IQ1_S v2 replacement has enough margin to
+  justify endpoint runtime implementation.
+
+Method:
+
+- Build metadata-only v2 packs from the selected IQ1_S plans. These packs
+  contain the real v2 header and manifest entries, but no payload bytes, so they
+  are safe for preflight/planner and cannot accidentally become a SOTA runtime
+  path.
+- Run cold-start N32 France and held-out deploy with:
+  - `GGML_MOE_EXPERT_PACK_V2=<metadata pack>`;
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=<manifest>`;
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN=1`;
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_CONTROL_PROFILE=1`;
+  - no runtime v2 dispatch.
+
+Metadata packs:
+
+- 12 GiB plan:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget12-metadata-pack`
+  - selected entries: `4493`;
+  - logical payload bytes: `12882329600`;
+  - metadata pack bytes: `827392`.
+- 24 GiB plan:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget24-metadata-pack`
+  - selected entries: `8987`;
+  - logical payload bytes: `25767526400`;
+  - metadata pack bytes: `1654784`.
+- 64 GiB all-profile plan:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget64-metadata-pack`
+  - selected entries: `22734`;
+  - logical payload bytes: `65182924800`;
+  - metadata pack bytes: `4186112`.
+
+12 GiB preflight:
+
+- France:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget12-preflight-france-n32-233412`
+- Held-out deploy:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget12-preflight-deploy-n32-233531`
+- Combined bound:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget12-preflight-bound/budget12-upgate-preflight-bound.md`
+- Result:
+  - France accepted entries: `35.39%`;
+  - France decode up/gate accepted: gate `56.28%`, up `50.95%`;
+  - France optimistic `partial_io_h2d` ceiling: `1.812 tok/s`;
+  - deploy accepted entries: `36.72%`;
+  - deploy decode up/gate accepted: gate `60.20%`, up `52.26%`;
+  - deploy optimistic `partial_io_h2d` ceiling: `1.868 tok/s`.
+
+Decision for 12 GiB:
+
+- Reject runtime implementation. Even the optimistic all-phase bound is below
+  `2 tok/s`, before split-dispatch overhead and quality risk.
+
+24 GiB preflight:
+
+- France:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget24-preflight-france-n32-233801`
+- Held-out deploy:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget24-preflight-deploy-n32-233912`
+- Combined bound:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget24-preflight-bound/budget24-upgate-preflight-bound.md`
+- Result:
+  - France accepted entries: `47.48%`;
+  - France decode up/gate accepted: gate `72.45%`, up `69.32%`;
+  - France optimistic `partial_io_h2d` ceiling: `1.854 tok/s`;
+  - deploy accepted entries: `50.29%`;
+  - deploy decode up/gate accepted: gate `79.55%`, up `73.84%`;
+  - deploy optimistic `partial_io_h2d` ceiling: `2.087 tok/s`.
+
+Important correction:
+
+- The bound tool's headline `partial_io_h2d` ceiling includes prompt-phase
+  saved bytes in the same linear pool and is therefore too optimistic for the
+  decode token-rate target.
+- Decode-only candidate summaries are the safer admission signal:
+  - France decode upgate estimated saving: `2679.1 ms`;
+  - deploy decode upgate estimated saving: `3136.1 ms`.
+- Applying the France saving to the protected SOTA France decode time
+  (`19471.45 ms`) gives roughly `31 / (19471.45 - 2679.1) * 1000 =
+  1.85 tok/s`, still below `2 tok/s` before overhead.
+
+Decision for 24 GiB:
+
+- Reject endpoint runtime implementation as the next mainline optimization.
+- It may improve token rate, but it does not clear the `>=2 tok/s` milestone
+  with enough margin to justify a complex mixed-type replacement path.
+
+64 GiB all-profile preflight:
+
+- Selected plan:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget64-bound/budget-64p0-selected-plan.tsv`
+- France run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget64-preflight-france-n32-234136`
+- Bound:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate-iq1s-budget64-preflight-bound/budget64-upgate-preflight-bound.md`
+- Result:
+  - accepted entries: `63.16%`;
+  - decode up/gate accepted: gate `91.91%`, up `91.91%`;
+  - decode full-cover calls: `53.36%` for both gate and up;
+  - headline optimistic `partial_io_h2d` ceiling: `2.203 tok/s`;
+  - decode upgate estimated saving: `3985.5 ms`;
+  - logical payload size: about `60.7 GiB`.
+
+Decision for 64 GiB:
+
+- Reject as a practical next runtime target.
+- It only barely clears the France decode requirement when applied to the
+  protected SOTA baseline, before any runtime overhead:
+  `31 / (19471.45 - 3985.5) * 1000 ~= 2.00 tok/s`.
+- It is profile-specific to the two prompts used to construct the plan, has no
+  generalization guarantee, and would require materializing about `60.7 GiB` of
+  IQ1_S payload.
+- Because the margin is effectively zero, any real overhead from v2 lookup,
+  split dispatch, extra sync, H2D contention, quality recheck, or cache
+  interaction would fall below `2 tok/s`.
+
+Overall decision:
+
+- Do not implement up/gate IQ1_S low-byte endpoint replacement as the next
+  mainline optimization.
+- Keep the standalone smoke evidence for future work, but the current measured
+  preflight does not justify a complex runtime path under the `>=2 tok/s`
+  milestone.
+
+Next direction after rejection:
+
+1. Return to storage/scheduler work that attacks exposed wait without changing
+   expert numerical representation:
+   - coalesced routed-read scheduling for same-layer up/gate/down misses;
+   - larger and steadier io_uring batch depth;
+   - explicit RAM/VRAM tiering after page-cache audit;
+   - whole-layer or role-layer RAM slabs only if they preserve large H2D
+     batches and reduce endpoint decode time.
+2. Start with a default-off scheduler-only A/B:
+   - no quality risk from changing quantization;
+   - no 12-60 GiB payload materialization;
+   - measurable target is lower exposed `io_uring_wait_us` and higher runtime
+     batch depth on France + held-out deploy.
+3. Admission still requires the full gates:
+   - cold start;
+   - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+   - France quality pass;
+   - held-out quality pass;
+   - TTFT <= `+20%`;
+   - fallback `0` or fully attributed;
+   - reproducible run dirs, commands, env, metrics, and rollback commit.
+
 ## 2026-07-12 Goal: verify DeepSeek-style CPU/defer GPU extension on Kimi
 
 ### Goal
