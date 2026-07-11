@@ -303,6 +303,65 @@ Required next change before real payload build:
 - After that, build the real top7down payload pack and run a default-off read
   smoke before touching inference dispatch.
 
+### 2026-07-11 Tooling: coalesced/chunked v2 payload builder
+
+Change:
+
+- Updated `.Agent/run-tools/kimi_iq1s_selected_payload_pack.py`.
+- Non-metadata payload builds now:
+  - create the manifest first;
+  - group contiguous source and pack offsets;
+  - download fixed-size chunks controlled by `--payload-chunk-mib`;
+  - write chunks directly into the pack file;
+  - avoid retaining all selected payloads in memory;
+  - record `pack_sha256`, `payload_groups`, `payload_range_reads`,
+    `payload_streamed_bytes`, and `payload_write_wall_sec`.
+- `--metadata-only` behavior remains unchanged except for additional report
+  fields.
+
+Metadata regression:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-packbuilder-chunked-metadata-regression-121922
+selected_entries=2688
+payload_bytes=7707033600
+pack_bytes=495616
+pack_sha256=16301dae8a58a800db1dc1b1bec998220091e62b2ab5a5416a4a1aa3dcbf9847
+payload_write_mode=metadata_only
+payload_groups=0
+payload_range_reads=0
+payload_streamed_bytes=0
+```
+
+Payload smoke:
+
+```text
+run=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-packbuilder-chunked-payload-smoke-121945
+selected_entries=1
+payload_bytes=2867200
+pack_bytes=2871296
+pack_sha256=ac2999226f88ffdea9164d74a9b7d8fed2db3e5441967ef352d6b4df235ca213
+payload_write_mode=coalesced_chunked
+payload_groups=1
+payload_range_reads=3
+payload_streamed_bytes=2867200
+payload_write_wall_sec=3.732
+verification=pass after correcting the expected pack-size assertion to 2871296
+```
+
+Next execution step:
+
+1. Build the real top7down full-cover payload pack:
+   - selected plan:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-metadata-cf1bef649-121305/fullcover-top7down-selected-plan.tsv`;
+   - expected entries: `2688`;
+   - expected payload bytes: `7707033600`;
+   - use `--payload-chunk-mib 64` initially.
+2. Run `kimi_moepack_v2_partial_split_smoke` or an equivalent v2 read/MMVQ
+   smoke against the real pack before wiring inference.
+3. Implement real dispatch only for full-cover homogeneous calls, default-off,
+   and A/B on N32 cold start first.
+
 ## READ FIRST: active goal and immediate plan
 
 Timestamp: 2026-07-11 CST.

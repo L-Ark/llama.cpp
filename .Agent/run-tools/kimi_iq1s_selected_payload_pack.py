@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import re
 import struct
@@ -312,11 +313,81 @@ def load_selected(path: Path, tensors: dict[str, TensorInfo], max_entries: int, 
     return selected, stats
 
 
+def sha256_file(path: Path, chunk_size: int = 8 * 1024 * 1024) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def contiguous_payload_groups(manifest: list[dict]) -> list[tuple[int, int, int, int]]:
+    """Return groups as (first_row, end_row, source_offset, pack_offset)."""
+    groups: list[tuple[int, int, int, int]] = []
+    i = 0
+    while i < len(manifest):
+        source_offset = int(manifest[i]["source_absolute_offset"])
+        pack_offset = int(manifest[i]["pack_offset"])
+        j = i + 1
+        prev_source_end = source_offset + int(manifest[i]["packed_nbytes"])
+        prev_pack_end = pack_offset + int(manifest[i]["packed_nbytes"])
+        while j < len(manifest):
+            row_source = int(manifest[j]["source_absolute_offset"])
+            row_pack = int(manifest[j]["pack_offset"])
+            if row_source != prev_source_end or row_pack != prev_pack_end:
+                break
+            nbytes = int(manifest[j]["packed_nbytes"])
+            prev_source_end += nbytes
+            prev_pack_end += nbytes
+            j += 1
+        groups.append((i, j, source_offset, pack_offset))
+        i = j
+    return groups
+
+
+def write_payloads_chunked(
+        f,
+        manifest: list[dict],
+        range_backend: str,
+        range_timeout: int,
+        payload_chunk_bytes: int) -> dict:
+    if payload_chunk_bytes <= 0:
+        raise ValueError("--payload-chunk-mib must be positive")
+
+    groups = contiguous_payload_groups(manifest)
+    range_reads = 0
+    payload_bytes = 0
+    t0 = time.monotonic()
+    for first, end, source_offset, pack_offset in groups:
+        group_bytes = sum(int(row["packed_nbytes"]) for row in manifest[first:end])
+        done = 0
+        while done < group_bytes:
+            nread = min(payload_chunk_bytes, group_bytes - done)
+            payload = read_concat_range(
+                IQ1S_PART_URLS, IQ1S_PART_BYTES, source_offset + done, nread,
+                backend=range_backend, timeout=range_timeout)
+            f.seek(pack_offset + done)
+            f.write(payload)
+            done += nread
+            payload_bytes += nread
+            range_reads += 1
+    return {
+        "payload_write_mode": "coalesced_chunked",
+        "payload_groups": len(groups),
+        "payload_range_reads": range_reads,
+        "payload_chunk_bytes": payload_chunk_bytes,
+        "payload_streamed_bytes": payload_bytes,
+        "payload_write_wall_sec": time.monotonic() - t0,
+    }
+
+
 def write_pack(path: Path, selected: list[dict], data_start: int, metadata_only: bool,
-               range_backend: str, range_timeout: int) -> list[dict]:
+               range_backend: str, range_timeout: int, payload_chunk_bytes: int) -> tuple[list[dict], dict]:
     pack_data_start = align_up(PACK_HEADER.size + len(selected) * PACK_ENTRY.size, PACK_ALIGNMENT)
     offset = pack_data_start
-    payloads: list[bytes] = []
     manifest: list[dict] = []
     for item in selected:
         src_offset = data_start + int(item["concat_tensor_offset"]) + int(item["expert_payload_offset"])
@@ -324,12 +395,16 @@ def write_pack(path: Path, selected: list[dict], data_start: int, metadata_only:
         row["source_absolute_offset"] = src_offset
         row["pack_offset"] = offset
         manifest.append(row)
-        if not metadata_only:
-            payloads.append(read_concat_range(
-                IQ1S_PART_URLS, IQ1S_PART_BYTES, src_offset, int(item["packed_nbytes"]),
-                backend=range_backend, timeout=range_timeout))
         offset = align_up(offset + int(item["packed_nbytes"]), PACK_ALIGNMENT)
 
+    payload_stats = {
+        "payload_write_mode": "metadata_only" if metadata_only else "coalesced_chunked",
+        "payload_groups": 0,
+        "payload_range_reads": 0,
+        "payload_chunk_bytes": payload_chunk_bytes,
+        "payload_streamed_bytes": 0,
+        "payload_write_wall_sec": 0.0,
+    }
     with path.open("wb") as f:
         f.write(PACK_HEADER.pack(PACK_MAGIC, 2, PACK_HEADER.size, len(manifest), pack_data_start))
         for row in manifest:
@@ -346,10 +421,9 @@ def write_pack(path: Path, selected: list[dict], data_start: int, metadata_only:
             ))
         f.truncate(pack_data_start)
         if not metadata_only:
-            for row, payload in zip(manifest, payloads):
-                f.seek(int(row["pack_offset"]))
-                f.write(payload)
-    return manifest
+            payload_stats = write_payloads_chunked(
+                f, manifest, range_backend, range_timeout, payload_chunk_bytes)
+    return manifest, payload_stats
 
 
 def write_manifest(path: Path, rows: list[dict]) -> None:
@@ -380,6 +454,12 @@ def write_markdown(path: Path, result: dict) -> None:
         f"- selected entries: `{result['selected_entries']}`",
         f"- payload bytes: `{result['payload_bytes']}`",
         f"- pack bytes: `{result['pack_bytes']}`",
+        f"- pack sha256: `{result['pack_sha256']}`",
+        f"- payload write mode: `{result['payload_write_mode']}`",
+        f"- payload groups: `{result['payload_groups']}`",
+        f"- payload range reads: `{result['payload_range_reads']}`",
+        f"- payload chunk bytes: `{result['payload_chunk_bytes']}`",
+        f"- payload write wall sec: `{result['payload_write_wall_sec']:.3f}`",
         f"- gguf data start: `{result['gguf_data_start']}`",
         "",
         "## Selected Entries",
@@ -426,11 +506,18 @@ def main() -> int:
         help="Optional local GGUF part1 header cache. If present, use it instead of a remote range request.")
     parser.add_argument("--range-backend", choices=("auto", "urllib", "curl"), default="auto")
     parser.add_argument("--range-timeout", type=int, default=180)
+    parser.add_argument(
+        "--payload-chunk-mib",
+        type=int,
+        default=64,
+        help="Maximum payload range read size for non-metadata builds.")
     parser.add_argument("--metadata-only", action="store_true")
     args = parser.parse_args()
 
     if args.max_entries <= 0:
         raise ValueError("--max-entries must be positive")
+    if args.payload_chunk_mib <= 0:
+        raise ValueError("--payload-chunk-mib must be positive")
     include_types = parse_types(args.include_types)
     invalid_types = include_types - set(TYPE_IDS)
     if invalid_types:
@@ -456,9 +543,9 @@ def main() -> int:
     args.out_dir.mkdir(parents=True, exist_ok=True)
     pack_path = args.out_dir / "selected-iq1s-overlay-v2.expert-pack"
     manifest_tsv = args.out_dir / "selected-iq1s-overlay-manifest.tsv"
-    manifest = write_pack(
+    manifest, payload_stats = write_pack(
         pack_path, selected, data_start, args.metadata_only,
-        args.range_backend, args.range_timeout)
+        args.range_backend, args.range_timeout, args.payload_chunk_mib * 1024 * 1024)
     write_manifest(manifest_tsv, manifest)
 
     payload_bytes = sum(int(row["packed_nbytes"]) for row in manifest)
@@ -476,6 +563,7 @@ def main() -> int:
         "header_cache": str(args.header_cache) if args.header_cache is not None else "",
         "range_backend": args.range_backend,
         "range_timeout": args.range_timeout,
+        "payload_chunk_mib": args.payload_chunk_mib,
         "gguf_data_start": data_start,
         "metadata": {
             "version": metadata.get("version"),
@@ -489,6 +577,8 @@ def main() -> int:
         "selected_entries": len(manifest),
         "payload_bytes": payload_bytes,
         "pack_bytes": pack_bytes,
+        "pack_sha256": sha256_file(pack_path),
+        **payload_stats,
         "selected": manifest,
         "reproduce_command": " ".join([
             ".Agent/run-tools/kimi_iq1s_selected_payload_pack.py",
@@ -499,6 +589,7 @@ def main() -> int:
         ] + ([f"--header-cache {args.header_cache}"] if args.header_cache is not None else []) +
             ([f"--range-backend {args.range_backend}"] if args.range_backend != "auto" else []) +
             ([f"--range-timeout {args.range_timeout}"] if args.range_timeout != 180 else []) +
+            ([f"--payload-chunk-mib {args.payload_chunk_mib}"] if args.payload_chunk_mib != 64 else []) +
             (["--metadata-only"] if args.metadata_only else [])),
     }
     (args.out_dir / "report.json").write_text(
@@ -509,6 +600,12 @@ def main() -> int:
     print(f"selected_entries={len(manifest)}")
     print(f"payload_bytes={payload_bytes}")
     print(f"pack_bytes={pack_bytes}")
+    print(f"pack_sha256={result['pack_sha256']}")
+    print(f"payload_write_mode={result['payload_write_mode']}")
+    print(f"payload_groups={result['payload_groups']}")
+    print(f"payload_range_reads={result['payload_range_reads']}")
+    print(f"payload_streamed_bytes={result['payload_streamed_bytes']}")
+    print(f"payload_write_wall_sec={result['payload_write_wall_sec']:.3f}")
     return 0
 
 
