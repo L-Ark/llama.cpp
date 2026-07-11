@@ -4,6 +4,147 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Current Goal: validate CPU/defer GPU-extension transfer to Kimi
+
+### Goal
+
+验证 DeepSeek SOTA 中的 `CPU/defer MoE scheduler + GPU expert-cache
+extension` 架构是否能继续提升 Kimi，并在 Kimi 当前实现上形成可复现的
+下一阶段优化路线。
+
+固定目标如下：
+
+- target hardware: `16 GB` host RAM hard limit, including page cache, mmap
+  file-backed pages, pinned/pageable memory, allocator overhead, and kernel
+  accounting;
+- GPU: one `32 GB RTX 5090`;
+- workload: cold-start random/general prompts, not prompt-specific hotsets,
+  prompt-specific packs, or warm-cache runs;
+- correctness: every promoted run must pass semantic quality checks, including
+  `Please introduce France in a short paragraph.`;
+- reproducibility: any new SOTA must come from a clean pushed commit, with
+  exact command, env, prompt set, metrics, output quality, rollback point, and
+  memory/IO/fallback profile recorded;
+- short target: restore and protect the current reproducible Kimi SOTA, then
+  push stable general-prompt decode above `2 tok/s`;
+- long target: move toward stable `>5 tok/s` by reducing exposed expert
+  movement and CPU/defer slow-path cost, not by relying on uncontrolled Linux
+  page cache.
+
+The DeepSeek lesson is architectural, not a direct copy of one knob:
+
+> Keep CPU/defer as the MoE dispatch owner, but make expensive expert work enter
+> a controlled GPU extension: `VRAM/RAM expert cache -> batched H2D -> GPU
+> compute`; CPU compute is only the final unsupported fallback.
+
+For Kimi, this is useful only if the profile shows one of the following:
+
+1. remaining `gate/up/down` work still enters CPU compute or GGUF
+   `src0->data` fallback;
+2. CPU/defer scheduler copies still touch GGUF mmap pages after prompt and
+   create low-value file cache;
+3. current GPU extension accepts the work, but expert reads are serialized or
+   fragmented enough that RAM/VRAM cache layout can reduce exposed wait.
+
+If Kimi is already `0 fallback` and all critical expert compute goes through
+GPU extension, then a DeepSeek-style "put gate in VRAM" change alone is not
+expected to reproduce the same jump. The next wins should instead come from
+controlled expert storage layout, RAM/VRAM tiering, larger safe IO scheduling
+waves, and lower-byte expert representations.
+
+### Decision Plan
+
+#### Phase A: Reproduce the protected Kimi control
+
+Run one cold-start N96 general prompt from the current pushed SOTA config under:
+
+- `MemoryMax=15900000000`;
+- `MemorySwapMax=0`;
+- no manual page-cache warmup;
+- current accepted Kimi expert-pack/cache/VRAM knobs.
+
+Record:
+
+- output text and quality pass/fail;
+- TTFT, decode wall time, decode token rate, prompt token rate if available;
+- `memory.peak`, anon/file split, `active_file`, `inactive_file`;
+- VRAM residency and expert-cache layout;
+- CPU fallback count, GGUF fallback count, expert-pack bytes, H2D bytes,
+  io_uring wait, and per-role compute/transfer time.
+
+If this control does not reproduce the accepted range, stop new optimization
+and diagnose commit/env/pack drift first.
+
+#### Phase B: Separate CPU/defer scheduling from real CPU fallback
+
+Add or use default-off profiles that classify every Kimi MoE expert action by:
+
+- phase: prompt or decode;
+- layer, role: `gate`, `up`, `down`;
+- path: GPU extension accepted, RAM tier, VRAM hit, expert pack io_uring,
+  GGUF mmap copy, CPU compute fallback, or metadata-only touch;
+- bytes touched, bytes transferred to GPU, wall time, and exposed wait;
+- source tensor type and reason when GPU extension rejects a path.
+
+This phase must answer:
+
+- Is CPU still computing any prompt/decode expert matmul?
+- Are any `gate/up/down` tensors still read from GGUF mmap instead of the
+  expert-pack/RAM/VRAM path?
+- Are late-layer GGUF pages entering file cache because the scheduler copies
+  from mmap before/after prompt fadvise?
+- Does `synchronize()` before post-prompt mmap drop reduce final decode-stage
+  file cache without hurting TTFT/token rate?
+
+#### Phase C: Choose the implementation branch from evidence
+
+Branch 1: real CPU fallback remains.
+
+- Implement the missing GPU extension first.
+- Priority order: `gate`, `up`, then `down`, because gate/up misses block the
+  same-layer MoE path earlier.
+- Add unsupported quant/type cases only when the profile proves they appear on
+  the critical path.
+- Accept only if fallback decreases and endpoint token rate improves without
+  TTFT or quality regression.
+
+Branch 2: fallback is zero, but GGUF mmap pages are refaulted.
+
+- Fix the prompt/decode boundary first:
+  - sync-before-drop A/B;
+  - drop only proven low-value expert mmap ranges;
+  - redirect scheduler sparse-copy source away from GGUF mmap when an
+    equivalent pack/RAM source exists.
+- Replace reclaimed file cache with explicit RAM expert cache only after the
+  low-value pages are proven removable.
+
+Branch 3: GPU extension already handles compute, but IO wait is exposed.
+
+- Co-design VRAM and RAM tiers:
+  - VRAM: hottest and most latency-critical experts;
+  - RAM: second-tier experts or full critical layer/role slabs only when they
+    reduce exposed SSD wait more than they fragment batches;
+  - SSD: cold experts and roles whose miss time is hidden by overlap.
+- Test same-layer `gate+up+down` read scheduling waves after routing, but keep
+  compute order unchanged.
+- Promote only endpoint decode-rate improvements, not hit-rate-only gains.
+
+#### Phase D: Generalization and promotion
+
+Every accepted result must be measured on:
+
+- at least one dev prompt used for profiling;
+- held-out prompts not used for hotset/cache/threshold selection;
+- the mandatory France prompt.
+
+Reject a candidate if:
+
+- TTFT increases by more than `20%`;
+- host RAM exceeds the hard limit or swap is used;
+- fallback increases relative to the matching control;
+- output becomes incoherent or semantically wrong;
+- the result cannot be reproduced from the pushed commit.
+
 ## 2026-07-12 Active Goal: turn unused host RAM into useful expert cache
 
 ### Goal
