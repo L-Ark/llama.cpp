@@ -2245,10 +2245,15 @@ int llama_context::decode(const llama_batch & batch_inp) {
         }
     }
 
-    // wait for the computation to finish (automatically done when obtaining the model output)
-    //synchronize();
-
     if (batch_inp.n_tokens > 1) {
+        const char * sync_before_drop_env = std::getenv("LLAMA_SYNC_BEFORE_DROP_MMAP_AFTER_PROMPT");
+        if (sync_before_drop_env && sync_before_drop_env[0] && sync_before_drop_env[0] != '0') {
+            const int64_t t_sync_start_us = ggml_time_us();
+            synchronize();
+            const int64_t t_sync_end_us = ggml_time_us();
+            LLAMA_LOG_INFO("%s: synchronized before prompt mmap drop wall_ms=%.3f\n",
+                    __func__, (double) (t_sync_end_us - t_sync_start_us) / 1000.0);
+        }
         model.drop_expert_mmap_pages_after_prompt();
     }
 
