@@ -175,6 +175,166 @@ Phase 5B execution plan:
    - Every accepted SOTA commit must include exact env, command, prompt split,
      run directories, before/after metrics, quality output, and rollback commit.
 
+## Phase 5B result: future-layer prefetch is not the next runtime change
+
+Timestamp: 2026-07-11 CST.
+
+New tool:
+
+- `.Agent/run-tools/kimi_future_expert_predictability.py`
+
+Run:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5b-future-expert-predictability-dev7
+```
+
+Command:
+
+```text
+.Agent/run-tools/kimi_future_expert_predictability.py \
+  --input-glob "/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-cpu-defer-gpu-ext-phase1-profile-n32-dev3-130834/*/route-trace.csv" \
+  --out /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5b-future-expert-predictability-dev7 \
+  --horizons 1 2 3 \
+  --budgets 8 16 32 \
+  --io-wait-ms-per-token 374.779
+```
+
+Inputs:
+
+- Seven dev-only route traces:
+  `dev_france_regression`, `dev_japan_factual`, `dev_linear_equation`,
+  `dev_mixed_summary`, `dev_photosynthesis_factual`, `dev_python_reverse`,
+  and `dev_zh_france`.
+- Held-out/test prompts were not used.
+- Parser result: each dev trace produced `31` decode tokens, one prompt-like
+  group, and zero incomplete groups.
+
+Method:
+
+- Leave-one-dev-prompt-out.
+- Predictors:
+  - `global_hot`: target-layer hot experts learned from the other dev prompts;
+  - `cooc`: current layer active experts vote for future layer active experts,
+    with global-hot fallback.
+- Horizons: `L+1`, `L+2`, `L+3`.
+- Budgets: `8`, `16`, `32` predicted experts per target layer.
+- Byte estimates include `all`, `upgate`, and `down` bundles; the headline below
+  uses all roles because runtime future-prefetch must ultimately make the
+  missing future expert usable, not just predict its id.
+
+Key results:
+
+| horizon | budget | predictor | recall | precision | pred GiB/token | useful GiB/token | waste GiB/token |
+|---:|---:|---|---:|---:|---:|---:|---:|
+| 1 | 8 | `cooc` | 0.2198 | 0.2198 | 7.4973 | 1.6449 | 5.8524 |
+| 1 | 8 | `global_hot` | 0.1417 | 0.1417 | 7.4973 | 1.0614 | 6.4359 |
+| 1 | 16 | `cooc` | 0.3057 | 0.1529 | 14.9946 | 2.2899 | 12.7047 |
+| 1 | 16 | `global_hot` | 0.2093 | 0.1046 | 14.9946 | 1.5673 | 13.4273 |
+| 1 | 32 | `cooc` | 0.4056 | 0.1014 | 29.9893 | 3.0388 | 26.9505 |
+| 1 | 32 | `global_hot` | 0.2989 | 0.0747 | 29.9893 | 2.2386 | 27.7506 |
+
+Layer distribution:
+
+- Best `H=1/B=16/cooc` target layers are only moderate:
+  - `blk.13`: recall `0.4240`;
+  - `blk.21`: recall `0.4188`;
+  - `blk.23`: recall `0.4130`.
+- Late layers are weak:
+  - `blk.54`: recall `0.1740`;
+  - `blk.58`: recall `0.1809`;
+  - `blk.57`: recall `0.1895`.
+
+Interpretation:
+
+- The co-occurrence predictor is better than global-hot, so there is real routing
+  structure.
+- The absolute recall is too low for a demand-safe runtime prefetch. At `B=16`,
+  the optimistic linear wait coverage is only about `114.6 ms/token`, below the
+  roughly `165 ms/token` needed to reach `2 tok/s` from the current profile.
+- At `B=32`, recall reaches `0.4056`, but all-role prefetch volume is about
+  `30.0 GiB/token` with about `27.0 GiB/token` waste. This would likely create
+  more IO/H2D pressure than it hides.
+- No layer band has strong enough recall to justify hardcoded future-layer
+  runtime prefetch without a better predictor.
+
+Decision:
+
+- Do not implement runtime future-layer prefetch from route-trace co-occurrence
+  now.
+- Keep the tool for future studies. Revisit only if a stronger predictor is
+  available, such as router logits, token-history features, previous-token
+  same-layer transitions, or a cheap draft model with measured acceptance.
+- Continue the next optimization round with explicit RAM/VRAM layout and
+  page-cache replacement, because that targets known low-value host memory
+  instead of adding speculative IO.
+
+## Phase 5C plan: explicit RAM/VRAM layout before more speculation
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Replace low-value decode-time host page cache with controlled expert residency
+> that can feed GPU demand loads efficiently, while preserving the current zero
+> CPU fallback path, cold-start requirement, 16 GB host-RAM gate, prompt-general
+> behavior, and reproducible SOTA protocol.
+
+Design constraints:
+
+- Do not rely on Linux page cache as an implicit expert cache.
+- Do not pin multi-GiB slabs by default; test pageable RAM first unless profiling
+  proves pinning wins.
+- RAM-resident experts must be organized so demand loads remain batchable:
+  prefer whole layer/role slabs or pack-contiguous ranges over scattered hot
+  singletons.
+- Demand IO always has priority over background RAM fill or speculative movement.
+- Any RAM tier must report:
+  - bytes resident by layer/role;
+  - SSD reads avoided;
+  - RAM-to-VRAM H2D bytes;
+  - demand wait saved;
+  - reclaim/refault and page-cache displacement;
+  - TTFT ratio and host RAM peak.
+
+Execution plan:
+
+1. Measure what decode-time host RAM is low-value.
+   - Use current SOTA cold-start N32/N96 dev runs.
+   - Record cgroup memory, `active_file`, `inactive_file`, `pgmajfault`,
+     `workingset_refault_file`, per-file residency, expert-pack counters,
+     and fallback counters after prompt, after page-cache drop, mid-decode, and
+     after decode.
+   - Classify file-backed pages as dense/non-expert, GGUF expert residue,
+     prompt-only residue, or refaulted demand pages.
+
+2. Build an offline RAM-slab selector from dev-only IO/wait profiles.
+   - Inputs: `io-batch-profile.csv`, `io-wait-trace.csv`,
+     `up-gate-profile.csv`, `down-profile.csv`, and route traces.
+   - Candidate units:
+     - whole layer `up+gate`;
+     - whole layer `down`;
+     - pack-contiguous adjacent expert ranges;
+     - mixed role/layer slabs only if they preserve large transfer batches.
+   - Score candidates by exposed wait saved per GiB, prompt-general recurrence,
+     and expected batching quality.
+   - Exclude held-out/test prompts from selection.
+
+3. Implement default-off RAM tier candidate.
+   - Prefer a pageable RAM slab first.
+   - Use explicit admission and eviction accounting, not ambient page cache.
+   - Keep current SSD/io_uring demand path unchanged for misses.
+   - Add instrumentation to prove whether RAM hits reduce demand wait or merely
+     fragment SSD batches.
+
+4. Validate in gates.
+   - N32 dev cold-start smoke.
+   - N96 dev paired cold-start.
+   - Held-out validation only after dev passes.
+   - Promote only if token rate improves, TTFT stays within `1.20x`, host RAM is
+     below `15900000000` bytes, quality passes, and results are reproducible from
+     a pushed commit.
+
 Execution plan:
 
 1. Commit and push the profiling-only coverage fix.
