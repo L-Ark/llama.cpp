@@ -969,6 +969,84 @@ Next required diagnostic before RAM/VRAM cache re-layout:
 4. Do not promote `LLAMA_SYNC_BEFORE_DROP_MMAP_AFTER_PROMPT` as an optimization;
    it is a negative diagnostic result only.
 
+### 2026-07-12 Phase 1 Follow-up: delayed second drop is also not enough
+
+Diagnostic branch:
+
+- `vendor/kimi-prompt-host-source-prof`
+- pushed diagnostic commits:
+  - `634a5e7eb diag: add delayed second prompt mmap drop`
+  - `fb5eb593d diag: force delayed prompt mmap redrop`
+
+Instrumentation:
+
+- Added default-off `LLAMA_SECOND_DROP_EXPERT_MMAP_AFTER_PROMPT_US`.
+- Added optional `LLAMA_SECOND_DROP_EXPERT_MMAP_AFTER_PROMPT_SYNC`.
+- The first implementation revealed the existing one-shot
+  `expert_mmap_drop_after_prompt_done` guard, so `fb5eb593d` added a
+  force-only diagnostic path. Default behavior remains unchanged because normal
+  calls still use `force=false`.
+
+Runs:
+
+1. No-force delayed drop:
+   `/root/lfz/runs/vendor-kimi-token-rate/20260712-second-drop500ms-reasoning-n96-201132`
+   - quality: pass, output contains `5:15 PM`
+   - TTFT: `216654.71 ms`
+   - decode: `36872.28 ms / 61`, `1.65 tok/s`
+   - result: second call was a no-op due to the one-shot guard; final GGUF
+     shard residency stayed at `13.551 GiB`.
+
+2. Force delayed drop:
+   `/root/lfz/runs/vendor-kimi-token-rate/20260712-force-second-drop500ms-reasoning-n96-202020`
+   - quality: pass, output contains `5:15 PM`
+   - TTFT: `215903.06 ms`
+   - decode: `37560.52 ms / 61`, `1.62 tok/s`
+   - memory peak: `15899996160`
+   - CPU fallback source entries: `0`
+   - first drop:
+     - expert ranges: `374261.30 MiB`, `180` ranges, `2709.037 ms`
+     - dense ranges: `10598.28 MiB`, `172` ranges, `15.166 ms`
+   - forced second drop after `500000 us`:
+     - expert ranges: `374261.30 MiB`, `180` ranges, `98.340 ms`
+     - dense ranges: `10598.28 MiB`, `172` ranges, `7.676 ms`
+   - `after_prompt_eval` still reported file cache around `14.819 GiB`
+   - final GGUF shard residency: `13.555 GiB`
+   - shard `00009`: `11.301 GiB`
+   - shard `00010`: `2.247 GiB`
+
+Decision:
+
+- Delaying 500 ms and forcing a second prompt mmap drop does not reclaim the
+  late-layer GGUF file-cache footprint.
+- Continuing to tune fadvise timing is unlikely to produce a robust RAM
+  solution, because the same 13.5 GiB refaults immediately enough to survive
+  both normal and forced delayed drops.
+- The next implementation direction should be source replacement, not more
+  dropping:
+  - stop prompt scheduler sparse-copy from using GGUF mmap `input->data` as the
+    source when an equivalent expert-pack/RAM source exists;
+  - keep CPU/defer as scheduler owner, but make its GPU-extension copy source
+    explicit and controllable;
+  - then reclaim GGUF file cache and use the freed host RAM for explicit
+    second-tier expert cache.
+
+Next required implementation plan:
+
+1. Add a default-off scheduler sparse-copy source hook for MoE weights.
+2. For each prompt sparse-copy range, resolve `(tensor, expert_id range)` to an
+   expert-pack or alias source entry.
+3. If the source exists in expert pack/RAM tier, copy from that explicit source
+   rather than from GGUF mmap `input->data`.
+4. Preserve current GPU compute and graph semantics; only change the host source
+   of the H2D copy.
+5. A/B requirements:
+   - final GGUF shard residency must fall materially below `13.5 GiB`;
+   - CPU fallback must remain `0`;
+   - quality must pass;
+   - TTFT must not regress more than the existing drop/profile overhead;
+   - endpoint token rate must not regress before using reclaimed RAM for cache.
+
 ## 2026-07-12 Active Goal: DeepSeek-style CPU/defer GPU-extension on Kimi
 
 ### Goal
