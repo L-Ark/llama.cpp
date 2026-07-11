@@ -155,6 +155,161 @@ Decision:
   result as a rejected A/B, and move next to backend attribution plus gate/up
   VRAM-extension tests.
 
+### 2026-07-12 Backend Attribution From Current Accepted Run
+
+Accepted reference run:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-down-group-k2048-iouring-nooverlap-n32-france-223533`;
+- commit/config state: accepted code path from `7e9c3dbed` with v2 full-cover
+  down iouring enabled and v2 overlap disabled;
+- quality: pass;
+- TTFT: `12091.79 ms`;
+- decode: `19854.13 ms / 31`, `1.56 tok/s`;
+- memory peak: `12768542720` bytes;
+- fallback profile: `0` rows.
+
+Backend evidence:
+
+- command uses `--defer-experts`;
+- loader reports `defer_experts=1`, dense `12.05 GiB`, deferred experts
+  `365.49 GiB`;
+- runtime reports `[moe_stream] enabled (8 streams, GPU expert compute,
+  defer_sync=0)`;
+- runtime reports batched up/gate decode path, mixed-type compact path,
+  IQ2_S batched MMVQ path, parallel CPU staging, down batch, and iouring direct
+  reads.
+
+Conclusion:
+
+- Kimi already matches the broad DeepSeek architecture:
+  CPU/defer owns MoE scheduling while GPU kernels compute staged experts.
+- The DeepSeek-style idea is therefore applicable as an architecture pattern,
+  but not as a simple "move CPU fallback gate to GPU" fix: Kimi has no measured
+  CPU fallback in this accepted run.
+- The next useful work is to reduce exposed up/gate movement and scheduler wait
+  inside the existing GPU extension path.
+
+Decode profile:
+
+- up/gate decode rows: `1861`;
+- up/gate decode wall sum: `13807.695 ms`;
+- up/gate decode kernel sum: `10549.096 ms`;
+- up/gate cache delta after prompt: hits `12982`, misses `16778`;
+- upgate VRAM cache: `1735` slots, `5.36 MiB` slot, hit rate `44.2%`;
+- down decode rows: `1861`;
+- down decode wall sum: `4953.322 ms`;
+- down decode stage sum: `4613.693 ms`;
+- down cache delta after prompt: hits `9197`, misses `5683`, preloads `4214`;
+- down VRAM cache: `723` slots, `7.88 MiB` slot, hit rate `56.3%`;
+- decode iouring delta after prompt:
+  `147745439744` bytes, `11310264 us` wait;
+- iouring runtime depth remains shallow:
+  `inflight_avg=4.61`, `inflight_max=8`, batch histogram dominated by `2-8`.
+
+Per-layer exposed wait candidates:
+
+- up/gate top wall layers in the accepted run:
+  `14`, `39`, `28`, `29`, `30`, `32`, `53`, `33`, `31`, `51`, `36`, `41`;
+- down top stage layers:
+  `20`, `25`, `24`, `22`, `7`, `19`, `26`, `9`, `8`, `21`, `57`, `1`.
+
+Decision:
+
+- Do not spend more time on v2 down overlap until up/gate exposed miss wait is
+  lower. Down-only work can save bytes but does not move the dominant term.
+- Next default-off experiment should increase upgate VRAM cache share before
+  adding new code. This tests whether the current cache split is under-allocating
+  the dominant up/gate path.
+
+Immediate A/B:
+
+- control:
+  `GGML_MOE_VRAM_CACHE_UPGATE_PCT=62`, accepted run above;
+- candidate:
+  `GGML_MOE_VRAM_CACHE_UPGATE_PCT=72`, same v2 no-overlap env;
+- prompt:
+  `Please introduce France in a short paragraph.`;
+- gate:
+  quality pass, `MemoryMax=15900000000`, TTFT <= `+20%`, decode tok/s above
+  `1.56`, and no CPU fallback;
+- if `72%` improves, run held-out prompt and then test `80%`;
+- if it regresses, record rejected and keep `62%`.
+
+### 2026-07-12 Result: UPGATE_PCT=72 accepted, 80 rejected
+
+Change:
+
+- `.Agent/run-tools/kimi-general-prompt-repro.sh` default `UPGATE_PCT` changed
+  from `62` to `72`;
+- no runtime code change;
+- v2 full-cover down iouring stays enabled;
+- v2 current-down overlap stays disabled:
+  `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_OVERLAP=0`.
+
+France mandatory prompt:
+
+- control run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-down-group-k2048-iouring-nooverlap-n32-france-223533`;
+- control result:
+  quality pass, TTFT `12091.79 ms`, decode `19854.13 ms / 31`,
+  `1.56 tok/s`, memory peak `12768542720`;
+- candidate run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate72-v2nooverlap-n32-france-225604`;
+- candidate result:
+  quality pass, TTFT `11416.28 ms`, decode `19471.45 ms / 31`,
+  `1.59 tok/s`, memory peak `12772810752`;
+- upgate cache:
+  slots `1735 -> 2015`, hit rate `44.2% -> 45.4%`,
+  decode misses `16778 -> 16206`;
+- down cache:
+  slots `723 -> 533`, hit rate `56.3% -> 56.1%`,
+  decode misses `5683 -> 5725`;
+- decode iouring wait after prompt:
+  `11310264 us -> 11005492 us`.
+
+Held-out prompt:
+
+- prompt:
+  `How to deploy a large model on a small devices?`;
+- control run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-heldout-deploy-v2iouring-nooverlap-n32-223807`;
+- control result:
+  quality pass, TTFT `12301.64 ms`, decode `20145.96 ms / 31`,
+  `1.54 tok/s`, memory peak `12767289344`;
+- candidate run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-heldout-deploy-upgate72-v2nooverlap-n32-225726`;
+- candidate result:
+  quality pass, TTFT `12937.49 ms`, decode `19993.04 ms / 31`,
+  `1.55 tok/s`, memory peak `12767031296`;
+- TTFT increase vs held-out control: `+5.17%`, within the `+20%` gate;
+- upgate hit rate: `46.1%`;
+- down hit rate: `59.2%`;
+- CPU fallback profile remains empty.
+
+Rejected boundary:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate80-v2nooverlap-n32-france-225840`;
+- result:
+  quality pass, TTFT `11987.04 ms`, decode `21837.37 ms / 31`,
+  `1.42 tok/s`, memory peak `12774408192`;
+- reason:
+  upgate hit rate improved to `48.5%`, but down slots fell to `380`,
+  down hit rate collapsed to `46.6%`, current-down preloads rose to `7192`,
+  and total decode iouring bytes rose to `171100504064` after prompt.
+
+Decision:
+
+- accept `UPGATE_PCT=72` as the current safer general-prompt split.
+- do not use `UPGATE_PCT=80`.
+- This is a small but reproducible configuration-level lift:
+  France `1.56 -> 1.59 tok/s`, held-out deploy `1.54 -> 1.55 tok/s`.
+- Next optimization should not continue blindly increasing upgate percentage.
+  The remaining target is reducing upgate misses without starving down, likely
+  via better up/gate pack layout, per-layer admission, or RAM/VRAM slab caching
+  for high exposed-wait layers.
+
 ## 2026-07-12 Active Goal and Immediate Plan
 
 ### Active Goal

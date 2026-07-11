@@ -8,7 +8,7 @@ cd "${REPO:-/root/lfz/llama.cpp-vendor-kimi}" || exit 1
 : "${PINNED_SLOTS:=12}"
 : "${VRAM_MIB:=15000}"
 : "${THREADS:=32}"
-: "${UPGATE_PCT:=62}"
+: "${UPGATE_PCT:=72}"
 : "${IQ2_UPGATE_PARALLEL:=1}"
 : "${MOE_IO_DEPTH:=8}"
 : "${MOE_IO_REFILL_BATCH:=4}"
