@@ -4,6 +4,112 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Current Goal And Execution Plan
+
+### Goal
+
+在当前 Kimi 可泛化 SOTA 基础上继续优化 token rate。短期目标是先把
+general/random prompt 的 cold-start N32 decode rate 稳定提升到 `>= 2.0 tok/s`；
+长期目标仍然是在 `16 GB host RAM` hard limit 和单张 `32 GB RTX 5090` 下，让用户
+随机输入 prompt 时稳定达到 `> 5 tok/s`，并保持输出语义正确。
+
+本阶段不接受 prompt-specific hotset、France-only pack、只对调试 prompt 有效的
+优化。所有优化都必须服务于泛化 prompt，并且最终指标以 held-out test set 为准。
+
+### Non-Negotiable Gates
+
+每个候选优化必须同时满足：
+
+1. cold start，`MemoryMax=15900000000`，`MemorySwapMax=0`，host RAM 包括
+   page cache、pinned staging、mmap、allocator 和内核记账，不能超过 16GB；
+2. 尽可能用满 VRAM，但不能因为挤压 down/upgate cache 造成 decode regression；
+3. prompt 和 decode fallback 必须保持 `0`，或把剩余 fallback 的 layer、role、dtype、
+   字节数和原因写清楚，不能用未知 fallback 作为 SOTA；
+4. `Please introduce France in a short paragraph.` 必须输出语义正确、连贯的短段落；
+5. held-out prompts 也必须通过语义质量检查，不能只看 token rate；
+6. TTFT 相比同 commit、同 prompt、同 N、同 cold-start control 不能超过 `+20%`；
+7. 结果必须可复现：run dir、commit、branch、env、命令、prompt/test set、完整输出、
+   RAM/VRAM/profile、TTFT、decode rate、fallback profile、rollback point 都要记录；
+8. 只有符合所有 gate 的提升才能 commit/push 并作为新 SOTA。失败、变慢、质量下降、
+   TTFT 超限或不可复现的候选必须保留 rejection 记录，并回到上一个可复现 SOTA。
+
+### Current Baseline To Protect
+
+当前可保护的默认复现配置是：
+
+- branch: `vendor/kimi-deepseek-41d205-additive`;
+- latest protected commit: `f92f05a1e`;
+- default repro script: `.Agent/run-tools/kimi-general-prompt-repro.sh`;
+- default split: `VRAM_MIB=15000`, `UPGATE_PCT=72`;
+- v2 full-cover down iouring enabled;
+- v2 current-down overlap disabled;
+- accepted France screen: `1.59 tok/s`, TTFT `11416.28 ms`, memory.peak
+  `12772810752`;
+- accepted held-out deploy screen: `1.55 tok/s`, TTFT `12937.49 ms`,
+  memory.peak `12767031296`.
+
+这个 baseline 不是最终目标，但它是后续所有 A/B 的 rollback point。任何新实验必须先
+证明自己比这个 baseline 更好，而不是只比更旧配置更好。
+
+### Bottleneck Hypothesis
+
+Kimi 当前已经基本符合 DeepSeek 的 CPU/defer 主调度 + GPU expert-cache extension
+架构：CPU/defer 负责 MoE 调度，expert 通过 pack/cache/hotpool 进入 VRAM 后由 GPU
+kernel 计算。因此下一阶段的主要问题不是再做一个泛泛的 CPU fallback GPU 化，而是减少
+已经在 GPU-extension 路径中的 exposed expert movement wait。
+
+当前 profile 显示优先级是：
+
+1. up/gate miss 暴露等待最高，特别是 `blk14/29/28/53/31/39/1/32 upgate`；
+2. down full-cover v2 已有收益，但继续挤压 down cache 会导致 regression；
+3. 纯 IO bench 能到约 `10.0-10.4 GiB/s`，runtime 打不满的主要原因是每层 routing 后
+   才知道 active experts，runtime batch depth 小且队列断流；
+4. Linux page cache 在 decode 阶段不是高效、可控的 expert cache，后续只能作为被
+   profile 证明有收益的 RAM tier 使用，不能默认认为 file cache 有价值。
+
+### Execution Plan
+
+1. Reproduce and profile protected baseline.
+   - 跑 France N32 cold-start；
+   - 从 held-out set 选至少一个新 prompt 复测；
+   - 输出 per-token 时间分解：expert read、iouring wait、pinned staging、H2D、
+     upgate compute、down compute、CPU fallback、RAM/file cache；
+   - 明确离 `2 tok/s` 和 `5 tok/s` 还差的主要秒数。
+
+2. Run v2 partial-split planning and bound only.
+   - 使用当前 `UPGATE_PCT=72` baseline 的真实 route/profile；
+   - 只做 planner/control/bound，不把 shadow-read 结果作为 SOTA；
+   - 目标是判断低字节 up/gate 替换是否有足够理论收益；
+   - 如果 bound 不能接近 `>=2 tok/s`，停止该方向，避免实现无收益路径。
+
+3. Design up/gate-first replacement candidate.
+   - 不再优先扩大 down；
+   - 先针对 exposed wait 最高的 up/gate layer/role 做 pack layout 或 low-byte
+     replacement 候选；
+   - 计算理论上限：可减少的 miss bytes、critical wait、expected tok/s upper bound；
+   - 实测不符合预期时，必须解释 gap：batch depth、H2D、kernel sync、cache eviction、
+     page reclaim 或 compute contention。
+
+4. Evaluate explicit RAM tier only after page-cache audit.
+   - 先确认 decode 阶段 active_file/inactive_file 具体由哪些 GGUF shard/ranges 组成；
+   - 清理或 `madvise` 低价值 GGUF expert/dense pages 时必须证明不会引入 refault；
+   - RAM tier 只放 profile 证明收益高的 expert 数据，并优先支持批量 H2D；
+   - whole-layer RAM resident 只能从单层 up/gate 小规模 A/B 开始，不能直接占满 RAM。
+
+5. A/B and admission.
+   - 所有 runtime 改动 default-off；
+   - 先小 N 或 dev prompt 筛选，再跑 France + held-out；
+   - admission 指标必须同时包含 token rate、TTFT、quality、RAM、VRAM、fallback、
+     profile breakdown；
+   - 若通过，更新默认 repro、写详细 commit body、push；若失败，记录 rejection 和原因。
+
+### Immediate Next Step
+
+下一步先执行 `UPGATE_PCT=72` baseline 上的 v2 partial-split planning/bound：它不改变
+当前 SOTA 路径，只回答一个问题：是否存在足够大的 up/gate 低字节替换收益，可以作为
+冲 `>=2 tok/s` 的工程方向。如果答案是否定的，转向 up/gate pack layout、coalesced
+read scheduler 和显式 RAM/VRAM 分层缓存。
+
 ## 2026-07-12 Goal: verify DeepSeek-style CPU/defer GPU extension on Kimi
 
 ### Goal
