@@ -362,6 +362,48 @@ Next structural direction: reduce exposed bytes before global eviction tuning
     prompt-general dev/held-out validation, because previous full-layer/pinned
     attempts were unstable.
 
+Predictive prefetch acceptance screen:
+
+- Timestamp: 2026-07-11 CST.
+- Script:
+  `.Agent/run-tools/kimi_predictive_prefetch_acceptance.py`.
+- Run:
+  `python3 .Agent/run-tools/kimi_predictive_prefetch_acceptance.py --route-root /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-current-dev4-n32-profile --out-csv <analysis>/predictive-prefetch-acceptance.csv --out-md <analysis>/predictive-prefetch-acceptance.md`.
+- Report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-current-dev4-n32-profile/analysis/predictive-prefetch-acceptance.md`.
+- Inputs:
+  - dev prompts: `4`;
+  - layers: `60`;
+  - layer/prompt sequences: `240`;
+  - role: `gate`; up/down use the same routed expert IDs, so the acceptance
+    applies to the active expert ID set.
+- Results:
+  - previous-token same-layer top-8 precision/recall: `34.41% / 34.41%`;
+  - exact set match: `0.03%`;
+  - sliding window frequency `W=4, top-1`: precision `65.160%`, recall
+    `8.145%`;
+  - `W=4, top-2`: precision `59.230%`, recall `14.808%`;
+  - `W=8, top-1`: precision `67.469%`, recall `8.434%`;
+  - best `W=4, top-1` layers include layer `48` at `86.11%`, layer `9` at
+    `83.33%`, and layers `37/56` at `81.48%`.
+- Interpretation:
+  - full top-8 previous-token prefetch is too wasteful and should not be
+    implemented;
+  - a small, throttled, layer-whitelisted sliding-window predictor is plausible;
+  - expected recall is low, so this cannot by itself reach `>5 tok/s`, but it
+    may reduce exposed queue gaps if submitted only when spare host-prefetch
+    capacity exists.
+- Next implementation scope:
+  - default-off env, e.g. `GGML_MOE_PREDICTIVE_HOST_PREFETCH=1`;
+  - window `4`, top-n `1` initially;
+  - layer whitelist generated from the acceptance report, starting only with
+    layers above a precision threshold such as `70%`;
+  - submit to existing `GGML_MOE_PLANNED_HOST_PREFETCH`/host-prefetch queue;
+  - do not prefetch if expert is already in VRAM cache or already queued;
+  - record submitted/hit/unused counters;
+  - A/B must verify that total IO bytes do not rise enough to erase the wait
+    reduction.
+
 ## Current execution goal: Kimi CPU/defer GPU-extension parity
 
 Timestamp: 2026-07-11 CST.
