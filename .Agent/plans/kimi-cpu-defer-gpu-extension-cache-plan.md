@@ -825,6 +825,80 @@ Decision:
   lookup/read to a tiny smoke compute path, or an explicit rejection if
   `IQ1_S`/`Q2_K` kernels cannot support the selected roles.
 
+## Phase 5D compute smoke: selected IQ1_S/Q2_K entries run through CUDA MMVQ
+
+Timestamp: 2026-07-11 CST.
+
+New tool:
+
+- `.Agent/run-tools/kimi_moepack_v2_mmvq_smoke.cpp`
+
+Purpose:
+
+- Validate that real selected lower-byte `GGMLMOEPACKv2` payloads can be copied
+  to GPU and consumed by the exported CUDA MoE MMVQ function:
+  `ggml_cuda_moe_stream_mmvq_dev`.
+- This uses the same 8-entry tiny selected pack as the reader smoke and does not
+  load a model.
+- This remains default-off and does not change inference behavior.
+
+Run directory:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-v2-mmvq-smoke
+```
+
+Command:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-v2-mmvq-smoke
+mkdir -p "$RUN"
+
+g++ -std=c++17 -O2 \
+  -I/usr/local/cuda/include \
+  .Agent/run-tools/kimi_moepack_v2_mmvq_smoke.cpp \
+  -L/usr/local/cuda/targets/x86_64-linux/lib -lcudart -ldl \
+  -o "$RUN/kimi_moepack_v2_mmvq_smoke"
+
+LD_LIBRARY_PATH=build-cuda-batch/bin:/usr/local/cuda/targets/x86_64-linux/lib \
+  "$RUN/kimi_moepack_v2_mmvq_smoke" \
+  build-cuda-batch/bin/libggml-cuda.so \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv
+```
+
+Result:
+
+- Runtime detected one CUDA device:
+  `NVIDIA GeForce RTX 5090`, compute capability `12.0`, VRAM `32109 MiB`.
+- All 8 selected entries passed `lookup -> read_debug -> H2D -> mmvq -> D2H`.
+- Each entry returned finite, nonzero output:
+  - `blk.1.ffn_down_exps.weight` expert `23`, `Q2_K`, `4816896` bytes;
+  - `blk.1.ffn_down_exps.weight` expert `116`, `Q2_K`, `4816896` bytes;
+  - `blk.1.ffn_gate_exps.weight` expert `23`, `IQ1_S`, `2867200` bytes;
+  - `blk.1.ffn_gate_exps.weight` expert `116`, `IQ1_S`, `2867200` bytes;
+  - `blk.1.ffn_gate_exps.weight` expert `197`, `IQ1_S`, `2867200` bytes;
+  - `blk.1.ffn_up_exps.weight` expert `23`, `IQ1_S`, `2867200` bytes;
+  - `blk.1.ffn_up_exps.weight` expert `116`, `IQ1_S`, `2867200` bytes;
+  - `blk.1.ffn_up_exps.weight` expert `197`, `IQ1_S`, `2867200` bytes.
+
+Decision:
+
+- The selected `IQ1_S` and `Q2_K` payloads are not merely readable; they can run
+  through the exported CUDA MMVQ path on this machine.
+- This clears the kernel-feasibility blocker for a tiny selected subset.
+- This still does not prove model quality or token-rate improvement:
+  - the smoke uses synthetic activations, not routed Kimi hidden states;
+  - the model runtime still does not dispatch v2 packed entries in place of the
+    current IQ3_S/Q4/IQ2 tensors;
+  - the current CPU/defer type gates still do not treat v2 packed type as the
+    effective compute type.
+- Next implementation step:
+  - add a default-off tiny v2 overlay bridge that, for explicitly allowed
+    `(tensor, expert)` keys only, reads packed bytes, uses the packed type/shape
+    as the effective MMVQ input, and falls back to the current path otherwise;
+  - first validation must be N32 quality smoke, not N96/SOTA.
+
 ## Phase 5B goal: transfer the CPU/defer GPU-extension idea to Kimi safely
 
 Timestamp: 2026-07-11 CST.
