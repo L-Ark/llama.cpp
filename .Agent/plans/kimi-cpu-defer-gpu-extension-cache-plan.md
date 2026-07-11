@@ -464,6 +464,186 @@ Next implementation priority from this evidence:
    held-out sweep using the exact current SOTA env, to re-establish the
    general-prompt baseline before any candidate optimization.
 
+### 2026-07-11 General Dev/Test Baseline Reproduction
+
+Purpose:
+
+- Establish a current general-prompt non-profile baseline under the exact SOTA
+  env before changing code or cache profiles.
+- Confirm whether the single-prompt France `1.90 tok/s` reproduction reflects
+  general decode behavior.
+- Re-check the held-out TTFT long-tail under the current clean code state.
+
+Common env:
+
+- clean repo: `/root/lfz/llama.cpp-vendor-kimi-815b-clean`;
+- `MemoryMax=15900000000`, `MemorySwapMax=0`;
+- `N=96`, `PINNED_SLOTS=16`, `UPGATE_PCT=62`, `VRAM_MIB=15000`;
+- RAM tier:
+
+```bash
+GGML_MOE_RAM_TIER_MIB=1800
+GGML_MOE_RAM_TIER_PROFILE=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=1
+GGML_MOE_RAM_TIER_PIN_MIB=1800
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+```
+
+#### Dev sweep
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-current-goal-sota-ramtier-dev-n96-161404`
+
+Command shape:
+
+```bash
+python3 /root/lfz/llama.cpp-vendor-kimi-815b-clean/.Agent/run-tools/kimi_general_prompt_sweep.py \
+  --repo /root/lfz/llama.cpp-vendor-kimi-815b-clean \
+  --prompt-file /root/lfz/llama.cpp-vendor-kimi-815b-clean/.Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root /root/lfz/runs/vendor-kimi-token-rate/20260711-current-goal-sota-ramtier-dev-n96-161404 \
+  --mode dev --n 96 --keep-going --memory-max 15900000000 \
+  --runtime-max-sec 1200 --pinned-slots 16 --upgate-pct 62 \
+  --extra-runtime-env "$EXTRA"
+```
+
+Prompt-level result:
+
+| prompt | quality | tok/s | TTFT ms | decode ms/runs | RAM peak GiB | iouring wait s | iouring GiB | RAM tier hits |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `dev_france_regression` | pass | `1.88` | `8403.36` | `45206.42 / 85` | `13.61` | `46.56` | `455.1` | `569 / 85754` |
+| `dev_japan_factual` | pass | `1.91` | `8809.61` | `40892.15 / 78` | `13.61` | `42.43` | `413.6` | `503 / 77973` |
+| `dev_photosynthesis_factual` | pass | `1.85` | `7562.48` | `50851.70 / 94` | `13.47` | `52.66` | `501.2` | `622 / 94577` |
+| `dev_linear_equation` | pass | `1.51` | `10617.99` | `22483.56 / 34` | `13.61` | `24.55` | `280.1` | `303 / 53106` |
+| `dev_python_reverse` | pass | `1.74` | `9936.85` | `54462.83 / 95` | `13.61` | `57.54` | `549.7` | `661 / 104017` |
+| `dev_zh_france` | pass | `1.84` | `7661.35` | `26619.28 / 49` | `13.46` | `27.03` | `269.2` | `313 / 50728` |
+| `dev_mixed_summary` | pass | `1.77` | `11259.95` | `27750.88 / 49` | `13.61` | `30.57` | `330.8` | `392 / 62517` |
+
+Aggregate:
+
+- quality: `7 / 7`;
+- token rate: min `1.510`, median `1.840`, mean `1.786`, max `1.910`;
+- TTFT: min `7562.48 ms`, median `8809.61 ms`, mean `9178.80 ms`,
+  max `11259.95 ms`;
+- decode sum: `268266.82 ms`;
+- iouring wait sum: `281.35 s`;
+- expert-pack bytes: `2799.7 GiB`;
+- max RAM peak: `13.61 GiB`;
+- RAM tier hits: `3363 / 528672 = 0.636%`;
+- CPU fallback / pack-mmap fallback: `0` on every prompt.
+
+#### Held-out test sweep
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-current-goal-sota-ramtier-test-n96-162427`
+
+Command shape:
+
+```bash
+python3 /root/lfz/llama.cpp-vendor-kimi-815b-clean/.Agent/run-tools/kimi_general_prompt_sweep.py \
+  --repo /root/lfz/llama.cpp-vendor-kimi-815b-clean \
+  --prompt-file /root/lfz/llama.cpp-vendor-kimi-815b-clean/.Agent/evals/kimi-general-test-prompts.jsonl \
+  --out-root /root/lfz/runs/vendor-kimi-token-rate/20260711-current-goal-sota-ramtier-test-n96-162427 \
+  --mode test --n 96 --keep-going --memory-max 15900000000 \
+  --runtime-max-sec 1200 --pinned-slots 16 --upgate-pct 62 \
+  --extra-runtime-env "$EXTRA"
+```
+
+Prompt-level result:
+
+| prompt | quality | tok/s | TTFT ms | decode ms/runs | RAM peak GiB | file GiB | refault | pgscan_direct | iouring wait s | RAM tier hits |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `test_english_factual_01` | pass | `1.99` | `7104.44` | `47832.51 / 95` | `13.47` | `11.22` | `0` | `0` | `47.32` | `566 / 90866` |
+| `test_english_factual_02` | pass | `1.84` | `9892.92` | `46242.38 / 85` | `13.61` | `11.23` | `0` | `0` | `48.42` | `619 / 88496` |
+| `test_reasoning_math_01` | pass | `1.74` | `236572.47` | `35155.70 / 61` | `14.81` | `11.89` | `21108` | `51584065` | `34.38` | `374 / 58392` |
+| `test_coding_01` | pass | `1.60` | `10132.67` | `59312.98 / 95` | `13.61` | `11.23` | `70` | `0` | `64.13` | `683 / 121304` |
+| `test_chinese_01` | pass | `1.89` | `8600.62` | `50186.12 / 95` | `13.61` | `11.23` | `0` | `0` | `51.95` | `589 / 91774` |
+| `test_mixed_instruction_01` | pass | `1.81` | `10242.00` | `52586.45 / 95` | `13.62` | `11.23` | `0` | `0` | `55.62` | `624 / 100245` |
+
+Aggregate:
+
+- quality: `6 / 6`;
+- token rate: min `1.600`, median `1.825`, mean `1.812`, max `1.990`;
+- TTFT: min `7104.44 ms`, median `10012.80 ms`, mean `47090.85 ms`,
+  max `236572.47 ms`;
+- decode sum: `291316.14 ms`;
+- iouring wait sum: `301.82 s`;
+- expert-pack bytes: `2920.0 GiB`;
+- max RAM peak: `14.81 GiB`;
+- RAM tier hits: `3455 / 551077 = 0.627%`;
+- CPU fallback / pack-mmap fallback: `0` on every prompt.
+
+Interpretation:
+
+- General decode baseline is now re-established:
+  - dev mean/median: `1.786 / 1.840 tok/s`;
+  - held-out mean/median: `1.812 / 1.825 tok/s`;
+  - quality passes all dev and held-out prompts;
+  - CPU fallback remains `0`.
+- The system still does not meet the product goal:
+  - decode is far below stable `>5 tok/s`;
+  - `test_reasoning_math_01` shows a severe TTFT long-tail under the 16GB RAM
+    gate.
+- Current RAM tier is inefficient across the general set:
+  - dev hit rate: `0.636%`;
+  - held-out hit rate: `0.627%`;
+  - it costs about `1.8GB` host RAM and does not solve the long-tail.
+
+#### No-RAM-tier reasoning A/B
+
+Purpose:
+
+- Test whether the held-out reasoning TTFT long-tail is caused primarily by the
+  `blk1_gate_full384` pinned RAM tier.
+
+Runs:
+
+- RAM-tier baseline:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-current-goal-sota-ramtier-test-n96-162427/test_reasoning_math_01`
+- No-RAM-tier A/B:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-current-goal-no-ramtier-reasoning-n96-163741`
+
+Result:
+
+| run | quality | tok/s | TTFT ms | decode ms | RAM peak GiB | file GiB | refault | pgmaj | pgscan_direct | iouring wait |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| RAM tier | pass | `1.74` | `236572.47` | `35155.70` | `14.81` | `11.89` | `21108` | `16848` | `51584065` | `34.38 s` |
+| no RAM tier | pass | `1.63` | `236487.47` | `37406.86` | `14.81` | `13.60` | `21570` | `16809` | `51024290` | `37.30 s` |
+
+Decision:
+
+- Disabling the current RAM tier does not remove the TTFT long-tail.
+- The long-tail is therefore not primarily caused by the `1.8GB` pinned gate RAM
+  tier.
+- The root symptom is prompt-eval memory pressure:
+  - cgroup `memory.events max` around `49k`;
+  - `workingset_refault_file` around `21k`;
+  - direct reclaim scan around `51M`;
+  - major faults around `16.8k`;
+  - final file cache grows far above normal prompt runs.
+- Next optimization must target prompt-eval file-cache/GGUF mmap behavior and
+  phase-level memory control before adding larger RAM expert caches.
+
+Immediate next plan:
+
+1. Instrument phase-level memory and file-cache growth for the reasoning
+   prompt:
+   - after model load;
+   - after RAM tier preload;
+   - before prompt eval;
+   - after prompt eval before first decode;
+   - after dense/expert mmap drop;
+   - after decode.
+2. Split expert-pack and file-cache counters by prompt/decode phase.
+3. Identify which GGUF shard pages are loaded during prompt eval and whether
+   they are expert pages, dense pages, or mixed pages.
+4. Only after isolating low-value prompt residue should we replace it with an
+   explicit RAM expert cache. A bigger RAM tier before this step risks making
+   the TTFT long-tail worse.
+
 ## 当前执行批次 Goal 与 Plan：default-off mixed-size up/gate 联合 IO
 
 Timestamp: 2026-07-11 CST.
