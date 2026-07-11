@@ -310,6 +310,109 @@ Decision:
   via better up/gate pack layout, per-layer admission, or RAM/VRAM slab caching
   for high exposed-wait layers.
 
+### 2026-07-12 Next Screen: wait-weighted layer/role admission under UPGATE_PCT=72
+
+Dev profiling inputs:
+
+- France:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate72-v2nooverlap-n32-france-225604`;
+- database:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-devprofile72-database-n32-230526`;
+- photosynthesis:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-devprofile72-photosynthesis-n32-230620`;
+- profile root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate72-dev3-profile-root`;
+- analysis:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate72-dev3-analysis/wait-weighted-screen.md`.
+
+Notes:
+
+- The database output is semantically acceptable for profiling, but the keyword
+  quality gate was too strict and marked it fail because the answer did not
+  include `query/search`. Do not use it as a SOTA quality gate result.
+- Held-out deploy is not included in this dev profile root.
+
+Screen result:
+
+- decode ms/token across the three dev runs: `645.299`;
+- top exposed buckets are still overwhelmingly `upgate`;
+- highest rows:
+  `blk14 upgate`, `blk29 upgate`, `blk28 upgate`, `blk53 upgate`,
+  `blk31 upgate`, `blk39 upgate`, `blk1 upgate`, `blk32 upgate`;
+- typical full layer/role observed footprint is large:
+  about `2.0-2.5 GiB` for a single upgate layer/role bucket;
+- best down buckets are around `1.3-1.9 GiB` each, but their ms/token is lower
+  and previous `UPGATE_PCT=80` showed that starving down causes immediate
+  regression.
+
+Decision:
+
+- Do not preload or pin whole layer upgate buckets yet. The footprint is too
+  large for the remaining VRAM/RAM budget and historical broad
+  `GGML_MOE_VRAM_PROFILE` attempts have regressed.
+- The next smallest aligned A/B is to use remaining safe VRAM capacity while
+  keeping the accepted `72/28` split:
+  test `VRAM_MIB=15300`, `UPGATE_PCT=72`.
+
+Immediate A/B:
+
+- control:
+  `VRAM_MIB=15000`, `UPGATE_PCT=72`;
+- candidate:
+  `VRAM_MIB=15300`, `UPGATE_PCT=72`;
+- all other env unchanged, including v2 full-cover down iouring enabled and
+  v2 current-down overlap disabled;
+- first prompt:
+  `Please introduce France in a short paragraph.`;
+- gates:
+  quality pass, `MemoryMax=15900000000`, TTFT <= `+20%`, no CPU fallback,
+  no CUDA allocation failure, decode tok/s above `1.59`;
+- if France passes, validate on held-out deploy prompt before changing the
+  repro default.
+
+### 2026-07-12 Result: VRAM_MIB=15300 rejected
+
+Candidate:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-vram15300-upgate72-v2nooverlap-n32-france-230915`;
+- config:
+  `VRAM_MIB=15300`, `UPGATE_PCT=72`;
+- prompt:
+  `Please introduce France in a short paragraph.`;
+- quality: pass;
+- TTFT: `12085.56 ms`;
+- decode: `19614.98 ms / 31`, `1.58 tok/s`;
+- memory peak: `12771852288`;
+- CUDA allocation: no failure or retry observed;
+- VRAM cache budget:
+  requested `15300 MiB`, actual `15300 MiB`;
+- slots:
+  upgate `2055` vs control `2015`, down `544` vs control `533`;
+- upgate:
+  hit rate `46.6%`, decode misses `15688`;
+- down:
+  hit rate `56.1%`, decode misses `5725`;
+- decode iouring after prompt:
+  `142536310784` bytes, `10945734 us`.
+
+Comparison:
+
+- accepted control:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-upgate72-v2nooverlap-n32-france-225604`;
+- control result:
+  quality pass, TTFT `11416.28 ms`, decode `19471.45 ms / 31`,
+  `1.59 tok/s`, memory peak `12772810752`.
+
+Decision:
+
+- rejected. The extra `300 MiB` improved upgate residency, but did not improve
+  endpoint decode rate and increased TTFT relative to the accepted control.
+- Keep the repro default at `VRAM_MIB=15000`, `UPGATE_PCT=72`.
+- Do not continue blind VRAM budget increases. The next useful path is
+  finer-grained up/gate byte/layout work that lowers exposed miss wait without
+  displacing down or adding prompt preload cost.
+
 ## 2026-07-12 Active Goal and Immediate Plan
 
 ### Active Goal
