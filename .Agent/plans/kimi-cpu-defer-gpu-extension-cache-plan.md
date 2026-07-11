@@ -4,6 +4,82 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 当前执行批次 Goal 与 Plan：default-off mixed-size up/gate 联合 IO
+
+Timestamp: 2026-07-11 CST.
+
+### Goal
+
+在最新已 push 的 Kimi SOTA 基线 `09b27b168` 之上，验证一个默认关闭的
+mixed-size `up/gate` 联合 io_uring staging 优化，目标是降低 decode critical
+path 上的 `iouring_wait` 和 up/gate staging wall time，并把泛化 prompt 的
+N96 cold-start token rate 从当前稳定区间 `1.4-1.5 tok/s` 推向 `>2 tok/s`。
+
+这个批次只接受 clean worktree、cold start、16GB host RAM cgroup 下可复现的
+结果。任何不能复现、只对单个 prompt 有效、TTFT 超过 baseline `+20%`、质量
+下降、CPU fallback 增加或 host RAM peak 超限的结果，都不能作为 SOTA。
+
+### 背景判断
+
+当前 clean baseline 显示，主要暴露时间仍在 up/gate 读取与 staging：
+
+- France N96 baseline：`1.46 tok/s`，`iouring_wait=39931.036 ms`。
+- depth16/refill8/slots16 no-code screen：France `1.53 tok/s`，cloud/business
+  held-out `1.44 tok/s`。
+- 现有 `GGML_MOE_UP_GATE_COMBINED_STAGE=1` 不能直接解决 Kimi 的关键问题，
+  因为 Kimi 多层 `up` 与 `gate` entry bytes 不一致；旧 `copy_stage_jobs()`
+  只在 uniform `nbytes` 时走 io_uring，mixed-size combined stage 会退回慢路
+  径。
+
+因此本批次要验证的核心假设是：
+
+- routing 产生同层 active expert 后，`up` 和 `gate` miss 可以合并成一个更大
+  的 IO 调度批次；
+- 即使 `up`/`gate` payload size 不一致，也应继续走 io_uring，而不是 per-job
+  staging fallback；
+- 如果更大的同层 up/gate IO 批次能提高 inflight depth 并减少队列断流，endpoint
+  decode token rate 应该提升；
+- 如果只是减少 bytes 或改善局部 profile，但 endpoint token rate、TTFT、质量
+  不合格，则不接受。
+
+### 实施 Plan
+
+1. 使用干净 worktree `/root/lfz/llama.cpp-vendor-kimi-gate-depth-09b`，基于
+   pushed HEAD `09b27b168` 开发，避免污染主 worktree 中已有 dirty 实验。
+2. 实现 default-off mixed-size up/gate combined staging：
+   - 默认行为完全不变；
+   - 只有同时打开 `GGML_MOE_UP_GATE_COMBINED_STAGE=1` 和
+     `GGML_MOE_UP_GATE_COMBINED_MIXED_IO=1` 时启用；
+   - `expert_bytes==0` 表示 mixed payload mode，按每个 job 自己的 `nbytes`
+     提交 io_uring read、H2D copy 和 profile 统计。
+3. 构建 `build-cuda-batch/bin/llama-completion`，先跑 default-off smoke，确认
+   默认路径没有回归。
+4. 跑 France N96 cold-start A/B：
+   - baseline candidate：`MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 PINNED_SLOTS=16`；
+   - mixed IO candidate：在上述 env 基础上增加
+     `GGML_MOE_UP_GATE_COMBINED_STAGE=1` 和
+     `GGML_MOE_UP_GATE_COMBINED_MIXED_IO=1`。
+5. 如果 France 合格，再跑 held-out 泛化 prompt；至少包含一个没有参与 pack/profile
+   调参的 general prompt。
+6. 对每个 run 记录：
+   - prefill token rate、decode token rate、TTFT、总 decode wall；
+   - `iouring_wait`、up/gate staging wall、down staging wall、H2D、compute；
+   - CPU fallback bytes/count；
+   - host RAM peak、file/page-cache 分布、VRAM 使用；
+   - prompt 原文和完整输出，用于质量 gate。
+7. 判定：
+   - 合格：token rate 明确提升、质量通过、TTFT 不超过 `+20%`、host RAM peak
+     `<15900000000` bytes、fallback 不增加。立即 commit + push，commit body
+     写清复现方法和 rollback point。
+   - 不合格：不作为 SOTA；如果代码有诊断价值，只能保持 default-off 并记录失败
+     原因；否则回退 patch。
+
+### 当前可回退点
+
+- Clean pushed baseline：`09b27b1683c7927d332acf0ad4020d3fcdd63fc4`
+- 已知稳定 no-code candidate：`MOE_IO_DEPTH=16 MOE_IO_REFILL_BATCH=8 PINNED_SLOTS=16`
+- 所有新结果必须能从 clean pushed commit + documented env 复现。
+
 ## 当前阶段 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
 
 Timestamp: 2026-07-11 CST.
