@@ -129,6 +129,96 @@ Execution plan:
    - Update this plan with the run root, metrics, decision, and rollback point
      before starting the next optimization.
 
+## Storage-layout tooling progress
+
+Timestamp: 2026-07-11 CST.
+
+Status: tooling and offline sizing only; no runtime behavior has changed and no
+new SOTA is claimed.
+
+Implemented/validated tooling:
+
+- Add `.Agent/run-tools/kimi_io_trace_pack_layout_screen.py` as the
+  reproducible offline screen for `GGML_MOE_IO_READ_TRACE_OUT` traces.
+- Extend `scripts/kimi-build-trace-overlay-pack.py` so a trace overlay can be
+  planned before copying payloads:
+  - `--dry-run` avoids writing pack payloads;
+  - `--report-json` saves the selected entry/byte summary;
+  - `--alias-tsv` can copy missing entries from the GGUF alias TSV source;
+  - `--roles up,gate,down` can restrict the overlay to a role subset.
+- Important implementation detail:
+  - `io-read-trace.csv` records the actual read-plan `nbytes`, which can be
+    aligned span size rather than the pack-index payload size;
+  - the overlay builder therefore selects source entries by `(tensor,
+    expert_idx)` and writes the source entry's own payload `nbytes`.
+
+Fresh dev2 dry-run inputs:
+
+- Trace root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-layout-trace-dev2-n32`.
+- Dev traces:
+  - `dev_japan_factual/io-read-trace.csv`;
+  - `dev_python_reverse/io-read-trace.csv`.
+- Source packs:
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+  - `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`.
+- Alias TSV:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv`.
+
+Dry-run results:
+
+- Full `up,gate,down` greedy-pair overlay:
+  - report:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-layout-trace-dev2-n32/overlay-plan/greedypair-dev2-with-alias-dryrun.json`;
+  - trace rows after `--max-jobs 8`: `56943`;
+  - entries: `28874`;
+  - payload bytes: `164122886144` (`152.85 GiB`);
+  - decision: do not build now because the filesystem has only about `133 GB`
+    free, and this leaves no safe margin.
+- `up+gate` greedy-pair overlay:
+  - report:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-layout-trace-dev2-n32/overlay-plan/greedypair-dev2-upgate-dryrun.json`;
+  - trace rows after `--max-jobs 8`: `36883`;
+  - entries: `19246`;
+  - payload bytes: `98490155008` (`91.72 GiB`);
+  - decision: build this first because `up/gate` misses are the main exposed
+    critical-path wait and the size fits current disk.
+- `down` greedy-pair overlay:
+  - report:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-layout-trace-dev2-n32/overlay-plan/greedypair-dev2-down-dryrun.json`;
+  - trace rows after `--max-jobs 8`: `20060`;
+  - entries: `9628`;
+  - payload bytes: `65632731136` (`61.13 GiB`);
+  - decision: keep as fallback A/B if `up+gate` fails or if disk budget becomes
+    too tight.
+
+Next runtime A/B plan:
+
+1. Build default-off duplicate `up+gate` greedy-pair overlay:
+   `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-dev2-upgate-greedypair-overlay.expert-pack`.
+2. Use it only with explicit env:
+   - `GGML_MOE_EXPERT_PACK_OVERLAY_EXTRA=<new overlay>`;
+   - `GGML_MOE_EXPERT_PACK_REPLACE_DUPLICATES=1`;
+   - `GGML_MOE_IO_ADJACENT_COALESCE=1`;
+   - keep current baseline pack, overlay, alias TSV, memory cgroup, and
+     cold-start settings unchanged.
+3. Paired validation:
+   - baseline and candidate on `dev_japan_factual` and `dev_python_reverse`;
+   - record read jobs, adjacent coalesce groups/extents saved,
+     `io_uring_wait`, decode ms/token, TTFT, RAM peak, quality output, and
+     CPU fallback.
+4. Pass condition:
+   - lower decode ms/token and exposed `io_uring_wait`;
+   - lower read-job/extents count or clear adjacent-coalesce evidence;
+   - quality pass;
+   - TTFT within `1.20x`;
+   - host RAM below `15900000000` bytes.
+5. Failure handling:
+   - if bytes move but decode does not improve, reject the behavior and keep
+     only tooling/docs;
+   - if the overlay hurts generalization, do not promote it and do not call it
+     SOTA.
+
 ## Immediate goal: Kimi CPU/defer GPU-extension usefulness check
 
 Timestamp: 2026-07-11 CST.

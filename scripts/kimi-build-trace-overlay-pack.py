@@ -2,7 +2,9 @@
 import argparse
 import csv
 import itertools
+import json
 import os
+import re
 import struct
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -12,13 +14,14 @@ PACK_MAGIC = b"GGMLMOEPACKv1\0\0\0"
 PACK_HEADER = struct.Struct("<16sIIQQ")
 PACK_ENTRY = struct.Struct("<128siIQQ")
 ALIGNMENT = 4096
+TENSOR_RE = re.compile(r"blk\.(\d+)\.ffn_(up|gate|down)_exps\.weight")
 
 
 def align_up(value: int, alignment: int = ALIGNMENT) -> int:
     return (value + alignment - 1) // alignment * alignment
 
 
-def load_trace_stats(paths: list[Path], max_jobs: int | None) -> tuple[
+def load_trace_stats(paths: list[Path], max_jobs: int | None, roles: set[str]) -> tuple[
         dict[str, list[int]],
         dict[str, set[int]],
         dict[str, Counter[int]],
@@ -45,6 +48,10 @@ def load_trace_stats(paths: list[Path], max_jobs: int | None) -> tuple[
                         skipped_jobs += 1
                         continue
                 tensor = row["tensor"]
+                m = TENSOR_RE.search(tensor)
+                role = m.group(2) if m else "other"
+                if role not in roles:
+                    continue
                 expert_idx = int(row["expert_idx"])
                 rows += 1
                 if expert_idx not in seen[tensor]:
@@ -119,6 +126,7 @@ def load_pack(path: Path, source_order: int) -> list[dict]:
                 raise RuntimeError(f"{path}: tensor name too long: {name}")
             entries.append({
                 "pack": path,
+                "source_kind": "pack",
                 "source_order": source_order,
                 "entry_idx": entry_idx,
                 "name": name,
@@ -129,14 +137,50 @@ def load_pack(path: Path, source_order: int) -> list[dict]:
     return entries
 
 
-def select_entries(packs: list[Path], trace_order: dict[str, list[int]]) -> list[dict]:
+def load_alias_tsv(path: Path, source_order: int) -> list[dict]:
+    entries = []
+    with path.open(newline="", encoding="utf-8", errors="replace") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        for entry_idx, row in enumerate(reader):
+            tensor = row.get("tensor", "")
+            source_path = row.get("source_path", "")
+            if not tensor or not source_path:
+                continue
+            entries.append({
+                "pack": Path(source_path),
+                "source_kind": "alias",
+                "source_order": source_order,
+                "entry_idx": entry_idx,
+                "name": tensor,
+                "expert_idx": int(row["expert_idx"]),
+                "source_offset": int(row["offset"]),
+                "nbytes": int(row["nbytes"]),
+            })
+    return entries
+
+
+def select_entries(
+        packs: list[Path],
+        alias_tsvs: list[Path],
+        trace_order: dict[str, list[int]]) -> list[dict]:
     by_key: dict[tuple[str, int], dict] = {}
-    for source_order, pack in enumerate(packs):
+    source_order = 0
+    for pack in packs:
         for entry in load_pack(pack, source_order):
             key = (entry["name"], entry["expert_idx"])
-            # Match runtime duplicate replacement semantics: later packs win.
-            if key not in by_key or entry["source_order"] >= by_key[key]["source_order"]:
+            if key not in by_key:
                 by_key[key] = entry
+        source_order += 1
+    for alias_tsv in alias_tsvs:
+        for entry in load_alias_tsv(alias_tsv, source_order):
+            key = (entry["name"], entry["expert_idx"])
+            # Runtime GGUF alias is a fallback source; it does not override exact
+            # tensor/expert keys already present in explicit expert packs. The
+            # trace records aligned read-plan sizes, so the selected source
+            # entry's payload nbytes is the authoritative pack-index size.
+            if key not in by_key:
+                by_key[key] = entry
+        source_order += 1
 
     selected = []
     missing = 0
@@ -221,17 +265,69 @@ def write_pack(entries: list[dict], out_path: Path, chunk_size: int) -> None:
     print(f"entries={len(planned)} data_start={data_start} size={total_size} copied_bytes={copied_bytes}")
 
 
+def summarize_entries(
+        args: argparse.Namespace,
+        entries: list[dict],
+        rows: int,
+        skipped_jobs: int,
+        trace_order: dict[str, list[int]]) -> dict:
+    by_role = defaultdict(lambda: {"entries": 0, "bytes": 0})
+    by_layer_role = defaultdict(lambda: {"entries": 0, "bytes": 0})
+    by_pack = defaultdict(lambda: {"entries": 0, "bytes": 0})
+    for entry in entries:
+        nbytes = int(entry["nbytes"])
+        m = TENSOR_RE.search(entry["name"])
+        layer = int(m.group(1)) if m else -1
+        role = m.group(2) if m else "other"
+        by_role[role]["entries"] += 1
+        by_role[role]["bytes"] += nbytes
+        by_layer_role[f"{layer}:{role}"]["entries"] += 1
+        by_layer_role[f"{layer}:{role}"]["bytes"] += nbytes
+        by_pack[str(entry["pack"])]["entries"] += 1
+        by_pack[str(entry["pack"])]["bytes"] += nbytes
+
+    total_bytes = sum(int(entry["nbytes"]) for entry in entries)
+    return {
+        "kind": "kimi_trace_overlay_pack_plan",
+        "traces": [str(trace) for trace in args.trace],
+        "packs": [str(pack) for pack in args.pack],
+        "alias_tsvs": [str(alias_tsv) for alias_tsv in args.alias_tsv],
+        "out": str(args.out),
+        "mode": args.mode,
+        "roles": sorted(args.roles_set),
+        "max_jobs": args.max_jobs,
+        "dry_run": bool(args.dry_run),
+        "trace_rows": rows,
+        "skipped_jobs": skipped_jobs,
+        "trace_tensors": len(trace_order),
+        "entries": len(entries),
+        "bytes": total_bytes,
+        "gib": total_bytes / (1024 ** 3),
+        "by_role": dict(sorted(by_role.items())),
+        "by_layer_role": dict(sorted(by_layer_role.items())),
+        "by_source_pack": dict(sorted(by_pack.items())),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build a trace-only overlay from one or more GGMLMOEPACKv1 files.")
     parser.add_argument("--trace", action="append", required=True, type=Path,
                         help="io-read-trace.csv; repeat for dev-prompt layout training.")
     parser.add_argument("--pack", action="append", required=True, type=Path, help="Input pack; repeat in runtime source order.")
+    parser.add_argument("--alias-tsv", action="append", default=[], type=Path,
+                        help="Optional GGUF alias TSV source for trace entries not present in input packs.")
     parser.add_argument("--out", required=True, type=Path, help="Output trace-only overlay pack.")
     parser.add_argument("--mode", choices=["first-use", "frequency", "greedy-pair"], default="first-use",
                         help="Physical order for selected entries.")
+    parser.add_argument("--roles", default="up,gate,down",
+                        help="Comma-separated roles to include from traces: up,gate,down.")
     parser.add_argument("--max-jobs", type=int, default=None,
                         help="Ignore trace rows whose jobs column is larger than this value.")
     parser.add_argument("--chunk-size", type=int, default=64 * 1024 * 1024)
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Plan the overlay and print/report selected bytes without copying pack payloads.")
+    parser.add_argument("--report-json", type=Path,
+                        help="Optional JSON report for dry-run or build metadata.")
     args = parser.parse_args()
 
     if args.chunk_size <= 0:
@@ -241,17 +337,33 @@ def main() -> int:
         raise RuntimeError("--out must differ from all --pack inputs")
     if args.max_jobs is not None and args.max_jobs <= 0:
         raise RuntimeError("--max-jobs must be positive when set")
+    args.roles_set = {role.strip() for role in args.roles.split(",") if role.strip()}
+    invalid_roles = args.roles_set - {"up", "gate", "down"}
+    if invalid_roles:
+        raise RuntimeError(f"invalid --roles values: {sorted(invalid_roles)}")
+    if not args.roles_set:
+        raise RuntimeError("--roles selected no roles")
 
-    first_use, seen, freq, edges, rows, skipped_jobs = load_trace_stats(args.trace, args.max_jobs)
+    first_use, seen, freq, edges, rows, skipped_jobs = load_trace_stats(args.trace, args.max_jobs, args.roles_set)
     trace_order = build_trace_order(args.mode, first_use, seen, freq, edges)
-    entries = select_entries(args.pack, trace_order)
+    entries = select_entries(args.pack, args.alias_tsv, trace_order)
     total_bytes = sum(entry["nbytes"] for entry in entries)
+    report = summarize_entries(args, entries, rows, skipped_jobs, trace_order)
     print("traces=" + ",".join(str(trace) for trace in args.trace))
     print("packs=" + ",".join(str(pack) for pack in args.pack))
+    if args.alias_tsv:
+        print("alias_tsvs=" + ",".join(str(alias) for alias in args.alias_tsv))
     print(f"out={args.out}")
-    print(f"mode={args.mode} max_jobs={args.max_jobs if args.max_jobs is not None else 'none'}")
+    print(f"mode={args.mode} roles={','.join(sorted(args.roles_set))} max_jobs={args.max_jobs if args.max_jobs is not None else 'none'}")
     print(f"trace_rows={rows} skipped_jobs={skipped_jobs} trace_tensors={len(trace_order)} "
           f"entries={len(entries)} bytes={total_bytes}")
+    if args.report_json:
+        args.report_json.parent.mkdir(parents=True, exist_ok=True)
+        args.report_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        print(f"report_json={args.report_json}")
+    if args.dry_run:
+        print("dry_run=1; not writing pack payloads")
+        return 0
     write_pack(entries, args.out, args.chunk_size)
     return 0
 
