@@ -11635,3 +11635,97 @@ Decision:
   env flag and storage semantics.
 - The implementation must be default-off and must not alter the current SOTA
   path unless the flag is set.
+
+## Candidate A implementation gate: blk1 up+gate full-layer RAM slab
+
+Timestamp: 2026-07-11 CST.
+
+Generated profile:
+
+- Tool:
+  `.Agent/run-tools/kimi_make_layer_ram_profile_from_alias.py`
+- Command:
+
+```bash
+python3 .Agent/run-tools/kimi_make_layer_ram_profile_from_alias.py \
+  --alias-tsv /root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv \
+  --layers 1 \
+  --roles up,gate \
+  --out-profile /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-slab-profiles/blk1-upgate-full384.profile.csv \
+  --out-report /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-slab-profiles/blk1-upgate-full384.report.json
+```
+
+Profile contents:
+
+- entries: `768`;
+- bytes: `3611295744`;
+- size: `3444.00 MiB` / `3.363 GiB`;
+- `blk.1.gate`: `384` entries, `1805647872` bytes;
+- `blk.1.up`: `384` entries, `1805647872` bytes.
+
+Runtime env for Candidate A:
+
+```text
+GGML_MOE_RAM_TIER_MIB=3500
+GGML_MOE_RAM_TIER_PROFILE=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-ram-slab-profiles/blk1-upgate-full384.profile.csv
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=0
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+GGML_MOE_RAM_BATCH_PROFILE_OUT=$RUN/ram-batch-profile.csv
+```
+
+Storage semantics:
+
+- Use the existing default-off RAM tier path.
+- Load all `blk.1` up/gate experts into anonymous host RAM from expert pack.
+- Keep the RAM tier pageable for this first A/B (`GGML_MOE_RAM_TIER_PIN=0`) to
+  avoid large pinned-memory reclaim/scheduler effects observed in earlier
+  experiments.
+- Do not change VRAM cache size, VRAM split, expert ids, compute kernels,
+  routing, or output math.
+- Cold-start preload cost is part of TTFT and must pass the `+20%` gate.
+
+Theoretical bound:
+
+- N32 diagnostic bucket:
+  - `blk.1` up/gate wall: `322.2 ms`;
+  - summed up/gate wait: `587.2 ms`;
+  - compute: `32.5 ms`;
+  - misses: `346`;
+  - hit rate: `30.2%`.
+- N96 scaling upper bound:
+  - about `1.5-1.8 s` maximum decode saving before overhead;
+  - at the current N96 baseline (`46966.29 ms / 85 = 1.81 tok/s`), a
+    `1.8 s` saving would move endpoint to roughly `1.88 tok/s`.
+- Therefore Candidate A is not expected to reach `>2 tok/s` by itself. Its
+  purpose is to validate the storage model: replacing low-value GGUF page cache
+  with explicit RAM expert slabs must reduce demand wait without hurting TTFT,
+  refaults, direct reclaim, or IO batch shape.
+
+A/B plan:
+
+1. Run N32 default-off control from the same HEAD and prompt.
+2. Run N32 Candidate A with the env above, `PROFILE=1`, `COPY_PROFILE=1`,
+   IO batch/locality profiles, and RAM batch profile.
+3. Compare:
+   - quality and output;
+   - TTFT;
+   - decode token rate;
+   - RAM peak and final `file/active_file`;
+   - `workingset_refault_file`, `pgscan_direct`, `pgsteal_direct`;
+   - RAM tier loaded bytes, hit count, and RAM batch profile;
+   - iouring bytes/wait/batch histogram;
+   - upgate `blk.1` wait and wall deltas;
+   - mixed SSD/RAM batch fragmentation.
+4. Only if N32 improves or provides a strong positive storage signal without
+   TTFT/refault regression, run N96 Candidate A.
+
+Reject Candidate A immediately if:
+
+- TTFT exceeds `N32 control * 1.2`;
+- RAM peak exceeds `15900000000`;
+- output quality fails;
+- CPU fallback or direct reads become nonzero;
+- `blk.1` wait falls but endpoint decode regresses due to RAM/SSD batch
+  fragmentation or preload cost.
