@@ -4,6 +4,93 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Active Goal Snapshot
+
+Current branch: `vendor/kimi-deepseek-41d205-additive`
+
+Current pushed reference: `ff7a891622897bf61c203bdfb5e16f20018ecb6f`
+
+### Goal
+
+在 `16 GB` host RAM hard limit（包含 page cache、mmap file pages、pinned
+memory、anonymous memory、kernel accounting）和单张 `32 GB RTX 5090` 上，让
+Kimi 在 cold start、随机泛化 prompt 下稳定输出，并把 decode token rate 从当前
+泛化基线约 `1.8 tok/s` 推高。短期目标是得到 clean commit 上可复现的
+`>2.0 tok/s` 泛化结果；长期目标仍是稳定 `>5 tok/s`。
+
+这个 goal 的核心不是做某个 prompt-specific hot pack，而是建立显式、可控、可
+复现的 expert 存储层级：
+
+- `VRAM`: 放最热、最能减少 critical-path wait 的 expert，并尽量在 GPU 计算；
+- `RAM`: 替换 decode 阶段低价值 GGUF/page-cache residue，放可批量 H2D 的次热
+  expert 或低命中 critical layer/role slab；
+- `SSD`: 只承载冷 expert，继续走 expert pack + io_uring/direct path。
+
+### Current Baseline To Beat
+
+当前 clean worktree 复现出的泛化基线：
+
+- France N96, RAM-tier SOTA env, non-profile: `1.90 tok/s`, TTFT `8408.47 ms`,
+  decode `44723.09 ms / 85`, quality pass, CPU fallback `0`;
+- dev general sweep: min `1.510`, median `1.840`, mean `1.786`, quality `7/7`;
+- held-out test sweep: min `1.600`, median `1.825`, mean `1.812`, quality `6/6`;
+- 当前 `blk1_gate_full384` RAM tier hit rate 只有约 `0.6-0.7%`，更多是复现
+  knob，不是高效 RAM 策略；
+- reasoning held-out prompt 的 TTFT long tail 约 `236s`，主要来自 prompt eval
+  期间 cgroup reclaim/refault，而不是 expert-pack IO。
+
+### Non-negotiable Acceptance Gates
+
+任何新 SOTA 必须同时满足：
+
+1. 来自 clean pushed commit，并记录 rollback commit。
+2. cold start，在 `MemoryMax=15900000000`、`MemorySwapMax=0` 下运行。
+3. host RAM peak 必须低于 hard limit，且记录 `anon/file/active_file/
+   inactive_file/pinned/refault/pgmajfault/pgscan_direct`。
+4. `Please introduce France in a short paragraph.` 必须语义正确、连贯。
+5. held-out prompts 不可用于 hotset/profile/pack/threshold 选择，只能最终测试。
+6. prompt 和 decode 的 CPU fallback 不能增加；如果 baseline 是 `0 fallback`，
+   candidate 也必须是 `0 fallback`。
+7. TTFT 不能超过 matching baseline 的 `+20%`。
+8. commit message body 必须写清提升幅度、env、复现命令、prompt/test set、
+   RAM/VRAM/page-cache、TTFT、decode、quality gate、fallback、rollback point。
+
+### Active Plan
+
+1. **Phase profile first.**
+   继续用 `GGML_MOE_PHASE_REPORT=1` 做 N96 cold-start profile，拆分
+   prompt eval、after-prompt drop、decode generation 三个阶段的 memory、refault、
+   expert-pack read、io_uring wait、RAM tier hit、H2D 和 CPU fallback。
+
+2. **Confirm what page cache is actually low value.**
+   用 mincore/tensor-range mapping 精确定位 decode 阶段 remaining file cache：
+   dense/attention、GGUF expert tensors、alias TSV、expert pack pages 分开统计。
+   只有确认 decode 不依赖的 clean GGUF expert pages 才能作为可替换 RAM pool。
+
+3. **Default-off fadvise A/B.**
+   测试 `LLAMA_MMAP_DONTNEED_FADVISE=1` 是否比现有 `madvise(MADV_DONTNEED)`
+   更有效清理 prompt 后低价值 GGUF expert page cache。验收重点不是只看 file
+   bytes 降低，而是 TTFT、refault、pgscan_direct、decode token rate 是否改善。
+
+4. **Replace page cache with explicit RAM expert cache only if profile supports it.**
+   不再做 scattered RAM hotset。RAM candidate 必须是 batch-coherent：
+   - 低命中 critical layer 的完整 `gate+up+down` slab；
+   - 或完整 role/layer slab；
+   - 或与 pack layout 相邻、可以批量 H2D 的 compact tier。
+   每个 candidate 必须先估算减少的 exposed `io_uring_wait` 上限，再实测
+   RAM->VRAM H2D、staging wall、batch fragmentation 和 reclaim/refault。
+
+5. **Re-evaluate DeepSeek CPU/defer GPU-extension migration on Kimi.**
+   先确认 Kimi 是否仍有 gate/up/down 留在真正 CPU slow path。如果已经是
+   CPU/defer scheduler 调 GPU extension 且 `0 fallback`，就不要盲目复制 DeepSeek
+   gate hot-cache 做法；下一步应转向 expert byte reduction、pack locality、v2
+   mixed-role dispatch 或预测/预取。
+
+6. **Promotion protocol.**
+   任何有效提升必须先跑 France regression，再跑 dev/general，再跑 held-out test。
+   只有三者都过质量、RAM、TTFT、fallback、可复现 gate，才能 commit/push 并标为
+   SOTA；否则保持 default-off、记录 rejection，并回到 rollback point。
+
 ## Current Goal And Execution Plan: Kimi CPU/defer GPU-extension cache path
 
 Timestamp: 2026-07-11 CST.
