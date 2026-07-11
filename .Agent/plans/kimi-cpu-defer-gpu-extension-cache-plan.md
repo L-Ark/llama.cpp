@@ -176,6 +176,84 @@ First coverage run:
   - a v2/lower-byte bridge should wait until the pack/hotset can cover full
     active calls or until a correct split-compute path exists.
 
+Next A/B experiment: mixed up/gate grouped combined stage
+
+- Timestamp: 2026-07-11 CST.
+- Motivation:
+  - the first coverage run shows the largest exposed term is mixed up/gate,
+    especially `up=22/gate=18/parallel_stage=1`;
+  - current mixed parallel stage plans `up_jobs` and `gate_jobs` separately and
+    copies them on two role-specific threads/rings;
+  - profile still shows low effective inflight (`~4.32`) and high up/gate wait,
+    so the queue is not behaving like the pure IO bench.
+- Proposed default-off env:
+  `GGML_MOE_MIXED_UP_GATE_COMBINED_STAGE=1`.
+- Implementation rule:
+  - only applies inside the existing mixed-type parallel-stage branch;
+  - build one combined job list from `up_jobs + gate_jobs`;
+  - sort/group by `nbytes`, because `expert_pack_iouring_copy_jobs` requires a
+    uniform expert byte size per batch;
+  - pre-grow the shared pinned ring to `max(up_expert_bytes, gate_expert_bytes)`
+    before grouped copy, so switching from smaller `up` entries to larger
+    `gate` entries cannot free a pinned ring while earlier H2D work is pending;
+  - copy all grouped jobs on one stream, record an event, then let both up and
+    gate compute streams wait/continue from that event.
+- Theory:
+  - possible win: fewer tiny role-local IO submissions, better offset sorting,
+    simpler queue continuity, and less role-to-role SSD contention;
+  - hard upper bound is limited by the measured mixed up/gate wait:
+    `~7206.880 ms` up wait and `~7682.755 ms` gate wait over N32, or roughly
+    `230-250 ms/token`;
+  - practical win must beat the lost overlap between up compute and gate copy,
+    which was only `~264.207 ms` up compute total in the N32 profile.
+- Required A/B:
+  - run cold-start N32 baseline and `GGML_MOE_MIXED_UP_GATE_COMBINED_STAGE=1`
+    with the same prompt/env;
+  - compare token rate, TTFT, RAM peak, quality, up/gate wait, down staging,
+    iouring inflight, and iouring wait;
+  - if token rate falls, TTFT exceeds gate, or wait just moves elsewhere, revert
+    the behavior change or leave it default-off with rejection notes.
+
+Result:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-mixed-combined-stage-ab`.
+- Build state: dirty test build with the proposed default-off branch compiled;
+  behavior branch was reverted after the A/B because it failed.
+- Baseline:
+  - quality: pass;
+  - token rate: `1.66 tok/s`;
+  - TTFT: `8725.62 ms`;
+  - decode: `18726.22 ms / 31 runs`;
+  - RAM peak: `12766937088` bytes;
+  - iouring wait: `19026709 us`, inflight avg `4.38`;
+  - up/gate wall: `12236.745 ms`;
+  - up wait: `7045.304 ms`, gate wait: `7707.093 ms`;
+  - decode down wall: `5088.172 ms`.
+- Combined stage:
+  - quality: pass;
+  - token rate: `1.63 tok/s`;
+  - TTFT: `8455.28 ms`;
+  - decode: `19006.09 ms / 31 runs`;
+  - RAM peak: `12753309696` bytes;
+  - iouring wait: `16387706 us`, inflight avg `4.42`;
+  - up/gate wall: `12549.103 ms`;
+  - up wait: `7716.684 ms`, gate wait: `8006.678 ms`;
+  - decode down wall: `4997.365 ms`.
+- Decision:
+  - reject this behavior change;
+  - although total iouring wait decreased, mixed up/gate wall and wait increased
+    and token rate dropped from `1.66` to `1.63 tok/s`;
+  - likely cause: combined copy removed useful overlap between up compute and
+    gate copy, and same-size grouping could not merge the dominant `up=22` and
+    `gate=18` jobs into one uniform iouring batch;
+  - code behavior was reverted; only this negative result is retained.
+- Next direction:
+  - do not pursue role-level combined staging for mixed up/gate;
+  - focus on either increasing useful up/gate VRAM hit rate, reducing up/gate
+    transferred bytes with a broader full-active low-byte pack, or scheduling
+    future-layer prefetch before the layer reaches the blocking point.
+
 ## Active goal: Kimi lower-byte GPU-extension path
 
 Timestamp: 2026-07-11 CST.
