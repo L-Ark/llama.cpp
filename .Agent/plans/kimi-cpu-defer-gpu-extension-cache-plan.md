@@ -388,6 +388,89 @@ Interpretation:
   replacement is still unproven, any split-dispatch implementation must remain
   default-off and begin with N32 quality smoke before performance claims.
 
+## Progress update: tiny v2 partial-split row-placement smoke
+
+Timestamp: 2026-07-11 CST.
+
+New smoke tool:
+
+- Added `.Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp`.
+- It dynamically loads:
+  - `ggml_cuda_moe_expert_pack_v2_lookup_debug`;
+  - `ggml_cuda_moe_expert_pack_v2_read_debug`;
+  - `ggml_cuda_moe_stream_mmvq_dev`.
+- It uses the already materialized 8-entry v2 payload pack, selects one tensor
+  group with multiple same-shape covered experts, inserts uncovered fallback
+  rows, runs MMVQ for covered rows, fills fallback rows with deterministic
+  sentinel values, and verifies all rows scatter into the requested destination
+  rows.
+- This is a control-plane smoke only. It does not load a model, does not replace
+  runtime outputs, does not measure token rate, and does not validate IQ1_S
+  model quality.
+
+Command:
+
+```bash
+RUN=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-smoke
+mkdir -p "$RUN"
+
+g++ -std=c++17 -O2 \
+  -I/usr/local/cuda/include \
+  .Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp \
+  -L/usr/local/cuda/targets/x86_64-linux/lib -lcudart -ldl \
+  -o "$RUN/kimi_moepack_v2_partial_split_smoke"
+
+LD_LIBRARY_PATH=build-cuda-batch/bin:/usr/local/cuda/targets/x86_64-linux/lib \
+  "$RUN/kimi_moepack_v2_partial_split_smoke" \
+  build-cuda-batch/bin/libggml-cuda.so \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv \
+  > "$RUN/stdout.txt" 2> "$RUN/stderr.txt"
+```
+
+Result:
+
+- Run directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-smoke`.
+- Status: pass.
+- Tensor selected by the smoke:
+  `blk.1.ffn_up_exps.weight`.
+- Routes: `5`.
+- Covered v2 routes: `3` experts: `23`, `116`, `197`.
+- Fallback routes: `2` synthetic uncovered experts: `0`, `1`.
+- Destination rows were intentionally out of order:
+  - route 0 -> dst 3;
+  - route 1 fallback -> dst 0;
+  - route 2 -> dst 4;
+  - route 3 fallback -> dst 1;
+  - route 4 -> dst 2.
+- Output row sums:
+  - v2 expert 23: `4.242831e+02`;
+  - fallback row 0: `2.048528e+06`;
+  - v2 expert 116: `4.617555e+02`;
+  - fallback row 1: `2.049552e+06`;
+  - v2 expert 197: `4.319570e+02`.
+- Runtime loader confirmed:
+  - v2 pack loaded `8` metadata entries;
+  - CUDA device: `NVIDIA GeForce RTX 5090`, compute capability `12.0`,
+    VRAM `32109 MiB`.
+
+Decision:
+
+- The minimal partial split row-placement mechanism is now validated outside the
+  model runtime: covered v2 rows and fallback rows can be combined into one
+  compact destination with nonzero finite outputs.
+- This clears only the row-mapping/control-plane blocker. The hard blockers
+  before any SOTA claim remain:
+  - default-off runtime implementation;
+  - device-side split staging without excessive extra kernels/synchronization;
+  - real model quality with lower-byte replacement;
+  - cold-start N32/N96 under 16 GB host RAM and TTFT gates;
+  - held-out prompt validation.
+- Next implementation, if pursued, should be a default-off runtime probe limited
+  to tiny payload entries and a small max-call count, with automatic fallback to
+  the current path on any mismatch.
+
 ## Active goal: verify DeepSeek-style CPU/defer GPU-extension on Kimi
 
 Timestamp: 2026-07-11 CST.
