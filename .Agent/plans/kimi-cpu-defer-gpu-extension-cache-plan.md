@@ -151,6 +151,107 @@ Follow-up:
   file cache with high-value expert cache. Same-layer up/gate mixed-size batching
   alone is not enough in the current runtime.
 
+## 当前执行批次 Goal 与 Plan：predictive host prefetch / RAM expert cache
+
+Timestamp: 2026-07-11 CST.
+
+### Goal
+
+验证已提交代码中的 host prefetch/RAM expert cache 是否能把低价值 page cache 替换
+成高价值 expert bytes，并降低泛化 prompt 的 endpoint decode wall。
+
+本批次目标不是用同 prompt route trace 做 SOTA。`GGML_MOE_HOST_PREFETCH=<trace>`
+只能作为 oracle/upper-bound 探索；只有 `GGML_MOE_PREDICTIVE_HOST_PREFETCH=1`
+这种不依赖当前 prompt 未来 trace 的配置，才有资格进入泛化 SOTA 候选。
+
+### 当前证据
+
+基于 clean N96 run
+`/root/lfz/runs/vendor-kimi-token-rate/20260711-mixedio-defaultoff-depth16-france-n96-145901`
+的 profile：
+
+- endpoint：`1.48 tok/s`，`decode=57595.19 ms / 85`，`TTFT=10014.61 ms`。
+- total copy-profile payload：`457.599 GiB`。
+- total copy-profile H2D sum：`25149.838 ms`。
+- total iouring wait：`36710.347 ms`。
+- `up-gate-profile wall_ms sum`：`39417.549 ms`。
+- `down-batch-profile wall_ms sum`：`24443.827 ms`。
+- host RAM peak：`12865003520` bytes，最终 file-backed pages 约 `12.09 GB`。
+- CPU fallback profile empty。
+
+主要 per-layer pressure：
+
+- Early down miss heavy：
+  - `blk.1 down`: `wall=1027.3 ms`, hit `29.3%`;
+  - `blk.6 down`: `wall=849.7 ms`, hit `35.4%`;
+  - `blk.4 down`: `wall=835.2 ms`, hit `27.5%`;
+  - `blk.7 down`: `wall=683.6 ms`, hit `33.1%`.
+- Mid/late up-gate wall heavy：
+  - `blk.29 upgate`: `wall=890.0 ms`;
+  - `blk.14 upgate`: `wall=872.5 ms`;
+  - `blk.54 upgate`: `wall=866.1 ms`;
+  - `blk.28 upgate`: `wall=854.8 ms`;
+  - `blk.51 upgate`: `wall=835.3 ms`.
+
+Predictive prefetch offline hit estimate using gate active expert sequences:
+
+| predictor | predicted entries | hits in next active set | predicted-entry hit | active cover |
+|---|---:|---:|---:|---:|
+| window=4, top1 | `5864` | `3402` | `58.0%` | `7.7%` |
+| window=4, top2 | `11728` | `6248` | `53.3%` | `14.1%` |
+| window=4, top4 | `23456` | `10238` | `43.6%` | `23.0%` |
+| window=4, top8 | `46902` | `14841` | `31.6%` | `33.4%` |
+
+Interpretation:
+
+- Predictive prefetch has limited but non-zero theoretical cover.
+- It is most plausible on mid layers with high temporal reuse, e.g. `blk.34-49`;
+  early layers have poor predictability and should not be the first predictive
+  target.
+- Top8 moves too many speculative bytes for only `33.4%` active cover; first
+  runtime A/B should start with top2/top4 and a bounded RAM budget.
+
+### Plan
+
+1. Oracle upper-bound smoke, not SOTA:
+   - Use `GGML_MOE_HOST_PREFETCH=<previous route-trace.csv>` on the same France
+     prompt.
+   - Purpose: prove whether the host prefetch path can ever reduce endpoint
+     decode wall when the future route sequence is known.
+   - If oracle does not improve endpoint decode wall, stop this direction and
+     do not run predictive prefetch.
+2. Predictive prefetch A/B, SOTA-eligible only if泛化:
+   - Enable `GGML_MOE_PREDICTIVE_HOST_PREFETCH=1`.
+   - Start with layers `34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49`.
+   - Start roles `upgate`; do not include down until upgate shows endpoint gain.
+   - Start `window=4`, `topn=4`, `min_history=4`, `max_active=8`.
+   - Start RAM cache budget `GGML_MOE_HOST_PREFETCH_MAX_MIB=1024` and
+     `GGML_MOE_HOST_PREFETCH_SLOTS=256`.
+3. Gates for every run:
+   - cold start;
+   - cgroup `MemoryMax=15900000000`, swap disabled;
+   - quality pass on France;
+   - TTFT <= baseline `+20%`;
+   - fallback profile empty or not worse than baseline;
+   - host prefetch metrics must show real hits, not only submitted speculative
+     reads.
+4. If France predictive A/B improves endpoint decode wall:
+   - run held-out prompts before accepting;
+   - record prompt text/output, token rate, TTFT, RAM peak, page cache/file
+     distribution, `host_prefetch` report, `predictive host prefetch` report,
+     copy-profile and up/down profile deltas.
+5. If predictive A/B fails:
+   - reject as SOTA;
+   - next direction should be RAM resident cache selected from cross-prompt
+     hotness or lower-byte expert representation, because simple temporal
+     prediction will not cover enough active expert bytes.
+
+### Acceptance rule
+
+Only a predictive, prompt-agnostic configuration can be accepted as SOTA. Oracle
+trace prefetch may justify further engineering, but it is never a valid SOTA
+result.
+
 ## 当前阶段 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
 
 Timestamp: 2026-07-11 CST.
