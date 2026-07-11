@@ -4,6 +4,89 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Active Goal and Immediate Plan
+
+### Active Goal
+
+在 `16 GB host RAM` 硬限制和单卡 `32 GB RTX 5090` 环境下，让 Kimi 在
+随机用户 prompt 上冷启动稳定输出，并逐步把泛化 decode token rate 从当前
+`~1.5-1.8 tok/s` 推到 `>2 tok/s`，长期目标是 `>5 tok/s`。所有提升必须服务
+于真实泛化 prompt，不允许使用 prompt-specific pack/hotset 冒充 SOTA。
+
+### Non-negotiable Gates
+
+- 每次实验必须 cold start，使用 `MemoryMax=15900000000` 和
+  `MemorySwapMax=0`，host RAM 统计必须包括 page cache、mmap file-backed
+  pages、pinned/pageable host buffers、allocator overhead 和 cgroup kernel
+  记账。
+- TTFT 相比同 commit/control 不得升高超过 `20%`。
+- mandatory quality gate:
+  `Please introduce France in a short paragraph.` 必须语义正确、连贯。
+- 泛化 gate 必须包含未参与 hotset/pack 选择的 held-out prompt；最终 SOTA 以
+  held-out/test set 指标为准。
+- CPU fallback profile、expert IO profile、H2D、VRAM hit/miss、RAM/page
+  cache 分布都要记录；不能只记录 token rate。
+- 任何 SOTA 必须可复现：commit message 和本 plan 都要写清楚提升幅度、环境、
+  复现命令、prompt/test set、TTFT、RAM/VRAM、quality 输出、profile 文件和
+  rollback commit；不可复现的结果不得称为 SOTA。
+
+### Current Baseline
+
+当前已复现的可比较 baseline 是 N32 France cold-start run：
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-nextgoal-baseline-n32-france-213337`;
+- prompt: `Please introduce France in a short paragraph.`;
+- quality: pass;
+- TTFT: `11493.86 ms`;
+- decode: `20102.13 ms / 31`, `1.54 tok/s`;
+- memory peak: `12767100928` bytes;
+- CPU fallback profile: `0 entries`;
+- decode delta: `iouring_bytes=149178925056`,
+  `iouring_wait_us=11196355`;
+- up/gate misses: `16218`; down misses: `5375`; down hits: `9513`.
+
+结论：当前主要瓶颈不是 CPU fallback，而是 expert movement/scheduler sync 暴露在
+critical path 上，尤其是 up/gate miss 和 down miss 没有形成足够大的连续 IO
+队列。
+
+### Immediate Plan: v2 Down-group Pack Feasibility
+
+下一步只推进 default-off、小规模、可回退的 A/B，不把未验证代码当 SOTA。
+
+1. 先对候选 `down-group-greedy-k2048` 做 runtime eligibility 预检查。
+   - 输入：
+     `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-general-coverage-analysis/down-group-greedy-k2048.manifest.tsv`。
+   - 必须统计完整 down group 覆盖率，以及其中同时满足 packed type、shape、
+     stride 同质性的比例。
+   - 如果 homogeneous full-cover 明显低于模拟的 `32.613%`，先重做候选选择，
+     不直接物化 pack。
+
+2. 如果预检查通过，物化 K2048 v2 payload pack。
+   - 将候选 manifest 转成 builder 需要的 selected-plan TSV。
+   - 使用 `.Agent/run-tools/kimi_iq1s_selected_payload_pack.py` 生成 pack。
+   - 记录 pack 大小、payload bytes、range read 数、构建耗时和源 manifest。
+
+3. 用 N32 France cold-start 做 A/B。
+   - 开启：
+     `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN=1` 和
+     `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_OVERLAP=1`。
+   - 记录：full-cover accept/reject 原因、current-down overlap accept/reject、
+     saved bytes、iouring wait、decode wall、TTFT、RAM peak 和完整输出。
+
+4. Promotion / rejection rule。
+   - 只有当 quality pass、RAM <16GB、TTFT gate pass、decode token rate 相比
+     control 有稳定提升时，才继续 N96 和 held-out prompt。
+   - 任何性能下降、正确率下降、TTFT 超限或不可复现结果都必须记录为 rejected，
+     不提交为 SOTA；如果已改代码则回退到前一个可复现 commit。
+
+### Next Goal After This A/B
+
+如果 v2 down-group overlap 无效，下一阶段转向 RAM/VRAM 存储重排，而不是继续堆
+prompt-specific pack：释放 decode 阶段低价值 GGUF file cache，把 host RAM 改成显式
+expert cache，优先测试低命中率且 exposed wait 高的整层 up/gate 或完整 layer slab，
+并比较 RAM->VRAM H2D、SSD->RAM/VRAM IO、queue fragmentation 和 TTFT 摊销。
+
 ## 2026-07-12 Run Goal: recover reproducible Kimi SOTA, then validate CPU/defer GPU-extension wins
 
 ### Goal
