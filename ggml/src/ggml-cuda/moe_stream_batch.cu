@@ -7218,6 +7218,129 @@ static void copy_profile_record(
     std::fclose(f);
 }
 
+static thread_local const char *g_moe_copy_phase = "unknown";
+
+struct moe_copy_phase_scope {
+    const char *prev = nullptr;
+
+    explicit moe_copy_phase_scope(const char *phase) {
+        prev = g_moe_copy_phase;
+        g_moe_copy_phase = phase && phase[0] ? phase : "unknown";
+    }
+
+    ~moe_copy_phase_scope() {
+        g_moe_copy_phase = prev ? prev : "unknown";
+    }
+};
+
+static bool prompt_host_source_profile_enabled() {
+    const char *path = std::getenv("GGML_MOE_PROMPT_HOST_SOURCE_PROFILE_OUT");
+    return path && path[0];
+}
+
+static bool prompt_host_source_profile_active() {
+    return prompt_host_source_profile_enabled() &&
+        g_moe_copy_phase && std::strcmp(g_moe_copy_phase, "prompt") == 0;
+}
+
+static int prompt_host_source_tensor_layer(const char *tensor) {
+    const char *p = tensor ? std::strstr(tensor, "blk.") : nullptr;
+    if (!p) return -1;
+    p += 4;
+    int layer = 0;
+    bool any = false;
+    while (*p >= '0' && *p <= '9') {
+        any = true;
+        layer = layer * 10 + (*p - '0');
+        ++p;
+    }
+    return any ? layer : -1;
+}
+
+static const char *prompt_host_source_tensor_role(const char *tensor) {
+    if (!tensor) return "unknown";
+    if (std::strstr(tensor, "ffn_up_exps")) return "up";
+    if (std::strstr(tensor, "ffn_gate_exps")) return "gate";
+    if (std::strstr(tensor, "ffn_down_exps")) return "down";
+    return "unknown";
+}
+
+static void prompt_host_source_profile_record(
+        const char *op,
+        const char *tensor,
+        int expert_idx,
+        size_t bytes,
+        const char *source_kind,
+        const expert_pack_entry *pack_entry,
+        bool ram_hit,
+        bool used_iouring,
+        bool used_host_data,
+        const void *host_data,
+        double wall_ms) {
+    if (!prompt_host_source_profile_active()) return;
+    const char *path = std::getenv("GGML_MOE_PROMPT_HOST_SOURCE_PROFILE_OUT");
+    if (!path || !path[0]) return;
+
+    int pack_source_idx = -1;
+    int pack_source_page_cache = -1;
+    int pack_source_fd_direct = -2;
+    uint64_t pack_offset = 0;
+    uint64_t pack_nbytes = 0;
+    if (pack_entry) {
+        pack_source_idx = pack_entry->source_idx;
+        pack_offset = pack_entry->offset;
+        pack_nbytes = pack_entry->nbytes;
+        const expert_pack_source *source = expert_pack_source_for_entry(pack_entry);
+        if (source) {
+            pack_source_page_cache = source->page_cache ? 1 : 0;
+#if !defined(_WIN32)
+            pack_source_fd_direct = source->fd_direct;
+#else
+            pack_source_fd_direct = -1;
+#endif
+        }
+    }
+
+    static std::mutex mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> lk(mu);
+
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+                "seq,phase,op,tensor,layer,role,expert_idx,bytes,source,"
+                "pack_present,ram_hit,used_iouring,used_host_data,host_data_nonnull,"
+                "pack_source_idx,pack_source_page_cache,pack_source_fd_direct,"
+                "pack_offset,pack_nbytes,wall_ms\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+            "%llu,%s,%s,%s,%d,%s,%d,%zu,%s,%d,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,%.6f\n",
+            (unsigned long long)++seq,
+            g_moe_copy_phase ? g_moe_copy_phase : "unknown",
+            op ? op : "",
+            tensor ? tensor : "",
+            prompt_host_source_tensor_layer(tensor),
+            prompt_host_source_tensor_role(tensor),
+            expert_idx,
+            bytes,
+            source_kind ? source_kind : "unknown",
+            pack_entry ? 1 : 0,
+            ram_hit ? 1 : 0,
+            used_iouring ? 1 : 0,
+            used_host_data ? 1 : 0,
+            host_data ? 1 : 0,
+            pack_source_idx,
+            pack_source_page_cache,
+            pack_source_fd_direct,
+            (unsigned long long)pack_offset,
+            (unsigned long long)pack_nbytes,
+            wall_ms);
+    std::fclose(f);
+}
+
 static bool ram_batch_profile_enabled() {
     const char *env = std::getenv("GGML_MOE_RAM_BATCH_PROFILE_OUT");
     return env && env[0];
@@ -7766,10 +7889,19 @@ static bool batch_cache_copy_h2d(
     }
     const bool profile_copy = copy_profile_enabled() && trace_op && trace_op[0];
     const auto copy_profile_start = profile_copy ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    const bool profile_prompt_host_source = prompt_host_source_profile_active();
+    const auto prompt_host_source_start = profile_prompt_host_source ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     // RAM tier fast path: if the entry is resident in the registered mmap,
     // do a direct H2D from the pinned region, bypassing the staging slot.
     if (expert_pack_ram_tier_copy_h2d(pack_entry, dst, sz, st, copy_trace)) {
+        if (profile_prompt_host_source) {
+            const auto profile_end = std::chrono::steady_clock::now();
+            prompt_host_source_profile_record(
+                    trace_op, tensor_name, expert_idx, sz,
+                    "ram_tier", pack_entry, true, false, false, host_data,
+                    std::chrono::duration<double, std::milli>(profile_end - prompt_host_source_start).count());
+        }
         if (profile_copy) {
             const auto copy_profile_end = std::chrono::steady_clock::now();
             copy_profile_record(
@@ -7811,6 +7943,13 @@ static bool batch_cache_copy_h2d(
                 direct_read_site_context_scope direct_scope(trace_op, tensor_name);
                 const bool read_ok = expert_pack_read_entry(pack_entry, slot.host, sz);
                 if (!read_ok) {
+                    if (profile_prompt_host_source) {
+                        const auto profile_end = std::chrono::steady_clock::now();
+                        prompt_host_source_profile_record(
+                                trace_op, tensor_name, expert_idx, sz,
+                                "pack_read_failed", pack_entry, false, false, false, host_data,
+                                std::chrono::duration<double, std::milli>(profile_end - prompt_host_source_start).count());
+                    }
                     return false;
                 }
             } else {
@@ -7868,9 +8007,24 @@ static bool batch_cache_copy_h2d(
                         slot_wait_ms, host_ms, 0.0, enqueue_ms, h2d_ms,
                         std::chrono::duration<double, std::milli>(copy_profile_end - copy_profile_start).count());
             }
+            if (profile_prompt_host_source) {
+                const auto profile_end = std::chrono::steady_clock::now();
+                prompt_host_source_profile_record(
+                        trace_op, tensor_name, expert_idx, sz,
+                        pack_entry ? "pack_staged_read" : "host_mmap_staged",
+                        pack_entry, false, false, pack_entry == nullptr, host_data,
+                        std::chrono::duration<double, std::milli>(profile_end - prompt_host_source_start).count());
+            }
             return true;
         }
         ++ring.fallbacks;
+        if (profile_prompt_host_source) {
+            const auto profile_end = std::chrono::steady_clock::now();
+            prompt_host_source_profile_record(
+                    trace_op, tensor_name, expert_idx, sz,
+                    "stage_unavailable", pack_entry, false, false, false, host_data,
+                    std::chrono::duration<double, std::milli>(profile_end - prompt_host_source_start).count());
+        }
     }
 
     const auto enqueue_start = profile_copy ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
@@ -7884,6 +8038,13 @@ static bool batch_cache_copy_h2d(
                 std::chrono::duration<double, std::milli>(copy_profile_end - enqueue_start).count(),
                 -1.0,
                 std::chrono::duration<double, std::milli>(copy_profile_end - copy_profile_start).count());
+    }
+    if (profile_prompt_host_source && ok) {
+        const auto profile_end = std::chrono::steady_clock::now();
+        prompt_host_source_profile_record(
+                trace_op, tensor_name, expert_idx, sz,
+                "host_mmap_direct", pack_entry, false, false, true, host_data,
+                std::chrono::duration<double, std::milli>(profile_end - prompt_host_source_start).count());
     }
     return ok;
 }
@@ -7927,6 +8088,7 @@ static bool expert_pack_iouring_copy_jobs(
     if (default_read_sz == 0) return false;
     const bool profile_io_batch = io_batch_profile_enabled();
     const auto io_batch_start = profile_io_batch ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    const bool profile_prompt_host_source = prompt_host_source_profile_active();
 
     struct iouring_read_plan {
         size_t job_idx = 0;
@@ -7971,7 +8133,8 @@ static bool expert_pack_iouring_copy_jobs(
         }
         batch_copy_trace copy_trace;
         copy_trace.pack_hit = true;
-        const auto copy_start = batch_ttft_trace_enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        const auto copy_start = (batch_ttft_trace_enabled() || profile_prompt_host_source) ?
+            std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         const auto ram_enqueue_start = profile_ram_batch ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         if (expert_pack_ram_tier_copy_h2d(job.pack_entry, job.dst, expert_bytes, st, &copy_trace)) {
             ++ram_or_prefetch_jobs;
@@ -7994,6 +8157,13 @@ static bool expert_pack_iouring_copy_jobs(
                     copy_trace.ram_hit,
                     std::chrono::duration<double, std::milli>(copy_end - copy_start).count());
             }
+            if (profile_prompt_host_source) {
+                const auto copy_end = std::chrono::steady_clock::now();
+                prompt_host_source_profile_record(
+                        trace_op, job.tensor, job.expert_idx, expert_bytes,
+                        "ram_tier", job.pack_entry, true, false, false, job.host_data,
+                        std::chrono::duration<double, std::milli>(copy_end - copy_start).count());
+            }
             continue;
         }
         if (host_prefetch_copy_h2d(job.pack_entry, job.tensor, job.expert_idx, job.dst, expert_bytes, st)) {
@@ -8012,6 +8182,13 @@ static bool expert_pack_iouring_copy_jobs(
                     copy_trace.pack_hit,
                     copy_trace.ram_hit,
                     std::chrono::duration<double, std::milli>(copy_end - copy_start).count());
+            }
+            if (profile_prompt_host_source) {
+                const auto copy_end = std::chrono::steady_clock::now();
+                prompt_host_source_profile_record(
+                        trace_op, job.tensor, job.expert_idx, expert_bytes,
+                        "host_prefetch", job.pack_entry, false, false, false, job.host_data,
+                        std::chrono::duration<double, std::milli>(copy_end - copy_start).count());
             }
             continue;
         }
@@ -8414,7 +8591,8 @@ static bool expert_pack_iouring_copy_jobs(
             group_idx,
             slot_idx,
             group.read_sz,
-            (batch_ttft_trace_enabled() || profile_copy) ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}
+            (batch_ttft_trace_enabled() || profile_copy || profile_prompt_host_source) ?
+                std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}
         };
         const expert_pack_source *source = expert_pack_source_for_entry(first_job.pack_entry);
         if (!source || source->fd_direct < 0) return false;
@@ -8553,9 +8731,10 @@ static bool expert_pack_iouring_copy_jobs(
                 ++g_expert_pack.iouring_reads;
                 g_expert_pack.iouring_bytes.fetch_add(expert_bytes);
                 ++g_expert_pack.iouring_h2d_enqueues;
+                double wall_ms = -1.0;
                 if (done.copy_start != std::chrono::steady_clock::time_point{}) {
                     const auto copy_end = std::chrono::steady_clock::now();
-                    const double wall_ms = std::chrono::duration<double, std::milli>(copy_end - done.copy_start).count();
+                    wall_ms = std::chrono::duration<double, std::milli>(copy_end - done.copy_start).count();
                     if (batch_ttft_trace_enabled()) {
                         batch_ttft_trace_record(
                             trace_op,
@@ -8573,6 +8752,12 @@ static bool expert_pack_iouring_copy_jobs(
                                 true, false, true,
                                 0.0, 0.0, wall_ms, enqueue_ms, h2d_ms, wall_ms);
                     }
+                }
+                if (profile_prompt_host_source) {
+                    prompt_host_source_profile_record(
+                            trace_op, job.tensor, job.expert_idx, expert_bytes,
+                            "iouring", job.pack_entry, false, true, false, job.host_data,
+                            wall_ms);
                 }
             }
 
@@ -14558,6 +14743,7 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
     const bool prompt_mode = rows_stride > 1 &&
         (prompt_exact_requested ? exact_prompt_type : prompt_up_gate_stream_enabled());
     const bool exact_prompt_q8k = prompt_mode && prompt_exact_requested && exact_prompt_type;
+    moe_copy_phase_scope copy_phase_scope(prompt_mode ? "prompt" : "decode");
     if (decline_debug && rows_stride > 1 && !prompt_mode) {
         const char *env = std::getenv("GGML_MOE_STREAM_PROMPT_UP_GATE");
         std::fprintf(stderr,
@@ -16603,6 +16789,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     };
     if (!init_batch_once()) return decline("init_batch_once");
     const bool prompt_multirow = rows_stride > 8;
+    moe_copy_phase_scope copy_phase_scope(prompt_multirow ? "prompt" : "decode");
     const char *prompt_matmul_env = std::getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH");
     const char *prompt_matmul_roles = std::getenv("GGML_MOE_PROMPT_MATMUL_ID_BATCH_ROLES");
     const bool is_prompt_up = src0_name && std::strstr(src0_name, "ffn_up_exps");
