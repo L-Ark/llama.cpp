@@ -17640,3 +17640,94 @@ Next action:
     for the same layer rather than failing all overlap attempts;
   - continue to require default-off runtime gates and N32 proof before any N96
     or held-out prompt run.
+
+### 2026-07-12 Follow-up: current-down v2 overlap rejection reason
+
+Purpose:
+
+- Determine why the default-off current-down v2 overlap path reported
+  `overlap_calls=899` but `overlap_accepted=0` in the previous top2048 v2 A/B.
+- Avoid guessing between:
+  - wrong tensor key/name;
+  - unsupported packed type;
+  - shape mismatch;
+  - non-homogeneous active experts;
+  - insufficient manifest coverage.
+
+Code state:
+
+- HEAD: `1f7e611f7`;
+- worktree: dirty because `ggml/src/ggml-cuda/moe_stream_batch.cu` contains
+  default-off v2 current-down overlap diagnostics;
+- the diagnostic added rejection counters only and does not change default-off
+  behavior;
+- build target `llama-completion` completed successfully after the diagnostic
+  change.
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-overlap-reason-n32-france-214656`
+- Same cold-start N32 France setup as the previous v2 A/B:
+  - `MemoryMax=15900000000`;
+  - `MemorySwapMax=0`;
+  - `GGML_MOE_EXPERT_PACK_V2=<top2048 v2 pack>`;
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=<top2048 manifest>`;
+  - `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN=1`;
+  - `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_OVERLAP=1`;
+  - `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_PROFILE_OUT=$RUN/v2-full-cover-down.csv`.
+
+Result:
+
+- quality: pass;
+- TTFT: `8588.94 ms`;
+- decode: `19975.70 ms / 31 tokens`;
+- token rate: `1.55 tok/s`;
+- memory peak: `13434961920 bytes`;
+- CPU fallback profile: `0` entries.
+
+V2 report:
+
+- full-cover down:
+  - calls: `2038`;
+  - accepted: `18`;
+  - rejected `not_decode_down`: `177`;
+  - rejected `no_entry`: `1843`;
+  - copied entries: `144`;
+  - copied bytes: `0.385 GiB`;
+  - saved bytes: `0.662 GiB`;
+  - read time: `440.338 ms`;
+  - total time: `496.844 ms`.
+- current-down v2 overlap:
+  - overlap calls: `899`;
+  - overlap accepted: `0`;
+  - overlap rejected: `899`;
+  - `overlap_reject_no_entry=899`;
+  - `overlap_reject_bad_expert=0`;
+  - `overlap_reject_unsupported=0`;
+  - `overlap_reject_not_smaller=0`;
+  - `overlap_reject_shape=0`;
+  - `overlap_reject_homogeneous=0`;
+  - `overlap_reject_bad_cache_key=0`.
+
+Interpretation:
+
+- Current-down v2 overlap is not failing because of tensor-key construction,
+  shape mismatch, packed-type support, or non-homogeneous active experts.
+- It fails because the top2048 v2 manifest has no entry for at least one active
+  down expert in every overlap call.
+- The previous "fix overlap key first" path is therefore lower priority.
+- The next v2 work must first improve coverage:
+  - build a v2 candidate from general-prompt route traces rather than a sparse
+    top2048 down-heavy set;
+  - target active up/gate/down groups that miss VRAM on the critical path;
+  - estimate expected coverage before runtime A/B;
+  - only rerun overlap after coverage predicts enough accepted calls to matter.
+
+Decision:
+
+- Do not promote the current top2048 v2 pack or current dirty overlap path as a
+  SOTA candidate.
+- Do not run N96 or held-out prompts for this candidate.
+- Treat this as a manifest coverage finding: v2 can only help if it covers a
+  materially larger fraction of critical-path active experts, especially the
+  current-down overlap calls.
