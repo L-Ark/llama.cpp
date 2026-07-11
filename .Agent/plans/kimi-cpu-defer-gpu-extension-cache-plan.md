@@ -185,6 +185,124 @@ Next execution step:
 4. Only then implement real dispatch for full-cover homogeneous calls. Keep it
    behind an env flag and A/B with cold-start N32 dev first.
 
+### 2026-07-11 Evidence: full-cover top7 down metadata pack
+
+Metadata-only pack build:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-metadata-cf1bef649-121305
+```
+
+Reproduce:
+
+```bash
+.Agent/run-tools/kimi_iq1s_selected_payload_pack.py \
+  --selected-plan-tsv /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-metadata-cf1bef649-121305/fullcover-top7down-selected-plan.tsv \
+  --out-dir /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-metadata-cf1bef649-121305 \
+  --max-entries 2688 \
+  --include-types IQ1_S \
+  --range-backend curl \
+  --metadata-only
+```
+
+Metadata result:
+
+```text
+selected_entries=2688
+tensors=7
+entries_per_tensor=384
+metadata_pack_bytes=495616
+real_payload_bytes_if_enabled=7707033600  # 7.18 GiB
+packed_type=IQ1_S
+packed_nbytes_per_expert=2867200
+```
+
+Tensors covered:
+
+```text
+blk.10.ffn_down_exps.weight
+blk.4.ffn_down_exps.weight
+blk.5.ffn_down_exps.weight
+blk.9.ffn_down_exps.weight
+blk.12.ffn_down_exps.weight
+blk.8.ffn_down_exps.weight
+blk.7.ffn_down_exps.weight
+```
+
+Default-off full-cover profile run using the metadata-only pack:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-profile-n32-cf1bef649-121332
+```
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO=/root/lfz/llama.cpp-vendor-kimi \
+      RUN=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-profile-n32-cf1bef649-121332 \
+      PROMPT_ID=v2_fullcover_top7down_profile_n32_france \
+      PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+      QUALITY_KEYWORDS="france,paris|europe|western europe" \
+      N=32 PROFILE=0 COPY_PROFILE=0 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_V2=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-metadata-cf1bef649-121305/selected-iq1s-overlay-v2.expert-pack
+GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-metadata-cf1bef649-121305/selected-iq1s-overlay-manifest.tsv
+GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN=1
+GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN_OUT=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-profile-n32-cf1bef649-121332/v2-partial-split-plan.csv
+GGML_MOE_EXPERT_PACK_V2_OVERRIDE_PROFILE_OUT=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-profile-n32-cf1bef649-121332/v2-override-preflight.csv" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+Profile result:
+
+```text
+quality=pass
+TTFT=8192.44 ms
+decode=16959.37 ms / 31
+token_rate=1.83 tok/s  # metadata/profile only; runtime behavior unchanged
+host_memory_peak=12727537664
+direct_reads=0
+cpu_fallback=0
+
+decode_calls=5583
+decode_full_cover_calls=217
+decode_partial_calls=0
+decode_no_cover_calls=5366
+decode_full_cover_saved=5.725 GiB
+decode_full_cover_covered_miss=9.186 GiB
+decode_extra_compute_groups=0
+
+all_full_cover_calls=224
+all_full_cover_saved=9.952 GiB
+```
+
+Decision:
+
+- The full-cover approach fixes the main risk from the top2048 entry-level
+  plan: there are no partial calls and no extra compute groups for the selected
+  down tensors.
+- The top7 down candidate is a valid first real payload target. Its theoretical
+  decode saving is `5.725 GiB`, or roughly `0.55-0.60 s` at the measured
+  `10 GiB/s` IO ceiling before replacement overhead.
+- This by itself may not reach `>2 tok/s`, but it is a low-risk real-dispatch
+  stepping stone because it keeps homogeneous calls.
+
+Required next change before real payload build:
+
+- Do not use the current payload builder naively for a 7.18 GiB pack.
+- Current `kimi_iq1s_selected_payload_pack.py` reads one range per expert and
+  accumulates payloads in memory before writing. For 2688 entries this means
+  thousands of HTTP range calls and multi-GiB resident memory.
+- First add a coalesced/streaming payload mode:
+  - group contiguous source ranges by tensor;
+  - stream large ranges directly into the pack at the corresponding offsets;
+  - keep memory bounded with a fixed chunk size;
+  - keep `--metadata-only` behavior unchanged;
+  - record exact range count, bytes, wall time, and output SHA256.
+- After that, build the real top7down payload pack and run a default-off read
+  smoke before touching inference dispatch.
+
 ## READ FIRST: active goal and immediate plan
 
 Timestamp: 2026-07-11 CST.
