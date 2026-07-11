@@ -335,6 +335,95 @@ Execution plan:
      below `15900000000` bytes, quality passes, and results are reproducible from
      a pushed commit.
 
+## Phase 5C baseline result: normal decode does not materially use page cache
+
+Timestamp: 2026-07-11 CST.
+
+New tool:
+
+- `.Agent/run-tools/kimi_phase_ram_cache_report.py`
+
+Run:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5c-ram-cache-baseline-report
+```
+
+Command:
+
+```text
+.Agent/run-tools/kimi_phase_ram_cache_report.py \
+  --run /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4z-queue-evidence-n32-photosynthesis/dev_photosynthesis_factual \
+  --run /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4t-dev-photosynthesis-n96-profile/dev_photosynthesis_factual \
+  --run /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4x-cpu-moe-phase-profile-n96-france \
+  --run /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase4t-instrumentation-n96-heldout-math-diagnostic/test_reasoning_math_01 \
+  --out-dir /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5c-ram-cache-baseline-report
+```
+
+Artifacts:
+
+- `report.md`
+- `ram_cache_summary.csv`
+- `ram_cache_summary.json`
+
+Key result:
+
+| prompt | phase data | tok/s | TTFT ms | RAM peak GiB | final file GiB | clean unmapped file GiB | decode iouring GiB | decode file delta MiB | decode refault |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `dev_photosynthesis_factual` N32 queue profile | yes | 1.50 | 10399.5 | 11.75 | 11.23 | 11.21 | 143.1 | 77.3 | 0 |
+| `dev_photosynthesis_factual` N96 phase profile | yes | 1.53 | 7385.5 | 11.76 | 11.24 | 11.22 | 443.2 | 79.2 | 0 |
+| `dev_france_regression` N96 attribution profile | no | 1.52 | 11913.2 | 11.93 | 11.26 | 11.24 | phase unavailable | phase unavailable | phase unavailable |
+| `test_reasoning_math_01` memory-pressure diagnostic | yes | 1.58 | 214863.1 | 14.81 | 13.65 | 13.65 | 310.7 | -33.2 | 1279 |
+
+Interpretation:
+
+- In normal low-refault runs, decode still moves hundreds of GiB through
+  expert-pack io_uring/H2D:
+  - N32 photosynthesis: `143.1 GiB`;
+  - N96 photosynthesis: `443.2 GiB`.
+- The same normal decode windows grow file cache by only about `77-79 MiB`, with
+  `decode_refault=0`, `direct_reads=0`, and `fallback_gguf=0`.
+- Final `file_mapped` is only about `0.031 MiB`; most of the remaining
+  `~11.2 GiB` file-backed memory is clean, unmapped file cache from model/load
+  lifecycle rather than a controlled expert cache.
+- Therefore normal decode is not materially served by Linux page cache. The
+  page cache is a plausible host-RAM replacement pool for explicit expert
+  residency, but this is not yet proof that it is safe to evict all of it.
+- The held-out math diagnostic remains the warning case:
+  - RAM hits the cap;
+  - TTFT is `214863.1 ms`;
+  - decode refaults increase by `1279`;
+  - direct reclaim is high.
+  Any RAM tier that recreates this pressure must be rejected even if token rate
+  improves on one prompt.
+
+Phase 5C next implementation target:
+
+1. Build a dev-only RAM slab candidate screen from foreground IO/wait data.
+   - Candidate units:
+     - whole layer/role `up+gate`;
+     - whole layer/role `down`;
+     - pack-contiguous expert ranges that preserve large batch reads.
+   - Ranking:
+     - exposed wait saved per GiB;
+     - recurrence across dev prompts;
+     - low overlap with current VRAM hot entries;
+     - low risk of fragmenting SSD batches when mixed with RAM hits.
+
+2. Start with pageable RAM, not pinned multi-GiB slabs.
+   - Prior pinned slab attempts risked host pressure and scheduling jitter.
+   - Pageable RAM still avoids SSD wait and allows the kernel to reclaim if the
+     candidate is too large, making the first A/B safer under the 16 GB gate.
+
+3. Acceptance metrics for the first runtime candidate:
+   - token rate improves on N32 dev and then N96 dev;
+   - TTFT ratio <= `1.20x`;
+   - host RAM peak < `15900000000` bytes;
+   - `workingset_refault_file`, `pgscan_direct`, and `pgsteal_direct` do not
+     materially increase;
+   - aggregate demand `io_uring_wait` decreases, not merely source bytes;
+   - output quality passes.
+
 Execution plan:
 
 1. Commit and push the profiling-only coverage fix.
