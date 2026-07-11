@@ -366,6 +366,119 @@ Next Phase 5D implementation target:
      `15900000000` bytes, and the commit body contains full reproduction
      details.
 
+## Phase 5D overlay screen: selected lower-byte packs are not plug-compatible yet
+
+Timestamp: 2026-07-11 CST.
+
+Additional runs:
+
+- IQ2_XXS selected overlay bound:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq2xxs-selected-overlay-bound-dev7/report.md`
+- IQ1_S selected hotset bound:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-hotset-bound-dev7/report.md`
+
+Asset and disk state:
+
+- Current free disk on `/root/lfz`: about `133 GiB`.
+- Current local model assets include the IQ3_S GGUF shards and the 0.6B draft
+  model; no complete lower-quant Kimi model is present.
+- Historical candidate refresh showed the closest complete original-model lower
+  quant, mradermacher `i1-IQ1_S`, is about `190.391 GiB` and failed the disk
+  safety gate even when more space was available. It is not safe to download as
+  a complete model now while preserving rollback assets.
+
+IQ2_XXS selected overlay result:
+
+- Source metadata:
+  `.Agent/runs/20260707-gp21-remote-range-pack/plan.tsv`.
+- Source is AesSedai `IQ2_XXS` expert ranges, not `i1-IQ1_S`.
+- Dev7 route-profile inputs only; held-out/test prompts were not used.
+
+| overlay budget GiB | selected entries | estimated pack GiB | hybrid byte ratio |
+|---:|---:|---:|---:|
+| 8 | 2580 | 7.998 | 0.9131 |
+| 16 | 5082 | 15.999 | 0.8733 |
+| 32 | 10083 | 31.999 | 0.8225 |
+| 64 | 19636 | 63.999 | 0.7617 |
+| 96 | 28568 | 95.999 | 0.7257 |
+| 120 | 35063 | 119.998 | 0.7089 |
+
+Decision:
+
+- Reject IQ2_XXS selected overlay as the next main path. Even a `120 GiB`
+  overlay only reaches `0.7089x`, far above the `<=0.563x` boundary target and
+  the safer `<=0.505x` target for `>2 tok/s`.
+
+IQ1_S selected hotset result:
+
+- Tool:
+  `/root/lfz/llama.cpp-vendor-kimi-gp169-clean/.Agent/run-tools/kimi_iq1s_budgeted_hotset_bound.py`.
+- Source asset:
+  `mradermacher/Kimi-K2.7-Code-i1-GGUF`
+  `Kimi-K2.7-Code.i1-IQ1_S.gguf`.
+- This is a theoretical byte bound only. It is not directly runnable with the
+  current IQ3_S main GGUF.
+
+| overlay budget GiB | selected entries | estimated pack GiB | hybrid byte ratio | current runtime nbytes compatible |
+|---:|---:|---:|---:|---|
+| 8 | 2992 | 7.999 | 0.8458 | false |
+| 16 | 5984 | 15.998 | 0.7774 | false |
+| 32 | 11962 | 31.998 | 0.6923 | false |
+| 64 | 23895 | 63.999 | 0.5951 | false |
+| 96 | 35777 | 95.998 | 0.5430 | false |
+| 120 | 44642 | 119.998 | 0.5223 | false |
+| all dev candidate keys | 55515 | 149.898 | 0.5108 | false |
+
+Interpretation:
+
+- IQ1_S selected overlay is the first selected-overlay bound that gets close to
+  the Phase 5D `>2 tok/s` byte target:
+  - `96 GiB` reaches `0.5430x`, just under the optimistic `0.563x` boundary;
+  - `120 GiB` reaches `0.5223x`, closer to the safer `0.505x` target;
+  - all dev candidate keys reach `0.5108x` but need about `149.9 GiB`, which is
+    outside the current disk envelope.
+- This still does not prove a runtime path:
+  - output quality for mixed IQ3_S/IQ1_S experts is unknown;
+  - current code does not treat selected IQ1_S entries as plug-compatible with
+    IQ3_S expert tensors.
+
+Current runtime compatibility assessment:
+
+- The normal one-pack path keys lookup by `(tensor, expert, nbytes)`:
+  `one_pack_lookup(src0_name, expert_index, src0_bytes)`.
+- The read path also requires `entry->nbytes == sz`.
+- The compute path receives `src0_type_int` from the main GGUF tensor, not from
+  the pack entry.
+- `ggml_cuda_moe_stream_supports_type()` currently admits `IQ3_XXS`, `IQ3_S`,
+  `IQ2_S`, `MXFP4`, and `F8_E4M3_B128`; `IQ1_S` and `Q2_K` are not admitted by
+  that fast-path gate.
+- Therefore a lower-byte selected IQ1_S overlay needs a default-off mixed-type
+  expert override, not just a different pack file.
+
+Next implementation plan after this screen:
+
+1. Add a metadata-only mixed-type override preflight before runtime math.
+   - Manifest fields must include tensor, expert, runtime type, runtime nbytes,
+     original type, original nbytes, `ne00`, `ne01`, `nb01`, source offset, and
+     source pack/path.
+   - Lookup must be default-off and must not replace the stable IQ3_S pack path.
+   - The preflight must reject shape/type mismatches and report exactly which
+     entries would be eligible.
+
+2. Add a tiny runtime smoke only after preflight passes.
+   - Start with a very small IQ1_S selected overlay, not a `96-120 GiB` pack.
+   - Add counters for mixed-type hits, rejected overrides, bytes saved, H2D
+     bytes, kernel type, and fallback-to-normal-pack events.
+   - Run N32 short quality prompts first; do not claim token-rate SOTA.
+
+3. Promote to a larger overlay only if quality survives.
+   - The first performance-relevant pack would need to be around `96-120 GiB`
+     to have a chance at `>2 tok/s` based on the current bound.
+   - This is near the current disk limit and must preserve rollback assets.
+   - Any accepted result must still satisfy cold start, 16 GB host RAM, TTFT
+     `<=1.20x`, prompt-general validation, and the full reproducibility commit
+     protocol.
+
 ## Phase 5B goal: transfer the CPU/defer GPU-extension idea to Kimi safely
 
 Timestamp: 2026-07-11 CST.
