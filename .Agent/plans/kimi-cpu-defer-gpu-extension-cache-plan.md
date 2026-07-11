@@ -253,6 +253,217 @@ Plan:
    reproducibility body. If it fails any gate, revert or leave it default-off and
    mark it rejected in this document.
 
+### 2026-07-11 Current Baseline Reproduction And Coverage Audit
+
+Purpose:
+
+- Re-establish the current Kimi baseline from a clean code worktree before doing
+  more optimization work.
+- Determine whether the DeepSeek-style "CPU/defer path gets a GPU gate
+  extension" still has a direct Kimi target.
+
+Source state:
+
+- Current branch: `vendor/kimi-deepseek-41d205-additive`.
+- Current pushed plan commit: `d73e8e4d4bb310ccd160673125b4f7554c49880a`.
+- Clean runtime worktree: `/root/lfz/llama.cpp-vendor-kimi-815b-clean`.
+- Runtime code commit: `815b29816d1a790ecde459ab1dc770944458b3aa`.
+- Code diff from current pushed HEAD to `815b29816` was checked with non-plan
+  paths and produced no source diff. The current main worktree still has dirty
+  experimental files, so these runs intentionally use the clean worktree.
+
+Common run settings:
+
+- cgroup: `MemoryMax=15900000000`, `MemorySwapMax=0`.
+- prompt: `Please introduce France in a short paragraph.`
+- `N=96`, `PINNED_SLOTS=16`, `VRAM_MIB=15000`, `UPGATE_PCT=62`.
+- `MOE_IO_DEPTH=16`, `MOE_IO_REFILL_BATCH=8`,
+  `MOE_PREFETCH_DOWN_DEPTH=2`.
+- expert pack:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`
+- overlay pack:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`
+
+#### A. Non-RAM-tier profile run
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-current-goal-baseline-france-n96-160215`
+
+Result:
+
+| metric | value |
+|---|---:|
+| quality | pass |
+| TTFT | `10329.47 ms` |
+| decode | `55742.14 ms / 85` |
+| profile token rate | `1.52 tok/s` |
+| RAM peak | `12869033984 bytes` |
+| final file cache | `12088909824 bytes` |
+| CPU fallback rows | `0` |
+| pack mmap fallback | `hits=0 misses=0 bytes=0 fallback_gguf=0` |
+| direct reads/fallbacks | `0 / 0` |
+| expert-pack iouring bytes | `491342774272 bytes` |
+| expert-pack iouring wait | `35499001 us` |
+| iouring inflight avg/max | `4.59 / 16` |
+
+Copy-profile role split:
+
+| role | rows | bytes | summed IO wait | H2D |
+|---|---:|---:|---:|---:|
+| `down` | `30611` | `195.62 GiB` | `113.01 s` | `10.11 s` |
+| `gate` | `27571` | `135.73 GiB` | `103.49 s` | `7.27 s` |
+| `up` | `27572` | `126.24 GiB` | `94.54 s` | `6.76 s` |
+
+Up/gate profile:
+
+- rows: `5101`;
+- up/gate cache hits: `17627 / 17628`;
+- up/gate cache misses: `23181 / 23180`;
+- summed up wait: `20.69 s`;
+- summed gate wait: `22.18 s`;
+- summed wall: `38.18 s`;
+- kernel total: `29.26 s`.
+
+Down-batch profile:
+
+- down rows: `5160`;
+- down misses/hits: `18935 / 29897`;
+- down stage: `17.26 s`;
+- down kernel: `0.72 s`;
+- down wall: `18.41 s`.
+
+Page-cache residency after run:
+
+- GGUF shards: `10.994 GiB`;
+- alias TSV: `0.010 GiB`;
+- expert packs: `0.005 GiB`;
+- top cached shard: `Kimi-K2.7-Code-IQ3_S-00002-of-00010.gguf`
+  at `2.716 GiB`.
+
+Interpretation:
+
+- This run proves the Kimi expert roles are not falling back to CPU compute or
+  GGUF mmap fallback in the profiled decode path.
+- The large remaining cost is inside the GPU extension path: SSD expert reads,
+  staging, H2D, and synchronization/queue exposure.
+- Linux page cache is still dominated by GGUF shard pages, not expert-pack data.
+
+#### B. Current RAM-tier profile run
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-current-goal-sota-ramtier-france-n96-160624`
+
+Additional env:
+
+```bash
+GGML_MOE_RAM_TIER_MIB=1800
+GGML_MOE_RAM_TIER_PROFILE=.Agent/profiles/kimi/ram-tier/gp112-prompt0-layer-role/blk1_gate_full384.csv
+GGML_MOE_RAM_TIER_SKIP=0
+GGML_MOE_RAM_TIER_PIN=1
+GGML_MOE_RAM_TIER_PIN_MIB=1800
+GGML_MOE_RAM_TIER_PRELOAD_DIRECT=1
+GGML_MOE_RAM_TIER_PRELOAD_THREADS=4
+```
+
+Result:
+
+| metric | value |
+|---|---:|
+| quality | pass |
+| TTFT | `11199.71 ms` |
+| decode | `55642.18 ms / 85` |
+| profile token rate | `1.53 tok/s` |
+| RAM peak | `14689984512 bytes` |
+| final file cache | `12085886976 bytes` |
+| CPU fallback rows | `0` |
+| pack mmap fallback | `hits=0 misses=0 bytes=0 fallback_gguf=0` |
+| RAM tier resident/pinned | `1800.00 MiB / 1722.00 MiB` |
+| RAM tier hits | `569 / 85754 = 0.7%` |
+| RAM tier H2D bytes | `2675556352` |
+| expert-pack iouring bytes | `488667217920 bytes` |
+| expert-pack iouring wait | `35062128 us` |
+
+Profile comparison versus non-RAM-tier profile:
+
+- RAM tier reduced iouring reads by only `569` and bytes by only
+  `2.49 GiB`.
+- Endpoint profile decode changed from `55742.14 ms` to `55642.18 ms`, which is
+  noise-level under profiling.
+- TTFT increased by about `870 ms`.
+- RAM peak increased from `12.87 GB` to `14.69 GB`.
+- The RAM-tier profile is therefore useful as a known reproduction knob, but the
+  current `blk1_gate_full384` tier is not a broadly efficient RAM-use strategy.
+
+#### C. Current RAM-tier non-profile reproduction
+
+Run:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260711-current-goal-sota-ramtier-france-n96-noprofile-160934`
+
+Result:
+
+| metric | value |
+|---|---:|
+| quality | pass |
+| TTFT | `8408.47 ms` |
+| decode | `44723.09 ms / 85` |
+| token rate | `1.90 tok/s` |
+| RAM peak | `14615097344 bytes` |
+| final file cache | `12057456640 bytes` |
+| CPU fallback | `0` from pack-mmap counter |
+| direct reads/fallbacks | `0 / 0` |
+| expert-pack iouring bytes | `488667217920 bytes` |
+| expert-pack iouring wait | `45911387 us` |
+| iouring inflight avg/max | `3.93 / 16` |
+| RAM tier hits | `569 / 85754 = 0.7%` |
+| VRAM down hit rate | `61.4%` |
+| VRAM up/gate hit rate | `43.5%` |
+
+Exact command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-current-goal-sota-ramtier-france-n96-noprofile-160934/launch.sh
+```
+
+Quality output:
+
+> France is a country in Western Europe known for its rich history, culture, and
+> influence on art, fashion, and cuisine. Its capital, Paris, is famous for
+> landmarks like the Eiffel Tower and the Louvre Museum. France is also known
+> for its beautiful countryside, wine regions, and historic cities such as Lyon
+> and Marseille. It plays a major role in European and global politics as a
+> founding member of the European Union.
+
+Decision:
+
+- The current single-prompt France N96 SOTA-level result is reproducible from a
+  clean code worktree: `1.90 tok/s`, quality pass, RAM under cap, zero fallback.
+- This is not yet a full general-prompt SOTA acceptance claim because the
+  current turn only reran the mandatory France prompt. A full dev plus sealed
+  held-out sweep must be rerun before promoting any new global SOTA.
+- DeepSeek-style "move gate CPU slow path to GPU" is not the next Kimi
+  implementation target unless future profiling finds a new fallback bucket.
+  Current evidence says gate/up/down are already batch-accepted by the GPU
+  extension and fallback rows are zero.
+
+Next implementation priority from this evidence:
+
+1. Stop treating CPU fallback as the main Kimi decode bottleneck.
+2. Keep `blk1_gate_full384` only as a reproduction knob, not as proof that RAM is
+   well used. Its current hit rate is `0.7%` while costing about `1.8 GB` RAM.
+3. Prioritize replacing low-value GGUF page cache with explicit, batchable RAM
+   expert storage only after proving it reduces exposed wait on dev and held-out
+   prompts.
+4. Prioritize all-role lower-byte representation and IO queue continuity because
+   N96 still moves about `455 GiB` expert-pack data for this one prompt.
+5. The next required run is a clean non-profile dev sweep plus one sealed
+   held-out sweep using the exact current SOTA env, to re-establish the
+   general-prompt baseline before any candidate optimization.
+
 ## 当前执行批次 Goal 与 Plan：default-off mixed-size up/gate 联合 IO
 
 Timestamp: 2026-07-11 CST.
