@@ -252,6 +252,52 @@ Only a predictive, prompt-agnostic configuration can be accepted as SOTA. Oracle
 trace prefetch may justify further engineering, but it is never a valid SOTA
 result.
 
+### 2026-07-11 oracle host prefetch smoke results
+
+All runs used the previous France N96 route trace only as an oracle upper-bound:
+
+`GGML_MOE_HOST_PREFETCH=/root/lfz/runs/vendor-kimi-token-rate/20260711-mixedio-defaultoff-depth16-france-n96-145901/route-trace.csv`
+
+| run | config | quality | TTFT | decode | token rate | RAM peak | host prefetch |
+|---|---|---|---:|---:|---:|---:|---|
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-hostprefetch-oracle-depth16-france-n32-151020` | 1GiB / 256 slots | pass | `12583.44 ms` | `21961.25 ms / 31` | `1.41 tok/s` | `13959675904` | `submitted=3785 hits=3614 no_slot=37216361 used=1023.86 MiB` |
+| `/root/lfz/runs/vendor-kimi-token-rate/20260711-hostprefetch-oracle2g-depth16-france-n32-151234` | 2GiB / 512 slots | pass | `11092.42 ms` | `23531.90 ms / 31` | `1.32 tok/s` | `15037505536` | `submitted=4319 hits=3974 no_slot=25679958 used=2047.83 MiB` |
+
+Decision:
+
+- Reject current host prefetch runtime behavior as a performance candidate.
+- Do not run predictive prefetch on held-out prompts yet.
+- The oracle path did reduce SSD-side iouring bytes, but endpoint speed became
+  worse because the host prefetch worker spent huge time in `no_slot` scans once
+  the RAM cache filled.
+
+Root cause hypothesis from source inspection:
+
+- `host_prefetch_find_free_slot_locked()` picks the first non-ready slot before
+  considering whether its retained `capacity` can satisfy the next entry.
+- When `used_bytes` is already near `max_bytes`, a small non-ready slot cannot
+  grow, so allocation is rejected even if another non-ready or ready slot with
+  sufficient retained capacity exists.
+- On `free_slot < 0`, the worker immediately continues while the trace predicate
+  remains true, producing a tight no-slot scan loop.
+
+Next implementation plan:
+
+1. Default-off code fix in a clean worktree:
+   - improve host prefetch slot selection so it prefers reusable non-ready slots
+     with `capacity >= alloc_sz`;
+   - if needed, evict a ready slot with sufficient retained capacity;
+   - only grow a slot when `used_bytes + extra <= max_bytes`;
+   - when no slot can be used, back off with a short wait instead of immediately
+     rescanning.
+2. Rebuild and rerun the same oracle N32 smoke.
+3. Accept the fix only if:
+   - `no_slot` drops by orders of magnitude;
+   - endpoint token rate is no worse than baseline;
+   - quality, TTFT, RAM and fallback gates still pass.
+4. Only if the fixed oracle path shows endpoint benefit, proceed to predictive
+   prompt-agnostic A/B.
+
 ## 当前阶段 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
 
 Timestamp: 2026-07-11 CST.
