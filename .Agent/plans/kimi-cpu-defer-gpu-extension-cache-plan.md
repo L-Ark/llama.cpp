@@ -143,6 +143,164 @@ git rev-parse HEAD
 只有 profile 证明 gate/up/down 中某个 role 的 GPU extension 能减少 critical-path
 wait，才进入对应的 default-off A/B patch。
 
+### 2026-07-11 Clean baseline/profile result
+
+Purpose:
+
+- Establish a clean, pushed-commit baseline before more optimization work.
+- Avoid using the dirty main worktree, which currently contains an uncommitted
+  `moe_stream_batch.cu` v2-overlap experiment.
+- Measure whether the current Kimi config generalizes beyond the France prompt.
+
+Clean source/build:
+
+```text
+worktree=/root/lfz/llama.cpp-vendor-kimi-815b-clean
+head=815b29816d1a790ecde459ab1dc770944458b3aa
+version=16361 (815b29816)
+device=NVIDIA GeForce RTX 5090, VRAM=32109 MiB
+build flags:
+  -DCMAKE_BUILD_TYPE=Release
+  -DGGML_CUDA=ON
+  -DGGML_CUDA_MOE_STREAM=ON
+  -DGGML_CUDA_MOE_STREAM_BATCH=ON
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
+  -DCMAKE_CUDA_ARCHITECTURES=120a-real
+```
+
+Run shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO=/root/lfz/llama.cpp-vendor-kimi-815b-clean \
+      RUN=<run-dir> N=96 PROFILE=1 COPY_PROFILE=1 \
+      PROMPT_ID=<id> PROMPT_USER_TEXT=<prompt> \
+      QUALITY_KEYWORDS=<keywords> \
+      EXTRA_RUNTIME_ENV="GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT=$RUN/current-down-overlap.csv" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+Important config note:
+
+- The current reproduction wrapper still uses the historical default expert
+  pack path:
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`
+  plus `kimi-iq3s-l1l2down-overlay.expert-pack`.
+- Therefore these runs are the current-SOTA-config baseline, not proof that the
+  pack layout is prompt-agnostic. Held-out prompt results below are used to
+  quantify generalization pressure.
+
+Results:
+
+```text
+France regression:
+  run=/root/lfz/runs/vendor-kimi-token-rate/20260711-815b-clean-baseline-france-n96-134940
+  prompt="Please introduce France in a short paragraph."
+  quality=pass
+  output=France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous for landmarks like the Eiffel Tower and the Louvre Museum. France is also known for its beautiful countryside, wine regions, and historic cities such as Lyon and Marseille. It plays a major role in European and global politics as a founding member of the European Union.
+  TTFT=11843.38 ms
+  decode=58307.12 ms / 85 runs
+  token_rate=1.46 tok/s
+  memory.peak=12809625600
+  file=12085489664 active_file=12026712064 inactive_file=58630144
+  fallback_profile_rows=0
+
+Held-out short answer:
+  run=/root/lfz/runs/vendor-kimi-token-rate/20260711-815b-clean-baseline-batteries-n96-135148
+  prompt="How do batteries store energy? Answer in one short paragraph."
+  quality=pass
+  decode=38786.60 ms / 58 runs
+  token_rate=1.50 tok/s
+  memory.peak=12782882816
+  note=model emitted EOS before 96 decode runs, so this is quality/generalization
+       evidence but not a full N96 stress run.
+
+Held-out long answer:
+  run=/root/lfz/runs/vendor-kimi-token-rate/20260711-815b-clean-baseline-cloudbiz-n96-135319
+  prompt="Write a detailed paragraph of about 120 words explaining how cloud computing helps a small business."
+  quality=pass
+  output=Cloud computing helps small businesses by providing affordable access to powerful technology without requiring expensive hardware or IT expertise. Instead of purchasing servers and software outright, companies can rent computing resources, storage, and applications through the internet on a subscription basis. This reduces upfront costs and allows businesses to pay only for what they use. Cloud services also enable employees to work from anywhere, collaborate in real time, and access files securely from multiple devices. Additionally, automatic updates, data backups, and built-in security
+  TTFT=15456.79 ms
+  decode=67062.20 ms / 95 runs
+  token_rate=1.42 tok/s
+  memory.peak=12815265792
+  file=12098895872 active_file=12035772416 inactive_file=62955520
+  fallback_profile_rows=0
+```
+
+Bottleneck summary:
+
+```text
+France:
+  decode_ms_per_token=685.97
+  expert_pack_iouring_wait=39931.036 ms
+  expert_pack_iouring_bytes=491.343 GB
+  iouring_inflight_avg=4.33, inflight_max=8
+  down H2D timed=19891.179 ms
+  gate H2D timed=5094.105 ms
+  current_down_overlap_worker=8744.949 ms
+  down VRAM hit_rate=61.4%
+  upgate VRAM hit_rate=43.5%
+  upgate decode wall=sum 40099.953 ms, about 471.76 ms/token
+  down decode wall=sum 15096.966 ms, about 177.61 ms/token
+
+Held-out long answer:
+  decode_ms_per_token=705.92
+  expert_pack_iouring_wait=44165.703 ms
+  expert_pack_iouring_bytes=593.214 GB
+  iouring_inflight_avg=4.42, inflight_max=8
+  down H2D timed=23927.343 ms
+  gate H2D timed=5826.680 ms
+  current_down_overlap_worker=9669.403 ms
+  down VRAM hit_rate=61.1%
+  upgate VRAM hit_rate=42.3%
+  upgate decode wall=sum 45703.478 ms, about 481.09 ms/token
+  down decode wall=sum 17215.198 ms, about 181.21 ms/token
+```
+
+Interpretation:
+
+- The clean baseline is stable across France and a long held-out prompt:
+  `1.42-1.46 tok/s` under the 16GB host RAM cgroup with correct output.
+- CPU fallback is not the current primary blocker; `fallback-profile.csv` has
+  only the header in both full-length runs.
+- The immediate blocker is exposed expert movement on the critical path:
+  up/gate wall is roughly `472-481 ms/token`, while down wall is roughly
+  `178-181 ms/token`.
+- Up/gate is therefore the first priority. Down still matters, but down-only
+  improvements cannot reach the short-term `>2 tok/s` milestone alone.
+- The io_uring queue is not saturating the pure bench limit: runtime
+  `inflight_avg` is only about `4.3-4.4` with depth 8, and most batches are
+  `2-8` experts. This confirms the earlier queue-drain diagnosis.
+- Host RAM peak is only about `12.8GB`, but almost all final RAM is file-backed
+  active_file around `12.0GB`. The next RAM work should replace low-value
+  file-backed cache with explicit high-yield expert cache only if it reduces
+  exposed up/gate wait.
+
+Next A/B priority:
+
+1. No-code IO-depth screen on the clean baseline.
+   - Test `MOE_IO_DEPTH=16`, `MOE_IO_REFILL_BATCH=8`, and enough pinned slots
+     to avoid slot contention.
+   - Accept only if endpoint token rate improves and RAM/TTFT/quality remain
+     within gates.
+
+2. Up/gate-priority VRAM split.
+   - Current upgate hit rate is `42-44%`, lower than down `61%`.
+   - Test moving more VRAM cache budget to upgate, while measuring whether the
+     down regression is smaller than the upgate wait saving.
+
+3. Explicit RAM tier for high-impact up/gate, not down-first.
+   - Candidate layers should be selected by clean baseline upgate wall/misses,
+     not by France-only hotness.
+   - Measure preload TTFT, RAM peak, refault/reclaim, and endpoint token rate.
+
+4. Only after the above, implement code changes for larger same-layer
+   gate+up+down IO scheduling or v2-aware prefetch.
+   - The current dirty v2-overlap work remains diagnostic until it can beat this
+     clean baseline under the same gates.
+
 ## 当前阶段 Goal 与 Plan：default-off v2 full-cover down dispatch A/B
 
 Timestamp: 2026-07-11 CST.
