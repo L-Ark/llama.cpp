@@ -352,6 +352,92 @@ Next direction:
 - Acceptance remains endpoint token rate, not host-prefetch hit count or reduced
   iouring bytes alone.
 
+## 下一执行批次 Plan：cross-prompt static RAM/VRAM tier
+
+Timestamp: 2026-07-11 CST.
+
+### Goal
+
+在不引入后台 speculative IO 的前提下，验证静态 RAM expert tier 是否能把 host
+RAM 中低价值 file-backed pages 替换为高价值 expert bytes，并提升泛化 prompt 的
+endpoint token rate。
+
+这个方向和 host prefetch 的区别：
+
+- host prefetch 在 decode 期间持续从 SSD 读，会抢 runtime IO，并且容易产生
+  slot churn；
+- static RAM tier 在 cold start / prompt 前或 prompt 后一次性装载候选 expert，
+  decode 期间只做 RAM->VRAM H2D，避免后台 SSD 竞争；
+- static profile 必须来自多个 dev prompts 的交集/加权，不允许只为 France prompt
+  调参。
+
+### Candidate design
+
+1. Build dev profile set:
+   - use existing dev prompts only, e.g. France / batteries / cloud-business;
+   - reserve held-out prompts and newly generated prompts for final validation;
+   - aggregate `route-profile.csv` and `copy-profile.csv` by
+     `(tensor, expert_idx, role, layer)`.
+2. Score each expert entry by endpoint value, not raw count only:
+   - primary score: repeated miss count across dev prompts;
+   - bonus: early critical-path layer or high `up-gate-profile/down-batch wall`;
+   - penalty: large bytes and prompt-specific-only hits;
+   - require presence in at least two dev prompts for the first candidate profile.
+3. First candidate profile:
+   - budget: `512 MiB` and `1024 MiB` RAM tier only;
+   - focus roles: early down hot misses and mid-layer up/gate hot misses;
+   - avoid whole-layer loads at first, because earlier whole/top64 RAM trials hit
+     memory pressure without endpoint gain.
+4. Measurement:
+   - baseline: depth16/refill8/slots16 no RAM tier;
+   - candidate: same env plus `GGML_MOE_RAM_TIER_PROFILE=<cross-prompt profile>`
+     and `GGML_MOE_RAM_TIER_MIB=<512|1024>`;
+   - run France first only as regression; then run at least one held-out prompt
+     before accepting.
+
+### Required evidence
+
+For every candidate:
+
+- exact profile file path and generation command;
+- list of dev prompts used to create the profile;
+- list of held-out prompts not used in profile construction;
+- RAM tier report:
+  - bytes loaded;
+  - hits/total;
+  - batch hits;
+  - H2D bytes;
+  - direct preload bytes/failures;
+- endpoint metrics:
+  - TTFT;
+  - decode wall and token rate;
+  - quality output;
+  - memory.peak and memory.stat file/anon/kernel;
+  - fallback profile;
+  - copy/upgate/down profile deltas.
+
+### Acceptance rule
+
+- Accept only if endpoint token rate improves on France and at least one held-out
+  prompt while all gates pass.
+- If hit rate improves but endpoint token rate does not, reject and record the
+  gap.
+- If TTFT exceeds `+20%`, RAM peak approaches `15900000000`, or fallback
+  increases, reject and revert.
+
+### Why this is now the next best direction
+
+The latest rejected experiments show:
+
+- same-layer mixed up/gate IO reduces aggregate wait but not critical-path wall;
+- host prefetch can reduce SSD bytes but adds decode IO competition and TTFT/RAM
+  pressure;
+- current bottleneck is still moved bytes on critical path, not only IO queue
+  depth.
+
+Therefore the next useful test is a static, prompt-agnostic RAM layout that
+removes repeated SSD reads without introducing a concurrent SSD worker.
+
 ## 当前阶段 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
 
 Timestamp: 2026-07-11 CST.
