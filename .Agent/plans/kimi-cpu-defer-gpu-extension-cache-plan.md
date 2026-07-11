@@ -97,6 +97,115 @@ Execution plan:
    - Update this plan before the next implementation attempt with the run root,
      decision, and rollback point.
 
+Current-head audit progress:
+
+- Timestamp: 2026-07-11 CST.
+- Branch/head: `vendor/kimi-deepseek-41d205-additive`,
+  `7122d959cc579ce36b840a4bfc23cdd1b4fe54f5`.
+- New cold-start baseline run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-active-goal-current-head-n32-japan`.
+- Prompt: `Please introduce Japan in a short paragraph.`
+- Quality: pass.
+- Token rate: `1.68 tok/s`.
+- TTFT: `8405.00 ms`.
+- Decode: `18439.31 ms / 31`, or `594.816 ms/token`.
+- Host RAM peak: `12767760384` bytes.
+- Final RAM shape: `file=12064870400`, `active_file=12024356864`,
+  `anon=450560`, `kernel=29577216`.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+- Expert-pack IO: `39075` iouring reads, `223114035200` bytes,
+  `18734269 us` reported wait, inflight average `4.30`, max `8`.
+- VRAM cache:
+  - up/gate: `1735` slots, hit rate `44.4%`;
+  - down: `723` slots, hit rate `59.5%`.
+- Current-down overlap: `4228` completed jobs, no failed batches.
+
+Current-head bottleneck report:
+
+- Report root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-cpu-defer-gpu-extension-audit-current`.
+- N32 current-head Japan attribution:
+  - up/gate wall: `392.096 ms/token`;
+  - down wall: `156.367 ms/token`;
+  - residual after CPU MoE: `23.429 ms/token`;
+  - decode fallback: `0 ms/token`.
+- N96 France reference attribution:
+  - token rate: `1.50 tok/s`;
+  - decode: `665.138 ms/token`;
+  - up/gate wall: `455.555 ms/token`;
+  - down wall: `173.197 ms/token`;
+  - residual after CPU MoE: `23.132 ms/token`;
+  - decode fallback: `0 ms/token`.
+- Largest N32 current-head up/gate rows:
+  - `up=22/gate=18`: `208.673 ms/token`, hit about `47.0%`,
+    wait about `4.894 ms/call`;
+  - `up=22/gate=22`: `93.878 ms/token`, hit about `42.5%`,
+    wait about `4.997 ms/call`;
+  - `up=18/gate=18`: `71.447 ms/token`;
+  - `up=18/gate=22`: `18.098 ms/token`.
+- Largest N96 France up/gate row:
+  - `up=22/gate=18/parallel_stage=1`: `260.608 ms/token`,
+    hit about `47.6%`, wait about `5.259 ms/call`.
+
+Coverage audit:
+
+- Coverage run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-gpu-extension-coverage-n32-france`.
+- Coverage summary:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-cpu-defer-gpu-extension-audit-current/gpu-extension-coverage-summary.md`.
+- Result:
+  - quality pass, `1.66 tok/s`, TTFT `9437.82 ms`, RAM peak
+    `12766507008` bytes;
+  - fallback rows: `0`;
+  - v2 full homogeneous active-call coverage: `0` calls;
+  - role-level cache hit including prompt rows:
+    down `41.52%`, gate `29.58%`, up `29.59%`;
+  - decode rows show up/gate hit is still materially below full-hit
+    (`~41-47%` depending on type), while down varies widely by type.
+
+Decision from this audit:
+
+- The DeepSeek idea is useful for Kimi only as an architecture pattern:
+  CPU/defer remains the scheduler and GPU remains the expert-cache/compute
+  extension. Kimi does not currently have a DeepSeek-like missing gate CPU path
+  to fix; decode CPU fallback and direct reads are already zero in the current
+  baseline.
+- Do not prioritize a gate-only hotpool. Up and gate hit/miss rates move
+  together in the fused path, and the largest exposed row is paired
+  `up=22/gate=18`; making only gate faster would leave up misses on the same
+  critical path.
+- Do not retry standalone `GGML_MOE_GATE_UPDOWN_COSUBMIT=1`; historical Phase
+  4A showed it does not execute actual jobs on the current fused up/gate Kimi
+  path.
+- Down-only work is not the first lever for `>2 tok/s`. On N96, removing all
+  measured down wall would only reach the boundary, and full removal is not
+  realistic because some down work is useful compute/H2D rather than avoidable
+  wait.
+
+Next implementation boundary:
+
+1. First candidate must name the exact up/gate rows it expects to reduce,
+   especially `up=22/gate=18` and `up=22/gate=22`, and must compute a
+   best-case saving from the current-head report before runtime changes.
+2. Acceptable mechanisms:
+   - paired up/gate cache admission or residency that improves both roles;
+   - cache-compatible fused-path scheduling that increases ready jobs without
+     stealing from demand reads or duplicating current-down overlap;
+   - RAM/VRAM tiering only after proving which decode-time file-backed pages
+     are low-value and replacing them with batch-friendly expert slabs;
+   - lower-byte expert representation only if the runtime can consume the
+     smaller format correctly and quality remains stable.
+3. Rejected or low-priority mechanisms for the next step:
+   - gate-only hotpool;
+   - standalone gate/up/down cosubmit hook;
+   - layout changes that reduce read count but keep bytes and exposed wait flat;
+   - large pinned RAM slabs without a bound showing reduced critical-path wait.
+4. The immediate next action is an offline bound/report for paired up/gate
+   residency plus explicit RAM/VRAM tier candidates, using dev prompts only.
+   Only if that report can plausibly save at least `~95 ms/token` on N32 and
+   `~165 ms/token` on N96 should the next runtime A/B be implemented.
+
 ## Current execution goal: prompt-general Kimi `>2 tok/s` through storage layout
 
 Timestamp: 2026-07-11 CST.
