@@ -230,6 +230,68 @@ Next A/B experiment: profile-guided eviction without preload or pinning
   - reject if hit rate rises but token rate falls, because this means the soft
     profile is not aligned with the critical path.
 
+Result:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-profile-lfu-dev2-ab`.
+- Baseline:
+  - Japan: quality pass, `1.69 tok/s`, TTFT `8614.26 ms`,
+    decode `18299.25 ms / 31`, RAM peak `12770054144`,
+    IO bytes `223.11 GB`, `io_uring_wait=18.87 s`, down hit `59.5%`,
+    upgate hit `44.4%`;
+  - Python reverse: quality pass, `1.54 tok/s`, TTFT `9115.20 ms`,
+    decode `20172.33 ms / 31`, RAM peak `12758016000`,
+    IO bytes `255.88 GB`, `io_uring_wait=21.74 s`, down hit `57.0%`,
+    upgate hit `37.0%`.
+- Candidate with `profile_lfu_lru` only:
+  - Japan: quality fail (`missing_keyword:japan`), `1.27 tok/s`,
+    TTFT `8906.75 ms`, decode `24428.35 ms / 31`,
+    RAM peak `12761583616`, IO bytes `295.20 GB`,
+    `io_uring_wait=24.75 s`, down hit `31.5%`, upgate hit `33.2%`;
+  - Python reverse: quality fail (`dangling_comma`), `1.24 tok/s`,
+    TTFT `9935.98 ms`, decode `25057.94 ms / 31`,
+    RAM peak `12756221952`, IO bytes `310.25 GB`,
+    `io_uring_wait=26.15 s`, down hit `29.5%`, upgate hit `31.0%`.
+- Decision:
+  - reject profile-guided eviction;
+  - even without preload/pin/direct reads, the dev profile is not a safe
+    prompt-general eviction signal. It appears to protect too few useful
+    current-prompt entries and evicts many zero-profile entries that are
+    actually needed by the current prompt, causing cache thrash and more IO.
+- Lesson:
+  - do not use offline prompt-derived hotsets as a hard or soft runtime
+    residency policy unless validation is done on held-out prompts and the
+    profile covers enough traffic to avoid zero-profile thrash;
+  - for random-prompt generalization, prefer online prompt-local signals or
+    model-structural policies over dev hotsets.
+
+Next A/B experiment: prompt-agnostic online LFU/LRU cache policy
+
+- Timestamp: 2026-07-11 CST.
+- Motivation:
+  - the current default behaves like recency-dominant eviction;
+  - a pure online `lfu_lru` policy uses only current-run reuse and does not
+    depend on prompt-specific offline hotsets;
+  - if expert reuse within a random prompt is strong enough, LFU/LRU may keep
+    repeated experts without freezing the cache.
+- Runtime env:
+  - `GGML_MOE_VRAM_CACHE_POLICY=lfu_lru`;
+  - no `GGML_MOE_VRAM_PROFILE`;
+  - no preload or pinning changes.
+- Theory:
+  - TTFT should stay near baseline because there is no preload;
+  - IO bytes should fall if current-prompt reuse is being evicted too early by
+    LRU;
+  - if route distribution is too broad or phase-local, LFU can hurt by keeping
+    stale early experts and evicting later layer-local entries.
+- Required A/B:
+  - run the same Japan/Python N32 paired test;
+  - accept only if both quality gates pass and average token rate improves
+    without a large regression on the slower Python prompt;
+  - if it fails, stop cache-policy env-only experiments and move to a more
+    structural approach: per-layer byte/layout changes, lower-byte full-active
+    overlay, or earlier true next-layer prefetch.
+
 ## Current execution goal: Kimi CPU/defer GPU-extension parity
 
 Timestamp: 2026-07-11 CST.
