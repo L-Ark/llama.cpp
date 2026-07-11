@@ -85,6 +85,111 @@ Immediate execution plan:
      quality, revert it or leave it default-off and document the rejection. It
      must not be called SOTA.
 
+## Progress update: v2 override preflight bridge
+
+Timestamp: 2026-07-11 CST.
+
+Commit scope prepared:
+
+- Added a default-off, manifest-gated v2 override preflight path in
+  `ggml/src/ggml-cuda/moe_stream_batch.cu`.
+- New envs:
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_PREFLIGHT=1` enables preflight;
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE=1` also enables the same preflight for
+    compatibility with the planned override gate;
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=<manifest.tsv>` is required for
+    safe allowlisting;
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_PROFILE_OUT=<csv>` writes per-call
+    coverage and rejection reasons.
+- Dispatch remains disabled. This patch does not change the default Kimi SOTA
+  runtime path and does not replace any expert payload. It only proves which
+  active `gate/up/down` routes are safe candidates for later lower-byte
+  consumption.
+
+Safety checks implemented:
+
+- Exact manifest allowlist by `(tensor, expert_idx)`.
+- v2 entry must match manifest `packed_type`, `packed_nbytes`, `packed_ne00`,
+  `packed_ne01`, and `packed_nb01`.
+- Logical matrix shape must match v2 `ne00/ne01`.
+- Packed type must be supported by the current MMVQ path.
+- Packed payload must be smaller than the current logical payload.
+- Rejections are split into: no manifest, not allowlisted, no v2 entry,
+  unsupported type, manifest mismatch, shape mismatch, and not smaller.
+
+Build:
+
+- Command: `cmake --build build-cuda-batch --target ggml-cuda -j2`.
+- Result: pass. Only existing warning classes were emitted.
+
+Cold-start diagnostic run with preflight enabled:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-override-preflight-n32-france`.
+- Prompt: `Please introduce France in a short paragraph.`
+- Command shape:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000
+  -p MemorySwapMax=0 env RUN=<run> N=32 PROFILE=1
+  PROMPT_ID=dev_france_v2_override_preflight
+  PROMPT_USER_TEXT='Please introduce France in a short paragraph.'
+  QUALITY_KEYWORDS='france,paris|europe|western'
+  EXTRA_RUNTIME_ENV='<v2 pack + preflight envs>'
+  .Agent/run-tools/kimi-general-prompt-repro.sh`.
+- v2 pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack`.
+- Manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv`.
+- Quality: pass.
+- Output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous`.
+- Token rate: `1.53 tok/s`.
+- TTFT: `9628.09 ms`.
+- Decode: `20289.77 ms / 31`, or `654.51 ms/token`.
+- Host RAM peak: `12775698432` bytes.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+- Expert-pack IO: `39090` io_uring reads, `224038649856` bytes,
+  `19175835 us` wait.
+- Preflight coverage:
+  - calls: `5760`;
+  - active entries: `68736`;
+  - accepted entries: `168`;
+  - full-cover calls: `0`;
+  - reject not allowlisted: `68568`;
+  - all other reject reasons: `0`.
+- Interpretation: the tiny 8-entry overlay is shape/type/manifest valid where
+  it applies, but it cannot drive runtime replacement because no active call is
+  fully covered. The lower token rate is diagnostic CSV overhead and is not a
+  SOTA candidate.
+
+Cold-start default-off regression check:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-preflight-defaultoff-n32-france`.
+- Same prompt, `N=32`, `PROFILE=1`, no v2/preflight env.
+- Quality: pass.
+- Token rate: `1.60 tok/s`.
+- TTFT: `8727.09 ms`.
+- Decode: `19385.92 ms / 31`, or `625.35 ms/token`.
+- Host RAM peak: `12767203328` bytes.
+- CPU fallback rows: `0`.
+- Direct reads: `0`.
+- No v2 preflight files or stderr report were produced.
+- Interpretation: default-off behavior is preserved within expected run-to-run
+  variance. This commit is infrastructure for the next lower-byte A/B, not a
+  SOTA performance claim.
+
+Next decision:
+
+- Do not expand this tiny pack into a SOTA claim.
+- Next lower-byte implementation must build a prompt-general, dev-derived pack
+  with enough full-active coverage for at least one role/layer group, then add
+  guarded dispatch only when preflight shows nonzero full-cover calls.
+- If full-active coverage cannot be achieved without prompt-specific selection,
+  pause lower-byte work and return to up/gate scheduling/layout or RAM/VRAM
+  storage-policy work.
+
 ## Active goal: verify DeepSeek-style CPU/defer GPU-extension on Kimi
 
 Timestamp: 2026-07-11 CST.

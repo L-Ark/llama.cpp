@@ -4478,6 +4478,381 @@ static void expert_pack_v2_call_coverage_record(
     std::fclose(f);
 }
 
+struct expert_pack_v2_override_manifest_entry {
+    int packed_type = -1;
+    size_t packed_nbytes = 0;
+    int64_t ne00 = 0;
+    int64_t ne01 = 0;
+    size_t nb01 = 0;
+};
+
+struct expert_pack_v2_override_preflight_state {
+    std::mutex mu;
+    bool inited = false;
+    bool enabled = false;
+    bool manifest_loaded = false;
+    bool report_registered = false;
+    std::unordered_map<std::string, expert_pack_v2_override_manifest_entry> manifest;
+    std::atomic<uint64_t> calls{0};
+    std::atomic<uint64_t> active_entries{0};
+    std::atomic<uint64_t> cache_hits{0};
+    std::atomic<uint64_t> accepted_entries{0};
+    std::atomic<uint64_t> full_cover_calls{0};
+    std::atomic<uint64_t> reject_no_manifest{0};
+    std::atomic<uint64_t> reject_not_allowed{0};
+    std::atomic<uint64_t> reject_no_entry{0};
+    std::atomic<uint64_t> reject_unsupported{0};
+    std::atomic<uint64_t> reject_manifest_mismatch{0};
+    std::atomic<uint64_t> reject_shape_mismatch{0};
+    std::atomic<uint64_t> reject_not_smaller{0};
+};
+
+static expert_pack_v2_override_preflight_state g_expert_pack_v2_override_preflight;
+
+static std::string expert_pack_v2_override_key(const char *tensor_name, int expert_idx) {
+    return std::string(tensor_name ? tensor_name : "") + "#" + std::to_string(expert_idx);
+}
+
+static bool expert_pack_v2_override_preflight_env_enabled() {
+    const char *preflight = std::getenv("GGML_MOE_EXPERT_PACK_V2_OVERRIDE_PREFLIGHT");
+    if (preflight && preflight[0] && preflight[0] != '0') return true;
+    const char *override = std::getenv("GGML_MOE_EXPERT_PACK_V2_OVERRIDE");
+    return override && override[0] && override[0] != '0';
+}
+
+static const char * expert_pack_v2_override_profile_path() {
+    const char *path = std::getenv("GGML_MOE_EXPERT_PACK_V2_OVERRIDE_PROFILE_OUT");
+    if (path && path[0]) return path;
+    path = std::getenv("GGML_MOE_EXPERT_PACK_V2_PREFLIGHT_OUT");
+    return path && path[0] ? path : nullptr;
+}
+
+static void expert_pack_v2_override_preflight_report() {
+    if (!g_expert_pack_v2_override_preflight.enabled) return;
+    std::fprintf(stderr,
+        "[moe_stream_batch] expert pack v2 override preflight report: "
+        "calls=%llu active=%llu cache_hits=%llu accepted=%llu full_cover_calls=%llu "
+        "reject_no_manifest=%llu reject_not_allowed=%llu reject_no_entry=%llu "
+        "reject_unsupported=%llu reject_manifest_mismatch=%llu "
+        "reject_shape_mismatch=%llu reject_not_smaller=%llu manifest_rows=%zu\n",
+        (unsigned long long)g_expert_pack_v2_override_preflight.calls.load(),
+        (unsigned long long)g_expert_pack_v2_override_preflight.active_entries.load(),
+        (unsigned long long)g_expert_pack_v2_override_preflight.cache_hits.load(),
+        (unsigned long long)g_expert_pack_v2_override_preflight.accepted_entries.load(),
+        (unsigned long long)g_expert_pack_v2_override_preflight.full_cover_calls.load(),
+        (unsigned long long)g_expert_pack_v2_override_preflight.reject_no_manifest.load(),
+        (unsigned long long)g_expert_pack_v2_override_preflight.reject_not_allowed.load(),
+        (unsigned long long)g_expert_pack_v2_override_preflight.reject_no_entry.load(),
+        (unsigned long long)g_expert_pack_v2_override_preflight.reject_unsupported.load(),
+        (unsigned long long)g_expert_pack_v2_override_preflight.reject_manifest_mismatch.load(),
+        (unsigned long long)g_expert_pack_v2_override_preflight.reject_shape_mismatch.load(),
+        (unsigned long long)g_expert_pack_v2_override_preflight.reject_not_smaller.load(),
+        g_expert_pack_v2_override_preflight.manifest.size());
+}
+
+static bool expert_pack_v2_override_manifest_parse_size(
+        const std::vector<char *> &fields, int col, size_t &out) {
+    if (col < 0 || (size_t)col >= fields.size() || !fields[(size_t)col]) return false;
+    char *end = nullptr;
+    const unsigned long long v = std::strtoull(fields[(size_t)col], &end, 10);
+    if (!end || *end != '\0') return false;
+    out = (size_t)v;
+    return true;
+}
+
+static bool expert_pack_v2_override_manifest_parse_i64(
+        const std::vector<char *> &fields, int col, int64_t &out) {
+    if (col < 0 || (size_t)col >= fields.size() || !fields[(size_t)col]) return false;
+    char *end = nullptr;
+    const long long v = std::strtoll(fields[(size_t)col], &end, 10);
+    if (!end || *end != '\0') return false;
+    out = (int64_t)v;
+    return true;
+}
+
+static void expert_pack_v2_override_preflight_init_once() {
+    std::lock_guard<std::mutex> lk(g_expert_pack_v2_override_preflight.mu);
+    if (g_expert_pack_v2_override_preflight.inited) return;
+
+    g_expert_pack_v2_override_preflight.enabled = expert_pack_v2_override_preflight_env_enabled();
+    g_expert_pack_v2_override_preflight.inited = true;
+    if (!g_expert_pack_v2_override_preflight.enabled) return;
+
+    const char *manifest_path = std::getenv("GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST");
+    if (!manifest_path || !manifest_path[0]) {
+        std::fprintf(stderr,
+            "[moe_stream_batch] expert pack v2 override preflight active without manifest; "
+            "all entries will be rejected for safety\n");
+        g_expert_pack_v2_override_preflight.report_registered = true;
+        std::atexit(expert_pack_v2_override_preflight_report);
+        return;
+    }
+
+    FILE *file = std::fopen(manifest_path, "r");
+    if (!file) {
+        std::fprintf(stderr,
+            "[moe_stream_batch] expert pack v2 override manifest open failed: %s\n",
+            manifest_path);
+        g_expert_pack_v2_override_preflight.report_registered = true;
+        std::atexit(expert_pack_v2_override_preflight_report);
+        return;
+    }
+
+    char line[4096];
+    std::vector<char *> fields;
+    if (!std::fgets(line, sizeof(line), file)) {
+        std::fprintf(stderr,
+            "[moe_stream_batch] expert pack v2 override manifest empty: %s\n",
+            manifest_path);
+        std::fclose(file);
+        g_expert_pack_v2_override_preflight.report_registered = true;
+        std::atexit(expert_pack_v2_override_preflight_report);
+        return;
+    }
+    expert_pack_split_tsv_line(line, fields);
+    const int col_tensor = expert_pack_tsv_column(fields, "tensor");
+    const int col_expert = expert_pack_tsv_column(fields, "expert_idx");
+    const int col_type = expert_pack_tsv_column(fields, "packed_type");
+    const int col_nbytes = expert_pack_tsv_column(fields, "packed_nbytes");
+    const int col_ne00 = expert_pack_tsv_column(fields, "packed_ne00");
+    const int col_ne01 = expert_pack_tsv_column(fields, "packed_ne01");
+    const int col_nb01 = expert_pack_tsv_column(fields, "packed_nb01");
+    if (col_tensor < 0 || col_expert < 0 || col_type < 0 || col_nbytes < 0 ||
+            col_ne00 < 0 || col_ne01 < 0 || col_nb01 < 0) {
+        std::fprintf(stderr,
+            "[moe_stream_batch] expert pack v2 override manifest missing required columns: %s\n",
+            manifest_path);
+        std::fclose(file);
+        g_expert_pack_v2_override_preflight.report_registered = true;
+        std::atexit(expert_pack_v2_override_preflight_report);
+        return;
+    }
+
+    uint64_t rows = 0;
+    uint64_t loaded = 0;
+    uint64_t bad_rows = 0;
+    while (std::fgets(line, sizeof(line), file)) {
+        expert_pack_split_tsv_line(line, fields);
+        ++rows;
+        const int need_cols = std::max(
+            std::max(col_tensor, col_expert),
+            std::max(std::max(col_type, col_nbytes), std::max(col_ne00, std::max(col_ne01, col_nb01)))) + 1;
+        if ((int)fields.size() < need_cols) {
+            ++bad_rows;
+            continue;
+        }
+        const char *tensor = fields[(size_t)col_tensor];
+        char *end = nullptr;
+        const long expert_long = std::strtol(fields[(size_t)col_expert], &end, 10);
+        if (!tensor || !tensor[0] || std::strlen(tensor) >= 128 || !end || *end != '\0' ||
+                expert_long < 0 || expert_long > INT_MAX) {
+            ++bad_rows;
+            continue;
+        }
+        int64_t packed_type_i64 = 0;
+        int64_t ne00 = 0;
+        int64_t ne01 = 0;
+        size_t packed_nbytes = 0;
+        size_t nb01 = 0;
+        if (!expert_pack_v2_override_manifest_parse_i64(fields, col_type, packed_type_i64) ||
+                !expert_pack_v2_override_manifest_parse_size(fields, col_nbytes, packed_nbytes) ||
+                !expert_pack_v2_override_manifest_parse_i64(fields, col_ne00, ne00) ||
+                !expert_pack_v2_override_manifest_parse_i64(fields, col_ne01, ne01) ||
+                !expert_pack_v2_override_manifest_parse_size(fields, col_nb01, nb01) ||
+                packed_type_i64 <= 0 || packed_type_i64 >= GGML_TYPE_COUNT ||
+                packed_nbytes == 0 || ne00 <= 0 || ne01 <= 0 || nb01 == 0) {
+            ++bad_rows;
+            continue;
+        }
+
+        expert_pack_v2_override_manifest_entry entry;
+        entry.packed_type = (int)packed_type_i64;
+        entry.packed_nbytes = packed_nbytes;
+        entry.ne00 = ne00;
+        entry.ne01 = ne01;
+        entry.nb01 = nb01;
+        g_expert_pack_v2_override_preflight.manifest[
+            expert_pack_v2_override_key(tensor, (int)expert_long)] = entry;
+        ++loaded;
+    }
+    std::fclose(file);
+    g_expert_pack_v2_override_preflight.manifest_loaded = loaded > 0 && bad_rows == 0;
+    g_expert_pack_v2_override_preflight.report_registered = true;
+    std::atexit(expert_pack_v2_override_preflight_report);
+    std::fprintf(stderr,
+        "[moe_stream_batch] expert pack v2 override preflight active: manifest=%s "
+        "loaded=%llu bad_rows=%llu dispatch=disabled\n",
+        manifest_path, (unsigned long long)loaded, (unsigned long long)bad_rows);
+}
+
+static void expert_pack_v2_override_preflight_record(
+        const char *phase,
+        const char *role,
+        const char *tensor_name,
+        int logical_type,
+        size_t logical_nbytes,
+        int64_t logical_ne00,
+        int64_t logical_ne01,
+        size_t logical_nb01,
+        batch_vram_cache *cache,
+        const int *active_experts,
+        int n_active) {
+    if (!tensor_name || !tensor_name[0] || !active_experts || n_active <= 0 || logical_nbytes == 0) {
+        return;
+    }
+    expert_pack_v2_override_preflight_init_once();
+    if (!g_expert_pack_v2_override_preflight.enabled) return;
+
+    int cache_hits = 0;
+    int accepted = 0;
+    int reject_no_manifest = 0;
+    int reject_not_allowed = 0;
+    int reject_no_entry = 0;
+    int reject_unsupported = 0;
+    int reject_manifest_mismatch = 0;
+    int reject_shape_mismatch = 0;
+    int reject_not_smaller = 0;
+    bool homogeneous = true;
+    int packed_type = -1;
+    size_t packed_nbytes = 0;
+    int64_t packed_ne00 = 0;
+    int64_t packed_ne01 = 0;
+    size_t packed_nb01 = 0;
+    uint64_t accepted_bytes = 0;
+    uint64_t accepted_saved_bytes = 0;
+
+    for (int j = 0; j < n_active; ++j) {
+        const int expert_idx = active_experts[j];
+        if (cache && batch_cache_find_slot(cache, batch_key_hash(tensor_name, expert_idx)) >= 0) {
+            ++cache_hits;
+        }
+
+        if (!g_expert_pack_v2_override_preflight.manifest_loaded) {
+            ++reject_no_manifest;
+            continue;
+        }
+
+        const auto allowed_it = g_expert_pack_v2_override_preflight.manifest.find(
+            expert_pack_v2_override_key(tensor_name, expert_idx));
+        if (allowed_it == g_expert_pack_v2_override_preflight.manifest.end()) {
+            ++reject_not_allowed;
+            continue;
+        }
+        const expert_pack_v2_override_manifest_entry &allowed = allowed_it->second;
+        const expert_pack_v2_entry *entry = expert_pack_v2_lookup(tensor_name, expert_idx);
+        if (!entry) {
+            ++reject_no_entry;
+            continue;
+        }
+        if (entry->packed_type != allowed.packed_type ||
+                (size_t)entry->nbytes != allowed.packed_nbytes ||
+                entry->ne00 != allowed.ne00 ||
+                entry->ne01 != allowed.ne01 ||
+                (size_t)entry->nb01 != allowed.nb01) {
+            ++reject_manifest_mismatch;
+            continue;
+        }
+        if (!expert_pack_v2_packed_type_supported(entry->packed_type)) {
+            ++reject_unsupported;
+            continue;
+        }
+        if (entry->ne00 != logical_ne00 || entry->ne01 != logical_ne01) {
+            ++reject_shape_mismatch;
+            continue;
+        }
+        if ((size_t)entry->nbytes >= logical_nbytes) {
+            ++reject_not_smaller;
+            continue;
+        }
+
+        ++accepted;
+        accepted_bytes += (uint64_t)entry->nbytes;
+        accepted_saved_bytes += (uint64_t)(logical_nbytes - (size_t)entry->nbytes);
+        if (packed_type < 0) {
+            packed_type = entry->packed_type;
+            packed_nbytes = (size_t)entry->nbytes;
+            packed_ne00 = entry->ne00;
+            packed_ne01 = entry->ne01;
+            packed_nb01 = (size_t)entry->nb01;
+        } else if (packed_type != entry->packed_type ||
+                packed_nbytes != (size_t)entry->nbytes ||
+                packed_ne00 != entry->ne00 ||
+                packed_ne01 != entry->ne01 ||
+                packed_nb01 != (size_t)entry->nb01) {
+            homogeneous = false;
+        }
+    }
+
+    const bool full_cover = accepted == n_active && homogeneous;
+    g_expert_pack_v2_override_preflight.calls.fetch_add(1, std::memory_order_relaxed);
+    g_expert_pack_v2_override_preflight.active_entries.fetch_add((uint64_t)n_active, std::memory_order_relaxed);
+    g_expert_pack_v2_override_preflight.cache_hits.fetch_add((uint64_t)cache_hits, std::memory_order_relaxed);
+    g_expert_pack_v2_override_preflight.accepted_entries.fetch_add((uint64_t)accepted, std::memory_order_relaxed);
+    if (full_cover) {
+        g_expert_pack_v2_override_preflight.full_cover_calls.fetch_add(1, std::memory_order_relaxed);
+    }
+    g_expert_pack_v2_override_preflight.reject_no_manifest.fetch_add((uint64_t)reject_no_manifest, std::memory_order_relaxed);
+    g_expert_pack_v2_override_preflight.reject_not_allowed.fetch_add((uint64_t)reject_not_allowed, std::memory_order_relaxed);
+    g_expert_pack_v2_override_preflight.reject_no_entry.fetch_add((uint64_t)reject_no_entry, std::memory_order_relaxed);
+    g_expert_pack_v2_override_preflight.reject_unsupported.fetch_add((uint64_t)reject_unsupported, std::memory_order_relaxed);
+    g_expert_pack_v2_override_preflight.reject_manifest_mismatch.fetch_add((uint64_t)reject_manifest_mismatch, std::memory_order_relaxed);
+    g_expert_pack_v2_override_preflight.reject_shape_mismatch.fetch_add((uint64_t)reject_shape_mismatch, std::memory_order_relaxed);
+    g_expert_pack_v2_override_preflight.reject_not_smaller.fetch_add((uint64_t)reject_not_smaller, std::memory_order_relaxed);
+
+    const char *path = expert_pack_v2_override_profile_path();
+    if (!path || !path[0]) return;
+
+    static std::mutex profile_mu;
+    static bool header_written = false;
+    static uint64_t seq = 0;
+    std::lock_guard<std::mutex> profile_lk(profile_mu);
+    FILE *f = std::fopen(path, "a");
+    if (!f) return;
+    if (!header_written) {
+        std::fprintf(f,
+            "seq,phase,role,tensor,logical_type,logical_nbytes,logical_ne00,"
+            "logical_ne01,logical_nb01,n_active,cache_hits,accepted,"
+            "reject_no_manifest,reject_not_allowed,reject_no_entry,"
+            "reject_unsupported,reject_manifest_mismatch,reject_shape_mismatch,"
+            "reject_not_smaller,full_cover,homogeneous,packed_type,packed_nbytes,"
+            "packed_ne00,packed_ne01,packed_nb01,logical_total_bytes,"
+            "accepted_bytes,accepted_saved_bytes\n");
+        header_written = true;
+    }
+    std::fprintf(f,
+        "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%zu,%ld,%ld,%zu,%llu,%llu,%llu\n",
+        (unsigned long long)++seq,
+        phase ? phase : "",
+        role ? role : "",
+        tensor_name,
+        logical_type,
+        logical_nbytes,
+        (long)logical_ne00,
+        (long)logical_ne01,
+        logical_nb01,
+        n_active,
+        cache_hits,
+        accepted,
+        reject_no_manifest,
+        reject_not_allowed,
+        reject_no_entry,
+        reject_unsupported,
+        reject_manifest_mismatch,
+        reject_shape_mismatch,
+        reject_not_smaller,
+        full_cover ? 1 : 0,
+        homogeneous ? 1 : 0,
+        packed_type,
+        packed_nbytes,
+        (long)packed_ne00,
+        (long)packed_ne01,
+        packed_nb01,
+        (unsigned long long)logical_nbytes * (unsigned long long)n_active,
+        (unsigned long long)accepted_bytes,
+        (unsigned long long)accepted_saved_bytes);
+    std::fclose(f);
+}
+
 static bool expert_pack_page_cache_preload_source(expert_pack_source &source, const char *mode) {
     if (!source.page_cache || !source.file || !mode || !mode[0] || mode[0] == '0') {
         return true;
@@ -12431,7 +12806,31 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
         cache,
         active_experts,
         n_active);
+    expert_pack_v2_override_preflight_record(
+        prompt_mode ? "prompt_upgate" : "decode_upgate",
+        "up",
+        up_key_name,
+        src0_up_type_int,
+        up_expert_bytes,
+        ne00,
+        ne01,
+        up_nb01,
+        cache,
+        active_experts,
+        n_active);
     expert_pack_v2_call_coverage_record(
+        prompt_mode ? "prompt_upgate" : "decode_upgate",
+        "gate",
+        gate_key_name,
+        src0_gate_type_int,
+        gate_expert_bytes,
+        ne00,
+        ne01,
+        gate_nb01,
+        cache,
+        active_experts,
+        n_active);
+    expert_pack_v2_override_preflight_record(
         prompt_mode ? "prompt_upgate" : "decode_upgate",
         "gate",
         gate_key_name,
@@ -14522,6 +14921,18 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         updown_paired_read && down_name_for_up_gate(src0_name, updown_paired_down_name, sizeof(updown_paired_down_name));
     preload_profile_for_tensor(src0_name, src0_data, n_as, nb02, src0_bytes, st);
     expert_pack_v2_call_coverage_record(
+        rows_stride > 8 ? "prompt_batch" : "decode_down",
+        is_prompt_up ? "up" : (is_prompt_gate ? "gate" : "down"),
+        src0_name,
+        src0_type_int,
+        src0_bytes,
+        ne00,
+        ne01,
+        nb01,
+        cache,
+        active_experts,
+        n_active);
+    expert_pack_v2_override_preflight_record(
         rows_stride > 8 ? "prompt_batch" : "decode_down",
         is_prompt_up ? "up" : (is_prompt_gate ? "gate" : "down"),
         src0_name,
