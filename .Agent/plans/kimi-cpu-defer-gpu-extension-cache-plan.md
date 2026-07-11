@@ -110,6 +110,91 @@ kernel 计算。因此下一阶段的主要问题不是再做一个泛泛的 CPU
 冲 `>=2 tok/s` 的工程方向。如果答案是否定的，转向 up/gate pack layout、coalesced
 read scheduler 和显式 RAM/VRAM 分层缓存。
 
+### 2026-07-12 Result: current v2 partial-split bound is not enough
+
+Commit under test: `cf5645adf`.
+
+Purpose:
+
+- run `UPGATE_PCT=72`, `VRAM_MIB=15000`, v2 full-cover down iouring,
+  full-cover down overlap off;
+- enable only planning/control/profile envs;
+- do not change runtime dispatch or claim SOTA;
+- determine whether current v2 partial-split can justify implementation work.
+
+Runs:
+
+- France:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-partialsplit-plan-upgate72-france-n32-232220`
+  - prompt: `Please introduce France in a short paragraph.`;
+  - quality: `pass`;
+  - TTFT: `12082.29 ms`;
+  - decode: `20692.28 ms / 31`, `1.50 tok/s`;
+  - memory.peak: `12775624704`;
+  - generated files:
+    `v2-override-preflight.csv`, `v2-partial-split-plan.csv`,
+    `v2-partial-split-control.csv`, `v2-full-cover-down.csv`.
+- Held-out deploy:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-partialsplit-plan-upgate72-deploy-n32-232419`
+  - prompt: `How to deploy a large model on a small devices?`;
+  - quality: `pass`;
+  - decode planner CSVs generated successfully;
+  - memory.peak: `12769935360`.
+
+Combined analysis:
+
+- Output directory:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-partialsplit-upgate72-bound-analysis`
+- Bound report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-partialsplit-upgate72-bound-analysis/v2-partial-split-bound.md`
+- France:
+  - accepted entries: `7.49%`;
+  - full-cover calls: `3.42%`;
+  - partial saved: `21.121 GiB`;
+  - partial miss ratio: `7.13%`;
+  - best optimistic `partial_io_h2d` ceiling: `1.66 tok/s`.
+- Held-out deploy:
+  - accepted entries: `5.65%`;
+  - full-cover calls: `0.64%`;
+  - partial saved: `17.094 GiB`;
+  - partial miss ratio: `4.91%`;
+  - best optimistic `partial_io_h2d` ceiling: `1.59 tok/s`.
+
+Critical finding:
+
+- `decode_upgate:gate` coverage is `0.00%` on both prompts.
+- `decode_upgate:up` coverage is `0.00%` on both prompts.
+- All current partial-split savings come from `down`.
+- The France run needs about `5192 ms` saved over N32 to reach `2 tok/s`,
+  but the current planner estimates only about `2352 ms` total IO+H2D saving
+  before any split-dispatch overhead.
+- The held-out deploy run is worse: only about `1755 ms` estimated total
+  saving before overhead.
+
+Decision:
+
+- Reject implementing current v2 partial-split as a near-term `>=2 tok/s`
+  path.
+- Do not spend engineering time on runtime split-dispatch for the existing
+  down-only v2 manifest.
+- Keep v2 full-cover down iouring as part of the protected baseline because it
+  already has proven benefit, but do not expand this direction unless a new
+  manifest covers up/gate.
+
+Next direction:
+
+1. Build an up/gate-first v2 or low-byte candidate manifest instead of a
+   down-only manifest.
+2. Prioritize `decode_upgate` miss-weighted exposed wait, especially the
+   repeatedly observed hot buckets `blk14/29/28/53/31/39/1/32 upgate`.
+3. Before implementation, compute the new manifest's up/gate coverage and
+   theoretical token-rate ceiling from real general-prompt route/profile data.
+4. Only if the bound can plausibly exceed `2 tok/s` after dispatch overhead,
+   implement a default-off runtime replacement path.
+5. If up/gate low-byte replacement cannot produce the bound, move to
+   coalesced routed-read scheduling and explicit RAM/VRAM tiering with a
+   page-cache audit.
+
 ## 2026-07-12 Goal: verify DeepSeek-style CPU/defer GPU extension on Kimi
 
 ### Goal
