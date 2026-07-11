@@ -4,6 +4,85 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Current goal: Kimi GPU-extension path to reproducible >2 tok/s
+
+This is the top-level goal for the current branch. It supersedes any older
+"best effort" SOTA language in this file.
+
+Goal:
+
+> On Kimi, preserve the current CPU/defer MoE scheduler and extend the GPU
+> expert-cache/streaming path so that prompt-general cold-start decode reaches a
+> reproducible held-out `>2 tok/s` first, then moves toward stable random-prompt
+> `>5 tok/s`, on one 32 GB RTX 5090-class GPU with strict 16 GB host RAM.
+
+Key interpretation from the DeepSeek SOTA:
+
+- The transferable idea is not "GPU backend with CPU fallback". It is a
+  CPU/defer MoE main path with a GPU expert-cache extension that catches
+  expensive `gate/up/down` work before it falls to slow CPU/defer execution.
+- For Kimi, this is useful only if it reduces exposed `gate/up/down` transfer,
+  staging, or compute time. Current Kimi profiles already show zero decode CPU
+  fallback and zero direct reads in the stable path, so a Kimi improvement must
+  be measured as lower critical-path wait, better VRAM/RAM residency, or fewer
+  bytes per active expert, not as generic "fallback removal".
+- Any DeepSeek-derived optimization must be revalidated on Kimi routing,
+  tensor types, active expert distribution, and held-out prompts. No prompt-
+  specific hotset may be promoted as SOTA.
+
+Hard gates before any result can be called SOTA:
+
+- Cold start only.
+- Host RAM peak must stay below `15900000000` bytes, including page cache,
+  pinned memory, mmap/file-backed pages, helper processes, and cgroup
+  accounting.
+- TTFT must not increase by more than `20%` versus the selected baseline.
+- Quality must pass on `Please introduce France in a short paragraph.` and on
+  held-out prompts. The France answer must be coherent and semantically correct.
+- Dev prompts may be used for tuning. Held-out prompts may only be used for
+  final evaluation.
+- Every accepted improvement must be committed and pushed immediately. The
+  commit body must include baseline/candidate SHAs, exact commands/env, prompts,
+  run directories, token rate, TTFT, RAM/VRAM/page-cache metrics,
+  IO/H2D/staging/compute/fallback metrics, quality result, and rollback point.
+
+Execution plan for this goal:
+
+1. Reprofile the current branch on one dev prompt and one held-out prompt.
+   - Record per-token decode time split: expert read, io_uring wait, pinned
+     staging, RAM/page-cache traffic, H2D, up/gate compute, down compute,
+     residual dense/attention compute, CPU fallback, and synchronization gaps.
+   - Treat the profile as the baseline for `>2 tok/s`.
+
+2. Build a default-off shadow planner for Kimi partial expert replacement.
+   - It must observe real runtime routes and split each call into v2-covered
+     rows and fallback rows without changing outputs.
+   - It must report full-cover calls, partial-cover calls, saved bytes,
+     missed bytes, row segmentation, and estimated extra compute groups.
+   - This decides whether lower-byte v2 expert rows can plausibly save enough
+     `io_uring_wait + H2D` to cross `>2 tok/s`.
+
+3. If the planner shows enough bound, implement guarded partial split dispatch.
+   - Start from tiny payload smoke, then dev-derived metadata, then materialized
+     payloads.
+   - Keep it default-off until correctness and held-out quality pass.
+   - Promote only if measured token rate improves with RAM, TTFT, and quality
+     gates satisfied.
+
+4. If partial split is not enough, prioritize storage and scheduling changes.
+   - Co-design VRAM hot experts and RAM slabs so low-value GGUF/page-cache
+     pages are replaced by batch-friendly expert data.
+   - Prefer layer/role slabs only when profiling shows they reduce exposed wait
+     more than they add H2D, staging, refault, or TTFT cost.
+   - Test up/gate-first residency before large down slabs, because current
+     Kimi bottleneck is more often exposed up/gate wait.
+
+5. Reproduce, commit, and push every successful step.
+   - A candidate that is slower, prompt-specific, over RAM, over TTFT, or lower
+     quality must be reverted or left default-off and documented as rejected.
+   - The next experiment must be chosen from the latest measured bottleneck,
+     not from a stale optimization idea.
+
 ## Current goal and plan checkpoint: 2026-07-11 CST
 
 This section is the current working contract. All later experiments, commits,
