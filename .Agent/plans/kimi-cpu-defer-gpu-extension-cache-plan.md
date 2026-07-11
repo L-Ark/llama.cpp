@@ -1322,6 +1322,83 @@ Decision gate:
   deeper overlap design.
 - No SOTA claim is allowed from this shadow scheduler.
 
+Result update:
+
+- Commit under test: `47706fcdb-dirty`.
+- Code path: default-off shadow/profiling only. Model output path is unchanged
+  unless `GGML_MOE_EXPERT_PACK_V2_SHADOW_COALESCE_SAME_LAYER=1` is explicitly
+  set.
+- Build command passed:
+  `cmake --build build-cuda-batch --target ggml-cuda -j2`.
+
+Default-off sanity:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-coalesce-defaultoff-n32-france-47706fcd-dirty`
+- Command shape:
+  `systemd-run --wait --collect --same-dir -p RuntimeMaxSec=240 -p MemoryMax=15900000000 -p MemorySwapMax=0 env RUN=<run> N=32 PROMPT_ID=dev_france_coalesce_defaultoff PROMPT_USER_TEXT="Please introduce France in a short paragraph." QUALITY_KEYWORDS="france,paris|europe|western" .Agent/run-tools/kimi-general-prompt-repro.sh`
+- Result:
+  - quality: pass;
+  - prompt eval: `8284.50 ms / 17 = 2.05 tok/s`;
+  - decode eval: `16686.41 ms / 31 = 1.86 tok/s`;
+  - RAM peak: `12720955392 bytes`;
+  - no coalesced shadow path was enabled.
+
+Top1024 same-commit A/B:
+
+| mode | run | staged | batches | jobs | avg jobs/batch | iouring wait | read_ms | h2d_ms | total shadow | RAM peak |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| non-coalesced | `20260711-kimi-v2-shadow-iouring-top1024-n32-france-47706fcd-dirty` | `2221` | `953` | `2221` | `2.33` | `776.147 ms` | `1123.320 ms` | `302.381 ms` | `1687.206 ms` | `12749393920` |
+| same-layer coalesced | `20260711-kimi-v2-shadow-coalesce-samelayer-top1024-n32-france-47706fcd-dirty` | `2221` | `481` | `2221` | `4.62` | `409.933 ms` | `735.438 ms` | `275.630 ms` | `1301.947 ms` | `12786032640` |
+
+Top1024 interpretation:
+
+- Runtime coalescing reproduced the offline prediction almost exactly:
+  - batch count fell from `953` to `481`;
+  - average jobs/batch rose from `2.33` to `4.62`.
+- It reduced exposed shadow read time:
+  - `iouring_wait` improved by `366.214 ms`;
+  - `read_ms` improved by `387.882 ms`;
+  - total shadow wall improved by `385.259 ms`.
+- The eval token rate with shadow enabled is not a SOTA metric:
+  - non-coalesced shadow: `1.65 tok/s`;
+  - coalesced shadow: `1.74 tok/s`;
+  - default-off normal path: `1.86 tok/s`.
+
+Top2048 coalesced follow-up:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-coalesce-samelayer-top2048-n32-france-47706fcd-dirty`
+- Result:
+  - quality: pass;
+  - staged: `3856`;
+  - batches/jobs: `907 / 3856`;
+  - average jobs/batch: `4.25`;
+  - iouring wait: `718.276 ms`;
+  - read_ms: `1294.565 ms`;
+  - h2d_ms: `482.303 ms`;
+  - total shadow: `2099.884 ms`;
+  - RAM peak: `12786327552 bytes`.
+- Compared with the previous top2048 non-coalesced baseline:
+  - batches fell from `1701` to `907`;
+  - read_ms improved from `1977.404 ms` to `1294.565 ms`;
+  - total shadow improved from `2855.672 ms` to `2099.884 ms`.
+
+Decision:
+
+- Keep the coalesced shadow scheduler as a default-off profiling tool.
+- This is not a promoted SOTA because it does not change the real decode path.
+- The result proves that runtime batch fragmentation is a real source of
+  exposed wait and that same-layer `up/gate/down` grouping can recover a large
+  fraction of the unused IO parallelism.
+- Next implementation target should be a tiny real dispatch prototype only for
+  the cases that are already safe in shadow:
+  - first `up+gate` same-layer coalescing, because both roles are naturally
+    adjacent in the fused path;
+  - then down preissue if routing already provides the active expert ids early
+    enough and the dependency only blocks compute, not read;
+  - do not expand top2992 until real dispatch shows top2048 bytes can pay back.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.

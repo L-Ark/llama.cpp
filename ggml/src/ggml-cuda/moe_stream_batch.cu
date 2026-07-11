@@ -3920,6 +3920,10 @@ static bool expert_pack_v2_shadow_iouring_read_enabled() {
     return expert_pack_env_bool("GGML_MOE_EXPERT_PACK_V2_SHADOW_IOURING_READ", false);
 }
 
+static bool expert_pack_v2_shadow_coalesce_same_layer_enabled() {
+    return expert_pack_env_bool("GGML_MOE_EXPERT_PACK_V2_SHADOW_COALESCE_SAME_LAYER", false);
+}
+
 static bool expert_pack_v2_shadow_direct_open_allowed() {
     if (!expert_pack_v2_shadow_direct_read_enabled() &&
             !expert_pack_v2_shadow_iouring_read_enabled()) return false;
@@ -9344,6 +9348,9 @@ struct expert_pack_v2_shadow_stage_state {
     std::atomic<uint64_t> iouring_inflight_sum{0};
     std::atomic<uint64_t> iouring_inflight_samples{0};
     std::atomic<uint64_t> iouring_inflight_max{0};
+    std::atomic<uint64_t> coalesced_groups{0};
+    std::atomic<uint64_t> coalesced_source_calls{0};
+    std::atomic<uint64_t> coalesced_entries{0};
 #if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
     io_uring *uring = nullptr;
     size_t uring_depth = 0;
@@ -9380,6 +9387,26 @@ static bool expert_pack_v2_shadow_stage_prompt_enabled() {
     return env && env[0] && env[0] != '0';
 }
 
+static void expert_pack_v2_shadow_stage_write_header(FILE *f, expert_pack_v2_shadow_stage_state &s) {
+    if (!f || s.header_written) return;
+    std::fprintf(f,
+        "seq,phase,role,tensor,logical_type,logical_nbytes,logical_ne00,"
+        "logical_ne01,logical_nb01,n_active,cache_hits,covered,"
+        "covered_cache_hits,staged,reject_no_manifest,reject_not_allowed,"
+        "reject_no_entry,reject_unsupported,reject_manifest_mismatch,"
+        "reject_shape_mismatch,reject_not_smaller,covered_bytes,"
+        "covered_saved_bytes,staged_bytes,staged_saved_bytes,"
+        "max_entry_bytes,host_capacity,dev_capacity,alloc_grew,"
+        "alloc_ms,read_ms,h2d_ms,sync_ms,total_ms,read_failures,"
+        "h2d_failures,direct_reads,direct_bytes,"
+        "direct_physical_bytes,direct_fallbacks,buffered_reads,"
+        "buffered_bytes,iouring_batches,iouring_jobs,"
+        "iouring_submit_calls,iouring_wait_calls,iouring_cqes,"
+        "iouring_wait_us,iouring_inflight_sum,"
+        "iouring_inflight_samples,iouring_inflight_max\n");
+    s.header_written = true;
+}
+
 static void expert_pack_v2_shadow_stage_report() {
     expert_pack_v2_shadow_stage_state &s = g_expert_pack_v2_shadow_stage;
     const uint64_t calls = s.calls.load(std::memory_order_relaxed);
@@ -9393,6 +9420,7 @@ static void expert_pack_v2_shadow_stage_report() {
         "iouring_batches=%llu iouring_jobs=%llu iouring_submit_calls=%llu "
         "iouring_wait_calls=%llu iouring_cqes=%llu iouring_wait_ms=%.3f "
         "iouring_inflight_avg=%.2f iouring_inflight_max=%llu "
+        "coalesced_groups=%llu coalesced_source_calls=%llu coalesced_entries=%llu "
         "alloc_ms=%.3f read_ms=%.3f h2d_ms=%.3f sync_ms=%.3f total_ms=%.3f "
         "host_capacity=%.3f MiB dev_capacity=%.3f MiB\n",
         (unsigned long long)calls,
@@ -9420,6 +9448,9 @@ static void expert_pack_v2_shadow_stage_report() {
             (double)s.iouring_inflight_sum.load(std::memory_order_relaxed) /
                 (double)s.iouring_inflight_samples.load(std::memory_order_relaxed) : 0.0,
         (unsigned long long)s.iouring_inflight_max.load(std::memory_order_relaxed),
+        (unsigned long long)s.coalesced_groups.load(std::memory_order_relaxed),
+        (unsigned long long)s.coalesced_source_calls.load(std::memory_order_relaxed),
+        (unsigned long long)s.coalesced_entries.load(std::memory_order_relaxed),
         s.alloc_ms,
         s.read_ms,
         s.h2d_ms,
@@ -9434,6 +9465,90 @@ struct expert_pack_v2_shadow_candidate {
     const expert_pack_v2_entry *entry = nullptr;
     bool cache_hit = false;
 };
+
+struct expert_pack_v2_shadow_coalesce_group {
+    bool active = false;
+    int layer = -1;
+    cudaStream_t stream = nullptr;
+    uint64_t first_seq = 0;
+    uint64_t last_seq = 0;
+    uint64_t source_calls = 0;
+    bool has_up = false;
+    bool has_gate = false;
+    bool has_down = false;
+    int n_active = 0;
+    int cache_hits = 0;
+    int covered = 0;
+    int covered_cache_hits = 0;
+    int reject_no_manifest = 0;
+    int reject_not_allowed = 0;
+    int reject_no_entry = 0;
+    int reject_unsupported = 0;
+    int reject_manifest_mismatch = 0;
+    int reject_shape_mismatch = 0;
+    int reject_not_smaller = 0;
+    uint64_t covered_bytes = 0;
+    uint64_t covered_saved_bytes = 0;
+    uint64_t staged_saved_bytes = 0;
+    size_t max_entry_bytes = 0;
+    std::vector<expert_pack_v2_shadow_candidate> candidates;
+};
+
+static expert_pack_v2_shadow_coalesce_group g_expert_pack_v2_shadow_coalesce;
+
+static int expert_pack_v2_shadow_tensor_layer(const char *tensor_name) {
+    if (!tensor_name || !tensor_name[0]) return -1;
+    const char *p = std::strstr(tensor_name, "blk.");
+    if (!p) return -1;
+    p += 4;
+    char *end = nullptr;
+    const long layer = std::strtol(p, &end, 10);
+    if (end == p || layer < 0 || layer > INT_MAX) return -1;
+    return (int)layer;
+}
+
+static void expert_pack_v2_shadow_coalesce_reset(expert_pack_v2_shadow_coalesce_group &g) {
+    g.active = false;
+    g.layer = -1;
+    g.stream = nullptr;
+    g.first_seq = 0;
+    g.last_seq = 0;
+    g.source_calls = 0;
+    g.has_up = false;
+    g.has_gate = false;
+    g.has_down = false;
+    g.n_active = 0;
+    g.cache_hits = 0;
+    g.covered = 0;
+    g.covered_cache_hits = 0;
+    g.reject_no_manifest = 0;
+    g.reject_not_allowed = 0;
+    g.reject_no_entry = 0;
+    g.reject_unsupported = 0;
+    g.reject_manifest_mismatch = 0;
+    g.reject_shape_mismatch = 0;
+    g.reject_not_smaller = 0;
+    g.covered_bytes = 0;
+    g.covered_saved_bytes = 0;
+    g.staged_saved_bytes = 0;
+    g.max_entry_bytes = 0;
+    g.candidates.clear();
+}
+
+static std::string expert_pack_v2_shadow_coalesce_role(const expert_pack_v2_shadow_coalesce_group &g) {
+    std::string role;
+    if (g.has_up) role += "up";
+    if (g.has_gate) {
+        if (!role.empty()) role += "+";
+        role += "gate";
+    }
+    if (g.has_down) {
+        if (!role.empty()) role += "+";
+        role += "down";
+    }
+    if (role.empty()) role = "coalesced";
+    return role;
+}
 
 struct expert_pack_v2_shadow_read_result {
     bool ok = false;
@@ -9734,6 +9849,370 @@ static expert_pack_v2_shadow_iouring_result expert_pack_v2_shadow_iouring_stage_
 #endif
 }
 
+struct expert_pack_v2_shadow_stage_metrics {
+    double alloc_ms = 0.0;
+    double read_ms = 0.0;
+    double h2d_ms = 0.0;
+    double sync_ms = 0.0;
+    double total_ms = 0.0;
+    uint64_t staged_bytes = 0;
+    uint64_t read_failures = 0;
+    uint64_t h2d_failures = 0;
+    uint64_t direct_reads = 0;
+    uint64_t direct_bytes = 0;
+    uint64_t direct_physical_bytes = 0;
+    uint64_t direct_fallbacks = 0;
+    uint64_t buffered_reads = 0;
+    uint64_t buffered_bytes = 0;
+    uint64_t iouring_batches = 0;
+    uint64_t iouring_jobs = 0;
+    uint64_t iouring_submit_calls = 0;
+    uint64_t iouring_wait_calls = 0;
+    uint64_t iouring_cqes = 0;
+    uint64_t iouring_wait_us = 0;
+    uint64_t iouring_inflight_sum = 0;
+    uint64_t iouring_inflight_samples = 0;
+    uint64_t iouring_inflight_max = 0;
+    bool alloc_grew = false;
+};
+
+static bool expert_pack_v2_shadow_stage_candidates_locked(
+        expert_pack_v2_shadow_stage_state &s,
+        const std::vector<expert_pack_v2_shadow_candidate> &candidates,
+        size_t max_entry_bytes,
+        const char *fallback_tensor_name,
+        cudaStream_t stream,
+        expert_pack_v2_shadow_stage_metrics &m) {
+    if (candidates.empty() || max_entry_bytes == 0) return false;
+
+    const auto total_t0 = std::chrono::steady_clock::now();
+    const auto alloc_t0 = std::chrono::steady_clock::now();
+    const size_t old_host_sz = s.host_sz;
+    const size_t old_dev_sz = s.dev_sz;
+    const size_t shadow_alignment = expert_pack_direct_alignment();
+    const bool use_iouring_shadow = expert_pack_v2_shadow_iouring_read_enabled();
+    const size_t shadow_slot_sz = use_iouring_shadow ?
+        (size_t)align_up_u64((uint64_t)max_entry_bytes, (uint64_t)shadow_alignment) :
+        max_entry_bytes;
+    if (shadow_slot_sz == 0 ||
+            (use_iouring_shadow && candidates.size() > SIZE_MAX / shadow_slot_sz)) {
+        s.alloc_failures.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    const size_t host_need = use_iouring_shadow ? shadow_slot_sz * candidates.size() : max_entry_bytes;
+    if (!ensure_host_pinned(s.host, s.host_sz, host_need) ||
+            !ensure_dev(s.dev, s.dev_sz, max_entry_bytes)) {
+        s.alloc_failures.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+    m.alloc_grew = s.host_sz != old_host_sz || s.dev_sz != old_dev_sz;
+    if (!s.copy_start && cudaEventCreate(&s.copy_start) != cudaSuccess) {
+        s.event_failed = true;
+    }
+    if (!s.copy_done && cudaEventCreate(&s.copy_done) != cudaSuccess) {
+        s.event_failed = true;
+    }
+    const auto alloc_t1 = std::chrono::steady_clock::now();
+    m.alloc_ms = std::chrono::duration<double, std::milli>(alloc_t1 - alloc_t0).count();
+
+    bool used_iouring_shadow = false;
+    if (use_iouring_shadow) {
+        const expert_pack_v2_shadow_iouring_result io_result =
+            expert_pack_v2_shadow_iouring_stage_candidates(s, candidates, shadow_slot_sz, stream);
+        if (io_result.attempted && io_result.completed) {
+            used_iouring_shadow = true;
+            m.staged_bytes += io_result.staged_bytes;
+            m.read_failures += io_result.read_failures;
+            m.h2d_failures += io_result.h2d_failures;
+            m.direct_reads += io_result.direct_reads;
+            m.direct_bytes += io_result.direct_bytes;
+            m.direct_physical_bytes += io_result.direct_physical_bytes;
+            m.direct_fallbacks += io_result.direct_fallbacks;
+            m.iouring_batches += io_result.batches;
+            m.iouring_jobs += io_result.jobs;
+            m.iouring_submit_calls += io_result.submit_calls;
+            m.iouring_wait_calls += io_result.wait_calls;
+            m.iouring_cqes += io_result.cqes;
+            m.iouring_wait_us += io_result.wait_us;
+            m.iouring_inflight_sum += io_result.inflight_sum;
+            m.iouring_inflight_samples += io_result.inflight_samples;
+            m.iouring_inflight_max = std::max<uint64_t>(m.iouring_inflight_max, io_result.inflight_max);
+            m.read_ms += io_result.read_ms;
+            m.h2d_ms += io_result.h2d_ms;
+            m.sync_ms += io_result.sync_ms;
+        }
+    }
+
+    if (!used_iouring_shadow) for (const expert_pack_v2_shadow_candidate &candidate : candidates) {
+        const size_t entry_bytes = (size_t)candidate.entry->nbytes;
+        const char *read_tensor_name = candidate.entry && candidate.entry->tensor[0] ?
+            candidate.entry->tensor : fallback_tensor_name;
+        const auto read_t0 = std::chrono::steady_clock::now();
+        const expert_pack_v2_shadow_read_result read_result =
+            expert_pack_v2_shadow_read_entry_to_host(
+                candidate.entry, read_tensor_name, candidate.expert_idx, s.host, s.host_sz);
+        const auto read_t1 = std::chrono::steady_clock::now();
+        m.read_ms += std::chrono::duration<double, std::milli>(read_t1 - read_t0).count();
+        if (!read_result.ok || read_result.nread != entry_bytes) {
+            ++m.read_failures;
+            continue;
+        }
+        if (read_result.direct) {
+            ++m.direct_reads;
+            m.direct_bytes += entry_bytes;
+            m.direct_physical_bytes += read_result.physical_bytes;
+        } else {
+            ++m.buffered_reads;
+            m.buffered_bytes += entry_bytes;
+        }
+        if (read_result.direct_attempted && !read_result.direct) {
+            ++m.direct_fallbacks;
+        }
+        if (!s.event_failed) {
+            cudaEventRecord(s.copy_start, stream);
+        }
+        if (cudaMemcpyAsync(s.dev, s.host, entry_bytes, cudaMemcpyHostToDevice, stream) != cudaSuccess) {
+            ++m.h2d_failures;
+            continue;
+        }
+        if (!s.event_failed) {
+            cudaEventRecord(s.copy_done, stream);
+            const auto sync_t0 = std::chrono::steady_clock::now();
+            if (cudaEventSynchronize(s.copy_done) != cudaSuccess) {
+                ++m.h2d_failures;
+                continue;
+            }
+            const auto sync_t1 = std::chrono::steady_clock::now();
+            m.sync_ms += std::chrono::duration<double, std::milli>(sync_t1 - sync_t0).count();
+            float copy_ms = 0.0f;
+            if (cudaEventElapsedTime(&copy_ms, s.copy_start, s.copy_done) == cudaSuccess) {
+                m.h2d_ms += (double)copy_ms;
+            }
+        } else {
+            const auto sync_t0 = std::chrono::steady_clock::now();
+            if (cudaStreamSynchronize(stream) != cudaSuccess) {
+                ++m.h2d_failures;
+                continue;
+            }
+            const auto sync_t1 = std::chrono::steady_clock::now();
+            m.sync_ms += std::chrono::duration<double, std::milli>(sync_t1 - sync_t0).count();
+        }
+        m.staged_bytes += (uint64_t)entry_bytes;
+    }
+
+    const auto total_t1 = std::chrono::steady_clock::now();
+    m.total_ms = std::chrono::duration<double, std::milli>(total_t1 - total_t0).count();
+    return true;
+}
+
+static void expert_pack_v2_shadow_stage_add_metrics_locked(
+        expert_pack_v2_shadow_stage_state &s,
+        size_t staged_entries,
+        const expert_pack_v2_shadow_stage_metrics &m) {
+    s.staged_calls.fetch_add(1, std::memory_order_relaxed);
+    s.staged_entries.fetch_add((uint64_t)staged_entries, std::memory_order_relaxed);
+    s.staged_bytes.fetch_add(m.staged_bytes, std::memory_order_relaxed);
+    s.read_failures.fetch_add(m.read_failures, std::memory_order_relaxed);
+    s.h2d_failures.fetch_add(m.h2d_failures, std::memory_order_relaxed);
+    s.direct_reads.fetch_add(m.direct_reads, std::memory_order_relaxed);
+    s.direct_bytes.fetch_add(m.direct_bytes, std::memory_order_relaxed);
+    s.direct_physical_bytes.fetch_add(m.direct_physical_bytes, std::memory_order_relaxed);
+    s.direct_fallbacks.fetch_add(m.direct_fallbacks, std::memory_order_relaxed);
+    s.buffered_reads.fetch_add(m.buffered_reads, std::memory_order_relaxed);
+    s.buffered_bytes.fetch_add(m.buffered_bytes, std::memory_order_relaxed);
+    s.iouring_batches.fetch_add(m.iouring_batches, std::memory_order_relaxed);
+    s.iouring_jobs.fetch_add(m.iouring_jobs, std::memory_order_relaxed);
+    s.iouring_submit_calls.fetch_add(m.iouring_submit_calls, std::memory_order_relaxed);
+    s.iouring_wait_calls.fetch_add(m.iouring_wait_calls, std::memory_order_relaxed);
+    s.iouring_cqes.fetch_add(m.iouring_cqes, std::memory_order_relaxed);
+    s.iouring_wait_us.fetch_add(m.iouring_wait_us, std::memory_order_relaxed);
+    s.iouring_inflight_sum.fetch_add(m.iouring_inflight_sum, std::memory_order_relaxed);
+    s.iouring_inflight_samples.fetch_add(m.iouring_inflight_samples, std::memory_order_relaxed);
+    expert_pack_atomic_max(s.iouring_inflight_max, m.iouring_inflight_max);
+    s.alloc_ms += m.alloc_ms;
+    s.read_ms += m.read_ms;
+    s.h2d_ms += m.h2d_ms;
+    s.sync_ms += m.sync_ms;
+    s.total_ms += m.total_ms;
+}
+
+static void expert_pack_v2_shadow_coalesce_flush_locked(expert_pack_v2_shadow_stage_state &s) {
+    expert_pack_v2_shadow_coalesce_group &g = g_expert_pack_v2_shadow_coalesce;
+    if (!g.active) return;
+    if (g.candidates.empty()) {
+        expert_pack_v2_shadow_coalesce_reset(g);
+        return;
+    }
+
+    char tensor_name[128];
+    std::snprintf(tensor_name, sizeof(tensor_name), "blk.%d.coalesced_v2_shadow", g.layer);
+    const std::string role = expert_pack_v2_shadow_coalesce_role(g);
+    const size_t staged_count = g.candidates.size();
+    const uint64_t source_calls = g.source_calls;
+    const uint64_t seq = g.first_seq;
+    expert_pack_v2_shadow_stage_metrics m;
+    if (!expert_pack_v2_shadow_stage_candidates_locked(
+                s, g.candidates, g.max_entry_bytes, tensor_name, g.stream, m)) {
+        expert_pack_v2_shadow_coalesce_reset(g);
+        return;
+    }
+
+    expert_pack_v2_shadow_stage_add_metrics_locked(s, staged_count, m);
+    s.coalesced_groups.fetch_add(1, std::memory_order_relaxed);
+    s.coalesced_source_calls.fetch_add(source_calls, std::memory_order_relaxed);
+    s.coalesced_entries.fetch_add((uint64_t)staged_count, std::memory_order_relaxed);
+
+    const char *path = expert_pack_v2_shadow_stage_path();
+    if (path && path[0]) {
+        FILE *f = std::fopen(path, "a");
+        if (f) {
+            expert_pack_v2_shadow_stage_write_header(f, s);
+            std::fprintf(f,
+                "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%zu,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,%llu,%llu,%zu,%zu,%zu,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu\n",
+                (unsigned long long)seq,
+                "decode_coalesced_same_layer",
+                role.c_str(),
+                tensor_name,
+                -1,
+                (size_t)0,
+                (long)g.layer,
+                (long)source_calls,
+                (size_t)0,
+                g.n_active,
+                g.cache_hits,
+                g.covered,
+                g.covered_cache_hits,
+                staged_count,
+                g.reject_no_manifest,
+                g.reject_not_allowed,
+                g.reject_no_entry,
+                g.reject_unsupported,
+                g.reject_manifest_mismatch,
+                g.reject_shape_mismatch,
+                g.reject_not_smaller,
+                (unsigned long long)g.covered_bytes,
+                (unsigned long long)g.covered_saved_bytes,
+                (unsigned long long)m.staged_bytes,
+                (unsigned long long)g.staged_saved_bytes,
+                g.max_entry_bytes,
+                s.host_sz,
+                s.dev_sz,
+                m.alloc_grew ? 1 : 0,
+                m.alloc_ms,
+                m.read_ms,
+                m.h2d_ms,
+                m.sync_ms,
+                m.total_ms,
+                (unsigned long long)m.read_failures,
+                (unsigned long long)m.h2d_failures,
+                (unsigned long long)m.direct_reads,
+                (unsigned long long)m.direct_bytes,
+                (unsigned long long)m.direct_physical_bytes,
+                (unsigned long long)m.direct_fallbacks,
+                (unsigned long long)m.buffered_reads,
+                (unsigned long long)m.buffered_bytes,
+                (unsigned long long)m.iouring_batches,
+                (unsigned long long)m.iouring_jobs,
+                (unsigned long long)m.iouring_submit_calls,
+                (unsigned long long)m.iouring_wait_calls,
+                (unsigned long long)m.iouring_cqes,
+                (unsigned long long)m.iouring_wait_us,
+                (unsigned long long)m.iouring_inflight_sum,
+                (unsigned long long)m.iouring_inflight_samples,
+                (unsigned long long)m.iouring_inflight_max);
+            std::fclose(f);
+        }
+    }
+    expert_pack_v2_shadow_coalesce_reset(g);
+}
+
+static bool expert_pack_v2_shadow_coalesce_observe(
+        expert_pack_v2_shadow_stage_state &s,
+        uint64_t call_idx,
+        const char *phase,
+        const char *role,
+        const char *tensor_name,
+        int n_active,
+        int cache_hits,
+        int covered,
+        int covered_cache_hits,
+        int reject_no_manifest,
+        int reject_not_allowed,
+        int reject_no_entry,
+        int reject_unsupported,
+        int reject_manifest_mismatch,
+        int reject_shape_mismatch,
+        int reject_not_smaller,
+        uint64_t covered_bytes,
+        uint64_t covered_saved_bytes,
+        uint64_t staged_saved_bytes,
+        size_t max_entry_bytes,
+        const std::vector<expert_pack_v2_shadow_candidate> &candidates,
+        cudaStream_t stream) {
+    if (!expert_pack_v2_shadow_coalesce_same_layer_enabled() ||
+            !expert_pack_v2_shadow_iouring_read_enabled() ||
+            !phase || std::strncmp(phase, "decode", 6) != 0) {
+        return false;
+    }
+
+    const int layer = expert_pack_v2_shadow_tensor_layer(tensor_name);
+    const bool is_down = role && std::strcmp(role, "down") == 0;
+    std::lock_guard<std::mutex> lk(s.mu);
+    expert_pack_v2_shadow_coalesce_group &g = g_expert_pack_v2_shadow_coalesce;
+    if (layer < 0) {
+        expert_pack_v2_shadow_coalesce_flush_locked(s);
+        return false;
+    }
+    if (g.active && (g.layer != layer || g.stream != stream)) {
+        expert_pack_v2_shadow_coalesce_flush_locked(s);
+    }
+    if (candidates.empty()) {
+        if (g.active && g.layer == layer && is_down) {
+            expert_pack_v2_shadow_coalesce_flush_locked(s);
+        }
+        return false;
+    }
+
+    if (!g.active) {
+        expert_pack_v2_shadow_coalesce_reset(g);
+        g.active = true;
+        g.layer = layer;
+        g.stream = stream;
+        g.first_seq = call_idx;
+    }
+    g.last_seq = call_idx;
+    ++g.source_calls;
+    if (role && std::strcmp(role, "up") == 0) {
+        g.has_up = true;
+    } else if (role && std::strcmp(role, "gate") == 0) {
+        g.has_gate = true;
+    } else if (is_down) {
+        g.has_down = true;
+    }
+    g.n_active += n_active;
+    g.cache_hits += cache_hits;
+    g.covered += covered;
+    g.covered_cache_hits += covered_cache_hits;
+    g.reject_no_manifest += reject_no_manifest;
+    g.reject_not_allowed += reject_not_allowed;
+    g.reject_no_entry += reject_no_entry;
+    g.reject_unsupported += reject_unsupported;
+    g.reject_manifest_mismatch += reject_manifest_mismatch;
+    g.reject_shape_mismatch += reject_shape_mismatch;
+    g.reject_not_smaller += reject_not_smaller;
+    g.covered_bytes += covered_bytes;
+    g.covered_saved_bytes += covered_saved_bytes;
+    g.staged_saved_bytes += staged_saved_bytes;
+    g.max_entry_bytes = std::max(g.max_entry_bytes, max_entry_bytes);
+    g.candidates.insert(g.candidates.end(), candidates.begin(), candidates.end());
+
+    if (is_down) {
+        expert_pack_v2_shadow_coalesce_flush_locked(s);
+    }
+    return true;
+}
+
 static void expert_pack_v2_shadow_stage_record(
         const char *phase,
         const char *role,
@@ -9851,6 +10330,31 @@ static void expert_pack_v2_shadow_stage_record(
             s.report_registered = true;
         }
     }
+    if (expert_pack_v2_shadow_coalesce_observe(
+                s,
+                call_idx,
+                phase,
+                role,
+                tensor_name,
+                n_active,
+                cache_hits,
+                covered,
+                covered_cache_hits,
+                reject_no_manifest,
+                reject_not_allowed,
+                reject_no_entry,
+                reject_unsupported,
+                reject_manifest_mismatch,
+                reject_shape_mismatch,
+                reject_not_smaller,
+                covered_bytes,
+                covered_saved_bytes,
+                staged_saved_bytes,
+                max_entry_bytes,
+                candidates,
+                stream)) {
+        return;
+    }
     if (candidates.empty()) {
         if (covered > 0) {
             std::lock_guard<std::mutex> lk(s.mu);
@@ -9858,24 +10362,7 @@ static void expert_pack_v2_shadow_stage_record(
             if (path && path[0]) {
                 FILE *f = std::fopen(path, "a");
                 if (f) {
-                    if (!s.header_written) {
-                        std::fprintf(f,
-                            "seq,phase,role,tensor,logical_type,logical_nbytes,logical_ne00,"
-                            "logical_ne01,logical_nb01,n_active,cache_hits,covered,"
-                            "covered_cache_hits,staged,reject_no_manifest,reject_not_allowed,"
-                            "reject_no_entry,reject_unsupported,reject_manifest_mismatch,"
-                            "reject_shape_mismatch,reject_not_smaller,covered_bytes,"
-                            "covered_saved_bytes,staged_bytes,staged_saved_bytes,"
-                            "max_entry_bytes,host_capacity,dev_capacity,alloc_grew,"
-                            "alloc_ms,read_ms,h2d_ms,sync_ms,total_ms,read_failures,"
-                            "h2d_failures,direct_reads,direct_bytes,"
-                            "direct_physical_bytes,direct_fallbacks,buffered_reads,"
-                            "buffered_bytes,iouring_batches,iouring_jobs,"
-                            "iouring_submit_calls,iouring_wait_calls,iouring_cqes,"
-                            "iouring_wait_us,iouring_inflight_sum,"
-                            "iouring_inflight_samples,iouring_inflight_max\n");
-                        s.header_written = true;
-                    }
+                    expert_pack_v2_shadow_stage_write_header(f, s);
                     std::fprintf(f,
                         "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,0,%llu,%zu,%zu,%zu,0,0.000000,0.000000,0.000000,0.000000,0.000000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n",
                         (unsigned long long)call_idx,
@@ -10086,24 +10573,7 @@ static void expert_pack_v2_shadow_stage_record(
         if (path && path[0]) {
             FILE *f = std::fopen(path, "a");
             if (f) {
-                if (!s.header_written) {
-                    std::fprintf(f,
-                        "seq,phase,role,tensor,logical_type,logical_nbytes,logical_ne00,"
-                        "logical_ne01,logical_nb01,n_active,cache_hits,covered,"
-                        "covered_cache_hits,staged,reject_no_manifest,reject_not_allowed,"
-                        "reject_no_entry,reject_unsupported,reject_manifest_mismatch,"
-                        "reject_shape_mismatch,reject_not_smaller,covered_bytes,"
-                        "covered_saved_bytes,staged_bytes,staged_saved_bytes,"
-                            "max_entry_bytes,host_capacity,dev_capacity,alloc_grew,"
-                            "alloc_ms,read_ms,h2d_ms,sync_ms,total_ms,read_failures,"
-                            "h2d_failures,direct_reads,direct_bytes,"
-                            "direct_physical_bytes,direct_fallbacks,buffered_reads,"
-                            "buffered_bytes,iouring_batches,iouring_jobs,"
-                            "iouring_submit_calls,iouring_wait_calls,iouring_cqes,"
-                            "iouring_wait_us,iouring_inflight_sum,"
-                            "iouring_inflight_samples,iouring_inflight_max\n");
-                    s.header_written = true;
-                }
+                expert_pack_v2_shadow_stage_write_header(f, s);
                 std::fprintf(f,
                     "%llu,%s,%s,%s,%d,%zu,%ld,%ld,%zu,%d,%d,%d,%d,%zu,%d,%d,%d,%d,%d,%d,%d,%llu,%llu,%llu,%llu,%zu,%zu,%zu,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu\n",
                     (unsigned long long)call_idx,
