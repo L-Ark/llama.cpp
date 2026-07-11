@@ -212,6 +212,160 @@ Fallback if Phase 5D bound is weak:
   - one small pageable RAM slab A/B only if it is clearly default-off and
     measured against TTFT/refault gates.
 
+## Phase 5D result: byte reduction can reach `>2 tok/s`; split retune cannot
+
+Timestamp: 2026-07-11 CST.
+
+Runs:
+
+- Quant-scaled cache bound:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-quant-scaled-cache-bound-dev7/report.md`
+- Byte-ratio target bound:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-byte-reduction-target-dev7/target-2tps.md`
+  and
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-byte-reduction-target-dev7/target-5tps.md`
+- Split-pool sweep:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-quant-split-sweep-dev7/report.md`
+
+Inputs:
+
+- Dev-only route traces from
+  `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-cpu-defer-gpu-ext-phase1-profile-n32-dev3-130834`.
+- Seven dev prompts:
+  `dev_france_regression`, `dev_japan_factual`, `dev_linear_equation`,
+  `dev_mixed_summary`, `dev_photosynthesis_factual`, `dev_python_reverse`,
+  and `dev_zh_france`.
+- Held-out/test prompts were not used.
+- The `farthest-next` oracle in `kimi_quant_scaled_cache_bound.py` was stopped
+  because full dev7 replay was too slow for routine use. The promoted decision
+  uses `global LFU`, which is the prompt-general static policy, not the oracle.
+
+Commands:
+
+```bash
+.Agent/run-tools/kimi_quant_scaled_cache_bound.py \
+  --runs-root /root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-cpu-defer-gpu-ext-phase1-profile-n32-dev3-130834 \
+  --ratios "1.0,0.827,0.696,0.563,0.505,0.4,0.3,0.25,0.2" \
+  --out-json /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-quant-scaled-cache-bound-dev7/quant_scaled_cache_bound.json \
+  --out-md /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-quant-scaled-cache-bound-dev7/report.md
+
+.Agent/run-tools/kimi_byte_reduction_target_bound.py \
+  --runs-root /root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-cpu-defer-gpu-ext-phase1-profile-n32-dev3-130834 \
+  --out /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-byte-reduction-target-dev7/target-2tps.md \
+  --target-tps 2.0 \
+  --peak-gib-s 10.4 \
+  --evidence-scope dev7-route-trace-n32
+
+.Agent/run-tools/kimi_byte_reduction_target_bound.py \
+  --runs-root /root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-cpu-defer-gpu-ext-phase1-profile-n32-dev3-130834 \
+  --out /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-byte-reduction-target-dev7/target-5tps.md \
+  --target-tps 5.0 \
+  --peak-gib-s 10.4 \
+  --evidence-scope dev7-route-trace-n32
+
+.Agent/run-tools/kimi_quant_split_sweep_bound.py \
+  --runs-root /root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-cpu-defer-gpu-ext-phase1-profile-n32-dev3-130834 \
+  --ratios "1.0,0.696,0.563,0.505,0.4,0.3,0.25,0.2" \
+  --pcts "40,45,50,55,60,62,65,70,75,80,85,90" \
+  --current-pct 62 \
+  --out-json /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-quant-split-sweep-dev7/split_sweep.json \
+  --out-md /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-quant-split-sweep-dev7/report.md
+```
+
+Quant-scaled global-LFU bound:
+
+| byte ratio | global LFU hit | global LFU miss GiB/token | projected ms/token at 10.4 GiB/s plus 94.1 ms floor | projected tok/s |
+|---:|---:|---:|---:|---:|
+| 1.000 | 28.4% | 8.644 | 925.2 | 1.08 |
+| 0.827 | 31.8% | 6.815 | 749.4 | 1.33 |
+| 0.696 | 35.1% | 5.461 | 619.2 | 1.62 |
+| 0.563 | 39.3% | 4.130 | 491.2 | 2.04 |
+| 0.505 | 41.6% | 3.565 | 436.9 | 2.29 |
+| 0.400 | 46.8% | 2.572 | 341.4 | 2.93 |
+| 0.300 | 53.8% | 1.675 | 255.2 | 3.92 |
+| 0.250 | 58.6% | 1.251 | 214.4 | 4.66 |
+| 0.200 | 64.8% | 0.850 | 175.8 | 5.69 |
+
+Target-bound result:
+
+- For `2 tok/s`, median moved bytes are `6.70 GiB/token`, mean
+  `7.18 GiB/token`.
+- The median all-hit MoE floor estimate is `98.6 ms/token`, mean
+  `94.1 ms/token`.
+- The median required byte ratio at `10.4 GiB/s` after reserving floor time is
+  `0.60x`; worst dev prompt is `0.47x`.
+- Miss-byte share by role:
+  - down: `464.15 GiB`, `43.7%`;
+  - gate: `304.96 GiB`, `28.7%`;
+  - up: `291.85 GiB`, `27.5%`.
+- For `5 tok/s`, the median required byte ratio after floor is `0.16x` and
+  worst dev prompt is `0.03x`. Therefore `5 tok/s` is not a simple byte-ratio
+  problem; it also requires lowering the all-hit MoE floor and/or changing the
+  compute/storage form.
+
+Split-pool result:
+
+- Total simulated VRAM cache capacity: `14.645 GiB`.
+- Current split: `62%` upgate / `38%` down.
+- Best split across `40-90%` upgate is effectively `60%` for the new dev7
+  traces, but relative gain is tiny:
+  - ratio `1.000`: `0.01%`;
+  - ratio `0.563`: `0.01%`;
+  - ratio `0.505`: `0.04%`;
+  - ratio `0.200`: `0.11%`.
+- Decision: do not spend runtime work on changing the upgate/down VRAM split
+  first. The current split is already near the route-trace optimum.
+
+Interpretation:
+
+- Phase 5D passes the theoretical-benefit gate for the `>2 tok/s` target:
+  a prompt-general byte ratio around `0.56x`, with the effective larger VRAM
+  cache from smaller entries, is enough to project just above `2 tok/s`.
+- A safer target is `0.50x` or lower because the bound assumes `10.4 GiB/s`
+  sustained movement and an optimistic all-hit MoE floor.
+- If only up/gate are compressed and down remains at current bytes, up/gate
+  must be roughly `0.29x` to reach a global `0.60x` movement ratio:
+  `(0.60 - 0.437) / (0.287 + 0.275) ~= 0.29`.
+- Directly re-encoding the already-quantized current experts is not a good
+  first candidate based on the older GP11 screen:
+  - `~0.5x` 1-bit blockwise candidates had rel-L2 around `1.8`;
+  - 2-bit candidates were closer but ratio was usually `0.7x-0.9x`, which is
+    not enough for the `2 tok/s` bound on the current traces;
+  - 3/4-bit candidates often expand versus the current IQ2/IQ3 entries.
+- Therefore the next practical implementation path should not be "simple
+  requantize current dequantized weights". It should evaluate one of:
+  - an external lower-quant expert source, built into an expert-only overlay
+    pack while preserving current dense/attention weights;
+  - a lower-byte auxiliary expert representation with activation/quality
+    validation before runtime promotion;
+  - a structural residual/shared-base form only if offline activation tests
+    prove much lower error than naive blockwise re-encoding.
+
+Next Phase 5D implementation target:
+
+1. Build a default-off lower-byte expert overlay feasibility test.
+   - Candidate ratio gate for `>2 tok/s`: `<=0.505x` global bytes, or
+     `<=0.563x` only if real runtime sustains the IO peak and quality is clean.
+   - Prefer whole `gate/up/down` overlay first, because role-only upgate needs
+     an aggressive `~0.29x` ratio to compensate for full-byte down.
+   - Keep the existing current-IQ3 model and expert-pack path as rollback.
+
+2. Validate quality before optimizing transfer.
+   - First run a small offline or short-runtime quality smoke with the lower-byte
+     expert representation.
+   - Mandatory prompt: `Please introduce France in a short paragraph.`
+   - Include at least one non-France dev prompt before any N96 profiling.
+   - Reject immediately if output becomes incoherent or semantically wrong.
+
+3. Only then implement runtime integration.
+   - Add default-off expert-pack selection for lower-byte overlay entries.
+   - Report lower-byte hits, normal hits, SSD misses, dequant/convert time, H2D
+     bytes, and output quality separately.
+   - Promote only if N96 prompt-general validation exceeds the current stable
+     SOTA, TTFT remains `<=1.20x`, host RAM remains below
+     `15900000000` bytes, and the commit body contains full reproduction
+     details.
+
 ## Phase 5B goal: transfer the CPU/defer GPU-extension idea to Kimi safely
 
 Timestamp: 2026-07-11 CST.
