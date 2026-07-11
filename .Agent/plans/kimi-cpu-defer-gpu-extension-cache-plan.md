@@ -4,6 +4,73 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 当前阶段 Goal 与 Plan：default-off v2 full-cover down dispatch A/B
+
+Timestamp: 2026-07-11 CST.
+
+### Goal
+
+在不破坏当前 Kimi/DeepSeek 合并分支功能的前提下，验证 `v2 full-cover
+down dispatch` 是否能把当前 decode critical path 中的 down expert 读取字节数
+转化为真实 endpoint token rate 提升。
+
+本阶段只做 default-off 接入：
+
+- 默认运行必须完全保持当前 SOTA 路径，不改变 logits、不改变输出、不改变性能。
+- 只有显式设置 `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN=1` 时，才允许进入
+  v2 full-cover down path。
+- v2 path 只在一次 down 调用内所有 active experts 都被 v2 payload pack 覆盖、
+  且 packed type/shape/nbytes/stride 完全一致、packed bytes 小于原始 bytes、
+  runtime 支持对应 packed type 时启用。
+- 任一条件不满足时必须回到原始 v1 expert pack / cache / dispatch 路径。
+
+成功标准：
+
+- cold-start N32 A/B 至少覆盖 France prompt 和一个 held-out/general prompt；
+- host RAM peak `<15900000000` bytes；
+- TTFT 不超过同一 baseline 的 `+20%`；
+- decode CPU fallback 仍为 0 或不比 baseline 变差；
+- `Please introduce France in a short paragraph.` 输出语义正确、连贯；
+- endpoint decode token rate 相比 baseline 有可复现提升；
+- 完整记录 baseline SHA、candidate SHA、rollback SHA、env、命令、prompt、
+  run directory、token rate、TTFT、RAM/page-cache/VRAM、IO/H2D/staging/compute/fallback；
+- 通过后立即 commit + push；失败则保持 default-off 并记录 reject reason，若默认路径
+  受影响必须回退。
+
+### Plan
+
+1. 固定本阶段 baseline。
+   - 当前 runtime 改动前 rollback point 是 `cd1d09e35`。
+   - 先确认工作区只有已知 untracked 工具文件，避免把无关文件混入提交。
+   - 后续任何 SOTA claim 都必须能从该 SHA 或明确 rollback SHA 冷启动复现。
+
+2. 实现最小 default-off runtime 接入。
+   - 在 down batch 路径增加 v2 full-cover preflight。
+   - 使用独立 cache key，例如 `"<src0_name>:v2full"`，禁止 compact bytes 被原始
+     v1 tensor key 命中。
+   - 只处理 decode down；mxfp4/q8k/shape 不兼容/coverage 不完整时直接走原路径。
+   - 首版可以先用保守 H2D staging，目标是证明 correctness 和 endpoint 是否有收益；
+     若 copy/staging 成为新瓶颈，再继续做 batch io_uring/pinned reuse。
+
+3. 默认关闭 smoke。
+   - build 后在不设置新 env 的情况下跑 cold-start smoke。
+   - 验证默认路径 token rate、TTFT、RAM、fallback、质量与 baseline 一致。
+   - 若默认关闭也改变结果，立即回退 runtime 改动。
+
+4. 打开 v2 full-cover down A/B。
+   - 使用已生成的 top7 down v2 payload pack：
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-payload-eb2fead64-122235/selected-iq1s-overlay-v2.expert-pack`
+   - 先跑 N32 France，再跑一个 held-out/general prompt。
+   - 记录 v2 accepted/rejected calls、cache hit/miss、read bytes、saved bytes、
+     staging wall、H2D、kernel、sync gap、endpoint token rate。
+
+5. 决策。
+   - 若 token rate 提升且所有 hard gates 合格：commit message body 必须写清提升幅度、
+     env、复现命令、prompt/test set、RAM/TTFT/quality gate、rollback point，然后 push。
+   - 若 saved bytes 没有转化为 endpoint gain：保留 default-off profile 证据，下一步转向
+     v2 batch staging、same-layer coalescing 或更早 next-layer prefetch。
+   - 若质量、TTFT、RAM 或默认路径失败：回退或禁用本路径，并在文档中记录失败原因。
+
 ## 本轮 Goal 与 Plan：验证 DeepSeek CPU/defer GPU-extension 思路能否迁移到 Kimi
 
 Timestamp: 2026-07-11 CST.
