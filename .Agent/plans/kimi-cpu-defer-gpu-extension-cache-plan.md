@@ -4,6 +4,92 @@ Date: 2026-07-10
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Active goal: Kimi lower-byte GPU-extension path
+
+Timestamp: 2026-07-11 CST.
+
+Goal:
+
+> Keep Kimi on the CPU/defer MoE scheduler, but make the GPU extension handle
+> useful `gate/up/down` experts with fewer transferred bytes and less exposed
+> `io_uring` wait. The near-term goal is a pushed, reproducible, prompt-general
+> improvement toward stable `>2 tok/s` at N96. The product goal remains stable
+> `>5 tok/s` for random user prompts on a 16 GB host-RAM machine with one
+> 32 GB RTX 5090-class GPU.
+
+Why this is the current goal:
+
+- The DeepSeek gate-hotpool idea is useful for Kimi as an architecture pattern:
+  CPU/defer remains the scheduler, while GPU becomes the expert-cache/compute
+  extension.
+- It should not be copied literally as a gate-only fix. Current Kimi profiling
+  already shows `CPU fallback: 0`; the remaining bottleneck is exposed expert
+  movement and staging wait, especially mixed `up/gate` and then `down`.
+- RAM-only whole-layer/slab experiments are clean but too small or too costly
+  under the 16 GB host-RAM cap. The stronger path is reducing bytes per useful
+  expert while keeping demand loading and cache accounting explicit.
+- Phase 5D bounds show that a selected lower-byte overlay can plausibly cross
+  the `>2 tok/s` boundary only if the runtime can actually consume the smaller
+  representation; metadata-only or payload-only tools are not SOTA.
+
+Hard success gates:
+
+- Cold start only, with cache state reset before accepted measurements.
+- Host RAM peak below `15900000000` bytes, including page cache, pinned memory,
+  mmap/file-backed pages, helper processes, and cgroup accounting.
+- Paired TTFT no more than `1.20x` baseline.
+- Mandatory semantic gate: `Please introduce France in a short paragraph.` must
+  be coherent and correct.
+- Optimization must be prompt-general. Dev prompts can guide design; held-out
+  prompts are validation only and cannot be used for hotset, pack, threshold, or
+  layer selection.
+- Any accepted SOTA must be reproducible from a pushed commit. The commit body
+  must include improvement size, exact env, commands, prompt split, run paths,
+  quality output/summary, TTFT/RAM/VRAM/IO/H2D/fallback metrics, and rollback
+  commit.
+
+Execution plan:
+
+1. Commit and push the current default-off Phase 5D tooling.
+   - Include `.Agent/run-tools/kimi_iq1s_selected_payload_pack.py` and this plan
+     update only.
+   - Make no SOTA claim; the payload builder only proves selected IQ1_S/Q2_K
+     bytes and source offsets can be materialized.
+
+2. Add a default-off runtime reader for the tiny `GGMLMOEPACKv2` sidecar.
+   - Parse the v2 index separately from the current main expert pack.
+   - Allow lookup by tensor/expert/type instead of assuming current-pack nbytes.
+   - Keep fallback to the existing IQ3_S path for every unsupported case.
+   - Add counters for overlay hit/miss, overlay bytes, type mismatch, nbytes
+     mismatch, and fallback reason.
+
+3. Add guarded mixed-type dispatch only for the tiny smoke path.
+   - Admit `IQ1_S`/`Q2_K` only behind an explicit env flag.
+   - Start with N32 quality smoke using the 8-entry pack; do not build a large
+     overlay until the tiny path proves correctness and accounting.
+   - If kernels are missing or quality is unstable, stop and document rejection
+     rather than expanding the pack.
+
+4. Re-profile before any promotion.
+   - Run paired cold-start N32, then N96 dev.
+   - Attribute per-token time into expert read, pinned/pageable staging, H2D,
+     up/gate compute, down compute, overlay dequant/compute, `io_uring_wait`,
+     and residual CPU/defer overhead.
+   - Continue only if the measured win reduces critical-path wait, not merely
+     bytes or hit-rate counters.
+
+5. Validate prompt-general behavior.
+   - Promote to held-out only after dev passes quality, RAM, TTFT, and wait
+     gates.
+   - The final reported SOTA must be based on held-out general prompts, not a
+     France-only prompt or prompt-specific pack.
+
+6. If the lower-byte overlay path fails, fall back to scheduling/layout work.
+   - Investigate exact-byte IO scheduling, pack layout for larger contiguous
+     reads, and unified same-layer `up/gate/down` demand scheduling.
+   - Keep RAM-tier work secondary unless it replaces low-value page cache with
+     demonstrably batchable expert data and improves held-out wait.
+
 ## Current authoritative goal and plan: Kimi CPU/defer GPU-extension, prompt-general
 
 Timestamp: 2026-07-11 CST.
@@ -575,6 +661,93 @@ Decision:
   override.
 - Only after a tiny payload exists should the runtime path add mixed-type lookup
   and `IQ1_S`/`Q2_K` dispatch guards for an N32 quality smoke.
+
+## Phase 5D payload result: tiny selected IQ1_S/Q2_K payload pack builds
+
+Timestamp: 2026-07-11 CST.
+
+New tool:
+
+- `.Agent/run-tools/kimi_iq1s_selected_payload_pack.py`
+
+Purpose:
+
+- Clear the `missing_source_offset` blocker for a tiny selected subset.
+- Read a selected-plan TSV, parse the mradermacher multipart IQ1_S GGUF header,
+  compute source absolute offsets, and optionally range-download payloads into
+  a `GGMLMOEPACKv2` sidecar.
+- This remains default-off and is not used by current runtime.
+
+Runs:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-metadata8/report.md
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/report.md
+```
+
+Commands:
+
+```bash
+.Agent/run-tools/kimi_iq1s_selected_payload_pack.py \
+  --selected-plan-tsv /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-hotset-bound-dev7/budget-8p0-selected-plan.tsv \
+  --out-dir /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-metadata8 \
+  --max-entries 8 \
+  --include-types IQ1_S,Q2_K \
+  --metadata-only
+
+.Agent/run-tools/kimi_iq1s_selected_payload_pack.py \
+  --selected-plan-tsv /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-hotset-bound-dev7/budget-8p0-selected-plan.tsv \
+  --out-dir /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8 \
+  --max-entries 8 \
+  --include-types IQ1_S,Q2_K
+```
+
+Result:
+
+- Metadata-only run:
+  - selected entries: `8`;
+  - payload bytes represented: `26836992`;
+  - GGUF data start: `6984096`;
+  - source offsets successfully generated.
+- Payload run:
+  - selected entries: `8`;
+  - payload bytes: `26836992`;
+  - pack bytes: `26841088`;
+  - output pack:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack`;
+  - manifest:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv`.
+- Pack structure validation passed:
+  - magic: `GGMLMOEPACKv2`;
+  - version: `2`;
+  - entries: `8`;
+  - data start: `4096`;
+  - manifest rows match pack index rows;
+  - all payload ranges fit inside the pack file.
+
+Selected entries:
+
+| tensor | expert | type | nbytes | source offset | pack offset |
+|---|---:|---|---:|---:|---:|
+| `blk.1.ffn_down_exps.weight` | 23 | `Q2_K` | 4816896 | 1455543200 | 4096 |
+| `blk.1.ffn_down_exps.weight` | 116 | `Q2_K` | 4816896 | 1903514528 | 4820992 |
+| `blk.1.ffn_gate_exps.weight` | 23 | `IQ1_S` | 2867200 | 3265205152 | 9637888 |
+| `blk.1.ffn_gate_exps.weight` | 116 | `IQ1_S` | 2867200 | 3531854752 | 12505088 |
+| `blk.1.ffn_gate_exps.weight` | 197 | `IQ1_S` | 2867200 | 3764097952 | 15372288 |
+| `blk.1.ffn_up_exps.weight` | 23 | `IQ1_S` | 2867200 | 4380115872 | 18239488 |
+| `blk.1.ffn_up_exps.weight` | 116 | `IQ1_S` | 2867200 | 4646765472 | 21106688 |
+| `blk.1.ffn_up_exps.weight` | 197 | `IQ1_S` | 2867200 | 4879008672 | 23973888 |
+
+Decision:
+
+- The source-offset/payload blocker is cleared for a tiny selected subset.
+- This still does not make the overlay runnable:
+  - current runtime does not parse `GGMLMOEPACKv2` in the one-pack path;
+  - current lookup expects current expert nbytes;
+  - current Kimi one-stream type gate rejects `IQ1_S`/`Q2_K`.
+- The next runtime step, if pursued, must be a default-off reader/lookup path for
+  this v2 sidecar plus explicit mixed-type dispatch guards. It must start with
+  this tiny pack and N32 quality smoke, not a large pack.
 
 ## Phase 5B goal: transfer the CPU/defer GPU-extension idea to Kimi safely
 
