@@ -85,6 +85,106 @@ Kimi 的阶段目标：
      coalescing、更早 next-layer prefetch、更高 inflight、H2D/compute overlap。
    - 每个候选都先写入计划，再实验，再记录结果；禁止只凭单 prompt 宣称 SOTA。
 
+### 2026-07-11 Evidence: v2 partial-split replacement profile
+
+Run:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-profile-n32-cf1bef649-120429
+```
+
+Command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env REPO=/root/lfz/llama.cpp-vendor-kimi \
+      RUN=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-profile-n32-cf1bef649-120429 \
+      PROMPT_ID=v2_partial_profile_n32_france \
+      PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
+      QUALITY_KEYWORDS="france,paris|europe|western europe" \
+      N=32 PROFILE=1 COPY_PROFILE=1 \
+      EXTRA_RUNTIME_ENV="GGML_MOE_EXPERT_PACK_V2=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-v2.expert-pack
+GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-manifest.tsv
+GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN=1
+GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_PLAN_OUT=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-profile-n32-cf1bef649-120429/v2-partial-split-plan.csv
+GGML_MOE_EXPERT_PACK_V2_OVERRIDE_PROFILE_OUT=/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-profile-n32-cf1bef649-120429/v2-override-preflight.csv" \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+Endpoint and constraint result:
+
+```text
+commit=cf1bef649
+quality=pass
+TTFT=12329.98 ms
+decode=22255.37 ms / 31
+token_rate=1.39 tok/s  # profiling overhead is enabled; not a SOTA run
+host_memory_peak=12771680256
+cpu_fallback_profile_entries=0
+expert_pack_iouring_bytes=224038649856
+expert_pack_iouring_wait_us=17204877
+iouring_inflight_avg=4.51
+direct_reads=0
+```
+
+Default-off v2 replacement profile summary:
+
+```text
+partial_split_rows=5760
+active_entries=68736
+cache_hits=23072
+accepted_entries=16505
+manifest_rows=2048
+
+logical_miss_bytes=240.877 GiB
+covered_miss_bytes=55.734 GiB
+covered_miss_saved_bytes=29.684 GiB
+miss_saved_ratio=12.3%
+
+decode_full_cover_calls=23
+decode_full_cover_saved=0.646 GiB
+decode_partial_calls=3403
+decode_partial_saved=11.856 GiB
+decode_no_cover_calls=2157
+decode_extra_compute_groups=3403
+```
+
+Interpretation:
+
+- The existing top2048 entry-level v2 pack has real byte-saving potential, but
+  most decode savings are partial coverage rather than full call coverage.
+- Directly implementing arbitrary partial-split real dispatch is risky: the
+  profile would add roughly one extra compute group for each of `3403` decode
+  calls, while only saving about `11.856 GiB` on decode.
+- At a measured IO ceiling of about `10 GiB/s`, those decode savings are worth
+  only about `1.2 s` before replacement read, H2D, split mapping, and extra
+  kernels. That is not enough margin for a broad partial-split path.
+- Therefore, the next implementation should not be "partial split everywhere".
+  It should first create full-cover compact packs for high-value whole
+  tensor/role groups, so selected calls can run as one homogeneous compact
+  batch with no split/fallback compute group.
+
+Next candidate artifact:
+
+```text
+.Agent/profiles/kimi/v2-full-cover/full-cover-candidates-n32-cf1bef649.tsv
+```
+
+Next execution step:
+
+1. Build a metadata-only full-cover v2 pack for the top candidate tensors and
+   verify manifest coverage.
+2. Build a real payload v2 pack for the smallest useful budget first:
+   - budget 8 GiB: top 7 down tensors, theoretical decode saved
+     `5.725 GiB`;
+   - budget 16 GiB: top 13 down tensors plus `blk.5` up/gate, theoretical
+     decode saved `11.529 GiB`.
+3. Run a default-off smoke with `kimi_moepack_v2_partial_split_smoke` on the
+   generated pack.
+4. Only then implement real dispatch for full-cover homogeneous calls. Keep it
+   behind an env flag and A/B with cold-start N32 dev first.
+
 ## READ FIRST: active goal and immediate plan
 
 Timestamp: 2026-07-11 CST.
