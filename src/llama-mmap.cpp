@@ -10,6 +10,10 @@
 #include <cerrno>
 #include <algorithm>
 #include <cstdlib>
+#include <cstdint>
+#include <cinttypes>
+#include <cstdio>
+#include <chrono>
 
 #ifdef __has_include
     #if __has_include(<unistd.h>)
@@ -489,6 +493,173 @@ struct llama_mmap::impl {
         return enabled;
     }
 
+    static const char * dontneed_profile_out() {
+        static const char * out = []() {
+            const char * env = std::getenv("LLAMA_MMAP_DONTNEED_PROFILE_OUT");
+            return env && env[0] && env[0] != '0' ? env : nullptr;
+        }();
+        return out;
+    }
+
+    static bool dontneed_profile_filter_matches(const char * path) {
+        const char * out = dontneed_profile_out();
+        if (!out || !path || !path[0]) {
+            return false;
+        }
+
+        const char * filter = std::getenv("LLAMA_MMAP_DONTNEED_PROFILE_FILTER");
+        if (!filter || !filter[0]) {
+            return true;
+        }
+
+        const char * p = filter;
+        while (*p) {
+            while (*p == ' ' || *p == '\t' || *p == ',' || *p == ':') {
+                ++p;
+            }
+            const char * start = p;
+            while (*p && *p != ',' && *p != ':') {
+                ++p;
+            }
+            const char * end = p;
+            while (end > start && (end[-1] == ' ' || end[-1] == '\t')) {
+                --end;
+            }
+            const size_t len = (size_t) (end - start);
+            if (len > 0) {
+                for (const char * hit = path; *hit; ++hit) {
+                    if (std::strncmp(hit, start, len) == 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    static const char * dontneed_profile_fd_path(int fd, char * buf, size_t buf_sz) {
+#if defined(__linux__)
+        if (fd < 0 || !buf || buf_sz == 0) {
+            return "";
+        }
+        char proc_path[64];
+        std::snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", fd);
+        const ssize_t n = readlink(proc_path, buf, buf_sz - 1);
+        if (n < 0) {
+            std::snprintf(buf, buf_sz, "<fd:%d>", fd);
+            return buf;
+        }
+        buf[n] = '\0';
+        return buf;
+#else
+        (void) fd;
+        if (buf && buf_sz > 0) {
+            buf[0] = '\0';
+        }
+        return "";
+#endif
+    }
+
+    static uint64_t dontneed_profile_mincore_bytes(void * base, size_t first, size_t len, int * err_out) {
+        if (err_out) {
+            *err_out = 0;
+        }
+#if defined(__linux__)
+        if (!base || len == 0) {
+            return 0;
+        }
+        const long page_size = sysconf(_SC_PAGESIZE);
+        if (page_size <= 0) {
+            if (err_out) {
+                *err_out = EINVAL;
+            }
+            return 0;
+        }
+        const uintptr_t begin = (uintptr_t) base + first;
+        const uintptr_t end = begin + len;
+        const uintptr_t aligned_begin = begin & ~(uintptr_t) (page_size - 1);
+        const uintptr_t aligned_end = (end + (uintptr_t) page_size - 1) & ~(uintptr_t) (page_size - 1);
+        if (aligned_end <= aligned_begin) {
+            return 0;
+        }
+
+        const size_t map_len = (size_t) (aligned_end - aligned_begin);
+        const size_t pages = map_len / (size_t) page_size;
+        std::vector<unsigned char> vec(pages);
+        if (mincore((void *) aligned_begin, map_len, vec.data()) != 0) {
+            if (err_out) {
+                *err_out = errno;
+            }
+            return 0;
+        }
+        uint64_t resident = 0;
+        for (size_t i = 0; i < pages; ++i) {
+            if (vec[i] & 1) {
+                resident += (uint64_t) page_size;
+            }
+        }
+        return resident;
+#else
+        (void) base;
+        (void) first;
+        (void) len;
+        return 0;
+#endif
+    }
+
+    static void dontneed_profile_write(
+            const char * path,
+            size_t first,
+            size_t len,
+            uint64_t before,
+            uint64_t after_madvise,
+            uint64_t after_fadvise,
+            int before_errno,
+            int after_madvise_errno,
+            int after_fadvise_errno,
+            int madvise_rc,
+            int madvise_errno,
+            int fadvise_rc,
+            uint64_t wall_us) {
+        const char * out = dontneed_profile_out();
+        if (!out) {
+            return;
+        }
+
+        static bool header_written = false;
+        static uint64_t seq = 0;
+        FILE * f = std::fopen(out, "a");
+        if (!f) {
+            return;
+        }
+        if (!header_written) {
+            std::fprintf(f,
+                    "seq,path,first,len,resident_before,resident_after_madvise,"
+                    "resident_after_fadvise,before_errno,after_madvise_errno,"
+                    "after_fadvise_errno,madvise_rc,madvise_errno,fadvise_rc,wall_us\n");
+            header_written = true;
+        }
+        std::fprintf(f,
+                "%" PRIu64 ",%s,%zu,%zu,%" PRIu64 ",%" PRIu64 ",%" PRIu64
+                ",%d,%d,%d,%d,%d,%d,%" PRIu64 "\n",
+                ++seq,
+                path ? path : "",
+                first,
+                len,
+                before,
+                after_madvise,
+                after_fadvise,
+                before_errno,
+                after_madvise_errno,
+                after_fadvise_errno,
+                madvise_rc,
+                madvise_errno,
+                fadvise_rc,
+                wall_us);
+        std::fclose(f);
+    }
+
     bool dontneed_fragment(size_t first, size_t last, size_t * len_out) {
         int page_size = sysconf(_SC_PAGESIZE);
         align_range(&first, &last, page_size);
@@ -506,16 +677,65 @@ struct llama_mmap::impl {
         GGML_ASSERT(last >= first);
 
 #ifdef __linux__
-        if (madvise((uint8_t *) addr + first, len, MADV_DONTNEED)) {
+        char path_buf[PATH_MAX];
+        const char * path = dontneed_profile_fd_path(fd, path_buf, sizeof(path_buf));
+        const bool profile = dontneed_profile_filter_matches(path);
+        int before_errno = 0;
+        int after_madvise_errno = 0;
+        int after_fadvise_errno = 0;
+        const auto profile_t0 = std::chrono::steady_clock::now();
+        const uint64_t resident_before = profile ?
+            dontneed_profile_mincore_bytes(addr, first, len, &before_errno) : 0;
+
+        errno = 0;
+        const int madvise_rc = madvise((uint8_t *) addr + first, len, MADV_DONTNEED);
+        const int madvise_errno = errno;
+        const uint64_t resident_after_madvise = profile ?
+            dontneed_profile_mincore_bytes(addr, first, len, &after_madvise_errno) : 0;
+        int fadvise_rc = -2;
+
+        if (madvise_rc) {
+            if (profile) {
+                const auto profile_t1 = std::chrono::steady_clock::now();
+                const uint64_t wall_us =
+                    (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(profile_t1 - profile_t0).count();
+                dontneed_profile_write(
+                        path, first, len,
+                        resident_before, resident_after_madvise, 0,
+                        before_errno, after_madvise_errno, 0,
+                        madvise_rc, madvise_errno, fadvise_rc, wall_us);
+            }
             LLAMA_LOG_WARN("warning: madvise(..., MADV_DONTNEED) failed: %s\n", strerror(errno));
             return false;
         }
         if (dontneed_fadvise_enabled() && fd >= 0) {
-            const int rc = posix_fadvise(fd, (off_t) first, (off_t) len, POSIX_FADV_DONTNEED);
-            if (rc != 0) {
-                LLAMA_LOG_WARN("warning: posix_fadvise(..., POSIX_FADV_DONTNEED) failed: %s\n", strerror(rc));
+            fadvise_rc = posix_fadvise(fd, (off_t) first, (off_t) len, POSIX_FADV_DONTNEED);
+            if (fadvise_rc != 0) {
+                if (profile) {
+                    const auto profile_t1 = std::chrono::steady_clock::now();
+                    const uint64_t wall_us =
+                        (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(profile_t1 - profile_t0).count();
+                    dontneed_profile_write(
+                            path, first, len,
+                            resident_before, resident_after_madvise, 0,
+                            before_errno, after_madvise_errno, 0,
+                            madvise_rc, madvise_errno, fadvise_rc, wall_us);
+                }
+                LLAMA_LOG_WARN("warning: posix_fadvise(..., POSIX_FADV_DONTNEED) failed: %s\n", strerror(fadvise_rc));
                 return false;
             }
+        }
+        const uint64_t resident_after_fadvise = profile ?
+            dontneed_profile_mincore_bytes(addr, first, len, &after_fadvise_errno) : 0;
+        if (profile) {
+            const auto profile_t1 = std::chrono::steady_clock::now();
+            const uint64_t wall_us =
+                (uint64_t) std::chrono::duration_cast<std::chrono::microseconds>(profile_t1 - profile_t0).count();
+            dontneed_profile_write(
+                    path, first, len,
+                    resident_before, resident_after_madvise, resident_after_fadvise,
+                    before_errno, after_madvise_errno, after_fadvise_errno,
+                    madvise_rc, madvise_errno, fadvise_rc, wall_us);
         }
 #endif
         return true;
