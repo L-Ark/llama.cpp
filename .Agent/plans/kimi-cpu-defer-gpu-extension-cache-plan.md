@@ -168,6 +168,68 @@ Next A/B experiment: dev4 budgeted VRAM profile pinning
   - if promising, expand to N96 dev and later held-out; if not, reject and keep
     only this documented negative result.
 
+Result:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-profile-cache-dev2-ab`.
+- Paired prompts:
+  `dev_japan_factual`, `dev_python_reverse`.
+- Baseline:
+  - Japan: quality pass, `1.70 tok/s`, TTFT `9309.39 ms`,
+    decode `18249.54 ms / 31`, RAM peak `12763987968`,
+    IO bytes `223.11 GB`, `io_uring_wait=18.80 s`, down hit `59.5%`,
+    upgate hit `44.4%`;
+  - Python reverse: quality pass, `1.53 tok/s`, TTFT `8706.42 ms`,
+    decode `20203.99 ms / 31`, RAM peak `12758818816`,
+    IO bytes `255.88 GB`, `io_uring_wait=21.58 s`, down hit `57.0%`,
+    upgate hit `37.0%`.
+- Candidate with preload/pin/profile_lfu_lru:
+  - Japan: quality fail (`dangling_comma`), `1.37 tok/s`, TTFT `9414.15 ms`,
+    decode `22595.99 ms / 31`, RAM peak `12760543232`,
+    IO bytes `274.66 GB`, `io_uring_wait=23.59 s`, down hit `30.8%`,
+    upgate hit `30.1%`, direct reads `75`, down pinned `578`,
+    upgate pinned `172`;
+  - Python reverse: quality fail (`repeat_collapse`), `1.35 tok/s`,
+    TTFT `9437.42 ms`, decode `22921.04 ms / 31`,
+    RAM peak `12760342528`, IO bytes `287.74 GB`,
+    `io_uring_wait=23.89 s`, down hit `33.0%`, upgate hit `25.7%`,
+    direct reads `62`, down pinned `578`, upgate pinned `142`.
+- Decision:
+  - reject preload/pin profile admission;
+  - it increased IO bytes and exposed wait, reduced both VRAM hit rates, and
+    failed quality;
+  - failure mode: a fixed dev hotset was not general enough, and pinning
+    reserved too many cache slots for low-current-value entries. Preload also
+    introduced direct reads from the GGUF/source path. This is the opposite of
+    the desired prompt-general dynamic cache behavior.
+
+Next A/B experiment: profile-guided eviction without preload or pinning
+
+- Timestamp: 2026-07-11 CST.
+- Motivation:
+  - the rejected run shows that hard pinning/preloading harms dynamic cache
+    adaptation;
+  - however, profile counts may still be useful as a soft eviction hint after
+    an expert has already been demanded by the current prompt.
+- Runtime env:
+  - `GGML_MOE_VRAM_PROFILE=<dev4 profile.csv>`;
+  - `GGML_MOE_VRAM_PROFILE_PRELOAD=0`;
+  - `GGML_MOE_VRAM_PROFILE_PROTECT=0`;
+  - `GGML_MOE_VRAM_PROFILE_PIN_ON_INSERT=0`;
+  - `GGML_MOE_VRAM_CACHE_POLICY=profile_lfu_lru`;
+  - keep all other current SOTA env unchanged.
+- Theory:
+  - no cold preload means TTFT and direct reads should remain close to baseline;
+  - no pinning means dynamic cache can still adapt to each prompt;
+  - `profile_lfu_lru` should mainly evict zero-profile entries before
+    high-dev-reuse entries, if the profile generalizes.
+- Required A/B:
+  - run the same two N32 dev prompts as the rejected test;
+  - promote only if quality passes and token rate improves on both or improves
+    average without hurting the slower Python prompt;
+  - reject if hit rate rises but token rate falls, because this means the soft
+    profile is not aligned with the critical path.
+
 ## Current execution goal: Kimi CPU/defer GPU-extension parity
 
 Timestamp: 2026-07-11 CST.
