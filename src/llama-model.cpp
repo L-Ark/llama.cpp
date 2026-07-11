@@ -8306,7 +8306,7 @@ std::string llama_model::arch_name() const {
     return llm_arch_name(arch);
 }
 
-void llama_model::drop_expert_mmap_pages_after_prompt() const {
+void llama_model::drop_expert_mmap_pages_after_prompt(bool force) const {
     const char * expert_env = std::getenv("LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT");
     const char * dense_env  = std::getenv("LLAMA_DROP_DENSE_MMAP_AFTER_PROMPT");
     const bool drop_expert = expert_env && expert_env[0] && expert_env[0] != '0';
@@ -8314,7 +8314,7 @@ void llama_model::drop_expert_mmap_pages_after_prompt() const {
     if (!drop_expert && !drop_dense) {
         return;
     }
-    if (pimpl->expert_mmap_drop_after_prompt_done) {
+    if (pimpl->expert_mmap_drop_after_prompt_done && !force) {
         return;
     }
     pimpl->expert_mmap_drop_after_prompt_done = true;

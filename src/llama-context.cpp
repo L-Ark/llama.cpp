@@ -2275,7 +2275,7 @@ int llama_context::decode(const llama_batch & batch_inp) {
                 }
                 LLAMA_LOG_INFO("%s: running delayed second prompt mmap drop delay_us=%lld\n",
                         __func__, delay_us);
-                model.drop_expert_mmap_pages_after_prompt();
+                model.drop_expert_mmap_pages_after_prompt(true);
             } else {
                 LLAMA_LOG_WARN("%s: invalid LLAMA_SECOND_DROP_EXPERT_MMAP_AFTER_PROMPT_US=%s\n",
                         __func__, second_drop_delay_env);
