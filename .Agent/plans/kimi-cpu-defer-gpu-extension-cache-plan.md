@@ -12134,3 +12134,205 @@ Next direction after rejection:
 4. If v2 cannot improve exposed critical-path time, pivot to scheduler-level
    improvements: larger per-call inflight, earlier next-layer prefetch, or
    coalesced up/gate/down read scheduling.
+
+## Progress update: active baseline and v2 same-layer coalescing screen
+
+Timestamp: 2026-07-11 CST.
+
+Commit under test:
+
+- Branch: `vendor/kimi-deepseek-41d205-additive`
+- HEAD: `4cd445cde`
+- No behavior-changing local modifications were used.
+
+Endpoint cold-start baseline, profile disabled:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-active-endpoint-baseline-4cd445cde`
+- Command shape:
+  `systemd-run --wait --collect --same-dir -p MemoryMax=15900000000 -p MemorySwapMax=0 env RUN=<run> N=32 PROFILE=0 COPY_PROFILE=0 PROMPT_ID=<id> PROMPT_USER_TEXT=<prompt> QUALITY_KEYWORDS=<keywords> .Agent/run-tools/kimi-general-prompt-repro.sh`
+
+| prompt | quality | tok/s | TTFT | decode | RAM peak | output gate |
+|---|---|---:|---:|---:|---:|---|
+| `dev_france_regression` | pass | `1.87` | `7763.95 ms` | `16615.83 ms / 31` | `12721909760` | coherent France paragraph |
+| `test_english_factual_01` | pass | `1.80` | `7493.45 ms` | `17212.51 ms / 31` | `12574064640` | coherent Brazil paragraph |
+
+Profile cold-start baseline:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-active-baseline-4cd445cde`
+- Dev run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-active-baseline-4cd445cde/dev_france_regression`
+- Held-out baseline run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-active-baseline-4cd445cde/test_english_factual_01`
+- Analysis dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-active-baseline-4cd445cde/analysis`
+- Extra profile env:
+  - `PROFILE=1`;
+  - `COPY_PROFILE=1`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT=$RUN/io-batch-profile.csv`;
+  - `GGML_MOE_IO_WAIT_TRACE_OUT=$RUN/io-wait-trace.csv`;
+  - `GGML_MOE_IO_READ_TRACE_OUT=$RUN/io-read-trace.csv`;
+  - `GGML_MOE_IO_LOCALITY_PROFILE_OUT=$RUN/io-locality-profile.csv`;
+  - `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+
+Profile result:
+
+| prompt | quality | tok/s | TTFT | decode | RAM peak | file cache | refault/direct reclaim |
+|---|---|---:|---:|---:|---:|---:|---|
+| `dev_france_regression` | pass | `1.47` | `11701.89 ms` | `21037.05 ms / 31` | `12777381888` | `12074024960` | `0 / 0` |
+| `test_english_factual_01` | pass | `1.49` | `10699.35 ms` | `20852.82 ms / 31` | `12618588160` | `12061102080` | `0 / 0` |
+
+IO summary:
+
+- Report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-active-baseline-4cd445cde/analysis/io-summary.md`
+- Weighted token rate under profile: `1.480 tok/s`.
+- Aggregate `io_uring` throughput: `10.023 GiB/s`.
+- Pure IO peak reference: `10.300 GiB/s`.
+- Peak utilization: `0.973`.
+- Weighted `io_uring` inflight average: `4.515`.
+- `io_uring` wait/decode fraction: `0.787`.
+- Direct read ratio: `0.000`; all expert-pack reads are through the
+  `io_uring` path.
+- Up/gate hit rate:
+  - France: `0.454`;
+  - Brazil: `0.423`.
+- Down hit rate:
+  - France: `0.577`;
+  - Brazil: `0.584`.
+
+Storage/page-cache summary:
+
+- Page-cache mincore report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-active-baseline-4cd445cde/analysis/file-cache-residency-after-brazil.csv`
+- After the last profile run, cache residency was:
+  - GGUF shards: `10.988 GiB`;
+  - alias TSV: `0.010 GiB`;
+  - expert packs: `0.005 GiB`.
+- This confirms the decode RAM file cache is still mostly clean GGUF shard
+  pages, not a useful explicit expert cache. However, previous RAM slab A/B
+  showed that replacing this memory is only useful if the replacement has high
+  prompt-general reuse and low scheduling overhead.
+
+Bottleneck interpretation:
+
+- This profile no longer supports the old diagnosis that SSD throughput is far
+  below the pure bench. On the current path, aggregate throughput is already
+  near the `10.0-10.4 GiB/s` ceiling.
+- The immediate bottleneck is effective bytes on the critical path:
+  - profile reads roughly `6.7-6.8 GiB/token` from expert pack;
+  - at `10.3 GiB/s`, an IO-only `2 tok/s` target requires about
+    `<=5.15 GiB/token`;
+  - a `5 tok/s` target requires about `<=2.06 GiB/token`.
+- Therefore the next primary improvement must reduce bytes per active expert,
+  raise effective VRAM hit rate without prompt-specific overfitting, or replace
+  multiple small exposed transfers with one lower-overhead coalesced transfer.
+
+Top2048 v2 payload shadow screen:
+
+- Payload pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-v2.expert-pack`
+- Manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-manifest.tsv`
+- Pack size: `5882155008` bytes, about `5.5 GiB` on disk.
+- Both runs below are shadow-only and do not change logits, routing, cache
+  admission, or output.
+
+Top2048 v2 shadow without same-layer coalescing:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-iouring-budget8-top2048-n32-france-4cd445cde`
+- Extra env:
+  - `GGML_MOE_EXPERT_PACK_V2=<top2048 pack>`;
+  - `GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=<top2048 manifest>`;
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE=1`;
+  - `GGML_MOE_EXPERT_PACK_V2_PARTIAL_SPLIT_SHADOW_STAGE_OUT=$RUN/v2-shadow-stage.csv`;
+  - `GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ=1`;
+  - `GGML_MOE_EXPERT_PACK_V2_SHADOW_IOURING_READ=1`.
+- Result:
+  - quality: pass;
+  - TTFT: `11246.80 ms`;
+  - decode: `23719.19 ms / 31 = 1.31 tok/s`;
+  - RAM peak: `12800782336`;
+  - v2 accepted preflight: `16505 / 68736`, full-cover calls `23`;
+  - shadow covered entries: `10647`;
+  - staged entries: `3856`;
+  - staged bytes: `10.342 GiB`;
+  - staged saved bytes: `12.500 GiB`;
+  - `io_uring` batches/jobs: `1701 / 3856`;
+  - v2 `io_uring` inflight avg/max: `2.12 / 8`;
+  - v2 read wall: `1802.500 ms`;
+  - v2 `io_uring` wait: `1228.605 ms`;
+  - v2 H2D event: `519.473 ms`;
+  - v2 total shadow wall: `2697.673 ms`.
+
+Top2048 v2 shadow with same-layer coalescing:
+
+- Run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-shadow-iouring-coalesce-top2048-n32-france-4cd445cde`
+- Additional env:
+  - `GGML_MOE_EXPERT_PACK_V2_SHADOW_COALESCE_SAME_LAYER=1`.
+- Result:
+  - quality: pass;
+  - TTFT: `11811.82 ms`;
+  - decode: `23552.64 ms / 31 = 1.32 tok/s`;
+  - RAM peak: `12836929536`;
+  - v2 accepted preflight: `16505 / 68736`, full-cover calls `23`;
+  - shadow covered entries: `10647`;
+  - staged entries: `3856`;
+  - staged bytes: `10.342 GiB`;
+  - staged saved bytes: `12.500 GiB`;
+  - `io_uring` batches/jobs: `907 / 3856`;
+  - v2 `io_uring` inflight avg/max: `3.77 / 8`;
+  - v2 read wall: `1390.115 ms`;
+  - v2 `io_uring` wait: `712.418 ms`;
+  - v2 H2D event: `490.506 ms`;
+  - v2 total shadow wall: `2224.147 ms`;
+  - coalesced groups/source calls/entries: `907 / 1701 / 3856`.
+
+Same-layer coalescing A/B:
+
+| metric | no coalesce | coalesce | delta |
+|---|---:|---:|---:|
+| v2 batches | `1701` | `907` | `-794` |
+| v2 jobs | `3856` | `3856` | `0` |
+| inflight avg | `2.12` | `3.77` | `+1.65` |
+| read wall | `1802.500 ms` | `1390.115 ms` | `-412.385 ms` |
+| `io_uring` wait | `1228.605 ms` | `712.418 ms` | `-516.187 ms` |
+| H2D event | `519.473 ms` | `490.506 ms` | `-28.967 ms` |
+| total shadow wall | `2697.673 ms` | `2224.147 ms` | `-473.526 ms` |
+| RAM peak | `12800782336` | `12836929536` | `+36147200` |
+
+Decision:
+
+- Same-layer v2 shadow coalescing is a real scheduling improvement and should
+  remain in the next implementation path.
+- Top2048 expansion alone is not enough; it increases coverage but does not
+  improve per-call batchability without coalescing.
+- The top2048 v2 payload saves only about `12.5 GiB` over N32 France, or about
+  `0.40 GiB/token`. That can plausibly close the small gap from the endpoint
+  France baseline `1.87 tok/s` to `>2 tok/s` only if real dispatch replaces the
+  existing expert-pack transfers instead of adding a second exposed H2D/sync
+  sequence.
+- It is not enough to move toward `5 tok/s` by itself. The long-term `5 tok/s`
+  path still needs much larger byte reduction, higher prompt-general VRAM hit
+  rate, or a different storage/compute form.
+
+Next execution plan:
+
+1. Do not promote any v2 shadow result as SOTA.
+2. Do not expand to top2992/top4096 as the next primary step unless a new bound
+   shows it materially raises coalesced batchability, not only coverage.
+3. Design a default-off coalesced v2 dispatch smoke:
+   - start with the smallest safe role/layer subset;
+   - reuse the same same-layer grouping that reduced shadow batches;
+   - ensure it replaces current expert-pack reads for covered entries instead
+     of adding a second transfer;
+   - avoid per-entry H2D synchronization;
+   - keep uncovered experts on the existing v1 path;
+   - report output equality/quality, v2 bytes, replaced v1 bytes, net bytes,
+     H2D time, sync time, `io_uring` wait, RAM peak, and TTFT.
+4. First run dispatch smoke only on dev prompts.
+5. Run held-out validation only if dev A/B improves endpoint token rate while
+   preserving RAM, TTFT, and quality.
