@@ -17298,3 +17298,197 @@ Decision:
      kernel, sync, RAM peak, TTFT, token rate, and quality.
 - Do not run held-out prompts until a dev prompt endpoint A/B shows a real
   token-rate gain under the RAM and TTFT gates.
+
+## 2026-07-12 Next Goal: Kimi CPU/defer GPU-extension applicability
+
+### Goal
+
+Reach a reproducible, general-prompt Kimi decode rate above the current stable
+SOTA, with a first concrete milestone of `>= 2.0 tok/s`, under these hard
+constraints:
+
+- cold start only;
+- host RAM strictly below `16 GB`, including page cache and non-process memory;
+- 32 GB RTX 5090 VRAM should be used aggressively for high-value expert data;
+- held-out/random prompts, not prompt-specific tuning, are the final metric;
+- `Please introduce France in a short paragraph.` must remain semantically
+  correct and coherent as a fixed quality gate;
+- TTFT must not increase by more than `20%` versus the immediately preceding
+  accepted baseline;
+- every accepted SOTA must be reproducible from one commit, one branch, one
+  command set, and one recorded config; if this cannot be reproduced, it is not
+  a SOTA.
+
+The specific question for this phase is whether the DeepSeek SOTA idea applies
+to Kimi:
+
+- DeepSeek benefited because the CPU/defer MoE path was the main scheduler and
+  the GPU extension caught gate/up/down work that would otherwise stay slow.
+- For Kimi, current evidence says most decode work is already on the expert
+  pack + io_uring + GPU-extension path, and recent source-replacement profiling
+  showed `ranges_attempted=0`.
+- Therefore the plan is not to assume the DeepSeek mechanism transfers
+  directly. The first goal is to prove whether any remaining Kimi CPU/defer or
+  fallback work still exists on the critical path and is large enough to matter.
+
+### Baseline To Reproduce First
+
+Before changing code, rerun a strict cold-start baseline on the current branch:
+
+- branch: `vendor/kimi-deepseek-41d205-additive`;
+- code baseline: latest pushed commit plus current default-off local diff only
+  if explicitly included in the test label;
+- memory limit: `MemoryMax=15900000000`, `MemorySwapMax=0`;
+- prompt set:
+  - dev: `Please introduce France in a short paragraph.`;
+  - dev: `What is intelligence?`;
+  - held-out: `Introduce HKUST in a short paragraph.`;
+  - held-out: `How to deploy a large model on a small devices?`;
+- output length:
+  - N32 for quick endpoint A/B;
+  - N96 only after N32 shows a real improvement;
+- required metrics:
+  - prefill/prompt token rate;
+  - decode token rate;
+  - TTFT;
+  - total decode time and per-token time;
+  - `iouring_reads`, `iouring_bytes`, `iouring_wait_us`;
+  - up/gate/down cache hit rates;
+  - CPU fallback count and fallback tensor types;
+  - RAM peak and file/anon/pinned breakdown;
+  - VRAM cache allocation and hit/miss summary;
+  - exact generated answer for the France gate and at least one held-out prompt.
+
+### Step 1: Locate The Real Remaining Critical Path
+
+Run profiling with no new optimization enabled.
+
+Record the per-token time split into:
+
+- routing/topk latency;
+- up/gate expert wait;
+- up/gate H2D;
+- up/gate compute;
+- down expert wait;
+- down H2D;
+- down compute;
+- current-down overlap effectiveness;
+- CPU fallback, if any;
+- synchronization and scheduler gaps;
+- page-cache refault/reclaim events.
+
+Decision rule:
+
+- If CPU fallback or CPU/defer non-GPU work is below noise level, do not spend
+  this phase on CPU fallback.
+- If `io_uring_wait_us` and expert bytes dominate, prioritize byte reduction,
+  coalescing, or earlier scheduling.
+- If scheduler gaps dominate despite low compute time, prioritize prefetch /
+  prediction / routing-to-IO latency.
+
+### Step 2: Validate DeepSeek-style GPU-extension Transferability
+
+Test whether Kimi still has any role/layer where a CPU/defer path can be
+converted into a GPU extension win.
+
+Experiments:
+
+1. Enable the default-off scheduler pack source-replacement diagnostics and
+   confirm whether `ranges_attempted` remains `0` on N32 and N96.
+2. Log, by layer and role, every expert request source:
+   - VRAM cache hit;
+   - expert-pack io_uring;
+   - overlay pack;
+   - RAM tier, if enabled;
+   - GGUF fallback;
+   - CPU compute fallback.
+3. For any non-zero CPU/GGUF fallback, record tensor type, role, layer, expert
+   id, bytes, and elapsed time.
+4. Only if this path is measurable on the critical path, implement a
+   default-off Kimi GPU-extension catch path analogous to DeepSeek.
+
+Acceptance:
+
+- A CPU/defer-to-GPU change is accepted only if it improves token rate, keeps
+  quality correct, keeps TTFT within gate, and preserves RAM below 16 GB.
+- A no-op diagnostic or a neutral profile is documented and rejected, not
+  promoted as SOTA.
+
+### Step 3: Test Lower-byte v2 Expert Replacement Before More RAM Tier Work
+
+Current evidence shows that full-byte RAM tiers save some SSD wait but often
+lose it back in RAM->VRAM transfer and scheduler overhead. Therefore the next
+high-priority path is reducing critical-path bytes.
+
+Run a default-off v2 A/B:
+
+- v2 pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-v2.expert-pack`;
+- manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-manifest.tsv`;
+- first test:
+  - `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN=1`;
+  - `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_OVERLAP=1`;
+  - N32 France only;
+- compare against same binary/default-off control.
+
+Required analysis:
+
+- replaced v1 bytes;
+- v2 bytes;
+- net bytes saved;
+- v2 read wait;
+- v2 H2D;
+- changed decode time;
+- quality;
+- RAM peak;
+- TTFT.
+
+Decision rule:
+
+- If v2 reduces bytes but decode does not improve, profile the gap before
+  further coding.
+- If it improves N32, rerun N96 France and one held-out prompt.
+- If it regresses, keep code default-off and document rejection.
+
+### Step 4: Only Then Revisit RAM/VRAM Storage Layout
+
+RAM should not hold low-value page cache if decode does not use it, but any
+replacement must be proven to reduce critical-path time, not just bytes.
+
+Allowed experiments after Step 1-3:
+
+- identify GGUF shard page-cache ranges still resident after prompt;
+- classify whether each range is dense/attention/shared expert/output or stale
+  expert data;
+- use `madvise(DONTNEED)` only for ranges proven not to be used during decode;
+- test a structured RAM tier only for high-value layer/role groups, such as
+  whole up+gate for a low-hit layer;
+- prefer pageable RAM first, pinned RAM only if it proves faster end-to-end;
+- keep RAM tier default-off until it improves general prompts.
+
+Rejected unless new profiling contradicts prior data:
+
+- global full-byte hot expert RAM tier as the primary strategy;
+- prompt-specific France-only expert packs as SOTA;
+- loading large RAM slabs during decode if it increases TTFT or causes reclaim
+  noise without improving held-out prompt rate.
+
+### Reproducibility Contract For Every New SOTA
+
+Every accepted commit must include, in the commit body or linked plan section:
+
+- previous baseline commit and rollback commit;
+- branch name;
+- exact model, pack, overlay, manifest, and env vars;
+- exact command or script path;
+- prompt/test set;
+- N32 and N96 result if promoted beyond smoke;
+- token rate, TTFT, RAM peak, key IO counters, and quality output;
+- why the speedup happened;
+- why it should generalize;
+- why TTFT/RAM/quality gates are still satisfied.
+
+If the result cannot be reproduced from those instructions after a fresh
+cold-start run, it must be marked invalid and the branch must roll back to the
+last reproducible SOTA.
