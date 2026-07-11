@@ -418,6 +418,80 @@ Decision:
 4. Only after direct/io_uring shadow proves read+H2D can approach the existing
    expert-pack path should partial dispatch be considered.
 
+## Current subgoal: v2 direct/io_uring shadow reader
+
+Timestamp: 2026-07-11 CST.
+
+Code-reading finding:
+
+- Existing v1 expert pack path already has the pieces needed for high-throughput
+  direct reads:
+  - `expert_pack_source.fd_direct`;
+  - O_DIRECT open in `expert_pack_open_data_source`;
+  - direct pread helper;
+  - batch `io_uring` staging through `expert_pack_iouring_copy_jobs`;
+  - per-ring queue-depth, batch-size, wait, and H2D counters.
+- Current v2 pack loading does not use that path:
+  - `expert_pack_v2_load_source` opens only `FILE *file`;
+  - it sets `fd_direct = -1`;
+  - runtime shadow read currently calls
+    `ggml_cuda_moe_expert_pack_v2_read_debug`, which uses `fseeko` +
+    `fread`;
+  - this creates page-cache pressure and serialized read timing, exactly what
+    top1024 exposed.
+
+Goal:
+
+> Add a default-off v2 direct/io_uring shadow reader so the top1024 payload pack
+> can be measured with the same storage path shape as the current expert-pack
+> runtime, still without changing model output.
+
+Implementation plan:
+
+1. Add v2 source direct-open support.
+   - Keep normal v2 default behavior unchanged.
+   - Behind an env such as
+     `GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ=1`, open v2 pack sources with
+     O_DIRECT when `GGML_MOE_IO_BACKEND=direct|iouring`.
+   - Preserve the existing `FILE *` for index loading and debug fallback.
+
+2. Add a v2 direct single-entry reader first.
+   - Read into the existing shadow pinned host buffer.
+   - Handle alignment the same way as v1 direct reads:
+     aligned offset, aligned size, and bounce buffer only if needed.
+   - Report direct bytes, direct calls, fallback calls, read wall, and whether
+     the fd was direct-capable.
+   - This first step may still be serial; it is a page-cache-removal test, not
+     the final reader.
+
+3. Add a v2 batched io_uring shadow reader if direct single-entry is positive.
+   - Group staged v2 candidates per call into read jobs.
+   - Reuse the existing pinned staging ring shape where possible.
+   - Report queue depth, batch hist, submit calls, wait calls, CQEs, inflight
+     average/max, physical read bytes, payload bytes, and H2D event time.
+   - Keep it shadow-only; no output change.
+
+4. Re-run top1024 N32 France after each reader step.
+   - Same pack:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024/selected-iq1s-overlay-v2.expert-pack`.
+   - Same manifest:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024/selected-iq1s-overlay-manifest.tsv`.
+   - Required checks:
+     - quality pass;
+     - RAM peak below `15900000000`;
+     - no CPU fallback regression;
+     - no output-changing dispatch;
+     - compare v2 read rate and RAM file-cache delta to the `fread` baseline.
+
+Decision gate:
+
+- If direct/io_uring shadow cannot approach the current expert-pack IO rate or
+  still pushes file cache/RAM too high, do not implement partial dispatch; pivot
+  to RAM/VRAM storage policy.
+- If top1024 direct/io_uring shadow shows stable multi-GiB staged saving with
+  low page-cache growth and plausible exposed wait reduction, then implement a
+  guarded partial dispatch smoke for the smallest safe role/layer subset.
+
 ## Current subgoal: v2 partial-split payload timing gate
 
 Timestamp: 2026-07-11 CST.
