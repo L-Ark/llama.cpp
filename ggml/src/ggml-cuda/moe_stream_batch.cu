@@ -751,6 +751,188 @@ static expert_pack_state g_expert_pack;
 
 static size_t expert_pack_iouring_batch_bucket(size_t jobs);
 
+struct expert_pack_source_read_profile_stats {
+    uint64_t ram_tier_jobs = 0;
+    uint64_t ram_tier_bytes = 0;
+    uint64_t host_prefetch_jobs = 0;
+    uint64_t host_prefetch_bytes = 0;
+    uint64_t iouring_groups = 0;
+    uint64_t iouring_jobs = 0;
+    uint64_t iouring_payload_bytes = 0;
+    uint64_t iouring_physical_bytes = 0;
+    uint64_t iouring_fallbacks = 0;
+    uint64_t direct_reads = 0;
+    uint64_t direct_payload_bytes = 0;
+    uint64_t direct_physical_bytes = 0;
+    uint64_t direct_fallbacks = 0;
+    uint64_t page_cache_reads = 0;
+    uint64_t page_cache_bytes = 0;
+    uint64_t page_cache_failures = 0;
+    uint64_t buffered_reads = 0;
+    uint64_t buffered_bytes = 0;
+    uint64_t buffered_failures = 0;
+};
+
+enum class expert_pack_source_read_kind {
+    ram_tier,
+    host_prefetch,
+    iouring,
+    iouring_fallback,
+    direct,
+    direct_fallback,
+    page_cache,
+    page_cache_failure,
+    buffered,
+    buffered_failure,
+};
+
+static std::mutex g_expert_pack_source_read_profile_mu;
+static std::unordered_map<int32_t, expert_pack_source_read_profile_stats> g_expert_pack_source_read_profile;
+
+static const char * expert_pack_source_read_profile_path() {
+    static const char *path = []() -> const char * {
+        const char *env = std::getenv("GGML_MOE_SOURCE_READ_PROFILE_OUT");
+        return (env && env[0]) ? env : nullptr;
+    }();
+    return path;
+}
+
+static void expert_pack_source_read_profile_record(
+        int32_t source_idx,
+        expert_pack_source_read_kind kind,
+        uint64_t jobs,
+        uint64_t payload_bytes,
+        uint64_t physical_bytes) {
+    if (!expert_pack_source_read_profile_path()) return;
+    std::lock_guard<std::mutex> lk(g_expert_pack_source_read_profile_mu);
+    expert_pack_source_read_profile_stats &s = g_expert_pack_source_read_profile[source_idx];
+    switch (kind) {
+        case expert_pack_source_read_kind::ram_tier:
+            s.ram_tier_jobs += jobs;
+            s.ram_tier_bytes += payload_bytes;
+            break;
+        case expert_pack_source_read_kind::host_prefetch:
+            s.host_prefetch_jobs += jobs;
+            s.host_prefetch_bytes += payload_bytes;
+            break;
+        case expert_pack_source_read_kind::iouring:
+            s.iouring_groups += 1;
+            s.iouring_jobs += jobs;
+            s.iouring_payload_bytes += payload_bytes;
+            s.iouring_physical_bytes += physical_bytes;
+            break;
+        case expert_pack_source_read_kind::iouring_fallback:
+            s.iouring_fallbacks += jobs;
+            break;
+        case expert_pack_source_read_kind::direct:
+            s.direct_reads += jobs;
+            s.direct_payload_bytes += payload_bytes;
+            s.direct_physical_bytes += physical_bytes;
+            break;
+        case expert_pack_source_read_kind::direct_fallback:
+            s.direct_fallbacks += jobs;
+            break;
+        case expert_pack_source_read_kind::page_cache:
+            s.page_cache_reads += jobs;
+            s.page_cache_bytes += payload_bytes;
+            break;
+        case expert_pack_source_read_kind::page_cache_failure:
+            s.page_cache_failures += jobs;
+            break;
+        case expert_pack_source_read_kind::buffered:
+            s.buffered_reads += jobs;
+            s.buffered_bytes += payload_bytes;
+            break;
+        case expert_pack_source_read_kind::buffered_failure:
+            s.buffered_failures += jobs;
+            break;
+    }
+}
+
+static void expert_pack_source_read_profile_write() {
+    const char *path = expert_pack_source_read_profile_path();
+    if (!path) return;
+    std::unordered_map<int32_t, expert_pack_source_read_profile_stats> stats;
+    {
+        std::lock_guard<std::mutex> lk(g_expert_pack_source_read_profile_mu);
+        stats = g_expert_pack_source_read_profile;
+    }
+
+    std::unordered_map<int32_t, uint64_t> entries_by_source;
+    std::unordered_map<int32_t, uint64_t> alias_entries_by_source;
+    for (const expert_pack_entry &entry : g_expert_pack.entries) {
+        entries_by_source[entry.source_idx] += 1;
+        if (entry.alias_source) {
+            alias_entries_by_source[entry.source_idx] += 1;
+        }
+    }
+    for (size_t i = 0; i < g_expert_pack.sources.size(); ++i) {
+        stats[(int32_t)i];
+    }
+
+    FILE *f = std::fopen(path, "w");
+    if (!f) return;
+    std::fprintf(f,
+            "source_idx,path,page_cache,fd_direct,entries,alias_entries,"
+            "ram_tier_jobs,ram_tier_bytes,host_prefetch_jobs,host_prefetch_bytes,"
+            "iouring_groups,iouring_jobs,iouring_payload_bytes,iouring_physical_bytes,iouring_fallbacks,"
+            "direct_reads,direct_payload_bytes,direct_physical_bytes,direct_fallbacks,"
+            "page_cache_reads,page_cache_bytes,page_cache_failures,"
+            "buffered_reads,buffered_bytes,buffered_failures\n");
+    std::vector<int32_t> keys;
+    keys.reserve(stats.size());
+    for (const auto &kv : stats) {
+        keys.push_back(kv.first);
+    }
+    std::sort(keys.begin(), keys.end());
+    for (int32_t source_idx : keys) {
+        const expert_pack_source_read_profile_stats &s = stats[source_idx];
+        const expert_pack_source *source =
+            (source_idx >= 0 && (size_t)source_idx < g_expert_pack.sources.size()) ?
+                &g_expert_pack.sources[(size_t)source_idx] : nullptr;
+        const char *source_path = source ? source->path : "";
+        const int page_cache = source && source->page_cache ? 1 : 0;
+#if !defined(_WIN32)
+        const int fd_direct = source ? source->fd_direct : -1;
+#else
+        const int fd_direct = -1;
+#endif
+        std::fprintf(f,
+                "%d,%s,%d,%d,%lu,%lu,"
+                "%lu,%lu,%lu,%lu,"
+                "%lu,%lu,%lu,%lu,%lu,"
+                "%lu,%lu,%lu,%lu,"
+                "%lu,%lu,%lu,"
+                "%lu,%lu,%lu\n",
+                source_idx,
+                source_path,
+                page_cache,
+                fd_direct,
+                (unsigned long)entries_by_source[source_idx],
+                (unsigned long)alias_entries_by_source[source_idx],
+                (unsigned long)s.ram_tier_jobs,
+                (unsigned long)s.ram_tier_bytes,
+                (unsigned long)s.host_prefetch_jobs,
+                (unsigned long)s.host_prefetch_bytes,
+                (unsigned long)s.iouring_groups,
+                (unsigned long)s.iouring_jobs,
+                (unsigned long)s.iouring_payload_bytes,
+                (unsigned long)s.iouring_physical_bytes,
+                (unsigned long)s.iouring_fallbacks,
+                (unsigned long)s.direct_reads,
+                (unsigned long)s.direct_payload_bytes,
+                (unsigned long)s.direct_physical_bytes,
+                (unsigned long)s.direct_fallbacks,
+                (unsigned long)s.page_cache_reads,
+                (unsigned long)s.page_cache_bytes,
+                (unsigned long)s.page_cache_failures,
+                (unsigned long)s.buffered_reads,
+                (unsigned long)s.buffered_bytes,
+                (unsigned long)s.buffered_failures);
+    }
+    std::fclose(f);
+}
+
 struct global_sched_shadow_key {
     int32_t source_idx = 0;
     uint64_t offset = 0;
@@ -3471,6 +3653,7 @@ static void current_down_overlap_report_atexit() {
 
 static void expert_pack_report_atexit() {
     if (!g_expert_pack.enabled) return;
+    expert_pack_source_read_profile_write();
     if (const char *direct_path = direct_read_site_profile_path()) {
         std::lock_guard<std::mutex> lk(g_direct_read_site_mu);
         std::fprintf(stderr,
@@ -6935,6 +7118,7 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
 #if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
     expert_pack_source *source = expert_pack_source_for_entry(entry);
     if (!entry || !source || source->fd_direct < 0 || entry->nbytes != sz) return false;
+    const int32_t source_idx = entry->source_idx;
     const uint64_t alignment = expert_pack_direct_alignment();
     const bool aligned_alias = expert_pack_env_bool("GGML_MOE_IO_ALIGNED_ALIAS_BATCH", false) &&
         entry->alias_source && (entry->offset % alignment) != 0;
@@ -6947,12 +7131,14 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
     if (aligned_alias) {
         if (posix_memalign(&read_dst, (size_t)alignment, read_sz) != 0 || !read_dst) {
             ++g_expert_pack.iouring_fallbacks;
+            expert_pack_source_read_profile_record(source_idx, expert_pack_source_read_kind::iouring_fallback, 1, sz, read_sz);
             return false;
         }
     } else if ((entry->offset % alignment) != 0 ||
             ((uintptr_t)dst % alignment) != 0 ||
             read_sz < sz) {
         ++g_expert_pack.iouring_fallbacks;
+        expert_pack_source_read_profile_record(source_idx, expert_pack_source_read_kind::iouring_fallback, 1, sz, read_sz);
         return false;
     }
 
@@ -6961,6 +7147,7 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
     if (io_uring_queue_init(1, &ring_io, flags) != 0) {
         if (read_dst != dst) std::free(read_dst);
         ++g_expert_pack.iouring_fallbacks;
+        expert_pack_source_read_profile_record(source_idx, expert_pack_source_read_kind::iouring_fallback, 1, sz, read_sz);
         return false;
     }
 
@@ -6969,6 +7156,7 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
         io_uring_queue_exit(&ring_io);
         if (read_dst != dst) std::free(read_dst);
         ++g_expert_pack.iouring_fallbacks;
+        expert_pack_source_read_profile_record(source_idx, expert_pack_source_read_kind::iouring_fallback, 1, sz, read_sz);
         return false;
     }
 
@@ -6984,6 +7172,7 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
         io_uring_queue_exit(&ring_io);
         if (read_dst != dst) std::free(read_dst);
         ++g_expert_pack.iouring_fallbacks;
+        expert_pack_source_read_profile_record(source_idx, expert_pack_source_read_kind::iouring_fallback, 1, sz, read_sz);
         return false;
     }
 
@@ -7007,11 +7196,13 @@ static bool expert_pack_read_entry_iouring(const expert_pack_entry *entry, void 
         }
         ++g_expert_pack.iouring_reads;
         g_expert_pack.iouring_bytes.fetch_add(sz);
+        expert_pack_source_read_profile_record(source_idx, expert_pack_source_read_kind::iouring, 1, sz, read_sz);
         return true;
     }
 
     if (read_dst != dst) std::free(read_dst);
     ++g_expert_pack.iouring_fallbacks;
+    expert_pack_source_read_profile_record(source_idx, expert_pack_source_read_kind::iouring_fallback, 1, sz, read_sz);
     return false;
 #else
     (void)entry;
@@ -7047,6 +7238,7 @@ static bool expert_pack_direct_read_entry_to_host(const expert_pack_entry *entry
 #if !defined(_WIN32)
     expert_pack_source *source = expert_pack_source_for_entry(entry);
     if (!entry || !source || source->fd_direct < 0 || entry->nbytes != sz) return false;
+    const int32_t source_idx = entry->source_idx;
     const uint64_t alignment = expert_pack_direct_alignment();
     const uint64_t aligned_offset = (entry->offset / alignment) * alignment;
     const size_t prefix = (size_t)(entry->offset - aligned_offset);
@@ -7054,11 +7246,19 @@ static bool expert_pack_direct_read_entry_to_host(const expert_pack_entry *entry
     if ((entry->offset % alignment) == 0 &&
             ((uintptr_t)dst % alignment) == 0 &&
             read_sz == (size_t)align_up_u64((uint64_t)sz, alignment)) {
-        return expert_pack_direct_pread_all(source->fd_direct, dst, read_sz, entry->offset);
+        const bool ok = expert_pack_direct_pread_all(source->fd_direct, dst, read_sz, entry->offset);
+        expert_pack_source_read_profile_record(
+                source_idx,
+                ok ? expert_pack_source_read_kind::direct : expert_pack_source_read_kind::direct_fallback,
+                1,
+                sz,
+                read_sz);
+        return ok;
     }
 
     void *bounce = nullptr;
     if (posix_memalign(&bounce, alignment, read_sz) != 0 || !bounce) {
+        expert_pack_source_read_profile_record(source_idx, expert_pack_source_read_kind::direct_fallback, 1, sz, read_sz);
         return false;
     }
     const bool ok = expert_pack_direct_pread_all(source->fd_direct, bounce, read_sz, aligned_offset);
@@ -7066,6 +7266,12 @@ static bool expert_pack_direct_read_entry_to_host(const expert_pack_entry *entry
         std::memcpy(dst, (const char *)bounce + prefix, sz);
     }
     free(bounce);
+    expert_pack_source_read_profile_record(
+            source_idx,
+            ok ? expert_pack_source_read_kind::direct : expert_pack_source_read_kind::direct_fallback,
+            1,
+            sz,
+            read_sz);
     return ok;
 #else
     (void)entry;
@@ -7088,6 +7294,7 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
             std::memcpy(dst, (const char *)mmap_source->mmap_base + entry->offset, sz);
             ++g_expert_pack.page_cache_reads;
             g_expert_pack.page_cache_bytes.fetch_add((uint64_t)sz);
+            expert_pack_source_read_profile_record(entry->source_idx, expert_pack_source_read_kind::page_cache, 1, sz, sz);
             return true;
         }
         std::lock_guard<std::mutex> lk(g_expert_pack.mu);
@@ -7097,14 +7304,17 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
         if (::fseeko(source->file, (off_t)entry->offset, SEEK_SET) != 0) {
 #endif
             ++g_expert_pack.read_failures;
+            expert_pack_source_read_profile_record(entry->source_idx, expert_pack_source_read_kind::page_cache_failure, 1, sz, sz);
             return false;
         }
         if (!expert_pack_read_exact(source->file, dst, sz)) {
             ++g_expert_pack.read_failures;
+            expert_pack_source_read_profile_record(entry->source_idx, expert_pack_source_read_kind::page_cache_failure, 1, sz, sz);
             return false;
         }
         ++g_expert_pack.page_cache_reads;
         g_expert_pack.page_cache_bytes.fetch_add((uint64_t)sz);
+        expert_pack_source_read_profile_record(entry->source_idx, expert_pack_source_read_kind::page_cache, 1, sz, sz);
         return true;
     }
 
@@ -7143,12 +7353,15 @@ static bool expert_pack_read_entry(const expert_pack_entry *entry, void *dst, si
     if (::fseeko(source->file, (off_t)entry->offset, SEEK_SET) != 0) {
 #endif
         ++g_expert_pack.read_failures;
+        expert_pack_source_read_profile_record(entry->source_idx, expert_pack_source_read_kind::buffered_failure, 1, sz, sz);
         return false;
     }
     if (!expert_pack_read_exact(source->file, dst, sz)) {
         ++g_expert_pack.read_failures;
+        expert_pack_source_read_profile_record(entry->source_idx, expert_pack_source_read_kind::buffered_failure, 1, sz, sz);
         return false;
     }
+    expert_pack_source_read_profile_record(entry->source_idx, expert_pack_source_read_kind::buffered, 1, sz, sz);
     return true;
 }
 
@@ -8162,6 +8375,12 @@ static bool expert_pack_iouring_copy_jobs(
             ram_or_prefetch_bytes += expert_bytes;
             ++ram_hit_jobs;
             ram_hit_bytes += expert_bytes;
+            expert_pack_source_read_profile_record(
+                    job.pack_entry->source_idx,
+                    expert_pack_source_read_kind::ram_tier,
+                    1,
+                    expert_bytes,
+                    0);
             if (profile_ram_batch) {
                 const auto ram_enqueue_end = std::chrono::steady_clock::now();
                 ram_hit_enqueue_ms += std::chrono::duration<double, std::milli>(ram_enqueue_end - ram_enqueue_start).count();
@@ -8190,6 +8409,12 @@ static bool expert_pack_iouring_copy_jobs(
         if (host_prefetch_copy_h2d(job.pack_entry, job.tensor, job.expert_idx, job.dst, expert_bytes, st)) {
             ++ram_or_prefetch_jobs;
             ram_or_prefetch_bytes += expert_bytes;
+            expert_pack_source_read_profile_record(
+                    job.pack_entry->source_idx,
+                    expert_pack_source_read_kind::host_prefetch,
+                    1,
+                    expert_bytes,
+                    0);
             copy_trace.pack_hit = true;
             copy_trace.ram_hit = false;
             if (copy_start != std::chrono::steady_clock::time_point{}) {
@@ -8679,6 +8904,15 @@ static bool expert_pack_iouring_copy_jobs(
             const uint64_t data = io_uring_cqe_get_data64(cqe);
             const size_t pending_idx = data == 0 ? SIZE_MAX : (size_t)data - 1;
             if (pending_idx >= pending.size() || cqe->res != (int)pending[pending_idx].bytes) {
+                if (pending_idx < pending.size() && pending[pending_idx].group_idx < group_plans.size()) {
+                    const iouring_group_plan &failed_group = group_plans[pending[pending_idx].group_idx];
+                    expert_pack_source_read_profile_record(
+                            failed_group.source_idx,
+                            expert_pack_source_read_kind::iouring_fallback,
+                            failed_group.slices.empty() ? 1 : (uint64_t)failed_group.slices.size(),
+                            expert_bytes * (failed_group.slices.empty() ? 1 : (uint64_t)failed_group.slices.size()),
+                            pending[pending_idx].bytes);
+                }
                 io_uring_cqe_seen(ring_io, cqe);
                 ++g_expert_pack.iouring_fallbacks;
                 return false;
@@ -8690,6 +8924,12 @@ static bool expert_pack_iouring_copy_jobs(
             io_uring_cqe_seen(ring_io, cqe);
             ++g_expert_pack.iouring_cqes;
             ++ring.iouring_cqes;
+            expert_pack_source_read_profile_record(
+                    group.source_idx,
+                    expert_pack_source_read_kind::iouring,
+                    group.slices.size(),
+                    (uint64_t)expert_bytes * (uint64_t)group.slices.size(),
+                    group.read_sz);
 
             const bool measure_enqueue = profile_stage || profile_copy || profile_io_batch || profile_io_wait;
             const auto enqueue_start = measure_enqueue ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
