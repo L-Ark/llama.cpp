@@ -190,6 +190,104 @@ Decision:
   replace low-value decode GGUF page cache with explicit RAM/VRAM expert tiers
   selected by exposed wait, not by prompt-specific frequency alone.
 
+### 2026-07-12 Result: v2 Full-cover Down Batched io_uring Accepted
+
+Implementation:
+
+- code path: `ggml/src/ggml-cuda/moe_stream_batch.cu`;
+- new default-off env:
+  `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_IOURING=1`;
+- when enabled, v2 full-cover down cache misses are collected into v2 jobs and
+  copied through batched `io_uring` + O_DIRECT + pinned staging instead of the
+  previous per-entry buffered/direct read plus pageable H2D path;
+- v2 source opening now treats the new env as a reason to open the v2 pack with
+  O_DIRECT;
+- the old v2 full-cover path remains the default when the env is absent;
+- build verification:
+  `cmake --build build-cuda-batch -j 8 --target llama-completion` passed.
+
+Accepted runtime config:
+
+```bash
+GGML_MOE_EXPERT_PACK_V2=/root/lfz/runs/vendor-kimi-token-rate/20260712-kimi-v2-down-group-k2048-payload/selected-iq1s-overlay-v2.expert-pack
+GGML_MOE_EXPERT_PACK_V2_OVERRIDE_MANIFEST=/root/lfz/runs/vendor-kimi-token-rate/20260712-kimi-v2-down-group-k2048-payload/selected-iq1s-overlay-manifest.tsv
+GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN=1
+GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_OVERLAP=0
+GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_IOURING=1
+GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_PROFILE_OUT=$RUN/v2-full-cover-down.csv
+```
+
+Important rejected variant:
+
+- run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-down-group-k2048-iouring-n32-france-223414`;
+- config: v2 iouring enabled but `GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_OVERLAP=1`;
+- quality: pass;
+- TTFT: `12014.53 ms`;
+- decode: `20447.68 ms / 31`, `1.52 tok/s`;
+- v2 actual down total: `383.212 ms`;
+- v2 overlap total: `264.913 ms`;
+- result: rejected. The new actual-down transport is fast, but the old v2
+  overlap path still uses the legacy per-entry read style and erases the gain.
+
+Accepted France A/B:
+
+- control:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-nextgoal-baseline-n32-france-213337`;
+- control quality: pass;
+- control TTFT: `11493.86 ms`;
+- control decode: `20102.13 ms / 31`, `1.54 tok/s`;
+- optimized:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-v2-down-group-k2048-iouring-nooverlap-n32-france-223533`;
+- optimized quality: pass;
+- optimized TTFT: `12091.79 ms`, `+5.2%`, within the `20%` gate;
+- optimized decode: `19854.13 ms / 31`, `1.56 tok/s`;
+- optimized memory peak: `12768542720`, below 16 GB;
+- v2 accepted calls: `197 / 2038`;
+- v2 copied bytes: `3.565 GiB`;
+- v2 saved bytes: `6.624 GiB`;
+- v2 read time: `355.953 ms`;
+- v2 H2D enqueue time: `14.679 ms`;
+- v2 total time: `405.235 ms`;
+- result: accepted as a small improvement over the current N32 control.
+
+Held-out prompt A/B:
+
+- prompt:
+  `How to deploy a large model on a small devices?`;
+- this prompt was not used in the K2048 down-group pack selection traces;
+- control:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-heldout-deploy-control-n32-223654`;
+- control quality: pass;
+- control TTFT: `12688.59 ms`;
+- control decode: `20721.41 ms / 31`, `1.50 tok/s`;
+- optimized:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-heldout-deploy-v2iouring-nooverlap-n32-223807`;
+- optimized quality: pass;
+- optimized TTFT: `12301.64 ms`, lower than control;
+- optimized decode: `20145.96 ms / 31`, `1.54 tok/s`;
+- optimized memory peak: `12767289344`, below 16 GB;
+- v2 accepted calls: `37 / 2038`;
+- v2 copied bytes: `0.689 GiB`;
+- v2 saved bytes: `1.281 GiB`;
+- v2 read time: `71.065 ms`;
+- v2 H2D enqueue time: `2.973 ms`;
+- v2 total time: `78.818 ms`;
+- result: accepted. The effect is smaller than France because the K2048
+  down-group pack has lower held-out coverage, but the direction remains
+  positive and quality passes.
+
+Promotion decision:
+
+- Promote only the default-off code path plus the explicit no-overlap runtime
+  config above.
+- Do not enable v2 full-cover down overlap for SOTA until that overlap path also
+  uses batched v2 io_uring/pinned staging.
+- Rollback point before this code promotion: `df2ccf3bb`.
+- This is not enough to reach the `>2 tok/s` short-term goal; it is a transport
+  correctness/performance step that removes the earlier v2 regression and gives
+  a small reproducible gain on one dev prompt plus one held-out prompt.
+
 ## 2026-07-12 Run Goal: recover reproducible Kimi SOTA, then validate CPU/defer GPU-extension wins
 
 ### Goal

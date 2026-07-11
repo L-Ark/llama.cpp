@@ -3913,6 +3913,8 @@ static bool expert_pack_load_source(const char *path, int32_t source_idx, std::v
     return true;
 }
 
+static bool expert_pack_v2_full_cover_down_iouring_enabled();
+
 static bool expert_pack_v2_shadow_direct_read_enabled() {
     return expert_pack_env_bool("GGML_MOE_EXPERT_PACK_V2_SHADOW_DIRECT_READ", false);
 }
@@ -3927,7 +3929,8 @@ static bool expert_pack_v2_shadow_coalesce_same_layer_enabled() {
 
 static bool expert_pack_v2_shadow_direct_open_allowed() {
     if (!expert_pack_v2_shadow_direct_read_enabled() &&
-            !expert_pack_v2_shadow_iouring_read_enabled()) return false;
+            !expert_pack_v2_shadow_iouring_read_enabled() &&
+            !expert_pack_v2_full_cover_down_iouring_enabled()) return false;
     const char *io_backend_env = std::getenv("GGML_MOE_IO_BACKEND");
     return io_backend_env && (
         std::strcmp(io_backend_env, "direct") == 0 ||
@@ -4407,6 +4410,27 @@ struct expert_pack_v2_full_cover_down_state {
     std::atomic<uint64_t> insert_failures{0};
     std::atomic<uint64_t> read_failures{0};
     std::atomic<uint64_t> h2d_failures{0};
+    std::atomic<uint64_t> overlap_calls{0};
+    std::atomic<uint64_t> overlap_accepted{0};
+    std::atomic<uint64_t> overlap_rejected{0};
+    std::atomic<uint64_t> overlap_reject_bad_expert{0};
+    std::atomic<uint64_t> overlap_reject_no_entry{0};
+    std::atomic<uint64_t> overlap_reject_unsupported{0};
+    std::atomic<uint64_t> overlap_reject_not_smaller{0};
+    std::atomic<uint64_t> overlap_reject_shape{0};
+    std::atomic<uint64_t> overlap_reject_homogeneous{0};
+    std::atomic<uint64_t> overlap_reject_bad_cache_key{0};
+    std::atomic<uint64_t> overlap_cache_hits{0};
+    std::atomic<uint64_t> overlap_cache_misses{0};
+    std::atomic<uint64_t> overlap_copied_entries{0};
+    std::atomic<uint64_t> overlap_copied_bytes{0};
+    std::atomic<uint64_t> overlap_read_us{0};
+    std::atomic<uint64_t> overlap_h2d_enqueue_us{0};
+    std::atomic<uint64_t> overlap_worker_us{0};
+    std::atomic<uint64_t> overlap_failures{0};
+    void *overlap_host = nullptr;
+    size_t overlap_host_sz = 0;
+    std::mutex overlap_mu;
     std::atomic<bool> report_registered{false};
 };
 
@@ -4414,6 +4438,14 @@ static expert_pack_v2_full_cover_down_state g_expert_pack_v2_full_cover_down;
 
 static bool expert_pack_v2_full_cover_down_enabled() {
     return expert_pack_env_bool("GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN", false);
+}
+
+static bool expert_pack_v2_full_cover_down_overlap_enabled() {
+    return expert_pack_env_bool("GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_OVERLAP", false);
+}
+
+static bool expert_pack_v2_full_cover_down_iouring_enabled() {
+    return expert_pack_env_bool("GGML_MOE_EXPERT_PACK_V2_FULL_COVER_DOWN_IOURING", false);
 }
 
 static const char * expert_pack_v2_full_cover_down_profile_path() {
@@ -4488,7 +4520,15 @@ static void expert_pack_v2_full_cover_down_report() {
             "reject_shape=%lu reject_homogeneous=%lu reject_not_smaller=%lu "
             "cache_hits=%lu cache_misses=%lu copied_entries=%lu copied_bytes=%.3f GiB "
             "saved_bytes=%.3f GiB insert_failures=%lu read_failures=%lu h2d_failures=%lu "
-            "read_ms=%.3f h2d_enqueue_ms=%.3f total_ms=%.3f\n",
+            "read_ms=%.3f h2d_enqueue_ms=%.3f total_ms=%.3f "
+            "overlap_calls=%lu overlap_accepted=%lu overlap_rejected=%lu "
+            "overlap_reject_bad_expert=%lu overlap_reject_no_entry=%lu "
+            "overlap_reject_unsupported=%lu overlap_reject_not_smaller=%lu "
+            "overlap_reject_shape=%lu overlap_reject_homogeneous=%lu "
+            "overlap_reject_bad_cache_key=%lu "
+            "overlap_cache_hits=%lu overlap_cache_misses=%lu overlap_copied_entries=%lu "
+            "overlap_copied_bytes=%.3f GiB overlap_read_ms=%.3f "
+            "overlap_h2d_enqueue_ms=%.3f overlap_worker_ms=%.3f overlap_failures=%lu\n",
             (unsigned long)calls,
             (unsigned long)s.accepted_calls.load(std::memory_order_relaxed),
             (unsigned long)s.rejected_not_decode_down.load(std::memory_order_relaxed),
@@ -4509,7 +4549,25 @@ static void expert_pack_v2_full_cover_down_report() {
             (unsigned long)s.h2d_failures.load(std::memory_order_relaxed),
             s.read_us.load(std::memory_order_relaxed) / 1000.0,
             s.h2d_enqueue_us.load(std::memory_order_relaxed) / 1000.0,
-            s.total_us.load(std::memory_order_relaxed) / 1000.0);
+            s.total_us.load(std::memory_order_relaxed) / 1000.0,
+            (unsigned long)s.overlap_calls.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_accepted.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_rejected.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_reject_bad_expert.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_reject_no_entry.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_reject_unsupported.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_reject_not_smaller.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_reject_shape.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_reject_homogeneous.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_reject_bad_cache_key.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_cache_hits.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_cache_misses.load(std::memory_order_relaxed),
+            (unsigned long)s.overlap_copied_entries.load(std::memory_order_relaxed),
+            s.overlap_copied_bytes.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0),
+            s.overlap_read_us.load(std::memory_order_relaxed) / 1000.0,
+            s.overlap_h2d_enqueue_us.load(std::memory_order_relaxed) / 1000.0,
+            s.overlap_worker_us.load(std::memory_order_relaxed) / 1000.0,
+            (unsigned long)s.overlap_failures.load(std::memory_order_relaxed));
 }
 
 static void expert_pack_v2_call_coverage_record(
@@ -8742,6 +8800,329 @@ static bool expert_pack_iouring_copy_jobs(
     (void)st;
     (void)ring;
     (void)trace_op;
+    return false;
+#endif
+}
+
+struct expert_pack_v2_iouring_copy_job {
+    int slot = -1;
+    void *dst = nullptr;
+    const expert_pack_v2_entry *entry = nullptr;
+    int expert_idx = -1;
+    char tensor[128] = {};
+    char logical_tensor[128] = {};
+};
+
+static bool expert_pack_v2_iouring_copy_jobs(
+        const std::vector<expert_pack_v2_iouring_copy_job> &jobs,
+        size_t expert_bytes,
+        cudaStream_t st,
+        pinned_stage_ring &ring,
+        const char *trace_op,
+        uint64_t *read_us,
+        uint64_t *h2d_enqueue_us) {
+#if defined(GGML_MOE_HAS_LIBURING) && !defined(_WIN32)
+    if (read_us) *read_us = 0;
+    if (h2d_enqueue_us) *h2d_enqueue_us = 0;
+    if (jobs.empty()) return true;
+    if (!expert_pack_v2_full_cover_down_iouring_enabled()) return false;
+    if (g_expert_pack.io_backend != 2) return false;
+
+    const size_t alignment = expert_pack_direct_alignment();
+    const bool aligned_alias_batch = expert_pack_env_bool("GGML_MOE_IO_ALIGNED_ALIAS_BATCH", false);
+    const size_t default_read_sz = (size_t)align_up_u64((uint64_t)expert_bytes, (uint64_t)alignment);
+    if (default_read_sz == 0 || default_read_sz > (size_t)UINT_MAX) return false;
+
+    struct read_plan {
+        size_t job_idx = 0;
+        uint64_t offset = 0;
+        size_t read_sz = 0;
+        size_t prefix = 0;
+        int32_t source_idx = 0;
+    };
+
+    std::vector<read_plan> plans;
+    plans.reserve(jobs.size());
+    size_t max_read_sz = default_read_sz;
+    for (size_t i = 0; i < jobs.size(); ++i) {
+        const expert_pack_v2_iouring_copy_job &job = jobs[i];
+        if (!job.entry || (size_t)job.entry->nbytes != expert_bytes || !job.dst) return false;
+        const expert_pack_source *source = expert_pack_v2_source_for_entry(job.entry);
+        if (!source || source->fd_direct < 0) return false;
+
+        uint64_t read_offset = job.entry->offset;
+        size_t read_sz = default_read_sz;
+        size_t prefix = 0;
+        if ((job.entry->offset % alignment) != 0) {
+            if (!aligned_alias_batch) return false;
+            read_offset = (job.entry->offset / alignment) * alignment;
+            prefix = (size_t)(job.entry->offset - read_offset);
+            read_sz = (size_t)align_up_u64((uint64_t)prefix + (uint64_t)expert_bytes, (uint64_t)alignment);
+        }
+        if (read_sz < expert_bytes || read_sz > (size_t)UINT_MAX) return false;
+        max_read_sz = std::max(max_read_sz, read_sz);
+        plans.push_back({i, read_offset, read_sz, prefix, job.entry->source_idx});
+    }
+
+    const bool sort_by_offset = expert_pack_env_bool("GGML_MOE_IO_SORT_OFFSET", false);
+    if (sort_by_offset && plans.size() > 1) {
+        std::stable_sort(plans.begin(), plans.end(),
+            [&](const read_plan &a, const read_plan &b) {
+                if (a.source_idx != b.source_idx) return a.source_idx < b.source_idx;
+                return a.offset < b.offset;
+            });
+    }
+
+    if (!pinned_stage_ensure(ring, max_read_sz, true)) return false;
+    const size_t depth = std::min(expert_pack_io_depth(), ring.slots.size());
+    if (depth == 0) return false;
+
+    const unsigned int flags = expert_pack_env_bool("GGML_MOE_IO_SQPOLL", false) ? IORING_SETUP_SQPOLL : 0;
+    if (!ring.uring || ring.uring_depth != depth) {
+        if (ring.uring) {
+            io_uring_queue_exit(ring.uring);
+            delete ring.uring;
+            ring.uring = nullptr;
+            ring.uring_depth = 0;
+        }
+        ring.uring = new io_uring();
+        if (io_uring_queue_init((unsigned)depth, ring.uring, flags) != 0) {
+            delete ring.uring;
+            ring.uring = nullptr;
+            ++g_expert_pack.iouring_fallbacks;
+            return false;
+        }
+        ring.uring_depth = depth;
+    }
+    io_uring *ring_io = ring.uring;
+
+    struct pending_job {
+        size_t plan_idx = 0;
+        size_t slot_idx = 0;
+        size_t bytes = 0;
+        std::chrono::steady_clock::time_point copy_start;
+    };
+    std::vector<pending_job> pending(depth);
+    std::vector<size_t> free_pending;
+    free_pending.reserve(depth);
+    for (size_t i = 0; i < depth; ++i) {
+        free_pending.push_back(depth - 1 - i);
+    }
+    struct reusable_pending {
+        size_t pending_idx = 0;
+        size_t slot_idx = 0;
+    };
+    std::vector<reusable_pending> reusable_pending_slots;
+    reusable_pending_slots.reserve(depth);
+
+    const bool profile_stage = pinned_stage_profile_enabled();
+    const bool profile_copy = copy_profile_enabled();
+    const bool profile_copy_h2d = copy_profile_h2d_enabled() && profile_copy;
+    double local_h2d_enqueue_ms = 0.0;
+    const auto read_start = std::chrono::steady_clock::now();
+
+    auto submit_one = [&](size_t plan_idx, size_t slot_idx, size_t pending_idx) -> bool {
+        const read_plan &plan = plans[plan_idx];
+        const expert_pack_v2_iouring_copy_job &job = jobs[plan.job_idx];
+        pinned_stage_slot &slot = ring.slots[slot_idx];
+        if (slot.pending) {
+            const auto wait_start = profile_stage ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            if (cudaEventSynchronize(slot.done) != cudaSuccess) return false;
+            if (profile_stage) {
+                const auto wait_end = std::chrono::steady_clock::now();
+                ring.slot_wait_ms += std::chrono::duration<double, std::milli>(wait_end - wait_start).count();
+            }
+            slot.pending = false;
+            ++ring.waits;
+        }
+        pinned_stage_collect_timing(ring, slot);
+
+        io_uring_sqe *sqe = io_uring_get_sqe(ring_io);
+        if (!sqe) return false;
+        pending[pending_idx] = {
+            plan_idx,
+            slot_idx,
+            plan.read_sz,
+            (batch_ttft_trace_enabled() || profile_copy) ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}
+        };
+        const expert_pack_source *source = expert_pack_v2_source_for_entry(job.entry);
+        if (!source || source->fd_direct < 0) return false;
+        io_uring_prep_read(sqe, source->fd_direct, slot.host, (unsigned)plan.read_sz, (off_t)plan.offset);
+        io_uring_sqe_set_data64(sqe, (uint64_t)pending_idx + 1);
+        return true;
+    };
+
+    ring.iouring_batches += 1;
+    ring.iouring_jobs += plans.size();
+    expert_pack_record_iouring_batch(plans.size());
+    const size_t bucket = expert_pack_iouring_batch_bucket(plans.size());
+    if (bucket < 6) {
+        ring.iouring_batch_hist[bucket] += 1;
+    }
+
+    size_t next_plan = 0;
+    size_t inflight = 0;
+    const size_t refill_batch = std::min(expert_pack_io_refill_batch(), depth);
+    while (next_plan < plans.size() && inflight < depth) {
+        const size_t pending_idx = free_pending.back();
+        free_pending.pop_back();
+        const size_t slot_idx = ring.next++ % ring.slots.size();
+        if (!submit_one(next_plan, slot_idx, pending_idx)) {
+            ++g_expert_pack.iouring_fallbacks;
+            return false;
+        }
+        ++next_plan;
+        ++inflight;
+    }
+    if (io_uring_submit(ring_io) < 0) {
+        ++g_expert_pack.iouring_fallbacks;
+        return false;
+    }
+    ++g_expert_pack.iouring_submit_calls;
+    ++ring.iouring_submit_calls;
+
+    size_t completed = 0;
+    while (completed < plans.size()) {
+        g_expert_pack.iouring_inflight_sum.fetch_add(inflight);
+        ++g_expert_pack.iouring_inflight_samples;
+        expert_pack_atomic_max(g_expert_pack.iouring_inflight_max, inflight);
+        ring.iouring_inflight_sum += inflight;
+        ++ring.iouring_inflight_samples;
+        if (ring.iouring_inflight_max < inflight) {
+            ring.iouring_inflight_max = inflight;
+        }
+
+        auto handle_cqe = [&](io_uring_cqe *cqe) -> bool {
+            const uint64_t data = io_uring_cqe_get_data64(cqe);
+            const size_t pending_idx = data == 0 ? SIZE_MAX : (size_t)data - 1;
+            if (pending_idx >= pending.size() || cqe->res != (int)pending[pending_idx].bytes) {
+                io_uring_cqe_seen(ring_io, cqe);
+                ++g_expert_pack.iouring_fallbacks;
+                return false;
+            }
+
+            const pending_job done = pending[pending_idx];
+            const read_plan &plan = plans[done.plan_idx];
+            const expert_pack_v2_iouring_copy_job &job = jobs[plan.job_idx];
+            pinned_stage_slot &slot = ring.slots[done.slot_idx];
+            io_uring_cqe_seen(ring_io, cqe);
+            ++g_expert_pack.iouring_cqes;
+            ++ring.iouring_cqes;
+
+            const bool measure_enqueue = profile_stage || profile_copy;
+            const auto enqueue_start = measure_enqueue ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+            if ((profile_stage || profile_copy_h2d) && slot.copy_start) {
+                if (cudaEventRecord(slot.copy_start, st) != cudaSuccess) return false;
+            }
+            const char *slot_src = (const char *)slot.host + plan.prefix;
+            if (cudaMemcpyAsync(job.dst, slot_src, expert_bytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+                return false;
+            }
+            if ((profile_stage || profile_copy_h2d) && slot.copy_done) {
+                if (cudaEventRecord(slot.copy_done, st) != cudaSuccess) return false;
+                if (profile_stage) slot.timing_pending = true;
+            }
+            if (cudaEventRecord(slot.done, st) != cudaSuccess) {
+                cudaStreamSynchronize(st);
+                return false;
+            }
+            double enqueue_ms = 0.0;
+            if (measure_enqueue) {
+                const auto enqueue_end = std::chrono::steady_clock::now();
+                enqueue_ms = std::chrono::duration<double, std::milli>(enqueue_end - enqueue_start).count();
+                if (profile_stage) ring.enqueue_ms += enqueue_ms;
+                local_h2d_enqueue_ms += enqueue_ms;
+            }
+            slot.pending = true;
+            ++ring.copies;
+            ++g_expert_pack.iouring_reads;
+            g_expert_pack.iouring_bytes.fetch_add(expert_bytes);
+            ++g_expert_pack.iouring_h2d_enqueues;
+            if (done.copy_start != std::chrono::steady_clock::time_point{}) {
+                const auto copy_end = std::chrono::steady_clock::now();
+                const double wall_ms = std::chrono::duration<double, std::milli>(copy_end - done.copy_start).count();
+                if (batch_ttft_trace_enabled()) {
+                    batch_ttft_trace_record(trace_op, job.logical_tensor[0] ? job.logical_tensor : job.tensor,
+                            job.expert_idx, expert_bytes, false, true, false, wall_ms);
+                }
+                if (profile_copy) {
+                    copy_profile_record(trace_op, job.logical_tensor[0] ? job.logical_tensor : job.tensor,
+                            job.expert_idx, expert_bytes, true, false, true,
+                            0.0, 0.0, wall_ms, enqueue_ms, -1.0, wall_ms);
+                }
+            }
+
+            ++completed;
+            --inflight;
+            reusable_pending_slots.push_back({pending_idx, done.slot_idx});
+            return true;
+        };
+
+        auto refill_pending = [&]() -> bool {
+            size_t submitted = 0;
+            while (next_plan < plans.size() && inflight < depth && !reusable_pending_slots.empty() && submitted < refill_batch) {
+                const reusable_pending reusable = reusable_pending_slots.back();
+                reusable_pending_slots.pop_back();
+                if (!submit_one(next_plan, reusable.slot_idx, reusable.pending_idx)) {
+                    ++g_expert_pack.iouring_fallbacks;
+                    return false;
+                }
+                ++next_plan;
+                ++inflight;
+                ++submitted;
+            }
+            if (submitted > 0) {
+                if (io_uring_submit(ring_io) < 0) {
+                    ++g_expert_pack.iouring_fallbacks;
+                    return false;
+                }
+                ++g_expert_pack.iouring_submit_calls;
+                ++ring.iouring_submit_calls;
+            }
+            return true;
+        };
+
+        io_uring_cqe *cqe = nullptr;
+        const auto wait_start = std::chrono::steady_clock::now();
+        ++g_expert_pack.iouring_wait_calls;
+        ++ring.iouring_wait_calls;
+        const int wait_rc = io_uring_wait_cqe(ring_io, &cqe);
+        const auto wait_end = std::chrono::steady_clock::now();
+        g_expert_pack.iouring_wait_us.fetch_add(
+                (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(wait_end - wait_start).count());
+        if (wait_rc != 0 || !cqe) {
+            ++g_expert_pack.iouring_fallbacks;
+            return false;
+        }
+        if (!handle_cqe(cqe)) return false;
+        if (refill_batch == 1 && !refill_pending()) return false;
+
+        while (completed < plans.size() && inflight > 0) {
+            io_uring_cqe *extra_cqe = nullptr;
+            const int peek_rc = io_uring_peek_cqe(ring_io, &extra_cqe);
+            if (peek_rc != 0 || !extra_cqe) break;
+            if (!handle_cqe(extra_cqe)) return false;
+            if (refill_batch == 1 && !refill_pending()) return false;
+        }
+        if (refill_batch > 1 && !refill_pending()) return false;
+    }
+
+    const auto read_end = std::chrono::steady_clock::now();
+    if (read_us) {
+        *read_us = (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(read_end - read_start).count();
+    }
+    if (h2d_enqueue_us) {
+        *h2d_enqueue_us = (uint64_t)(local_h2d_enqueue_ms * 1000.0);
+    }
+    return true;
+#else
+    (void)jobs;
+    (void)expert_bytes;
+    (void)st;
+    (void)ring;
+    (void)trace_op;
+    (void)read_us;
+    (void)h2d_enqueue_us;
     return false;
 #endif
 }
@@ -15266,6 +15647,204 @@ extern "C" bool ggml_cuda_moe_stream_up_gate_batch(
             return;
         }
 
+        struct current_down_v2_job {
+            int slot = -1;
+            void *dst = nullptr;
+            const expert_pack_v2_entry *entry = nullptr;
+            int expert_idx = -1;
+            char tensor[128] = {};
+            char logical_tensor[128] = {};
+        };
+
+        if (expert_pack_v2_full_cover_down_enabled() &&
+                expert_pack_v2_full_cover_down_overlap_enabled()) {
+            expert_pack_v2_full_cover_down_state &v2_state = g_expert_pack_v2_full_cover_down;
+            v2_state.overlap_calls.fetch_add(1, std::memory_order_relaxed);
+            if (!v2_state.report_registered.exchange(true)) {
+                std::atexit(expert_pack_v2_full_cover_down_report);
+            }
+
+            bool v2_overlap_ok = true;
+            const expert_pack_v2_entry *v2_first = nullptr;
+            const expert_pack_v2_entry *v2_entries[MOE_STREAM_MAX_ACTIVE] = {};
+            for (int j = 0; j < n_active; ++j) {
+                const int expert = active_experts[j];
+                if (expert < 0 || expert >= rt.n_as) {
+                    v2_state.overlap_reject_bad_expert.fetch_add(1, std::memory_order_relaxed);
+                    v2_overlap_ok = false;
+                    break;
+                }
+                const expert_pack_v2_entry *entry = expert_pack_v2_lookup(rt.name, expert);
+                if (!entry) {
+                    v2_state.overlap_reject_no_entry.fetch_add(1, std::memory_order_relaxed);
+                    v2_overlap_ok = false;
+                    break;
+                }
+                if (!expert_pack_v2_packed_type_supported(entry->packed_type)) {
+                    v2_state.overlap_reject_unsupported.fetch_add(1, std::memory_order_relaxed);
+                    v2_overlap_ok = false;
+                    break;
+                }
+                if ((size_t)entry->nbytes == 0 || (size_t)entry->nbytes >= rt.expert_bytes ||
+                        (size_t)entry->nbytes > down_cache->slot_sz) {
+                    v2_state.overlap_reject_not_smaller.fetch_add(1, std::memory_order_relaxed);
+                    v2_overlap_ok = false;
+                    break;
+                }
+                if (entry->nb01 == 0) {
+                    v2_state.overlap_reject_shape.fetch_add(1, std::memory_order_relaxed);
+                    v2_overlap_ok = false;
+                    break;
+                }
+                if (!v2_first) {
+                    v2_first = entry;
+                } else if (entry->packed_type != v2_first->packed_type ||
+                        entry->nbytes != v2_first->nbytes ||
+                        entry->ne00 != v2_first->ne00 ||
+                        entry->ne01 != v2_first->ne01 ||
+                        entry->nb01 != v2_first->nb01) {
+                    v2_state.overlap_reject_homogeneous.fetch_add(1, std::memory_order_relaxed);
+                    v2_overlap_ok = false;
+                    break;
+                }
+                v2_entries[j] = entry;
+            }
+
+            if (v2_overlap_ok && v2_first) {
+                char v2_down_name[128] = {};
+                const int name_len = std::snprintf(v2_down_name, sizeof(v2_down_name), "%s:v2full", rt.name);
+                if (name_len <= 0 || (size_t)name_len >= sizeof(v2_down_name)) {
+                    v2_state.overlap_reject_bad_cache_key.fetch_add(1, std::memory_order_relaxed);
+                    v2_overlap_ok = false;
+                } else {
+                    const size_t v2_nbytes = (size_t)v2_first->nbytes;
+                    uint64_t local_v2_cache_hits = 0;
+                    std::vector<current_down_v2_job> v2_jobs;
+                    v2_jobs.reserve((size_t)n_active);
+                    for (int j = 0; j < n_active; ++j) {
+                        const int expert = active_experts[j];
+                        const uintptr_t v2_key = batch_key_hash(v2_down_name, expert);
+                        if (batch_cache_find_slot(down_cache, v2_key) >= 0) {
+                            ++local_v2_cache_hits;
+                            expert_pack_v2_shadow_profile_record(
+                                    "current_down_overlap_v2", rt.name, expert, rt.type,
+                                    rt.expert_bytes, "v2_cache_hit");
+                            continue;
+                        }
+                        expert_pack_v2_shadow_profile_record(
+                                "current_down_overlap_v2", rt.name, expert, rt.type,
+                                rt.expert_bytes, "v2_cache_miss");
+                        const int slot = batch_cache_insert_slot(
+                                down_cache, v2_key, nullptr, v2_nbytes, bc.prefetch_stream,
+                                true, true, nullptr, 0, false, v2_down_name, expert, true);
+                        if (slot < 0) {
+                            continue;
+                        }
+                        current_down_v2_job job;
+                        job.slot = slot;
+                        job.dst = (char *)down_cache->pool + (size_t)slot * down_cache->slot_sz;
+                        job.entry = v2_entries[j];
+                        job.expert_idx = expert;
+                        std::snprintf(job.tensor, sizeof(job.tensor), "%s", v2_down_name);
+                        std::snprintf(job.logical_tensor, sizeof(job.logical_tensor), "%s", rt.name);
+                        v2_jobs.push_back(job);
+                    }
+
+                    v2_state.overlap_cache_hits.fetch_add(local_v2_cache_hits, std::memory_order_relaxed);
+                    v2_state.overlap_cache_misses.fetch_add((uint64_t)v2_jobs.size(), std::memory_order_relaxed);
+                    if (v2_jobs.empty()) {
+                        v2_state.overlap_accepted.fetch_add(1, std::memory_order_relaxed);
+                        current_down_overlap_tensor_profile_record(v2_down_name, 1, 0, local_v2_cache_hits, 0, 0, 0);
+                        return;
+                    }
+
+                    v2_state.overlap_accepted.fetch_add(1, std::memory_order_relaxed);
+                    current_down_overlap_record_batch(v2_jobs.size());
+                    current_down_overlap_tensor_profile_record(
+                            v2_down_name, 1, v2_jobs.size(), local_v2_cache_hits, 0, 0, 0);
+                    static std::atomic<int> first_current_down_overlap_v2{0};
+                    if (first_current_down_overlap_v2.fetch_add(1) == 0) {
+                        std::fprintf(stderr,
+                                "[moe_stream_batch] current down v2 overlap active: tensor=%s jobs=%zu bytes=%.2f MiB\n",
+                                v2_down_name, v2_jobs.size(), v2_nbytes / (1024.0 * 1024.0));
+                    }
+
+                    current_down_overlap_thread = std::thread([&, down_cache, v2_jobs = std::move(v2_jobs), v2_nbytes]() {
+                        const auto worker_start = std::chrono::steady_clock::now();
+                        bool copied = true;
+                        uint64_t local_read_us = 0;
+                        uint64_t local_h2d_enqueue_us = 0;
+                        {
+                            expert_pack_v2_full_cover_down_state &v2_global = g_expert_pack_v2_full_cover_down;
+                            std::lock_guard<std::mutex> v2_lk(v2_global.overlap_mu);
+                            const size_t host_need = v2_nbytes * v2_jobs.size();
+                            if (host_need == 0 ||
+                                    !ensure_host_pinned(v2_global.overlap_host, v2_global.overlap_host_sz, host_need)) {
+                                copied = false;
+                            }
+                            for (size_t i = 0; copied && i < v2_jobs.size(); ++i) {
+                                const current_down_v2_job &job = v2_jobs[i];
+                                char *host_slot = (char *)v2_global.overlap_host + i * v2_nbytes;
+                                const auto read_t0 = std::chrono::steady_clock::now();
+                                const expert_pack_v2_shadow_read_result read_result =
+                                    expert_pack_v2_shadow_read_entry_to_host(
+                                            job.entry, job.logical_tensor, job.expert_idx,
+                                            host_slot, v2_nbytes);
+                                const auto read_t1 = std::chrono::steady_clock::now();
+                                local_read_us += (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
+                                        read_t1 - read_t0).count();
+                                if (!read_result.ok || read_result.nread != v2_nbytes) {
+                                    copied = false;
+                                    break;
+                                }
+                                const auto h2d_t0 = std::chrono::steady_clock::now();
+                                if (cudaMemcpyAsync(job.dst, host_slot, v2_nbytes,
+                                            cudaMemcpyHostToDevice, bc.prefetch_stream) != cudaSuccess) {
+                                    copied = false;
+                                    break;
+                                }
+                                const auto h2d_t1 = std::chrono::steady_clock::now();
+                                local_h2d_enqueue_us += (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
+                                        h2d_t1 - h2d_t0).count();
+                            }
+                            if (copied && cudaStreamSynchronize(bc.prefetch_stream) != cudaSuccess) {
+                                copied = false;
+                            }
+                        }
+
+                        if (!copied) {
+                            cudaStreamSynchronize(bc.prefetch_stream);
+                            for (const current_down_v2_job &job : v2_jobs) {
+                                batch_cache_clear_slot(down_cache, job.slot);
+                            }
+                            g_expert_pack_v2_full_cover_down.overlap_failures.fetch_add(1, std::memory_order_relaxed);
+                        } else {
+                            g_current_down_overlap.completed_jobs.fetch_add(v2_jobs.size());
+                            current_down_overlap_tensor_profile_record(
+                                    v2_jobs.empty() ? "" : v2_jobs[0].tensor,
+                                    0, 0, 0, 0, 0, v2_jobs.size());
+                            g_expert_pack_v2_full_cover_down.overlap_copied_entries.fetch_add((uint64_t)v2_jobs.size(), std::memory_order_relaxed);
+                            g_expert_pack_v2_full_cover_down.overlap_copied_bytes.fetch_add(
+                                    (uint64_t)v2_nbytes * (uint64_t)v2_jobs.size(),
+                                    std::memory_order_relaxed);
+                        }
+                        g_expert_pack_v2_full_cover_down.overlap_read_us.fetch_add(local_read_us, std::memory_order_relaxed);
+                        g_expert_pack_v2_full_cover_down.overlap_h2d_enqueue_us.fetch_add(local_h2d_enqueue_us, std::memory_order_relaxed);
+
+                        const auto worker_end = std::chrono::steady_clock::now();
+                        const uint64_t worker_us = (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
+                                worker_end - worker_start).count();
+                        g_expert_pack_v2_full_cover_down.overlap_worker_us.fetch_add(worker_us, std::memory_order_relaxed);
+                        g_current_down_overlap.worker_us.fetch_add(worker_us);
+                    });
+                    return;
+                }
+            }
+            if (!v2_overlap_ok) {
+                v2_state.overlap_rejected.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+
         uint64_t local_cache_hits = 0;
         uint64_t local_missing_pack = 0;
         std::vector<stage_copy_job> down_jobs;
@@ -17115,7 +17694,9 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                     v2_full_down_packed_type = first_entry->packed_type;
                     v2_full_down_nbytes = (size_t)first_entry->nbytes;
                     v2_full_down_nb01 = first_entry->nb01;
-                    v2_full_down_host.resize(v2_full_down_nbytes * (size_t)n_active);
+                    if (!expert_pack_v2_full_cover_down_iouring_enabled()) {
+                        v2_full_down_host.resize(v2_full_down_nbytes * (size_t)n_active);
+                    }
                     v2_state.accepted_calls.fetch_add(1, std::memory_order_relaxed);
                     v2_state.saved_bytes.fetch_add(
                             (uint64_t)(src0_bytes - v2_full_down_nbytes) * (uint64_t)n_active,
@@ -17202,6 +17783,7 @@ extern "C" bool ggml_cuda_moe_stream_batch(
     uint64_t v2_full_down_copied_bytes = 0;
     uint64_t v2_full_down_read_us = 0;
     uint64_t v2_full_down_h2d_enqueue_us = 0;
+    std::vector<expert_pack_v2_iouring_copy_job> v2_full_down_iouring_jobs;
     const auto v2_full_down_total_t0 = v2_full_down_active ?
         std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
@@ -17244,29 +17826,40 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                 }
                 v2_full_down_slots[j] = cache_slot;
                 void *dst_slot = (char *)cache->pool + (size_t)cache_slot * cache->slot_sz;
-                char *host_slot = v2_full_down_host.data() + (size_t)j * v2_full_down_nbytes;
-                const auto read_t0 = std::chrono::steady_clock::now();
-                const expert_pack_v2_shadow_read_result read_result =
-                    expert_pack_v2_shadow_read_entry_to_host(
-                            v2_full_down_entries[j], src0_name, active_experts[j],
-                            host_slot, v2_full_down_nbytes);
-                const auto read_t1 = std::chrono::steady_clock::now();
-                v2_full_down_read_us += (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(read_t1 - read_t0).count();
-                if (!read_result.ok || read_result.nread != v2_full_down_nbytes) {
-                    g_expert_pack_v2_full_cover_down.read_failures.fetch_add(1, std::memory_order_relaxed);
-                    clear_v2_full_down_slots();
-                    return decline("v2_full_cover_down_read");
+                if (expert_pack_v2_full_cover_down_iouring_enabled()) {
+                    expert_pack_v2_iouring_copy_job job;
+                    job.slot = cache_slot;
+                    job.dst = dst_slot;
+                    job.entry = v2_full_down_entries[j];
+                    job.expert_idx = active_experts[j];
+                    std::snprintf(job.tensor, sizeof(job.tensor), "%s", cache_name);
+                    std::snprintf(job.logical_tensor, sizeof(job.logical_tensor), "%s", src0_name ? src0_name : "");
+                    v2_full_down_iouring_jobs.push_back(job);
+                } else {
+                    char *host_slot = v2_full_down_host.data() + (size_t)j * v2_full_down_nbytes;
+                    const auto read_t0 = std::chrono::steady_clock::now();
+                    const expert_pack_v2_shadow_read_result read_result =
+                        expert_pack_v2_shadow_read_entry_to_host(
+                                v2_full_down_entries[j], src0_name, active_experts[j],
+                                host_slot, v2_full_down_nbytes);
+                    const auto read_t1 = std::chrono::steady_clock::now();
+                    v2_full_down_read_us += (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(read_t1 - read_t0).count();
+                    if (!read_result.ok || read_result.nread != v2_full_down_nbytes) {
+                        g_expert_pack_v2_full_cover_down.read_failures.fetch_add(1, std::memory_order_relaxed);
+                        clear_v2_full_down_slots();
+                        return decline("v2_full_cover_down_read");
+                    }
+                    const auto h2d_t0 = std::chrono::steady_clock::now();
+                    if (cudaMemcpyAsync(dst_slot, host_slot, v2_full_down_nbytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
+                        g_expert_pack_v2_full_cover_down.h2d_failures.fetch_add(1, std::memory_order_relaxed);
+                        clear_v2_full_down_slots();
+                        return decline("v2_full_cover_down_h2d");
+                    }
+                    const auto h2d_t1 = std::chrono::steady_clock::now();
+                    v2_full_down_h2d_enqueue_us += (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(h2d_t1 - h2d_t0).count();
+                    ++v2_full_down_copied_entries;
+                    v2_full_down_copied_bytes += (uint64_t)v2_full_down_nbytes;
                 }
-                const auto h2d_t0 = std::chrono::steady_clock::now();
-                if (cudaMemcpyAsync(dst_slot, host_slot, v2_full_down_nbytes, cudaMemcpyHostToDevice, st) != cudaSuccess) {
-                    g_expert_pack_v2_full_cover_down.h2d_failures.fetch_add(1, std::memory_order_relaxed);
-                    clear_v2_full_down_slots();
-                    return decline("v2_full_cover_down_h2d");
-                }
-                const auto h2d_t1 = std::chrono::steady_clock::now();
-                v2_full_down_h2d_enqueue_us += (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(h2d_t1 - h2d_t0).count();
-                ++v2_full_down_copied_entries;
-                v2_full_down_copied_bytes += (uint64_t)v2_full_down_nbytes;
             } else {
                 cache_slot = batch_cache_insert_slot(cache, cache_key, expert_host, src0_bytes, st, true, false,
                         nullptr, 0, !down_parallel_stage, src0_name, active_experts[j]);
@@ -17343,6 +17936,26 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         bc.h_ids_src1[j] = j;
         bc.h_ids_dst[j] = dst_ids[j];
         bc.h_bounds[j] = j;
+    }
+    if (v2_full_down_active && !v2_full_down_iouring_jobs.empty()) {
+        uint64_t local_read_us = 0;
+        uint64_t local_h2d_enqueue_us = 0;
+        if (!expert_pack_v2_iouring_copy_jobs(
+                    v2_full_down_iouring_jobs,
+                    v2_full_down_nbytes,
+                    st,
+                    bc.stage_ring,
+                    "v2_full_cover_down",
+                    &local_read_us,
+                    &local_h2d_enqueue_us)) {
+            g_expert_pack_v2_full_cover_down.read_failures.fetch_add(1, std::memory_order_relaxed);
+            clear_v2_full_down_slots();
+            return decline("v2_full_cover_down_iouring");
+        }
+        v2_full_down_read_us += local_read_us;
+        v2_full_down_h2d_enqueue_us += local_h2d_enqueue_us;
+        v2_full_down_copied_entries += (int)v2_full_down_iouring_jobs.size();
+        v2_full_down_copied_bytes += (uint64_t)v2_full_down_nbytes * (uint64_t)v2_full_down_iouring_jobs.size();
     }
     if (v2_full_down_active) {
         const auto v2_full_down_total_t1 = std::chrono::steady_clock::now();
