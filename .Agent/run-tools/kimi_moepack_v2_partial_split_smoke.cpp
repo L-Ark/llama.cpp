@@ -9,6 +9,7 @@
 #include <dlfcn.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -59,13 +60,48 @@ struct manifest_entry {
     size_t nbytes = 0;
 };
 
+struct route_timing {
+    bool covered = false;
+    int expert_idx = -1;
+    int dst_id = -1;
+    int packed_type = 0;
+    int64_t ne00 = 0;
+    int64_t ne01 = 0;
+    size_t payload_bytes = 0;
+    size_t src1_bytes = 0;
+    size_t dst_bytes = 0;
+    size_t q8_bytes = 0;
+    double lookup_us = 0.0;
+    double host_src0_alloc_us = 0.0;
+    double read_us = 0.0;
+    double host_src1_us = 0.0;
+    double cuda_alloc_us = 0.0;
+    double h2d_ms = 0.0;
+    double kernel_ms = 0.0;
+    double sync_us = 0.0;
+    double d2h_us = 0.0;
+    double cuda_free_us = 0.0;
+    double merge_us = 0.0;
+    double fallback_fill_us = 0.0;
+    double total_us = 0.0;
+};
+
 struct route {
     bool covered = false;
     int expert_idx = -1;
     int dst_id = -1;
     manifest_entry entry;
     std::vector<float> values;
+    route_timing timing;
 };
+
+using steady_clock = std::chrono::steady_clock;
+
+static double elapsed_us(
+        const steady_clock::time_point & start,
+        const steady_clock::time_point & end) {
+    return std::chrono::duration<double, std::micro>(end - start).count();
+}
 
 static std::vector<std::string> split_tsv_line(const std::string & line) {
     std::vector<std::string> out;
@@ -168,35 +204,51 @@ static bool run_v2_entry(
         mmvq_fn mmvq,
         const manifest_entry & expected,
         cudaStream_t stream,
-        std::vector<float> & out) {
+        std::vector<float> & out,
+        route_timing & timing) {
+    const steady_clock::time_point total_start = steady_clock::now();
+    timing.covered = true;
+    timing.expert_idx = expected.expert_idx;
+    timing.packed_type = expected.packed_type;
     int packed_type = 0;
     int64_t ne00 = 0;
     int64_t ne01 = 0;
     size_t nb01 = 0;
     size_t nbytes = 0;
+    steady_clock::time_point t0 = steady_clock::now();
     if (!lookup(expected.tensor.c_str(), expected.expert_idx, &packed_type, &ne00, &ne01, &nb01, &nbytes)) {
         std::fprintf(stderr, "lookup failed tensor=%s expert=%d\n", expected.tensor.c_str(), expected.expert_idx);
         return false;
     }
+    timing.lookup_us = elapsed_us(t0, steady_clock::now());
     if (packed_type != expected.packed_type || ne00 != expected.ne00 ||
             ne01 != expected.ne01 || nb01 != expected.nb01 || nbytes != expected.nbytes) {
         std::fprintf(stderr, "metadata mismatch tensor=%s expert=%d\n", expected.tensor.c_str(), expected.expert_idx);
         return false;
     }
+    timing.ne00 = ne00;
+    timing.ne01 = ne01;
+    timing.payload_bytes = nbytes;
 
+    t0 = steady_clock::now();
     std::vector<uint8_t> host_src0(nbytes);
+    timing.host_src0_alloc_us = elapsed_us(t0, steady_clock::now());
     size_t nread = 0;
+    t0 = steady_clock::now();
     if (!read(expected.tensor.c_str(), expected.expert_idx, host_src0.data(), host_src0.size(), &nread) ||
             nread != nbytes) {
         std::fprintf(stderr, "read failed tensor=%s expert=%d nread=%zu nbytes=%zu\n",
                 expected.tensor.c_str(), expected.expert_idx, nread, nbytes);
         return false;
     }
+    timing.read_us = elapsed_us(t0, steady_clock::now());
 
+    t0 = steady_clock::now();
     std::vector<float> host_src1((size_t)ne00);
     for (int64_t i = 0; i < ne00; ++i) {
         host_src1[(size_t)i] = ((int)(i % 23) - 11) * 0.025f;
     }
+    timing.host_src1_us = elapsed_us(t0, steady_clock::now());
 
     void * d_src0 = nullptr;
     float * d_src1 = nullptr;
@@ -205,27 +257,64 @@ static bool run_v2_entry(
     const size_t src1_bytes = (size_t)ne00 * sizeof(float);
     const size_t dst_bytes = (size_t)ne01 * sizeof(float);
     const size_t q8_bytes = q8_1_scratch_bytes(ne00);
+    timing.src1_bytes = src1_bytes;
+    timing.dst_bytes = dst_bytes;
+    timing.q8_bytes = q8_bytes;
 
     bool ok = true;
+    t0 = steady_clock::now();
     ok = ok && check_cuda(cudaMalloc(&d_src0, nbytes), "cudaMalloc d_src0");
     ok = ok && check_cuda(cudaMalloc((void **)&d_src1, src1_bytes), "cudaMalloc d_src1");
     ok = ok && check_cuda(cudaMalloc(&d_src1_q8, q8_bytes), "cudaMalloc d_src1_q8");
     ok = ok && check_cuda(cudaMalloc((void **)&d_dst, dst_bytes), "cudaMalloc d_dst");
+    timing.cuda_alloc_us = elapsed_us(t0, steady_clock::now());
+
+    cudaEvent_t h2d_start = nullptr;
+    cudaEvent_t h2d_stop = nullptr;
+    cudaEvent_t kernel_start = nullptr;
+    cudaEvent_t kernel_stop = nullptr;
+    ok = ok && check_cuda(cudaEventCreate(&h2d_start), "cudaEventCreate h2d_start");
+    ok = ok && check_cuda(cudaEventCreate(&h2d_stop), "cudaEventCreate h2d_stop");
+    ok = ok && check_cuda(cudaEventCreate(&kernel_start), "cudaEventCreate kernel_start");
+    ok = ok && check_cuda(cudaEventCreate(&kernel_stop), "cudaEventCreate kernel_stop");
+    ok = ok && check_cuda(cudaEventRecord(h2d_start, stream), "record h2d_start");
     ok = ok && check_cuda(cudaMemcpyAsync(d_src0, host_src0.data(), nbytes, cudaMemcpyHostToDevice, stream), "copy src0 H2D");
     ok = ok && check_cuda(cudaMemcpyAsync(d_src1, host_src1.data(), src1_bytes, cudaMemcpyHostToDevice, stream), "copy src1 H2D");
     ok = ok && check_cuda(cudaMemsetAsync(d_dst, 0, dst_bytes, stream), "memset dst");
+    ok = ok && check_cuda(cudaEventRecord(h2d_stop, stream), "record h2d_stop");
     if (ok) {
+        ok = ok && check_cuda(cudaEventRecord(kernel_start, stream), "record kernel_start");
         ok = mmvq(packed_type, d_src0, ne01, ne00, nb01, d_src1, d_src1_q8, d_dst, stream);
+        ok = ok && check_cuda(cudaEventRecord(kernel_stop, stream), "record kernel_stop");
     }
+    t0 = steady_clock::now();
     ok = ok && check_cuda(cudaStreamSynchronize(stream), "stream sync");
+    timing.sync_us = elapsed_us(t0, steady_clock::now());
+    if (ok) {
+        float h2d_elapsed_ms = 0.0f;
+        float kernel_elapsed_ms = 0.0f;
+        ok = ok && check_cuda(cudaEventElapsedTime(&h2d_elapsed_ms, h2d_start, h2d_stop), "elapsed h2d");
+        ok = ok && check_cuda(cudaEventElapsedTime(&kernel_elapsed_ms, kernel_start, kernel_stop), "elapsed kernel");
+        timing.h2d_ms = (double)h2d_elapsed_ms;
+        timing.kernel_ms = (double)kernel_elapsed_ms;
+    }
 
     out.assign((size_t)ne01, 0.0f);
+    t0 = steady_clock::now();
     ok = ok && check_cuda(cudaMemcpy(out.data(), d_dst, dst_bytes, cudaMemcpyDeviceToHost), "copy dst D2H");
+    timing.d2h_us = elapsed_us(t0, steady_clock::now());
 
+    t0 = steady_clock::now();
     if (d_src0) cudaFree(d_src0);
     if (d_src1) cudaFree(d_src1);
     if (d_src1_q8) cudaFree(d_src1_q8);
     if (d_dst) cudaFree(d_dst);
+    if (h2d_start) cudaEventDestroy(h2d_start);
+    if (h2d_stop) cudaEventDestroy(h2d_stop);
+    if (kernel_start) cudaEventDestroy(kernel_start);
+    if (kernel_stop) cudaEventDestroy(kernel_stop);
+    timing.cuda_free_us = elapsed_us(t0, steady_clock::now());
+    timing.total_us = elapsed_us(total_start, steady_clock::now());
     if (!ok) {
         return false;
     }
@@ -363,19 +452,30 @@ int main(int argc, char ** argv) {
     for (int i = 0; i < n_rows; ++i) {
         route & r = routes[(size_t)i];
         float * dst_row = final_dst.data() + (size_t)r.dst_id * (size_t)base.ne01;
+        r.timing.covered = r.covered;
+        r.timing.expert_idx = r.expert_idx;
+        r.timing.dst_id = r.dst_id;
         if (r.covered) {
-            if (!run_v2_entry(lookup, read, mmvq, r.entry, stream, r.values)) {
+            if (!run_v2_entry(lookup, read, mmvq, r.entry, stream, r.values, r.timing)) {
                 cudaStreamDestroy(stream);
                 dlclose(handle);
                 return 1;
             }
+            const steady_clock::time_point merge_start = steady_clock::now();
             std::memcpy(dst_row, r.values.data(), (size_t)base.ne01 * sizeof(float));
+            r.timing.merge_us = elapsed_us(merge_start, steady_clock::now());
+            r.timing.total_us += r.timing.merge_us;
         } else {
+            const steady_clock::time_point fill_start = steady_clock::now();
             r.values.resize((size_t)base.ne01);
             for (int64_t col = 0; col < base.ne01; ++col) {
                 r.values[(size_t)col] = fallback_value(i, col);
             }
+            r.timing.fallback_fill_us = elapsed_us(fill_start, steady_clock::now());
+            const steady_clock::time_point merge_start = steady_clock::now();
             std::memcpy(dst_row, r.values.data(), (size_t)base.ne01 * sizeof(float));
+            r.timing.merge_us = elapsed_us(merge_start, steady_clock::now());
+            r.timing.total_us = r.timing.fallback_fill_us + r.timing.merge_us;
         }
     }
 
@@ -413,6 +513,59 @@ int main(int argc, char ** argv) {
         "kimi_moepack_v2_partial_split_smoke pass tensor=%s routes=%d covered=%d fallback=%d ne00=%ld ne01=%ld pack=%s manifest=%s\n",
         base.tensor.c_str(), n_rows, covered_count, n_rows - covered_count,
         (long)base.ne00, (long)base.ne01, pack_path, manifest_path);
+    route_timing total;
+    int measured_covered = 0;
+    int measured_fallback = 0;
+    for (const route & r : routes) {
+        const route_timing & t = r.timing;
+        if (r.covered) {
+            ++measured_covered;
+            total.payload_bytes += t.payload_bytes;
+            total.src1_bytes += t.src1_bytes;
+            total.dst_bytes += t.dst_bytes;
+            total.q8_bytes += t.q8_bytes;
+            total.lookup_us += t.lookup_us;
+            total.host_src0_alloc_us += t.host_src0_alloc_us;
+            total.read_us += t.read_us;
+            total.host_src1_us += t.host_src1_us;
+            total.cuda_alloc_us += t.cuda_alloc_us;
+            total.h2d_ms += t.h2d_ms;
+            total.kernel_ms += t.kernel_ms;
+            total.sync_us += t.sync_us;
+            total.d2h_us += t.d2h_us;
+            total.cuda_free_us += t.cuda_free_us;
+            total.merge_us += t.merge_us;
+            total.total_us += t.total_us;
+        } else {
+            ++measured_fallback;
+            total.fallback_fill_us += t.fallback_fill_us;
+            total.merge_us += t.merge_us;
+            total.total_us += t.total_us;
+        }
+    }
+    const double payload_mib = (double)total.payload_bytes / 1048576.0;
+    std::printf(
+        "timing_summary covered=%d fallback=%d payload_mib=%.3f lookup_us=%.3f host_src0_alloc_us=%.3f read_us=%.3f host_src1_us=%.3f cuda_alloc_us=%.3f h2d_ms=%.3f kernel_ms=%.3f sync_us=%.3f d2h_us=%.3f cuda_free_us=%.3f merge_us=%.3f fallback_fill_us=%.3f total_us=%.3f\n",
+        measured_covered, measured_fallback, payload_mib, total.lookup_us,
+        total.host_src0_alloc_us, total.read_us, total.host_src1_us,
+        total.cuda_alloc_us, total.h2d_ms, total.kernel_ms, total.sync_us,
+        total.d2h_us, total.cuda_free_us, total.merge_us,
+        total.fallback_fill_us, total.total_us);
+    if (measured_covered > 0) {
+        std::printf(
+            "timing_per_covered payload_mib=%.3f lookup_us=%.3f read_us=%.3f cuda_alloc_us=%.3f h2d_ms=%.3f kernel_ms=%.3f sync_us=%.3f d2h_us=%.3f cuda_free_us=%.3f merge_us=%.3f total_us=%.3f\n",
+            payload_mib / (double)measured_covered,
+            total.lookup_us / (double)measured_covered,
+            total.read_us / (double)measured_covered,
+            total.cuda_alloc_us / (double)measured_covered,
+            total.h2d_ms / (double)measured_covered,
+            total.kernel_ms / (double)measured_covered,
+            total.sync_us / (double)measured_covered,
+            total.d2h_us / (double)measured_covered,
+            total.cuda_free_us / (double)measured_covered,
+            total.merge_us / (double)n_rows,
+            total.total_us / (double)measured_covered);
+    }
     for (int i = 0; i < n_rows; ++i) {
         const route & r = routes[(size_t)i];
         double sum_abs = 0.0;
@@ -421,6 +574,13 @@ int main(int argc, char ** argv) {
         }
         std::printf("route row=%d dst=%d expert=%d covered=%d sum_abs=%.6e\n",
                 i, r.dst_id, r.expert_idx, r.covered ? 1 : 0, sum_abs);
+        const route_timing & t = r.timing;
+        std::printf(
+            "timing_route row=%d dst=%d expert=%d covered=%d payload_bytes=%zu lookup_us=%.3f host_src0_alloc_us=%.3f read_us=%.3f host_src1_us=%.3f cuda_alloc_us=%.3f h2d_ms=%.3f kernel_ms=%.3f sync_us=%.3f d2h_us=%.3f cuda_free_us=%.3f merge_us=%.3f fallback_fill_us=%.3f total_us=%.3f\n",
+            i, r.dst_id, r.expert_idx, r.covered ? 1 : 0, t.payload_bytes,
+            t.lookup_us, t.host_src0_alloc_us, t.read_us, t.host_src1_us,
+            t.cuda_alloc_us, t.h2d_ms, t.kernel_ms, t.sync_us, t.d2h_us,
+            t.cuda_free_us, t.merge_us, t.fallback_fill_us, t.total_us);
     }
     return 0;
 }

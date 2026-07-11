@@ -159,6 +159,107 @@ Reproducibility requirement for this subgoal:
   payload pack/manifest paths, measured timing table, interpretation, and
   rollback point.
 
+## Progress update: v2 partial-split payload timing smoke
+
+Timestamp: 2026-07-11 CST.
+
+Code change:
+
+- Extended `.Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp` with
+  detailed timing output.
+- Timed stages:
+  - v2 metadata lookup;
+  - host payload buffer allocation;
+  - v2 payload read;
+  - host activation setup;
+  - per-row CUDA allocation;
+  - source H2D plus destination memset;
+  - v2 replacement MMVQ kernel;
+  - stream synchronization;
+  - D2H verification copy;
+  - CUDA free;
+  - output merge/scatter;
+  - fallback-row fill.
+- Correctness checks are unchanged: covered rows must produce finite nonzero
+  output, fallback rows are preserved, and final destination row placement is
+  verified.
+
+Run directory:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-timing-smoke
+```
+
+Inputs:
+
+- lib: `build-cuda-batch/bin/libggml-cuda.so`
+- pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack`
+- manifest:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv`
+- selected tensor: `blk.1.ffn_up_exps.weight`
+- route shape: `5` routes total, `3` covered, `2` fallback
+- covered row payload: `2.734 MiB` each, `8.203 MiB` total
+
+Build command:
+
+```bash
+g++ -std=c++17 -O2 \
+  .Agent/run-tools/kimi_moepack_v2_partial_split_smoke.cpp \
+  -I/usr/local/cuda/include \
+  -L/usr/local/cuda/lib64 -lcudart -ldl \
+  -o /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-timing-smoke/kimi_moepack_v2_partial_split_smoke
+```
+
+Run command:
+
+```bash
+LD_LIBRARY_PATH=build-cuda-batch/bin:/usr/local/cuda/lib64 \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-partial-split-timing-smoke/kimi_moepack_v2_partial_split_smoke \
+  build-cuda-batch/bin/libggml-cuda.so \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack \
+  /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv
+```
+
+Results:
+
+| run | covered rows | payload | covered total | read | H2D | kernel | post-first total/row | post-first read/row | post-first H2D/row | post-first kernel/row |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| first process | 3 | `8.203 MiB` | `75.139 ms` | `19.681 ms` | `3.393 ms` | `37.514 ms` | `7.364 ms` | `3.519 ms` | `1.042 ms` | `0.012 ms` |
+| repeat process | 3 | `8.203 MiB` | `53.638 ms` | `4.846 ms` | `2.902 ms` | `36.338 ms` | `5.453 ms` | `1.708 ms` | `0.998 ms` | `0.012 ms` |
+
+Fallback/merge costs:
+
+- fallback fill: about `2.5-3.2 us/row`;
+- merge/scatter memcpy: about `1-2 us/row`.
+
+Interpretation:
+
+- Partial split is not blocked by output merge/scatter or fallback-row fill.
+- The first v2 MMVQ route in each process pays a large cold/lazy kernel cost
+  around `36-37 ms`. This is a cold-start cost, not the steady per-row kernel
+  cost.
+- Post-first replacement kernel time is tiny for this IQ1_S row:
+  about `0.012 ms/row`.
+- Post-first payload read and H2D are the real costs in this smoke:
+  `1.7-3.5 ms/row` read plus about `1.0 ms/row` H2D for `2.734 MiB`.
+- The smoke currently uses per-row `cudaMalloc/cudaFree` and per-row stream
+  synchronization. Those are intentionally naive and must not be copied into
+  the runtime implementation.
+
+Decision:
+
+- Continue partial split only as a batched/reused-buffer runtime path.
+- Do not implement per-row runtime dispatch.
+- The next runtime design must:
+  - preallocate/reuse device buffers for covered rows;
+  - batch covered rows per tensor/role where possible;
+  - avoid per-row stream synchronization;
+  - account for the one-time cold kernel cost separately from steady decode;
+  - preserve the existing current-path compute for uncovered rows;
+  - stay default-off until N32 quality, N96 dev, and held-out gates pass.
+- No SOTA claim is made from this smoke.
+
 ## Progress update: runtime partial-split shadow planner
 
 Timestamp: 2026-07-11 CST.
