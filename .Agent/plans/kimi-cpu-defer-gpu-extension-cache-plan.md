@@ -206,6 +206,93 @@ Next implementation boundary:
    Only if that report can plausibly save at least `~95 ms/token` on N32 and
    `~165 ms/token` on N96 should the next runtime A/B be implemented.
 
+Paired up/gate and RAM/VRAM tier bound result:
+
+- Timestamp: 2026-07-11 CST.
+- Report root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-paired-upgate-ram-bound-current`.
+- Consolidated report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-paired-upgate-ram-bound-current/report.md`.
+- Inputs:
+  - current dev4 profile root:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-current-dev4-n32-profile`;
+  - dev7 IO trace root:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260710-kimi-phase4e-full-dev7-trace-n32-150343`;
+  - current-head N32 Japan baseline:
+    `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-active-goal-current-head-n32-japan`.
+- Baseline for this bound:
+  - token rate: `1.68 tok/s`;
+  - decode: `18439.31 ms / 31`, or `594.816 ms/token`;
+  - reaching `2 tok/s` requires about `95 ms/token` saving;
+  - CPU fallback rows: `0`;
+  - direct reads: `0`.
+
+Findings:
+
+1. Whole-layer up/gate residency is too expensive for the next A/B.
+   - Largest dev-general up/gate layer buckets are only about `6-10 ms/token`
+     each.
+   - Examples:
+     - layer 14 upgate: `10.038 ms/token`, observed `2126.25 MiB`;
+     - layer 28 upgate: `9.209 ms/token`, observed `2539.69 MiB`;
+     - layer 1 upgate: `9.090 ms/token`, observed `2242.19 MiB`;
+     - layer 29 upgate: `8.479 ms/token`, observed `2618.44 MiB`.
+   - Reaching the `~95 ms/token` N32 gap would need many such layers and would
+     exceed practical RAM/VRAM residency budgets.
+
+2. Fixed prompt-general hotset retuning is not promising.
+   - Cache oracle report:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-paired-upgate-ram-bound-current/cache-oracle-bound.md`.
+   - Current online cache beats dev-wide static global LFU at the same slot
+     counts.
+   - Upgate current hit rates on dev prompts are `37.0-45.4%`; dev-wide global
+     LFU only gives `25.3-35.1%`.
+   - Therefore a simple fixed prompt-general hotset/profile should not be the
+     next runtime A/B.
+
+3. Ordinary explicit RAM tier does not clear the `>2 tok/s` bound.
+   - RAM candidates exclude current VRAM entries and use dev IO traces only.
+   - Results:
+     - `4096 MiB`: selected `61.263 GiB` weighted traffic, but only
+       `0.422 GiB` RAM-dominant; scheduler-realistic best `1.68 tok/s`;
+     - `8192 MiB`: selected `106.031 GiB` weighted traffic, but only
+       `2.514 GiB` RAM-dominant; scheduler-realistic best `1.70 tok/s`;
+     - `10240 MiB`: selected `126.794 GiB` weighted traffic, but only
+       `3.931 GiB` RAM-dominant; scheduler-realistic best `1.71 tok/s`.
+   - Decision: reject a large conventional RAM tier until a scheduler/layout
+     change can make RAM hits batch-dominant or avoid mixed RAM/SSD
+     fragmentation.
+
+4. Lower-byte expert representation is the only bound here that looks large
+   enough.
+   - Quant-scaled cache bound:
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-paired-upgate-ram-bound-current/quant-scaled-cache-bound.md`.
+   - Mean prompt-general global LFU miss traffic:
+     - ratio `1.0`: `7.858 GiB/token`;
+     - ratio `0.5`: `3.076 GiB/token`;
+     - ratio `0.35`: `1.792 GiB/token`;
+     - ratio `0.25`: `1.015 GiB/token`;
+     - ratio `0.125`: `0.216 GiB/token`.
+   - Ratio around `0.35` gets close to the transfer budget for much higher
+     token rate if overlap and compute remain controlled; ratio `0.25` gives a
+     stronger bound but needs quality/runtime proof.
+
+Decision:
+
+- Do not implement the next runtime A/B as gate-only, whole-layer up/gate
+  residency, fixed hotset retuning, or a large ordinary RAM tier.
+- Promote lower-byte expert representation to the next main design path, but
+  only after writing a concrete implementation plan with:
+  - exact role/type coverage;
+  - dequant or direct-compute kernel path;
+  - quality gate before performance gate;
+  - cold-start N32 smoke before N96;
+  - fallback to the current IQ3 path for unsupported cases.
+- Secondary fallback path:
+  - design a scheduler/layout change whose explicit goal is to increase
+    RAM-dominant or up/gate-dominant batches; it must show a new offline bound
+    that clears `2 tok/s` before runtime A/B.
+
 ## Current execution goal: prompt-general Kimi `>2 tok/s` through storage layout
 
 Timestamp: 2026-07-11 CST.
