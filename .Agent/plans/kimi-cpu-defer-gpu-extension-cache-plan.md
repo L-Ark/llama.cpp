@@ -4,6 +4,99 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Active goal: verify DeepSeek-style CPU/defer GPU-extension on Kimi
+
+Timestamp: 2026-07-11 CST.
+
+This is the top-priority goal for the next optimization round. Historical
+sections below remain as audit history; new work must follow this section unless
+this section is explicitly superseded by a later dated goal.
+
+Goal:
+
+> Determine, with cold-start prompt-general measurements, whether the DeepSeek
+> SOTA pattern transfers to Kimi: keep the CPU/defer MoE scheduler, but make the
+> GPU expert-cache extension handle the critical `gate/up/down` work more
+> completely. The immediate target is a pushed, reproducible improvement to
+> stable held-out `>2 tok/s` under strict 16 GB host RAM. The product target
+> remains stable `>5 tok/s` for random user prompts on one 32 GB RTX
+> 5090-class GPU.
+
+Important interpretation:
+
+- DeepSeek's large jump came from a CPU/defer path where important gate work was
+  effectively made GPU-resident and GPU-computed.
+- Kimi currently reports decode CPU fallback at zero on the stable path, so this
+  is not a literal "remove CPU fallback" task.
+- For Kimi, the transferable idea is architectural: CPU/defer stays the
+  scheduler, while GPU cache/streaming becomes a better extension for
+  `gate/up/down` residency, transfer, and compute.
+- The main measured Kimi gap is exposed transfer/staging wait, especially mixed
+  up/gate miss wait. Any proposed implementation must show it reduces that
+  wait, not only that it increases hit rate or moves bytes elsewhere.
+
+Hard gates for this goal:
+
+- Cold start only; no warm-cache SOTA claims.
+- Host RAM peak must stay below `15900000000` bytes, including page cache,
+  pinned memory, mmap/file-backed pages, helper processes, and cgroup accounting.
+- VRAM should be used aggressively, but not by increasing TTFT beyond `1.20x`,
+  causing reclaim/refault spikes, or weakening output quality.
+- The prompt `Please introduce France in a short paragraph.` must remain
+  coherent and semantically correct.
+- Optimization must be prompt-general. Dev prompts can be used for design;
+  held-out prompts must not be used to choose hot experts, thresholds, pack
+  order, or layer/role slabs.
+- Every accepted improvement must be committed and pushed immediately with a
+  reproducible commit body: before/after metrics, exact env and command, prompt
+  split, run directories, quality result, TTFT/RAM/VRAM/IO/H2D/fallback metrics,
+  and rollback commit.
+
+Execution plan:
+
+1. Re-establish the baseline before changing behavior.
+   - Use the current pushed branch and rollback SHA.
+   - Run at least one cold-start N32 smoke and one N96 profile on dev prompts.
+   - Record token rate, TTFT, RAM peak, page-cache split, VRAM/cache settings,
+     expert-pack bytes, `io_uring_wait`, staging wall, H2D wall, compute wall,
+     CPU fallback count, direct reads, and exact output.
+
+2. Audit current CPU/defer GPU-extension coverage.
+   - Confirm the effective `n_cpu_moe`/CPU-defer layer coverage.
+   - For every role/layer, separate these paths: VRAM cache hit, RAM tier hit,
+     SSD/io_uring pack miss, H2D copy, GPU compute, and true CPU fallback.
+   - Verify whether gate, up, and down are already fully handled by the GPU
+     extension or whether any role still uses a slower CPU/defer subpath.
+
+3. Compute a savings bound before each implementation.
+   - Start from the measured per-token profile, especially mixed up/gate wait.
+   - Estimate the maximum possible token-rate gain from the candidate using
+     bytes per expert, expected hit/miss reduction, SSD bandwidth, H2D bandwidth,
+     staging cost, and compute cost.
+   - Continue only if the bound can plausibly save enough critical-path time to
+     move prompt-general throughput toward `>2 tok/s`.
+
+4. Run default-off A/B candidates in priority order.
+   - Gate residency/cache audit first: test whether more complete gate residency
+     helps Kimi, but reject gate-only work if the profile shows mixed up/gate
+     wait remains dominant.
+   - Up+gate paired cache/streaming second: because the largest current Kimi row
+     is mixed `up=22/gate=18`, prioritize paired admission and transfer.
+   - Same-layer `gate/up/down` cosubmit or scheduler changes third: use shadow
+     counters first, then runtime behavior only if it increases queue continuity
+     without increasing exposed wait.
+   - RAM tier experiments only after low-value page cache is identified and
+     replaced with batch-friendly expert slabs. Avoid prompt-specific hotsets.
+
+5. Promotion and rollback.
+   - Promote only if paired baseline/candidate runs pass token-rate, TTFT, RAM,
+     quality, and reproducibility gates on dev and held-out prompts.
+   - If a candidate is slower, raises TTFT too much, exceeds RAM, or fails
+     quality, revert the behavior or leave it default-off and document the
+     rejection. It must not be called SOTA.
+   - Update this plan before the next implementation attempt with the run root,
+     decision, and rollback point.
+
 ## Current execution goal: prompt-general Kimi `>2 tok/s` through storage layout
 
 Timestamp: 2026-07-11 CST.
