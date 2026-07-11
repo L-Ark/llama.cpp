@@ -227,6 +227,120 @@ Only after the source of prompt-time late-layer GGUF page-cache refill is known
 should the next implementation attempt replace page cache with explicit RAM
 expert cache.
 
+### 2026-07-12 Phase 1 Result: CPU/defer dispatch is not the late-layer GGUF refault source
+
+Diagnostic branch:
+
+- `vendor/kimi-prompt-host-source-prof`
+- pushed diagnostic commits:
+  - `f4b44b65e diag: profile kimi cpu moe dispatch residency`
+  - `9cffdd354 diag: make kimi cpu dispatch profile phase aware`
+  - `f82c92904 diag: profile kimi fused upgate dispatch residency`
+
+Instrumentation:
+
+- Added default-off `GGML_KIMI_CPU_MOE_DISPATCH_PROFILE_OUT`.
+- Records CPU/defer MoE dispatch windows for:
+  - `ggml_compute_forward_mul_mat_id` down path;
+  - `ggml_compute_forward_moe_up_gate` fused up/gate path.
+- CSV fields include phase, tensor, role, type, active experts/rows,
+  batch eligibility, batch acceptance, remaining fallback rows, and mincore
+  resident bytes before/after the GPU-extension dispatch window.
+- Added a read-only CUDA phase hook so CPU diagnostics use the same
+  `before_prompt_eval` to `after_prompt_eval` prompt window as CUDA
+  host-source profiling. This was required because prompt eval can enter
+  decode-shaped calls where `ids->ne[1]` alone is not a reliable prompt marker.
+
+Runs:
+
+1. `/root/lfz/runs/vendor-kimi-token-rate/20260712-cpu-dispatch-residency-reasoning-n96-182900`
+   - commit: `f4b44b65e`
+   - issue: no dispatch CSV was emitted because prompt-only filtering used
+     `ids->ne[1] > 1`; this reproduced the earlier phase-classification
+     problem.
+   - quality: pass, output `5:15 PM`
+   - TTFT `214623.01 ms`, decode `37076.77 ms / 61`, `1.65 tok/s`
+   - CPU fallback source entries: `0`
+
+2. `/root/lfz/runs/vendor-kimi-token-rate/20260712-cpu-dispatch-residency-v2-reasoning-n96-183728`
+   - commit: `9cffdd354`
+   - quality: pass, output `5:15 PM`
+   - TTFT `227729.11 ms`, decode `36651.95 ms / 61`, `1.66 tok/s`
+   - CPU fallback source entries: `0`
+   - dispatch CSV rows: only prompt `blk.60.ffn_down_exps.weight`
+   - down row result:
+     `batch_done=1`, `fallback_rows=0`, `resident_before_bytes=0`,
+     `resident_after_bytes=0`
+
+3. `/root/lfz/runs/vendor-kimi-token-rate/20260712-cpu-dispatch-residency-v3-reasoning-n96-184824`
+   - commit: `f82c92904`
+   - filter: `blk.53` through `blk.60`
+   - quality: pass, output `5:15 PM`
+   - TTFT `222580.99 ms`, decode `36293.28 ms / 61`, `1.68 tok/s`
+   - memory peak: `15899996160`, still cgroup cap
+   - CPU fallback source entries: `0`
+   - prompt host-source CSV rows: `24`, all `blk.60.ffn_{up,gate,down}` from
+     expert pack `iouring`, no `host_mmap_*`
+   - dispatch CSV rows:
+     - `blk.60.ffn_up_exps.weight`: `batch_done=1`, `fallback_rows=0`,
+       `resident_before=0`, `resident_after=0`
+     - `blk.60.ffn_gate_exps.weight`: `batch_done=1`, `fallback_rows=0`,
+       `resident_before=0`, `resident_after=0`
+     - `blk.60.ffn_down_exps.weight`: `batch_done=1`, `fallback_rows=0`,
+       `resident_before=0`, `resident_after=0`
+
+File-cache residency after v3:
+
+- GGUF shards: `14552408064` bytes, `13.553 GiB`
+- expert packs: `4845568` bytes, `0.005 GiB`
+- alias TSV: `0.010 GiB`
+- dominant files:
+  - shard `00009`: `11.299 GiB`
+  - shard `00010`: `2.247 GiB`
+
+Tensor-level residency for v2/v3 continues to identify late-layer expert
+tensors, not expert-pack data:
+
+- shard `00009`: about `11.30 GiB`
+  - `down_exps`: about `4.72 GiB`
+  - `up_exps`: about `3.34 GiB`
+  - `gate_exps`: about `3.25 GiB`
+  - top ranges include `blk.53-58.ffn_{down,up,gate}_exps.weight`
+- shard `00010`: about `2.247 GiB`
+  - `blk.59.ffn_down_exps.weight`: `0.807 GiB`
+  - `blk.59.ffn_up_exps.weight`: `0.720 GiB`
+  - `blk.59.ffn_gate_exps.weight`: `0.720 GiB`
+
+Decision:
+
+- The late-layer GGUF file-cache refill is not caused by:
+  - prompt CUDA expert-copy H2D fallback;
+  - CPU fallback compute;
+  - CPU/defer down GPU-extension dispatch;
+  - CPU/defer fused up/gate GPU-extension dispatch.
+- For the observed prompt compute dispatches, Kimi is already using the GPU
+  extension and has `0` CPU fallback. DeepSeek-style "move remaining gate CPU
+  slow path to GPU" is therefore not the next Kimi bottleneck.
+- Do not start RAM/VRAM re-layout from these pages yet: they are still being
+  refaulted by an unlocated source, so replacing them blindly risks fighting
+  prompt-time mmap behavior and causing reclaim/TTFT regressions.
+
+Next required diagnostic:
+
+1. Instrument mmap/drop ranges rather than MoE compute dispatch:
+   - add default-off per-range mincore before/after around
+     `llama_mmap::dontneed_fragment()`;
+   - log file path or shard, range offset/length, cached bytes before/after,
+     `madvise` result, optional `posix_fadvise` result, phase label, and wall
+     time.
+2. Use it to answer whether `LLAMA_DROP_EXPERT_MMAP_AFTER_PROMPT` is:
+   - called after the pages are already resident;
+   - failing to evict specific shard ranges;
+   - immediately followed by a refault from model/loader/backend code;
+   - or only changing active/inactive LRU state while the cgroup remains full.
+3. Only after this range-level source is known should we convert the low-value
+   file cache into explicit RAM expert cache.
+
 ## 2026-07-12 Active Goal: DeepSeek-style CPU/defer GPU-extension on Kimi
 
 ### Goal
