@@ -104,9 +104,28 @@ smoke under the current task constraints:
 - It is still far above the `0.252x` optimistic `5 tok/s` byte gate, so it
   should not be framed as a `5 tok/s` solution.
 
-Before the smoke can run, storage must be freed. The low-risk cleanup candidate
-is the old France-only pack because prompt-specific packs are no longer accepted
-as generalized SOTA evidence and this one was previously identified as obsolete.
+Before the smoke can run, storage must be freed. The old France-only pack is the
+only single cleanup candidate large enough to unblock `i1-IQ1_S`, but it cannot
+be deleted blindly.
+
+Reference audit after this report found that some repro/historical scripts still
+reference the France pack path, including:
+
+- `.Agent/run-tools/kimi-general-prompt-repro.sh`;
+- `.Agent/run-tools/kimi_phase0_io_trace_remote.sh`;
+- historical run scripts under `/root/lfz/runs/vendor-kimi-token-rate`;
+- old side worktrees under `/root/lfz`.
+
+Therefore the cleanup gate is:
+
+1. first migrate the current accepted repro path away from the France-only pack
+   or record an equivalent prompt-general replacement;
+2. confirm the current SOTA rollback/repro command no longer requires that file;
+3. then delete or archive the old France-only pack to unlock the `i1-IQ1_S`
+   smoke.
+
+Until that migration is done, the storage gate remains blocked even though the
+byte math says deleting the pack would be sufficient.
 
 ## Reproduce
 

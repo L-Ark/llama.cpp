@@ -173,10 +173,17 @@ Decision:
 3. `i1-IQ1_S` is not a `5 tok/s` solution. The `5 tok/s` path still requires
    effective bytes near `0.25x` plus a lower compute/floor path, stronger future
    prediction, or higher VRAM-resident reuse.
-4. The next actionable step is storage cleanup of obsolete prompt-specific pack
-   data, then a dev-only `i1-IQ1_S` metadata/load/quality smoke if download time
-   is acceptable. No held-out prompt may be inspected until a frozen candidate
-   passes dev gates.
+4. A reference audit found that the old France-only pack is still referenced by
+   some repro/historical scripts, including `.Agent/run-tools/kimi-general-prompt-repro.sh`
+   and historical run scripts under `/root/lfz/runs/vendor-kimi-token-rate`.
+   Therefore it must not be deleted blindly.
+5. The next actionable step is to migrate the current accepted repro path away
+   from the France-only pack, or record an equivalent prompt-general replacement.
+   Only after the current SOTA rollback/repro path no longer needs that file
+   should the obsolete pack be deleted or archived to unlock the `i1-IQ1_S`
+   smoke.
+6. No held-out prompt may be inspected until a frozen lower-byte candidate passes
+   dev gates.
 
 ## 2026-07-12 Current Goal And Execution Plan
 
