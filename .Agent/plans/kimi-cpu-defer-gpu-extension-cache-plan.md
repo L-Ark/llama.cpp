@@ -4,6 +4,118 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Active Goal And Next Execution Plan
+
+本段是当前最高优先级目标和执行计划。后面的历史段落只作为证据和回溯材料；
+如果与本段冲突，以本段为准。
+
+### Active Goal
+
+在 `vendor/kimi-deepseek-41d205-additive` 分支上，基于当前 Kimi 可泛化 SOTA 继续优化
+decode token rate。短期硬目标是让 generalized prompts 的 cold-start 稳定输出达到
+`>2 tok/s`；中长期目标是向 `>5 tok/s` 推进。
+
+最终任务背景必须始终保持不变：
+
+- 目标机器是 `16 GB Host RAM + 32 GB RTX 5090`；
+- 用户输入是随机 prompt，不允许 prompt-specific pack、prompt-specific cache 或
+  warm-cache 结果冒充 SOTA；
+- 所有优化服务于“随机 prompt 下稳定、语义正确地输出”，不是只优化某一道题；
+- `Please introduce France in a short paragraph.` 是强制质量门禁，回答必须语义正确、
+  连贯；
+- Host RAM 必须 `<16 GB`，统计口径包含 RSS、page cache、pinned staging、
+  RAM expert cache 和其他进程外文件缓存；
+- 必须 cold start；
+- TTFT 相对 paired baseline 不得升高超过 `20%`；
+- 符合约束并带来提升时必须立即 commit 和 push；不符合则 default-off 或回退；
+- 每个 SOTA commit 必须可复现，并在 commit body 和计划文档里记录：
+  提升幅度、commit/env、复现命令、prompt split、RAM/VRAM、TTFT、decode rate、
+  prompt/prefill rate、质量输出、rollback point。
+
+### Current Baseline Diagnosis
+
+当前已经确认：
+
+- DeepSeek-style `CPU/defer MoE main path + GPU expert-cache extension` 对 Kimi 有用，
+  但当前 HEAD 上 gate/up/down 已基本被 GPU extension 接住；
+- current audit 中 `up_gate` 和 `down` 均为 `batch_accept == calls`，
+  true CPU fallback rows 为 `0`；
+- 当前主要瓶颈不再是 broad CPU fallback，而是 expert payload 和 demand-read exposure；
+- 当前 copy/profiling 根因量级约为 `6.54 GiB/token` expert movement；
+- scheduler-only、queue-only、静态 layout、整层 RAM slab 的上界都不足以稳定达到
+  `2 tok/s`；
+- 已做的 lower-byte admission 说明：若所有 role 的 expert bytes 约减半，理论上可接近
+  `2 tok/s`；若只做 IO 调度而不降 bytes，很难跨过 `2 tok/s`。
+
+因此下一阶段主线不是继续猜缓存策略，而是：
+
+1. 先用可复现 cold-start baseline 锁定当前每 token 秒数分解；
+2. 优先寻找能减少 expert bytes/token 的表示方式；
+3. 同时把 RAM/VRAM 作为显式、可控、可批量 H2D 的 cache，而不是依赖不可控 page cache；
+4. 每一步都必须用 generalized dev prompts 证明，不使用 held-out prompts 调参。
+
+### Prompt Split Rule
+
+为了避免 prompt-specific 优化：
+
+- `dev prompts` 只用于调试和优化方向选择；
+- `held-out/test prompts` 只能最终验证 SOTA，不能根据 test 结果调整 pack、cache、hotset
+  或 layout；
+- 任何新 prompt 在第一次运行前必须先标明用途：`dev`、`diagnostic` 或 `held-out`；
+- 没有提前声明用途的新 prompt，默认只能作为 diagnostic 记录，不得用于声明 SOTA。
+
+### Next Execution Plan
+
+1. Reproduce current generalized baseline.
+   - 使用当前 HEAD、cold start、`MemoryMax=15900000000`；
+   - 跑至少 France + 一个 generalized dev prompt；
+   - 记录 TTFT、decode token rate、prompt/prefill token rate、RAM/VRAM、page cache、
+     pinned/RSS、quality output；
+   - 生成 per-token profile：expert read、pinned staging、H2D、up/gate compute、
+     down compute、CPU fallback、io_uring wait、overlap 情况。
+
+2. Run non-destructive lower-byte admission.
+   - 复查已有 activation-aware 工具和 activation corpus；
+   - 只做 oracle/screen，不先改 runtime；
+   - 候选方向包括：
+     exact input keep、partial exact contribution、joint intermediate keep/scalar、
+     role-specific quant split、shared/base-plus-residual、complete-model lower-bit smoke；
+   - 接受门槛：bytes/token 至少接近 `0.50x`，同时 error/quality 风险可控；
+   - 如果工具结果依赖不可部署 oracle 信息，必须明确标注为 non-deployable upper bound。
+
+3. Design explicit RAM/VRAM storage policy only after byte screen.
+   - 先实测 decode 阶段 page cache/RAM 中哪些 pages 不再有价值；
+   - 释放低价值 file-backed working set 后，只把空间用于可控 expert cache；
+   - RAM cache 必须支持批量、顺序或大块 H2D，不接受把 SSD 随机读问题变成 RAM 随机拷贝问题；
+   - VRAM 放最 hot / highest critical-path experts；
+   - RAM 放次 hot 或低 hit-rate 层的可批量 slabs；
+   - SSD 放冷 expert；
+   - 对每个策略同时比较 saved io_uring wait、added staging/H2D、TTFT、RAM peak 和质量。
+
+4. Implement only the best admitted path.
+   - 若 lower-byte screen 通过，先实现最小 default-off runtime A/B；
+   - 若 RAM/VRAM layout screen 通过，先实现 default-off cache/slab A/B；
+   - 若两者都未通过，则不提交 runtime 改动，只提交 rejected evidence，并转向 predictor/prefetch
+     或完整模型更低 bit smoke。
+
+5. SOTA acceptance and rollback.
+   - generalized dev 提升后，才能跑 held-out/test；
+   - test set 通过后才可声明新 SOTA；
+   - 新 SOTA commit 必须详细写复现信息并 push；
+   - 若性能下降、准确率下降、TTFT `> +20%` 或 RAM `>=16GB`，必须回退或 default-off；
+   - rollback point 当前为 `b96bb5e91`，除非后续产生新的 verified SOTA commit。
+
+### Immediate Next Step
+
+继续执行 lower-byte admission 的非破坏性实验：
+
+- 读取并复查现有 activation-aware oracle 工具；
+- 使用已有 generalized dev activation corpus 跑小规模 screen；
+- 产出 `.Agent/runs/20260712-activation-aware-next-admission/`；
+- 在本计划文档记录结果：
+  pass/fail、理论上限、与实测 gap、下一步是否值得实现 runtime；
+- 只有当 screen 给出可解释、可部署、可泛化的收益时，才进入代码实现。
+
 ## 2026-07-12 Current Authoritative Goal And Plan
 
 本段是当前执行目标。后面的历史段落只作为实验记录和回溯依据；如果与本段冲突，以本段为准。
