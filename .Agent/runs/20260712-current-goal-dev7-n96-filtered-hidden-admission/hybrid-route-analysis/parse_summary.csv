@@ -1,0 +1,8 @@
+prompt,path,rows,segments,decode_tokens,prompt_like_groups,incomplete_groups
+dev_france_regression,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus/dev_france_regression/route-trace.csv,146496,15480,85,1,0
+dev_japan_factual,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus/dev_japan_factual/route-trace.csv,136416,14220,78,1,0
+dev_linear_equation,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus/dev_linear_equation/route-trace.csv,82968,6300,34,1,0
+dev_mixed_summary,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus/dev_mixed_summary/route-trace.csv,104568,9000,49,1,0
+dev_photosynthesis_factual,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus/dev_photosynthesis_factual/route-trace.csv,155208,17100,94,1,0
+dev_python_reverse,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus/dev_python_reverse/route-trace.csv,162312,17280,95,1,0
+dev_zh_france,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus/dev_zh_france/route-trace.csv,91824,9000,49,1,0

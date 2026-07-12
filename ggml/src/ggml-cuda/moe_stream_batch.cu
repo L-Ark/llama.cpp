@@ -3257,6 +3257,24 @@ static bool moe_activation_dump_decode_only() {
     return decode_only;
 }
 
+static const char * moe_activation_dump_role_filter() {
+    static const char *role = []() -> const char * {
+        const char *env = std::getenv("GGML_MOE_ACTIVATION_DUMP_ROLE_FILTER");
+        return (env && env[0]) ? env : nullptr;
+    }();
+    return role;
+}
+
+static int moe_activation_dump_active_slot_filter() {
+    static const int slot = []() {
+        const char *env = std::getenv("GGML_MOE_ACTIVATION_DUMP_ACTIVE_SLOT");
+        if (!env || !env[0]) return -1;
+        const long v = std::strtol(env, nullptr, 10);
+        return (int)std::max<long>(-1, std::min<long>(v, 1000000));
+    }();
+    return slot;
+}
+
 static void moe_activation_dump_record(
         const char *role,
         const char *mode,
@@ -3276,6 +3294,14 @@ static void moe_activation_dump_record(
         return;
     }
     if (moe_activation_dump_decode_only() && (!mode || std::strcmp(mode, "decode") != 0)) {
+        return;
+    }
+    const char *role_filter = moe_activation_dump_role_filter();
+    if (role_filter && (!role || std::strcmp(role_filter, role) != 0)) {
+        return;
+    }
+    const int active_slot_filter = moe_activation_dump_active_slot_filter();
+    if (active_slot_filter >= 0 && active_slot != active_slot_filter) {
         return;
     }
 

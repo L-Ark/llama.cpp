@@ -1,0 +1,585 @@
+{
+  "admission": {
+    "max_pred_over_actual": 1.35,
+    "min_full_step_pct": 0.4,
+    "min_recall": 0.65
+  },
+  "budgets": [
+    8
+  ],
+  "feature_dim": 128,
+  "horizons": [
+    1
+  ],
+  "kind": "kimi_hidden_route_future_admission",
+  "layers": 60,
+  "neighbors": [
+    1,
+    3,
+    5
+  ],
+  "prompts": [
+    {
+      "activation_f32_bytes": 146255872,
+      "activation_incomplete_groups": 1,
+      "activation_roles": {
+        "up": 5101
+      },
+      "activation_rows": 5101,
+      "activation_slots": {
+        "0": 5101
+      },
+      "activation_tokens": 85,
+      "paired_tokens": 85,
+      "prompt": "dev_france_regression",
+      "route_incomplete_calls": 0,
+      "route_prompt_like_rows": 1,
+      "route_score_rows": 5101,
+      "route_tokens": 85,
+      "sample_rows": 5100
+    },
+    {
+      "activation_f32_bytes": 134213632,
+      "activation_incomplete_groups": 1,
+      "activation_roles": {
+        "up": 4681
+      },
+      "activation_rows": 4681,
+      "activation_slots": {
+        "0": 4681
+      },
+      "activation_tokens": 78,
+      "paired_tokens": 78,
+      "prompt": "dev_japan_factual",
+      "route_incomplete_calls": 0,
+      "route_prompt_like_rows": 1,
+      "route_score_rows": 4681,
+      "route_tokens": 78,
+      "sample_rows": 4680
+    },
+    {
+      "activation_f32_bytes": 58519552,
+      "activation_incomplete_groups": 1,
+      "activation_roles": {
+        "up": 2041
+      },
+      "activation_rows": 2041,
+      "activation_slots": {
+        "0": 2041
+      },
+      "activation_tokens": 34,
+      "paired_tokens": 34,
+      "prompt": "dev_linear_equation",
+      "route_incomplete_calls": 0,
+      "route_prompt_like_rows": 1,
+      "route_score_rows": 2041,
+      "route_tokens": 34,
+      "sample_rows": 2040
+    },
+    {
+      "activation_f32_bytes": 84324352,
+      "activation_incomplete_groups": 1,
+      "activation_roles": {
+        "up": 2941
+      },
+      "activation_rows": 2941,
+      "activation_slots": {
+        "0": 2941
+      },
+      "activation_tokens": 49,
+      "paired_tokens": 49,
+      "prompt": "dev_mixed_summary",
+      "route_incomplete_calls": 0,
+      "route_prompt_like_rows": 1,
+      "route_score_rows": 2941,
+      "route_tokens": 49,
+      "sample_rows": 2940
+    },
+    {
+      "activation_f32_bytes": 161738752,
+      "activation_incomplete_groups": 1,
+      "activation_roles": {
+        "up": 5641
+      },
+      "activation_rows": 5641,
+      "activation_slots": {
+        "0": 5641
+      },
+      "activation_tokens": 94,
+      "paired_tokens": 94,
+      "prompt": "dev_photosynthesis_factual",
+      "route_incomplete_calls": 0,
+      "route_prompt_like_rows": 1,
+      "route_score_rows": 5641,
+      "route_tokens": 94,
+      "sample_rows": 5640
+    },
+    {
+      "activation_f32_bytes": 163459072,
+      "activation_incomplete_groups": 1,
+      "activation_roles": {
+        "up": 5701
+      },
+      "activation_rows": 5701,
+      "activation_slots": {
+        "0": 5701
+      },
+      "activation_tokens": 95,
+      "paired_tokens": 95,
+      "prompt": "dev_python_reverse",
+      "route_incomplete_calls": 0,
+      "route_prompt_like_rows": 1,
+      "route_score_rows": 5701,
+      "route_tokens": 95,
+      "sample_rows": 5700
+    },
+    {
+      "activation_f32_bytes": 84324352,
+      "activation_incomplete_groups": 1,
+      "activation_roles": {
+        "up": 2941
+      },
+      "activation_rows": 2941,
+      "activation_slots": {
+        "0": 2941
+      },
+      "activation_tokens": 49,
+      "paired_tokens": 49,
+      "prompt": "dev_zh_france",
+      "route_incomplete_calls": 0,
+      "route_prompt_like_rows": 1,
+      "route_score_rows": 2941,
+      "route_tokens": 49,
+      "sample_rows": 2940
+    }
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_hidden_route_future_admission.py --root /root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus --out-dir .Agent/runs/20260712-current-goal-dev7-n96-filtered-hidden-admission/hidden-route-h1-budget8-analysis --layers 60 --horizons 1 --budgets 8 --neighbors 1,3,5 --feature-dim 128",
+  "root": "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus",
+  "rows": [
+    {
+      "actual": 228448,
+      "budget": 8,
+      "full_step_pct": 0.0009805294859223982,
+      "hits": 54132,
+      "horizon": 1,
+      "per_prompt": [
+        [
+          "dev_france_regression",
+          {
+            "actual": 40120,
+            "full_steps": 15,
+            "hits": 16964,
+            "predicted": 40120,
+            "samples": 5015
+          }
+        ],
+        [
+          "dev_japan_factual",
+          {
+            "actual": 36816,
+            "full_steps": 9,
+            "hits": 14095,
+            "predicted": 36816,
+            "samples": 4602
+          }
+        ],
+        [
+          "dev_linear_equation",
+          {
+            "actual": 16048,
+            "full_steps": 1,
+            "hits": 2472,
+            "predicted": 16048,
+            "samples": 2006
+          }
+        ],
+        [
+          "dev_mixed_summary",
+          {
+            "actual": 23128,
+            "full_steps": 1,
+            "hits": 2834,
+            "predicted": 23128,
+            "samples": 2891
+          }
+        ],
+        [
+          "dev_photosynthesis_factual",
+          {
+            "actual": 44368,
+            "full_steps": 1,
+            "hits": 5431,
+            "predicted": 44368,
+            "samples": 5546
+          }
+        ],
+        [
+          "dev_python_reverse",
+          {
+            "actual": 44840,
+            "full_steps": 0,
+            "hits": 3717,
+            "predicted": 44840,
+            "samples": 5605
+          }
+        ],
+        [
+          "dev_zh_france",
+          {
+            "actual": 23128,
+            "full_steps": 1,
+            "hits": 8619,
+            "predicted": 23128,
+            "samples": 2891
+          }
+        ]
+      ],
+      "policy": "hidden_knn5",
+      "precision": 0.23695545594621095,
+      "pred_over_actual": 1.0,
+      "predicted": 228448,
+      "recall": 0.23695545594621095,
+      "samples": 28556
+    },
+    {
+      "actual": 228448,
+      "budget": 8,
+      "full_step_pct": 0.0024513237148059953,
+      "hits": 53479,
+      "horizon": 1,
+      "per_prompt": [
+        [
+          "dev_france_regression",
+          {
+            "actual": 40120,
+            "full_steps": 30,
+            "hits": 17011,
+            "predicted": 40120,
+            "samples": 5015
+          }
+        ],
+        [
+          "dev_japan_factual",
+          {
+            "actual": 36816,
+            "full_steps": 32,
+            "hits": 14174,
+            "predicted": 36816,
+            "samples": 4602
+          }
+        ],
+        [
+          "dev_linear_equation",
+          {
+            "actual": 16048,
+            "full_steps": 1,
+            "hits": 2379,
+            "predicted": 16048,
+            "samples": 2006
+          }
+        ],
+        [
+          "dev_mixed_summary",
+          {
+            "actual": 23128,
+            "full_steps": 2,
+            "hits": 2629,
+            "predicted": 23128,
+            "samples": 2891
+          }
+        ],
+        [
+          "dev_photosynthesis_factual",
+          {
+            "actual": 44368,
+            "full_steps": 1,
+            "hits": 5221,
+            "predicted": 44368,
+            "samples": 5546
+          }
+        ],
+        [
+          "dev_python_reverse",
+          {
+            "actual": 44840,
+            "full_steps": 0,
+            "hits": 3615,
+            "predicted": 44840,
+            "samples": 5605
+          }
+        ],
+        [
+          "dev_zh_france",
+          {
+            "actual": 23128,
+            "full_steps": 4,
+            "hits": 8450,
+            "predicted": 23128,
+            "samples": 2891
+          }
+        ]
+      ],
+      "policy": "hidden_knn3",
+      "precision": 0.2340970374001961,
+      "pred_over_actual": 1.0,
+      "predicted": 228448,
+      "recall": 0.2340970374001961,
+      "samples": 28556
+    },
+    {
+      "actual": 228448,
+      "budget": 8,
+      "full_step_pct": 0.00290656954755568,
+      "hits": 51719,
+      "horizon": 1,
+      "per_prompt": [
+        [
+          "dev_france_regression",
+          {
+            "actual": 40120,
+            "full_steps": 38,
+            "hits": 16464,
+            "predicted": 40120,
+            "samples": 5015
+          }
+        ],
+        [
+          "dev_japan_factual",
+          {
+            "actual": 36816,
+            "full_steps": 36,
+            "hits": 13815,
+            "predicted": 36816,
+            "samples": 4602
+          }
+        ],
+        [
+          "dev_linear_equation",
+          {
+            "actual": 16048,
+            "full_steps": 1,
+            "hits": 2309,
+            "predicted": 16048,
+            "samples": 2006
+          }
+        ],
+        [
+          "dev_mixed_summary",
+          {
+            "actual": 23128,
+            "full_steps": 2,
+            "hits": 2492,
+            "predicted": 23128,
+            "samples": 2891
+          }
+        ],
+        [
+          "dev_photosynthesis_factual",
+          {
+            "actual": 44368,
+            "full_steps": 2,
+            "hits": 4998,
+            "predicted": 44368,
+            "samples": 5546
+          }
+        ],
+        [
+          "dev_python_reverse",
+          {
+            "actual": 44840,
+            "full_steps": 0,
+            "hits": 3477,
+            "predicted": 44840,
+            "samples": 5605
+          }
+        ],
+        [
+          "dev_zh_france",
+          {
+            "actual": 23128,
+            "full_steps": 4,
+            "hits": 8164,
+            "predicted": 23128,
+            "samples": 2891
+          }
+        ]
+      ],
+      "policy": "hidden_knn1",
+      "precision": 0.226392877153663,
+      "pred_over_actual": 1.0,
+      "predicted": 228448,
+      "recall": 0.226392877153663,
+      "samples": 28556
+    },
+    {
+      "actual": 228448,
+      "budget": 8,
+      "full_step_pct": 0.0,
+      "hits": 28739,
+      "horizon": 1,
+      "per_prompt": [
+        [
+          "dev_france_regression",
+          {
+            "actual": 40120,
+            "full_steps": 0,
+            "hits": 8595,
+            "predicted": 40120,
+            "samples": 5015
+          }
+        ],
+        [
+          "dev_japan_factual",
+          {
+            "actual": 36816,
+            "full_steps": 0,
+            "hits": 7027,
+            "predicted": 36816,
+            "samples": 4602
+          }
+        ],
+        [
+          "dev_linear_equation",
+          {
+            "actual": 16048,
+            "full_steps": 0,
+            "hits": 912,
+            "predicted": 16048,
+            "samples": 2006
+          }
+        ],
+        [
+          "dev_mixed_summary",
+          {
+            "actual": 23128,
+            "full_steps": 0,
+            "hits": 2010,
+            "predicted": 23128,
+            "samples": 2891
+          }
+        ],
+        [
+          "dev_photosynthesis_factual",
+          {
+            "actual": 44368,
+            "full_steps": 0,
+            "hits": 3226,
+            "predicted": 44368,
+            "samples": 5546
+          }
+        ],
+        [
+          "dev_python_reverse",
+          {
+            "actual": 44840,
+            "full_steps": 0,
+            "hits": 1869,
+            "predicted": 44840,
+            "samples": 5605
+          }
+        ],
+        [
+          "dev_zh_france",
+          {
+            "actual": 23128,
+            "full_steps": 0,
+            "hits": 5100,
+            "predicted": 23128,
+            "samples": 2891
+          }
+        ]
+      ],
+      "policy": "static_target_layer",
+      "precision": 0.1258010575710884,
+      "pred_over_actual": 1.0,
+      "predicted": 228448,
+      "recall": 0.1258010575710884,
+      "samples": 28556
+    },
+    {
+      "actual": 228448,
+      "budget": 8,
+      "full_step_pct": 0.0,
+      "hits": 4604,
+      "horizon": 1,
+      "per_prompt": [
+        [
+          "dev_france_regression",
+          {
+            "actual": 40120,
+            "full_steps": 0,
+            "hits": 794,
+            "predicted": 40120,
+            "samples": 5015
+          }
+        ],
+        [
+          "dev_japan_factual",
+          {
+            "actual": 36816,
+            "full_steps": 0,
+            "hits": 731,
+            "predicted": 36816,
+            "samples": 4602
+          }
+        ],
+        [
+          "dev_linear_equation",
+          {
+            "actual": 16048,
+            "full_steps": 0,
+            "hits": 299,
+            "predicted": 16048,
+            "samples": 2006
+          }
+        ],
+        [
+          "dev_mixed_summary",
+          {
+            "actual": 23128,
+            "full_steps": 0,
+            "hits": 474,
+            "predicted": 23128,
+            "samples": 2891
+          }
+        ],
+        [
+          "dev_photosynthesis_factual",
+          {
+            "actual": 44368,
+            "full_steps": 0,
+            "hits": 893,
+            "predicted": 44368,
+            "samples": 5546
+          }
+        ],
+        [
+          "dev_python_reverse",
+          {
+            "actual": 44840,
+            "full_steps": 0,
+            "hits": 946,
+            "predicted": 44840,
+            "samples": 5605
+          }
+        ],
+        [
+          "dev_zh_france",
+          {
+            "actual": 23128,
+            "full_steps": 0,
+            "hits": 467,
+            "predicted": 23128,
+            "samples": 2891
+          }
+        ]
+      ],
+      "policy": "source_route_plus_static",
+      "precision": 0.02015338282672643,
+      "pred_over_actual": 1.0,
+      "predicted": 228448,
+      "recall": 0.02015338282672643,
+      "samples": 28556
+    }
+  ]
+}

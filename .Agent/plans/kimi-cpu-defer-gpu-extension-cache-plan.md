@@ -415,6 +415,140 @@ Updated next action:
 3. Do not issue runtime prefetch reads until that full corpus passes recall,
    predicted/actual byte, full-step, RAM, TTFT, and quality gates.
 
+### Dev7 N96 Filtered Hidden Admission (2026-07-12 18:30 CST)
+
+Artifact:
+
+- corpus root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus`
+- combined report:
+  `.Agent/runs/20260712-current-goal-dev7-n96-filtered-hidden-admission/report.md`
+- route-score baseline:
+  `.Agent/runs/20260712-current-goal-dev7-n96-filtered-hidden-admission/route-score-analysis/analysis.md`
+- route-history baseline:
+  `.Agent/runs/20260712-current-goal-dev7-n96-filtered-hidden-admission/hybrid-route-analysis/report.md`
+- hidden-vector H1 admission:
+  `.Agent/runs/20260712-current-goal-dev7-n96-filtered-hidden-admission/hidden-route-h1-budget8-analysis/report.md`
+- tool:
+  `.Agent/run-tools/kimi_hidden_route_future_admission.py`
+
+Purpose:
+
+- complete the post trace-fix next action above;
+- collect generalized dev N96 cold-start traces with route-score,
+  route-detail, route-trace, and bounded hidden activation features;
+- decide whether route-score/history or filtered hidden vectors provide enough
+  future expert knowledge to justify runtime prefetch reads.
+
+Instrumentation change:
+
+- added default-off activation dump filters in
+  `ggml/src/ggml-cuda/moe_stream_batch.cu`:
+  - `GGML_MOE_ACTIVATION_DUMP_ROLE_FILTER`;
+  - `GGML_MOE_ACTIVATION_DUMP_ACTIVE_SLOT`;
+- used:
+  - `GGML_MOE_ACTIVATION_DUMP_ROLE_FILTER=up`;
+  - `GGML_MOE_ACTIVATION_DUMP_ACTIVE_SLOT=0`;
+- this keeps one hidden vector per decode token/layer and takes complete top-8
+  expert labels from `route-score-trace.csv`, avoiding the old activation-only
+  label limitation.
+
+Corpus command:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus
+python3 .Agent/run-tools/kimi_general_prompt_sweep.py \
+  --repo /root/lfz/llama.cpp-vendor-kimi \
+  --prompt-file .Agent/evals/kimi-general-dev-prompts.jsonl \
+  --out-root "$ROOT" \
+  --mode dev \
+  --n 96 \
+  --profile \
+  --keep-going \
+  --memory-max 15900000000 \
+  --runtime-max-sec 1200 \
+  --vram-mib 15000 \
+  --threads 32 \
+  --pinned-slots 12 \
+  --upgate-pct 72 \
+  --extra-runtime-env "GGML_MOE_ROUTE_SCORE_TRACE_OUT=\$RUN/route-score-trace.csv
+GGML_MOE_ROUTE_DETAIL_OUT=\$RUN/route-detail.csv
+GGML_MOE_ACTIVATION_DUMP_DIR=\$RUN
+GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=20000
+GGML_MOE_ACTIVATION_DUMP_CALL_STRIDE=1
+GGML_MOE_ACTIVATION_DUMP_DECODE_ONLY=1
+GGML_MOE_ACTIVATION_DUMP_ROLE_FILTER=up
+GGML_MOE_ACTIVATION_DUMP_ACTIVE_SLOT=0"
+```
+
+Corpus quality:
+
+| prompt | quality | tok/s | TTFT ms | decode ms/runs | RAM peak GiB | complete hidden groups |
+|---|---:|---:|---:|---:|---:|---:|
+| `dev_france_regression` | pass | `1.64` | `8200.50` | `51860.43/85` | `12.108` | `85` |
+| `dev_japan_factual` | pass | `1.66` | `8800.24` | `47031.55/78` | `12.094` | `78` |
+| `dev_linear_equation` | pass | `1.46` | `11143.78` | `23242.72/34` | `11.976` | `34` |
+| `dev_mixed_summary` | pass | `1.60` | `11043.66` | `30678.48/49` | `12.003` | `49` |
+| `dev_photosynthesis_factual` | pass | `1.61` | `7387.85` | `58214.73/94` | `11.954` | `94` |
+| `dev_python_reverse` | pass | `1.53` | `9171.05` | `62118.78/95` | `12.136` | `95` |
+| `dev_zh_france` | pass | `1.71` | `7892.55` | `28687.69/49` | `11.849` | `49` |
+
+Admission gate:
+
+- recall `>=0.65`;
+- predicted/actual bytes `<=1.35x`;
+- full-step coverage `>=0.40`;
+- no held-out/test prompt use;
+- no runtime implementation unless the offline gate passes.
+
+Results:
+
+| method | best admissible row | recall | pred/actual | full-step | decision |
+|---|---|---:|---:|---:|---|
+| route-score simple | `hybrid_layer8_token8` | `0.3496` | `1.949x` | `0.0008` | reject |
+| route-history hybrid | H3 `hybrid_balanced`, budget 8 | `0.3580` | `1.000x` | `0.0005` | reject |
+| hidden-vector KNN | H1 `hidden_knn5`, budget 8 | `0.236955` | `1.000x` | `0.000981` | reject |
+
+Hidden-vector command:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-n96-filtered-hidden-corpus
+OUT=.Agent/runs/20260712-current-goal-dev7-n96-filtered-hidden-admission/hidden-route-h1-budget8-analysis
+/usr/bin/time -v python3 .Agent/run-tools/kimi_hidden_route_future_admission.py \
+  --root "$ROOT" \
+  --out-dir "$OUT" \
+  --layers 60 \
+  --horizons 1 \
+  --budgets 8 \
+  --neighbors 1,3,5 \
+  --feature-dim 128
+```
+
+Offline hidden analysis cost:
+
+- wall time `2:14.83`;
+- max RSS `222680 KB`;
+- not a runtime cost and not a SOTA metric.
+
+Decision:
+
+- reject runtime future prefetch from route-score, route-history, and filtered
+  hidden KNN predictors;
+- filtered hidden vectors are worse than the route-history budget-8 baseline
+  (`0.236955` vs `0.3580` recall);
+- full-step coverage is effectively zero, so the predictor cannot produce
+  complete future expert batches;
+- do not implement runtime prefetch reads from this path.
+
+Updated next action:
+
+1. Return to byte/storage work for the `>2 tok/s` milestone:
+   - quality-preserving lower-byte expert representation; or
+   - explicit RAM/VRAM storage that replaces low-value GGUF page cache with
+     batchable high-yield expert payloads.
+2. Revisit prediction only with a materially stronger signal, such as a real
+   draft/router model, and only after complete-batch admission passes on dev.
+
 ## Locked Goal and Near-Term Plan (2026-07-12 16:17 CST)
 
 This section is the current working goal for the next implementation phase. It
