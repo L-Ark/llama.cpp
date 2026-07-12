@@ -4,6 +4,91 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Current Goal and Execution Plan (2026-07-12)
+
+This is the operational header for the active Codex goal. Historical sections
+below remain useful for audit, but new work must first satisfy this section.
+
+### Active Goal
+
+Optimize Kimi on `vendor/kimi-deepseek-41d205-additive` for generalized
+cold-start decoding on one `32 GB RTX 5090` with a hard `16 GB Host RAM` cap.
+The immediate milestone is a reproducible and stable `>2 tok/s` decode rate on
+general prompts. The product target remains stable `>5 tok/s` for random user
+prompts on the same hardware.
+
+The current architecture to improve is:
+
+- CPU/defer MoE path remains the scheduler;
+- GPU acts as the expert-cache and compute extension for gate/up/down;
+- accepted paths must avoid broad CPU fallback;
+- remaining optimization should reduce exposed expert movement, improve RAM/VRAM
+  placement, or reduce expert bytes without breaking output quality.
+
+### Non-Negotiable Gates
+
+Every candidate must be evaluated as a cold start and must record:
+
+- host RAM below `16 GB`, including RSS, page cache, pinned staging, RAM expert
+  cache, and file-backed pages;
+- VRAM usage and whether available VRAM is used for high-value expert cache;
+- decode token rate, prefill/prompt rate, TTFT, per-token wall time, and major
+  sub-costs: expert read, io_uring wait, pinned staging, H2D, up/gate compute,
+  down compute, and CPU fallback;
+- quality output text for `Please introduce France in a short paragraph.`;
+- generalized dev prompts and held-out prompts, with held-out prompts excluded
+  from tuning;
+- exact branch, commit, env vars, command line, prompt set, artifacts, and
+  rollback commit.
+
+A result is accepted only if it improves token rate, keeps quality coherent,
+keeps TTFT within `+20%` of the paired baseline, stays under the RAM cap, and is
+reproducible from the pushed commit. Otherwise the code/config path must be
+reverted or left default-off with a rejected run report.
+
+### Execution Plan
+
+1. Re-establish the protected baseline.
+   - Run one cold-start generalized prompt profile before each new
+     implementation phase.
+   - Use the same profiling schema for every run so regressions are comparable:
+     token rate, TTFT, RAM/page cache/pinned breakdown, VRAM, read bytes,
+     io_uring wait, staging, H2D, GPU compute, and fallback rows.
+
+2. Prioritize byte/layout changes before scheduler-only changes.
+   - Scheduler-only same-layer batching has already failed to clear `>2 tok/s`.
+   - New admission work must show a hard bound above the milestone before
+     runtime implementation.
+   - Current candidates are activation-aware expert representations, structured
+     factorization, selective residual correction, or an approved full
+     lower-byte asset smoke such as `i1-IQ1_S`.
+
+3. Make RAM useful, not accidental.
+   - Identify low-value decode-time file cache with measured evidence before
+     replacing it.
+   - Replace it only with batchable expert data: contiguous role/layer slabs,
+     RAM-resident next-tier experts, or staging designs that preserve large
+     reads and avoid fragmenting SSD batches.
+   - Do not claim benefit from generic page cache unless it measurably reduces
+     exposed wait and improves token rate under the RAM cap.
+
+4. Runtime implementation is default-off until accepted.
+   - Add a narrow env flag for each A/B path.
+   - Test against the paired baseline on generalized dev prompts first.
+   - If the candidate passes, run held-out prompts and push immediately with a
+     full reproducibility message.
+   - If it fails, record the failure, keep the code disabled or revert, and do
+     not call it SOTA.
+
+5. Commit discipline for any SOTA claim.
+   - Commit body must include improvement magnitude, exact environment, exact
+     reproduction commands, prompt split, output text, RAM/VRAM metrics, TTFT,
+     quality gate result, artifacts, and rollback point.
+   - The plan must be updated before the experiment and the run report must be
+     committed after the experiment.
+   - The pushed branch for this line of work is
+     `vendor/kimi-deepseek-41d205-additive` unless explicitly changed.
+
 ## 2026-07-12 Goal Lock: Kimi CPU/defer GPU-extension Next Step
 
 This section is the current source of truth. Later historical sections are kept
