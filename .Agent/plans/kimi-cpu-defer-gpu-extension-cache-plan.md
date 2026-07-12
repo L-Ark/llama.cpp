@@ -219,6 +219,66 @@ Decision:
   2. 更强 draft/router expert-ID predictor，必须先过 complete-batch admission；
   3. exact storage/layout 变化，必须证明能减少 moved bytes 或 exposed wait，而不只是重排。
 
+### 2026-07-12 Expert-ID Predictor Admission
+
+Goal:
+
+- 在不近似 MoE 输出的情况下，直接测试 expert-ID 预测是否能暴露未来完整 batch；
+- 只使用 dev route traces，不使用 held-out/test；
+- 若离线不满足 recall/byte ratio 门禁，则不做 runtime prefetch。
+
+Artifacts:
+
+- summary:
+  `.Agent/runs/20260712-expert-id-predictor-admission/report.md`；
+- static prior:
+  `.Agent/runs/20260712-static-prior-expert-id-admission/static-prior.md`；
+- FineMoE-style prefix:
+  `.Agent/runs/20260712-finemoe-prefix-expert-id-admission/dev_france_regression.md`；
+  `.Agent/runs/20260712-finemoe-prefix-expert-id-admission/dev_intelligence_general.md`。
+
+Inputs:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717`；
+- prompts: `dev_france_regression` and `dev_intelligence_general`。
+
+Admission gates:
+
+- byte recall `>=65%`；
+- predicted/actual bytes `<=1.35x`；
+- enough full-step / complete-batch coverage to reduce exposed wait；
+- no held-out/test prompt traces for training or threshold choice。
+
+Static prior result:
+
+- top-K per tensor, leave-one-prompt-out；
+- `K=8`: recall `0.0908`, predicted/actual bytes `0.8117x`；
+- `K=16`: recall `0.1573`, predicted/actual bytes `1.6233x`；
+- `K=128`: recall `0.5729`, predicted/actual bytes `12.3965x`；
+- never reaches the `>=65%` recall gate, and high-recall settings massively
+  overfetch。
+
+FineMoE-style route-prefix result:
+
+- prompt-local history + current token prefix layers；
+- France best distance: recall `0.4230`, useful/false-positive `0.501`；
+- Intelligence best distance: recall about `0.4340`, useful/false-positive
+  about `0.552`；
+- better than static prior, but still far below the `>=65%` recall gate and
+  wrong-prefetch bytes exceed useful bytes。
+
+Decision:
+
+- 不实现 runtime expert-ID prefetch from static prior or FineMoE-style prefix；
+- 理论 future-window bound 仍然大，但现有 prompt-general 信号不能低浪费地暴露完整 future
+  batches；
+- 以后只有在真实 draft/router model 直接预测 expert IDs，并先通过同样的 complete-batch
+  admission 后，才重新考虑 runtime prefetch；
+- 下一步继续聚焦：
+  1. 能通过 current-pack output-error gate 的真实 lower-byte payload；
+  2. 能减少 moved bytes/exposed wait 的 exact storage/layout 变化；
+  3. 提高实际 bytes/sec ceiling 的硬件/存储路径。
+
 ## 2026-07-12 Current Goal: Generalized Kimi `>2 tok/s` First, Then `5 tok/s`
 
 ### Goal

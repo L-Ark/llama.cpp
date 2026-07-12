@@ -1,0 +1,261 @@
+{
+  "by_distance": [
+    {
+      "distance": 1,
+      "global_hotset": {
+        "actual_bytes": 249555582976.0,
+        "byte_recall": 0.33081658051280544,
+        "false_positive_bytes": 164533010432.0,
+        "mean_window_precision": 0.3344315326804741,
+        "mean_window_recall": 0.3318491627565252,
+        "p50_window_recall": 0.375,
+        "precision_bytes": 0.3341174450150966,
+        "predicted_bytes": 247090135040.0,
+        "useful_bytes": 82557124608.0,
+        "useful_to_false_positive": 0.5017663287825157,
+        "window_count": 1829
+      },
+      "mean_prefix_similarity": 0.2661156631403644,
+      "p50_prefix_similarity": 0.2631578947368421,
+      "prefix_predictor": {
+        "actual_bytes": 249555582976.0,
+        "byte_recall": 0.42301760332948524,
+        "false_positive_bytes": 210558681088.0,
+        "mean_window_precision": 0.40571510638069475,
+        "mean_window_recall": 0.42366047020229636,
+        "p50_window_recall": 0.375,
+        "precision_bytes": 0.33393871408711095,
+        "predicted_bytes": 316125085696.0,
+        "useful_bytes": 105566404608.0,
+        "useful_to_false_positive": 0.501363344709972,
+        "window_count": 1829
+      }
+    },
+    {
+      "distance": 2,
+      "global_hotset": {
+        "actual_bytes": 490407723008.0,
+        "byte_recall": 0.33215053451624127,
+        "false_positive_bytes": 322612412416.0,
+        "mean_window_precision": 0.3357682473642026,
+        "mean_window_recall": 0.3330826377305372,
+        "p50_window_recall": 0.31504702194357365,
+        "precision_bytes": 0.3355070043309637,
+        "predicted_bytes": 485501599744.0,
+        "useful_bytes": 162889187328.0,
+        "useful_to_false_positive": 0.5049067582618575,
+        "window_count": 1798
+      },
+      "mean_prefix_similarity": 0.2660784908125427,
+      "p50_prefix_similarity": 0.2631578947368421,
+      "prefix_predictor": {
+        "actual_bytes": 490407723008.0,
+        "byte_recall": 0.42239598729284455,
+        "false_positive_bytes": 415944245248.0,
+        "mean_window_precision": 0.40485805866199814,
+        "mean_window_recall": 0.4229237895174757,
+        "p50_window_recall": 0.4375,
+        "precision_bytes": 0.33244970750524855,
+        "predicted_bytes": 623090499584.0,
+        "useful_bytes": 207146254336.0,
+        "useful_to_false_positive": 0.49801447358044926,
+        "window_count": 1798
+      }
+    },
+    {
+      "distance": 3,
+      "global_hotset": {
+        "actual_bytes": 722556420096.0,
+        "byte_recall": 0.33299556584942175,
+        "false_positive_bytes": 474642825216.0,
+        "mean_window_precision": 0.33664370808820315,
+        "mean_window_recall": 0.3339225490697442,
+        "p50_window_recall": 0.3333333333333333,
+        "precision_bytes": 0.3363967537524695,
+        "predicted_bytes": 715250909184.0,
+        "useful_bytes": 240608083968.0,
+        "useful_to_false_positive": 0.5069245149939943,
+        "window_count": 1767
+      },
+      "mean_prefix_similarity": 0.26602369766855666,
+      "p50_prefix_similarity": 0.2631578947368421,
+      "prefix_predictor": {
+        "actual_bytes": 722556420096.0,
+        "byte_recall": 0.4217674635947603,
+        "false_positive_bytes": 614233374720.0,
+        "mean_window_precision": 0.404288880916459,
+        "mean_window_recall": 0.4223470422351985,
+        "p50_window_recall": 0.4166666666666667,
+        "precision_bytes": 0.33161701884434935,
+        "predicted_bytes": 918984163328.0,
+        "useful_bytes": 304750788608.0,
+        "useful_to_false_positive": 0.49614820872754023,
+        "window_count": 1767
+      }
+    },
+    {
+      "distance": 4,
+      "global_hotset": {
+        "actual_bytes": 945262166016.0,
+        "byte_recall": 0.33421187881823317,
+        "false_positive_bytes": 619763630080.0,
+        "mean_window_precision": 0.33783229700165884,
+        "mean_window_recall": 0.33509187338311003,
+        "p50_window_recall": 0.34367499032133175,
+        "precision_bytes": 0.3376339631267777,
+        "predicted_bytes": 935681474560.0,
+        "useful_bytes": 315917844480.0,
+        "useful_to_false_positive": 0.5097392443619527,
+        "window_count": 1736
+      },
+      "mean_prefix_similarity": 0.2659493940061527,
+      "p50_prefix_similarity": 0.2628188829561827,
+      "prefix_predictor": {
+        "actual_bytes": 945262166016.0,
+        "byte_recall": 0.42073119832584976,
+        "false_positive_bytes": 804795514880.0,
+        "mean_window_precision": 0.40334183997304657,
+        "mean_window_recall": 0.4213088046736895,
+        "p50_window_recall": 0.4078859560067682,
+        "precision_bytes": 0.33072959883413733,
+        "predicted_bytes": 1202496798720.0,
+        "useful_bytes": 397701283840.0,
+        "useful_to_false_positive": 0.494164388949533,
+        "window_count": 1736
+      }
+    },
+    {
+      "distance": 5,
+      "global_hotset": {
+        "actual_bytes": 1158894714880.0,
+        "byte_recall": 0.3354127163831699,
+        "false_positive_bytes": 758436790272.0,
+        "mean_window_precision": 0.3389959006154958,
+        "mean_window_recall": 0.336235324622007,
+        "p50_window_recall": 0.340389369592089,
+        "precision_bytes": 0.3388482599367806,
+        "predicted_bytes": 1147144814592.0,
+        "useful_bytes": 388708024320.0,
+        "useful_to_false_positive": 0.512512089742636,
+        "window_count": 1705
+      },
+      "mean_prefix_similarity": 0.2658684135370496,
+      "p50_prefix_similarity": 0.26232741617357,
+      "prefix_predictor": {
+        "actual_bytes": 1158894714880.0,
+        "byte_recall": 0.41976514038928187,
+        "false_positive_bytes": 987903852544.0,
+        "mean_window_precision": 0.4024456251981772,
+        "mean_window_recall": 0.42035381242221614,
+        "p50_window_recall": 0.4240095628415301,
+        "precision_bytes": 0.3299473282333489,
+        "predicted_bytes": 1474367455232.0,
+        "useful_bytes": 486463602688.0,
+        "useful_to_false_positive": 0.49241998746667864,
+        "window_count": 1705
+      }
+    },
+    {
+      "distance": 6,
+      "global_hotset": {
+        "actual_bytes": 1363340296192.0,
+        "byte_recall": 0.3362413462877955,
+        "false_positive_bytes": 891097546752.0,
+        "mean_window_precision": 0.33977987847230534,
+        "mean_window_recall": 0.33699921638649233,
+        "p50_window_recall": 0.33758680555555554,
+        "precision_bytes": 0.3396875475915934,
+        "predicted_bytes": 1349508923392.0,
+        "useful_bytes": 458411376640.0,
+        "useful_to_false_positive": 0.5144345625356993,
+        "window_count": 1674
+      },
+      "mean_prefix_similarity": 0.26578064007342583,
+      "p50_prefix_similarity": 0.2622601279317697,
+      "prefix_predictor": {
+        "actual_bytes": 1363340296192.0,
+        "byte_recall": 0.41846414652710806,
+        "false_positive_bytes": 1163887427584.0,
+        "mean_window_precision": 0.40118041202095345,
+        "mean_window_recall": 0.41903575656617115,
+        "p50_window_recall": 0.4166666666666667,
+        "precision_bytes": 0.3289380751645684,
+        "predicted_bytes": 1734396461056.0,
+        "useful_bytes": 570509033472.0,
+        "useful_to_false_positive": 0.49017544132791596,
+        "window_count": 1674
+      }
+    },
+    {
+      "distance": 7,
+      "global_hotset": {
+        "actual_bytes": 1559053991936.0,
+        "byte_recall": 0.3370687909964137,
+        "false_positive_bytes": 1017811615744.0,
+        "mean_window_precision": 0.34056157004998855,
+        "mean_window_recall": 0.3377777804575294,
+        "p50_window_recall": 0.3392857142857143,
+        "precision_bytes": 0.3405051601497932,
+        "predicted_bytes": 1543320059904.0,
+        "useful_bytes": 525508444160.0,
+        "useful_to_false_positive": 0.5163120915807822,
+        "window_count": 1643
+      },
+      "mean_prefix_similarity": 0.2656640499739602,
+      "p50_prefix_similarity": 0.2618296529968454,
+      "prefix_predictor": {
+        "actual_bytes": 1559053991936.0,
+        "byte_recall": 0.41722843940269555,
+        "false_positive_bytes": 1332419608576.0,
+        "mean_window_precision": 0.39995699744630775,
+        "mean_window_recall": 0.4178001503228589,
+        "p50_window_recall": 0.4107142857142857,
+        "precision_bytes": 0.32804541153728495,
+        "predicted_bytes": 1982901272576.0,
+        "useful_bytes": 650481664000.0,
+        "useful_to_false_positive": 0.4881958054453963,
+        "window_count": 1643
+      }
+    },
+    {
+      "distance": 8,
+      "global_hotset": {
+        "actual_bytes": 1746035802112.0,
+        "byte_recall": 0.3377289377770585,
+        "false_positive_bytes": 1138842091520.0,
+        "mean_window_precision": 0.3411648944140453,
+        "mean_window_recall": 0.3383849384596352,
+        "p50_window_recall": 0.34117466372587724,
+        "precision_bytes": 0.3411495254378175,
+        "predicted_bytes": 1728528908288.0,
+        "useful_bytes": 589686816768.0,
+        "useful_to_false_positive": 0.5177950667251432,
+        "window_count": 1612
+      },
+      "mean_prefix_similarity": 0.265537982278879,
+      "p50_prefix_similarity": 0.2616487455197133,
+      "prefix_predictor": {
+        "actual_bytes": 1746035802112.0,
+        "byte_recall": 0.4159729257793369,
+        "false_positive_bytes": 1494339108864.0,
+        "mean_window_precision": 0.39872526090351085,
+        "mean_window_recall": 0.4165353720302029,
+        "p50_window_recall": 0.4071213913108773,
+        "precision_bytes": 0.3270691009018065,
+        "predicted_bytes": 2220642729984.0,
+        "useful_bytes": 726303621120.0,
+        "useful_to_false_positive": 0.4860366812404031,
+        "window_count": 1612
+      }
+    }
+  ],
+  "decision": "Phase 0 does not justify runtime FineMoE prefetch/protection yet. The prefix predictor does not recover enough future expert bytes with a strong useful-to-false-positive ratio on this accepted trace.",
+  "generated_at": "2026-07-12T04:45:37+0000",
+  "kind": "kimi_finemoe_route_prefix_bound",
+  "max_distance": 8,
+  "max_layer": 60,
+  "raw_segments": 32,
+  "reproduce_command": ".Agent/run-tools/kimi_finemoe_route_prefix_bound.py --trace /root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/dev_france_regression/route-trace.csv --out-json .Agent/runs/20260712-finemoe-prefix-expert-id-admission/dev_france_regression.json --out-md .Agent/runs/20260712-finemoe-prefix-expert-id-admission/dev_france_regression.md --max-distance 8 --min-segment-layers 50",
+  "segments_used": 32,
+  "trace": "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/dev_france_regression/route-trace.csv"
+}
