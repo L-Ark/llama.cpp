@@ -138,7 +138,11 @@ Artifacts:
 - local storage inventory:
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/storage-inventory.txt`;
 - IQ1_S cleanup/download dry-run:
-  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-dry-run.log`.
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-dry-run.log`;
+- IQ1_S part metadata validation:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-part-metadata-validation.log`;
+- IQ1_S cleanup safety dry-run:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-safety-dry-run.log`.
 
 Byte target result:
 
@@ -174,6 +178,13 @@ Storage result:
   - projected free after candidate delete: `286866386944 bytes`;
   - projected leftover after `i1-IQ1_S` download: `82435514464 bytes`;
   - projected space gate: pass for the `50 GiB` reserve.
+- Follow-up metadata/safety validation:
+  - `i1-IQ1_S` HF part metadata validates all five parts and total
+    `204430872480 bytes`;
+  - cleanup safety dry-run reports `delete_candidate_safety_check=ok`;
+  - projected leftover after `i1-IQ1_S` download remains above reserve at
+    `82426388576 bytes`;
+  - no deletion/download was executed.
 
 Decision:
 
@@ -189,7 +200,9 @@ Decision:
    and historical run scripts under `/root/lfz/runs/vendor-kimi-token-rate`.
    Therefore it must be preserved until the accepted repro path is migrated.
 5. A non-France cleanup path now exists. The updated dry-run preserves rollback
-   assets and projects enough free space for `i1-IQ1_S` plus a `50 GiB` reserve.
+   assets, passes `delete_candidate_safety_check=ok`, validates current
+   `i1-IQ1_S` part sizes, and projects enough free space for `i1-IQ1_S` plus a
+   `50 GiB` reserve.
 6. The next actionable step is explicit-confirm cleanup using the updated
    `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`, then an `i1-IQ1_S`
    dev-only smoke. No deletion/download was executed by this planning step.

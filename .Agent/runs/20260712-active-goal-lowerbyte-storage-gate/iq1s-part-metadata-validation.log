@@ -1,0 +1,33 @@
+[kimi_iq1s_prepare] date=2026-07-12T02:22:36+00:00
+[kimi_iq1s_prepare] execute=0 delete_old_packs=0 download=0 run_smoke=0 validate_parts=1 resume_download=1
+[kimi_iq1s_prepare] repo=/root/lfz/llama.cpp-vendor-kimi
+[kimi_iq1s_prepare] repo_branch=vendor/kimi-deepseek-41d205-additive
+[kimi_iq1s_prepare] repo_head=d50d643ab48b746ce4ca39c526e5169100242912
+[kimi_iq1s_prepare] model_path=/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF/Kimi-K2.7-Code.i1-IQ1_S.gguf
+[kimi_iq1s_prepare] required_iq1s_bytes=204430872480
+[kimi_iq1s_prepare] free_before=113120653312
+[kimi_iq1s_prepare] min_free_after_download_bytes=53687091200
+[kimi_iq1s_prepare] preserve paths:
+[kimi_iq1s_prepare]   preserve 405392165559 /root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S
+[kimi_iq1s_prepare]   preserve 175133036544 /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack
+[kimi_iq1s_prepare]   preserve 4844539904 /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack
+[kimi_iq1s_prepare] delete candidates:
+[kimi_iq1s_prepare]   candidate 0 /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack
+[kimi_iq1s_prepare]   candidate 79544299520 /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-tracefirst-n64-20260630.expert-pack
+[kimi_iq1s_prepare]   candidate 81460133888 /root/lfz/runs/vendor-kimi-token-rate/20260708-gp146-dev-grouped-overlay-shadow/gp146-france-routefirst-overlay.expert-pack
+[kimi_iq1s_prepare]   candidate 7689551872 /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack
+[kimi_iq1s_prepare]   candidate 5042724864 /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack
+[kimi_iq1s_prepare] delete_candidate_total=173736710144
+[kimi_iq1s_prepare] projected_free_after_candidate_delete=286857363456
+[kimi_iq1s_prepare] projected_leftover_after_iq1s_download=82426490976
+[kimi_iq1s_prepare] projected_space_ready=1
+[kimi_iq1s_prepare] part_size_ok name=Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5 bytes=41875931136
+[kimi_iq1s_prepare] part_size_ok name=Kimi-K2.7-Code.i1-IQ1_S.gguf.part2of5 bytes=41875931136
+[kimi_iq1s_prepare] part_size_ok name=Kimi-K2.7-Code.i1-IQ1_S.gguf.part3of5 bytes=41875931136
+[kimi_iq1s_prepare] part_size_ok name=Kimi-K2.7-Code.i1-IQ1_S.gguf.part4of5 bytes=41875931136
+[kimi_iq1s_prepare] part_size_ok name=Kimi-K2.7-Code.i1-IQ1_S.gguf.part5of5 bytes=36927147936
+[kimi_iq1s_prepare] part_total_ok bytes=204430872480
+[kimi_iq1s_prepare] delete step skipped
+[kimi_iq1s_prepare] space_ready=0 free=113120653312 required=258117963680 missing=144997310368
+[kimi_iq1s_prepare] download step skipped
+[kimi_iq1s_prepare] smoke step skipped

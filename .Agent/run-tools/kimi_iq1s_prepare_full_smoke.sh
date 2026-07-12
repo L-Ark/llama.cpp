@@ -41,6 +41,11 @@ DELETE_CANDIDATES=(
   "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack"
 )
 
+ACTIVE_REPRO_FILES=(
+  ".Agent/run-tools/kimi-general-prompt-repro.sh"
+  ".Agent/run-tools/kimi_phase0_io_trace_remote.sh"
+)
+
 PART_URLS=(
   "https://huggingface.co/mradermacher/Kimi-K2.7-Code-i1-GGUF/resolve/main/Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5"
   "https://huggingface.co/mradermacher/Kimi-K2.7-Code-i1-GGUF/resolve/main/Kimi-K2.7-Code.i1-IQ1_S.gguf.part2of5"
@@ -197,6 +202,33 @@ validate_preserve_paths() {
   done
 }
 
+validate_delete_candidates() {
+  local candidate preserve refs file
+  for candidate in "${DELETE_CANDIDATES[@]}"; do
+    for preserve in "${PRESERVE_PATHS[@]}"; do
+      if [ "$candidate" = "$preserve" ]; then
+        log "ERROR delete candidate overlaps preserve path: $candidate"
+        return 1
+      fi
+    done
+
+    if [ -d "$REPO/.git" ]; then
+      for file in "${ACTIVE_REPRO_FILES[@]}"; do
+        if [ ! -f "$REPO/$file" ]; then
+          continue
+        fi
+        refs="$(git -C "$REPO" grep -n -F -- "$candidate" -- "$file" 2>/dev/null || true)"
+        if [ -n "$refs" ]; then
+          log "ERROR delete candidate referenced by active repro file: $candidate"
+          printf '%s\n' "$refs"
+          return 1
+        fi
+      done
+    fi
+  done
+  log "delete_candidate_safety_check=ok"
+}
+
 maybe_delete_old_packs() {
   if [ "$DELETE_OLD_PACKS" != "1" ]; then
     log "delete step skipped"
@@ -207,6 +239,7 @@ maybe_delete_old_packs() {
     return 1
   fi
   validate_preserve_paths
+  validate_delete_candidates
   for path in "${DELETE_CANDIDATES[@]}"; do
     if [ ! -e "$path" ]; then
       log "delete candidate missing, skip: $path"

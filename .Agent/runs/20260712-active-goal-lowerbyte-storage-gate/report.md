@@ -26,6 +26,10 @@ behavior and does not claim SOTA.
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/storage-inventory.txt`
 - IQ1_S cleanup/download dry-run:
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-dry-run.log`
+- IQ1_S part metadata validation:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-part-metadata-validation.log`
+- IQ1_S cleanup safety dry-run:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-safety-dry-run.log`
 
 ## Byte Target
 
@@ -104,6 +108,29 @@ Dry-run result:
 - projected free after candidate delete: `286866386944 bytes`;
 - projected leftover after `i1-IQ1_S` download: `82435514464 bytes`;
 - projected space gate: pass for a `50 GiB` reserve.
+
+Follow-up validation:
+
+- Part metadata validation log:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-part-metadata-validation.log`;
+- exit code:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-part-metadata-validation.exit`;
+- result:
+  - part1: `41875931136 bytes`;
+  - part2: `41875931136 bytes`;
+  - part3: `41875931136 bytes`;
+  - part4: `41875931136 bytes`;
+  - part5: `36927147936 bytes`;
+  - total: `204430872480 bytes`;
+  - status: pass.
+- Safety dry-run log:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-safety-dry-run.log`;
+- safety result:
+  - `delete_candidate_safety_check=ok`;
+  - `projected_space_ready=1`;
+  - projected leftover after `i1-IQ1_S` download:
+    `82426388576 bytes`;
+  - no deletion/download executed.
 
 ## Candidate Gate
 
