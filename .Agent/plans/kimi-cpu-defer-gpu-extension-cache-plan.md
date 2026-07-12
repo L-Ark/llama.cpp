@@ -174,6 +174,47 @@ Decision:
   activation-aware/lower-byte representation screen for all roles, especially
   up/gate.
 
+### 2026-07-12 Non-Destructive Lower-Byte Closure Result
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-nondestructive-lowbyte-closure/report.md`
+
+Status: completed; no runtime behavior change and no SOTA claim.
+
+Candidate gate refresh:
+
+| candidate | evidence | decision |
+|---|---|---|
+| naive blockwise 1-bit re-encode | byte ratio `0.347x-0.488x`, rel-L2 `1.777-2.275` | reject |
+| naive blockwise 2-bit re-encode | byte ratio `0.673x-0.878x`, rel-L2 `0.687-0.791` | reject |
+| D2MoE clustered/base residual | 16-cluster rank128 error down `0.5002`, gate `0.3064`; base `448 MiB` per tensor | reject as primary |
+| selected IQ1_S/v2 hotsets | ideal transfer rows exist, but real tiny v2 IQ1_S/Q2_K output-error gate failed | reject for runtime bridge |
+| down activation block skipping | useful skip rates have mean rel error `0.210-0.368` and do not reduce up/gate | reject as primary |
+
+`0.50x` mixed-role budget:
+
+- source:
+  `.Agent/runs/20260712-current-goal-lowbyte-freeze-screen/gp77-target050-summary.json`;
+- target global byte ratio: `<=0.50x`;
+- target mean rel-L2 per component: `<=0.10`;
+- combinations under byte target: `16`;
+- passing combinations: `0`;
+- best under-budget pair:
+  - global ratio `0.3861x`;
+  - down mean rel-L2 `0.499277`;
+  - fused up/gate mean rel-L2 `0.598174`;
+  - decision: reject.
+
+Decision:
+
+- do not implement runtime support for these rejected non-destructive
+  lower-byte candidates;
+- the current failure mode is fused up/gate output error, not only byte ratio;
+- without explicit `i1-IQ1_S` cleanup/download approval, the next work must be
+  a genuinely new representation design/screen, not another runtime bridge for
+  the rejected candidates.
+
 ### Immediate Plan
 
 1. Reconfirm the baseline before further runtime work.
@@ -203,6 +244,8 @@ Decision:
      proves the endpoint target.
    - Complete-model `i1-IQ1_S` smoke is the only current same-model asset path,
      but it requires explicit cleanup/download approval before execution.
+   - Existing non-destructive candidates are closed; do not wire them into
+     runtime unless a new screen produces much lower fused up/gate error.
 
 4. Revisit RAM/VRAM layout only as explicit replacement for low-value file cache
    or as a pack-layout locality change.
