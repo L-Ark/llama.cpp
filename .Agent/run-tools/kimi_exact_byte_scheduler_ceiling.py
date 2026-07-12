@@ -84,6 +84,7 @@ def percentile(values: list[float], q: float) -> float:
 
 
 def write_markdown(path: Path, result: dict[str, Any]) -> None:
+    target = result["target_tok_s"]
     lines = [
         "# Kimi exact-byte scheduler ceiling",
         "",
@@ -101,18 +102,18 @@ def write_markdown(path: Path, result: dict[str, Any]) -> None:
         f"- floor+transfer mean ceiling: `{result['summary']['floor_plus_transfer_mean_tok_s']:.3f} tok/s`",
         f"- best prompt floor+transfer ceiling: `{result['summary']['floor_plus_transfer_max_tok_s']:.3f} tok/s`",
         f"- worst prompt floor+transfer ceiling: `{result['summary']['floor_plus_transfer_min_tok_s']:.3f} tok/s`",
-        f"- mean byte ratio needed for 5 tok/s after floor: `{result['summary']['mean_required_byte_ratio_for_5tps']:.3f}x`",
+        f"- mean byte ratio needed for {target:.1f} tok/s after floor: `{result['summary']['mean_required_byte_ratio_for_target_tps']:.3f}x`",
         "",
         "## Per Prompt",
         "",
-        "| prompt | measured tok/s | moved GiB/token | transfer-only tok/s | floor+transfer tok/s | required ratio for 5 tok/s | call wall ms/token | runtime-load copy ms/token |",
+        f"| prompt | measured tok/s | moved GiB/token | transfer-only tok/s | floor+transfer tok/s | required ratio for {target:.1f} tok/s | call wall ms/token | runtime-load copy ms/token |",
         "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in result["prompts"]:
         lines.append(
             f"| `{row['prompt_id']}` | `{row['measured_tok_s']:.3f}` | "
             f"`{row['moved_gib_per_token']:.3f}` | `{row['transfer_only_tok_s']:.3f}` | "
-            f"`{row['floor_plus_transfer_tok_s']:.3f}` | `{row['required_byte_ratio_for_5tps']:.3f}` | "
+            f"`{row['floor_plus_transfer_tok_s']:.3f}` | `{row['required_byte_ratio_for_target_tps']:.3f}` | "
             f"`{row['call_wall_ms_per_token']:.1f}` | `{row['runtime_load_copy_ms_per_token']:.1f}` |"
         )
     lines += [
@@ -171,7 +172,7 @@ def main() -> int:
             "transfer_only_tok_s": tok_s(transfer_ms_per_token),
             "floor_plus_transfer_ms_per_token": floor_plus_transfer_ms,
             "floor_plus_transfer_tok_s": tok_s(floor_plus_transfer_ms),
-            "required_byte_ratio_for_5tps": required_ratio,
+            "required_byte_ratio_for_target_tps": required_ratio,
             "runtime_load_events_per_token": ttft["runtime_load_events"] / tokens,
             "runtime_load_copy_ms_per_token": ttft["runtime_load_copy_ms_sum"] / tokens,
             "call_wall_ms_per_token": call_wall / tokens,
@@ -182,11 +183,11 @@ def main() -> int:
         raise RuntimeError(f"no prompt metrics found under {args.profile_root}")
 
     floor_rates = [r["floor_plus_transfer_tok_s"] for r in rows]
-    required_ratios = [r["required_byte_ratio_for_5tps"] for r in rows]
+    required_ratios = [r["required_byte_ratio_for_target_tps"] for r in rows]
     measured_rates = [r["measured_tok_s"] for r in rows]
     transfer_rates = [r["transfer_only_tok_s"] for r in rows]
     decision = (
-        "Exact-byte scheduling without byte reduction is not a primary 5 tok/s path: "
+        f"Exact-byte scheduling without byte reduction is not a primary {args.target_tok_s:.1f} tok/s path: "
         f"even at {args.bandwidth_gib_s:.1f} GiB/s and a {args.all_hit_floor_ms_per_token:.1f} ms/token "
         f"all-hit floor, the best held-out prompt ceiling is {max(floor_rates):.2f} tok/s and "
         f"the mean ceiling is {mean(floor_rates):.2f} tok/s. Continue with structural byte reduction."
@@ -208,9 +209,9 @@ def main() -> int:
             "floor_plus_transfer_median_tok_s": median(floor_rates),
             "floor_plus_transfer_min_tok_s": min(floor_rates),
             "floor_plus_transfer_max_tok_s": max(floor_rates),
-            "mean_required_byte_ratio_for_5tps": mean(required_ratios),
-            "median_required_byte_ratio_for_5tps": median(required_ratios),
-            "p10_required_byte_ratio_for_5tps": percentile(required_ratios, 0.10),
+            "mean_required_byte_ratio_for_target_tps": mean(required_ratios),
+            "median_required_byte_ratio_for_target_tps": median(required_ratios),
+            "p10_required_byte_ratio_for_target_tps": percentile(required_ratios, 0.10),
         },
         "decision": decision,
         "reproduce_command": " ".join(__import__("sys").argv),

@@ -119,6 +119,65 @@ report, followed by a go/no-go decision:
   implementation target must change to future-route prediction or another method
   that reduces actual moved bytes.
 
+### 2026-07-12 Lower-Byte Target And Storage Gate Result
+
+Artifacts:
+
+- report:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/report.md`;
+- optimistic exact-byte ceiling for `2 tok/s`:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/exact-byte-scheduler-ceiling-2tps.md`;
+- optimistic exact-byte ceiling for `5 tok/s`:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/exact-byte-scheduler-ceiling-5tps.md`;
+- profiled-floor byte target for `2 tok/s`:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/byte-target-2tps.md`;
+- profiled-floor byte target for `5 tok/s`:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/byte-target-5tps.md`;
+- HF candidate metadata probe:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/hf-candidate-size-probe.json`;
+- local storage inventory:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/storage-inventory.txt`.
+
+Byte target result:
+
+- Optimistic exact-byte model with fixed `40.1 ms/token` all-hit floor:
+  - `2 tok/s` needs moved-byte ratio about `0.708x-0.741x`, mean `0.725x`;
+  - `5 tok/s` needs moved-byte ratio about `0.246x-0.258x`, mean `0.252x`.
+- Profiled-floor model from observed all-hit rows:
+  - `2 tok/s` needs about `0.41x` on France and `0.59x` on Intelligence,
+    median `0.50x`;
+  - `5 tok/s` is not reachable by complete-model lower-byte alone under this
+    floor because France's estimated all-hit MoE floor already exceeds
+    `200 ms/token`.
+
+Storage result:
+
+- Current free space on `/root/lfz`: `113131085824 bytes` (`105.35 GiB`).
+- Current IQ3_S model size: `405392165559 bytes`.
+- No complete lower-byte candidate fits current free space while preserving the
+  `50 GiB` reserve.
+- The old France-only pack is
+  `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`
+  and is `175133036544 bytes`. It is prompt-specific and not accepted as
+  generalized SOTA evidence.
+- If that old France-only pack is removed, `i1-IQ1_S` fits with the `50 GiB`
+  reserve: size `204430872480 bytes`, ratio `0.504x` versus current IQ3_S,
+  leaving `83833249888 bytes`.
+
+Decision:
+
+1. Pure exact-byte scheduler/co-submit remains rejected as a primary route.
+2. `i1-IQ1_S` is the only complete-model candidate worth a `2 tok/s` smoke:
+   it clears the optimistic `2 tok/s` byte gate and is borderline under the
+   profiled-floor gate.
+3. `i1-IQ1_S` is not a `5 tok/s` solution. The `5 tok/s` path still requires
+   effective bytes near `0.25x` plus a lower compute/floor path, stronger future
+   prediction, or higher VRAM-resident reuse.
+4. The next actionable step is storage cleanup of obsolete prompt-specific pack
+   data, then a dev-only `i1-IQ1_S` metadata/load/quality smoke if download time
+   is acceptable. No held-out prompt may be inspected until a frozen candidate
+   passes dev gates.
+
 ## 2026-07-12 Current Goal And Execution Plan
 
 ### Goal
