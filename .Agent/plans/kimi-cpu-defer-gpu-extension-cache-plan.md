@@ -235,6 +235,106 @@ Updated next action:
    activation-corpus hidden-feature, and broad RAM-tier paths are rejected by
    current evidence.
 
+### Joint Intermediate-Keep GP105 Refresh (2026-07-12 17:25 CST)
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-joint-intermediate-keep-gp105-bounded/report.md`
+- `.Agent/runs/20260712-current-goal-joint-intermediate-keep-gp105-bounded/report.json`
+- `.Agent/runs/20260712-current-goal-joint-intermediate-keep-gp105-bounded/keep-ratio-token-bound.md`
+- `.Agent/runs/20260712-current-goal-joint-intermediate-keep-gp105-bounded/time.log`
+- tool change:
+  `.Agent/run-tools/kimi_joint_intermediate_keep_oracle.py` now supports both
+  `$RUN/act/activations.csv` and `$RUN/activations.csv` activation layouts.
+
+Purpose:
+
+- recheck the partial intermediate-dimension keep idea against the newer GP105
+  group-complete activation corpus;
+- decide whether it is worth designing a dynamic sliced `up/gate/down` storage
+  and runtime path for the `>2 tok/s` milestone.
+
+Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+OUT=.Agent/runs/20260712-current-goal-joint-intermediate-keep-gp105-bounded
+python3 .Agent/run-tools/kimi_joint_intermediate_keep_oracle.py \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp105-groupcomplete-activation-corpus-r2/dev_france_regression \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp105-groupcomplete-activation-corpus-r2/dev_japan_factual \
+  --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp105-groupcomplete-activation-corpus-r2/dev_photosynthesis_factual \
+  --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv \
+  --libggml-base build-cuda-batch/bin/libggml-base.so \
+  --out-json "$OUT/report.json" \
+  --out-md "$OUT/report.md" \
+  --keep-fracs 0.45,0.48,0.50,0.52,0.55,0.58,0.60 \
+  --max-records-per-prompt 384 \
+  --target-keep-frac 0.5 \
+  --target-group-rel-l2 0.10 \
+  --torch-threads 8
+```
+
+Resource note:
+
+- a full `1248` down-records/prompt run was started and then stopped because
+  RSS climbed above `30 GiB`; it is not used as evidence;
+- the accepted bounded run used `384` down records per prompt and still peaked
+  at `14787620 KB` RSS with `4:58.92` wall time;
+- this is an offline oracle cost, not a runtime cost, but it reinforces that
+  this path needs a concrete low-overhead runtime design before any A/B.
+
+Quality result:
+
+| keep | aggregate group rel-L2 | worst prompt group rel-L2 | quality decision |
+|---:|---:|---:|---|
+| `0.50` | `0.107984` | `0.109637` | fail |
+| `0.52` | `0.099207` | `0.100664` | aggregate pass, prompt-level weak |
+| `0.55` | `0.086941` | `0.088282` | prompt-level mean pass |
+| `0.58` | `0.075411` | `0.076597` | pass |
+| `0.60` | `0.068359` | `0.069416` | pass |
+
+Token-rate bound using current N32 COPY/IO profile:
+
+| keep ratio | all-role byte reduction | bounded tok/s |
+|---:|---:|---:|
+| `0.60` | `40%` | `1.860` |
+| `0.58` | `42%` | `1.887` |
+| `0.55` | `45%` | `1.927` |
+| `0.52` | `48%` | `1.969` |
+| `0.50` | `50%` | `1.998` |
+
+Interpretation:
+
+- `0.50x` is the first keep ratio close to the `>2 tok/s` bound, but it fails
+  the quality gate on GP105;
+- `0.52x` nearly passes quality but still misses the `2 tok/s` bound and has a
+  weak prompt-level margin;
+- `0.55x` has a better prompt-level mean error, but the bound is only
+  `1.927 tok/s` even under the optimistic assumption that all `up/gate/down`
+  movement shrinks equally;
+- real runtime is harder than the oracle because top intermediate dimensions
+  are known only after computing fused up/gate. Without an additional predictor,
+  this can safely reduce down movement after `h` is known, but it cannot reduce
+  up/gate payload before reading those tensors.
+
+Decision:
+
+- keep joint intermediate-dimension partial reads rejected as the next primary
+  runtime implementation;
+- do not design a sliced `up/gate/down` runtime for this path now;
+- if this idea is revisited later, it needs a separate predictor for active
+  intermediate dimensions before up/gate reads, plus a contiguous sliced layout
+  that proves endpoint `>2 tok/s` under the same RAM/TTFT/quality gates.
+
+Updated next action:
+
+1. With explicit user approval, the only concrete complete-model byte-reduced
+   smoke remains guarded `i1-IQ1_S`.
+2. Without that approval, further progress requires a new representation family
+   with `<=0.50x` effective all-role movement and substantially better fused
+   up/gate error than the rejected blockwise, tiny v2, surrogate, and
+   intermediate-keep families.
+
 ## Locked Goal and Near-Term Plan (2026-07-12 16:17 CST)
 
 This section is the current working goal for the next implementation phase. It

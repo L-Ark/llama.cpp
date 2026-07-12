@@ -86,6 +86,15 @@ def layer_name(tensor: str) -> str:
     return tensor
 
 
+def activation_dir(root: Path) -> Path:
+    nested = root / "act"
+    if (nested / "activations.csv").exists():
+        return nested
+    if (root / "activations.csv").exists():
+        return root
+    return nested
+
+
 def down_matvec(torch: Any, matrix: Any, vec: Any, row: dict[str, Any]) -> Any:
     if matrix.shape[1] == row["ne00"] and matrix.shape[0] == row["ne01"]:
         return torch.mv(matrix, vec)
@@ -135,8 +144,9 @@ class Acc:
 
 
 def analyze_prompt(torch: Any, root: Path, inventory: dict[str, Any], lib: Any, keep_fracs: list[float], max_records: int):
-    rows = load_rows(root / "act" / "activations.csv", max_records)
-    bin_path = root / "act" / "activations.f32"
+    act_dir = activation_dir(root)
+    rows = load_rows(act_dir / "activations.csv", max_records)
+    bin_path = act_dir / "activations.f32"
     by_key: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         by_key[(row["tensor"], row["expert_idx"])].append(row)
