@@ -84,12 +84,53 @@ Decision:
 
 Next action:
 
-- prioritize default-off scheduler-only same-layer up/gate/down read submission
-  that does not add host RAM pressure;
+- close scheduler-only same-layer up/gate/down read submission as the next
+  primary implementation path unless a later byte-reducing/layout-changing path
+  makes it a secondary multiplier;
 - keep lower-byte/v2 expert representation as the only currently identified
   path with enough headroom for `>2 tok/s`;
 - revisit explicit RAM/VRAM cache only after a stronger exposed-wait admission,
   preferably with batchable layer/role slab layout rather than scattered entries.
+
+### 2026-07-12 Scheduler-Only Closure Result
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-scheduler-closure/report.md`
+
+Status: completed and rejected as the next primary runtime A/B path.
+
+Evidence consolidated:
+
+- exact queue continuity bound:
+  `.Agent/runs/20260712-exact-queue-continuity-bound/report.md`;
+- standalone gate/up/down cosubmit Phase 4A;
+- fused-path cosubmit shadow Phase 4B;
+- early current-down overlap Phase 4C;
+- small static RAM-tier admission:
+  `.Agent/runs/20260712-current-goal-small-ram-admission/report.md`.
+
+Key conclusions:
+
+- decode-like queue-empty ratio was `0.000`; exposed waits mostly wait for
+  already submitted work, not for missing scheduler submissions;
+- exact-byte scheduling at the measured `6.4-6.7 GiB/token` expert movement
+  tops out around `1.50 tok/s`;
+- up/gate fusion has an optimistic bound of only `1.66-1.73 tok/s`;
+- standalone `GGML_MOE_GATE_UPDOWN_COSUBMIT=1` did not execute useful jobs on
+  the fused Kimi path and regressed endpoint rate;
+- `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1` caused CUDA OOM or severe slowdown;
+- scattered static RAM tiers up to `1024MiB` have only `1.77%` copy io/wall
+  coverage and cannot close the `>2 tok/s` gap.
+
+Decision:
+
+- do not run another scheduler-only same-layer runtime A/B as the primary path;
+- do not retry `GGML_MOE_GATE_UPDOWN_COSUBMIT=1` or
+  `GGML_MOE_CURRENT_DOWN_OVERLAP_EARLY=1`;
+- keep scheduler work only as a later secondary multiplier after lower-byte or
+  layout work reduces moved bytes or improves locality enough to change the
+  bound.
 
 ### Immediate Plan
 
@@ -102,27 +143,25 @@ Next action:
    - If the historical SOTA range does not reproduce, stop optimization and fix
      reproducibility first.
 
-2. Close static RAM-tier admission before running more RAM A/B.
-   - Use existing dev traces to run wait-weighted and leave-one-prompt-out
-     admission for `512 MiB` and `1024 MiB` candidates.
-   - Measure predicted exposed-wait coverage, number of distinct entries, layer
-     spread, and whether hits preserve batchable H2D.
-   - Do not run another runtime RAM tier if admission says the candidate is
-     scattered, low coverage, or mostly reduces bytes without reducing exposed
-     wait.
-   - Keep the previous rejection: GB-scale whole-layer/whole-role RAM tiers are
-     not the primary path after `blk14_gate_full384` failed generalized A/B and
-     `blk4_down_full384` failed TTFT/RAM pressure.
+2. Do not run more scattered/static RAM-tier or scheduler-only A/B as primary
+   paths.
+   - `512 MiB` and `1024 MiB` static RAM-tier admission is complete and
+     rejected;
+   - exact-byte scheduler-only bounds are complete and rejected for the current
+     byte/token regime;
+   - any future scheduler work must be paired with byte reduction or pack/layout
+     locality change.
 
-3. Prioritize scheduler-only A/B that does not consume more host RAM.
-   - Test a default-off same-layer up/gate/down read scheduler only if it can
-     enqueue misses immediately after routing without delaying current compute.
-   - Acceptance metric is endpoint decode time and reduced exposed wait, not
-     larger nominal batch size.
-   - Preserve current-down overlap; if unified enqueue reduces overlap or adds
-     staging fences, reject it.
+3. Prioritize lower-byte/v2 expert representation.
+   - Start with deployable screens, not oracle-only bounds;
+   - require output-error and quality gates before runtime dispatch;
+   - target at least `0.715x-0.748x` moved bytes for `2 tok/s`, and about
+     `0.25x` for `5 tok/s`;
+   - down-only reduction is not enough unless the end-to-end byte/wait model
+     proves the endpoint target.
 
-4. Revisit RAM/VRAM layout only as explicit replacement for low-value file cache.
+4. Revisit RAM/VRAM layout only as explicit replacement for low-value file cache
+   or as a pack-layout locality change.
    - First profile what decode file cache actually contains and whether those
      pages are reused.
    - RAM expert cache must be batchable: layer/role slab, contiguous pack
@@ -132,16 +171,7 @@ Next action:
      experts only when admission proves it reduces exposed wait more than it
      adds staging/H2D and TTFT.
 
-5. Continue lower-byte work as the only path with enough theoretical headroom
-   for `>2 tok/s` and eventually `>5 tok/s`.
-   - Keep v2/lower-byte candidates in preflight/shadow until quality screens
-     pass.
-   - A runtime lower-byte path must show a deployable byte reduction, not an
-     oracle-only bound.
-   - If down-only reduction passes but up/gate fails, do not claim `>2 tok/s`
-     feasibility unless the end-to-end byte and wait model supports it.
-
-6. SOTA promotion protocol.
+5. SOTA promotion protocol.
    - Run paired baseline/candidate on generalized dev prompts first.
    - Run sealed held-out/test prompts only after dev passes.
    - Commit and push immediately only if RAM, TTFT, quality, and reproducibility
@@ -156,8 +186,10 @@ fallback class has already been addressed. The practical bottleneck is that each
 token still exposes too much expert movement on the critical path, especially
 up/gate demand reads. Static RAM tiers have repeatedly improved nominal hit
 rate or bytes but not generalized endpoint time. The next credible improvement
-must either reduce bytes/token, preserve larger useful read batches without new
-RAM pressure, or turn low-value decode file cache into a batchable expert cache.
+must either reduce bytes/token, improve expert-pack/layout locality enough to
+change the useful batch-size bound, or turn low-value decode file cache into a
+batchable expert cache with a stronger exposed-wait bound than the rejected
+static tiers.
 
 ## 2026-07-12 Current Goal: Kimi CPU/defer GPU-extension Port
 
