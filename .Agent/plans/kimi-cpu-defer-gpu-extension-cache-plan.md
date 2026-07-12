@@ -20956,3 +20956,127 @@ Next plan:
      useful SSD queue depth.
 4. If returning to prefetch, first add or use a shadow signal stronger than
    route history and require dev-only admission before runtime reads.
+
+## 2026-07-12 Current Scheduler Ceiling Recheck
+
+Goal:
+
+- Recheck whether a pure exact-byte scheduler/co-submit optimization is still a
+  viable next step on the current fresh COPY/IO profile.
+- Avoid spending implementation time on `GGML_MOE_GATE_UPDOWN_COSUBMIT` or a
+  broader global scheduler if the current moved bytes already saturate the
+  device enough that scheduler-only work cannot reach the next milestone.
+
+Input:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717`
+- Prompts:
+  - `dev_france_regression`
+  - `dev_intelligence_general`
+- This is a COPY/IO diagnostic profile, not an accepted SOTA metric. It is
+  still valid for moved bytes, queue behavior and ceiling analysis.
+
+### IO Queue Summary
+
+Tool:
+
+- `.Agent/run-tools/kimi_io_queue_metrics_summary.py`
+
+Command:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717
+OUT=$ROOT/analysis/scheduler-current
+python3 .Agent/run-tools/kimi_io_queue_metrics_summary.py \
+  --metrics "$ROOT/dev_france_regression/metrics.json" \
+  --metrics "$ROOT/dev_intelligence_general/metrics.json" \
+  --out-json "$OUT/io-queue-summary.json" \
+  --out-csv "$OUT/io-queue-summary.csv" \
+  --out-md "$OUT/io-queue-summary.md" \
+  --peak-gib-s 10.3
+```
+
+Result:
+
+- weighted diagnostic token rate: `1.458 tok/s`
+- aggregate `io_uring` throughput: `9.536 GiB/s`
+- pure IO peak reference: `10.300 GiB/s`
+- peak utilization: `0.926`
+- direct read ratio: `0.000`
+- weighted `io_uring` inflight avg: `4.496`
+- `io_uring` wait/decode fraction: `0.749`
+- prompt details:
+  - France: `9.494 GiB/s`, inflight avg `4.520`;
+  - Intelligence: `9.580 GiB/s`, inflight avg `4.470`.
+
+Interpretation:
+
+- The runtime is no longer at `~6 GiB/s` in this COPY/IO profile. It is already
+  near the measured pure-IO reference.
+- Increasing IO depth/refill or co-submitting jobs without reducing moved bytes
+  has limited headroom.
+
+### Exact-Byte Scheduler Ceiling
+
+Tool:
+
+- `.Agent/run-tools/kimi_exact_byte_scheduler_ceiling.py`
+
+Command:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717
+OUT=$ROOT/analysis/scheduler-current
+python3 .Agent/run-tools/kimi_exact_byte_scheduler_ceiling.py \
+  --profile-root "$ROOT" \
+  --out-json "$OUT/exact-byte-scheduler-ceiling.json" \
+  --out-md "$OUT/exact-byte-scheduler-ceiling.md" \
+  --bandwidth-gib-s 10.3 \
+  --all-hit-floor-ms-per-token 40.1 \
+  --target-tok-s 5.0
+```
+
+Result:
+
+| prompt | measured tok/s | moved GiB/token | transfer-only tok/s | floor+transfer tok/s | required ratio for 5 tok/s |
+|---|---:|---:|---:|---:|---:|
+| `dev_france_regression` | `1.420` | `6.689` | `1.540` | `1.450` | `0.246` |
+| `dev_intelligence_general` | `1.500` | `6.393` | `1.611` | `1.513` | `0.258` |
+
+Summary:
+
+- measured mean token rate: `1.460 tok/s`
+- transfer-only mean ceiling: `1.576 tok/s`
+- floor+transfer mean ceiling: `1.482 tok/s`
+- best prompt floor+transfer ceiling: `1.513 tok/s`
+- worst prompt floor+transfer ceiling: `1.450 tok/s`
+- mean byte ratio needed for `5 tok/s` after floor: `0.252x`
+
+Decision:
+
+- Reject pure exact-byte scheduler or gate/up/down co-submit as the next
+  runtime A/B if it does not reduce moved bytes.
+- This includes enabling `GGML_MOE_GATE_UPDOWN_COSUBMIT` as a primary path:
+  even perfect scheduling at the current bytes cannot reach `2 tok/s` on this
+  diagnostic ceiling, and is far from `5 tok/s`.
+- A scheduler change can be revisited only as a secondary improvement after:
+  - moved bytes are reduced materially;
+  - or a stronger predictor/shadow signal creates useful future work without
+    `>1.35x` predicted/actual bytes;
+  - or a profiling run shows throughput has fallen far below the current
+    `~9.5 GiB/s` level.
+
+Next plan:
+
+1. Do not run a default-on or SOTA-claiming co-submit A/B from the current
+   evidence.
+2. If a quick default-off smoke is ever run, it must be framed only as a
+   correctness/profiling check, not as a likely SOTA route.
+3. The primary next work should target bytes, not scheduler:
+   - obtain or construct a lower-byte exact/near-exact representation that
+     passes activation-output quality gates;
+   - or design a stronger predictor using router logits/hidden features and
+     first pass dev-only admission before reads;
+   - or use hardware/storage changes that actually raise the bytes/sec ceiling
+     beyond the current NVMe-to-VRAM path.
