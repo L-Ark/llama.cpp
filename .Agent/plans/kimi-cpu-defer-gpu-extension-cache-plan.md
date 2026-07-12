@@ -114,6 +114,142 @@ Decision:
   confirmation, because it would delete about `173736710144 bytes` of old
   non-SOTA packs and download `204430872480 bytes`.
 
+## 2026-07-12 Fresh Pack-Source Control And IO-Depth Rejection
+
+### Goal
+
+在 `6721481ba` 的 source-mode 脚本改动之后，重新验证默认
+`MOE_EXPERT_SOURCE=pack` 路径没有被破坏，并用 fresh control 判断当前 exposed
+wait 是否还能靠更深 `io_uring` 队列压缩。
+
+### Fresh Control
+
+Artifacts:
+
+- report:
+  `.Agent/runs/20260712-modelsource-pack-control-dev2-n32/report.md`;
+- external profile root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-modelsource-pack-control-dev2-n32-025300`;
+- France run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-modelsource-pack-control-france-n32-024906`;
+- intelligence run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-modelsource-pack-control-intelligence-n32-025149`;
+- aggregate IO report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-modelsource-pack-control-dev2-n32-025300/analysis/io-queue-summary.md`;
+- decode bottleneck report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-modelsource-pack-control-dev2-n32-025300/analysis/decode-bottleneck/report.md`;
+- wait-weighted screen:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-modelsource-pack-control-dev2-n32-025300/analysis/wait-weighted-screen.md`.
+
+Configuration:
+
+- branch: `vendor/kimi-deepseek-41d205-additive`;
+- commit: `6721481ba93f2abf8ae50ce6616cd7f62417e49f`;
+- cold start per prompt;
+- `MemoryMax=15900000000`, `MemorySwapMax=0`;
+- `N=32`, `VRAM_MIB=15000`, `UPGATE_PCT=72`;
+- `MOE_EXPERT_SOURCE=pack`;
+- `PROFILE=1`, `COPY_PROFILE=1`;
+- default `MOE_IO_DEPTH=8`, `MOE_IO_REFILL_BATCH=4`.
+
+Endpoint result:
+
+| prompt | quality | tok/s | TTFT ms | decode ms/runs | RAM peak |
+|---|---:|---:|---:|---:|---:|
+| `dev_france_regression` | pass | `1.58` | `11336.22` | `19558.88 / 31` | `12768227328` |
+| `dev_intelligence_general` | pass | `1.51` | `9832.15` | `20464.24 / 31` | `12602351616` |
+
+Fresh bottleneck summary:
+
+- aggregate weighted token rate: `1.549 tok/s`;
+- aggregate `iouring` throughput: `10.132 GiB/s`;
+- pure IO reference: `10.3 GiB/s`;
+- peak utilization: `0.984`;
+- direct read ratio: `0`;
+- weighted `iouring` inflight avg: `4.522`;
+- fallback profile: header-only, `0` fallback rows;
+- expert-pack coverage in copy profile: `pack_hit=1` for all copy rows,
+  `pack_hit=0` rows `0`;
+- weighted up/gate hit rate: France `46.2%`, intelligence `44.2%`;
+- weighted down hit rate: France `57.6%`, intelligence `57.2%`.
+
+Decode component estimate:
+
+| component | ms/token | decode share | ideal tok/s if removed |
+|---|---:|---:|---:|
+| `cpu_moe_upgate_total` | `448.621` | `0.695` | `5.078` |
+| `upgate_wall` | `440.722` | `0.683` | `4.883` |
+| `cpu_moe_down_total` | `173.973` | `0.270` | `2.121` |
+| `down_wall` | `169.687` | `0.263` | `2.102` |
+| `residual_after_cpu_moe` | `22.940` | `0.036` | `1.606` |
+| `decode_fallback` | `0` | `0` | `1.549` |
+
+Interpretation:
+
+- The latest default `pack` source path is still valid after the script
+  source-mode change.
+- The bottleneck is not GGUF fallback or missing expert-pack coverage.
+- The remaining exposed path is VRAM-cache miss handling:
+  expert-pack `io_uring` read -> pinned staging -> H2D -> GPU compute.
+- Aggregate throughput is already near the measured IO ceiling, so simply
+  increasing queue depth is unlikely to close the `>=2 tok/s` gap.
+- `up/gate` remains the dominant additive bucket; `down` is secondary but still
+  large enough that any candidate must avoid making down overlap worse.
+
+### IO Depth/Refill A/B
+
+Artifacts:
+
+- base:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-modelsource-pack-control-france-n32-024906`;
+- candidate:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-modelsource-pack-depth16-france-n32-025416`;
+- A/B report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-modelsource-pack-depth16-ab-france-n32/analysis/depth16-ab.md`.
+
+Candidate config:
+
+- same as fresh France control except:
+  `MOE_IO_DEPTH=16`, `MOE_IO_REFILL_BATCH=8`.
+
+Result:
+
+| config | quality | tok/s | TTFT ms | decode ms | iouring wait s | inflight avg/max | down H2D ms | gate H2D ms |
+|---|---:|---:|---:|---:|---:|---|---:|---:|
+| `base depth8/refill4` | pass | `1.58` | `11336.22` | `19558.88` | `15.998` | `4.59/8` | `9438.5` | `1734.0` |
+| `candidate depth16/refill8` | pass | `1.50` | `10849.12` | `20718.04` | `15.424` | `5.05/12` | `9766.1` | `1810.7` |
+
+Decision:
+
+- Reject `depth16/refill8` as a default or SOTA candidate.
+- It reduces raw `iouring_wait` by only `0.574s`, but endpoint decode regresses
+  by `1159.16 ms` and measured H2D/enqueue grows.
+- This confirms the next useful path must reduce bytes or improve future
+  knowledge/cache admission; it should not be another pure IO-depth tuning
+  change.
+
+### Next Optimization Direction
+
+The next default-off implementation must target one of these, in order:
+
+1. Future-layer predictor / bounded prefetch admission.
+   - The previous oracle bound is the only current evidence that clears the
+     `>=2 tok/s` gap.
+   - A predictor must be prompt-general and pass offline gates before runtime:
+     `>=65%` bottleneck-byte recall, `<=1.35x` predicted/actual bytes,
+     `>=40%` full-step coverage, projected endpoint saving `>=4.5s` on N32.
+2. Byte reduction / lower-byte exact or near-exact expert representation.
+   - Necessary for the long-term `>5 tok/s` target because current exact-byte
+     movement is already near the IO ceiling.
+   - `i1-IQ1_S` full-model smoke remains gated on explicit cleanup/download
+     confirmation.
+3. RAM/VRAM tier only if batch-preserving.
+   - A RAM tier must replace low-value page cache with high-value expert data,
+     but it must not fragment SSD batches or increase mixed RAM/SSD scheduling
+     overhead.
+   - Any RAM-tier A/B must name the exact layer/role/expert admission profile
+     and prove an endpoint bound above `4.5s` N32 saving before implementation.
+
 ## 2026-07-12 Active Goal Snapshot And Next Plan
 
 ### Active Goal
