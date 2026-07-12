@@ -90,6 +90,77 @@ DeepSeek 那条 `CPU/defer MoE main path + GPU expert-cache extension` 路线对
 lower-byte expert representation 开始下一轮：先做纯 source-mode / smoke gate，确认不混用旧
 expert pack，再做质量和性能验证。
 
+### 2026-07-12 Next Experiment: Real V2 Lower-Byte Output Error Smoke
+
+Goal:
+
+- 在接任何 runtime override 之前，验证真实 `GGMLMOEPACKv2` lower-byte payload 的算子输出是否接近当前
+  IQ3 pack 的同一 expert 输出；
+- 范围只限现有 tiny selected v2 pack，不加载完整模型，不改推理路径，不声明 SOTA；
+- 这是 lower-byte runtime path 的 activation-output quality gate。
+
+Rationale:
+
+- 之前的 v2 reader smoke 只证明 payload 可读；
+- 之前的 v2 MMVQ smoke 只证明 `IQ1_S/Q2_K` 能跑出 finite/nonzero 输出；
+- 这些还不能证明 lower-byte 替换后与当前 IQ3 expert 的输出接近；
+- 如果同一随机 activation 下，真实 lower-byte payload 对当前 IQ3 输出的 rel-L2 已经很高，
+  那么继续做 runtime override 很可能会在语义质量上失败，应该先暂停；
+- 如果误差低，再进入 tiny N32 quality smoke 或 default-off runtime bridge。
+
+Method:
+
+1. 新增 default-off 工具
+   `.Agent/run-tools/kimi_moepack_v2_compare_current_smoke.cpp`；
+2. 输入：
+   - 当前 `build-cuda-batch/bin/libggml-cuda.so`；
+   - tiny v2 overlay pack：
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack`；
+   - v2 manifest：
+     `/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-manifest.tsv`；
+   - 当前 IQ3 expert inventory：
+     `.Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv`；
+   - 当前 IQ3 pack/overlay/alias env，与 normal pack-source repro 保持一致；
+3. 对每个 selected tensor/expert：
+   - 从当前 IQ3 pack 读取 current bytes；
+   - 从 v2 pack 读取 lower-byte bytes；
+   - 对相同随机 activation 跑 `ggml_cuda_moe_stream_mmvq_dev`；
+   - 记录 mean rel-L2、max rel-L2、cosine、mean/max abs error、byte ratio。
+
+Pass/Reject rule:
+
+- 这个 smoke 不是最终质量门禁，只用于决定是否继续 runtime bridge；
+- 若 tiny pack 的 mean rel-L2 明显偏高，尤其 `IQ1_S` up/gate 高误差，则拒绝 tiny
+  IQ1/Q2 直接替换路线，转向更安全 byte ratio、activation-aware representation 或只做 metadata；
+- 若误差可接受，再进入 default-off runtime bridge，并且仍必须用 France/generalized N32/N96
+  冷启动质量与 TTFT/RAM 门禁验证。
+
+Result:
+
+- artifact:
+  `.Agent/runs/20260712-v2-compare-current-smoke/report.md`；
+- tool:
+  `.Agent/run-tools/kimi_moepack_v2_compare_current_smoke.cpp`；
+- entries: `8`；
+- activation rows: `32`；
+- current pack read failures: `0`；
+- current reads from GGUF alias source: `0`；
+- overall mean rel-L2: `0.48436786`；
+- overall max rel-L2: `0.57039980`；
+- overall mean cosine: `0.88373874`；
+- down `Q3_K -> Q2_K` byte ratio `0.763636`，mean rel-L2 `0.3036-0.3067`；
+- gate `IQ2_S -> IQ1_S` byte ratio `0.609756`，mean rel-L2 `0.5385-0.5544`；
+- up `IQ2_S -> IQ1_S` byte ratio `0.609756`，mean rel-L2 `0.5192-0.5583`。
+
+Decision:
+
+- 拒绝把 tiny `IQ1_S/Q2_K` overlay 直接接入 runtime bridge；
+- 虽然 payload 可读、CUDA MMVQ 可运行，但 up/gate 的 IQ1_S 输出误差太大，作为第一个
+  语义质量候选风险过高；
+- lower-byte 方向仍然保留，但下一步必须选择更安全的 byte ratio 或 activation-aware
+  representation，并且所有真实 payload 都要先通过这个 current-pack output-error gate；
+- 暂停 v2 runtime override/partial split 实作，直到有候选在该 gate 上显著好于本次结果。
+
 ## 2026-07-12 Current Goal: Generalized Kimi `>2 tok/s` First, Then `5 tok/s`
 
 ### Goal

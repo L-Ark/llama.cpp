@@ -1,0 +1,10 @@
+[moe_stream_batch] expert pack v2: loaded 8 metadata entries from /root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-phase5d-iq1s-selected-payload-pack8/selected-iq1s-overlay-v2.expert-pack
+[moe_stream_batch] expert pack v2: total metadata entries=8 sources=1
+[moe_stream_batch] expert pack: loaded 30831 entries from /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack
+[moe_stream_batch] expert pack: loaded 768 entries from /root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack
+[moe_stream_batch] GGUF alias: loaded 37521 entries from /root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv sources=9 skipped_duplicates=31599 bad_rows=0 rows=69120
+[moe_stream_batch] expert pack: total entries=69120 sources=11
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 32109 MiB):
+  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32109 MiB
+summary entries=8 activation_rows=32 mean_rel_l2=0.48436786 max_rel_l2=0.57039980 mean_cosine=0.88373874 mean_abs_error=0.022002849 max_abs_error=0.1526603 mean_current_l2=2.7681341
+[moe_stream_batch] expert pack: hits=8 misses=0 read_failures=0 direct_reads=0 direct_fallbacks=0 iouring_reads=0 iouring_bytes=0 iouring_fallbacks=0 iouring_submit_us=0 iouring_wait_us=0 iouring_h2d_enqueues=0 entries=69120
