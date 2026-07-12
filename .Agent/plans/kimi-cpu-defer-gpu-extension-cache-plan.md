@@ -4,6 +4,138 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Current Active Goal and Next Plan (2026-07-12 16:58 CST)
+
+This is the active goal for the next Kimi optimization cycle. It supersedes
+older broad scheduler/RAM-tier ideas unless a new measurement reopens them.
+
+### Goal
+
+Optimize Kimi on `vendor/kimi-deepseek-41d205-additive` for generalized,
+cold-start user prompts on one `32 GB RTX 5090` with strict `16 GB` host RAM.
+
+Near milestone:
+
+- reach stable generalized `>2 tok/s` decode without prompt-specific expert
+  placement;
+- keep host RAM below `16 GB`, including page cache, RSS, pinned buffers and
+  any explicit RAM expert cache;
+- preserve coherent output, with
+  `Please introduce France in a short paragraph.` remaining semantically
+  correct and fluent;
+- keep TTFT within `+20%` of the paired accepted baseline;
+- keep prompt and decode CPU fallback at `0` for accepted SOTA claims;
+- commit and push every accepted improvement with exact reproduction details.
+
+Product target:
+
+- stable `>5 tok/s` decode for random user prompts on the same hardware.
+
+### Current Conclusion
+
+The DeepSeek CPU/defer idea is useful for Kimi as an architecture pattern, but
+the current Kimi branch already has the important part active:
+
+- MoE scheduling is CPU/defer-led;
+- `gate`, `up` and `down` batches are accepted by the GPU extension;
+- recent profiling shows true CPU fallback rows are `0`;
+- all profiled copy rows are expert-pack `io_uring` reads, not GGUF fallback.
+
+Therefore the next work is not a broad "move gate to GPU" rewrite. That path is
+already present. The exposed Kimi bottleneck is now the amount and timing of
+expert payload movement:
+
+- current COPY/IO diagnostic profiles move about `6.4-6.7 GiB/token`;
+- `io_uring` throughput can already reach about `9.5 GiB/s`, close to the
+  measured `10.3 GiB/s` pure IO reference;
+- exact-byte scheduler-only changes cannot reach `2 tok/s`, and are far from
+  `5 tok/s`, unless moved bytes are reduced or genuinely useful future expert
+  work is exposed.
+
+### Required Direction
+
+The next accepted improvement must reduce critical-path moved bytes, or create
+reliable future expert knowledge that lets the runtime prefetch useful bytes
+without excessive waste.
+
+Primary directions, in order:
+
+1. Stronger future-expert admission.
+   - Do not use route-history-only predictors as a runtime path; those were
+     rejected.
+   - Test stronger signals first: router logits/top-k scores, hidden-state
+     features, or a draft/router model.
+   - Admission gate before runtime reads:
+     - useful expert-byte recall `>=65%`;
+     - predicted/actual bytes `<=1.35x`;
+     - complete-step coverage `>=40%`;
+     - no quality regression on generalized dev prompts.
+
+2. Lower-byte expert representation.
+   - Only pursue representations with a hard byte-saving ceiling large enough
+     to matter. To approach `5 tok/s`, the moved-byte ratio must move toward
+     roughly `0.25x` after non-transfer floor costs.
+   - Do not rerun already rejected families unless the representation changes
+     materially.
+   - Full `i1-IQ1_S` or other replacement-model tests require explicit user
+     approval before download or asset replacement.
+
+3. Explicit RAM/VRAM storage redesign.
+   - Use RAM only for high-yield, batchable expert data; do not count Linux
+     page cache replacement as a success by itself.
+   - A RAM tier or layer slab must prove it reduces exposed wait enough to
+     improve endpoint token rate, not only hit rate.
+   - Avoid splitting SSD batches into many small residual reads. If a RAM cache
+     creates mixed RAM/SSD jobs, the scheduler must preserve large SSD batches.
+
+4. Scheduler changes only as secondary work.
+   - Larger `gate+up+down` co-submit, depth/refill changes, and same-layer
+     batching are default-off profiling tools until moved bytes are lower.
+   - Accept them only if they improve generalized endpoint token rate and pass
+     RAM, TTFT and quality gates.
+
+### Immediate Plan
+
+1. Consolidate the predictor evidence.
+   - Re-read existing predictor reports.
+   - Verify whether the existing activation corpus can support hidden-state or
+     router-logit predictor admission.
+   - If the corpus is insufficient for complete layer/token labels, write that
+     limitation down and add the missing instrumentation instead of guessing.
+
+2. Run a dev-only stronger-signal admission if data exists.
+   - Use generalized dev prompts only; keep held-out prompts untouched.
+   - Report recall, predicted/actual bytes, full-step coverage, estimated saved
+     wait, and failure cases by layer/role.
+   - Do not perform real prefetch reads until admission passes.
+
+3. If predictor admission fails, switch to lower-byte representation screening.
+   - Compute the byte-reduction ceiling needed for `>2 tok/s` and `>5 tok/s`.
+   - Test only candidates that can plausibly meet that ceiling.
+   - Record quality output text, TTFT, RAM and decode timing before any runtime
+     integration.
+
+4. If a candidate passes admission, implement it default-off.
+   - Run `n96` cold-start generalized dev prompts plus the required France
+     quality prompt.
+   - Capture per-token timing split: expert read, pinned staging, H2D,
+     up/gate compute, down compute, scheduler wait, and CPU fallback.
+   - Promote to SOTA only if endpoint token rate improves and all constraints
+     pass.
+
+5. Reproducibility rule for every SOTA commit.
+   - Update this plan before running the experiment.
+   - Commit and push immediately after a passing result.
+   - Commit body must include:
+     - improvement magnitude;
+     - exact branch and rollback commit;
+     - exact env vars and commands;
+     - prompt split and output text;
+     - RAM/page-cache/RSS/pinned/VRAM metrics;
+     - TTFT and decode token rate;
+     - quality gate result;
+     - artifact paths.
+
 ## Locked Goal and Near-Term Plan (2026-07-12 16:17 CST)
 
 This section is the current working goal for the next implementation phase. It
