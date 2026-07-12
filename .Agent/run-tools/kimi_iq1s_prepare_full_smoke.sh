@@ -4,11 +4,11 @@ set -euo pipefail
 # Default mode is a non-destructive dry run. Deleting old packs requires all of:
 #   EXECUTE=1 DELETE_OLD_PACKS=1 CONFIRM_DELETE=DELETE_OLD_KIMI_NON_SOTA_PACKS
 
-: "${REPO:=/root/lfz/tmp/vendor-kimi-speculative-gp33}"
+: "${REPO:=/root/lfz/llama.cpp-vendor-kimi}"
 : "${MODEL_DIR:=/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF}"
 : "${MODEL_PATH:=$MODEL_DIR/Kimi-K2.7-Code.i1-IQ1_S.gguf}"
 : "${RUN_ROOT:=/root/lfz/runs/vendor-kimi-token-rate}"
-: "${RUN_TAG:=gp35-iq1s-france-n32}"
+: "${RUN_TAG:=kimi-iq1s-dev-n32}"
 : "${MEMORY_MAX:=15900000000}"
 : "${MEMORY_SWAP_MAX:=0}"
 : "${N:=32}"
@@ -20,7 +20,7 @@ set -euo pipefail
 : "${RUN_SMOKE:=1}"
 : "${VALIDATE_PARTS:=1}"
 : "${RESUME_DOWNLOAD:=1}"
-: "${MIN_FREE_AFTER_DOWNLOAD_GIB:=20}"
+: "${MIN_FREE_AFTER_DOWNLOAD_GIB:=50}"
 : "${CURL_BIN:=curl}"
 
 : "${IQ1S_BYTES:=204430872480}"
@@ -36,6 +36,7 @@ PRESERVE_PATHS=(
 DELETE_CANDIDATES=(
   "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france.expert-pack"
   "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-tracefirst-n64-20260630.expert-pack"
+  "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp146-dev-grouped-overlay-shadow/gp146-france-routefirst-overlay.expert-pack"
   "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack"
   "/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack"
 )
@@ -96,15 +97,32 @@ print_inventory() {
   fi
   log "model_path=$MODEL_PATH"
   log "required_iq1s_bytes=$IQ1S_BYTES"
-  log "free_before=$(bytes_free_for_path "$MODEL_DIR")"
+  local free_before delete_total projected_free projected_leftover
+  free_before="$(bytes_free_for_path "$MODEL_DIR")"
+  delete_total=0
+  log "free_before=$free_before"
+  log "min_free_after_download_bytes=$MIN_FREE_AFTER_DOWNLOAD_BYTES"
   log "preserve paths:"
   for path in "${PRESERVE_PATHS[@]}"; do
     log "  preserve $(path_size_bytes "$path") $path"
   done
   log "delete candidates:"
   for path in "${DELETE_CANDIDATES[@]}"; do
-    log "  candidate $(path_size_bytes "$path") $path"
+    local candidate_size
+    candidate_size="$(path_size_bytes "$path")"
+    delete_total=$((delete_total + candidate_size))
+    log "  candidate $candidate_size $path"
   done
+  projected_free=$((free_before + delete_total))
+  projected_leftover=$((projected_free - IQ1S_BYTES))
+  log "delete_candidate_total=$delete_total"
+  log "projected_free_after_candidate_delete=$projected_free"
+  log "projected_leftover_after_iq1s_download=$projected_leftover"
+  if [ "$projected_leftover" -ge "$MIN_FREE_AFTER_DOWNLOAD_BYTES" ]; then
+    log "projected_space_ready=1"
+  else
+    log "projected_space_ready=0"
+  fi
 }
 
 validate_part_metadata() {

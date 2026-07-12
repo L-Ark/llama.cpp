@@ -1,40 +1,25 @@
-2026-07-12T02:07:39+00:00
+2026-07-12T02:17:58+00:00
 Filesystem         1B-blocks         Used    Available Use% Mounted on
-/dev/root      1065418129408 952270266368 113131085824  90% /
-/dev/root      1065418129408 952270266368 113131085824  90% /
+/dev/root      1065418129408 952271699968 113129652224  90% /
+/dev/root      1065418129408 952271699968 113129652224  90% /
 models
 6164	/root/lfz/models/Kimi-K2.7-Code-first-shard-test
 380960	/root/lfz/models/Kimi-K2.7-Code-layer1-test
 447042464	/root/lfz/models/kimi-draft
 405392165559	/root/lfz/models/Kimi-K2.7-Code-GGUF-IQ3_S
-kimi_assets
-23668	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run402_upgate_miss_attribution.txt
-27398	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run485_cpu_moe_split_summary.txt
-27403	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run486_cpu_moe_split_summary.txt
-27423	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run406_global_cache_value_simulation.txt
-28586	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run287_runtime_load_attribution.txt
-34700	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run370_down_cuda_validate_layer53.txt
-65510	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run456_top_future_upgate_1024_profile.csv
-93348	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run488_down_validate_lines.txt
-104595	/root/lfz/runs/ik_llama/kimi-iq3s-assets/scripts
-137609	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-hotset-t24-complete-top12g.runtime.csv
-156931	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-hotset-t24-profile-top12g.runtime.csv
-205820	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run487_down_validate_row_lines.txt
-334203	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run71-small-up-only-profile.csv
-442718	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run71-up-only-profile.csv
-574307	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-stable-missfreq.runtime.csv
-823010	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-run283-upgate-hot-vram-profile.csv
-899886	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run71-upgate-only-profile.csv
-962730	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run342_route_profile.csv
-977338	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run407-run401-allpool-static-count-profile.csv
-989650	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-current-preferred-fulltrace-missfreq.runtime.csv
-2987430	/root/lfz/runs/ik_llama/kimi-iq3s-assets/run409-run401-upgate-only-route-trace.csv
+kimi_assets_large
 198184960	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-missing-down-overlay.expert-pack
 343846912	/root/lfz/runs/ik_llama/kimi-iq3s-assets/tmp-hot-upgate-pair-smoke.expert-pack
-1805727327	/root/lfz/runs/ik_llama/kimi-iq3s-assets/pagecache
 4844539904	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack
 5042724864	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-phase7gz-combined-overlay.expert-pack
 7689551872	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-l4l60missing-overlay.expert-pack
 17179111424	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack
 79544299520	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-tracefirst-n64-20260630.expert-pack
 175133036544	/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack
+vendor_kimi_large
+2945953792	/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top1024/selected-iq1s-overlay-v2.expert-pack
+4844539904	/root/lfz/runs/vendor-kimi-token-rate/20260705-7ir-overlay-firstuse/kimi-iq3s-l1l2down-overlay-firstuse.expert-pack
+5882155008	/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-payload-budget8-top2048/selected-iq1s-overlay-v2.expert-pack
+5967941632	/root/lfz/runs/vendor-kimi-token-rate/20260712-kimi-v2-down-group-k2048-payload/selected-iq1s-overlay-v2.expert-pack
+7707529216	/root/lfz/runs/vendor-kimi-token-rate/20260711-kimi-v2-fullcover-top7down-payload-eb2fead64-122235/selected-iq1s-overlay-v2.expert-pack
+81460133888	/root/lfz/runs/vendor-kimi-token-rate/20260708-gp146-dev-grouped-overlay-shadow/gp146-france-routefirst-overlay.expert-pack

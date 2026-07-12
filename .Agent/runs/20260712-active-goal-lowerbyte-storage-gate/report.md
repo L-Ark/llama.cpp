@@ -24,6 +24,8 @@ behavior and does not claim SOTA.
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/hf-candidate-size-probe.json`
 - local storage inventory:
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/storage-inventory.txt`
+- IQ1_S cleanup/download dry-run:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-dry-run.log`
 
 ## Byte Target
 
@@ -70,6 +72,9 @@ Current local storage from `df -B1`:
 - old trace-first pack:
   `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-tracefirst-n64-20260630.expert-pack`,
   `79544299520 bytes`;
+- old GP146 grouped-overlay pack:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp146-dev-grouped-overlay-shadow/gp146-france-routefirst-overlay.expert-pack`,
+  `81460133888 bytes`;
 - current general-dev budget overlay:
   `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-general-dev-budget16-overlay.expert-pack`,
   `17179111424 bytes`.
@@ -77,9 +82,28 @@ Current local storage from `df -B1`:
 Current free space cannot download any complete lower-byte candidate while
 keeping a `50 GiB` reserve.
 
-If the old France-only pack is removed, available space becomes approximately
-`288264122368 bytes` (`268.43 GiB`). That is enough for `i1-IQ1_S` with a
-`50 GiB` reserve.
+Reference audit found that the old France-only pack is still used by the current
+tracked repro script, so it is preserved for rollback. A non-France cleanup path
+is available instead:
+
+- preserve current IQ3_S model;
+- preserve current France main expert pack;
+- preserve current `l1l2down` overlay;
+- delete only explicitly confirmed non-SOTA cleanup candidates:
+  - trace-first pack: `79544299520 bytes`;
+  - GP146 grouped-overlay pack: `81460133888 bytes`;
+  - `l1l2down-l4l60missing` overlay: `7689551872 bytes`;
+  - `phase7gz-combined` overlay: `5042724864 bytes`;
+  - missing `france.expert-pack` candidate contributes `0 bytes` currently.
+
+Dry-run result:
+
+- log:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-dry-run.log`;
+- projected delete candidate total: `173736710144 bytes`;
+- projected free after candidate delete: `286866386944 bytes`;
+- projected leftover after `i1-IQ1_S` download: `82435514464 bytes`;
+- projected space gate: pass for a `50 GiB` reserve.
 
 ## Candidate Gate
 
@@ -104,9 +128,9 @@ smoke under the current task constraints:
 - It is still far above the `0.252x` optimistic `5 tok/s` byte gate, so it
   should not be framed as a `5 tok/s` solution.
 
-Before the smoke can run, storage must be freed. The old France-only pack is the
-only single cleanup candidate large enough to unblock `i1-IQ1_S`, but it cannot
-be deleted blindly.
+Before the smoke can run, storage must be freed. The old France-only pack is no
+longer the preferred cleanup candidate because it is still part of the current
+tracked repro path.
 
 Reference audit after this report found that some repro/historical scripts still
 reference the France pack path, including:
@@ -118,14 +142,15 @@ reference the France pack path, including:
 
 Therefore the cleanup gate is:
 
-1. first migrate the current accepted repro path away from the France-only pack
-   or record an equivalent prompt-general replacement;
-2. confirm the current SOTA rollback/repro command no longer requires that file;
-3. then delete or archive the old France-only pack to unlock the `i1-IQ1_S`
-   smoke.
+1. keep the France main pack as a preserve path until the accepted repro path is
+   migrated;
+2. use the updated `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh` dry-run to
+   verify projected free space;
+3. with explicit deletion confirmation only, delete the non-SOTA cleanup
+   candidates listed above;
+4. then download `i1-IQ1_S` and run a dev-only smoke.
 
-Until that migration is done, the storage gate remains blocked even though the
-byte math says deleting the pack would be sufficient.
+No deletion or download was executed in this report.
 
 ## Reproduce
 

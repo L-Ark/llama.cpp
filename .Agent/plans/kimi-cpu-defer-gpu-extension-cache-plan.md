@@ -136,7 +136,9 @@ Artifacts:
 - HF candidate metadata probe:
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/hf-candidate-size-probe.json`;
 - local storage inventory:
-  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/storage-inventory.txt`.
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/storage-inventory.txt`;
+- IQ1_S cleanup/download dry-run:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-dry-run.log`.
 
 Byte target result:
 
@@ -158,11 +160,20 @@ Storage result:
   `50 GiB` reserve.
 - The old France-only pack is
   `/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`
-  and is `175133036544 bytes`. It is prompt-specific and not accepted as
-  generalized SOTA evidence.
-- If that old France-only pack is removed, `i1-IQ1_S` fits with the `50 GiB`
-  reserve: size `204430872480 bytes`, ratio `0.504x` versus current IQ3_S,
-  leaving `83833249888 bytes`.
+  and is `175133036544 bytes`. A reference audit shows it is still part of the
+  current tracked repro path, so it is preserved for rollback.
+- A non-France cleanup path is now available. It preserves the current IQ3_S
+  model, the France main expert pack and the `l1l2down` overlay, while deleting
+  only explicit-confirm non-SOTA candidates:
+  - trace-first pack: `79544299520 bytes`;
+  - GP146 grouped-overlay pack: `81460133888 bytes`;
+  - `l1l2down-l4l60missing` overlay: `7689551872 bytes`;
+  - `phase7gz-combined` overlay: `5042724864 bytes`.
+- Dry-run projection for the non-France cleanup path:
+  - delete candidate total: `173736710144 bytes`;
+  - projected free after candidate delete: `286866386944 bytes`;
+  - projected leftover after `i1-IQ1_S` download: `82435514464 bytes`;
+  - projected space gate: pass for the `50 GiB` reserve.
 
 Decision:
 
@@ -174,15 +185,15 @@ Decision:
    effective bytes near `0.25x` plus a lower compute/floor path, stronger future
    prediction, or higher VRAM-resident reuse.
 4. A reference audit found that the old France-only pack is still referenced by
-   some repro/historical scripts, including `.Agent/run-tools/kimi-general-prompt-repro.sh`
+   the current tracked repro script `.Agent/run-tools/kimi-general-prompt-repro.sh`
    and historical run scripts under `/root/lfz/runs/vendor-kimi-token-rate`.
-   Therefore it must not be deleted blindly.
-5. The next actionable step is to migrate the current accepted repro path away
-   from the France-only pack, or record an equivalent prompt-general replacement.
-   Only after the current SOTA rollback/repro path no longer needs that file
-   should the obsolete pack be deleted or archived to unlock the `i1-IQ1_S`
-   smoke.
-6. No held-out prompt may be inspected until a frozen lower-byte candidate passes
+   Therefore it must be preserved until the accepted repro path is migrated.
+5. A non-France cleanup path now exists. The updated dry-run preserves rollback
+   assets and projects enough free space for `i1-IQ1_S` plus a `50 GiB` reserve.
+6. The next actionable step is explicit-confirm cleanup using the updated
+   `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`, then an `i1-IQ1_S`
+   dev-only smoke. No deletion/download was executed by this planning step.
+7. No held-out prompt may be inspected until a frozen lower-byte candidate passes
    dev gates.
 
 ## 2026-07-12 Current Goal And Execution Plan
