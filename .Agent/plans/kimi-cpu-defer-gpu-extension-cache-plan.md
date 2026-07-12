@@ -145,6 +145,66 @@ Next action:
   replaces low-value decode-time file cache with batchable role/layer slabs and
   predicts `>2 tok/s` before runtime implementation.
 
+### 2026-07-12 RAM Slab N96 Refresh Result
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-ram-slab-n96-refresh/report.md`
+- `.Agent/runs/20260712-current-goal-ram-slab-n96-refresh/slab-screen/report.md`
+
+Status: completed; no runtime behavior change and no SOTA claim.
+
+Reason for this admission:
+
+- the current goal explicitly asks whether low-value page/file cache can be
+  replaced by high-value RAM expert storage;
+- earlier row-level RAM bounds looked promising only because they ignored
+  mixed SSD/RAM batch fragmentation;
+- this refresh uses fresh current-HEAD `n96` cold-start IO traces and screens
+  batchable layer/role slabs instead of scattered per-row hotsets.
+
+Fresh trace baseline:
+
+| prompt | quality | tok/s | decode ms/token | TTFT ms | RAM peak GiB |
+|---|---|---:|---:|---:|---:|
+| `dev_france_regression` | pass | `1.68` | `596.49` | `8939.01` | `11.933` |
+| `dev_intelligence_general` | pass | `1.68` | `595.93` | `7304.90` | `11.773` |
+
+Combined decode is `107314.99 ms / 180 tokens`, or `596.194 ms/token`.
+Reaching `2 tok/s` requires `<=500 ms/token`, so a RAM/slab path needs about
+`96.194 ms/token` saving before considering TTFT and RAM preload overhead.
+
+Slab screen result:
+
+| budget | family | resident MiB | saved wait ms/token | implied tok/s if fully saved |
+|---:|---|---:|---:|---:|
+| `4096 MiB` | `layer_upgate` | `4028.2` | `14.36` | `1.718` |
+| `8192 MiB` | `layer_upgate` | `7338.6` | `25.00` | `1.751` |
+| `10240 MiB` | `layer_upgate` | `9177.6` | `30.86` | `1.769` |
+| `4096 MiB` | `layer_all` | `3731.8` | `11.53` | `1.711` |
+| `8192 MiB` | `layer_all` | `6729.4` | `20.08` | `1.735` |
+| `10240 MiB` | `layer_all` | `9732.5` | `28.37` | `1.761` |
+
+Decision:
+
+- reject static layer/role RAM slabs as the next primary runtime A/B;
+- even `10 GiB` of dev-screen slabs is far below the `96 ms/token` saving
+  needed for `2 tok/s`;
+- real runtime would be worse because these bounds exclude cold preload, TTFT,
+  reclaim pressure, and scheduler overhead;
+- RAM is still useful only if paired with a mechanism that changes complete
+  batch behavior: predictor/prefetch, lower-byte expert representation, or a
+  storage layout that reduces bytes across all active experts.
+
+Next action:
+
+- keep scattered RAM tier, whole-layer RAM slab, and scheduler-only paths
+  closed as primary routes;
+- continue with a stronger lower-byte representation screen or explicit
+  `i1-IQ1_S` full-model smoke approval;
+- if working on RAM again, require a complete-batch admission saving
+  `>=96 ms/token` on generalized dev traces before runtime implementation.
+
 ## 2026-07-12 Goal Lock: Kimi CPU/defer GPU-extension Next Step
 
 This section is the current source of truth. Later historical sections are kept
