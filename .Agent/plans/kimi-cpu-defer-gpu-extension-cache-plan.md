@@ -250,6 +250,74 @@ The next default-off implementation must target one of these, in order:
    - Any RAM-tier A/B must name the exact layer/role/expert admission profile
      and prove an endpoint bound above `4.5s` N32 saving before implementation.
 
+## 2026-07-12 Prefix-Neighbor Future Predictor Admission
+
+### Goal
+
+验证比 simple LFU/history 更强、但仍可实现的 route-ID predictor：用当前 token 已经
+计算出的 layer/expert 前缀作为 nearest-neighbor query，在其他 dev prompts 中查找相似
+前缀，预测未来 1-3 层 active experts。这个方法如果有效，可以作为 bounded
+future-layer prefetch 的 runtime 候选；如果无效，则不应继续用 route IDs 做 runtime
+prefetch。
+
+### Artifact
+
+- repo report:
+  `.Agent/runs/20260712-prefix-neighbor-predictor-admission/report.md`;
+- tool:
+  `.Agent/run-tools/kimi_prefix_neighbor_predictor_admission.py`;
+- smoke output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-prefix-neighbor-smoke-030927/report.md`;
+- focused max-recall output:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-prefix-neighbor-focused-031038/report.md`;
+- input dev7 route root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009`.
+
+### Method
+
+- dev-only, leave-one-dev-prompt-out;
+- no held-out/test prompt inspected;
+- prefix signature = active expert sets from already-computed recent layers;
+- similarity = weighted Jaccard, with most recent layer weighted highest;
+- prediction = nearest-neighbor future-layer target experts with small global-hot
+  fallback;
+- admission gate:
+  - all-role byte recall `>=65%`;
+  - predicted/actual bytes `<=1.35x`;
+  - full-step coverage `>=40%`.
+
+### Result
+
+Smoke under byte budget:
+
+| horizon | width | budget | neighbors | byte recall | full steps | pred/actual |
+|---:|---:|---:|---:|---:|---:|---:|
+| `1` | `2` | `8` | `3` | `22.95%` | `0.09%` | `1.00x` |
+
+Focused max-recall:
+
+| horizon | width | budget | neighbors | byte recall | full steps | pred/actual |
+|---:|---:|---:|---:|---:|---:|---:|
+| `1` | `3` | `32` | `9` | `40.99%` | `2.38%` | `4.00x` |
+| `2` | `3` | `32` | `9` | `40.87%` | `2.38%` | `4.00x` |
+| `3` | `3` | `32` | `9` | `40.74%` | `2.55%` | `4.00x` |
+
+Passing all-role rows: `0`.
+
+### Decision
+
+- Reject route-ID prefix-neighbor future prefetch as a standalone runtime
+  candidate.
+- It is stronger than tiny budget rows, but still far from the required
+  admission gate and requires `4.00x` predicted bytes for only about `41%` byte
+  recall.
+- Do not implement runtime future prefetch from route IDs alone.
+- The next future-prefetch attempt must use a stronger signal:
+  router logits/top-k scores before hard routing, hidden-state features, or a
+  small draft/router model.
+- If that signal is not available, the next major optimization should return to
+  lower-byte expert representation or a storage format that reduces bytes moved.
+
 ## 2026-07-12 Active Goal Snapshot And Next Plan
 
 ### Active Goal
