@@ -89,6 +89,62 @@ reverted or left default-off with a rejected run report.
    - The pushed branch for this line of work is
      `vendor/kimi-deepseek-41d205-additive` unless explicitly changed.
 
+### 2026-07-12 Joint Intermediate-Keep Refresh Result
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-joint-intermediate-keep-refresh/report.md`
+
+Status: completed; no runtime behavior change and no SOTA claim.
+
+Reason for this admission:
+
+- previous 64-record smoke showed `keep=0.5` group rel-L2 at `0.105683`,
+  close enough to the `0.10` quality gate to justify a larger non-destructive
+  refresh;
+- this is a different representation class from the rejected blockwise 1-bit
+  and 2-bit fused up/gate candidates, so it was the next reasonable screen.
+
+Refresh setup:
+
+- dev prompts:
+  `dev_japan_factual`, `dev_mixed_summary`, `dev_python_reverse`;
+- records: `192` down-activation records per prompt;
+- keep fractions: `0.4,0.45,0.48,0.5,0.52,0.55,0.6`;
+- target for a runtime path: `keep <= 0.5` and grouped rel-L2 `<= 0.10`;
+- command is recorded in the report's reproduce section.
+
+Aggregate result:
+
+| keep | byte ratio | group mean rel-L2 | group max rel-L2 | decision |
+|---:|---:|---:|---:|---|
+| `0.48` | `0.4800` | `0.116727` | `0.166445` | fail |
+| `0.50` | `0.5000` | `0.107407` | `0.152523` | fail |
+| `0.52` | `0.5200` | `0.098653` | `0.140934` | aggregate-only pass, prompt-level still weak |
+| `0.55` | `0.5500` | `0.086354` | `0.126843` | quality closer, byte ratio too weak for the primary target |
+
+Decision:
+
+- reject joint intermediate-dimension partial reads as the next primary runtime
+  implementation path;
+- `0.5x` does not pass the dev quality gate;
+- `0.52x` only passes in aggregate, while `dev_mixed_summary` and
+  `dev_python_reverse` remain just above `0.10`;
+- `0.55x` is a useful reference point for quality, but it gives less byte
+  reduction and still requires a difficult dynamic sliced up/gate/down layout;
+- do not spend runtime implementation effort on this path unless a later design
+  solves both prompt-level quality and large contiguous read layout.
+
+Next action:
+
+- keep the current rejected status for scheduler-only and small RAM-tier paths;
+- either get explicit approval for the full `i1-IQ1_S` same-model smoke, or
+  screen a stronger representation class with an admission target below
+  `0.50x` and prompt-level output-error evidence;
+- if working on RAM/VRAM placement next, require a measured admission that
+  replaces low-value decode-time file cache with batchable role/layer slabs and
+  predicts `>2 tok/s` before runtime implementation.
+
 ## 2026-07-12 Goal Lock: Kimi CPU/defer GPU-extension Next Step
 
 This section is the current source of truth. Later historical sections are kept
