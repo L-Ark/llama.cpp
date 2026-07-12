@@ -237,6 +237,45 @@ Decision:
   - a new IO scheduler only if offline traces show it preserves existing
     up/gate and down overlap while exposing materially larger batches.
 
+### Next-Candidate Screen (2026-07-12 19:55 CST)
+
+Artifact:
+
+- `.Agent/runs/20260712-active-goal-564b887-next-candidate-screen/report.md`
+
+Offline screens were run against the same current-HEAD audit root. They do not
+claim SOTA and do not use held-out prompts.
+
+Byte-reduction bound:
+
+- For `2 tok/s`, current profiles require roughly `0.59x` to `0.66x` moved
+  expert bytes after reserving the optimistic all-hit MoE floor.
+- For `5 tok/s`, the required ratio is around `0.07x` median, so scheduler or
+  RAM placement alone cannot plausibly reach the product target.
+- Miss bytes are balanced across roles: gate `34.6%`, down `33.2%`, up
+  `32.2%`. A role-only byte reduction is weaker than an all-role or matched
+  up/gate/down representation.
+
+RAM/VRAM layer-role residency bound:
+
+- top layer-role buckets are mostly up/gate, around `8-9 ms/token` each;
+- optimistic whole-bucket residency under `12 GiB` still saves only about
+  `44.6 ms/token`, raising the current weighted profile to about `1.74 tok/s`
+  in the best case;
+- real RAM residency should save less than this bound because it still pays
+  RAM-to-VRAM H2D and may fragment SSD batches.
+
+Decision:
+
+- The next primary implementation path should be lower-byte movement with a
+  target ratio `<=0.6x` for the `2 tok/s` milestone.
+- RAM/VRAM slab work is demoted to auxiliary unless a new per-read
+  `io-read-trace.csv` screen finds a much denser candidate.
+- If lower-byte is blocked by quality, the next experiment should first collect
+  per-read IO trace on generalized dev prompts, then re-run slab screening.
+- Scheduler-only work remains secondary unless an offline bound shows it can
+  save a material fraction of the `82.5 ms/token` endpoint gap.
+
 ## Current Goal and Execution Plan (2026-07-12 18:43 CST)
 
 This is the active working goal for the next execution cycle. It is written
