@@ -269,6 +269,40 @@ Candidate profiles generated:
 These profiles are A/B inputs only. They are not SOTA results. The next run must
 be paired cold-start baseline vs candidate under `MemoryMax=15900000000`.
 
+### 2026-07-12 RAM Tier Candidate A/B Result
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-ramtier-ab/report.md`
+
+Status: completed; no SOTA improvement.
+
+Tested default-off candidates:
+
+1. `blk14_gate_full384`
+   - profile: `384` entries, `2.0098 GiB`, full `blk.14 gate`;
+   - France: `1.88 -> 1.92 tok/s`, TTFT ratio `1.0483`, quality pass;
+   - Intelligence: `1.92 -> 1.84 tok/s`, TTFT ratio `1.0905`, quality pass;
+   - RAM tier hit rate only `0.5%`;
+   - decision: reject as not generalized.
+2. `blk4_down_full384`
+   - profile: `384` entries, `2.7891 GiB`, full `blk.4 down`;
+   - France run did not complete after `4min35s` and was stopped;
+   - sampled cgroup memory was `14.6G/14.8G` with only about `133MB`
+     available;
+   - decision: reject for TTFT/RAM gate failure.
+
+Conclusion:
+
+- Do not continue GB-scale whole-layer/role RAM-tier sweeps as the primary path.
+- A single full gate layer has too little generalized coverage; a full down
+  layer creates unacceptable TTFT/RAM pressure.
+- The next RAM/cache candidate must be smaller and selected by dev-aggregate
+  wait-weighted admission, preferably capped around `512-1024 MiB`, with
+  leave-one-prompt-out coverage before runtime.
+- Alternatively, move to a scheduler-only same-layer up/gate/down read-batch
+  A/B that does not add large resident host memory.
+
 ### 2026-07-12 Activation-Aware Lower-Byte Admission Result
 
 Artifact:
