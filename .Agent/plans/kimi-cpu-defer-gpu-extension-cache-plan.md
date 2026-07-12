@@ -137,6 +137,194 @@ preflight 拒绝。
 这轮 goal 是形成一个可执行、可复现的 `>=2 tok/s` 路线，而不是再堆叠无法解释的
 profile-specific 配置。
 
+### 2026-07-12 Fresh Wait Profile Result And Next Filter
+
+Timestamp: 2026-07-12 CST.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401`
+
+Prompts:
+
+- `dev_france_regression`:
+  `Please introduce France in a short paragraph.`
+- `dev_intelligence_general`:
+  `What is intelligence?`
+
+Configuration:
+
+- branch: `vendor/kimi-deepseek-41d205-additive`;
+- commit: `12416ae75`;
+- cold start per prompt;
+- `MemoryMax=15900000000`, `MemorySwapMax=0`;
+- `N=32`, `VRAM_MIB=15000`, `UPGATE_PCT=72`;
+- v2 full-cover down iouring enabled;
+- v2 current-down overlap disabled;
+- profiling enabled:
+  - `PROFILE=1`;
+  - `COPY_PROFILE=1`;
+  - `GGML_MOE_IO_BATCH_PROFILE_OUT`;
+  - `GGML_MOE_IO_WAIT_TRACE_OUT`;
+  - `GGML_MOE_IO_READ_TRACE_OUT`;
+  - `GGML_MOE_IO_LOCALITY_PROFILE_OUT`;
+  - `GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT`;
+  - `GGML_MOE_H2D_COALESCE_PROFILE_OUT`.
+
+Artifacts:
+
+- fresh profile report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/current-goal-fresh-profile.md`;
+- wait-weighted screen:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/wait-weighted-screen.md`;
+- IO trace summaries:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/dev_france_io_trace_summary.txt`;
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/dev_intelligence_io_trace_summary.txt`;
+- split sweep:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/split-sweep-bound.md`;
+- cache oracle:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/cache-oracle-bound.md`;
+- RAM screens:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/ram-upgate-3000-report.md`;
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/ram-down-3000-report.md`;
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/ram-all-6000-report.md`;
+- layout/prefetch bounds:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/layout-prefetch-dev_france_regression/report.md`;
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/layout-prefetch-dev_intelligence_general/report.md`;
+- predictor bounds:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/predictive-acceptance-gate.md`;
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/predictive-acceptance-down.md`;
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401/analysis/route-predictor-bound.md`.
+
+Endpoint result:
+
+| prompt | quality | token rate | TTFT | decode | RAM peak |
+|---|---:|---:|---:|---:|---:|
+| `dev_france_regression` | pass | `1.52 tok/s` | `12493.03 ms` | `20362.22 ms / 31` | `12781109248` |
+| `dev_intelligence_general` | pass | `1.49 tok/s` | `9970.94 ms` | `20759.32 ms / 31` | `12614369280` |
+
+Quality:
+
+- France output:
+  `France, located in Western Europe, is renowned for its rich history,
+  influential culture, and diverse landscapes ranging from the vineyards of
+  Bordeaux to the beaches of the Riviera`
+- Intelligence output:
+  `Intelligence is a broad and contested concept, but at its core it refers to
+  the ability to learn, reason, solve problems, understand complex ideas, adapt
+  to`
+- Both pass the current keyword/quality gate.
+
+Fallback and memory:
+
+- `fallback-profile.csv` is header-only for both prompts: `0` fallback entries.
+- Memory peak stays below the 16 GB hard gate:
+  - France: `11.90 GiB`;
+  - intelligence: `11.75 GiB`.
+- Decode-stage file cache remains large:
+  - file about `11.23-11.25 GiB`;
+  - active_file about `11.19-11.20 GiB`.
+
+Current gap to `>=2 tok/s`:
+
+- With full profiling enabled:
+  - France needs `4862.2 ms` decode saving;
+  - intelligence needs `5259.3 ms` decode saving.
+- Relative to the protected non-extra-trace N32 admissions:
+  - France needs about `3971 ms`;
+  - held-out deploy needs about `4493 ms`.
+- Any runtime candidate with less than `~4.5 s` plausible endpoint saving should
+  be rejected before implementation.
+
+Fresh bottleneck attribution:
+
+| prompt | runtime gate IO wait | runtime up IO wait | runtime down IO wait | overlap down IO wait | up/gate wall | down wall |
+|---|---:|---:|---:|---:|---:|---:|
+| France | `5726.5 ms` | `5226.0 ms` | `3393.6 ms` | `1475.7 ms` | `14248.5 ms` | `5002.7 ms` |
+| intelligence | `5324.1 ms` | `4802.8 ms` | `3339.4 ms` | `1571.1 ms` | `14157.6 ms` | `5458.7 ms` |
+
+Interpretation:
+
+- The bottleneck is still inside the CPU/defer GPU-extension path, not CPU
+  fallback.
+- The largest exposed bucket is mixed up/gate transfer/staging, then down.
+- Mixed up/gate parallel staging is already enabled, but role-level combined
+  staging has already been rejected historically because it reduces raw IO wait
+  while losing useful copy/compute overlap.
+- Therefore the next source change must not be another naive same-layer
+  co-submit path.
+
+Rejected by this screen:
+
+1. Global VRAM split retuning:
+   - offline split sweep shows best IQ3 split is `UPGATE_PCT=60`, but only
+     `0.60%` lower miss GiB/token than current `72`;
+   - this is below the admission threshold and should not get runtime A/B time.
+2. Static/prompt-agnostic LFU hotset:
+   - cache oracle shows global LFU is worse than current runtime behavior;
+   - prompt LFU/Belady bounds prove there is locality, but it is not captured by
+     a fixed global frequency hotset.
+3. RAM tier as currently selected:
+   - `3 GB` up/gate RAM screen: `599` entries, `14.32 GiB` weighted hits, only
+     `10` RAM-dominant batches and `146` RAM-only batches;
+   - `3 GB` down RAM screen: `455` entries, `16.06 GiB` weighted hits, only
+     `11` RAM-dominant batches and `45` RAM-only batches;
+   - `6 GB` all-role RAM screen: `1031` entries, `30.39 GiB` weighted hits, only
+     `24` RAM-dominant batches and `165` RAM-only batches;
+   - these profiles are too scattered to justify runtime RAM tier promotion
+     unless the RAM scheduler can preserve large batches and avoid mixed
+     SSD/RAM fragmentation.
+4. Simple history/LFU predictive prefetch:
+   - sliding-window top-8 same-layer recall is only about `36-39%`;
+   - leave-one-out `history_lfu` and `hybrid_lfu` do not reach the admission
+     gate of `>=65%` byte recall, `<=1.35x` predicted bytes, and `>=40%`
+     full-step coverage;
+   - no runtime prefetch should be implemented from these simple predictors.
+
+Positive bound:
+
+- Layout-only p10 same-size bound:
+  - France: `3125.9 ms`, `100.8 ms/token`;
+  - intelligence: `2838.2 ms`, `91.6 ms/token`;
+  - correlation between locality gap and wait is negative in this sample, so
+    pack relayout alone is not a clean first implementation.
+- Future-layer prefetch oracle bound:
+  - K=2 windows save `4809.6 ms` France and `4888.0 ms` intelligence;
+  - this is the first bound in the current screen that clears the `>=2 tok/s`
+    gap;
+  - however, the simple predictors are not accurate enough, so this remains an
+    oracle bound, not an implementation plan.
+
+Decision:
+
+- Do not implement global split tuning, static RAM tier, static LFU hotset, or
+  simple history/LFU prefetch as the next runtime change.
+- The next valid design step is a stronger, prompt-general future-layer
+  predictor admission study. Candidate predictor families:
+  1. small draft/router model that predicts next-layer active experts from the
+     current hidden state or recent router logits;
+  2. lightweight per-layer classifier trained only on dev traces, then frozen
+     before held-out validation;
+  3. bounded speculative expert prefetch where unused predictions are capped by
+     a strict byte budget and demand reads can steal in-flight prefetch slots
+     without duplicate SSD reads.
+
+Admission gate for the next predictor study:
+
+- Use dev prompts only for predictor design.
+- Do not touch sealed/held-out prompts until the predictor and runtime policy
+  are frozen.
+- Required offline gate before runtime implementation:
+  - `>=65%` byte recall on the bottleneck group;
+  - `<=1.35x` predicted/actual bytes;
+  - `>=40%` full-step coverage;
+  - projected endpoint saving `>=4.5 s` on N32 or `>=100 ms/token` on N96;
+  - predicted prefetch must be throttled so total SSD bytes and TTFT cannot
+    explode.
+- If this gate fails, the next major direction must return to smaller expert
+  representation or a different storage/compute format rather than more cache
+  policy tuning.
+
 ### 2026-07-12 Result: current v2 partial-split bound is not enough
 
 Commit under test: `cf5645adf`.
