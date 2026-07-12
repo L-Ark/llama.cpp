@@ -335,6 +335,86 @@ Updated next action:
    up/gate error than the rejected blockwise, tiny v2, surrogate, and
    intermediate-keep families.
 
+### Trace Alignment Instrumentation Fix (2026-07-12 17:35 CST)
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-trace-alignment-fix/report.md`
+- `.Agent/runs/20260712-current-goal-trace-alignment-fix/report.json`
+- before smoke:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-trace-alignment-smoke/dev_france_n4`
+- after smoke:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-trace-alignment-smoke-after-fix/dev_france_n4`
+- audit tool:
+  `.Agent/run-tools/kimi_trace_alignment_audit.py`
+
+Purpose:
+
+- unblock future hidden/router predictor admission by fixing default-off trace
+  quality;
+- previous activation dumps could not be trusted for full future-prefetch
+  admission because the generic batch path wrote prompt rows as
+  `role=down,mode=decode`, even when the tensor was gate/up/down prompt work.
+
+Code change:
+
+- `ggml/src/ggml-cuda/moe_stream_batch.cu`
+  - generic `ggml_cuda_moe_stream_batch` now records `batch_mode` from
+    `rows_stride > 8 ? "prompt" : "decode"`;
+  - activation dump `role` is now inferred from tensor kind
+    (`up`, `gate`, `down`) instead of hardcoded `down`;
+  - route-detail now receives `token_ids` from the generic batch path, so prompt
+    and decode route-detail rows no longer lose token-column IDs.
+
+Validation:
+
+- built target:
+
+```bash
+cmake --build build-cuda-batch --target llama-completion -j 16
+```
+
+- ran cold-start N4 trace smoke under `MemoryMax=15900000000`,
+  `MemorySwapMax=0`, with:
+  - `GGML_MOE_ROUTE_SCORE_TRACE_OUT=$RUN/route-score-trace.csv`;
+  - `GGML_MOE_ROUTE_DETAIL_OUT=$RUN/route-detail.csv`;
+  - `GGML_MOE_ACTIVATION_DUMP_DIR=$RUN`;
+  - `GGML_MOE_ACTIVATION_DUMP_MAX_RECORDS=512`;
+  - `GGML_MOE_ACTIVATION_DUMP_CALL_STRIDE=1`;
+  - `GGML_MOE_ACTIVATION_DUMP_DECODE_ONLY=1`.
+
+Before vs after:
+
+| metric | before | after |
+|---|---:|---:|
+| route-score rows | `181` | `181` |
+| route-score positions | `17/18/19 + prompt pos 0` | same |
+| route-detail rows | `28416` | `28416` |
+| route-detail prompt token IDs | all `-1` | real prompt column IDs |
+| route-detail decode token IDs | `0` plus `-1` rows | all `0` |
+| activation rows | `512` | `512` |
+| activation role/tensor mismatches | `376` | `0` |
+| activation modes | all incorrectly `decode` | decode-only rows after prompt filter |
+| activation roles | all incorrectly `down` | `up=172, gate=172, down=168` |
+
+Decision:
+
+- accept the trace alignment fix as default-off instrumentation progress;
+- this is not a token-rate SOTA and does not change default runtime behavior
+  unless trace env vars are set;
+- activation `token_id` remains the per-ubatch tensor-column index. In decode
+  it is expected to be `0`; global decode position should be recovered from
+  `route-score-trace.csv` (`pos`) and layer/order alignment.
+
+Updated next action:
+
+1. If continuing predictor work, collect a full generalized dev N96 corpus with
+   route-score, route-detail, and activation dump enabled after this fix.
+2. Then rerun hidden/router future-expert admission using true `pos/layer`
+   labels from route-score and corrected activation roles/modes.
+3. Do not issue runtime prefetch reads until that full corpus passes recall,
+   predicted/actual byte, full-step, RAM, TTFT, and quality gates.
+
 ## Locked Goal and Near-Term Plan (2026-07-12 16:17 CST)
 
 This section is the current working goal for the next implementation phase. It

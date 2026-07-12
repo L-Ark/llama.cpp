@@ -1,0 +1,443 @@
+{
+  "kind": "kimi_trace_alignment_audit",
+  "reproduce_command": ".Agent/run-tools/kimi_trace_alignment_audit.py --before /root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-trace-alignment-smoke/dev_france_n4 --after /root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-trace-alignment-smoke-after-fix/dev_france_n4 --out-json .Agent/runs/20260712-current-goal-trace-alignment-fix/report.json --out-md .Agent/runs/20260712-current-goal-trace-alignment-fix/report.md",
+  "runs": {
+    "after": {
+      "activations": {
+        "first_calls": {
+          "0": [
+            {
+              "count": 8,
+              "layer": 60,
+              "role": "up",
+              "tensor_kind": "up"
+            },
+            {
+              "count": 8,
+              "layer": 60,
+              "role": "gate",
+              "tensor_kind": "gate"
+            }
+          ],
+          "1": [
+            {
+              "count": 8,
+              "layer": 1,
+              "role": "up",
+              "tensor_kind": "up"
+            },
+            {
+              "count": 8,
+              "layer": 1,
+              "role": "gate",
+              "tensor_kind": "gate"
+            }
+          ],
+          "2": [
+            {
+              "count": 8,
+              "layer": 2,
+              "role": "up",
+              "tensor_kind": "up"
+            },
+            {
+              "count": 8,
+              "layer": 2,
+              "role": "gate",
+              "tensor_kind": "gate"
+            }
+          ],
+          "3": [
+            {
+              "count": 8,
+              "layer": 3,
+              "role": "up",
+              "tensor_kind": "up"
+            },
+            {
+              "count": 8,
+              "layer": 3,
+              "role": "gate",
+              "tensor_kind": "gate"
+            }
+          ],
+          "4": [
+            {
+              "count": 8,
+              "layer": 4,
+              "role": "up",
+              "tensor_kind": "up"
+            },
+            {
+              "count": 8,
+              "layer": 4,
+              "role": "gate",
+              "tensor_kind": "gate"
+            }
+          ],
+          "5": [
+            {
+              "count": 8,
+              "layer": 5,
+              "role": "up",
+              "tensor_kind": "up"
+            },
+            {
+              "count": 8,
+              "layer": 5,
+              "role": "gate",
+              "tensor_kind": "gate"
+            }
+          ],
+          "6": [
+            {
+              "count": 8,
+              "layer": 6,
+              "role": "up",
+              "tensor_kind": "up"
+            },
+            {
+              "count": 8,
+              "layer": 6,
+              "role": "gate",
+              "tensor_kind": "gate"
+            }
+          ],
+          "7": [
+            {
+              "count": 8,
+              "layer": 7,
+              "role": "up",
+              "tensor_kind": "up"
+            },
+            {
+              "count": 8,
+              "layer": 7,
+              "role": "gate",
+              "tensor_kind": "gate"
+            }
+          ]
+        },
+        "mode": {
+          "decode": 512
+        },
+        "role": {
+          "down": 168,
+          "gate": 172,
+          "up": 172
+        },
+        "role_tensor_mismatch": 0,
+        "rows": 512,
+        "tensor_kind": {
+          "down": 168,
+          "gate": 172,
+          "up": 172
+        },
+        "token_id": {
+          "0": 512
+        }
+      },
+      "metrics": {
+        "exit": 0,
+        "memory_peak": 12740292608,
+        "quality": "fail",
+        "quality_reason": "missing_keyword:europe|paris",
+        "token_rate": 1.36,
+        "ttft_ms": 8110.83
+      },
+      "route_detail": {
+        "decode_token_id": {
+          "0": 4344
+        },
+        "kind": {
+          "down": 9472,
+          "gate": 9472,
+          "up": 9472
+        },
+        "mode": {
+          "decode": 4344,
+          "prompt": 24072
+        },
+        "prompt_token_id": {
+          "0": 1416,
+          "1": 1416,
+          "10": 1416,
+          "11": 1416,
+          "13": 1416,
+          "14": 1416,
+          "15": 1416,
+          "5": 1416,
+          "6": 1416,
+          "7": 1416,
+          "8": 1416,
+          "9": 1416
+        },
+        "rows": 28416,
+        "token_id": {
+          "0": 5760,
+          "1": 1416,
+          "10": 1416,
+          "11": 1416,
+          "13": 1416,
+          "14": 1416,
+          "15": 1416,
+          "5": 1416,
+          "6": 1416,
+          "7": 1416,
+          "8": 1416,
+          "9": 1416
+        }
+      },
+      "route_score": {
+        "calls": 4,
+        "first_calls": {
+          "0": {
+            "count": 1,
+            "first_layers": [
+              60
+            ],
+            "last_layers": [
+              60
+            ]
+          },
+          "1": {
+            "count": 60,
+            "first_layers": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "last_layers": [
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          },
+          "2": {
+            "count": 60,
+            "first_layers": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "last_layers": [
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          },
+          "3": {
+            "count": 60,
+            "first_layers": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "last_layers": [
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          }
+        },
+        "n_tokens": {
+          "1": 180,
+          "17": 1
+        },
+        "positions": {
+          "0": 1,
+          "17": 60,
+          "18": 60,
+          "19": 60
+        },
+        "rows": 181
+      },
+      "run": "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-trace-alignment-smoke-after-fix/dev_france_n4"
+    },
+    "before": {
+      "activations": {
+        "first_calls": {
+          "0": [
+            {
+              "count": 136,
+              "layer": 1,
+              "role": "down",
+              "tensor_kind": "gate"
+            }
+          ],
+          "1": [
+            {
+              "count": 136,
+              "layer": 1,
+              "role": "down",
+              "tensor_kind": "up"
+            }
+          ],
+          "2": [
+            {
+              "count": 136,
+              "layer": 1,
+              "role": "down",
+              "tensor_kind": "down"
+            }
+          ],
+          "3": [
+            {
+              "count": 104,
+              "layer": 2,
+              "role": "down",
+              "tensor_kind": "gate"
+            }
+          ]
+        },
+        "mode": {
+          "decode": 512
+        },
+        "role": {
+          "down": 512
+        },
+        "role_tensor_mismatch": 376,
+        "rows": 512,
+        "tensor_kind": {
+          "down": 136,
+          "gate": 240,
+          "up": 136
+        },
+        "token_id": {
+          "0": 31,
+          "1": 31,
+          "10": 30,
+          "13": 30,
+          "14": 30,
+          "2": 30,
+          "3": 31,
+          "5": 31,
+          "6": 31,
+          "7": 31,
+          "8": 30,
+          "9": 30
+        }
+      },
+      "metrics": {
+        "exit": 0,
+        "memory_peak": 12740333568,
+        "quality": "fail",
+        "quality_reason": "missing_keyword:europe|paris",
+        "token_rate": 1.37,
+        "ttft_ms": 8451.92
+      },
+      "route_detail": {
+        "decode_token_id": {
+          "-1": 1448,
+          "0": 2896
+        },
+        "kind": {
+          "down": 9472,
+          "gate": 9472,
+          "up": 9472
+        },
+        "mode": {
+          "decode": 4344,
+          "prompt": 24072
+        },
+        "prompt_token_id": {
+          "-1": 24072
+        },
+        "rows": 28416,
+        "token_id": {
+          "-1": 25520,
+          "0": 2896
+        }
+      },
+      "route_score": {
+        "calls": 4,
+        "first_calls": {
+          "0": {
+            "count": 1,
+            "first_layers": [
+              60
+            ],
+            "last_layers": [
+              60
+            ]
+          },
+          "1": {
+            "count": 60,
+            "first_layers": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "last_layers": [
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          },
+          "2": {
+            "count": 60,
+            "first_layers": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "last_layers": [
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          },
+          "3": {
+            "count": 60,
+            "first_layers": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "last_layers": [
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          }
+        },
+        "n_tokens": {
+          "1": 180,
+          "17": 1
+        },
+        "positions": {
+          "0": 1,
+          "17": 60,
+          "18": 60,
+          "19": 60
+        },
+        "rows": 181
+      },
+      "run": "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-trace-alignment-smoke/dev_france_n4"
+    }
+  }
+}

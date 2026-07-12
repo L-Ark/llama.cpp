@@ -17366,15 +17366,18 @@ extern "C" bool ggml_cuda_moe_stream_batch(
         std::fprintf(stderr, "[moe_stream_batch] trace call=%d tensor=%s experts=%d ne01=%ld ne00=%ld\n",
                      batch_call, src0_name ? src0_name : "(null)", n_active, (long)ne01, (long)ne00);
     }
+    const char *batch_mode = rows_stride > 8 ? "prompt" : "decode";
+    const char *batch_kind = is_prompt_up ? "up" : (is_prompt_gate ? "gate" : (is_down ? "down" : ""));
+
     batch_route_detail_record(
-        rows_stride > 8 ? "prompt" : "decode",
+        batch_mode,
         (uint64_t)batch_call,
         src0_name,
         src0_type_int,
         active_experts,
         dst_ids,
         nullptr,
-        nullptr,
+        token_ids,
         n_active,
         (size_t)ne01 * nb01,
         ne01,
@@ -17909,8 +17912,8 @@ extern "C" bool ggml_cuda_moe_stream_batch(
                         ne00);
             }
             moe_activation_dump_record(
-                    "down",
-                    "decode",
+                    batch_kind,
+                    batch_mode,
                     (uint64_t)batch_call,
                     src0_name,
                     src0_type_int,
