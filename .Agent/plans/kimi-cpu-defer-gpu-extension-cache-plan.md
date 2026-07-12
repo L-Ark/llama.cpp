@@ -459,6 +459,178 @@ Decision:
   optimization direction should return to lower-byte expert representation or a
   storage-format change, not more cache-policy tuning.
 
+### 2026-07-12 RAM Slab Admission Result
+
+Timestamp: 2026-07-12 CST.
+
+Purpose:
+
+- Test whether explicit RAM/VRAM tiering can replace low-value decode file cache
+  with batchable whole layer/role expert slabs.
+- Avoid the previously rejected scattered hot-expert RAM tier, which reduced
+  SSD bytes but fragmented mixed RAM/SSD batches.
+- Use dev traces only and keep held-out/test prompts sealed.
+
+Input profile:
+
+- Source profile root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401`.
+- Branch: `vendor/kimi-deepseek-41d205-additive`.
+- Commit under current analysis branch: `b734f6826`.
+- Prompts:
+  - `dev_france_regression`;
+  - `dev_intelligence_general`.
+- Config:
+  - cold start per prompt;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - `N=32`, `VRAM_MIB=15000`, `UPGATE_PCT=72`;
+  - v2 full-cover down iouring enabled;
+  - current-down v2 overlap disabled;
+  - fallback rows: `0`.
+- Baseline endpoint under full tracing:
+  - France: `1.52 tok/s`, decode `20362.22 ms / 31`;
+  - intelligence: `1.49 tok/s`, decode `20759.32 ms / 31`.
+- Required saving for the fully traced runs to reach `2 tok/s`:
+  - France: `4862.2 ms`;
+  - intelligence: `5259.3 ms`.
+
+Admission tool:
+
+- Tool:
+  `.Agent/run-tools/kimi_phase5c_ram_slab_screen.py`.
+- Result root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-slab-admission-003142`.
+- Runs:
+  - `maxjobs8`: foreground decode-like rows with `jobs <= 8`;
+  - `alljobs`: all foreground decode-like rows.
+- Simulated current VRAM hotset:
+  - down slots: `533`;
+  - upgate slots: `2015`;
+  - split max: `6 MiB`.
+
+Commands:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-waitprofile-n32-235401
+OUT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-slab-admission-003142
+
+python3 .Agent/run-tools/kimi_phase5c_ram_slab_screen.py \
+  --input-root "$ROOT" \
+  --route-profile-root "$ROOT" \
+  --out-dir "$OUT/maxjobs8" \
+  --roles up,gate,down \
+  --max-jobs 8 \
+  --down-slots 533 \
+  --upgate-slots 2015 \
+  --split-max-mib 6 \
+  --contig-window-mib 512 1024 2048 \
+  --contig-top-per-source 8
+
+python3 .Agent/run-tools/kimi_phase5c_ram_slab_screen.py \
+  --input-root "$ROOT" \
+  --route-profile-root "$ROOT" \
+  --out-dir "$OUT/alljobs" \
+  --roles up,gate,down \
+  --max-jobs 0 \
+  --down-slots 533 \
+  --upgate-slots 2015 \
+  --split-max-mib 6 \
+  --contig-window-mib 512 1024 2048 \
+  --contig-top-per-source 8
+```
+
+`maxjobs8` result:
+
+- decode-like rows: `50460`;
+- decode-like batches: `10854`;
+- decode runs: `62`;
+- total batch wait: `22023.793 ms`;
+- total batch wait per decode token: `355.222 ms/token`.
+
+Top whole-slab candidates:
+
+| kind | candidate | resident MiB | wait ms/token | RAM-only batches | mixed-risk batches | VRAM overlap MiB |
+|---|---|---:|---:|---:|---:|---:|
+| `layer_upgate` | `blk.1.upgate` | `1246.90` | `5.825` | `124` | `0` | `98.66` |
+| `layer_upgate` | `blk.9.upgate` | `1506.38` | `5.054` | `124` | `0` | `135.09` |
+| `layer_upgate` | `blk.7.upgate` | `1358.63` | `4.967` | `124` | `0` | `183.44` |
+| `layer_all` | `blk.1.all` | `2083.07` | `7.735` | `186` | `0` | `152.80` |
+| `layer_all` | `blk.9.all` | `2577.50` | `6.788` | `166` | `0` | `198.09` |
+
+Greedy `maxjobs8` bounds:
+
+| kind | budget MiB | selected slabs | resident MiB | wait ms/token | total wait for 62 decode tokens |
+|---|---:|---:|---:|---:|---:|
+| `layer_upgate` | `4096` | `3` | `3355.0` | `14.47` | `897 ms` |
+| `layer_upgate` | `8192` | `7` | `7589.1` | `31.31` | `1941 ms` |
+| `layer_upgate` | `10240` | `9` | `9751.0` | `39.72` | `2463 ms` |
+| `layer_all` | `8192` | `4` | `7380.1` | `25.64` | `1589 ms` |
+| `layer_all` | `10240` | `5` | `9347.0` | `32.12` | `1991 ms` |
+
+`alljobs` result:
+
+- decode-like rows: `74703`;
+- decode-like batches: `11208`;
+- decode runs: `62`;
+- total batch wait: `30859.222 ms`;
+- total batch wait per decode token: `497.729 ms/token`.
+
+Top whole-slab candidates:
+
+| kind | candidate | resident MiB | wait ms/token | RAM-only batches | mixed-risk batches | VRAM overlap MiB |
+|---|---|---:|---:|---:|---:|---:|
+| `layer_upgate` | `blk.1.upgate` | `1569.82` | `7.435` | `128` | `0` | `98.66` |
+| `layer_upgate` | `blk.32.upgate` | `1870.66` | `6.672` | `128` | `0` | `130.60` |
+| `layer_upgate` | `blk.29.upgate` | `1791.88` | `6.441` | `128` | `0` | `208.50` |
+| `layer_all` | `blk.1.all` | `2622.55` | `10.191` | `192` | `0` | `152.80` |
+| `layer_all` | `blk.32.all` | `3013.80` | `9.419` | `192` | `0` | `178.73` |
+
+Greedy `alljobs` bounds:
+
+| kind | budget MiB | selected slabs | resident MiB | wait ms/token | total wait for 62 decode tokens |
+|---|---:|---:|---:|---:|---:|
+| `layer_upgate` | `4096` | `2` | `3031.9` | `13.39` | `830 ms` |
+| `layer_upgate` | `8192` | `5` | `7104.5` | `29.78` | `1846 ms` |
+| `layer_upgate` | `10240` | `7` | `10019.8` | `41.21` | `2555 ms` |
+| `layer_all` | `8192` | `3` | `7742.0` | `27.79` | `1723 ms` |
+| `layer_all` | `10240` | `4` | `10214.8` | `36.23` | `2246 ms` |
+
+Interpretation:
+
+- Whole layer/role slabs have the right shape: the top candidates convert full
+  batches into RAM-only hits and have `0` mixed-risk batches in this offline
+  screen.
+- The saving is still too small for a standalone runtime promotion:
+  - best `10 GiB` upgate slab bound is only about `2.56 s` over `62` decode
+    tokens;
+  - best `10 GiB` layer-all slab bound is only about `2.25 s`;
+  - the fully traced endpoint gap to `2 tok/s` is `4.86-5.26 s`;
+  - the protected non-extra-trace gap is still about `4.0-4.5 s`.
+- These bounds are optimistic because they count removable batch wait before
+  paying RAM-resident preload cost, host-RAM pressure, pageable/pinned H2D
+  behavior, and any refault/reclaim side effects.
+
+Decision:
+
+- Do not implement or promote a standalone whole-layer RAM slab runtime A/B now.
+- Keep the RAM slab direction as a possible combination component only after
+  another optimization removes at least about `2 s` more endpoint decode time.
+- If revisited, first candidate should be pageable, not fully pinned:
+  `blk.1.upgate` or a small greedy upgate set, because those have full RAM-only
+  batch shape and low mixed-risk count.
+- Do not use scattered RAM hotsets as SOTA candidates unless a future scheduler
+  can keep RAM and SSD reads in separate large batches.
+
+Next direction after this rejection:
+
+- Static cache placement alone is not sufficient. The next high-leverage
+  direction must either:
+  - lower bytes per expert without quality loss;
+  - expose genuinely new independent future-layer work with a stronger signal
+    than route history;
+  - or split coalesced SSD read readiness from per-expert H2D readiness so that
+    larger reads do not block earlier up/gate slices.
+
 ### 2026-07-12 Result: current v2 partial-split bound is not enough
 
 Commit under test: `cf5645adf`.
