@@ -4,6 +4,121 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Current Goal and Execution Plan (2026-07-12 18:43 CST)
+
+This is the active working goal for the next execution cycle. It is written
+here before implementation so every follow-up experiment has a fixed target,
+acceptance rule and rollback point.
+
+### Goal
+
+Use the current Kimi implementation to keep the CPU/defer MoE scheduler while
+expanding and measuring its GPU expert-cache extension, with the near-term
+target of stable generalized `>2 tok/s` decode and the product target of stable
+random-prompt `>5 tok/s` decode on:
+
+- one `32 GB RTX 5090`;
+- strict `<16 GB` host RAM, including RSS, pinned buffers, explicit RAM expert
+  cache, Linux page cache and all process-external memory pressure;
+- cold start only;
+- generalized prompts only, with held-out prompts reserved for final SOTA
+  validation;
+- semantic quality preserved, especially
+  `Please introduce France in a short paragraph.`;
+- TTFT within `+20%` of the paired accepted baseline;
+- prompt and decode CPU fallback remaining `0` for any accepted SOTA claim.
+
+The current rollback point for this cycle is:
+
+- `531eefa8e runs: reject Kimi filtered hidden prefetch admission`
+
+### Kimi Applicability of the DeepSeek Gate-to-VRAM Pattern
+
+The DeepSeek lesson is applicable to Kimi as a scheduling architecture pattern:
+keep the CPU/defer path as the owner of MoE dispatch, then attach GPU-resident
+or fast-loaded expert execution to that path.
+
+For current Kimi, the important gate-to-VRAM step is already present:
+
+- `gate`, `up` and `down` expert batches can enter the GPU extension;
+- recent profiles show true CPU fallback rows are already `0`;
+- current bottleneck is not "gate is still on CPU";
+- current bottleneck is exposed expert movement and wait:
+  SSD or RAM source -> staging -> H2D -> GPU compute dependency.
+
+Therefore the next work must not be a blind port of the DeepSeek gate path.
+It must either reduce critical-path expert bytes, increase useful VRAM/RAM
+residency, or expose reliable future expert IDs early enough to prefetch
+without wasting bandwidth.
+
+### Immediate Plan
+
+1. Reconfirm the current baseline on one generalized dev prompt.
+   - Run `n96` cold start with the current SOTA config.
+   - Record decode tok/s, TTFT, RAM peak, VRAM use, output text, CPU fallback
+     count and the timing split for expert read, staging, H2D, up/gate compute,
+     down compute and scheduler/io wait.
+   - This baseline is the comparison point for all following A/B tests.
+
+2. Finish the VRAM split and cache-policy decision.
+   - Keep the current `UPGATE_PCT=72` unless a measured A/B beats it.
+   - The latest offline split sweep shows only `0.41%` miss-byte gain at IQ3
+     and at most `1.07%` under a hypothetical `0.25x` byte ratio, so split-only
+     changes are rejected unless runtime profiling contradicts this.
+   - Inspect existing cache-policy switches such as LFU/LRU/profile-hybrid and
+     run only small default-off A/B tests first.
+
+3. Use RAM for expert data only when it beats page-cache waste.
+   - Identify which decode-stage file-backed pages are not useful for decode.
+   - Replace low-yield file cache only with batchable expert data.
+   - Avoid mixed RAM/SSD scheduling that shrinks SSD batches and increases
+     exposed wait.
+   - Accept RAM tier or full-layer RAM residency only if endpoint token rate,
+     not just hit rate, improves while RAM stays below `16 GB`.
+
+4. Re-open prefetch only with a stronger admission signal.
+   - Route-history and hidden-KNN admission are rejected in their current form.
+   - A new predictor must pass before runtime integration:
+     - useful expert-byte recall `>=65%`;
+     - predicted/actual bytes `<=1.35x`;
+     - complete-step coverage `>=40%`;
+     - no quality regression on generalized dev prompts.
+   - Candidate signals are router logits/top-k score history, draft/router
+     model output, or a prompt-general learned admission model.
+
+5. Use lower-byte expert representation only if the byte ceiling is large
+   enough.
+   - For `>2 tok/s`, a candidate must remove enough exposed movement to beat
+     the measured baseline after non-transfer floor costs.
+   - For `>5 tok/s`, moved expert bytes likely need to approach roughly
+     `0.25x` of the current IQ3 path.
+   - Any complete replacement model or large new asset download requires
+     explicit approval before changing local assets.
+
+### Acceptance and Reproducibility Gate
+
+An optimization is accepted only when all of the following are true:
+
+- generalized endpoint decode tok/s improves over the paired baseline;
+- `Please introduce France in a short paragraph.` remains coherent and correct;
+- TTFT increase is `<=20%`;
+- host RAM peak is `<16 GB`, including page cache and pinned/RAM expert cache;
+- CPU fallback rows remain `0`;
+- results are cold-start and reproducible from the committed commands;
+- the plan is updated before the experiment;
+- the passing result is committed and pushed immediately.
+
+Every SOTA commit body must include:
+
+- exact branch, commit and rollback point;
+- exact env vars and command lines;
+- prompt split and all output text used for quality gates;
+- decode tok/s, TTFT, RAM/page-cache/RSS/pinned/VRAM metrics;
+- timing split for read/staging/H2D/compute/wait;
+- improvement magnitude;
+- artifact paths;
+- reason the change is accepted or rejected.
+
 ## Current Active Goal and Next Plan (2026-07-12 16:58 CST)
 
 This is the active goal for the next Kimi optimization cycle. It supersedes
