@@ -1,0 +1,52 @@
+{
+  "copy_wait_p50": 3.103922,
+  "copy_wait_p95": 5.56457,
+  "copy_wait_p99": 7.077181,
+  "decode_io_batch_hist": {
+    "1": 205,
+    "2-4": 2478,
+    "5-8": 2872
+  },
+  "decode_io_locality_rows": 5555,
+  "decode_io_wait": {
+    "low_inflight_ratio": 0.06796413287140819,
+    "next_job_done_ratio": 1.0,
+    "p50": 1.264729,
+    "p95": 2.376697,
+    "p99": 2.91153,
+    "queue_empty_ratio": 0.0,
+    "wait_ms": 11123.981191000054,
+    "wait_ms_per_row": 1.1334808631546824,
+    "wait_rows": 9814,
+    "zero_drain_ratio": 0.0
+  },
+  "io_batch_hist": {
+    "1": 205,
+    "2-4": 2478,
+    "5-8": 2872,
+    "gt32": 177
+  },
+  "io_locality_rows": 5732,
+  "io_wait": {
+    "low_inflight_ratio": 0.05610894941634241,
+    "next_job_done_ratio": 0.7872373540856031,
+    "p50": 1.276179,
+    "p95": 2.412626,
+    "p99": 3.083422,
+    "queue_empty_ratio": 0.0,
+    "wait_ms": 15108.997070000083,
+    "wait_ms_per_row": 1.175797437354092,
+    "wait_rows": 12850,
+    "zero_drain_ratio": 0.0
+  },
+  "metrics": {
+    "decode_ms": 20687.58,
+    "decode_runs": 31,
+    "expert_pack_0": "37043 misses=0 read_failures=0 direct_reads=0 direct_fallbacks=0 iouring_reads=37043 iouring_bytes=212793262080 iouring_fallbacks=0 iouring_submit_us=123080 iouring_wait_us=15102679 iouring_h2d_enqueues=37043 entries=69120",
+    "expert_pack_iouring_0": "batches=5732 submit_calls=8466 wait_calls=12850 cqes=37043 inflight_avg=4.47 inflight_max=8 batch_hist=1:205,2-4:2478,5-8:2872,9-16:0,17-32:0,gt32:177",
+    "quality": "pass",
+    "token_rate": 1.5,
+    "ttft_ms": 10052.75
+  },
+  "run_dir": "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/dev_intelligence_general"
+}

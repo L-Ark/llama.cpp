@@ -1,0 +1,5 @@
+type,calls,wall_ms,wall_ms_per_call,up_miss_per_call,gate_miss_per_call,up_wait_ms_per_call,gate_wait_ms_per_call,up_compute_ms_per_call,gate_compute_ms_per_call
+up=22/gate=18/parallel=1,899,8410.555,9.355,3.981,3.981,4.717,5.341,0.176,0.151
+up=22/gate=22/parallel=1,558,3180.855,5.700,4.484,4.484,5.058,5.467,0.212,0.119
+up=18/gate=18/parallel=0,311,2383.677,7.665,4.614,4.617,0.000,0.000,0.000,0.000
+up=18/gate=22/parallel=1,93,553.037,5.947,4.462,4.473,5.448,5.650,0.161,0.123

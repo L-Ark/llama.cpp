@@ -1,0 +1,3 @@
+op,rows,read_jobs,read_gib,span_gib,gap_gib,gap_over_read,span_over_read,source_switches_per_row,unique_sources_per_row,adjacent_pairs_per_read_job,same_tensor_ratio
+runtime_load,4656,21459,113.232,3643.989,3530.757,31.182,32.182,1.415,1.702,0.014,1.000
+current_down_overlap,899,4514,26.524,874.395,847.871,31.966,32.966,1.722,1.824,0.013,1.000

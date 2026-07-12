@@ -1,0 +1,4 @@
+first_role,rows,jobs,read_jobs,avg_read_jobs,avg_initial_submit,wait_calls,wait_ms,wait_ms_per_read_job,wall_ms,submit_ms,slot_wait_ms,inflight_avg,inflight_max
+gate,1906,11730,11730,6.154,4.466,4377,5302.909,0.452,10354.259,38.383,20.325,3.872,8
+down,1920,13587,13587,7.077,5.401,3659,4951.597,0.364,11069.594,49.602,23.598,4.989,8
+up,1906,11726,11726,6.152,4.464,4814,4854.491,0.414,9582.661,38.451,19.866,3.682,8

@@ -250,6 +250,92 @@ Decision:
   3. RAM/VRAM tiering only when it replaces low-value file cache and improves
      endpoint decode time under the 16GB RAM gate.
 
+### 2026-07-12 Exact Queue Continuity Result
+
+Status: completed and rejected as the next primary runtime A/B.
+
+Artifact:
+
+- `.Agent/runs/20260712-exact-queue-continuity-bound/report.md`
+- `.Agent/runs/20260712-exact-queue-continuity-bound/dev_france_regression-queue/report.md`
+- `.Agent/runs/20260712-exact-queue-continuity-bound/dev_intelligence_general-queue/report.md`
+- `.Agent/runs/20260712-exact-queue-continuity-bound/dev_france_regression-fused-upgate.md`
+- `.Agent/runs/20260712-exact-queue-continuity-bound/dev_intelligence_general-fused-upgate.md`
+- `.Agent/runs/20260712-exact-queue-continuity-bound/exact-byte-ceiling-2tps.md`
+- `.Agent/runs/20260712-exact-queue-continuity-bound/exact-byte-ceiling-5tps.md`
+
+Goal:
+
+- Test whether exact, non-speculative queue continuity can be the next
+  implementation path after CPU fallback and static relayout were rejected.
+- No future predictor, no wrong-path overfetch, no held-out/test prompts.
+- Include up/gate fusion because up and gate selected expert IDs are paired.
+
+Input:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717`;
+- prompts: `dev_france_regression`, `dev_intelligence_general`;
+- both source runs passed quality;
+- traces used: `copy-profile.csv`, `io-batch-profile.csv`,
+  `io-wait-trace.csv`, `io-read-trace.csv`, `ttft-trace.csv`.
+
+Queue evidence:
+
+- France:
+  - iouring reads `38796`, bytes `222635671552`, wait `16755483 us`;
+  - inflight avg/max `4.52/8`;
+  - full wait queue-empty ratio `0.000`, low-inflight ratio `0.037`;
+  - decode-like wait queue-empty ratio `0.000`, low-inflight ratio `0.045`;
+- Intelligence:
+  - iouring reads `37043`, bytes `212793262080`, wait `15102679 us`;
+  - inflight avg/max `4.47/8`;
+  - full wait queue-empty ratio `0.000`, low-inflight ratio `0.056`;
+  - decode-like wait queue-empty ratio `0.000`, low-inflight ratio `0.068`.
+
+Up/gate fusion bound:
+
+- France:
+  - current up+gate staged bytes `75.34 GiB`;
+  - jobs `15864 -> 7934`, `50.0%` reduction;
+  - ideal saved decode time at `10.4 GiB/s`: `3158.96 ms`;
+  - ideal token rate if all saved: `1.66 tok/s`;
+- Intelligence:
+  - current up+gate staged bytes `76.59 GiB`;
+  - jobs `16076 -> 8040`, `50.0%` reduction;
+  - ideal saved decode time at `10.4 GiB/s`: `2746.61 ms`;
+  - ideal token rate if all saved: `1.73 tok/s`.
+
+Exact-byte ceiling:
+
+- Assumptions: `10.4 GiB/s` movement ceiling and `40.1 ms/token` all-hit MoE floor;
+- current movement:
+  - France `6.689 GiB/token`;
+  - Intelligence `6.393 GiB/token`;
+- floor+transfer mean ceiling without byte reduction: `1.495 tok/s`;
+- best prompt ceiling: `1.527 tok/s`;
+- required mean byte ratio:
+  - for `2 tok/s`: `0.732x`;
+  - for `5 tok/s`: `0.254x`.
+
+Decision:
+
+- Reject scheduler-only / exact-byte queue continuity as the next primary
+  implementation.
+- The queue is not frequently empty; it already reaches `inflight_max=8`.
+- Up/gate fusion halves job count but does not reduce bytes and remains below
+  `2 tok/s` even in the optimistic bound.
+- Hitting `2 tok/s` already requires about `25-30%` byte reduction; hitting
+  `5 tok/s` requires about `74-75%` byte reduction or equivalent exact expert
+  movement elimination.
+- Keep queue continuity/up-gate fusion as a secondary multiplier after a
+  byte-reducing path exists.
+
+Next primary implementation candidate:
+
+- lower-byte expert representation with strict output-error and quality gates;
+- or RAM/VRAM tiering only if it demonstrably replaces low-value file cache and
+  reduces endpoint decode time, not only hit rate.
+
 ### Plan
 
 1. 保持 CPU/defer GPU-extension 作为每次实验的硬回归门禁。

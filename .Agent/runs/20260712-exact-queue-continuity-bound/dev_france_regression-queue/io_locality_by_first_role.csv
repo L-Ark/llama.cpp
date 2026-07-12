@@ -1,0 +1,4 @@
+first_role,rows,read_jobs,read_gib,span_gib,gap_gib,gap_over_read,span_over_read,source_switches_per_row,unique_sources_per_row,adjacent_pairs_per_read_job,same_tensor_ratio
+down,1920,14150,90.245,1531.850,1441.604,15.974,16.974,0.197,1.057,0.138,1.000
+gate,1918,12324,60.791,1011.512,950.721,15.639,16.639,0.194,1.057,0.154,1.000
+up,1918,12322,56.312,939.364,883.052,15.681,16.681,0.194,1.057,0.154,1.000

@@ -1,0 +1,59 @@
+{
+  "all_hit_floor_ms_per_token": 40.1,
+  "bandwidth_gib_s": 10.4,
+  "decision": "Exact-byte scheduling without byte reduction is not a primary 2.0 tok/s path: even at 10.4 GiB/s and a 40.1 ms/token all-hit floor, the best held-out prompt ceiling is 1.53 tok/s and the mean ceiling is 1.50 tok/s. Continue with structural byte reduction.",
+  "kind": "kimi_exact_byte_scheduler_ceiling",
+  "profile_root": "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717",
+  "prompts": [
+    {
+      "call_events_per_token": 125.7741935483871,
+      "call_wall_ms_per_token": 1019.4267741935467,
+      "decode_ms": 21839.52,
+      "decode_runs": 31,
+      "floor_plus_transfer_ms_per_token": 683.2315968705171,
+      "floor_plus_transfer_tok_s": 1.4636325436066087,
+      "measured_tok_s": 1.42,
+      "moved_bytes": 222635671552,
+      "moved_gib_per_token": 6.6885686074533774,
+      "prompt_id": "dev_france_regression",
+      "required_byte_ratio_for_target_tps": 0.7150947057147815,
+      "runtime_load_copy_ms_per_token": 3853.4447741935605,
+      "runtime_load_events_per_token": 1111.1290322580646,
+      "transfer_only_ms_per_token": 643.1315968705171,
+      "transfer_only_tok_s": 1.5548917280164853
+    },
+    {
+      "call_events_per_token": 125.7741935483871,
+      "call_wall_ms_per_token": 948.3204516129025,
+      "decode_ms": 20687.58,
+      "decode_runs": 31,
+      "floor_plus_transfer_ms_per_token": 654.7996547803099,
+      "floor_plus_transfer_tok_s": 1.5271846780913583,
+      "measured_tok_s": 1.5,
+      "moved_bytes": 212793262080,
+      "moved_gib_per_token": 6.392876409715222,
+      "prompt_id": "dev_intelligence_general",
+      "required_byte_ratio_for_target_tps": 0.7481702591233204,
+      "runtime_load_copy_ms_per_token": 3549.103677419344,
+      "runtime_load_events_per_token": 1049.3225806451612,
+      "transfer_only_ms_per_token": 614.6996547803099,
+      "transfer_only_tok_s": 1.6268107395592963
+    }
+  ],
+  "reproduce_command": ".Agent/run-tools/kimi_exact_byte_scheduler_ceiling.py --profile-root /root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717 --out-json .Agent/runs/20260712-exact-queue-continuity-bound/exact-byte-ceiling-2tps.json --out-md .Agent/runs/20260712-exact-queue-continuity-bound/exact-byte-ceiling-2tps.md --bandwidth-gib-s 10.4 --all-hit-floor-ms-per-token 40.1 --target-tok-s 2",
+  "summary": {
+    "floor_plus_transfer_max_tok_s": 1.5271846780913583,
+    "floor_plus_transfer_mean_tok_s": 1.4954086108489835,
+    "floor_plus_transfer_median_tok_s": 1.4954086108489835,
+    "floor_plus_transfer_min_tok_s": 1.4636325436066087,
+    "mean_required_byte_ratio_for_target_tps": 0.731632482419051,
+    "measured_mean_tok_s": 1.46,
+    "measured_median_tok_s": 1.46,
+    "median_required_byte_ratio_for_target_tps": 0.731632482419051,
+    "p10_required_byte_ratio_for_target_tps": 0.7184022610556354,
+    "prompts": 2,
+    "transfer_only_mean_tok_s": 1.5908512337878908,
+    "transfer_only_median_tok_s": 1.5908512337878908
+  },
+  "target_tok_s": 2.0
+}
