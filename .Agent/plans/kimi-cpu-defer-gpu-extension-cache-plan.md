@@ -325,6 +325,140 @@ Admission gate for the next predictor study:
   representation or a different storage/compute format rather than more cache
   policy tuning.
 
+### 2026-07-12 Dev7 Hybrid Predictor Admission Result
+
+Timestamp: 2026-07-12 CST.
+
+Purpose:
+
+- Validate whether a stronger route-history predictor can turn the future-layer
+  prefetch oracle bound into an implementable runtime direction.
+- Use dev prompts only.
+- Keep held-out/test prompts sealed for later validation.
+
+Input route traces:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009`
+- Branch: `vendor/kimi-deepseek-41d205-additive`.
+- Commit: `468d988e8`.
+- Prompt file: `.Agent/evals/kimi-general-dev-prompts.jsonl`.
+- Prompts:
+  - `dev_france_regression`;
+  - `dev_japan_factual`;
+  - `dev_photosynthesis_factual`;
+  - `dev_linear_equation`;
+  - `dev_python_reverse`;
+  - `dev_zh_france`;
+  - `dev_mixed_summary`.
+- Config:
+  - cold start per prompt;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - `N=32`, `PROFILE=1`;
+  - `VRAM_MIB=15000`, `UPGATE_PCT=72`;
+  - v2 full-cover down iouring enabled;
+  - v2 current-down overlap disabled.
+
+Endpoint result:
+
+| prompt | quality | token rate | TTFT | decode | RAM peak |
+|---|---:|---:|---:|---:|---:|
+| `dev_france_regression` | pass | `1.66` | `9314.35 ms` | `18663.66 ms / 31` | `12765503488` |
+| `dev_japan_factual` | pass | `1.67` | `8651.15 ms` | `18520.81 ms / 31` | `12770037760` |
+| `dev_photosynthesis_factual` | pass | `1.68` | `7515.70 ms` | `18401.90 ms / 31` | `12602634240` |
+| `dev_linear_equation` | pass | `1.34` | `11290.21 ms` | `23050.36 ms / 31` | `12764004352` |
+| `dev_python_reverse` | pass | `1.52` | `9426.13 ms` | `20419.62 ms / 31` | `12763455488` |
+| `dev_zh_france` | pass | `1.74` | `7747.90 ms` | `17856.66 ms / 31` | `12607578112` |
+| `dev_mixed_summary` | pass | `1.60` | `11368.97 ms` | `19390.40 ms / 31` | `12762677248` |
+
+All seven dev prompts pass quality and stay below the 16 GB host-RAM gate.
+
+Baseline co-occurrence predictor:
+
+- Tool:
+  `.Agent/run-tools/kimi_future_expert_predictability.py`.
+- Report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/analysis/future-expert-predictability/report.md`.
+- Leave-one-dev-prompt-out result:
+
+| horizon | budget | predictor | recall | precision | pred GiB/token | useful GiB/token | waste GiB/token |
+|---:|---:|---|---:|---:|---:|---:|---:|
+| `1` | `8` | `cooc` | `0.2115` | `0.2115` | `7.4973` | `1.5834` | `5.9140` |
+| `1` | `16` | `cooc` | `0.2924` | `0.1462` | `14.9946` | `2.1903` | `12.8043` |
+| `1` | `32` | `cooc` | `0.3859` | `0.0965` | `29.9893` | `2.8922` | `27.0971` |
+
+Interpretation:
+
+- Current-layer co-occurrence is better than global-hot, but still too wasteful.
+- `H=1/B=16` only covers about `104.1 ms/token` under a linear wait model while
+  adding about `14.99 GiB/token` predicted all-role prefetch volume.
+- `H=1/B=32` raises recall to `0.3859`, but wastes about `27.10 GiB/token`.
+
+New hybrid predictor tool:
+
+- Tool:
+  `.Agent/run-tools/kimi_future_hybrid_predictor_admission.py`.
+- Verification:
+  `python3 -m py_compile .Agent/run-tools/kimi_future_hybrid_predictor_admission.py`
+  passed.
+- Report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/analysis/hybrid-predictor-admission/report.md`.
+- Inputs:
+  same seven dev-only `route-trace.csv` files.
+- Method:
+  leave-one-dev-prompt-out;
+  combine current-layer co-occurrence, same-prompt previous same-layer experts,
+  same-prompt recent LFU, and dev global hot.
+- Predictors evaluated:
+  `global_hot`, `cooc`, `previous_same_layer`, `recent_lfu`,
+  `hybrid_balanced`, `hybrid_cooc`, `hybrid_recent`, `hybrid_prev`.
+- Horizons:
+  `1`, `2`, `3`.
+- Budgets:
+  `4`, `8`, `12`, `16`, `32`.
+
+Admission gate:
+
+- `>=65%` all-role byte recall;
+- `<=1.35x` predicted/actual bytes;
+- `>=40%` full-step coverage.
+
+Hybrid result:
+
+- Passing rows: `0`.
+- Best all-role rows:
+
+| predictor | horizon | budget | recall | precision | full steps | pred/actual bytes | pred GiB/token | useful GiB/token | waste GiB/token |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `hybrid_recent` | `3` | `32` | `0.5883` | `0.1471` | `3.09%` | `4.00x` | `28.943` | `4.251` | `24.693` |
+| `hybrid_recent` | `1` | `32` | `0.5880` | `0.1470` | `3.05%` | `4.00x` | `29.989` | `4.403` | `25.586` |
+| `hybrid_balanced` | `1` | `32` | `0.5822` | `0.1456` | `3.09%` | `4.00x` | `29.989` | `4.360` | `25.629` |
+| `hybrid_balanced` | `3` | `16` | `0.4776` | `0.2388` | `0.65%` | `2.00x` | `14.472` | `3.450` | `11.022` |
+
+Interpretation:
+
+- Same-prompt recency/history improves recall over plain co-occurrence, but the
+  extra recall is bought with too much predicted IO volume and almost no
+  full-step coverage.
+- Even the best hybrid route-history predictor does not make speculative
+  future-layer prefetch demand-safe.
+- A runtime future-prefetch prototype should not be implemented from route
+  traces alone.
+
+Decision:
+
+- Reject route-history-only future-layer prefetch for the next runtime change.
+- Keep the new hybrid predictor tool for offline admission screens.
+- The next predictor attempt must introduce a stronger signal:
+  - router logits/top-k scores before hard routing;
+  - hidden-state features;
+  - a cheap draft/router model;
+  - or another predictor whose offline result crosses the admission gate before
+    any runtime prefetch implementation.
+- If such signal is not available or cannot pass the gate, the next major
+  optimization direction should return to lower-byte expert representation or a
+  storage-format change, not more cache-policy tuning.
+
 ### 2026-07-12 Result: current v2 partial-split bound is not enough
 
 Commit under test: `cf5645adf`.
