@@ -291,6 +291,84 @@ The remaining high-value paths are:
 3. a stronger graph-side or draft-router predictor that can prove complete-batch
    recall, not route-history recall, before any runtime A/B.
 
+### 2026-07-12 Storage-Format Next Gate Result
+
+Status: completed and rejected for current-IQ3_S payload relayout/compression.
+
+Artifact:
+
+- `.Agent/runs/20260712-storage-format-next-gate/report.md`
+- `.Agent/runs/20260712-exact-layout-storage-bound/dev_france_regression-layout.md`
+- `.Agent/runs/20260712-exact-layout-storage-bound/dev_intelligence_general-layout.md`
+
+Scope:
+
+- dev-only offline decision report;
+- no pack rewrite;
+- no model deletion/download;
+- no runtime change;
+- no SOTA claim;
+- no held-out/test prompt used.
+
+Result:
+
+- exact per-batch ideal layout can exceed `2 tok/s` on dev2, but it is an
+  unrealizable upper bound because batch signatures are almost all unique:
+  - France: `5575` unique exact signatures / `5579` batches, only `8` repeated;
+  - Intelligence: `5549` unique exact signatures / `5555` batches, only `11`
+    repeated;
+  - read traffic remains `137.759-139.756 GiB`, so it reduces extents only,
+    not moved bytes.
+- same-prompt static `greedy_pair` reaches `1.86` and `2.02 tok/s` bounds, but
+  this is prompt-order overfit;
+- leave-one-prompt-out static layout reaches only `1.500 tok/s`, saving
+  `19.175 ms/token`;
+- role split is also too small: `up,gate` saves at most `11.371 ms/token`,
+  `down` at most `7.804 ms/token`;
+- generic lossless compression fails:
+  raw payload ratio `0.9931`, non-base XOR residual ratio `1.0001`;
+- split lower-byte subpacks can fit individually but are not runnable against
+  current IQ3_S without type/byte-size override and quality-gated kernels.
+
+Decision:
+
+- do not implement current-IQ3_S static pack relayout or generic compressed-pack
+  runtime as the next A/B;
+- storage-format work is only worth implementing if it actually lowers payload
+  bytes, e.g. complete lower-bit GGUF smoke or a default-off lower-byte expert
+  override path with direct kernels and output-quality gates.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717
+OUT=.Agent/runs/20260712-exact-layout-storage-bound
+mkdir -p "$OUT"
+for P in dev_france_regression dev_intelligence_general; do
+  python3 .Agent/run-tools/kimi_io_trace_pack_layout_screen.py \
+    --io-read-trace "$ROOT/$P/io-read-trace.csv" \
+    --baseline-metrics "$ROOT/$P/metrics.txt" \
+    --out-json "$OUT/$P-layout.json" \
+    --out-md "$OUT/$P-layout.md" \
+    --roles up,gate,down \
+    --max-jobs 8 \
+    --max-gap-mib 1.0
+done
+```
+
+### Updated Remaining Paths
+
+After this gate, the remaining high-value paths are narrower:
+
+1. `i1-IQ1_S` complete lower-bit smoke, requiring explicit approval for guarded
+   storage cleanup/download;
+2. default-off lower-byte expert override path, only if its representation
+   passes output-quality gates for up/gate/down and can keep fallback rows at
+   `0`;
+3. stronger graph-side/draft-router predictor using logits or hidden-state
+   features, but only after complete-batch admission passes.
+
 ## 2026-07-12 Current Authoritative Goal And Plan
 
 本段是当前执行目标。后面的历史段落只作为实验记录和回溯依据；如果与本段冲突，以本段为准。
