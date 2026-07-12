@@ -4,6 +4,92 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Current Authoritative Goal And Plan
+
+本段是当前执行目标。后面的历史段落只作为实验记录和回溯依据；如果与本段冲突，以本段为准。
+
+### Goal
+
+在 `vendor/kimi-deepseek-41d205-additive` 分支上继续优化 Kimi，使其在用户随机 prompt
+场景下稳定提升 cold-start decode token rate。短期目标是 generalized prompts 稳定
+`>2 tok/s`，长期目标是 `>5 tok/s`。
+
+必须同时满足以下硬约束：
+
+- Host RAM `<16 GB`，统计口径包含 page cache、RSS、pinned staging、RAM expert cache；
+- 单张 `32 GB RTX 5090`，尽可能用满 VRAM，但不能牺牲 RAM/TTFT/质量门禁；
+- 必须 cold start，不接受 warm-cache 或 prompt-specific 结果；
+- 优化必须面向 generalized prompts；held-out/test prompts 只能最终验证，不能用于调参；
+- `Please introduce France in a short paragraph.` 必须语义正确、连贯；
+- TTFT 不得比对应 baseline 升高超过 `20%`；
+- 任何 SOTA 必须可复现，并在 commit body 里写清提升幅度、env、复现命令、
+  prompt/dev/test set、RAM/VRAM、TTFT、质量输出、rollback point，然后立即 push。
+
+### Current Position
+
+DeepSeek 那条 `CPU/defer MoE main path + GPU expert-cache extension` 路线对 Kimi 的结论是：
+
+- 有用，但主要作为强制 regression gate，而不是当前最大新增收益来源；
+- 当前 Kimi dev audit 已显示 gate/up/down 基本被 GPU extension 接住：
+  `up_gate` 和 `down` 均 `batch_accept == calls`，true CPU fallback rows 为 `0`；
+- 当前瓶颈转移到 expert bytes/token 和 demand-read exposure：
+  约 `6.54 GiB/token` expert payload，单靠 io_uring 调度/co-submit 达不到稳定 `2 tok/s`；
+- 静态 RAM hot tier / 整层 RAM slab 已被 complete-batch oracle 否掉：
+  即使 dev-overfit `10GB` resident RAM，也只保存 `53.441 ms/token`，上界约
+  `1.839 tok/s`，低于 `2 tok/s` 所需。
+
+### Plan
+
+1. 保持 CPU/defer GPU-extension 作为每次实验的硬回归门禁。
+   - `up_gate batch_accept == calls`；
+   - `down batch_accept == calls`；
+   - true CPU fallback rows 必须为 `0`；
+   - prompt fallback 不允许重新出现；
+   - 如果任何一项失败，先修 fast path，不声明性能优化。
+
+2. 先固化当前 generalized baseline。
+   - 使用 cold start；
+   - 至少跑 France quality gate 和一个 generalized dev prompt；
+   - 记录 decode token rate、TTFT、prompt token rate、RAM peak、file/page-cache、
+     pinned/RSS、VRAM、输出文本；
+   - 保存 copy profile、IO wait/read trace、fallback profile、route/profile 汇总。
+
+3. 下一条主线优先做 lower-byte expert representation。
+   - 目标是直接降低每 token 需要搬运的 expert bytes；
+   - 实践前先按 expert size、量化比例、NVMe/H2D 带宽计算 token-rate 理论上限；
+   - 先做 default-off smoke，不改变当前 SOTA 默认路径；
+   - France 和 generalized dev 输出必须先过质量，再看性能；
+   - 若质量退化、TTFT 超限或 RAM 超限，立即 disable/revert，不进入 SOTA。
+
+4. predictor/prefetch 只在离线 oracle 过线后继续。
+   - 旧 route-history/score predictor 已被拒绝：recall 低，full-step cover 为 `0`；
+   - 新 predictor 必须引入更强信号，例如 draft-router、小模型或 hidden-state feature；
+   - runtime A/B 前，离线必须证明能节省 `>=100 ms/token` exposed wait，且 moved bytes
+     不爆炸；
+   - 预取目标必须是 complete future batches，而不是零散提高 row-level hit rate。
+
+5. RAM/VRAM 存储重排暂不做静态 runtime A/B。
+   - 不继续扩大静态 RAM hot expert tier；
+   - 不继续测静态整层 RAM slab；
+   - 只有当新 storage format / predictor 能提高 complete-batch dominance 时，才重新考虑
+     RAM tier；
+   - RAM 里的数据必须替换低价值 page cache，而不是和 page cache 竞争导致 refault/TTFT
+     抖动。
+
+6. 每一轮仍按“设计优化方法 -> 执行优化方法”交替推进。
+   - 设计时先 profile 每 token 总耗时，并拆分 expert read、pinned staging、H2D、
+     up/gate compute、down compute、CPU/GGUF fallback、sync gap；
+   - 执行前先写理论收益和 token-rate 上限；
+   - 实测后如果不符合预期，必须解释 gap：队列断流、batch fragmentation、H2D、compute、
+     RAM reclaim、page cache refault、fallback 或质量退化；
+   - 只有满足所有门禁的提升才 commit/push；失败方案保留 default-off 证据或回退。
+
+### Immediate Next Step
+
+先完成并提交 RAM/VRAM storage oracle 结论，明确静态 RAM tier 不进入 runtime A/B。之后从
+lower-byte expert representation 开始下一轮：先做纯 source-mode / smoke gate，确认不混用旧
+expert pack，再做质量和性能验证。
+
 ## 2026-07-12 Current Goal: Generalized Kimi `>2 tok/s` First, Then `5 tok/s`
 
 ### Goal
@@ -181,6 +267,56 @@ Decision:
   feature，而不是只靠历史 route score；
 - 若不继续 predictor，回到 RAM/VRAM 显式存储重排 oracle 或新的 lower-byte expert
   representation。
+
+### 2026-07-12 RAM/VRAM Storage Rebalance Oracle Result
+
+Artifact:
+
+- `.Agent/runs/20260712-ram-vram-storage-oracle/report.md`
+- row-level RAM tier oracle:
+  `.Agent/runs/20260712-ram-vram-storage-oracle/copy-profile-ram-tier-oracle/oracle.md`
+- complete-batch oracle:
+  `.Agent/runs/20260712-ram-vram-storage-oracle/batch-cover-ram-oracle/oracle.md`
+- IO trace root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-ram-vram-io-trace-n32-040559`
+
+Inputs:
+
+- generalized dev prompts only：France + Intelligence；
+- both IO-trace runs quality pass；
+- France IO trace: `1.67 tok/s`, TTFT `8753.31 ms`, decode
+  `18542.08 ms / 31`, RAM peak `12775096320` bytes；
+- Intelligence IO trace: `1.68 tok/s`, TTFT `6637.68 ms`, decode
+  `18489.81 ms / 31`, RAM peak `12605616128` bytes。
+
+Findings:
+
+- copy-profile shows no pack miss and no GGUF expert fallback in this path：
+  profiled copy traffic is all `pack_hit=1` and `iouring=1`；
+- therefore RAM tier would not fix fallback；it can only replace some
+  expert-pack SSD/io_uring demand reads with RAM->VRAM copies；
+- wait-weighted single layer/role screen is too small：
+  best upgate layer is `11.832 ms/token`，best down layer is about
+  `5.98 ms/token`；
+- row-level RAM tier oracle looks promising but is too optimistic：
+  2GB row-level bound reaches `2.467 tok/s` conservative estimate because it
+  assumes selected expert rows remove independent waits；
+- complete-batch oracle rejects static RAM tier：
+  with 10GB resident RAM, dev-overfit complete-batch cover saves only
+  `53.441 ms/token` and bounds token rate at `1.839 tok/s`；
+- the IO-trace baseline needs about `97.3 ms/token` saving to reach `2 tok/s`,
+  so even the dev-overfit 10GB complete-batch oracle is not enough。
+
+Decision:
+
+- 不做 static RAM hot expert tier runtime A/B；
+- 不做 static whole-layer RAM slab runtime A/B；
+- 原因是 batch fragmentation 后收益不足，且 cold preload 还会带来 TTFT/RAM 风险；
+- RAM 只有在能提高 complete-batch dominance 时才值得重试，例如强 predictor
+  预取完整 future batches，或 storage format / lower-byte 表示让整批 active experts
+  变小；
+- 当前下一条更高价值路线应转向 lower-byte expert representation 或更强
+  draft-router/hidden-state predictor，而不是继续扩大静态 RAM tier。
 
 ## 2026-07-12 Active Goal: Kimi CPU/defer GPU-extension Applicability
 
