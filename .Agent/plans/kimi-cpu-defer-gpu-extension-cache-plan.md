@@ -161,6 +161,64 @@ Decision:
   representation，并且所有真实 payload 都要先通过这个 current-pack output-error gate；
 - 暂停 v2 runtime override/partial split 实作，直到有候选在该 gate 上显著好于本次结果。
 
+### 2026-07-12 Next Experiment: Hidden+Route MoE-Output Surrogate Screen
+
+Goal:
+
+- 在继续设计更强 predictor / draft-router / 近似 expert 表示之前，先用已有 dev activation
+  corpus 验证：runtime 已有的 pre-MoE hidden vector 加 selected expert IDs，是否足以预测完整
+  MoE 输出；
+- 这是更强信号路线的离线 admission，不改变 runtime，不声明 SOTA；
+- 如果这个上界都过不了输出误差门禁，则不要把“轻量 surrogate / hidden-state predictor”
+  当作近期主线。
+
+Method:
+
+1. 使用现有工具 `.Agent/run-tools/kimi_input_route_moe_surrogate_oracle.py`；
+2. 输入只使用 dev activation corpus：
+   `/root/lfz/runs/vendor-kimi-token-rate/20260708-gp105-groupcomplete-activation-corpus-r2`
+   下的 `dev_france_regression`、`dev_japan_factual`、`dev_photosynthesis_factual`；
+3. leave-one-prompt-out：
+   - 用其他 dev prompts 训练/构造 nearest-neighbor 或 kernel ridge surrogate；
+   - 在被留出的 dev prompt 上评估；
+4. 特征候选：
+   - hidden input；
+   - hidden + stats；
+   - hidden + route stats；
+   - hidden route gated；
+5. 目标输出是同层 active experts 的 summed MoE output，评价 mean/max rel-L2。
+
+Pass/Reject rule:
+
+- 若 best mean rel-L2 `<=0.10`，再设计 default-off runtime shadow path；
+- 若 best mean rel-L2 `>0.10`，拒绝小型 hidden+route MoE-output surrogate 作为近期主线；
+- 该实验不使用 held-out/test prompt，不触发任何 runtime read 或质量/SOTA claim。
+
+Result:
+
+- artifact:
+  `.Agent/runs/20260712-hidden-route-surrogate-screen/report.md`；
+- prompts: `3` dev prompts；
+- full-corpus groups: `468`；
+- layers evaluated: `53`；
+- complete top-8 groups only；
+- best method: `nn_scaled:input_route_stats`；
+- best mean rel-L2: `0.885045`；
+- best max rel-L2: `1.298097`；
+- target mean rel-L2 gate: `<=0.10`。
+
+Decision:
+
+- 拒绝 small hidden+route full-MoE-output surrogate 作为下一条优化主线；
+- 误差超过门禁约 `8.85x`，说明用当前 hidden vector + selected expert IDs 直接近似完整
+  MoE 输出不可行；
+- 这不否定未来更强的 expert-ID predictor / draft-router，但下一次 predictor 必须直接证明
+  complete-batch coverage 和 predicted/actual bytes，而不是尝试用小 surrogate 替代 MoE 输出；
+- 当前可行方向继续收敛到三类：
+  1. 真实 lower-byte payload，必须先过 current-pack output-error gate；
+  2. 更强 draft/router expert-ID predictor，必须先过 complete-batch admission；
+  3. exact storage/layout 变化，必须证明能减少 moved bytes 或 exposed wait，而不只是重排。
+
 ## 2026-07-12 Current Goal: Generalized Kimi `>2 tok/s` First, Then `5 tok/s`
 
 ### Goal

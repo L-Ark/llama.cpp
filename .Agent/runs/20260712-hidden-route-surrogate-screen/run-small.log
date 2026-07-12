@@ -1,0 +1,26 @@
+wrote .Agent/runs/20260712-hidden-route-surrogate-screen/report-small.json
+wrote .Agent/runs/20260712-hidden-route-surrogate-screen/report-small.md
+Reject as primary: best input-route surrogate krr:input_route_gated:lambda=10 has mean rel L2 1.064523, above the 0.1 gate. This closes the small prototype/kernel full-MoE-output surrogate family for now.
+	Command being timed: "python3 .Agent/run-tools/kimi_input_route_moe_surrogate_oracle.py --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp105-groupcomplete-activation-corpus-r2/dev_france_regression --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp105-groupcomplete-activation-corpus-r2/dev_japan_factual --prompt-root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp105-groupcomplete-activation-corpus-r2/dev_photosynthesis_factual --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --libggml-base build-cuda-batch/bin/libggml-base.so --out-json .Agent/runs/20260712-hidden-route-surrogate-screen/report-small.json --out-md .Agent/runs/20260712-hidden-route-surrogate-screen/report-small.md --max-records-per-prompt 720 --modes input,input_stats,input_route_stats,input_route_gated --lambdas 1.0,10.0 --complete-group-only --target-rel-l2 0.10 --torch-threads 8"
+	User time (seconds): 44.37
+	System time (seconds): 34.65
+	Percent of CPU this job got: 128%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:01.54
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1636020
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 107
+	Minor (reclaiming a frame) page faults: 10173434
+	Voluntary context switches: 594
+	Involuntary context switches: 884
+	Swaps: 0
+	File system inputs: 1332000
+	File system outputs: 200
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
