@@ -1,0 +1,5428 @@
+{
+  "baseline_decode_ms": 36991.93,
+  "baseline_tok_s": 1.6760412338583035,
+  "batch_count": 11134,
+  "budget_rows": [
+    {
+      "budget_mib": 2048,
+      "covered_batches": 267,
+      "op_batches": {
+        "runtime_load": 267
+      },
+      "resident_bytes": 2147221504,
+      "resident_gib": 1.999755859375,
+      "role_rows": {
+        "gate": 333,
+        "up": 390
+      },
+      "saved_wait_ms": 725.0117210000002,
+      "selected_entries": 439,
+      "top_batches": [
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 1,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 4950,
+          "wait_ms": 2.55615
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 2,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 3741,
+          "wait_ms": 2.546401
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 3,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4593,
+          "wait_ms": 4.414588
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 4,
+          "resident_mib": 5.36328125,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 4951,
+          "wait_ms": 2.488281
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 5,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1013,
+          "wait_ms": 4.125354000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 6,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4594,
+          "wait_ms": 4.731639
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 7,
+          "resident_mib": 5.359375,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 3742,
+          "wait_ms": 2.357539
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 8,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4641,
+          "wait_ms": 3.800342
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 9,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1421,
+          "wait_ms": 2.0030069999999998
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 10,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1409,
+          "wait_ms": 3.7346890000000004
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 11,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 560,
+          "wait_ms": 5.449033999999999
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 12,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4642,
+          "wait_ms": 4.225924
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 13,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1014,
+          "wait_ms": 4.174634
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 14,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3389,
+          "wait_ms": 1.721085
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 15,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4281,
+          "wait_ms": 1.7167439999999998
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 16,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5145,
+          "wait_ms": 5.149992
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 17,
+          "resident_mib": 16.078125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5146,
+          "wait_ms": 6.006019
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "38": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 18,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1188,
+          "wait_ms": 1.663373
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 19,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 3436,
+          "wait_ms": 4.95633
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "7": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 20,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1276,
+          "wait_ms": 1.8540649999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 21,
+          "resident_mib": 13.4609375,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 1055,
+          "wait_ms": 4.87806
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 22,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1422,
+          "wait_ms": 1.9413660000000001
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 23,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2542,
+          "wait_ms": 4.782228
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 24,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5628,
+          "wait_ms": 4.7355789999999995
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 25,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 592,
+          "wait_ms": 1.683323
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 26,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2543,
+          "wait_ms": 4.693749
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "41": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 27,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5675,
+          "wait_ms": 1.556433
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "54": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 28,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2858,
+          "wait_ms": 4.660609000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "54": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 29,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4998,
+          "wait_ms": 1.881345
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 30,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5629,
+          "wait_ms": 4.640659
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 31,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 593,
+          "wait_ms": 1.634384
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 32,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3279,
+          "wait_ms": 1.9688569999999999
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "51": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 33,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5705,
+          "wait_ms": 1.533432
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 34,
+          "resident_mib": 16.078125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 559,
+          "wait_ms": 5.481346
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 35,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2700,
+          "wait_ms": 4.583648
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 36,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3957,
+          "wait_ms": 1.767375
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 37,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1410,
+          "wait_ms": 3.651481
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 38,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2699,
+          "wait_ms": 4.5811340000000005
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 39,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3958,
+          "wait_ms": 1.700863
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "41": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 40,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5697,
+          "wait_ms": 4.578247
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 41,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3390,
+          "wait_ms": 1.822135
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 42,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4282,
+          "wait_ms": 1.817094
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 43,
+          "resident_mib": 16.0859375,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 1056,
+          "wait_ms": 5.395824999999999
+        },
+        {
+          "jobs": 4,
+          "layers": {
+            "9": 4
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 44,
+          "resident_mib": 17.9375,
+          "roles": {
+            "gate": 4
+          },
+          "rows": 4,
+          "seq": 1644,
+          "wait_ms": 5.995078
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 45,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 5222,
+          "wait_ms": 8.938671999999999
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 46,
+          "resident_mib": 31.3984375,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 1460,
+          "wait_ms": 4.945810999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "9": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 47,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2724,
+          "wait_ms": 2.417367
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 48,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 386,
+          "wait_ms": 4.611738000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "9": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 49,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 5602,
+          "wait_ms": 1.826736
+        },
+        {
+          "jobs": 8,
+          "layers": {
+            "9": 8
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 50,
+          "resident_mib": 35.875,
+          "roles": {
+            "gate": 8
+          },
+          "rows": 8,
+          "seq": 206,
+          "wait_ms": 5.406055
+        }
+      ],
+      "top_layers": [
+        [
+          "9",
+          240
+        ],
+        [
+          "13",
+          136
+        ],
+        [
+          "1",
+          82
+        ],
+        [
+          "18",
+          22
+        ],
+        [
+          "17",
+          20
+        ],
+        [
+          "7",
+          19
+        ],
+        [
+          "38",
+          18
+        ],
+        [
+          "55",
+          15
+        ],
+        [
+          "54",
+          15
+        ],
+        [
+          "51",
+          14
+        ],
+        [
+          "48",
+          14
+        ],
+        [
+          "39",
+          12
+        ],
+        [
+          "21",
+          11
+        ],
+        [
+          "12",
+          8
+        ],
+        [
+          "41",
+          8
+        ],
+        [
+          "37",
+          8
+        ],
+        [
+          "22",
+          8
+        ],
+        [
+          "49",
+          7
+        ],
+        [
+          "43",
+          6
+        ],
+        [
+          "53",
+          6
+        ]
+      ]
+    },
+    {
+      "budget_mib": 4096,
+      "covered_batches": 525,
+      "op_batches": {
+        "current_down_overlap": 1,
+        "runtime_load": 524
+      },
+      "resident_bytes": 4294135808,
+      "resident_gib": 3.999225616455078,
+      "role_rows": {
+        "down": 2,
+        "gate": 927,
+        "up": 611
+      },
+      "saved_wait_ms": 1382.611058999999,
+      "selected_entries": 879,
+      "top_batches": [
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 1,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 4950,
+          "wait_ms": 2.55615
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 2,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 3741,
+          "wait_ms": 2.546401
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 3,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4593,
+          "wait_ms": 4.414588
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 4,
+          "resident_mib": 5.36328125,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 4951,
+          "wait_ms": 2.488281
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 5,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1013,
+          "wait_ms": 4.125354000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 6,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4594,
+          "wait_ms": 4.731639
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 7,
+          "resident_mib": 5.359375,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 3742,
+          "wait_ms": 2.357539
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 8,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4641,
+          "wait_ms": 3.800342
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 9,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1421,
+          "wait_ms": 2.0030069999999998
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 10,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1409,
+          "wait_ms": 3.7346890000000004
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 11,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 560,
+          "wait_ms": 5.449033999999999
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 12,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4642,
+          "wait_ms": 4.225924
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 13,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1014,
+          "wait_ms": 4.174634
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 14,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3389,
+          "wait_ms": 1.721085
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 15,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4281,
+          "wait_ms": 1.7167439999999998
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 16,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5145,
+          "wait_ms": 5.149992
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 17,
+          "resident_mib": 16.078125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5146,
+          "wait_ms": 6.006019
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "38": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 18,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1188,
+          "wait_ms": 1.663373
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 19,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 3436,
+          "wait_ms": 4.95633
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "7": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 20,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1276,
+          "wait_ms": 1.8540649999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 21,
+          "resident_mib": 13.4609375,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 1055,
+          "wait_ms": 4.87806
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 22,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1422,
+          "wait_ms": 1.9413660000000001
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 23,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2542,
+          "wait_ms": 4.782228
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 24,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5628,
+          "wait_ms": 4.7355789999999995
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 25,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 592,
+          "wait_ms": 1.683323
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 26,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2543,
+          "wait_ms": 4.693749
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "41": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 27,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5675,
+          "wait_ms": 1.556433
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "54": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 28,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2858,
+          "wait_ms": 4.660609000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "54": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 29,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4998,
+          "wait_ms": 1.881345
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 30,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5629,
+          "wait_ms": 4.640659
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 31,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 593,
+          "wait_ms": 1.634384
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 32,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3279,
+          "wait_ms": 1.9688569999999999
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "51": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 33,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5705,
+          "wait_ms": 1.533432
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 34,
+          "resident_mib": 16.078125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 559,
+          "wait_ms": 5.481346
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 35,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2700,
+          "wait_ms": 4.583648
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 36,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3957,
+          "wait_ms": 1.767375
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 37,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1410,
+          "wait_ms": 3.651481
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 38,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2699,
+          "wait_ms": 4.5811340000000005
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 39,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3958,
+          "wait_ms": 1.700863
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "41": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 40,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5697,
+          "wait_ms": 4.578247
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 41,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3390,
+          "wait_ms": 1.822135
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 42,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4282,
+          "wait_ms": 1.817094
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 43,
+          "resident_mib": 16.0859375,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 1056,
+          "wait_ms": 5.395824999999999
+        },
+        {
+          "jobs": 4,
+          "layers": {
+            "9": 4
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 44,
+          "resident_mib": 17.9375,
+          "roles": {
+            "gate": 4
+          },
+          "rows": 4,
+          "seq": 1644,
+          "wait_ms": 5.995078
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 45,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 5222,
+          "wait_ms": 8.938671999999999
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 46,
+          "resident_mib": 31.3984375,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 1460,
+          "wait_ms": 4.945810999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "9": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 47,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2724,
+          "wait_ms": 2.417367
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 48,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 386,
+          "wait_ms": 4.611738000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "9": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 49,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 5602,
+          "wait_ms": 1.826736
+        },
+        {
+          "jobs": 8,
+          "layers": {
+            "9": 8
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 50,
+          "resident_mib": 35.875,
+          "roles": {
+            "gate": 8
+          },
+          "rows": 8,
+          "seq": 206,
+          "wait_ms": 5.406055
+        }
+      ],
+      "top_layers": [
+        [
+          "9",
+          424
+        ],
+        [
+          "1",
+          340
+        ],
+        [
+          "7",
+          162
+        ],
+        [
+          "13",
+          146
+        ],
+        [
+          "18",
+          33
+        ],
+        [
+          "39",
+          27
+        ],
+        [
+          "38",
+          26
+        ],
+        [
+          "55",
+          26
+        ],
+        [
+          "37",
+          25
+        ],
+        [
+          "17",
+          23
+        ],
+        [
+          "42",
+          21
+        ],
+        [
+          "51",
+          18
+        ],
+        [
+          "48",
+          18
+        ],
+        [
+          "22",
+          18
+        ],
+        [
+          "43",
+          17
+        ],
+        [
+          "41",
+          16
+        ],
+        [
+          "15",
+          16
+        ],
+        [
+          "45",
+          16
+        ],
+        [
+          "54",
+          15
+        ],
+        [
+          "36",
+          15
+        ]
+      ]
+    },
+    {
+      "budget_mib": 6144,
+      "covered_batches": 782,
+      "op_batches": {
+        "current_down_overlap": 3,
+        "runtime_load": 779
+      },
+      "resident_bytes": 6439870464,
+      "resident_gib": 5.997596740722656,
+      "role_rows": {
+        "down": 5,
+        "gate": 1127,
+        "up": 1290
+      },
+      "saved_wait_ms": 2018.0347049999987,
+      "selected_entries": 1327,
+      "top_batches": [
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 1,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 4950,
+          "wait_ms": 2.55615
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 2,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 3741,
+          "wait_ms": 2.546401
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 3,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4593,
+          "wait_ms": 4.414588
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 4,
+          "resident_mib": 5.36328125,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 4951,
+          "wait_ms": 2.488281
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 5,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1013,
+          "wait_ms": 4.125354000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 6,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4594,
+          "wait_ms": 4.731639
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 7,
+          "resident_mib": 5.359375,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 3742,
+          "wait_ms": 2.357539
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 8,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4641,
+          "wait_ms": 3.800342
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 9,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1421,
+          "wait_ms": 2.0030069999999998
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 10,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1409,
+          "wait_ms": 3.7346890000000004
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 11,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 560,
+          "wait_ms": 5.449033999999999
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 12,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4642,
+          "wait_ms": 4.225924
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 13,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1014,
+          "wait_ms": 4.174634
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 14,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3389,
+          "wait_ms": 1.721085
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 15,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4281,
+          "wait_ms": 1.7167439999999998
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 16,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5145,
+          "wait_ms": 5.149992
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 17,
+          "resident_mib": 16.078125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5146,
+          "wait_ms": 6.006019
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "38": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 18,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1188,
+          "wait_ms": 1.663373
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 19,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 3436,
+          "wait_ms": 4.95633
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "7": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 20,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1276,
+          "wait_ms": 1.8540649999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 21,
+          "resident_mib": 13.4609375,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 1055,
+          "wait_ms": 4.87806
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 22,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1422,
+          "wait_ms": 1.9413660000000001
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 23,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2542,
+          "wait_ms": 4.782228
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 24,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5628,
+          "wait_ms": 4.7355789999999995
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 25,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 592,
+          "wait_ms": 1.683323
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 26,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2543,
+          "wait_ms": 4.693749
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "41": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 27,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5675,
+          "wait_ms": 1.556433
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "54": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 28,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2858,
+          "wait_ms": 4.660609000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "54": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 29,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4998,
+          "wait_ms": 1.881345
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 30,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5629,
+          "wait_ms": 4.640659
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 31,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 593,
+          "wait_ms": 1.634384
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 32,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3279,
+          "wait_ms": 1.9688569999999999
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "51": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 33,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5705,
+          "wait_ms": 1.533432
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 34,
+          "resident_mib": 16.078125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 559,
+          "wait_ms": 5.481346
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 35,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2700,
+          "wait_ms": 4.583648
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 36,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3957,
+          "wait_ms": 1.767375
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 37,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1410,
+          "wait_ms": 3.651481
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 38,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2699,
+          "wait_ms": 4.5811340000000005
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 39,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3958,
+          "wait_ms": 1.700863
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "41": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 40,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5697,
+          "wait_ms": 4.578247
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 41,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3390,
+          "wait_ms": 1.822135
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 42,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4282,
+          "wait_ms": 1.817094
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 43,
+          "resident_mib": 16.0859375,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 1056,
+          "wait_ms": 5.395824999999999
+        },
+        {
+          "jobs": 4,
+          "layers": {
+            "9": 4
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 44,
+          "resident_mib": 17.9375,
+          "roles": {
+            "gate": 4
+          },
+          "rows": 4,
+          "seq": 1644,
+          "wait_ms": 5.995078
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 45,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 5222,
+          "wait_ms": 8.938671999999999
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 46,
+          "resident_mib": 31.3984375,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 1460,
+          "wait_ms": 4.945810999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "9": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 47,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2724,
+          "wait_ms": 2.417367
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 48,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 386,
+          "wait_ms": 4.611738000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "9": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 49,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 5602,
+          "wait_ms": 1.826736
+        },
+        {
+          "jobs": 8,
+          "layers": {
+            "9": 8
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 50,
+          "resident_mib": 35.875,
+          "roles": {
+            "gate": 8
+          },
+          "rows": 8,
+          "seq": 206,
+          "wait_ms": 5.406055
+        }
+      ],
+      "top_layers": [
+        [
+          "1",
+          535
+        ],
+        [
+          "9",
+          435
+        ],
+        [
+          "13",
+          367
+        ],
+        [
+          "7",
+          167
+        ],
+        [
+          "43",
+          166
+        ],
+        [
+          "48",
+          67
+        ],
+        [
+          "41",
+          47
+        ],
+        [
+          "22",
+          44
+        ],
+        [
+          "54",
+          43
+        ],
+        [
+          "38",
+          40
+        ],
+        [
+          "39",
+          40
+        ],
+        [
+          "49",
+          35
+        ],
+        [
+          "18",
+          34
+        ],
+        [
+          "37",
+          34
+        ],
+        [
+          "36",
+          30
+        ],
+        [
+          "55",
+          28
+        ],
+        [
+          "21",
+          27
+        ],
+        [
+          "17",
+          23
+        ],
+        [
+          "42",
+          23
+        ],
+        [
+          "51",
+          21
+        ]
+      ]
+    },
+    {
+      "budget_mib": 8192,
+      "covered_batches": 1033,
+      "op_batches": {
+        "current_down_overlap": 5,
+        "runtime_load": 1028
+      },
+      "resident_bytes": 8589492224,
+      "resident_gib": 7.9995880126953125,
+      "role_rows": {
+        "down": 8,
+        "gate": 1455,
+        "up": 1889
+      },
+      "saved_wait_ms": 2663.659682000001,
+      "selected_entries": 1775,
+      "top_batches": [
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 1,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 4950,
+          "wait_ms": 2.55615
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 2,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 3741,
+          "wait_ms": 2.546401
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 3,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4593,
+          "wait_ms": 4.414588
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 4,
+          "resident_mib": 5.36328125,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 4951,
+          "wait_ms": 2.488281
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 5,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1013,
+          "wait_ms": 4.125354000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 6,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4594,
+          "wait_ms": 4.731639
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 7,
+          "resident_mib": 5.359375,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 3742,
+          "wait_ms": 2.357539
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 8,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4641,
+          "wait_ms": 3.800342
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 9,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1421,
+          "wait_ms": 2.0030069999999998
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 10,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1409,
+          "wait_ms": 3.7346890000000004
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 11,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 560,
+          "wait_ms": 5.449033999999999
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 12,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4642,
+          "wait_ms": 4.225924
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 13,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1014,
+          "wait_ms": 4.174634
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 14,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3389,
+          "wait_ms": 1.721085
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 15,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4281,
+          "wait_ms": 1.7167439999999998
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 16,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5145,
+          "wait_ms": 5.149992
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 17,
+          "resident_mib": 16.078125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5146,
+          "wait_ms": 6.006019
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "38": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 18,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1188,
+          "wait_ms": 1.663373
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 19,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 3436,
+          "wait_ms": 4.95633
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "7": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 20,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1276,
+          "wait_ms": 1.8540649999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 21,
+          "resident_mib": 13.4609375,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 1055,
+          "wait_ms": 4.87806
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 22,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1422,
+          "wait_ms": 1.9413660000000001
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 23,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2542,
+          "wait_ms": 4.782228
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 24,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5628,
+          "wait_ms": 4.7355789999999995
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 25,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 592,
+          "wait_ms": 1.683323
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 26,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2543,
+          "wait_ms": 4.693749
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "41": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 27,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5675,
+          "wait_ms": 1.556433
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "54": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 28,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2858,
+          "wait_ms": 4.660609000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "54": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 29,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4998,
+          "wait_ms": 1.881345
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 30,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5629,
+          "wait_ms": 4.640659
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 31,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 593,
+          "wait_ms": 1.634384
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 32,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3279,
+          "wait_ms": 1.9688569999999999
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "51": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 33,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5705,
+          "wait_ms": 1.533432
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 34,
+          "resident_mib": 16.078125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 559,
+          "wait_ms": 5.481346
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 35,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2700,
+          "wait_ms": 4.583648
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 36,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3957,
+          "wait_ms": 1.767375
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 37,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1410,
+          "wait_ms": 3.651481
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 38,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2699,
+          "wait_ms": 4.5811340000000005
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 39,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3958,
+          "wait_ms": 1.700863
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "41": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 40,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5697,
+          "wait_ms": 4.578247
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 41,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3390,
+          "wait_ms": 1.822135
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 42,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4282,
+          "wait_ms": 1.817094
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 43,
+          "resident_mib": 16.0859375,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 1056,
+          "wait_ms": 5.395824999999999
+        },
+        {
+          "jobs": 4,
+          "layers": {
+            "9": 4
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 44,
+          "resident_mib": 17.9375,
+          "roles": {
+            "gate": 4
+          },
+          "rows": 4,
+          "seq": 1644,
+          "wait_ms": 5.995078
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 45,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 5222,
+          "wait_ms": 8.938671999999999
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 46,
+          "resident_mib": 31.3984375,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 1460,
+          "wait_ms": 4.945810999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "9": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 47,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2724,
+          "wait_ms": 2.417367
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 48,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 386,
+          "wait_ms": 4.611738000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "9": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 49,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 5602,
+          "wait_ms": 1.826736
+        },
+        {
+          "jobs": 8,
+          "layers": {
+            "9": 8
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 50,
+          "resident_mib": 35.875,
+          "roles": {
+            "gate": 8
+          },
+          "rows": 8,
+          "seq": 206,
+          "wait_ms": 5.406055
+        }
+      ],
+      "top_layers": [
+        [
+          "1",
+          573
+        ],
+        [
+          "9",
+          435
+        ],
+        [
+          "17",
+          419
+        ],
+        [
+          "13",
+          381
+        ],
+        [
+          "43",
+          189
+        ],
+        [
+          "41",
+          183
+        ],
+        [
+          "7",
+          167
+        ],
+        [
+          "42",
+          131
+        ],
+        [
+          "54",
+          80
+        ],
+        [
+          "48",
+          67
+        ],
+        [
+          "49",
+          65
+        ],
+        [
+          "40",
+          54
+        ],
+        [
+          "22",
+          53
+        ],
+        [
+          "21",
+          51
+        ],
+        [
+          "37",
+          50
+        ],
+        [
+          "18",
+          45
+        ],
+        [
+          "55",
+          43
+        ],
+        [
+          "39",
+          41
+        ],
+        [
+          "38",
+          40
+        ],
+        [
+          "36",
+          34
+        ]
+      ]
+    },
+    {
+      "budget_mib": 10240,
+      "covered_batches": 1267,
+      "op_batches": {
+        "current_down_overlap": 6,
+        "runtime_load": 1261
+      },
+      "resident_bytes": 10732867584,
+      "resident_gib": 9.99576187133789,
+      "role_rows": {
+        "down": 9,
+        "gate": 1535,
+        "up": 2805
+      },
+      "saved_wait_ms": 3321.3809660000034,
+      "selected_entries": 2222,
+      "top_batches": [
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 1,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 4950,
+          "wait_ms": 2.55615
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 2,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 3741,
+          "wait_ms": 2.546401
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 3,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4593,
+          "wait_ms": 4.414588
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 4,
+          "resident_mib": 5.36328125,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 4951,
+          "wait_ms": 2.488281
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 5,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1013,
+          "wait_ms": 4.125354000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 6,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4594,
+          "wait_ms": 4.731639
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 7,
+          "resident_mib": 5.359375,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 3742,
+          "wait_ms": 2.357539
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 8,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4641,
+          "wait_ms": 3.800342
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 9,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1421,
+          "wait_ms": 2.0030069999999998
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 10,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1409,
+          "wait_ms": 3.7346890000000004
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 11,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 560,
+          "wait_ms": 5.449033999999999
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 12,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4642,
+          "wait_ms": 4.225924
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 13,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1014,
+          "wait_ms": 4.174634
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 14,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3389,
+          "wait_ms": 1.721085
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 15,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4281,
+          "wait_ms": 1.7167439999999998
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 16,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5145,
+          "wait_ms": 5.149992
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 17,
+          "resident_mib": 16.078125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5146,
+          "wait_ms": 6.006019
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "38": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 18,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1188,
+          "wait_ms": 1.663373
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 19,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 3436,
+          "wait_ms": 4.95633
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "7": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 20,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1276,
+          "wait_ms": 1.8540649999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 21,
+          "resident_mib": 13.4609375,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 1055,
+          "wait_ms": 4.87806
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 22,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1422,
+          "wait_ms": 1.9413660000000001
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 23,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2542,
+          "wait_ms": 4.782228
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 24,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5628,
+          "wait_ms": 4.7355789999999995
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 25,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 592,
+          "wait_ms": 1.683323
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 26,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2543,
+          "wait_ms": 4.693749
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "41": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 27,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5675,
+          "wait_ms": 1.556433
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "54": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 28,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2858,
+          "wait_ms": 4.660609000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "54": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 29,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4998,
+          "wait_ms": 1.881345
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 30,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5629,
+          "wait_ms": 4.640659
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 31,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 593,
+          "wait_ms": 1.634384
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 32,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3279,
+          "wait_ms": 1.9688569999999999
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "51": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 33,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5705,
+          "wait_ms": 1.533432
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 34,
+          "resident_mib": 16.078125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 559,
+          "wait_ms": 5.481346
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 35,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2700,
+          "wait_ms": 4.583648
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 36,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3957,
+          "wait_ms": 1.767375
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 37,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1410,
+          "wait_ms": 3.651481
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 38,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2699,
+          "wait_ms": 4.5811340000000005
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 39,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3958,
+          "wait_ms": 1.700863
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "41": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 40,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5697,
+          "wait_ms": 4.578247
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 41,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3390,
+          "wait_ms": 1.822135
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 42,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4282,
+          "wait_ms": 1.817094
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 43,
+          "resident_mib": 16.0859375,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 1056,
+          "wait_ms": 5.395824999999999
+        },
+        {
+          "jobs": 4,
+          "layers": {
+            "9": 4
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 44,
+          "resident_mib": 17.9375,
+          "roles": {
+            "gate": 4
+          },
+          "rows": 4,
+          "seq": 1644,
+          "wait_ms": 5.995078
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 45,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 5222,
+          "wait_ms": 8.938671999999999
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 46,
+          "resident_mib": 31.3984375,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 1460,
+          "wait_ms": 4.945810999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "9": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 47,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2724,
+          "wait_ms": 2.417367
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 48,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 386,
+          "wait_ms": 4.611738000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "9": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 49,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 5602,
+          "wait_ms": 1.826736
+        },
+        {
+          "jobs": 8,
+          "layers": {
+            "9": 8
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 50,
+          "resident_mib": 35.875,
+          "roles": {
+            "gate": 8
+          },
+          "rows": 8,
+          "seq": 206,
+          "wait_ms": 5.406055
+        }
+      ],
+      "top_layers": [
+        [
+          "1",
+          576
+        ],
+        [
+          "9",
+          435
+        ],
+        [
+          "17",
+          419
+        ],
+        [
+          "13",
+          395
+        ],
+        [
+          "22",
+          262
+        ],
+        [
+          "18",
+          238
+        ],
+        [
+          "43",
+          216
+        ],
+        [
+          "49",
+          202
+        ],
+        [
+          "7",
+          190
+        ],
+        [
+          "38",
+          186
+        ],
+        [
+          "41",
+          183
+        ],
+        [
+          "40",
+          169
+        ],
+        [
+          "39",
+          148
+        ],
+        [
+          "42",
+          131
+        ],
+        [
+          "54",
+          81
+        ],
+        [
+          "48",
+          67
+        ],
+        [
+          "37",
+          51
+        ],
+        [
+          "21",
+          51
+        ],
+        [
+          "55",
+          47
+        ],
+        [
+          "36",
+          34
+        ]
+      ]
+    },
+    {
+      "budget_mib": 12288,
+      "covered_batches": 1493,
+      "op_batches": {
+        "current_down_overlap": 6,
+        "runtime_load": 1487
+      },
+      "resident_bytes": 12882452480,
+      "resident_gib": 11.997718811035156,
+      "role_rows": {
+        "down": 13,
+        "gate": 1900,
+        "up": 3375
+      },
+      "saved_wait_ms": 3946.868799000003,
+      "selected_entries": 2673,
+      "top_batches": [
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 1,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 4950,
+          "wait_ms": 2.55615
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 2,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 3741,
+          "wait_ms": 2.546401
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 3,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4593,
+          "wait_ms": 4.414588
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "38": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 4,
+          "resident_mib": 5.36328125,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 4951,
+          "wait_ms": 2.488281
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 5,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1013,
+          "wait_ms": 4.125354000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 6,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4594,
+          "wait_ms": 4.731639
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "49": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 7,
+          "resident_mib": 5.359375,
+          "roles": {
+            "gate": 1
+          },
+          "rows": 1,
+          "seq": 3742,
+          "wait_ms": 2.357539
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 8,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4641,
+          "wait_ms": 3.800342
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 9,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1421,
+          "wait_ms": 2.0030069999999998
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 10,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1409,
+          "wait_ms": 3.7346890000000004
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 11,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 560,
+          "wait_ms": 5.449033999999999
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 12,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4642,
+          "wait_ms": 4.225924
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "39": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 13,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1014,
+          "wait_ms": 4.174634
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 14,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3389,
+          "wait_ms": 1.721085
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 15,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4281,
+          "wait_ms": 1.7167439999999998
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 16,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5145,
+          "wait_ms": 5.149992
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "43": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 17,
+          "resident_mib": 16.078125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5146,
+          "wait_ms": 6.006019
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "38": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 18,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 1188,
+          "wait_ms": 1.663373
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 19,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 3436,
+          "wait_ms": 4.95633
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "7": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 20,
+          "resident_mib": 8.97265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1276,
+          "wait_ms": 1.8540649999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 21,
+          "resident_mib": 13.4609375,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 1055,
+          "wait_ms": 4.87806
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 22,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1422,
+          "wait_ms": 1.9413660000000001
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 23,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2542,
+          "wait_ms": 4.782228
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 24,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5628,
+          "wait_ms": 4.7355789999999995
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 25,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 592,
+          "wait_ms": 1.683323
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "12": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 26,
+          "resident_mib": 13.45703125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2543,
+          "wait_ms": 4.693749
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "41": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 27,
+          "resident_mib": 4.48828125,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5675,
+          "wait_ms": 1.556433
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "54": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 28,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2858,
+          "wait_ms": 4.660609000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "54": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 29,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 4998,
+          "wait_ms": 1.881345
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "18": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 30,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 5629,
+          "wait_ms": 4.640659
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 31,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 593,
+          "wait_ms": 1.634384
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "18": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 32,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3279,
+          "wait_ms": 1.9688569999999999
+        },
+        {
+          "jobs": 1,
+          "layers": {
+            "51": 1
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 33,
+          "resident_mib": 4.484375,
+          "roles": {
+            "up": 1
+          },
+          "rows": 1,
+          "seq": 5705,
+          "wait_ms": 1.533432
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "7": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 34,
+          "resident_mib": 16.078125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 559,
+          "wait_ms": 5.481346
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 35,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2700,
+          "wait_ms": 4.583648
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 36,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3957,
+          "wait_ms": 1.767375
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "51": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 37,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 1410,
+          "wait_ms": 3.651481
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "1": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 38,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 2699,
+          "wait_ms": 4.5811340000000005
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "1": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 39,
+          "resident_mib": 8.96875,
+          "roles": {
+            "up": 2
+          },
+          "rows": 2,
+          "seq": 3958,
+          "wait_ms": 1.700863
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "41": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 40,
+          "resident_mib": 13.453125,
+          "roles": {
+            "up": 3
+          },
+          "rows": 3,
+          "seq": 5697,
+          "wait_ms": 4.578247
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "55": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 41,
+          "resident_mib": 10.72265625,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 3390,
+          "wait_ms": 1.822135
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "49": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 42,
+          "resident_mib": 10.71875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 4282,
+          "wait_ms": 1.817094
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "53": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 43,
+          "resident_mib": 16.0859375,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 1056,
+          "wait_ms": 5.395824999999999
+        },
+        {
+          "jobs": 4,
+          "layers": {
+            "9": 4
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 44,
+          "resident_mib": 17.9375,
+          "roles": {
+            "gate": 4
+          },
+          "rows": 4,
+          "seq": 1644,
+          "wait_ms": 5.995078
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 45,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 5222,
+          "wait_ms": 8.938671999999999
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 46,
+          "resident_mib": 31.3984375,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 1460,
+          "wait_ms": 4.945810999999999
+        },
+        {
+          "jobs": 3,
+          "layers": {
+            "9": 3
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 47,
+          "resident_mib": 13.453125,
+          "roles": {
+            "gate": 3
+          },
+          "rows": 3,
+          "seq": 2724,
+          "wait_ms": 2.417367
+        },
+        {
+          "jobs": 7,
+          "layers": {
+            "9": 7
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 48,
+          "resident_mib": 31.390625,
+          "roles": {
+            "gate": 7
+          },
+          "rows": 7,
+          "seq": 386,
+          "wait_ms": 4.611738000000001
+        },
+        {
+          "jobs": 2,
+          "layers": {
+            "9": 2
+          },
+          "op": "runtime_load",
+          "prompt": "dev_france_regression",
+          "rank": 49,
+          "resident_mib": 8.96875,
+          "roles": {
+            "gate": 2
+          },
+          "rows": 2,
+          "seq": 5602,
+          "wait_ms": 1.826736
+        },
+        {
+          "jobs": 8,
+          "layers": {
+            "9": 8
+          },
+          "op": "runtime_load",
+          "prompt": "dev_intelligence_general",
+          "rank": 50,
+          "resident_mib": 35.875,
+          "roles": {
+            "gate": 8
+          },
+          "rows": 8,
+          "seq": 206,
+          "wait_ms": 5.406055
+        }
+      ],
+      "top_layers": [
+        [
+          "1",
+          594
+        ],
+        [
+          "22",
+          454
+        ],
+        [
+          "9",
+          442
+        ],
+        [
+          "17",
+          427
+        ],
+        [
+          "13",
+          404
+        ],
+        [
+          "43",
+          271
+        ],
+        [
+          "18",
+          238
+        ],
+        [
+          "42",
+          227
+        ],
+        [
+          "39",
+          218
+        ],
+        [
+          "49",
+          214
+        ],
+        [
+          "36",
+          210
+        ],
+        [
+          "7",
+          201
+        ],
+        [
+          "38",
+          186
+        ],
+        [
+          "41",
+          183
+        ],
+        [
+          "21",
+          169
+        ],
+        [
+          "40",
+          169
+        ],
+        [
+          "46",
+          103
+        ],
+        [
+          "54",
+          102
+        ],
+        [
+          "48",
+          67
+        ],
+        [
+          "37",
+          51
+        ]
+      ]
+    }
+  ],
+  "decode_runs": 62,
+  "inputs": [
+    "/root/lfz/runs/vendor-kimi-token-rate/20260712-active-goal-c7b69-io-read-trace-n32-114538/dev_france_regression/io-read-trace.csv",
+    "/root/lfz/runs/vendor-kimi-token-rate/20260712-active-goal-c7b69-io-read-trace-n32-114538/dev_intelligence_general/io-read-trace.csv"
+  ],
+  "kind": "kimi_batch_cover_ram_oracle",
+  "max_jobs": 8,
+  "prompt_count": 2,
+  "roles": [
+    "down",
+    "gate",
+    "up"
+  ],
+  "total_wait_ms": 30673.20039400002,
+  "total_wait_ms_per_token": 494.7290386129036,
+  "trace_count": 2,
+  "unique_keys": 24053
+}

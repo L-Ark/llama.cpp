@@ -1,0 +1,6 @@
+source_root=/root/lfz/runs/vendor-kimi-token-rate/20260712-active-goal-c7b69-io-read-trace-n32-114538
+baseline_decode_ms=36991.93
+head=c7b69a97edac06a8d583ba4f195a27917458371a
+short=c7b69a97e
+branch=vendor/kimi-deepseek-41d205-additive
+generated_utc=2026-07-12T11:51:12Z

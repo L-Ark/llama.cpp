@@ -276,6 +276,54 @@ Decision:
 - Scheduler-only work remains secondary unless an offline bound shows it can
   save a material fraction of the `82.5 ms/token` endpoint gap.
 
+### RAM Slab Per-Read Trace Screen (2026-07-12 20:08 CST)
+
+Artifact:
+
+- `.Agent/runs/20260712-active-goal-c7b69-ram-slab-trace-screen/report.md`
+
+This follows the previous decision to collect `io-read-trace.csv` before
+making any stronger RAM/VRAM storage claim. It uses current HEAD `c7b69a97e`,
+two generalized dev prompts, `N=32`, cold start, `16 GB` cgroup, and no
+runtime-code changes.
+
+Trace quality/resource gates:
+
+- `dev_france_regression`: pass, `1.68 tok/s`, RAM peak
+  `12773388288`, fallback `0`, direct reads `0`;
+- `dev_intelligence_general`: pass, `1.67 tok/s`, RAM peak
+  `12609302528`, fallback `0`, direct reads `0`.
+
+Complete-batch RAM cover oracle:
+
+- traces: `2`;
+- decode runs: `62`;
+- baseline decode: `36991.93 ms`, `1.676 tok/s`;
+- profiled IO wait: `30673.200 ms`, `494.729 ms/token`;
+- even with dev-overfit complete-batch selection:
+  - `8192 MiB` RAM covers `1033` batches and bounds at `1.806 tok/s`;
+  - `10240 MiB` RAM covers `1267` batches and bounds at `1.841 tok/s`;
+  - `12288 MiB` RAM covers `1493` batches and bounds at `1.876 tok/s`.
+
+Layer/slab screen:
+
+- best clean whole upgate slabs are around `6-7 ms/token` each;
+- best whole-layer slabs are around `9-11 ms/token` each;
+- greedy `layer_upgate` under `10240 MiB` saves only `49.90 ms/token`;
+- greedy `layer_all` under `10240 MiB` saves only `40.51 ms/token`.
+
+Decision:
+
+- RAM slabs are rejected as the next primary route to `2 tok/s`.
+- This rejection is stronger than the previous coarse estimate because it uses
+  actual per-read traces and an optimistic complete-batch oracle.
+- RAM/VRAM storage work remains an auxiliary optimization after lower-byte
+  movement or a stronger predictor reduces the remaining movement enough that
+  `40-60 ms/token` matters.
+- Do not implement a RAM slab runtime A/B before a higher-leverage lower-byte
+  admission succeeds, unless a future prompt-general trace produces a much
+  denser candidate than this screen.
+
 ## Current Goal and Execution Plan (2026-07-12 18:43 CST)
 
 This is the active working goal for the next execution cycle. It is written
