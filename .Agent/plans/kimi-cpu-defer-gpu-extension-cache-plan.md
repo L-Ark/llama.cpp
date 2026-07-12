@@ -631,6 +631,206 @@ Next direction after this rejection:
   - or split coalesced SSD read readiness from per-expert H2D readiness so that
     larger reads do not block earlier up/gate slices.
 
+### 2026-07-12 Byte-Reduction Target Bound
+
+Timestamp: 2026-07-12 CST.
+
+Purpose:
+
+- Quantify how much expert movement must shrink to reach the near-term
+  `>=2 tok/s` milestone and the long-term `>5 tok/s` target.
+- Decide whether more cache/scheduler tuning can plausibly close the gap.
+- Tie the decision to existing quant/re-encode and residual-compression screens
+  before writing any runtime low-byte path.
+
+Input profile:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009`.
+- Branch: `vendor/kimi-deepseek-41d205-additive`.
+- Analysis commit: `be055f882`.
+- Prompt set:
+  `.Agent/evals/kimi-general-dev-prompts.jsonl`.
+- Prompts:
+  - `dev_france_regression`;
+  - `dev_japan_factual`;
+  - `dev_photosynthesis_factual`;
+  - `dev_linear_equation`;
+  - `dev_python_reverse`;
+  - `dev_zh_france`;
+  - `dev_mixed_summary`.
+- Config:
+  - cold start per prompt;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - `N=32`, `PROFILE=1`;
+  - `VRAM_MIB=15000`, `UPGATE_PCT=72`;
+  - v2 full-cover down iouring enabled;
+  - current-down overlap disabled;
+  - quality pass on all seven dev prompts.
+
+Artifacts:
+
+- Result root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-byte-reduction-bound-003702`.
+- Target `2 tok/s` report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-byte-reduction-bound-003702/target2.md`.
+- Target `5 tok/s` report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-byte-reduction-bound-003702/target5.md`.
+- Quant split sweep:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-byte-reduction-bound-003702/quant-split-sweep.md`.
+
+Commands:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009
+OUT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-byte-reduction-bound-003702
+
+python3 .Agent/run-tools/kimi_byte_reduction_target_bound.py \
+  --runs-root "$ROOT" \
+  --out "$OUT/target2.md" \
+  --target-tps 2.0 \
+  --peak-gib-s 10.4 \
+  --evidence-scope dev7-current-config-n32
+
+python3 .Agent/run-tools/kimi_byte_reduction_target_bound.py \
+  --runs-root "$ROOT" \
+  --out "$OUT/target5.md" \
+  --target-tps 5.0 \
+  --peak-gib-s 10.4 \
+  --evidence-scope dev7-current-config-n32
+
+python3 .Agent/run-tools/kimi_quant_split_sweep_bound.py \
+  --runs-root "$ROOT" \
+  --ratios 1.0,0.75,0.5,0.4,0.33,0.25 \
+  --pcts 40,45,50,55,60,62,65,70,72,75,80 \
+  --current-pct 72 \
+  --out-json "$OUT/quant-split-sweep.json" \
+  --out-md "$OUT/quant-split-sweep.md"
+```
+
+Target `2 tok/s` result:
+
+| metric | value |
+|---|---:|
+| median moved bytes | `6.61 GiB/token` |
+| mean moved bytes | `7.11 GiB/token` |
+| median active expert footprint before cache | `13.21 GiB/token` |
+| mean active expert footprint before cache | `13.59 GiB/token` |
+| median all-hit MoE floor estimate | `137.2 ms/token` |
+| mean all-hit MoE floor estimate | `135.3 ms/token` |
+| median required byte ratio at `10.4 GiB/s` after floor | `0.56x` |
+| worst required byte ratio at `10.4 GiB/s` after floor | `0.36x` |
+
+Role miss bytes across the dev7 traces:
+
+| role | miss GiB | miss share |
+|---|---:|---:|
+| `down` | `473.94` | `34.8%` |
+| `gate` | `462.29` | `33.9%` |
+| `up` | `427.57` | `31.4%` |
+
+Interpretation for `2 tok/s`:
+
+- A median prompt needs about `44%` movement-byte reduction even after assuming
+  pure IO-bench bandwidth and reserving an optimistic all-hit MoE compute floor.
+- The worst dev prompt needs about `64%` movement-byte reduction.
+- Because miss bytes are broad across `down`, `gate`, and `up`, a down-only or
+  gate-only optimization is unlikely to make all dev prompts stable above
+  `2 tok/s`.
+- Scheduler/cache tuning can still help as a combination component, but it
+  cannot replace a material representation-byte reduction.
+
+Target `5 tok/s` result:
+
+| metric | value |
+|---|---:|
+| median required byte ratio at `10.4 GiB/s` after floor | `0.10x` |
+| worst required byte ratio at `10.4 GiB/s` after floor | `0.00x` |
+
+Interpretation for `5 tok/s`:
+
+- `5 tok/s` is not reachable with current expert representation plus cache/IO
+  scheduling only.
+- At least one dev prompt has an estimated all-hit MoE floor above the `200
+  ms/token` budget (`dev_linear_equation`, `211.1 ms/token`), so the final
+  path must also reduce compute/staging overhead or change the expert compute
+  form, not only SSD bytes.
+- The required median movement ratio is around `0.10x`, which rules out small
+  static cache improvements as a primary path.
+
+Quant split sweep result:
+
+- Current ratio `1.0`, current `UPGATE_PCT=72`, simulated miss:
+  `8.701 GiB/token`.
+- Best split at ratio `1.0` is `UPGATE_PCT=60`, simulated miss:
+  `8.661 GiB/token`, only `0.47%` better.
+- For future byte-reduced representations, the best split remains around
+  `60%` upgate in this LFU route-trace model:
+  - ratio `0.50`: best `3.525 GiB/token`, current split `3.555`, gain `0.84%`;
+  - ratio `0.33`: best `1.943 GiB/token`, current split `1.964`, gain `1.10%`;
+  - ratio `0.25`: best `1.252 GiB/token`, current split `1.271`, gain `1.50%`.
+
+Decision from split sweep:
+
+- Do not spend another runtime A/B on VRAM split retuning alone.
+- If a new byte-reduced representation is introduced, start its first split
+  around `60%` upgate / `40%` down in dev screens, but do not treat split
+  tuning as the main optimization.
+
+Existing representation screens relevant to this bound:
+
+- Naive quant re-encode report:
+  `.Agent/runs/20260707-gp11-quant-reencode-bound/report.md`.
+  - To reach `<=0.55x`, only 1-bit blockwise candidates fit.
+  - Their rel L2 is about `1.78-1.86`.
+  - To reach `<=0.40x`, only two sampled IQ3_XXS gate rows fit, and rel L2 is
+    about `2.07`.
+  - 2-bit candidates have lower error, but their byte ratios are
+    `0.67-0.88x`, above the worst-case `2 tok/s` requirement and far above the
+    `5 tok/s` requirement.
+- D2MoE-style residual rank samples:
+  `.Agent/runs/20260706-kimi-d2moe-phase0/residual-rank-*.md`.
+  - Rank-128 residuals still have residual norm ratio around `0.94-0.95`.
+  - This is not a viable standalone residual representation without a richer
+    correction model.
+- Clustered base-expert bound:
+  `.Agent/runs/20260706-kimi-d2moe-phase0/cluster-base-blk56-down-top32.md`.
+  - Even with `16` clusters, rank-128 error/weight is about `0.5002`.
+  - Base memory cost rises to `448 MiB` for a single down tensor sample.
+- Generic exact lossless/XOR residual compression was already rejected in
+  `.Agent/plans/kimi-next-expert-transfer-optimization-plan.md`:
+  it did not approach the `0.30x-0.40x` target.
+- Activation-aware block scaling improved error but still failed the output
+  gate:
+  `.Agent/plans/kimi-next-expert-transfer-optimization-plan.md` GP68.
+
+Decision:
+
+- Reject naive global low-bit re-encoding as the next runtime path.
+- Reject VRAM split tuning as a primary path.
+- Reject generic lossless compression and simple base+low-rank residual as
+  standalone `2 tok/s` or `5 tok/s` paths.
+- The next byte-reduction candidate must be selective and activation-gated:
+  1. choose high-wait `up/gate/down` miss buckets from dev only;
+  2. test a richer representation, such as activation-weighted codebooks or
+     selective residual correction;
+  3. require an activation-output error gate before any runtime pack/kernel;
+  4. only then run a default-off N32 cold-start A/B.
+
+Next immediate plan:
+
+- Build an offline selective low-byte admission that combines:
+  - current dev7 wait/miss bytes by layer/role/expert;
+  - required byte-ratio target (`0.56x` median, `0.36x` worst for `2 tok/s`);
+  - existing activation-output/error screens;
+  - expected saved endpoint milliseconds.
+- It must output one of:
+  - a candidate list that has enough theoretical saving and passes the
+    activation-output gate; or
+  - a rejection showing that current available low-byte methods cannot meet the
+    quality/speed gate, forcing a move to stronger predictor/draft-router or
+    compute-form changes.
+
 ### 2026-07-12 Result: current v2 partial-split bound is not enough
 
 Commit under test: `cf5645adf`.
