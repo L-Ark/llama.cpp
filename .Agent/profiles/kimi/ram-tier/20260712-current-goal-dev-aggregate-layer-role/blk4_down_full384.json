@@ -1,0 +1,21 @@
+{
+  "alias_tsv": "/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv",
+  "by_role": {
+    "blk.4.down": {
+      "bytes": 2994733056,
+      "entries": 384
+    }
+  },
+  "bytes": 2994733056,
+  "entries": 384,
+  "gib": 2.7890625,
+  "kind": "kimi_layer_ram_profile_from_alias",
+  "layers": [
+    4
+  ],
+  "mib": 2856.0,
+  "out_profile": ".Agent/profiles/kimi/ram-tier/20260712-current-goal-dev-aggregate-layer-role/blk4_down_full384.csv",
+  "roles": [
+    "down"
+  ]
+}

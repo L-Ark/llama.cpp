@@ -256,6 +256,19 @@ Next implementation gate:
 4. Complete `i1-IQ1_S` full-model smoke still requires explicit storage
    cleanup/download approval.
 
+Candidate profiles generated:
+
+- artifact:
+  `.Agent/runs/20260712-current-goal-gpu-extension-path-gate/ram-tier-candidate-profiles.md`;
+- profile directory:
+  `.Agent/profiles/kimi/ram-tier/20260712-current-goal-dev-aggregate-layer-role/`;
+- `blk14_gate_full384`: `384` entries, `2.0098 GiB`;
+- `blk14_upgate_full384`: `768` entries, `3.6914 GiB`;
+- `blk4_down_full384`: `384` entries, `2.7891 GiB`.
+
+These profiles are A/B inputs only. They are not SOTA results. The next run must
+be paired cold-start baseline vs candidate under `MemoryMax=15900000000`.
+
 ### 2026-07-12 Activation-Aware Lower-Byte Admission Result
 
 Artifact:
