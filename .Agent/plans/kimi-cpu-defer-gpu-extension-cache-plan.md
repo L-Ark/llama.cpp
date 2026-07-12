@@ -4,6 +4,98 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Current Goal: Generalized Kimi `>2 tok/s` First, Then `5 tok/s`
+
+### Goal
+
+当前 goal 是在现有 `vendor/kimi-deepseek-41d205-additive` 分支上，把 Kimi 的
+generalized/random prompt 冷启动 decode rate 先稳定推进到 `>2 tok/s`，同时保持后续
+`>5 tok/s` 的路线不被 prompt-specific cache 或不可复现实验污染。
+
+硬约束保持不变：
+
+- Host RAM 必须 `<16 GB`，并且包含 page cache、RSS、pinned staging、显式 RAM expert
+  cache；
+- 单卡 `32 GB RTX 5090`，尽可能用满 VRAM，但不能用会破坏 TTFT/RAM/质量门禁的缓存；
+- 必须 cold start；
+- 优化必须面向 generalized prompts，不允许用最终 held-out/test prompts 调参；
+- `Please introduce France in a short paragraph.` 必须语义正确、连贯；
+- TTFT 不能比对应 baseline 升高超过 `20%`；
+- 每个 SOTA 必须可复现：commit body 写清提升幅度、env、命令、prompt/test set、RAM/VRAM、
+  TTFT、quality、rollback point，并立即 push。
+
+### Current Assessment
+
+刚完成的 CPU/defer GPU-extension audit 显示，当前 Kimi 路径已经不是“CPU fallback 为主、
+GPU 偶尔接住”的状态：
+
+- `up_gate` 和 `down` 均为 `batch_accept == calls`，`batch_decline == 0`；
+- true CPU fallback rows 为 `0`；
+- copy-profile 全部是 `pack_hit=1`、`iouring=1`、`ram_hit=0`；
+- 两个 generalized dev prompts 加权 decode 约 `1.51 tok/s`；
+- 专家 payload 约 `6.54 GiB/token`，按实测 `~10.3 GiB/s` 传输上限，单靠 scheduler
+  co-submit 不能稳定达到 `2 tok/s`。
+
+所以 DeepSeek 的 `CPU/defer main path + GPU expert-cache extension` 思路对 Kimi 的结论是：
+
+- 作为 regression gate 很重要，必须继续保证 gate/up/down 不退回 CPU/GGUF fallback；
+- 但它当前已经基本接住 Kimi 的主路径，不再是下一阶段最大增益来源；
+- 下一步主线必须减少 critical-path moved bytes，或者把需求读取提前到真正可覆盖的位置。
+
+### Execution Plan
+
+1. 固化当前可复现 baseline。
+   - 重新跑一个 generalized dev prompt 和 France quality gate；
+   - 记录 token rate、TTFT、prompt token rate、RAM peak、file/page-cache、pinned/RSS、
+     VRAM、输出文本；
+   - 同时记录 `copy-profile.csv`、`route-profile.csv`、fallback profile；
+   - 若结果不能复现当前 `~1.5 tok/s` 级别，先定位复现偏差，不进入优化。
+
+2. 把 CPU/defer GPU-extension 作为每次实验的强制回归检查。
+   - `up_gate batch_accept == calls`；
+   - `down batch_accept == calls`；
+   - true CPU fallback rows 必须为 `0`；
+   - prompt fallback 不允许重新出现；
+   - 一旦失败，先修 fast path 覆盖，不把结果声明为性能优化。
+
+3. 做 router-score / hidden-state predictor 的探索性 trace。
+   - 现有 route-history predictor 已证明 recall/full-step 不足，不能作为主线；
+   - 下一步先审计 Kimi graph 中 router logits、top-k weights、margin、entropy 是否能 default-off
+     写入 trace；
+   - 如果能 trace，先只做离线 predictor 评估：recall、precision、pred/actual bytes、full-step
+     cover、理论 saved wait；
+   - 只有离线结果满足 `>=100 ms/token` exposed-wait saving 且 moved bytes 不爆炸，才进入 runtime
+     prefetch A/B。
+
+4. 做 RAM/VRAM 显式存储重排，但必须先过 oracle。
+   - 目标不是提高表面 hit rate，而是替换 decode 阶段低价值 file-backed page cache；
+   - 候选包括：次热 expert RAM cache、低命中层整层 up/gate slab、必要时完整层
+     gate/up/down slab；
+   - 任何 RAM plan 必须先用 trace oracle 估算 saved exposed wait、RAM bytes、TTFT cost；
+   - 若 oracle 不能达到 `>=100 ms/token` saving，不做 runtime A/B；
+   - runtime A/B 必须拆分 RAM->VRAM H2D、SSD->RAM/VRAM wait、page reclaim/refault、TTFT。
+
+5. 对 lower-byte expert representation 只做新家族，不重复旧 blockwise 失败路线。
+   - 旧 blockwise activation-output smoke 没有 passing candidate，不能再作为默认主线；
+   - 新方案必须先证明 France 与 generalized dev 的语义质量不退化；
+   - 任何低字节方案必须同时报告 byte ratio、相对误差、输出文本、token rate、fallback 和 RAM。
+
+6. SOTA 接受与回退。
+   - generalized dev 平均提升，held-out/test 只做最终验证；
+   - RAM `<16 GB`，TTFT `<= baseline * 1.20`，质量通过；
+   - commit 后立即 push；
+   - 若性能下降、质量下降、TTFT 超限、RAM 超限、或不可复现，则 revert/disable，不作为 SOTA。
+
+### Immediate Next Step
+
+下一步先做 `router-score / hidden-state trace feasibility audit`：
+
+1. 找到 Kimi graph 中 router logits、top-k ids、top-k weights 的生成和消费位置；
+2. 判断 CUDA MoE extension 当前是否能拿到 score/weight，还是只能拿到 expert id；
+3. 如果能低风险 default-off trace，就实现 `GGML_MOE_ROUTE_SCORE_TRACE_OUT`；
+4. 如果当前路径拿不到 score/weight，就写明需要新增的 graph-side trace 点和数据字段；
+5. 用结论决定 predictor/prefetch 是否值得继续，避免再用弱 route-history 方案浪费实验轮次。
+
 ## 2026-07-12 Active Goal: Kimi CPU/defer GPU-extension Applicability
 
 ### Goal
