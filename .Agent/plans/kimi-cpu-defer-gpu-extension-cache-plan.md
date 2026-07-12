@@ -4,6 +4,99 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Locked Goal and Near-Term Plan (2026-07-12 16:17 CST)
+
+This section is the current working goal for the next implementation phase. It
+is intentionally narrower than the full historical plan below.
+
+### Goal
+
+Bring Kimi back onto a reproducible, generalized optimization path on
+`vendor/kimi-deepseek-41d205-additive` by validating whether the DeepSeek-style
+`CPU/defer scheduler + GPU expert-cache extension` can materially improve Kimi.
+
+The immediate milestone is stable cold-start `>2 tok/s` decode on generalized
+prompts under:
+
+- one `32 GB RTX 5090`;
+- strict `16 GB` host RAM cap, including page cache, RSS, pinned memory, RAM
+  expert cache, and other process/external memory;
+- coherent output for `Please introduce France in a short paragraph.`;
+- TTFT no more than `+20%` above the paired accepted baseline;
+- no prompt-specific expert placement or prompt-specific pack tuning;
+- all accepted results reproducible from a pushed commit.
+
+The product target remains stable `>5 tok/s` for random user prompts on the
+same hardware. The next phase should not optimize for a single known prompt; it
+must improve the general runtime path.
+
+### Current Hypothesis
+
+DeepSeek's large gain came from making the CPU/defer MoE path call a GPU
+extension for hot gate experts, rather than leaving gate in the slow CPU/defer
+path. For Kimi, this idea is useful only if profiling shows exposed gate/up/down
+misses or CPU/defer fallback remain on the critical path.
+
+Do not assume direct transfer. Kimi's current bottleneck has often been exposed
+expert movement and io_uring queue starvation, so each step must prove whether
+it reduces critical-path wait rather than only improving hit rate or reducing
+bytes off the critical path.
+
+### Execution Plan
+
+1. Reproduce the current baseline before changing runtime behavior.
+   - Run one cold-start `n96` generalized dev prompt and one required France
+     quality prompt.
+   - Record decode tok/s, TTFT, RAM/page-cache/pinned/RSS breakdown, VRAM,
+     expert read bytes, io_uring wait, staging, H2D, gate/up/down compute, and
+     CPU fallback by role/type.
+
+2. Audit actual execution placement.
+   - For each MoE role (`gate`, `up`, `down`) report whether it is computed by
+     GPU extension, CPU fallback, or dense/GGUF fallback.
+   - Report where the source bytes come from: VRAM cache, RAM tier/pageable RAM,
+     pinned staging, expert pack, or GGUF mmap.
+   - Confirm whether prompt-stage zero-fallback is still active on this branch.
+
+3. Test the DeepSeek gate-extension transfer directly.
+   - Compare current Kimi placement with a default-off gate-heavy VRAM policy.
+   - Accept this path only if it reduces exposed wait and improves generalized
+     decode tok/s while preserving TTFT/RAM/quality gates.
+   - If gate is no longer the exposed bottleneck, reject gate-only work and move
+     capacity to up/gate paired placement or byte reduction.
+
+4. Optimize VRAM/RAM storage as explicit cache, not accidental page cache.
+   - Identify decode-time file-backed pages that are not useful for future
+     decode.
+   - Replace them only with batchable expert data: role/layer slabs, second-tier
+     RAM expert cache, or contiguous pack layouts that preserve large reads.
+   - Measure whether the replacement reduces critical-path io_uring wait;
+     reducing file cache alone is not a success metric.
+
+5. Improve IO scheduling only after placement is understood.
+   - Try larger same-layer role batches (`gate+up+down`) as a default-off A/B.
+   - Keep the change only if it increases sustained inflight work without adding
+     staging/H2D stalls or TTFT regression.
+   - If runtime cannot expose enough independent work, stop scheduler-only work
+     and return to lower-byte expert representation.
+
+6. Screen lower-byte expert representations before runtime integration.
+   - Admission must show a hard upper bound above the `>2 tok/s` milestone and
+     prompt-level quality/error evidence.
+   - Existing rejected families remain rejected unless a new representation
+     changes the quality/byte tradeoff materially.
+   - Full lower-bit model smoke tests, such as `i1-IQ1_S`, require explicit user
+     approval before downloading or replacing assets.
+
+7. Reproducibility rule for every accepted improvement.
+   - Update this plan before the experiment.
+   - Commit and push immediately after a passing result.
+   - The commit body must include improvement magnitude, exact env, exact
+     commands, prompt split, output text, RAM/VRAM/TTFT metrics, quality gate,
+     artifacts, and rollback commit.
+   - Failed paths must be recorded with artifacts and left default-off or
+     reverted.
+
 ## Current Goal and Execution Plan (2026-07-12)
 
 This is the operational header for the active Codex goal. Historical sections
