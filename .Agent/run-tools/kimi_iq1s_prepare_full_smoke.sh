@@ -435,7 +435,7 @@ run_smoke() {
     log "dry-run smoke command after download:"
     printf '%s\n' \
       "cd '$REPO'" \
-      "systemd-run --wait --collect --same-dir -p MemoryMax=$MEMORY_MAX -p MemorySwapMax=$MEMORY_SWAP_MAX env REPO='$REPO' RUN='$run_dir' N='$N' THREADS='$THREADS' PROMPT_ID=dev_france_regression PROMPT_USER_TEXT='Please introduce France in a short paragraph.' QUALITY_KEYWORDS='france,europe|paris|eiffel|louvre|riviera|bordeaux' PROFILE=1 COPY_PROFILE=0 MODEL_PATH='$MODEL_PATH' .Agent/run-tools/kimi-general-prompt-repro.sh"
+      "systemd-run --wait --collect --same-dir -p MemoryMax=$MEMORY_MAX -p MemorySwapMax=$MEMORY_SWAP_MAX env REPO='$REPO' RUN='$run_dir' N='$N' THREADS='$THREADS' PROMPT_ID=dev_france_regression PROMPT_USER_TEXT='Please introduce France in a short paragraph.' QUALITY_KEYWORDS='france,europe|paris|eiffel|louvre|riviera|bordeaux' PROFILE=1 COPY_PROFILE=0 MODEL_PATH='$MODEL_PATH' MOE_EXPERT_SOURCE=model .Agent/run-tools/kimi-general-prompt-repro.sh"
     return 0
   fi
 
@@ -444,7 +444,7 @@ run_smoke() {
     log "dry-run smoke command:"
     printf '%s\n' \
       "cd '$REPO'" \
-      "systemd-run --wait --collect --same-dir -p MemoryMax=$MEMORY_MAX -p MemorySwapMax=$MEMORY_SWAP_MAX env REPO='$REPO' RUN='$run_dir' N='$N' THREADS='$THREADS' PROMPT_ID=dev_france_regression PROMPT_USER_TEXT='Please introduce France in a short paragraph.' QUALITY_KEYWORDS='france,europe|paris|eiffel|louvre|riviera|bordeaux' PROFILE=1 COPY_PROFILE=0 MODEL_PATH='$MODEL_PATH' .Agent/run-tools/kimi-general-prompt-repro.sh"
+      "systemd-run --wait --collect --same-dir -p MemoryMax=$MEMORY_MAX -p MemorySwapMax=$MEMORY_SWAP_MAX env REPO='$REPO' RUN='$run_dir' N='$N' THREADS='$THREADS' PROMPT_ID=dev_france_regression PROMPT_USER_TEXT='Please introduce France in a short paragraph.' QUALITY_KEYWORDS='france,europe|paris|eiffel|louvre|riviera|bordeaux' PROFILE=1 COPY_PROFILE=0 MODEL_PATH='$MODEL_PATH' MOE_EXPERT_SOURCE=model .Agent/run-tools/kimi-general-prompt-repro.sh"
     return
   fi
 
@@ -455,7 +455,7 @@ run_smoke() {
       PROMPT_ID=dev_france_regression \
       PROMPT_USER_TEXT="Please introduce France in a short paragraph." \
       QUALITY_KEYWORDS="france,europe|paris|eiffel|louvre|riviera|bordeaux" \
-      PROFILE=1 COPY_PROFILE=0 MODEL_PATH="$MODEL_PATH" \
+      PROFILE=1 COPY_PROFILE=0 MODEL_PATH="$MODEL_PATH" MOE_EXPERT_SOURCE=model \
       .Agent/run-tools/kimi-general-prompt-repro.sh
 }
 

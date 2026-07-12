@@ -4,6 +4,116 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Active Goal: Reproducible Lower-Byte Smoke Gate
+
+### Goal
+
+本阶段 goal 是把 Kimi 下一条 lower-byte 路线先做成可复现、可审计、不会误用旧
+expert source 的实验门禁。短期仍以 generalized/random prompt 的 cold-start N32
+decode rate `>= 2.0 tok/s` 为目标；长期目标仍是在 `16 GB host RAM` hard limit 和
+单张 `32 GB RTX 5090` 下稳定达到 `> 5 tok/s`。但在下载或删除任何大文件之前，必须先
+保证 smoke/repro 脚本能明确区分：
+
+- 当前 SOTA 的 `pack` source：IQ3_S model + 当前 expert pack/overlay/alias；
+- full-model/lower-byte 的 `model` source：只使用目标 GGUF 自身，不混入旧 IQ3_S
+  expert pack、overlay 或 alias。
+
+### Why This Is The Immediate Gate
+
+审计发现 `.Agent/run-tools/kimi-general-prompt-repro.sh` 之前默认硬编码了：
+
+- `GGML_MOE_EXPERT_PACK=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack`;
+- `GGML_MOE_EXPERT_PACK_OVERLAY=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack`;
+- `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv`.
+
+因此之前的 `i1-IQ1_S` full execute=0 dry-run 只能证明空间、删除清单、下载流程和
+smoke 命令形状可行，不能证明后续 smoke 一定是纯 IQ1_S/full-model source。这个风险
+必须在执行任何删除、下载或 SOTA smoke 前修正。
+
+### Plan
+
+1. 保持当前 SOTA 默认行为不变。
+   - 默认 `MOE_EXPERT_SOURCE=pack`，继续写入当前 IQ3_S pack、overlay 和 alias；
+   - 现有 SOTA repro 命令不需要改。
+
+2. 增加显式 full-model source 模式。
+   - 新增 `MOE_EXPERT_SOURCE=model`；
+   - 在该模式下不写入 `GGML_MOE_EXPERT_PACK`、`GGML_MOE_EXPERT_PACK_OVERLAY`、
+     `GGML_MOE_EXPERT_GGUF_ALIAS_TSV`；
+   - 同时在 env file 中 `unset` 可能继承的 pack/page-cache source，并设置
+     `GGML_MOE_EXPERT_PACK_RUNTIME_DISABLE=1`；
+   - 关闭 pack mmap fallback，避免 smoke 被旧 pack 或 alias 污染。
+
+3. 增加非破坏性 dry-run 验证。
+   - 新增 `REPRO_DRY_RUN=1`，只生成 run dir、`env.txt`、`command.txt`、`git.txt`
+     和 dry-run marker；
+   - 不 drop cache、不启动模型、不下载、不删除；
+   - 用 dry-run artifact 证明 `model` 模式没有 pack/alias env。
+
+4. 更新 `i1-IQ1_S` 准备脚本。
+   - post-download smoke 命令必须显式带 `MOE_EXPERT_SOURCE=model`；
+   - 后续真正执行前仍必须人工确认删除，因为候选删除量约 `174 GB`。
+
+5. 记录和提交。
+   - 把修正、dry-run artifact、验证命令和结果写回本计划；
+   - commit message 必须写清楚目标、风险、复现方式、未执行删除/下载；
+   - push 到 `vendor/kimi-deepseek-41d205-additive`。
+
+### Hard Stop
+
+在没有用户明确确认前，不执行以下操作：
+
+- 删除旧 expert pack；
+- 下载 `i1-IQ1_S` 的 `204430872480` bytes GGUF；
+- 把任何 lower-byte smoke 结果声明为 SOTA。
+
+### Non-Destructive Validation Result
+
+Implementation status:
+
+- `.Agent/run-tools/kimi-general-prompt-repro.sh` now supports
+  `MOE_EXPERT_SOURCE=pack|model`;
+- default remains `pack`, so current SOTA repro behavior is unchanged;
+- `MOE_EXPERT_SOURCE=model` writes no pack/overlay/alias source, unsets any
+  inherited pack/page-cache source variables, sets
+  `GGML_MOE_EXPERT_PACK_RUNTIME_DISABLE=1`, and disables pack mmap fallback;
+- `REPRO_DRY_RUN=1` generates repro artifacts without dropping caches or
+  starting the model;
+- `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh` now prints/runs the
+  `i1-IQ1_S` smoke with `MOE_EXPERT_SOURCE=model`.
+
+Artifacts:
+
+- guarded IQ1_S execute=0 dry-run after source-mode fix:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-modelsource-dry-run.log`;
+- repro dry-run proving no pack/alias contamination:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/repro-dry-run-iq1s-modelsource/`.
+
+Validation:
+
+- `bash -n` passed for both updated scripts;
+- IQ1_S prepare dry-run exited `0`;
+- prepare dry-run projected leftover after IQ1_S download:
+  `82424229984 bytes`, above the `50 GiB` reserve;
+- prepare dry-run still performed no deletion/download because `EXECUTE=0`;
+- printed post-download smoke command includes `MOE_EXPERT_SOURCE=model`;
+- repro dry-run `env.txt` contains no `GGML_MOE_EXPERT_PACK=`,
+  `GGML_MOE_EXPERT_PACK_OVERLAY=`, or `GGML_MOE_EXPERT_GGUF_ALIAS_TSV=`;
+- repro dry-run `env.txt` contains `unset GGML_MOE_EXPERT_PACK`,
+  `GGML_MOE_EXPERT_PACK_RUNTIME_DISABLE=1`, and
+  `GGML_MOE_CPU_FALLBACK_PACK_MMAP=0`;
+- repro dry-run `command.txt` records `MOE_EXPERT_SOURCE=model` and
+  `REPRO_DRY_RUN=1`.
+
+Decision:
+
+- The lower-byte/full-model smoke gate is now reproducible at the script level.
+- The previous execute=0 IQ1_S dry-run should not be used as proof of pure
+  IQ1_S/full-model source; the new model-source dry-run supersedes it.
+- Actual cleanup/download/smoke remains blocked until explicit user
+  confirmation, because it would delete about `173736710144 bytes` of old
+  non-SOTA packs and download `204430872480 bytes`.
+
 ## 2026-07-12 Active Goal Snapshot And Next Plan
 
 ### Active Goal

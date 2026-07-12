@@ -1,0 +1,23 @@
+PROMPT_ID=dev_france_regression
+PROMPT_USER_TEXT=Please introduce France in a short paragraph.
+QUALITY_KEYWORDS=france,europe|paris|eiffel|louvre|riviera|bordeaux
+RUN=.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/repro-dry-run-iq1s-modelsource
+N=32
+PINNED_SLOTS=12
+VRAM_MIB=15000
+THREADS=32
+UPGATE_PCT=72
+IQ2_UPGATE_PARALLEL=1
+MOE_IO_DEPTH=8
+MOE_IO_REFILL_BATCH=4
+MOE_PREFETCH_DOWN_DEPTH=2
+MODEL_PATH=/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF/Kimi-K2.7-Code.i1-IQ1_S.gguf
+MOE_EXPERT_SOURCE=model
+EXPERT_PACK_PATH=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-france-l12-upgate-v2.expert-pack
+EXPERT_PACK_OVERLAY_PATH=/root/lfz/runs/ik_llama/kimi-iq3s-assets/kimi-iq3s-l1l2down-overlay.expert-pack
+EXPERT_GGUF_ALIAS_TSV=/root/lfz/runs/vendor-kimi-token-rate/20260706-131700Z-gp2-gguf-alias-generate/kimi-iq3s-all-experts.gguf-alias.tsv
+MOE_IO_ALIGNED_ALIAS_BATCH=1
+PROFILE=1
+COPY_PROFILE=0
+REPRO_DRY_RUN=1
+build-cuda-batch/bin/llama-completion --defer-experts --fit off -ngl 99 --special -m /root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF/Kimi-K2.7-Code.i1-IQ1_S.gguf -c 512 -n 32 --temp 0 --top-p 1.0 --top-k 1 --seed 1 --no-display-prompt -no-cnv -t 32 -tb 32 -p \<\|im_user\|\>user\<\|im_middle\|\>Please\ introduce\ France\ in\ a\ short\ paragraph.\<\|im_end\|\>\<\|im_assistant\|\>assistant\<\|im_middle\|\>\<think\>\</think\> 

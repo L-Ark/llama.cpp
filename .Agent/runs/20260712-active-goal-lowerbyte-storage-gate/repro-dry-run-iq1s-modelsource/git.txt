@@ -1,0 +1,25 @@
+repo=/root/lfz/llama.cpp-vendor-kimi
+pwd=/root/lfz/llama.cpp-vendor-kimi
+branch=vendor/kimi-deepseek-41d205-additive
+head=acc27a39cc6d295e71b92a672eec3f31f235ffa5
+short=acc27a39c
+status_short:
+ M .Agent/plans/kimi-cpu-defer-gpu-extension-cache-plan.md
+ M .Agent/run-tools/kimi-general-prompt-repro.sh
+ M .Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh
+?? .Agent/run-tools/down-mirror-upgate-1000.csv
+?? .Agent/run-tools/down-mirror-upgate-600.csv
+?? .Agent/run-tools/down-mirror-upgate-800.csv
+?? .Agent/run-tools/kimi-general-prompt-sweep.sh
+?? .Agent/run-tools/kimi_expert_pack_iouring_bench
+?? .Agent/run-tools/kimi_expert_pack_iouring_bench.cpp
+?? .Agent/run-tools/kimi_make_down_mirror_profile.py
+?? .Agent/run-tools/kimi_make_ram_slab_profile_from_io_trace.py
+?? .Agent/run-tools/kimi_vram_ram_codesign_analysis.py
+?? .Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-delete-candidates-manifest-after-modelsource.tsv
+?? .Agent/runs/20260712-active-goal-lowerbyte-storage-gate/repro-dry-run-iq1s-modelsource/
+diff_stat:
+ .../kimi-cpu-defer-gpu-extension-cache-plan.md     | 63 ++++++++++++++++++++++
+ .Agent/run-tools/kimi-general-prompt-repro.sh      | 46 +++++++++++++++-
+ .Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh   |  6 +--
+ 3 files changed, 110 insertions(+), 5 deletions(-)
