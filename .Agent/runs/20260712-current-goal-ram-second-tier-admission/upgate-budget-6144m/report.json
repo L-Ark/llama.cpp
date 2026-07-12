@@ -1,0 +1,1716 @@
+{
+  "allowed_source_idx": [],
+  "batch_summary": {
+    "candidate_pct_hist": {
+      "25-50": 4192,
+      "50-75": 2347,
+      "<25": 1840,
+      ">=75": 703
+    },
+    "candidate_rows_hist": {
+      "1": 6587,
+      "2": 1967,
+      "3": 444,
+      "4": 66,
+      "5": 17,
+      "6": 1
+    },
+    "hit_batches": 9082,
+    "hit_candidate_bytes": 61957742592,
+    "hit_candidate_gib": 57.70264434814453,
+    "ram_dominant_batches": 41,
+    "ram_dominant_candidate_bytes": 869351424,
+    "ram_dominant_candidate_gib": 0.8096466064453125,
+    "ram_only_batches": 567,
+    "ram_only_candidate_bytes": 4041457664,
+    "ram_only_candidate_gib": 3.7639007568359375,
+    "selected_id_count": 1265,
+    "total_batches": 21145
+  },
+  "budget_mib": 6144,
+  "exclude_vram": true,
+  "kind": "kimi_ram_candidate_multidev_screen",
+  "max_jobs": 8,
+  "metadata": {
+    "counters": {
+      "rows_above_max_jobs": 24243,
+      "rows_role_skipped": 56127,
+      "rows_total": 174725,
+      "rows_vram_skipped": 21096
+    },
+    "source_bytes": {
+      "0": 380284993536,
+      "2": 12874465280,
+      "3": 12174241792,
+      "4": 10250330112,
+      "5": 8886321152,
+      "6": 12912640000,
+      "7": 10856947712,
+      "8": 14834040832,
+      "9": 14064599040,
+      "10": 5005189120
+    },
+    "source_rows": {
+      "0": 74502,
+      "2": 2364,
+      "3": 2463,
+      "4": 2178,
+      "5": 1864,
+      "6": 2500,
+      "7": 2102,
+      "8": 2872,
+      "9": 2620,
+      "10": 890
+    },
+    "vram_overlap_bytes": 107848663040,
+    "vram_overlap_rows": 21096
+  },
+  "min_count": 2,
+  "min_prompts": 2,
+  "prompts": [
+    "dev_france_regression",
+    "dev_intelligence_general"
+  ],
+  "roles": [
+    "gate",
+    "up"
+  ],
+  "route_profiles": [
+    "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-admission-ioread-n96-083914/dev_france_regression/route-profile.csv",
+    "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-admission-ioread-n96-083914/dev_intelligence_general/route-profile.csv"
+  ],
+  "selected_bytes": 6440247296,
+  "selected_entries": 1265,
+  "selected_mib": 6141.8984375,
+  "selected_source_bytes": {
+    "0": 60100870144,
+    "2": 438657024,
+    "3": 178601984,
+    "4": 84713472,
+    "5": 274681856,
+    "6": 217968640,
+    "8": 225308672,
+    "9": 290721792,
+    "10": 146219008
+  },
+  "selected_source_rows": {
+    "0": 11854,
+    "2": 78,
+    "3": 36,
+    "4": 18,
+    "5": 57,
+    "6": 43,
+    "8": 43,
+    "9": 53,
+    "10": 26
+  },
+  "selected_weighted_bytes": 61957742592,
+  "selected_weighted_gib": 57.70264434814453,
+  "top_entries": [
+    {
+      "bytes": 94044160,
+      "expert_bytes": 4702208,
+      "expert_idx": 78,
+      "layer": 16,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 1,
+      "role": "up",
+      "rows": 20,
+      "source_bytes": {
+        "0": 94044160
+      },
+      "sources": {
+        "0": 20
+      },
+      "tensor": "blk.16.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 94044160,
+      "expert_bytes": 4702208,
+      "expert_idx": 78,
+      "layer": 16,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 2,
+      "role": "gate",
+      "rows": 20,
+      "source_bytes": {
+        "0": 94044160
+      },
+      "sources": {
+        "0": 20
+      },
+      "tensor": "blk.16.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 94044160,
+      "expert_bytes": 4702208,
+      "expert_idx": 275,
+      "layer": 8,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 3,
+      "role": "gate",
+      "rows": 20,
+      "source_bytes": {
+        "0": 94044160
+      },
+      "sources": {
+        "0": 20
+      },
+      "tensor": "blk.8.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 94044160,
+      "expert_bytes": 4702208,
+      "expert_idx": 5,
+      "layer": 23,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 4,
+      "role": "up",
+      "rows": 20,
+      "source_bytes": {
+        "0": 94044160
+      },
+      "sources": {
+        "0": 20
+      },
+      "tensor": "blk.23.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 94044160,
+      "expert_bytes": 4702208,
+      "expert_idx": 5,
+      "layer": 23,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 5,
+      "role": "gate",
+      "rows": 20,
+      "source_bytes": {
+        "0": 94044160
+      },
+      "sources": {
+        "0": 20
+      },
+      "tensor": "blk.23.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 89341952,
+      "expert_bytes": 4702208,
+      "expert_idx": 3,
+      "layer": 20,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 6,
+      "role": "up",
+      "rows": 19,
+      "source_bytes": {
+        "0": 89341952
+      },
+      "sources": {
+        "0": 19
+      },
+      "tensor": "blk.20.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 89341952,
+      "expert_bytes": 4702208,
+      "expert_idx": 3,
+      "layer": 20,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 7,
+      "role": "gate",
+      "rows": 19,
+      "source_bytes": {
+        "0": 89341952
+      },
+      "sources": {
+        "0": 19
+      },
+      "tensor": "blk.20.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 79937536,
+      "expert_bytes": 4702208,
+      "expert_idx": 302,
+      "layer": 28,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 8,
+      "role": "up",
+      "rows": 17,
+      "source_bytes": {
+        "0": 79937536
+      },
+      "sources": {
+        "0": 17
+      },
+      "tensor": "blk.28.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 75235328,
+      "expert_bytes": 4702208,
+      "expert_idx": 333,
+      "layer": 33,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 9,
+      "role": "up",
+      "rows": 16,
+      "source_bytes": {
+        "0": 75235328
+      },
+      "sources": {
+        "0": 16
+      },
+      "tensor": "blk.33.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 75235328,
+      "expert_bytes": 4702208,
+      "expert_idx": 218,
+      "layer": 34,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 10,
+      "role": "up",
+      "rows": 16,
+      "source_bytes": {
+        "0": 75235328
+      },
+      "sources": {
+        "0": 16
+      },
+      "tensor": "blk.34.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 75235328,
+      "expert_bytes": 4702208,
+      "expert_idx": 187,
+      "layer": 28,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 11,
+      "role": "up",
+      "rows": 16,
+      "source_bytes": {
+        "0": 75235328
+      },
+      "sources": {
+        "0": 16
+      },
+      "tensor": "blk.28.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 75235328,
+      "expert_bytes": 4702208,
+      "expert_idx": 328,
+      "layer": 11,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 12,
+      "role": "up",
+      "rows": 16,
+      "source_bytes": {
+        "0": 75235328
+      },
+      "sources": {
+        "0": 16
+      },
+      "tensor": "blk.11.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 75235328,
+      "expert_bytes": 4702208,
+      "expert_idx": 328,
+      "layer": 11,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 13,
+      "role": "gate",
+      "rows": 16,
+      "source_bytes": {
+        "0": 75235328
+      },
+      "sources": {
+        "0": 16
+      },
+      "tensor": "blk.11.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 75235328,
+      "expert_bytes": 4702208,
+      "expert_idx": 169,
+      "layer": 24,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 14,
+      "role": "up",
+      "rows": 16,
+      "source_bytes": {
+        "0": 75235328
+      },
+      "sources": {
+        "0": 16
+      },
+      "tensor": "blk.24.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 75235328,
+      "expert_bytes": 4702208,
+      "expert_idx": 169,
+      "layer": 24,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 15,
+      "role": "gate",
+      "rows": 16,
+      "source_bytes": {
+        "0": 75235328
+      },
+      "sources": {
+        "0": 16
+      },
+      "tensor": "blk.24.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 75235328,
+      "expert_bytes": 4702208,
+      "expert_idx": 186,
+      "layer": 43,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 16,
+      "role": "up",
+      "rows": 16,
+      "source_bytes": {
+        "0": 75235328
+      },
+      "sources": {
+        "0": 16
+      },
+      "tensor": "blk.43.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 84295680,
+      "expert_bytes": 5619712,
+      "expert_idx": 30,
+      "layer": 6,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 17,
+      "role": "up",
+      "rows": 15,
+      "source_bytes": {
+        "0": 84295680
+      },
+      "sources": {
+        "0": 15
+      },
+      "tensor": "blk.6.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 84295680,
+      "expert_bytes": 5619712,
+      "expert_idx": 30,
+      "layer": 6,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 18,
+      "role": "gate",
+      "rows": 15,
+      "source_bytes": {
+        "0": 84295680
+      },
+      "sources": {
+        "0": 15
+      },
+      "tensor": "blk.6.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 70533120,
+      "expert_bytes": 4702208,
+      "expert_idx": 61,
+      "layer": 31,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 19,
+      "role": "up",
+      "rows": 15,
+      "source_bytes": {
+        "0": 70533120
+      },
+      "sources": {
+        "0": 15
+      },
+      "tensor": "blk.31.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 70533120,
+      "expert_bytes": 4702208,
+      "expert_idx": 334,
+      "layer": 41,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 20,
+      "role": "up",
+      "rows": 15,
+      "source_bytes": {
+        "0": 70533120
+      },
+      "sources": {
+        "0": 15
+      },
+      "tensor": "blk.41.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 70533120,
+      "expert_bytes": 4702208,
+      "expert_idx": 103,
+      "layer": 23,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 21,
+      "role": "up",
+      "rows": 15,
+      "source_bytes": {
+        "0": 70533120
+      },
+      "sources": {
+        "0": 15
+      },
+      "tensor": "blk.23.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 70533120,
+      "expert_bytes": 4702208,
+      "expert_idx": 103,
+      "layer": 23,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 22,
+      "role": "gate",
+      "rows": 15,
+      "source_bytes": {
+        "0": 70533120
+      },
+      "sources": {
+        "0": 15
+      },
+      "tensor": "blk.23.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 70533120,
+      "expert_bytes": 4702208,
+      "expert_idx": 46,
+      "layer": 15,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 23,
+      "role": "up",
+      "rows": 15,
+      "source_bytes": {
+        "0": 70533120
+      },
+      "sources": {
+        "0": 15
+      },
+      "tensor": "blk.15.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 70533120,
+      "expert_bytes": 4702208,
+      "expert_idx": 46,
+      "layer": 15,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 24,
+      "role": "gate",
+      "rows": 15,
+      "source_bytes": {
+        "0": 70533120
+      },
+      "sources": {
+        "0": 15
+      },
+      "tensor": "blk.15.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 70533120,
+      "expert_bytes": 4702208,
+      "expert_idx": 109,
+      "layer": 25,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 25,
+      "role": "up",
+      "rows": 15,
+      "source_bytes": {
+        "0": 70533120
+      },
+      "sources": {
+        "0": 15
+      },
+      "tensor": "blk.25.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 70533120,
+      "expert_bytes": 4702208,
+      "expert_idx": 109,
+      "layer": 25,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 26,
+      "role": "gate",
+      "rows": 15,
+      "source_bytes": {
+        "0": 70533120
+      },
+      "sources": {
+        "0": 15
+      },
+      "tensor": "blk.25.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 78675968,
+      "expert_bytes": 5619712,
+      "expert_idx": 273,
+      "layer": 59,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 27,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 78675968
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.59.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 78675968,
+      "expert_bytes": 5619712,
+      "expert_idx": 273,
+      "layer": 59,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 28,
+      "role": "gate",
+      "rows": 14,
+      "source_bytes": {
+        "0": 78675968
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.59.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 78675968,
+      "expert_bytes": 5619712,
+      "expert_idx": 301,
+      "layer": 31,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 29,
+      "role": "gate",
+      "rows": 14,
+      "source_bytes": {
+        "0": 78675968
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.31.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 78675968,
+      "expert_bytes": 5619712,
+      "expert_idx": 99,
+      "layer": 39,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 30,
+      "role": "gate",
+      "rows": 14,
+      "source_bytes": {
+        "0": 78675968
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.39.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 78675968,
+      "expert_bytes": 5619712,
+      "expert_idx": 266,
+      "layer": 4,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 31,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 78675968
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.4.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 78675968,
+      "expert_bytes": 5619712,
+      "expert_idx": 266,
+      "layer": 4,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 32,
+      "role": "gate",
+      "rows": 14,
+      "source_bytes": {
+        "0": 78675968
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.4.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 78675968,
+      "expert_bytes": 5619712,
+      "expert_idx": 283,
+      "layer": 9,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 33,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 78675968
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.9.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 78675968,
+      "expert_bytes": 5619712,
+      "expert_idx": 215,
+      "layer": 30,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 34,
+      "role": "gate",
+      "rows": 14,
+      "source_bytes": {
+        "0": 78675968
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.30.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 321,
+      "layer": 15,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 35,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.15.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 321,
+      "layer": 15,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 36,
+      "role": "gate",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.15.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 359,
+      "layer": 17,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 37,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.17.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 359,
+      "layer": 17,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 38,
+      "role": "gate",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.17.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 35,
+      "layer": 30,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 39,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.30.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 202,
+      "layer": 54,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 40,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.54.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 301,
+      "layer": 31,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 41,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.31.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 20,
+      "layer": 35,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 42,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.35.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 99,
+      "layer": 39,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 43,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.39.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 133,
+      "layer": 42,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 44,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.42.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 283,
+      "layer": 9,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 45,
+      "role": "gate",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.9.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 173,
+      "layer": 20,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 46,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.20.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 173,
+      "layer": 20,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 47,
+      "role": "gate",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.20.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 127,
+      "layer": 11,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 48,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.11.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 127,
+      "layer": 11,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 49,
+      "role": "gate",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.11.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 175,
+      "layer": 17,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 50,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.17.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 175,
+      "layer": 17,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 51,
+      "role": "gate",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.17.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 215,
+      "layer": 30,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 52,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.30.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 65830912,
+      "expert_bytes": 4702208,
+      "expert_idx": 205,
+      "layer": 53,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 53,
+      "role": "up",
+      "rows": 14,
+      "source_bytes": {
+        "0": 65830912
+      },
+      "sources": {
+        "0": 14
+      },
+      "tensor": "blk.53.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 73109504,
+      "expert_bytes": 5623808,
+      "expert_idx": 53,
+      "layer": 59,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 54,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "10": 73109504
+      },
+      "sources": {
+        "10": 13
+      },
+      "tensor": "blk.59.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 73109504,
+      "expert_bytes": 5623808,
+      "expert_idx": 53,
+      "layer": 59,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 55,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "10": 73109504
+      },
+      "sources": {
+        "10": 13
+      },
+      "tensor": "blk.59.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 90,
+      "layer": 5,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 56,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.5.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 90,
+      "layer": 5,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 57,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.5.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 94,
+      "layer": 37,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 58,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.37.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 322,
+      "layer": 32,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 59,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.32.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 84,
+      "layer": 43,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 60,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.43.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 34,
+      "layer": 7,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 61,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.7.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 31,
+      "layer": 9,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 62,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.9.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 217,
+      "layer": 30,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 63,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.30.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 156,
+      "layer": 7,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 64,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.7.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 358,
+      "layer": 6,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 65,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.6.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 358,
+      "layer": 6,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 66,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.6.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 73056256,
+      "expert_bytes": 5619712,
+      "expert_idx": 342,
+      "layer": 32,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 67,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 73056256
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.32.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 364,
+      "layer": 25,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 68,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.25.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 364,
+      "layer": 25,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 69,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.25.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 314,
+      "layer": 38,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 70,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.38.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 5,
+      "layer": 1,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 71,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.1.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 5,
+      "layer": 1,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 72,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.1.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 221,
+      "layer": 50,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 73,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.50.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 253,
+      "layer": 10,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 74,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.10.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 253,
+      "layer": 10,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 75,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.10.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 127,
+      "layer": 23,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 76,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.23.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 127,
+      "layer": 23,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 77,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.23.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 121,
+      "layer": 24,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 78,
+      "role": "up",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.24.ffn_up_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 121,
+      "layer": 24,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 79,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.24.ffn_gate_exps.weight"
+    },
+    {
+      "bytes": 61128704,
+      "expert_bytes": 4702208,
+      "expert_idx": 237,
+      "layer": 24,
+      "prompts": [
+        "dev_france_regression",
+        "dev_intelligence_general"
+      ],
+      "rank": 80,
+      "role": "gate",
+      "rows": 13,
+      "source_bytes": {
+        "0": 61128704
+      },
+      "sources": {
+        "0": 13
+      },
+      "tensor": "blk.24.ffn_gate_exps.weight"
+    }
+  ],
+  "traces": [
+    "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-admission-ioread-n96-083914/dev_france_regression/io-read-trace.csv",
+    "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-admission-ioread-n96-083914/dev_intelligence_general/io-read-trace.csv"
+  ],
+  "vram_ids": 2548
+}

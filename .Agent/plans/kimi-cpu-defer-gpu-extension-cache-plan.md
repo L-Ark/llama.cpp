@@ -250,6 +250,80 @@ Immediate next plan:
    explicit approval for the `i1-IQ1_S` complete lower-bit smoke before any
    download or model asset replacement.
 
+### RAM Second-Tier Admission Result (2026-07-12 16:39 CST)
+
+Artifacts:
+
+- trace root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-admission-ioread-n96-083914`;
+- report root:
+  `.Agent/runs/20260712-current-goal-ram-second-tier-admission`;
+- top-level report:
+  `.Agent/runs/20260712-current-goal-ram-second-tier-admission/report.md`;
+- wait-bound screen:
+  `.Agent/runs/20260712-current-goal-ram-second-tier-admission/phase5c-slab-screen-with-wait/report.md`;
+- dynamic candidate reports:
+  `.Agent/runs/20260712-current-goal-ram-second-tier-admission/upgate-budget-<mib>m/report.json`,
+  `.Agent/runs/20260712-current-goal-ram-second-tier-admission/allroles-budget-<mib>m/report.json`.
+
+Trace setup:
+
+- `N=96`, `PROFILE=1`, `COPY_PROFILE=0`;
+- extra traces:
+  `GGML_MOE_IO_READ_TRACE_OUT=<run>/io-read-trace.csv`,
+  `GGML_MOE_IO_BATCH_PROFILE_OUT=<run>/io-batch-profile.csv`;
+- prompts:
+  `dev_france_regression`, `dev_intelligence_general`;
+- cold start under `MemoryMax=15900000000`, `MemorySwapMax=0`;
+- both prompts passed quality;
+- weighted decode: about `587.45 ms/token`, `1.70 tok/s`;
+- rough gap to `2 tok/s`: about `87.45 ms/token` before TTFT/RAM overheads.
+
+Dynamic top-expert RAM tier screen:
+
+- budgets: `2,4,6,8,10 GiB`;
+- `min_prompts=2`, `max_jobs=8`;
+- current simulated VRAM hotset excluded with `upgate_slots=2015`,
+  `down_slots=533`;
+- even at `10 GiB`, selected entries are scattered:
+  - `upgate`: `84.126 GiB` weighted traffic, but only `138 / 21145`
+    RAM-dominant batches;
+  - `allroles`: `114.231 GiB` weighted traffic, but only `116 / 31903`
+    RAM-dominant batches.
+
+Layer/role slab wait-bound screen:
+
+- generated `io-wait-trace.csv` from `io-batch-profile.csv` using the same
+  batch sequence (`batch_seq=seq`) for offline wait accounting;
+- total measured batch wait: `92473.847 ms`, `513.744 ms/token`;
+- best single layer slabs:
+  - `blk.1.upgate`: `2233.96 MiB`, `8.350 ms/token`;
+  - `blk.9.upgate`: `2569.97 MiB`, `6.826 ms/token`;
+  - `blk.7.upgate`: `2284.31 MiB`, `6.736 ms/token`;
+  - `blk.1.all`: `3731.85 MiB`, `11.502 ms/token`;
+- greedy upper bound:
+  - `layer_upgate`, `10 GiB`: `31.14 ms/token`;
+  - `layer_all`, `10 GiB`: `28.58 ms/token`.
+
+Decision:
+
+- reject RAM second-tier as the next primary runtime A/B;
+- dynamic top-expert RAM tier improves byte coverage but does not create enough
+  RAM-dominant batches, so it risks fragmenting SSD batches;
+- layer/role slabs are batch-cleaner but their best `10 GiB` saved-wait upper
+  bound is far below the `~87 ms/token` needed for `2 tok/s`;
+- runtime implementation would add TTFT/preload/RAM pressure risk without a
+  sufficient endpoint bound.
+
+Next action:
+
+- do not implement RAM second-tier runtime now;
+- do not continue storage-placement work unless a new admission predicts a
+  materially larger exposed-wait reduction than this screen;
+- without explicit `i1-IQ1_S` approval, the remaining path must be a genuinely
+  new lower-byte expert representation with prompt-level output-error evidence,
+  not a retune of rejected families.
+
 ## Current Goal and Execution Plan (2026-07-12)
 
 This is the operational header for the active Codex goal. Historical sections

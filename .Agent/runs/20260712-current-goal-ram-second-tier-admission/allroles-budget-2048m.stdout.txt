@@ -1,0 +1,7 @@
+traces=2 prompts=2 candidates=37155
+selected entries=325 mib=2047.07 weighted_gib=32.242
+selected_source_rows={0: 4899, 1: 300, 2: 36, 10: 16}
+batches hit=4243 dominant=1 only=73 total=31903
+wrote .Agent/runs/20260712-current-goal-ram-second-tier-admission/allroles-budget-2048m/ram-profile.csv
+wrote .Agent/runs/20260712-current-goal-ram-second-tier-admission/allroles-budget-2048m/candidates.csv
+wrote .Agent/runs/20260712-current-goal-ram-second-tier-admission/allroles-budget-2048m/report.json

@@ -1,0 +1,7 @@
+traces=2 prompts=2 candidates=24449
+selected entries=419 mib=2046.10 weighted_gib=23.708
+selected_source_rows={0: 4941, 3: 10, 6: 10, 8: 10, 10: 26}
+batches hit=4294 dominant=2 only=213 total=21145
+wrote .Agent/runs/20260712-current-goal-ram-second-tier-admission/upgate-budget-2048m/ram-profile.csv
+wrote .Agent/runs/20260712-current-goal-ram-second-tier-admission/upgate-budget-2048m/candidates.csv
+wrote .Agent/runs/20260712-current-goal-ram-second-tier-admission/upgate-budget-2048m/report.json
