@@ -206,6 +206,170 @@ Next implementation candidate:
 - promotion gate remains generalized prompt quality, RAM `<16 GB`, TTFT
   `<=+20%`, CPU fallback `0`, and endpoint token-rate improvement.
 
+### Planned A/B: Mixed Up/Gate Combined Stage (2026-07-12 19:12 CST)
+
+Goal:
+
+- test whether the Kimi mixed-type up/gate path can reduce exposed io_uring
+  wait by co-submitting the already-known same-layer `up+gate` misses in a
+  single larger IO batch.
+
+Current evidence:
+
+- current Kimi main path is `mixed_types`, not the same-type `parallel_up_gate`
+  path;
+- the same-type path already has a default-off
+  `GGML_MOE_UP_GATE_COMBINED_STAGE` implementation;
+- the mixed path still launches two host threads:
+  - `copy_stage_jobs(up_jobs, bc.up_stream, bc.stage_ring)`;
+  - `copy_stage_jobs(gate_jobs, bc.gate_stream, bc.stage_ring_gate)`;
+- fresh France decode-only IO profile:
+  - gate runtime-load avg read jobs/batch: `4.426`;
+  - up runtime-load avg read jobs/batch: `4.426`;
+  - gate runtime-load wait: `14706.035 ms`;
+  - up runtime-load wait: `14442.326 ms`;
+  - about `53%` of gate/up decode batches have `<=4` read jobs.
+
+Theory and upper bound:
+
+- combining up+gate misses can roughly double the per-call read jobs exposed
+  to `expert_pack_iouring_copy_jobs`, from about `4.4` per role to about
+  `8.8` combined when both roles miss similarly;
+- this does not reduce bytes and does not make expert IDs earlier; it only
+  reduces small-batch submit/wait overhead and may improve inflight continuity;
+- a loose upper bound is the gate+up decode IO wait bucket:
+  `14706 + 14442 ~= 29148 ms` over `85` decode runs;
+- a realistic win must be much smaller because:
+  - current two-thread copy overlaps some up and gate reading;
+  - current up compute can start after up copy while gate copy is still running;
+  - combined stage makes both compute streams wait for the combined copy event;
+  - same-tensor adjacent coalescing will not merge up and gate extents because
+    they are different tensors.
+
+Implementation shape:
+
+- add a default-off mixed-path flag:
+  `GGML_MOE_MIXED_UP_GATE_COMBINED_STAGE=1`;
+- only enable it when `up_expert_bytes == gate_expert_bytes` and
+  `bc.ev_up_copy_aux_done` exists;
+- combine `up_jobs + gate_jobs` and call
+  `copy_stage_jobs(combined_jobs, bc.up_stream, bc.stage_ring)`;
+- record `bc.ev_up_copy_aux_done` on `bc.up_stream`, then make
+  `bc.gate_stream` wait on that event before gate compute;
+- keep default behavior unchanged when the env var is absent.
+
+Primary risk:
+
+- the candidate may reduce io_uring wait but regress endpoint token rate by
+  losing copy/compute overlap. If so, reject it even if IO-batch metrics look
+  better.
+
+N32 A/B gate:
+
+- baseline: current default env, `N=32`, cold start, generalized France prompt;
+- candidate: same command plus
+  `EXTRA_RUNTIME_ENV="GGML_MOE_MIXED_UP_GATE_COMBINED_STAGE=1"`;
+- collect endpoint token rate, TTFT, RAM peak, output text, CPU fallback,
+  `io-batch-profile.csv`, and decode-only IO-batch summary;
+- accept for N96 expansion only if:
+  - quality passes;
+  - RAM remains `<16 GB`;
+  - TTFT increase is `<=20%`;
+  - CPU fallback remains `0`;
+  - endpoint token rate improves, not only IO wait.
+
+If N32 fails:
+
+- keep the code default-off only if it is useful as a diagnostic and fully
+  documented;
+- otherwise revert the runtime change before commit;
+- record the failure and do not run N96.
+
+### Mixed Combined Stage Guard Finding (2026-07-12 19:28 CST)
+
+The first compiled default-off mixed-path implementation did not activate on
+the N32 candidate because the Kimi mixed calls are primarily mixed quant types:
+
+- `up_type=18, gate_type=22`;
+- `up_type=22, gate_type=18`.
+
+Those calls do not satisfy the safe same-size guard
+`up_expert_bytes == gate_expert_bytes`. Therefore the current same-size mixed
+combined-stage design does not exercise Kimi's main mixed path.
+
+Decision before the next run:
+
+- do not claim this as a valid A/B for mixed up/gate co-submit;
+- do not expand the same-size mixed patch unless a future model has same-size
+  mixed roles;
+- a real Kimi mixed up/gate co-submit would need multi-size IO batch support in
+  `expert_pack_iouring_copy_jobs`, which is a larger implementation and must
+  be planned separately;
+- run one small N32 diagnostic with the already-existing same-type flag
+  `GGML_MOE_UP_GATE_COMBINED_STAGE=1`, because Kimi has same-type `22/22`
+  calls on the existing `parallel_up_gate` path.
+
+Expected scope of the same-type diagnostic:
+
+- only same-type parallel up/gate calls can change;
+- mixed `18/22` and `22/18` calls remain unchanged;
+- accept only if endpoint token rate improves and quality/RAM/TTFT/fallback
+  gates pass;
+- reject if the IO profile improves but endpoint token rate does not.
+
+### Result: Mixed/Same-Type Combined Stage N32 A/B (2026-07-12 19:38 CST)
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-mixed-combined-stage-n32-ab/report.md`
+
+Build validation:
+
+- the temporary mixed same-size implementation compiled;
+- after it failed to activate for Kimi's mixed type pairs, the runtime source
+  change was reverted;
+- `cmake --build build-cuda-batch --target llama-completion -j 16` succeeded
+  again at clean source commit `7de0ccac1`.
+
+Mixed-path result:
+
+- `GGML_MOE_MIXED_UP_GATE_COMBINED_STAGE=1` did not activate because Kimi's
+  mixed calls are mostly `18/22` and `22/18`, which do not satisfy the
+  same-size guard;
+- this is not a valid performance A/B for Kimi's mixed path;
+- real mixed up/gate co-submit requires multi-size IO batch support.
+
+Existing same-type path result:
+
+| run | quality | tok/s | decode ms / runs | TTFT ms | RAM peak bytes | iouring wait |
+|---|---|---:|---:|---:|---:|---:|
+| baseline | pass | `1.70` | `18206.89 / 31` | `9182.96` | `12765011968` | `18034153 us` |
+| `GGML_MOE_UP_GATE_COMBINED_STAGE=1` | pass | `1.70` | `18241.14 / 31` | `8250.78` | `12764528640` | `16124716 us` |
+
+Decode-only IO:
+
+| run | batches | read jobs | avg read jobs/batch | inflight avg | wait ms |
+|---|---:|---:|---:|---:|---:|
+| baseline | `5579` | `25623` | `4.593` | `3.479` | `15622.196` |
+| same-type combined | `4753` | `22431` | `4.719` | `3.544` | `13160.784` |
+
+Decision:
+
+- reject same-type combined for SOTA;
+- do not run N96;
+- the IO wait reduction is real, but endpoint decode does not improve;
+- likely gap: main stage-ring H2D/slot pressure and lost overlap offset the
+  smaller IO wait. Same-type combined also misses the dominant mixed
+  `18/22` and `22/18` calls.
+
+Next:
+
+- do not retry simple combined-stage env flags;
+- only revisit joint up/gate IO if implementing multi-size scheduling that
+  preserves per-role H2D/compute overlap;
+- otherwise prioritize lower-byte expert movement or a stronger future-expert
+  admission signal.
+
 ## Current Active Goal and Next Plan (2026-07-12 16:58 CST)
 
 This is the active goal for the next Kimi optimization cycle. It supersedes

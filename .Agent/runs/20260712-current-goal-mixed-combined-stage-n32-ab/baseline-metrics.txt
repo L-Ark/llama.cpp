@@ -1,0 +1,48 @@
+run=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-mixed-combined-stage-n32-ab/baseline
+prompt_id=dev_france_regression
+prompt=Please introduce France in a short paragraph.
+exit=0
+quality=pass
+quality_reason=ok
+output=France is a country in Western Europe known for its rich history, culture, and influence on art, fashion, and cuisine. Its capital, Paris, is famous
+ttft_ms=9182.96
+prompt_tokens=17
+decode_ms=18206.89
+decode_runs=31
+token_rate=1.70
+memory.max=15899996160
+memory.swap.max=0
+memory.peak=12765011968
+memory.current.final=12093849600
+anon=462848
+file=12060356608
+kernel=29462528
+inactive_file=40886272
+active_file=12019240960
+pgmajfault=2405
+pgfault=516064
+workingset_refault_file=0
+expert_pack_0=38796 misses=0 read_failures=0 direct_reads=0 direct_fallbacks=0 iouring_reads=38796 iouring_bytes=222635671552 iouring_fallbacks=0 iouring_submit_us=115175 iouring_wait_us=18034153 iouring_h2d_enqueues=38796 entries=69120
+expert_pack_iouring_0=batches=5756 submit_calls=11420 wait_calls=26457 cqes=38796 inflight_avg=4.37 inflight_max=8 batch_hist=1:182,2-4:2579,5-8:2818,9-16:0,17-32:0,gt32:177
+pinned_staging_0=: enabled, 12 slots of 4.48 MiB
+pinned_staging_1=: enabled, 12 slots of 6.02 MiB
+pinned_staging_2=: enabled, 12 slots of 7.44 MiB
+pinned_staging_3=: enabled, 12 slots of 7.88 MiB
+pinned_staging_4=: enabled, 12 slots of 4.48 MiB
+pinned_staging_5=: enabled, 12 slots of 5.36 MiB
+pinned_staging_6=: enabled, 12 slots of 5.36 MiB
+pinned_staging_7=: copies=32299 waits=32251 fallbacks=0 slots=12 slot=7.88 MiB slot_wait=3647.685 ms host_stage=0.000 ms enqueue=538.792 ms h2d=9833.680 ms h2d_timed=32299
+pinned_staging_8= iouring: batches=4208 jobs=32299 submit_calls=9872 wait_calls=21632 cqes=32299 inflight_avg=4.59 inflight_max=8 batch_hist=1:106,2-4:1743,5-8:2182,9-16:0,17-32:0,gt32:177
+pinned_staging_9= gate: copies=6497 waits=6461 fallbacks=0 slots=12 slot=5.36 MiB slot_wait=12.684 ms host_stage=0.000 ms enqueue=98.828 ms h2d=1861.809 ms h2d_timed=6497
+pinned_staging_10= gate iouring: batches=1548 jobs=6497 submit_calls=1548 wait_calls=4825 cqes=6497 inflight_avg=3.37 inflight_max=8 batch_hist=1:76,2-4:836,5-8:636,9-16:0,17-32:0,gt32:0
+current_down_overlap_0=calls=992 planned_jobs=4351 completed_jobs=4351 cache_hits=2841 missing_tensor=93 missing_pack=0 submitted_batches=899 failed_batches=0 mark_failed=0 max_jobs=8 worker_us=2405673 batch_hist=1:12,2-4:376,5-8:511,9-16:0,17-32:0,gt32:0
+vram_down_0=slots=533 slot=7.88 MiB hits=12795 misses=9437 preloads=4351 pinned=0 hit_rate=57.6%
+vram_down_1=slots=533 slot=7.88 MiB hits=12795 misses=9437 preloads=4351 pinned=0 hit_rate=57.6%
+vram_down_2=slots=533 slot=7.88 MiB hits=12795 misses=9437 preloads=4351 pinned=0 hit_rate=57.6%
+vram_down_3=slots=533 slot=7.88 MiB hits=12795 misses=9437 preloads=4351 pinned=0 hit_rate=57.6%
+vram_upgate_0=slots=2015 slot=5.36 MiB hits=21046 misses=24506 preloads=0 pinned=0 hit_rate=46.2%
+vram_upgate_1=slots=2015 slot=5.36 MiB hits=21046 misses=24506 preloads=0 pinned=0 hit_rate=46.2%
+vram_upgate_2=slots=2015 slot=5.36 MiB hits=21046 misses=24506 preloads=0 pinned=0 hit_rate=46.2%
+vram_upgate_3=slots=2015 slot=5.36 MiB hits=21046 misses=24506 preloads=0 pinned=0 hit_rate=46.2%
+drop_after_prompt_expert_0=bytes=374261.30 MiB ranges=180 failures=0 wall_ms=4.453
+drop_after_prompt_dense_0=bytes=10598.28 MiB ranges=172 failures=0 wall_ms=9.044
