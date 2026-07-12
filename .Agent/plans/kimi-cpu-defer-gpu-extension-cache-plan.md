@@ -185,7 +185,7 @@ decode token rate。短期硬目标是让 generalized prompts 的 cold-start 稳
 
 ### Immediate Next Step
 
-Status: completed.
+Status: completed and superseded by the current path gate below.
 
 已执行 lower-byte admission 的非破坏性实验：
 
@@ -199,6 +199,62 @@ Status: completed.
 1. 完整 lower-bit model smoke，例如 `i1-IQ1_S`，但必须先经过显式存储清理/下载审批；
 2. predictor/prefetch admission，目标是让未来 batch 更早、更完整地进入队列，而不是再做
    静态 RAM hotset 或已失败的 activation-aware 局部压缩。
+
+### 2026-07-12 CPU/defer GPU-extension Path Gate
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-gpu-extension-path-gate/report.md`
+
+Current HEAD:
+
+- branch: `vendor/kimi-deepseek-41d205-additive`;
+- commit: `8daad70a1`;
+- runtime source diff versus profiled audit commit `97d1c177f`: none under
+  `ggml/**`, `src/**`, `common/**`, `examples/**`, `tools/**`, `CMakeLists.txt`.
+
+Decision:
+
+- Do not spend the next implementation cycle on another broad CPU fallback hook
+  or gate-only DeepSeek port.
+- The current Kimi path already has `up_gate` and `down` accepted by the
+  CPU/defer GPU extension in the profiled N96 path:
+  - true CPU fallback rows: `0`;
+  - extension miss runs: `0`;
+  - up/gate accept rate: `1.000`;
+  - down accept rate: `1.000`.
+- Remaining bottleneck is demand expert movement on the accepted GPU-extension
+  path:
+  - weighted decode: `651.099 ms/token`, `1.536 tok/s`;
+  - up/gate wall: `441.220 ms/token`;
+  - up/gate exposed wait proxy: `252.286 ms/token`;
+  - down wall: `171.086 ms/token`, mostly staging.
+
+Runtime support boundary:
+
+- v2 override manifest/preflight exists, but the generic override path prints
+  `dispatch=disabled`;
+- up/gate currently records v2 coverage/preflight/partial-split/shadow data, but
+  real staging still uses current logical payload size and v1 pack lookup;
+- down has a narrower real full-cover homogeneous v2 path that can switch
+  `run_src0_type` and `run_nb01`, but down-only byte reduction is insufficient
+  for `>2 tok/s`.
+
+Next implementation gate:
+
+1. Build prompt-agnostic RAM/VRAM layer-role candidates from dev aggregate wait,
+   not one-prompt hotsets.
+   - First candidates: full `blk.14 gate` or `blk.14 up+gate`, and full
+     `blk.4 down`;
+   - Start with pageable RAM tier (`GGML_MOE_RAM_TIER_PIN=0`);
+   - acceptance is endpoint decode token rate, not hit rate.
+2. Run a small default-off unified up/gate/down read-scheduler smoke only if it
+   can increase batch size without delaying compute or reducing current-down
+   overlap.
+3. Continue v2/lower-byte only as preflight/shadow unless a quality-safe payload
+   passes output-error screening.
+4. Complete `i1-IQ1_S` full-model smoke still requires explicit storage
+   cleanup/download approval.
 
 ### 2026-07-12 Activation-Aware Lower-Byte Admission Result
 
