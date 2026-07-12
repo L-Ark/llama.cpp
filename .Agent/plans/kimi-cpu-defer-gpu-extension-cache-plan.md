@@ -119,6 +119,93 @@ Every SOTA commit body must include:
 - artifact paths;
 - reason the change is accepted or rejected.
 
+### Baseline/Profile Refresh (2026-07-12 18:55 CST)
+
+Artifacts:
+
+- `.Agent/runs/20260712-current-goal-a4076-baseline-france-profile/report.md`
+- `.Agent/runs/20260712-current-goal-a4076-baseline-france-profile/copy-profile-breakdown.md`
+- `.Agent/runs/20260712-current-goal-a4076-baseline-france-profile/cpu-defer-audit/report.md`
+- `.Agent/runs/20260712-current-goal-a4076-baseline-france-profile/io-batch-breakdown.md`
+- `.Agent/runs/20260712-current-goal-a4076-baseline-france-profile/io-batch-decode-only.md`
+- `.Agent/runs/20260712-current-goal-dev7-vram-split-refresh/quant-split-sweep-dev7.md`
+- `.Agent/runs/20260712-current-goal-dev7-vram-split-refresh/cache-oracle-dev7.md`
+
+Fresh current-HEAD baseline:
+
+- branch: `vendor/kimi-deepseek-41d205-additive`;
+- commit: `a4076b7a4`;
+- rollback point: `531eefa8e`;
+- prompt: `Please introduce France in a short paragraph.`;
+- cold-start IO-batch diagnostic:
+  - quality: pass;
+  - TTFT: `8498.12 ms`;
+  - decode: `50692.07 ms / 85`;
+  - token rate: `1.68 tok/s`;
+  - RAM peak: `12802908160 bytes`, about `11.92 GiB`;
+  - CPU fallback rows: `0`;
+  - expert-pack miss rows: `0`;
+  - expert-pack bytes: `485993840640`;
+  - expert-pack `io_uring_wait_us`: `46124245`.
+
+Timing decomposition from the paired copy/profile run:
+
+- true CPU fallback rows: `0`;
+- up/gate GPU-extension wall: `443.978 ms/token`;
+- up/gate exposed wait proxy: `255.369 ms/token`;
+- decode down GPU-extension wall: `170.954 ms/token`;
+- down stage: `159.927 ms/token`;
+- profiled copy path has no `pack_hit=0` rows;
+- copy wall by role:
+  - gate runtime load: `90819 ms` over `132.52 GiB`;
+  - up runtime load: `82956 ms` over `123.20 GiB`;
+  - down runtime load: `68659 ms` over `127.85 GiB`;
+  - current-down overlap: `33932 ms` over `69.05 GiB`.
+
+Decode-only IO exposure, filtering `io-batch-profile.csv` rows with
+`jobs <= 8`:
+
+- batches: `15272`;
+- read jobs: `71447`;
+- avg read jobs/batch: `4.678`;
+- weighted inflight avg: `3.470`;
+- wait: `43730.248 ms`;
+- wall: `45773.007 ms`;
+- read batches with `<=4` jobs: `47.3%`;
+- role wait:
+  - gate runtime load: `14706.035 ms`;
+  - up runtime load: `14442.326 ms`;
+  - down runtime load: `8392.745 ms`;
+  - current-down overlap: `6189.143 ms`.
+
+Decisions from this refresh:
+
+1. The DeepSeek-style CPU/defer GPU extension is already active for Kimi.
+   Do not spend the next cycle on another broad CPU fallback rewrite unless a
+   fresh fallback-reason profile contradicts this.
+2. Current pack coverage is complete for this run. Rebuilding another
+   prompt-specific pack is not justified.
+3. Split-only retuning is rejected. The dev7 split sweep showed only `0.41%`
+   miss-byte gain at current IQ3 and at most `1.07%` under a hypothetical
+   `0.25x` representation.
+4. Broad global cache-policy switches remain rejected. Historical `lfu_lru`,
+   `profile_lfu_lru` and hybrid profile policies regressed both speed and
+   semantic quality.
+5. Increasing `MOE_IO_DEPTH` above `8` is not the next primary experiment:
+   decode rows almost all have `jobs <= 8`, so a deeper ring does not create
+   more independent work.
+
+Next implementation candidate:
+
+- inspect whether the current mixed up/gate path can co-submit gate+up misses
+  into larger IO batches without losing the existing parallel-stage and up
+  compute overlap;
+- if the design only serializes up compute behind gate reads, reject it before
+  implementation;
+- otherwise implement it default-off and run an N32 A/B before any N96 claim;
+- promotion gate remains generalized prompt quality, RAM `<16 GB`, TTFT
+  `<=+20%`, CPU fallback `0`, and endpoint token-rate improvement.
+
 ## Current Active Goal and Next Plan (2026-07-12 16:58 CST)
 
 This is the active goal for the next Kimi optimization cycle. It supersedes

@@ -1,0 +1,2 @@
+prompt,quality,token_rate,decode_ms_per_token,ttft_ms,ram_peak_gib,fallback_rows,extension_miss,upgate_ms_per_token,upgate_wait_ms_per_token,down_ms_per_token,down_stage_ms_per_token
+dev_france_regression,pass,1.540,649.959,11828.710,11.932,0,0,443.978,255.369,170.954,159.927

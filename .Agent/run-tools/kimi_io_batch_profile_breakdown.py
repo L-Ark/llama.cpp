@@ -114,7 +114,7 @@ def finish_bucket(key: tuple[str, ...], acc: dict[str, float]) -> dict[str, Any]
     }
 
 
-def summarize(paths: list[pathlib.Path]) -> dict[str, Any]:
+def summarize(paths: list[pathlib.Path], min_jobs: int | None = None, max_jobs: int | None = None) -> dict[str, Any]:
     by_prompt: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     by_role: dict[tuple[str, str], dict[str, float]] = defaultdict(lambda: defaultdict(float))
     by_layer_role: dict[tuple[str, str, int], dict[str, float]] = defaultdict(lambda: defaultdict(float))
@@ -123,6 +123,11 @@ def summarize(paths: list[pathlib.Path]) -> dict[str, Any]:
     for path in paths:
         prompt = path.parent.name
         for row in read_csv(path):
+            jobs = inum(row.get("jobs"))
+            if min_jobs is not None and jobs < min_jobs:
+                continue
+            if max_jobs is not None and jobs > max_jobs:
+                continue
             op = row.get("op", "")
             first = row.get("first_tensor", "")
             role = role_of(first)
@@ -147,6 +152,10 @@ def summarize(paths: list[pathlib.Path]) -> dict[str, Any]:
     ]
     return {
         "inputs": [str(path) for path in paths],
+        "filters": {
+            "min_jobs": min_jobs,
+            "max_jobs": max_jobs,
+        },
         "total": finish_bucket(("total",), total),
         "prompts": prompt_rows,
         "by_role": role_rows,
@@ -170,6 +179,11 @@ def write_md(path: pathlib.Path, report: dict[str, Any], top_n: int) -> None:
         "",
         "This report summarizes `GGML_MOE_IO_BATCH_PROFILE_OUT` rows. It measures",
         "how much independent read work the runtime actually exposes to io_uring.",
+        "",
+        "## Filters",
+        "",
+        f"- min jobs: `{report.get('filters', {}).get('min_jobs')}`",
+        f"- max jobs: `{report.get('filters', {}).get('max_jobs')}`",
         "",
         "## Aggregate",
         "",
@@ -250,9 +264,11 @@ def main() -> int:
     parser.add_argument("--out-role-csv", type=pathlib.Path, required=True)
     parser.add_argument("--out-layer-csv", type=pathlib.Path, required=True)
     parser.add_argument("--top-n", type=int, default=30)
+    parser.add_argument("--min-jobs", type=int, default=None)
+    parser.add_argument("--max-jobs", type=int, default=None)
     args = parser.parse_args()
 
-    report = summarize(args.input)
+    report = summarize(args.input, min_jobs=args.min_jobs, max_jobs=args.max_jobs)
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     write_md(args.out_md, report, args.top_n)
