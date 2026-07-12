@@ -193,6 +193,104 @@ done
 python3 .Agent/run-tools/kimi_activation_admission_summary.py
 ```
 
+### 2026-07-12 Hybrid Future Predictor Admission Result
+
+Status: completed and rejected as a runtime prefetch A/B basis.
+
+Artifact:
+
+- `.Agent/runs/20260712-hybrid-future-predictor-admission/report.md`
+- `.Agent/runs/20260712-hybrid-future-predictor-admission/parse_summary.csv`
+- `.Agent/runs/20260712-hybrid-future-predictor-admission/fold_metrics.csv`
+- `.Agent/runs/20260712-hybrid-future-predictor-admission/aggregate_metrics.csv`
+
+Scope:
+
+- dev-only offline screen;
+- no runtime change;
+- no SOTA claim;
+- no held-out/test prompt used;
+- input root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009`;
+- prompts:
+  `dev_france_regression`, `dev_japan_factual`, `dev_linear_equation`,
+  `dev_mixed_summary`, `dev_photosynthesis_factual`, `dev_python_reverse`,
+  `dev_zh_france`;
+- method:
+  leave-one-prompt-out hybrid future expert predictor using route-history
+  signals (`global_hot`, `cooc`, `previous_same_layer`, `recent_lfu`,
+  `hybrid_*`);
+- horizons: `1,2,3`;
+- budgets: `8,16,32`;
+- wait reference: `371.1 ms/token`.
+
+Admission gate:
+
+- all-role byte recall `>=65%`;
+- predicted/actual bytes `<=1.35x`;
+- full-step coverage `>=40%`.
+
+Result:
+
+- passing rows: `0`;
+- best all-role recall:
+  `hybrid_recent`, horizon `3`, budget `32`,
+  recall `0.5883`, precision `0.1471`, full-step `3.09%`,
+  predicted/actual bytes `4.00x`;
+- best lower-overfetch rows around budget `16` still have predicted/actual
+  `2.00x`, recall around `0.477`, and full-step below `1%`;
+- up/gate-only rows show the same pattern: recall around `0.588` only at
+  `4.00x` predicted bytes, with about `15 GiB/token` wasted traffic.
+
+Decision:
+
+- do not implement a runtime prefetch A/B from route-history hybrid predictors;
+- route-history can recover some future expert bytes, but it does not create
+  useful complete future batches without excessive wrong bytes;
+- this reinforces earlier rejections of static prior, FineMoE-style prefix,
+  simple route-score/history, route-ID prefix-neighbor, and small hidden+route
+  MoE-output surrogate predictors;
+- any next predictor attempt must use a stronger signal, e.g. graph-side router
+  logits over more than selected top-k, hidden-state features with a real
+  classifier, or a draft/router model, and must pass the same complete-batch
+  admission before runtime reads are added.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+OUT=.Agent/runs/20260712-hybrid-future-predictor-admission
+rm -rf "$OUT"
+timeout 600 python3 .Agent/run-tools/kimi_future_hybrid_predictor_admission.py \
+  --input-glob "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/dev_*/route-trace.csv" \
+  --out "$OUT" \
+  --layers 60 \
+  --max-decode-experts 8 \
+  --horizons 1 2 3 \
+  --budgets 8 16 32 \
+  --bundles all,upgate,down \
+  --recent-window 4 \
+  --io-wait-ms-per-token 371.1
+```
+
+### Updated Next Step
+
+At this point the following non-destructive admissions are rejected:
+
+- static RAM hot tier / whole-layer RAM slabs by complete-batch oracle;
+- static pack layout / queue-only scheduling;
+- activation-aware AW-MSE/input-correction lower-byte representation;
+- route-history / prefix / simple score-history future prefetch.
+
+The remaining high-value paths are:
+
+1. complete lower-bit smoke (`i1-IQ1_S`) after explicit approval for guarded
+   cleanup/download;
+2. storage-format changes that reduce bytes moved for all active experts,
+   not just reorder the same bytes;
+3. a stronger graph-side or draft-router predictor that can prove complete-batch
+   recall, not route-history recall, before any runtime A/B.
+
 ## 2026-07-12 Current Authoritative Goal And Plan
 
 本段是当前执行目标。后面的历史段落只作为实验记录和回溯依据；如果与本段冲突，以本段为准。

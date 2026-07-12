@@ -1,0 +1,8 @@
+prompt,path,rows,segments,decode_tokens,prompt_like_groups,incomplete_groups
+dev_france_regression,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/dev_france_regression/route-trace.csv,68736,5760,31,1,0
+dev_japan_factual,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/dev_japan_factual/route-trace.csv,68736,5760,31,1,0
+dev_linear_equation,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/dev_linear_equation/route-trace.csv,78648,5760,31,1,0
+dev_mixed_summary,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/dev_mixed_summary/route-trace.csv,78648,5760,31,1,0
+dev_photosynthesis_factual,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/dev_photosynthesis_factual/route-trace.csv,64488,5760,31,1,0
+dev_python_reverse,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/dev_python_reverse/route-trace.csv,70152,5760,31,1,0
+dev_zh_france,/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/dev_zh_france/route-trace.csv,65904,5760,31,1,0
