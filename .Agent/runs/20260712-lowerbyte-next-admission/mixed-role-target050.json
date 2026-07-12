@@ -1,0 +1,191 @@
+{
+  "conclusion": "No mixed-role combination passes. Even the best under-budget pair has worst mean rel L2 0.598, so GP68-GP70 blockwise residual tuning should stop as a primary 5 tok/s path.",
+  "kind": "kimi_mixed_role_byte_error_budget",
+  "passing": [],
+  "reproduce_command": ".Agent/run-tools/kimi_mixed_role_byte_error_budget.py --screen-json .Agent/runs/20260712-current-goal-lowbyte-freeze-screen/gp77-target050-summary.json --out-json .Agent/runs/20260712-lowerbyte-next-admission/mixed-role-target050.json --out-md .Agent/runs/20260712-lowerbyte-next-admission/mixed-role-target050.md --target-global-ratio 0.50 --target-mean-rel-l2 0.10",
+  "source_screen": ".Agent/runs/20260712-current-goal-lowbyte-freeze-screen/gp77-target050-summary.json",
+  "target_global_ratio": 0.5,
+  "target_mean_rel_l2": 0.1,
+  "under_budget": [
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse:bits1:block256",
+      "down_mean_rel_l2": 0.49927663909280223,
+      "down_ratio": 0.30909090909090886,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p1:bits1:block256",
+      "fused_mean_rel_l2": 0.5981738848461864,
+      "fused_ratio": 0.43255361337152465,
+      "global_ratio": 0.3861316365620131,
+      "worst_mean_rel_l2": 0.5981738848461864
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p02:bits1:block256",
+      "down_mean_rel_l2": 0.35809476575191707,
+      "down_ratio": 0.3229090909090909,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p1:bits1:block256",
+      "fused_mean_rel_l2": 0.5981738848461864,
+      "fused_ratio": 0.43255361337152465,
+      "global_ratio": 0.39132727292564956,
+      "worst_mean_rel_l2": 0.5981738848461864
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p05:bits1:block256",
+      "down_mean_rel_l2": 0.2972296688665765,
+      "down_ratio": 0.34363636363636363,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p1:bits1:block256",
+      "fused_mean_rel_l2": 0.5981738848461864,
+      "fused_ratio": 0.43255361337152465,
+      "global_ratio": 0.3991207274711041,
+      "worst_mean_rel_l2": 0.5981738848461864
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p1:bits1:block256",
+      "down_mean_rel_l2": 0.2348191169292928,
+      "down_ratio": 0.3781818181818181,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p1:bits1:block256",
+      "fused_mean_rel_l2": 0.5981738848461864,
+      "fused_ratio": 0.43255361337152465,
+      "global_ratio": 0.412109818380195,
+      "worst_mean_rel_l2": 0.5981738848461864
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse:bits1:block256",
+      "down_mean_rel_l2": 0.49927663909280223,
+      "down_ratio": 0.30909090909090886,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p05:bits1:block256",
+      "fused_mean_rel_l2": 0.6702878844477722,
+      "fused_ratio": 0.4010287562460742,
+      "global_ratio": 0.366460125715732,
+      "worst_mean_rel_l2": 0.6702878844477722
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p02:bits1:block256",
+      "down_mean_rel_l2": 0.35809476575191707,
+      "down_ratio": 0.3229090909090909,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p05:bits1:block256",
+      "fused_mean_rel_l2": 0.6702878844477722,
+      "fused_ratio": 0.4010287562460742,
+      "global_ratio": 0.37165576207936846,
+      "worst_mean_rel_l2": 0.6702878844477722
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p05:bits1:block256",
+      "down_mean_rel_l2": 0.2972296688665765,
+      "down_ratio": 0.34363636363636363,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p05:bits1:block256",
+      "fused_mean_rel_l2": 0.6702878844477722,
+      "fused_ratio": 0.4010287562460742,
+      "global_ratio": 0.379449216624823,
+      "worst_mean_rel_l2": 0.6702878844477722
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p1:bits1:block256",
+      "down_mean_rel_l2": 0.2348191169292928,
+      "down_ratio": 0.3781818181818181,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p05:bits1:block256",
+      "fused_mean_rel_l2": 0.6702878844477722,
+      "fused_ratio": 0.4010287562460742,
+      "global_ratio": 0.3924383075339139,
+      "worst_mean_rel_l2": 0.6702878844477722
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse:bits1:block256",
+      "down_mean_rel_l2": 0.49927663909280223,
+      "down_ratio": 0.30909090909090886,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p02:bits1:block256",
+      "fused_mean_rel_l2": 0.7218263459161497,
+      "fused_ratio": 0.38211395568203876,
+      "global_ratio": 0.3546572901637739,
+      "worst_mean_rel_l2": 0.7218263459161497
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p02:bits1:block256",
+      "down_mean_rel_l2": 0.35809476575191707,
+      "down_ratio": 0.3229090909090909,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p02:bits1:block256",
+      "fused_mean_rel_l2": 0.7218263459161497,
+      "fused_ratio": 0.38211395568203876,
+      "global_ratio": 0.35985292652741036,
+      "worst_mean_rel_l2": 0.7218263459161497
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p05:bits1:block256",
+      "down_mean_rel_l2": 0.2972296688665765,
+      "down_ratio": 0.34363636363636363,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p02:bits1:block256",
+      "fused_mean_rel_l2": 0.7218263459161497,
+      "fused_ratio": 0.38211395568203876,
+      "global_ratio": 0.3676463810728649,
+      "worst_mean_rel_l2": 0.7218263459161497
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p1:bits1:block256",
+      "down_mean_rel_l2": 0.2348191169292928,
+      "down_ratio": 0.3781818181818181,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p02:bits1:block256",
+      "fused_mean_rel_l2": 0.7218263459161497,
+      "fused_ratio": 0.38211395568203876,
+      "global_ratio": 0.3806354719819558,
+      "worst_mean_rel_l2": 0.7218263459161497
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse:bits1:block256",
+      "down_mean_rel_l2": 0.49927663909280223,
+      "down_ratio": 0.30909090909090886,
+      "fused_candidate": "fused_up_gate:aw_mse:bits1:block256",
+      "fused_mean_rel_l2": 0.771295874708151,
+      "fused_ratio": 0.3695038991206239,
+      "global_ratio": 0.34678861486945106,
+      "worst_mean_rel_l2": 0.771295874708151
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p02:bits1:block256",
+      "down_mean_rel_l2": 0.35809476575191707,
+      "down_ratio": 0.3229090909090909,
+      "fused_candidate": "fused_up_gate:aw_mse:bits1:block256",
+      "fused_mean_rel_l2": 0.771295874708151,
+      "fused_ratio": 0.3695038991206239,
+      "global_ratio": 0.3519842512330875,
+      "worst_mean_rel_l2": 0.771295874708151
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p05:bits1:block256",
+      "down_mean_rel_l2": 0.2972296688665765,
+      "down_ratio": 0.34363636363636363,
+      "fused_candidate": "fused_up_gate:aw_mse:bits1:block256",
+      "fused_mean_rel_l2": 0.771295874708151,
+      "fused_ratio": 0.3695038991206239,
+      "global_ratio": 0.35977770577854207,
+      "worst_mean_rel_l2": 0.771295874708151
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p1:bits1:block256",
+      "down_mean_rel_l2": 0.2348191169292928,
+      "down_ratio": 0.3781818181818181,
+      "fused_candidate": "fused_up_gate:aw_mse:bits1:block256",
+      "fused_mean_rel_l2": 0.771295874708151,
+      "fused_ratio": 0.3695038991206239,
+      "global_ratio": 0.37276679668763296,
+      "worst_mean_rel_l2": 0.771295874708151
+    }
+  ],
+  "weights": {
+    "down": 0.376,
+    "fused_up_gate": 0.624
+  }
+}

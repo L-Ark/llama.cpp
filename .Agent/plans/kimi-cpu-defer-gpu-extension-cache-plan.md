@@ -336,6 +336,90 @@ Next primary implementation candidate:
 - or RAM/VRAM tiering only if it demonstrably replaces low-value file cache and
   reduces endpoint decode time, not only hit rate.
 
+### 2026-07-12 Lower-Byte Next Admission Result
+
+Status: completed; lower-byte remains the next primary direction, but the
+existing blockwise residual family is rejected.
+
+Artifact:
+
+- `.Agent/runs/20260712-lowerbyte-next-admission/report.md`
+- `.Agent/runs/20260712-lowerbyte-next-admission/low-byte-bound.md`
+- `.Agent/runs/20260712-lowerbyte-next-admission/quant-split-sweep.md`
+- `.Agent/runs/20260712-lowerbyte-next-admission/mixed-role-target050.md`
+
+Input:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717`;
+- prompts: `dev_france_regression`, `dev_intelligence_general`;
+- traces: `io-read-trace.csv` plus `io-wait-trace.csv`;
+- baseline decode `42527.100 ms / 62 decode runs`;
+- this is dev-only and does not use held-out/test prompts.
+
+Exposed-wait byte bound:
+
+- total profiled IO wait: `23006.531 ms`;
+- total profiled payload: `277.515 GiB`;
+- role max linear wait contribution:
+  - gate `135.452 ms/token`;
+  - up `122.284 ms/token`;
+  - down `113.337 ms/token`;
+- all-role `50%` byte reduction bound: `1.998 tok/s`;
+- all-role `75%` byte reduction bound: `2.444-2.453 tok/s`;
+- all profiled IO wait eliminated bound: `3.176 tok/s`;
+- target feasibility:
+  - `2 tok/s` requires about `50.1%` all-role byte reduction;
+  - `5 tok/s` would require `131.0%` all-role exposed-wait reduction, so IO
+    byte reduction alone cannot reach it on this baseline.
+
+Split-pool result under smaller entries:
+
+- current `62%` upgate split is already near optimal:
+  - ratio `1.000`: best split `62`, miss `7.004 GiB/token`;
+  - ratio `0.732`: best split `62`, miss `4.558 GiB/token`;
+  - ratio `0.500`: best split `62`, miss `2.584 GiB/token`;
+  - ratio `0.254`: best split `60`, miss `0.785 GiB/token`;
+- therefore the first lower-byte runtime smoke should not spend time sweeping
+  split first; keep around `62%` and validate endpoint behavior.
+
+Error gate for existing blockwise residual family:
+
+- command target: global byte ratio `<=0.50x`, mean rel-L2 `<=0.10`;
+- combinations under byte target: `16`;
+- passing combinations: `0`;
+- best under-budget combination:
+  - global ratio `0.3861`;
+  - down mean rel-L2 `0.499277`;
+  - fused up/gate mean rel-L2 `0.598174`;
+  - decision `reject`;
+- conclusion: do not implement GP68-GP77 blockwise 1-bit residual family as a
+  runtime path.
+
+Complete-model candidate state:
+
+- Existing storage gate still identifies `i1-IQ1_S` as the only current
+  complete-model candidate worth a `2 tok/s` smoke:
+  - size `204430872480 bytes`;
+  - ratio vs current IQ3_S model dir `0.504x`;
+  - not a `5 tok/s` solution;
+- current check: `/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF` is not present;
+- free space on `/root/lfz` is about `106 GiB`, not enough to download it while
+  preserving rollback reserve without cleanup;
+- no deletion or download was performed.
+
+Decision:
+
+- The next implementation must reduce all-role effective movement to around
+  `0.50x` to have a plausible `2 tok/s` path.
+- Reducing only down, or only hot subsets, is insufficient.
+- Existing blockwise residual candidates fail quality/error gates and are
+  rejected.
+- `i1-IQ1_S` complete-model smoke is the next concrete runtime experiment only
+  if explicit storage cleanup/download is approved via the guarded script.
+- Without storage cleanup approval, continue non-destructive design of a new
+  activation-aware lower-byte representation with multi-prompt output-error
+  gates before runtime code.
+
 ### Plan
 
 1. 保持 CPU/defer GPU-extension 作为每次实验的硬回归门禁。
