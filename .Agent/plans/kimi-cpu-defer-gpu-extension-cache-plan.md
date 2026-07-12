@@ -101,6 +101,52 @@ DeepSeek 那次大幅提升的本质不是传统意义上的 “GPU backend 失�
    - 如果不存在该慢路径：停止把它作为主线，转向 lower-byte exact/near-exact expert
      表示、router-logit/hidden-state 预测、或 pack layout / RAM tier 的字节级优化。
 
+### 2026-07-12 Dev2 Audit Result
+
+Artifact:
+
+- `.Agent/runs/20260712-cpu-defer-gpu-extension-audit/report.md`
+- remote audit root: `/root/lfz/runs/vendor-kimi-token-rate/20260712-cpu-defer-gpu-ext-audit-dev2-report`
+
+Cold-start inputs:
+
+- `dev_france_regression`: `Please introduce France in a short paragraph.`
+- `dev_intelligence_general`: `What is intelligence?`
+
+Result:
+
+- weighted decode: `662.468 ms/token`, `1.510 tok/s`;
+- quality: pass on both prompts;
+- RAM peak: `11.891 GiB` and `11.737 GiB`, below the 16GB gate;
+- fallback rows: `0`;
+- CPU/defer extension miss: `0`;
+- `up_gate` and `down` both show `batch_accept == calls`, `batch_decline == 0`;
+- all copy-profile rows are `pack_hit=1`, `iouring=1`, `ram_hit=0`.
+
+Decision:
+
+- DeepSeek-style `CPU/defer main path + GPU expert-cache extension` is already active
+  for current Kimi up/gate/down in this path.
+- A broad fallback-hook rewrite is not the next high-value Kimi optimization.
+- Current bottleneck is moved bytes plus demand-read exposure:
+  - `runtime_load gate`: `118.813 GiB` over dev2;
+  - `runtime_load up`: `109.942 GiB`;
+  - `runtime_load down`: `124.691 GiB`;
+  - `current_down_overlap down`: `52.079 GiB`.
+- Total copied expert payload is about `405.5 GiB / 62 decode tokens = 6.54 GiB/token`.
+  At the measured `~10.3 GiB/s` transfer ceiling, pure scheduling without byte reduction
+  cannot reach `2 tok/s`, and is far from `5 tok/s`.
+
+Next action:
+
+1. Keep CPU/defer audit as a regression gate, not as the main optimization target.
+2. Prioritize lower-byte expert representation or RAM/VRAM tiering that demonstrably
+   reduces critical-path `runtime_load` io wait.
+3. Any predictor/prefetch work must first prove it reduces exposed wait without inflating
+   moved bytes enough to lose the transfer ceiling.
+4. SOTA candidates still require cold-start generalized prompts, RAM/TTFT/quality gates,
+   commit-body reproduction details, and immediate push.
+
 ## 2026-07-12 Active Goal: Reproducible Lower-Byte Smoke Gate
 
 ### Goal

@@ -423,6 +423,7 @@ def write_report(out: pathlib.Path, input_root: pathlib.Path, runs: list[dict[st
     first_git = runs[0]["git"] if runs else {}
     branch = first_git.get("branch", "unknown")
     head = first_git.get("short", first_git.get("head", "unknown"))
+    copy_profile_runs = sum(1 for run in runs if (pathlib.Path(run["run_dir"]) / "copy-profile.csv").exists())
     decision = "fallback_hook_not_next"
     if agg["true_fallback_runs"] or agg["extension_miss_runs"]:
         decision = "investigate_extension_miss_before_scheduler_work"
@@ -524,7 +525,17 @@ def write_report(out: pathlib.Path, input_root: pathlib.Path, runs: list[dict[st
         "",
         "- This audit uses existing `metrics.json`, `stderr.txt`, `fallback-profile.csv`, `up-gate-profile.csv`, and `down-batch-profile.csv` artifacts.",
         "- It proves CPU fallback and CUDA batch-extension acceptance for the profiled runs.",
-        "- It does not split H2D from host staging because this dev7 run was not collected with `COPY_PROFILE=1`.",
+        f"- Runs with `copy-profile.csv`: `{copy_profile_runs}/{len(runs)}`.",
+    ]
+    if copy_profile_runs:
+        lines += [
+            "- For runs collected with `COPY_PROFILE=1`, use `kimi_copy_profile_breakdown.py` to split expert-pack/io_uring wait from H2D enqueue/copy.",
+        ]
+    else:
+        lines += [
+            "- It does not split H2D from host staging because no input run was collected with `COPY_PROFILE=1`.",
+        ]
+    lines += [
         "- A later source-change A/B must still run fresh cold-start profiles with copy/io traces before claiming SOTA.",
         "",
         "## Next Action",
