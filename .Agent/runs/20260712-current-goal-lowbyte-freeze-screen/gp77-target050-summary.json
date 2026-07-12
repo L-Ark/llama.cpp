@@ -1,0 +1,306 @@
+{
+  "aggregate": {
+    "down:aw_mse:bits1:block256": {
+      "max_abs_error": 1.108243703842163,
+      "max_rel_l2": 0.5063956457316098,
+      "mean_abs_error": 0.03792726511730709,
+      "mean_byte_ratio": 0.30909090909090886,
+      "mean_rel_l2": 0.49927663909280223,
+      "rows": 72
+    },
+    "down:aw_mse_keep_input0p02:bits1:block256": {
+      "max_abs_error": 0.7265826463699341,
+      "max_rel_l2": 0.41797472755565435,
+      "mean_abs_error": 0.024342765939864976,
+      "mean_byte_ratio": 0.3229090909090909,
+      "mean_rel_l2": 0.35809476575191707,
+      "rows": 72
+    },
+    "down:aw_mse_keep_input0p05:bits1:block256": {
+      "max_abs_error": 0.5556514263153076,
+      "max_rel_l2": 0.3537997909764378,
+      "mean_abs_error": 0.019901288108990736,
+      "mean_byte_ratio": 0.34363636363636363,
+      "mean_rel_l2": 0.2972296688665765,
+      "rows": 72
+    },
+    "down:aw_mse_keep_input0p1:bits1:block256": {
+      "max_abs_error": 0.4355953335762024,
+      "max_rel_l2": 0.2890191915199064,
+      "mean_abs_error": 0.01549257394274011,
+      "mean_byte_ratio": 0.3781818181818181,
+      "mean_rel_l2": 0.2348191169292928,
+      "rows": 72
+    },
+    "gate:aw_mse:bits1:block256": {
+      "max_abs_error": 1.4026261568069458,
+      "max_rel_l2": 0.6215955279620787,
+      "mean_abs_error": 0.10141681543447906,
+      "mean_byte_ratio": 0.36950389912062387,
+      "mean_rel_l2": 0.5953287149512246,
+      "rows": 72
+    },
+    "gate:aw_mse_keep_input0p02:bits1:block256": {
+      "max_abs_error": 1.3807682991027832,
+      "max_rel_l2": 0.5780220441527553,
+      "mean_abs_error": 0.09358875758738981,
+      "mean_byte_ratio": 0.3821138211382114,
+      "mean_rel_l2": 0.5471357659758849,
+      "rows": 72
+    },
+    "gate:aw_mse_keep_input0p05:bits1:block256": {
+      "max_abs_error": 1.2160248756408691,
+      "max_rel_l2": 0.5384996169897374,
+      "mean_abs_error": 0.08602267801244226,
+      "mean_byte_ratio": 0.40102870416459246,
+      "mean_rel_l2": 0.5016626074862705,
+      "rows": 72
+    },
+    "gate:aw_mse_keep_input0p1:bits1:block256": {
+      "max_abs_error": 1.059382677078247,
+      "max_rel_l2": 0.4733360407415762,
+      "mean_abs_error": 0.07553426911019617,
+      "mean_byte_ratio": 0.4325535092085615,
+      "mean_rel_l2": 0.4413105351622073,
+      "rows": 72
+    },
+    "up:aw_mse:bits1:block256": {
+      "max_abs_error": 1.3701800107955933,
+      "max_rel_l2": 0.633636111986208,
+      "mean_abs_error": 0.10326594838665591,
+      "mean_byte_ratio": 0.36950389912062387,
+      "mean_rel_l2": 0.5962066791739594,
+      "rows": 72
+    },
+    "up:aw_mse_keep_input0p02:bits1:block256": {
+      "max_abs_error": 1.2541495561599731,
+      "max_rel_l2": 0.5915090466632787,
+      "mean_abs_error": 0.09541231970716682,
+      "mean_byte_ratio": 0.3821138211382114,
+      "mean_rel_l2": 0.5487148847750348,
+      "rows": 72
+    },
+    "up:aw_mse_keep_input0p05:bits1:block256": {
+      "max_abs_error": 1.2242904901504517,
+      "max_rel_l2": 0.5446911960783756,
+      "mean_abs_error": 0.0873580785571701,
+      "mean_byte_ratio": 0.40102870416459246,
+      "mean_rel_l2": 0.5021563898573296,
+      "rows": 72
+    },
+    "up:aw_mse_keep_input0p1:bits1:block256": {
+      "max_abs_error": 1.1813108921051025,
+      "max_rel_l2": 0.4733918365403903,
+      "mean_abs_error": 0.07677652011625469,
+      "mean_byte_ratio": 0.4325535092085615,
+      "mean_rel_l2": 0.44236965921341476,
+      "rows": 72
+    }
+  },
+  "decision": "No candidate passes the multi-prompt offline gate. Do not implement this blockwise low-bit residual family as a runtime path; move to a qualitatively different representation.",
+  "fused_up_gate": {
+    "fused_up_gate:aw_mse:bits1:block256": {
+      "max_abs_error": 1.7089437246322632,
+      "max_rel_l2": 0.8269386273359308,
+      "mean_abs_error": 0.02625805337649783,
+      "mean_byte_ratio": 0.3695038991206239,
+      "mean_rel_l2": 0.771295874708151,
+      "rows": 72
+    },
+    "fused_up_gate:aw_mse_keep_input0p02:bits1:block256": {
+      "max_abs_error": 1.7445738315582275,
+      "max_rel_l2": 0.7931580391478152,
+      "mean_abs_error": 0.024765721310460422,
+      "mean_byte_ratio": 0.38211395568203876,
+      "mean_rel_l2": 0.7218263459161497,
+      "rows": 72
+    },
+    "fused_up_gate:aw_mse_keep_input0p05:bits1:block256": {
+      "max_abs_error": 1.5338677167892456,
+      "max_rel_l2": 0.7335263004596935,
+      "mean_abs_error": 0.02311528731984759,
+      "mean_byte_ratio": 0.4010287562460742,
+      "mean_rel_l2": 0.6702878844477722,
+      "rows": 72
+    },
+    "fused_up_gate:aw_mse_keep_input0p1:bits1:block256": {
+      "max_abs_error": 1.3906766176223755,
+      "max_rel_l2": 0.6595004157925174,
+      "mean_abs_error": 0.02068979350183832,
+      "mean_byte_ratio": 0.43255361337152465,
+      "mean_rel_l2": 0.5981738848461864,
+      "rows": 72
+    }
+  },
+  "kind": "kimi_multi_prompt_screen_summary",
+  "mixed_role": [
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse:bits1:block256",
+      "down_mean_rel_l2": 0.49927663909280223,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p1:bits1:block256",
+      "fused_mean_rel_l2": 0.5981738848461864,
+      "global_ratio": 0.3861316365620131,
+      "worst_mean_rel_l2": 0.5981738848461864
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p02:bits1:block256",
+      "down_mean_rel_l2": 0.35809476575191707,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p1:bits1:block256",
+      "fused_mean_rel_l2": 0.5981738848461864,
+      "global_ratio": 0.39132727292564956,
+      "worst_mean_rel_l2": 0.5981738848461864
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p05:bits1:block256",
+      "down_mean_rel_l2": 0.2972296688665765,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p1:bits1:block256",
+      "fused_mean_rel_l2": 0.5981738848461864,
+      "global_ratio": 0.3991207274711041,
+      "worst_mean_rel_l2": 0.5981738848461864
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p1:bits1:block256",
+      "down_mean_rel_l2": 0.2348191169292928,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p1:bits1:block256",
+      "fused_mean_rel_l2": 0.5981738848461864,
+      "global_ratio": 0.412109818380195,
+      "worst_mean_rel_l2": 0.5981738848461864
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse:bits1:block256",
+      "down_mean_rel_l2": 0.49927663909280223,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p05:bits1:block256",
+      "fused_mean_rel_l2": 0.6702878844477722,
+      "global_ratio": 0.366460125715732,
+      "worst_mean_rel_l2": 0.6702878844477722
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p02:bits1:block256",
+      "down_mean_rel_l2": 0.35809476575191707,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p05:bits1:block256",
+      "fused_mean_rel_l2": 0.6702878844477722,
+      "global_ratio": 0.37165576207936846,
+      "worst_mean_rel_l2": 0.6702878844477722
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p05:bits1:block256",
+      "down_mean_rel_l2": 0.2972296688665765,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p05:bits1:block256",
+      "fused_mean_rel_l2": 0.6702878844477722,
+      "global_ratio": 0.379449216624823,
+      "worst_mean_rel_l2": 0.6702878844477722
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p1:bits1:block256",
+      "down_mean_rel_l2": 0.2348191169292928,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p05:bits1:block256",
+      "fused_mean_rel_l2": 0.6702878844477722,
+      "global_ratio": 0.3924383075339139,
+      "worst_mean_rel_l2": 0.6702878844477722
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse:bits1:block256",
+      "down_mean_rel_l2": 0.49927663909280223,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p02:bits1:block256",
+      "fused_mean_rel_l2": 0.7218263459161497,
+      "global_ratio": 0.3546572901637739,
+      "worst_mean_rel_l2": 0.7218263459161497
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p02:bits1:block256",
+      "down_mean_rel_l2": 0.35809476575191707,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p02:bits1:block256",
+      "fused_mean_rel_l2": 0.7218263459161497,
+      "global_ratio": 0.35985292652741036,
+      "worst_mean_rel_l2": 0.7218263459161497
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p05:bits1:block256",
+      "down_mean_rel_l2": 0.2972296688665765,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p02:bits1:block256",
+      "fused_mean_rel_l2": 0.7218263459161497,
+      "global_ratio": 0.3676463810728649,
+      "worst_mean_rel_l2": 0.7218263459161497
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p1:bits1:block256",
+      "down_mean_rel_l2": 0.2348191169292928,
+      "fused_candidate": "fused_up_gate:aw_mse_keep_input0p02:bits1:block256",
+      "fused_mean_rel_l2": 0.7218263459161497,
+      "global_ratio": 0.3806354719819558,
+      "worst_mean_rel_l2": 0.7218263459161497
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse:bits1:block256",
+      "down_mean_rel_l2": 0.49927663909280223,
+      "fused_candidate": "fused_up_gate:aw_mse:bits1:block256",
+      "fused_mean_rel_l2": 0.771295874708151,
+      "global_ratio": 0.34678861486945106,
+      "worst_mean_rel_l2": 0.771295874708151
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p02:bits1:block256",
+      "down_mean_rel_l2": 0.35809476575191707,
+      "fused_candidate": "fused_up_gate:aw_mse:bits1:block256",
+      "fused_mean_rel_l2": 0.771295874708151,
+      "global_ratio": 0.3519842512330875,
+      "worst_mean_rel_l2": 0.771295874708151
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p05:bits1:block256",
+      "down_mean_rel_l2": 0.2972296688665765,
+      "fused_candidate": "fused_up_gate:aw_mse:bits1:block256",
+      "fused_mean_rel_l2": 0.771295874708151,
+      "global_ratio": 0.35977770577854207,
+      "worst_mean_rel_l2": 0.771295874708151
+    },
+    {
+      "decision": "reject",
+      "down_candidate": "down:aw_mse_keep_input0p1:bits1:block256",
+      "down_mean_rel_l2": 0.2348191169292928,
+      "fused_candidate": "fused_up_gate:aw_mse:bits1:block256",
+      "fused_mean_rel_l2": 0.771295874708151,
+      "global_ratio": 0.37276679668763296,
+      "worst_mean_rel_l2": 0.771295874708151
+    }
+  ],
+  "passing_fused": [],
+  "passing_matvec": [],
+  "passing_mixed_role": [],
+  "reproduce_command": ".Agent/run-tools/kimi_multi_prompt_screen_summary.py --screen-json .Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_japan_factual/screen.json --screen-json .Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_mixed_summary/screen.json --screen-json .Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_python_reverse/screen.json --out-json .Agent/runs/20260712-current-goal-lowbyte-freeze-screen/gp77-target050-summary.json --out-md .Agent/runs/20260712-current-goal-lowbyte-freeze-screen/gp77-target050-summary.md --target-byte-ratio 0.50 --target-mean-rel-l2 0.10",
+  "screens": [
+    {
+      "path": ".Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_japan_factual/screen.json",
+      "prompt_id": "dev_japan_factual"
+    },
+    {
+      "path": ".Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_mixed_summary/screen.json",
+      "prompt_id": "dev_mixed_summary"
+    },
+    {
+      "path": ".Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_python_reverse/screen.json",
+      "prompt_id": "dev_python_reverse"
+    }
+  ],
+  "target_byte_ratio": 0.5,
+  "target_mean_rel_l2": 0.1,
+  "weights": {
+    "down": 0.376,
+    "fused_up_gate": 0.624
+  }
+}

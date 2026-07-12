@@ -20635,3 +20635,115 @@ Decision:
      selected gate/upgate layer-role groups;
   3. report exact output text, token rate bound, TTFT/RAM implications and
      rollback point before runtime implementation.
+
+## 2026-07-12 Low-Byte Gate/Upgate Freeze Screen
+
+Goal:
+
+- Convert the low-byte bound into a concrete candidate gate.
+- Reuse existing dev-only activation-output screens before writing any runtime
+  codec or CUDA kernel.
+- Keep held-out prompts sealed until a candidate is frozen.
+
+Prompt discipline:
+
+- Dev prompt manifest:
+  `.Agent/evals/kimi-general-dev-prompts.jsonl`
+  - `dev_france_regression`
+  - `dev_japan_factual`
+  - `dev_photosynthesis_factual`
+  - `dev_linear_equation`
+  - `dev_python_reverse`
+  - `dev_zh_france`
+  - `dev_mixed_summary`
+- Held-out prompt manifest:
+  `.Agent/evals/kimi-general-test-prompts.jsonl`
+  - `test_english_factual_01`
+  - `test_english_factual_02`
+  - `test_reasoning_math_01`
+  - `test_coding_01`
+  - `test_chinese_01`
+  - `test_mixed_instruction_01`
+- Candidate selection may use dev prompts only.
+- Held-out prompt routes, activation dumps and outputs must not be inspected
+  for tuning. Held-out runs are allowed only after a candidate and all env
+  settings are frozen.
+
+Existing offline quality gate:
+
+- Tool:
+  `.Agent/run-tools/kimi_multi_prompt_screen_summary.py`
+- Source activation screens:
+  - `.Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_japan_factual/screen.json`
+  - `.Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_mixed_summary/screen.json`
+  - `.Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_python_reverse/screen.json`
+- These screens are dev-only and are based on activation-output error, not
+  just weight reconstruction error.
+
+Command:
+
+```bash
+OUT=.Agent/runs/20260712-current-goal-lowbyte-freeze-screen
+mkdir -p "$OUT"
+.Agent/run-tools/kimi_multi_prompt_screen_summary.py \
+  --screen-json .Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_japan_factual/screen.json \
+  --screen-json .Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_mixed_summary/screen.json \
+  --screen-json .Agent/runs/20260707-gp77-multiprompt-representation-screen/dev_python_reverse/screen.json \
+  --out-json "$OUT/gp77-target050-summary.json" \
+  --out-md "$OUT/gp77-target050-summary.md" \
+  --target-byte-ratio 0.50 \
+  --target-mean-rel-l2 0.10
+```
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-lowbyte-freeze-screen/gp77-target050-summary.md`
+- `.Agent/runs/20260712-current-goal-lowbyte-freeze-screen/gp77-target050-summary.json`
+
+Result:
+
+- screens: `3`
+- aggregate matvec candidates: `12`
+- aggregate fused candidates: `4`
+- passing matvec candidates: `0`
+- passing fused candidates: `0`
+- passing mixed-role candidates: `0`
+- best fused up/gate:
+  - `fused_up_gate:aw_mse_keep_input0p1:bits1:block256`
+  - byte ratio `0.4326`
+  - mean rel L2 `0.598174`
+  - max rel L2 `0.659500`
+- best mixed-role under budget:
+  - down `down:aw_mse:bits1:block256`
+  - fused up/gate `fused_up_gate:aw_mse_keep_input0p1:bits1:block256`
+  - global ratio `0.3861`
+  - down mean rel L2 `0.499277`
+  - fused mean rel L2 `0.598174`
+  - worst mean rel L2 `0.598174`
+  - decision `reject`
+
+Interpretation:
+
+- Even when the byte-ratio target is relaxed from the prior `0.40x` 5 tok/s
+  budget to `0.50x`, the old blockwise activation-aware family still fails the
+  output-error gate by a wide margin.
+- This closes simple blockwise 1-bit residual/codebook candidates not only for
+  the `5 tok/s` target, but also for the nearer `2 tok/s` milestone.
+- The next representation candidate must be qualitatively different. It cannot
+  be a small retune of GP67-GP77 blockwise quantization.
+
+Next plan:
+
+1. Do not implement runtime support for the rejected blockwise family.
+2. For a future lower-byte candidate, require before runtime work:
+   - dev-only activation-output mean rel L2 near `<=0.10`;
+   - effective moved-byte ratio `<=0.50x` for a `2 tok/s` candidate, or
+     `0.30x-0.40x` for a `5 tok/s` candidate;
+   - expected decode bound using `.Agent/run-tools/kimi_low_byte_expert_bound.py`;
+   - no held-out route/activation data used for design.
+3. The next engineering direction should therefore shift to one of:
+   - exact or near-exact pack/layout changes that reduce exposed wait without
+     changing arithmetic;
+   - stronger future-layer prefetch that creates larger useful batches;
+   - a new representation with fused reconstruction+matmul and measured
+     activation-output error, not plain blockwise weight reconstruction.
