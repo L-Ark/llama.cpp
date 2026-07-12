@@ -4,6 +4,103 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Active Goal: Kimi CPU/defer GPU-extension Applicability
+
+### Goal
+
+本阶段 goal 是验证并实现一条明确路线：判断 DeepSeek SOTA 中
+`CPU/defer MoE main path + GPU expert-cache extension` 的成功原因，是否能迁移到
+Kimi，并在当前 Kimi 代码上转化为可泛化、可复现的 token rate 提升。
+
+目标不是做 prompt-specific cache，也不是只提高单个 France prompt；最终任务背景保持不变：
+
+- 机器约束：`16 GB host RAM` hard limit（包含 page cache / pinned / runtime RSS）+
+  单张 `32 GB RTX 5090`；
+- 启动方式：必须 cold start；
+- 输入场景：用户随机 prompt，优化必须对 generalized prompts 有效；
+- 短期目标：先稳定超过 `2 tok/s`；
+- 长期目标：稳定超过 `5 tok/s`；
+- 质量门禁：`Please introduce France in a short paragraph.` 必须语义正确、连贯；
+- TTFT 门禁：任何 SOTA 候选 TTFT 不得比对应 baseline 升高超过 `20%`；
+- 可复现门禁：任何 SOTA 结论必须绑定 commit、env、命令、prompt/test set、RAM/VRAM
+  指标、TTFT、输出质量、rollback point，并立即 push。
+
+### Core Hypothesis
+
+DeepSeek 那次大幅提升的本质不是传统意义上的 “GPU backend 失败后 CPU fallback”，而是：
+
+1. MoE 前若干层由 `CPU/defer` 路径主调度；
+2. 原本 gate/up/down 中部分角色会在 CPU/defer 慢路径上执行或被慢路径阻塞；
+3. 给这个 CPU/defer 主路径增加 GPU expert-cache extension 后，gate 等关键角色可以通过
+   VRAM hot/cache + pack/io_uring/H2D + CUDA kernel 执行；
+4. gate 是 routed expert 的必经路径，因此 gate 从慢路径变成 GPU-resident/fast path
+   后，decode critical path 明显缩短。
+
+对 Kimi 是否有用，必须用实测回答：
+
+- 如果 Kimi 当前仍存在 gate/up/down 的 CPU/defer 慢路径、GGUF fallback 或 unsupported
+  type fallback，那么 DeepSeek 同类 extension 可能有收益；
+- 如果 Kimi 当前已经做到 prompt/decode fallback 近似为 0，且 gate/up/down 都走 GPU
+  extension，那么这条路线的新增收益会有限，下一步应回到 moved bytes、RAM/VRAM 分层、
+  lower-byte 表示或更强预测/预取。
+
+### Execution Plan
+
+1. 重新建立当前 Kimi baseline。
+   - 使用当前分支 `vendor/kimi-deepseek-41d205-additive` 的 HEAD；
+   - cold-start 跑 generalized dev prompts，并至少保留一个 held-out prompt 只做最终验证；
+   - 记录 decode token rate、TTFT、prompt token rate、RAM peak、file/page-cache、
+     pinned/RSS、VRAM、quality output；
+   - 记录 `direct_reads`、`iouring_bytes`、`iouring_wait`、H2D、up/gate/down wall、
+     CPU fallback by type/role/layer。
+
+2. 审计 Kimi MoE 执行路径。
+   - 明确每个 role：gate、up、down、shared expert、dense/attention 分别在哪里计算；
+   - 区分 `CPU/defer main path`、`GPU extension fast path`、`CPU fallback`、`GGUF
+     fallback`；
+   - 对所有 fallback 给出实际触发原因：unsupported quant type、batch 条件不满足、pack
+     miss、alias 不存在、scheduler 没接住、还是显式配置导致。
+
+3. 补齐 instrumentation。
+   - 每个 token/layer/role 记录 source path：VRAM hot、VRAM dynamic、RAM tier、
+     SSD pack、GGUF mmap、CPU fallback；
+   - 每个 role 拆分：read submit、io_uring wait、staging wall、H2D、GPU compute、
+     CPU compute、sync gap；
+   - route trace 必须能定位 layer/role/expert，不只记录 expert id；
+   - 输出统一汇总到 run report，作为每次 A/B 的比较依据。
+
+4. 只做 default-off A/B，不直接声明 SOTA。
+   - A/B-1：gate-only GPU-cache 强化，优先覆盖暴露 wait 最大的层；
+   - A/B-2：up+gate paired cache，验证 gate/up 是否需要同层同 expert 同步缓存；
+   - A/B-3：down cache 仅在 profiling 证明 down miss 是 critical path 时启用；
+   - A/B-4：RAM tier 只放 generalized heat 中的次热 expert 或整层 slab，不能用测试
+     prompt 热度；
+   - A/B-5：清理 prompt 后低价值 GGUF page cache，并把释放的 host RAM 转成显式 expert
+     cache，验证是否降低 critical-path SSD read，而不是只提高 hit rate。
+
+5. 每个实验前先理论上限，实验后解释 gap。
+   - 根据 active expert bytes/token、NVMe/ODIRECT 实测带宽、H2D 带宽、compute wall
+     估算上限；
+   - 如果实测低于预期，必须定位是队列断流、H2D/sync、compute、RAM pressure、page
+     reclaim、还是 fallback；
+   - 如果只是 hit rate 提高但 token rate 下降，必须保留 profiling 证据并回退。
+
+6. SOTA 接受规则。
+   - generalized dev set 平均 token rate 提升，并且 held-out prompt 不退化；
+   - host RAM peak `< 16 GB`，包含 page cache；
+   - TTFT `<= baseline * 1.20`；
+   - France quality gate 通过，其他 prompts 语义连贯；
+   - fallback 不增加，尤其不能重新引入 prompt fallback；
+   - commit message body 必须写明提升幅度、env、命令、prompt/test set、RAM/VRAM、
+     TTFT、quality、rollback point；
+   - 通过后立即 push；失败则 revert 或保留 default-off，不作为 SOTA。
+
+7. 分流决策。
+   - 如果 Kimi 确认存在 DeepSeek 类 gate/up/down 慢路径：优先实现 GPU extension 和
+     cache policy；
+   - 如果不存在该慢路径：停止把它作为主线，转向 lower-byte exact/near-exact expert
+     表示、router-logit/hidden-state 预测、或 pack layout / RAM tier 的字节级优化。
+
 ## 2026-07-12 Active Goal: Reproducible Lower-Byte Smoke Gate
 
 ### Goal
