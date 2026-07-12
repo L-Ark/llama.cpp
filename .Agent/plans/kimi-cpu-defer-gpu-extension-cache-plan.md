@@ -370,6 +370,51 @@ Next:
 - otherwise prioritize lower-byte expert movement or a stronger future-expert
   admission signal.
 
+### Multi-Size Mixed Up/Gate Scheduler Bound (2026-07-12 19:55 CST)
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-upgate-multisize-bound/report.md`
+
+Question:
+
+- should the next runtime implementation be a full multi-size mixed up/gate IO
+  scheduler?
+
+Required endpoint saving:
+
+- current N96 France baseline: `50692.07 ms / 85`, `1.68 tok/s`;
+- reaching `2 tok/s` on this prompt requires about `8192 ms` decode saving,
+  or about `96.38 ms/token`.
+
+N96 up/gate type contribution:
+
+| type pair | calls | wall ms | up wait ms | gate wait ms | up jobs/call | gate jobs/call |
+|---|---:|---:|---:|---:|---:|---:|
+| `22/18` | `2465` | `17624.2` | `10869.1` | `11823.0` | `4.08` | `4.08` |
+| `22/22` | `1530` | `7968.1` | `7069.2` | `7629.8` | `4.61` | `4.61` |
+| `18/18` | `851` | `6062.4` | `0.0` | `0.0` | `4.87` | `4.87` |
+| `18/22` | `255` | `1459.9` | `1345.2` | `1351.5` | `4.89` | `4.90` |
+
+Bound and decision:
+
+- mixed `22/18 + 18/22` wall is about `19084 ms`;
+- to reach `2 tok/s`, a multi-size mixed scheduler would need to convert
+  roughly `43%` of the entire mixed up/gate wall into endpoint saving;
+- the same-type A/B already reduced decode-only IO wait by about `2.46 s` but
+  did not improve endpoint decode;
+- therefore a full multi-size mixed scheduler is not the next best
+  implementation unless it also preserves per-role H2D/compute-as-ready
+  overlap. A naive combined ring is rejected.
+
+Next implementation priority:
+
+1. Lower-byte expert movement with hard quality gates.
+2. Stronger future-expert admission only with a materially stronger signal
+   than route-history or hidden-KNN.
+3. RAM/VRAM storage redesign only if it replaces low-yield page cache with
+   prompt-general, batchable expert data and improves endpoint token rate.
+
 ## Current Active Goal and Next Plan (2026-07-12 16:58 CST)
 
 This is the active goal for the next Kimi optimization cycle. It supersedes
