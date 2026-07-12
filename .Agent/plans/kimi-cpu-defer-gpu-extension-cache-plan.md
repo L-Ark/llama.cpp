@@ -4,6 +4,121 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Active Goal Snapshot And Next Plan
+
+### Active Goal
+
+在 Kimi 当前可泛化实现基础上，继续提升 cold-start decode token rate。短期 goal 是在
+`16 GB` host RAM hard limit 和单张 `32 GB RTX 5090` 下，把 generalized/random
+prompt 的稳定 N32 decode rate 提升到 `>= 2.0 tok/s`；长期 goal 仍然是让用户随机
+prompt 稳定达到 `> 5 tok/s`。所有结果必须语义正确、TTFT 不超过同配置 baseline 的
+`+20%`、prompt/decode fallback 可解释且最好保持 `0`，并且必须能从 commit、run dir
+和复现命令完整复现。
+
+### Current Facts That Must Guide The Next Step
+
+- Current branch: `vendor/kimi-deepseek-41d205-additive`.
+- Current analyzed HEAD: `c78219bb8`.
+- Current Kimi path is already CPU/defer MoE scheduling plus GPU expert-cache
+  extension. The main issue is no longer generic CPU fallback; current protected
+  profiles have `0` true fallback rows.
+- Fresh COPY/IO profiles show exact-byte scheduling is already close to the
+  pure IO bandwidth ceiling:
+  - aggregate runtime iouring throughput is about `9.536 GiB/s`;
+  - pure IO reference is about `10.3 GiB/s`;
+  - utilization is about `92.6%`;
+  - exact-byte floor+transfer ceiling is only about `1.45-1.51 tok/s`.
+- Therefore pure scheduler/co-submit changes, without reducing moved bytes or
+  improving future knowledge enough to avoid reads, cannot be the main path to
+  `2 tok/s`.
+- To reach `2 tok/s` under the current exact-byte model, moved bytes must drop
+  to roughly `0.71-0.74x` of current bytes. To reach `5 tok/s`, moved bytes must
+  drop to roughly `0.25x`.
+- Prior rejected paths remain rejected unless new evidence changes the bound:
+  prompt-specific hotsets, France-only packs, static same-prompt pack relayout,
+  broad adjacent coalesce, pure RAM slab/batch-cover oracle, and old blockwise
+  low-byte gate/upgate screens.
+
+### Non-Negotiable Execution Rules
+
+1. Every new SOTA claim must be reproducible before it is accepted:
+   - branch and commit;
+   - rollback commit;
+   - exact command and environment variables;
+   - run directory;
+   - prompt set and full generated text;
+   - token rate, TTFT, decode time, RAM, VRAM, fallback profile, IO profile;
+   - quality gate result.
+2. Every experiment must be cold start with `MemoryMax=15900000000` and
+   `MemorySwapMax=0`; host RAM includes page cache, pinned memory, mmap pages,
+   allocator memory and kernel accounting.
+3. Optimization must be prompt-general. Dev prompts can choose candidates;
+   held-out/test prompts cannot be inspected before final validation.
+4. If performance drops, quality drops, fallback appears without a root cause,
+   TTFT exceeds `+20%`, or host RAM exceeds the limit, the candidate is rejected
+   and the runtime must stay on the last reproducible SOTA.
+5. A plan update must be written before each substantial implementation step.
+
+### Next Plan
+
+1. Freeze the current baseline for this round.
+   - Reconfirm current HEAD and rollback point.
+   - Keep the current default Kimi configuration as the control.
+   - Do not change runtime defaults until an A/B passes all gates.
+
+2. Quantify the byte-reduction target from current profiles.
+   - Use the current exact-byte scheduler ceiling report as the source of truth.
+   - Produce a small reproducible target table for `2 tok/s` and `5 tok/s`:
+     current GiB/token, transfer budget, required moved-byte ratio and remaining
+     compute/overhead floor.
+   - Commit the table/report so later implementation work cannot move the target
+     by hand-waving.
+
+3. Check whether a lower-byte expert asset is actually available and reproducible.
+   - Inventory local model/checkpoint/expert-pack assets and free disk.
+   - Identify whether IQ2/IQ1/NVFP4 or other candidate expert representations
+     exist locally, need download, or are blocked by disk.
+   - Do not delete historical assets without explicit approval unless they are
+     already marked obsolete in the plan.
+
+4. If an asset is available, run a dev-only quality and speed smoke.
+   - Use generalized dev prompts, not France-only prompts.
+   - Required first gate:
+     - semantic output pass;
+     - prompt/decode fallback remains `0` or is fully explained;
+     - host RAM under `16GB`;
+     - TTFT within `+20%`;
+     - no held-out leakage.
+   - Only if dev passes, run the sealed test prompts and decide SOTA admission.
+
+5. If no suitable asset is available, reject asset-based lower-byte runtime work
+   for this round and switch to a representation-design gate.
+   - A candidate representation must pass activation-output screening on dev
+     prompts before any runtime implementation.
+   - Minimum target for the `2 tok/s` milestone: effective moved-byte ratio
+     `<=0.72x` with quality preserved.
+   - Minimum target for the `5 tok/s` milestone: effective moved-byte ratio
+     near `0.25x`, which likely requires byte reduction plus stronger prediction
+     or more VRAM-resident reuse.
+
+6. Only after byte reduction or prediction passes the bound gate, implement a
+   default-off runtime A/B.
+   - Measure France plus generalized dev prompts first.
+   - Then validate on held-out prompts exactly once per frozen candidate.
+   - If admitted, commit and push immediately with a detailed message body.
+
+### Immediate Deliverable
+
+The immediate deliverable for the next execution step is not a new runtime
+optimization. It is a reproducible lower-byte target and storage feasibility
+report, followed by a go/no-go decision:
+
+- go: a concrete lower-byte asset or representation can plausibly reach
+  `>=2 tok/s` while preserving quality and constraints;
+- no-go: the available assets/representations cannot meet the bound, so the next
+  implementation target must change to future-route prediction or another method
+  that reduces actual moved bytes.
+
 ## 2026-07-12 Current Goal And Execution Plan
 
 ### Goal
