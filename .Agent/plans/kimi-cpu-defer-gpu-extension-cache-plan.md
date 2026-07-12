@@ -20498,3 +20498,140 @@ Next plan:
    - Accept and push only if generalized token rate improves, quality passes,
      TTFT is within `+20%`, cold-start conditions hold, and total host RAM
      stays below `16GB`.
+
+## 2026-07-12 Low-Byte Expert Representation Bound
+
+Goal:
+
+- Quantify whether reducing expert bytes per miss can realistically reach the
+  next `2 tok/s` milestone and whether it can contribute to the long-term
+  `5 tok/s` target.
+- Prioritize which role should be changed first if we implement mixed
+  precision, residual expert representation, grouped codec, or any other
+  lower-byte expert form.
+- Do this before any runtime code change, because a lower-byte format has
+  quality risk and can add decode-side reconstruction/dequant overhead.
+
+Tool:
+
+- `.Agent/run-tools/kimi_low_byte_expert_bound.py`
+
+Verification:
+
+```bash
+python3 -m py_compile .Agent/run-tools/kimi_low_byte_expert_bound.py
+```
+
+Command:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717
+OUT=$ROOT/analysis/low-byte-expert-bound
+.Agent/run-tools/kimi_low_byte_expert_bound.py \
+  --input-root "$ROOT" \
+  --out-json "$OUT/bound.json" \
+  --out-md "$OUT/bound.md" \
+  --roles up,gate,down \
+  --max-jobs 8 \
+  --keep-ratios 0.75,0.50,0.25,0.0 \
+  --targets 2.0,5.0 \
+  --baseline-decode-ms 39422.98
+```
+
+Artifact:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/low-byte-expert-bound/bound.md`
+
+Inputs:
+
+- traces: `2`
+  - `dev_france_regression/io-read-trace.csv`
+  - `dev_intelligence_general/io-read-trace.csv`
+- decode-like batches: `11134`
+- decode runs: `62`
+- baseline decode: `39422.980 ms`
+- baseline token rate: `1.573 tok/s`
+- profiled IO wait: `23006.531 ms`
+- profiled payload: `277.515 GiB`
+
+Role contribution under a linear exposed-wait model:
+
+| role | payload GiB | max linear wait ms | max linear wait ms/token | eliminate-role bound tok/s |
+|---|---:|---:|---:|---:|
+| down | `125.563` | `7026.910` | `113.337` | `1.914` |
+| gate | `78.777` | `8398.003` | `135.452` | `1.998` |
+| up | `73.175` | `7581.618` | `122.284` | `1.947` |
+
+Scenario bound:
+
+| scenario | byte reduction | saved ms/token | bounded tok/s |
+|---|---:|---:|---:|
+| gate | `50%` | `67.726` | `1.760` |
+| gate | `100%` | `135.452` | `1.998` |
+| up | `50%` | `61.142` | `1.740` |
+| down | `50%` | `56.669` | `1.727` |
+| up+gate | `50%` | `128.868` | `1.972` |
+| up+gate | `75%` | `193.302` | `2.260` |
+| all | `25%` | `92.768` | `1.841` |
+| all | `50%` | `185.537` | `2.221` |
+| all | `75%` | `278.305` | `2.797` |
+| all | `100%` | `371.073` | `3.777` |
+
+Target feasibility:
+
+| target tok/s | required saving ms/token | all-role required reduction | possible by IO-byte reduction only |
+|---:|---:|---:|---|
+| `2.0` | `135.855` | `36.6%` | yes |
+| `5.0` | `435.855` | `117.5%` | no |
+
+Top layer/role contribution:
+
+| rank | layer_role | payload GiB | max linear wait ms/token |
+|---:|---|---:|---:|
+| 1 | `blk.1.gate` | `1.402` | `3.195` |
+| 2 | `blk.16.gate` | `1.143` | `2.866` |
+| 3 | `blk.1.up` | `1.402` | `2.818` |
+| 4 | `blk.29.gate` | `1.602` | `2.752` |
+| 5 | `blk.39.gate` | `1.262` | `2.702` |
+| 6 | `blk.32.gate` | `1.507` | `2.699` |
+| 7 | `blk.28.gate` | `1.555` | `2.682` |
+| 8 | `blk.9.up` | `1.555` | `2.655` |
+| 9 | `blk.48.gate` | `1.466` | `2.605` |
+| 10 | `blk.33.gate` | `1.513` | `2.553` |
+
+Interpretation:
+
+- Lower-byte expert representation is worth exploring for the `2 tok/s`
+  milestone: all-role `50%` byte reduction has an optimistic exposed-wait
+  bound of `2.221 tok/s`.
+- Gate is the first role to evaluate because its payload is smaller than down
+  but its wait contribution is larger. A gate-only `100%` exposed-wait
+  elimination almost reaches `2 tok/s`; a practical gate codec will need either
+  strong byte reduction plus H2D saving, or to be paired with up.
+- Up+gate is more promising than down for a first quality-risk experiment:
+  `50%` byte reduction bounds at `1.972 tok/s`, and `75%` bounds at
+  `2.260 tok/s`.
+- Down has the largest payload, but its exposed-wait contribution is lower
+  than gate/up in this trace. Down-only compression is therefore not the first
+  implementation target unless it also reduces H2D or compute overhead.
+- Reaching `5 tok/s` cannot come from IO exposed-wait byte reduction alone.
+  Even removing all profiled IO wait entirely only bounds at `3.777 tok/s` on
+  this baseline. The path to `5 tok/s` must combine byte reduction with one or
+  more of:
+  - lower H2D volume or faster H2D staging;
+  - better overlap/prediction so reads are no longer exposed;
+  - larger useful IO batches;
+  - less per-expert compute or fused reconstruction+matmul;
+  - more VRAM-resident hot experts without violating the `16GB` host-RAM gate.
+
+Decision:
+
+- Do not implement a broad all-role codec first; the quality risk is too high
+  and the `5 tok/s` target would still be out of reach.
+- Next practical experiment should be a narrow offline quality/sensitivity
+  screen for gate and up+gate:
+  1. create a held-out prompt set that is not used to choose the codec;
+  2. test synthetic degradation or candidate lower-byte formats only on
+     selected gate/upgate layer-role groups;
+  3. report exact output text, token rate bound, TTFT/RAM implications and
+     rollback point before runtime implementation.
