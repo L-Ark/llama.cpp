@@ -21,6 +21,7 @@ set -euo pipefail
 : "${VALIDATE_PARTS:=1}"
 : "${RESUME_DOWNLOAD:=1}"
 : "${MIN_FREE_AFTER_DOWNLOAD_GIB:=50}"
+: "${DELETE_MANIFEST_PATH:=}"
 : "${CURL_BIN:=curl}"
 
 : "${IQ1S_BYTES:=204430872480}"
@@ -229,6 +230,48 @@ validate_delete_candidates() {
   log "delete_candidate_safety_check=ok"
 }
 
+projected_space_check() {
+  local free_before delete_total candidate_size projected_free projected_leftover
+  free_before="$(bytes_free_for_path "$MODEL_DIR")"
+  delete_total=0
+  for candidate in "${DELETE_CANDIDATES[@]}"; do
+    candidate_size="$(path_size_bytes "$candidate")"
+    delete_total=$((delete_total + candidate_size))
+  done
+  projected_free=$((free_before + delete_total))
+  projected_leftover=$((projected_free - IQ1S_BYTES))
+  log "projected_space_check_free_before=$free_before"
+  log "projected_space_check_delete_total=$delete_total"
+  log "projected_space_check_free_after_delete=$projected_free"
+  log "projected_space_check_leftover_after_iq1s_download=$projected_leftover"
+  if [ "$projected_leftover" -lt "$MIN_FREE_AFTER_DOWNLOAD_BYTES" ]; then
+    log "ERROR projected space check failed: leftover=$projected_leftover required=$MIN_FREE_AFTER_DOWNLOAD_BYTES"
+    return 1
+  fi
+  log "projected_space_check=ok"
+}
+
+write_delete_manifest() {
+  local manifest path size
+  manifest="$DELETE_MANIFEST_PATH"
+  if [ -z "$manifest" ]; then
+    manifest="$MODEL_DIR/iq1s-delete-candidates-$(date -u +%Y%m%d-%H%M%SZ).tsv"
+  fi
+  mkdir -p "$(dirname "$manifest")"
+  {
+    printf 'kind\tbytes\tpath\n'
+    for path in "${PRESERVE_PATHS[@]}"; do
+      size="$(path_size_bytes "$path")"
+      printf 'preserve\t%s\t%s\n' "$size" "$path"
+    done
+    for path in "${DELETE_CANDIDATES[@]}"; do
+      size="$(path_size_bytes "$path")"
+      printf 'delete_candidate\t%s\t%s\n' "$size" "$path"
+    done
+  } > "$manifest"
+  log "delete_manifest=$manifest"
+}
+
 maybe_delete_old_packs() {
   if [ "$DELETE_OLD_PACKS" != "1" ]; then
     log "delete step skipped"
@@ -240,6 +283,8 @@ maybe_delete_old_packs() {
   fi
   validate_preserve_paths
   validate_delete_candidates
+  projected_space_check
+  write_delete_manifest
   for path in "${DELETE_CANDIDATES[@]}"; do
     if [ ! -e "$path" ]; then
       log "delete candidate missing, skip: $path"

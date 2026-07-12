@@ -144,7 +144,11 @@ Artifacts:
 - IQ1_S cleanup safety dry-run:
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-safety-dry-run.log`;
 - IQ1_S full execute=0 dry-run:
-  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-dry-run.log`.
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-dry-run.log`;
+- IQ1_S guarded execute=0 dry-run:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-guarded-dry-run.log`;
+- IQ1_S delete candidate manifest:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-delete-candidates-manifest.tsv`.
 
 Byte target result:
 
@@ -196,6 +200,12 @@ Storage result:
   - prints the resumable download plan and the post-download `systemd-run`
     smoke command;
   - no deletion/download/smoke was executed because `EXECUTE=0`.
+- Guarded execute=0 dry-run:
+  - adds a hard `projected_space_check` before any deletion path;
+  - records `projected_space_check=ok`;
+  - writes a deletion manifest with `preserve` and `delete_candidate` rows;
+  - projected leftover after `i1-IQ1_S` download is `82425122912 bytes`;
+  - no deletion/download/smoke was executed because `EXECUTE=0`.
 
 Decision:
 
@@ -217,11 +227,14 @@ Decision:
 6. The next actionable step is explicit-confirm cleanup using the updated
    `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`, then an `i1-IQ1_S`
    dev-only smoke. No deletion/download was executed by this planning step.
-7. The exact execution shape is now captured by the full execute=0 dry-run
-   artifact. To proceed, the next run must use the same script and confirmation
-   token, then immediately run the dev-only smoke and record RAM/TTFT/quality/
-   fallback metrics.
-8. No held-out prompt may be inspected until a frozen lower-byte candidate passes
+7. The exact execution shape is now captured by the guarded full execute=0
+   dry-run artifact. To proceed, the next run must use the same script and
+   confirmation token. The script now hard-fails before deletion if projected
+   post-download free space would fall below the `50 GiB` reserve, and it writes
+   a deletion manifest before removing candidates.
+8. After explicit-confirm cleanup/download, immediately run the dev-only smoke
+   and record RAM/TTFT/quality/fallback metrics.
+9. No held-out prompt may be inspected until a frozen lower-byte candidate passes
    dev gates.
 
 ## 2026-07-12 Current Goal And Execution Plan

@@ -32,6 +32,10 @@ behavior and does not claim SOTA.
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-safety-dry-run.log`
 - IQ1_S full execute=0 dry-run:
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-dry-run.log`
+- IQ1_S guarded execute=0 dry-run:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-guarded-dry-run.log`
+- IQ1_S delete candidate manifest:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-delete-candidates-manifest.tsv`
 
 ## Byte Target
 
@@ -152,6 +156,28 @@ Full execute=0 dry-run:
     `MemoryMax=15900000000`, `MemorySwapMax=0`, `N=32`,
     `PROMPT_ID=dev_france_regression`, and
     `MODEL_PATH=/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF/Kimi-K2.7-Code.i1-IQ1_S.gguf`;
+  - no deletion/download/smoke was executed because `EXECUTE=0`.
+
+Guarded execute=0 dry-run:
+
+- log:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-guarded-dry-run.log`;
+- exit:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-guarded-dry-run.exit`;
+- delete manifest:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-delete-candidates-manifest.tsv`;
+- result:
+  - `projected_space_check=ok`;
+  - `delete_candidate_safety_check=ok`;
+  - `part_total_ok bytes=204430872480`;
+  - projected leftover after `i1-IQ1_S` download:
+    `82425122912 bytes`;
+  - delete manifest preserves:
+    - current IQ3_S model directory;
+    - current France main expert pack;
+    - current `l1l2down` overlay;
+  - delete manifest marks only the explicit cleanup candidates as
+    `delete_candidate`;
   - no deletion/download/smoke was executed because `EXECUTE=0`.
 
 ## Candidate Gate
