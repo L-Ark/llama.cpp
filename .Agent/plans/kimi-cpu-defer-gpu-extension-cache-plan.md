@@ -4,6 +4,117 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Goal Lock: Kimi CPU/defer GPU-extension Next Step
+
+This section is the current source of truth. Later historical sections are kept
+for audit only. If any older plan suggests a larger static RAM tier, a
+prompt-specific hotset, or a gate-only DeepSeek copy, this section overrides it.
+
+### Goal
+
+On `vendor/kimi-deepseek-41d205-additive`, continue optimizing Kimi under the
+same production target:
+
+- host machine: `16 GB Host RAM` hard cap, including RSS, page cache, pinned
+  staging, RAM expert cache, and file-backed pages;
+- GPU: one `32 GB RTX 5090`-class device, with VRAM used as aggressively as is
+  useful;
+- workload: cold-start random/general prompts, not prompt-specific France-only
+  traces;
+- quality: `Please introduce France in a short paragraph.` must remain
+  semantically correct and coherent, and held-out prompts must pass before any
+  global SOTA claim;
+- latency: TTFT must not exceed the paired baseline by more than `20%`;
+- reproducibility: every accepted improvement must be pushed and reproducible
+  from one commit, one branch, exact env, exact commands, prompt split, metrics,
+  output text, RAM/VRAM data, and rollback commit.
+
+Near-term performance goal: recover and protect the current reproducible
+general-prompt range, then reach a stable `>2 tok/s` decode rate. Long-term
+product goal remains stable `>5 tok/s` for random user prompts on the same
+hardware.
+
+The DeepSeek SOTA idea is useful for Kimi only in this form:
+
+- keep the CPU/defer MoE path as the scheduler;
+- use GPU as a gate/up/down expert-cache and compute extension;
+- avoid broad CPU fallback;
+- optimize the remaining exposed expert movement, not another gate-only port.
+
+Current evidence says Kimi already has the broad extension path connected:
+`up_gate` and `down` have accepted GPU-extension paths and true CPU fallback
+rows are `0` in the protected profile. Therefore the next wins must come from
+reducing critical-path expert movement: queue starvation, io_uring wait,
+staging/H2D exposure, cache placement, or lower-byte expert representation.
+
+### Immediate Plan
+
+1. Reconfirm the baseline before further runtime work.
+   - Use the current pushed branch and cold-start `MemoryMax=15900000000`.
+   - Run at least one N96 generalized dev prompt plus France quality gate.
+   - Record decode tok/s, TTFT, prompt/prefill rate, output text, RAM peak,
+     file/page-cache split, pinned/RSS, VRAM, io_uring bytes/wait, H2D bytes,
+     and per-role wall time.
+   - If the historical SOTA range does not reproduce, stop optimization and fix
+     reproducibility first.
+
+2. Close static RAM-tier admission before running more RAM A/B.
+   - Use existing dev traces to run wait-weighted and leave-one-prompt-out
+     admission for `512 MiB` and `1024 MiB` candidates.
+   - Measure predicted exposed-wait coverage, number of distinct entries, layer
+     spread, and whether hits preserve batchable H2D.
+   - Do not run another runtime RAM tier if admission says the candidate is
+     scattered, low coverage, or mostly reduces bytes without reducing exposed
+     wait.
+   - Keep the previous rejection: GB-scale whole-layer/whole-role RAM tiers are
+     not the primary path after `blk14_gate_full384` failed generalized A/B and
+     `blk4_down_full384` failed TTFT/RAM pressure.
+
+3. Prioritize scheduler-only A/B that does not consume more host RAM.
+   - Test a default-off same-layer up/gate/down read scheduler only if it can
+     enqueue misses immediately after routing without delaying current compute.
+   - Acceptance metric is endpoint decode time and reduced exposed wait, not
+     larger nominal batch size.
+   - Preserve current-down overlap; if unified enqueue reduces overlap or adds
+     staging fences, reject it.
+
+4. Revisit RAM/VRAM layout only as explicit replacement for low-value file cache.
+   - First profile what decode file cache actually contains and whether those
+     pages are reused.
+   - RAM expert cache must be batchable: layer/role slab, contiguous pack
+     layout, or another layout that supports large H2D transfers.
+   - Do not replace SSD random reads with RAM random copies.
+   - VRAM holds the highest critical-path experts; RAM may hold second-tier
+     experts only when admission proves it reduces exposed wait more than it
+     adds staging/H2D and TTFT.
+
+5. Continue lower-byte work as the only path with enough theoretical headroom
+   for `>2 tok/s` and eventually `>5 tok/s`.
+   - Keep v2/lower-byte candidates in preflight/shadow until quality screens
+     pass.
+   - A runtime lower-byte path must show a deployable byte reduction, not an
+     oracle-only bound.
+   - If down-only reduction passes but up/gate fails, do not claim `>2 tok/s`
+     feasibility unless the end-to-end byte and wait model supports it.
+
+6. SOTA promotion protocol.
+   - Run paired baseline/candidate on generalized dev prompts first.
+   - Run sealed held-out/test prompts only after dev passes.
+   - Commit and push immediately only if RAM, TTFT, quality, and reproducibility
+     all pass.
+   - If a result regresses token rate, quality, TTFT, RAM, or reproducibility,
+     leave it default-off or revert and record the rejection.
+
+### Current Working Hypothesis
+
+Kimi should not expect another DeepSeek-style gate-only jump. The large gate
+fallback class has already been addressed. The practical bottleneck is that each
+token still exposes too much expert movement on the critical path, especially
+up/gate demand reads. Static RAM tiers have repeatedly improved nominal hit
+rate or bytes but not generalized endpoint time. The next credible improvement
+must either reduce bytes/token, preserve larger useful read batches without new
+RAM pressure, or turn low-value decode file cache into a batchable expert cache.
+
 ## 2026-07-12 Current Goal: Kimi CPU/defer GPU-extension Port
 
 本段是当前执行目标。它把 DeepSeek SOTA 中确认有效的经验收束成 Kimi 的下一阶段
