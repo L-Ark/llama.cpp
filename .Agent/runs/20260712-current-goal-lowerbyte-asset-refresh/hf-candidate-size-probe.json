@@ -1,0 +1,322 @@
+{
+  "kind": "kimi_hf_candidate_size_probe",
+  "results": [
+    {
+      "commit": "06671d52123acf7ad3dad395d3628c96d8b690a8",
+      "error": null,
+      "files": [
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ1_S.gguf.part1of5",
+          "size": 41875931136
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ1_S.gguf.part2of5",
+          "size": 41875931136
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ1_S.gguf.part3of5",
+          "size": 41875931136
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ1_S.gguf.part4of5",
+          "size": 41875931136
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ1_S.gguf.part5of5",
+          "size": 36927147936
+        }
+      ],
+      "gb": 204.43087248,
+      "gib": 190.39108648896217,
+      "label": "i1-IQ1_S",
+      "prefix": "Kimi-K2.7-Code.i1-IQ1_S.gguf.part",
+      "repo": "mradermacher/Kimi-K2.7-Code-i1-GGUF",
+      "size_bytes": 204430872480,
+      "sized_files": 5
+    },
+    {
+      "commit": "06671d52123acf7ad3dad395d3628c96d8b690a8",
+      "error": null,
+      "files": [
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ1_M.gguf.part1of5",
+          "size": 46170898432
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ1_M.gguf.part2of5",
+          "size": 46170898432
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ1_M.gguf.part3of5",
+          "size": 46170898432
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ1_M.gguf.part4of5",
+          "size": 46170898432
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ1_M.gguf.part5of5",
+          "size": 43254337952
+        }
+      ],
+      "gb": 227.93793168,
+      "gib": 212.28374138474464,
+      "label": "i1-IQ1_M",
+      "prefix": "Kimi-K2.7-Code.i1-IQ1_M.gguf.part",
+      "repo": "mradermacher/Kimi-K2.7-Code-i1-GGUF",
+      "size_bytes": 227937931680,
+      "sized_files": 5
+    },
+    {
+      "commit": "06671d52123acf7ad3dad395d3628c96d8b690a8",
+      "error": null,
+      "files": [
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ2_XXS.gguf.part1of6",
+          "size": 45097156608
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ2_XXS.gguf.part2of6",
+          "size": 45097156608
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ2_XXS.gguf.part3of6",
+          "size": 45097156608
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ2_XXS.gguf.part4of6",
+          "size": 45097156608
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ2_XXS.gguf.part5of6",
+          "size": 45097156608
+        },
+        {
+          "filename": "Kimi-K2.7-Code.i1-IQ2_XXS.gguf.part6of6",
+          "size": 41630580640
+        }
+      ],
+      "gb": 267.11636368,
+      "gib": 248.7714995443821,
+      "label": "i1-IQ2_XXS",
+      "prefix": "Kimi-K2.7-Code.i1-IQ2_XXS.gguf.part",
+      "repo": "mradermacher/Kimi-K2.7-Code-i1-GGUF",
+      "size_bytes": 267116363680,
+      "sized_files": 6
+    },
+    {
+      "commit": "46352ca8dc32aa60f9754f5bd3fb778deeb9e430",
+      "error": null,
+      "files": [
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00001-of-00008.gguf",
+          "size": 6913184
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00002-of-00008.gguf",
+          "size": 49638722336
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00003-of-00008.gguf",
+          "size": 48368994848
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00004-of-00008.gguf",
+          "size": 48368994848
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00005-of-00008.gguf",
+          "size": 49246454080
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00006-of-00008.gguf",
+          "size": 49253143328
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00007-of-00008.gguf",
+          "size": 49885925408
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00008-of-00008.gguf",
+          "size": 9140022432
+        }
+      ],
+      "gb": 303.909170464,
+      "gib": 283.0374710857868,
+      "label": "unsloth UD-IQ1_M",
+      "prefix": "UD-IQ1_M/",
+      "repo": "unsloth/Kimi-K2.7-Code-GGUF",
+      "size_bytes": 303909170464,
+      "sized_files": 8
+    },
+    {
+      "commit": "46352ca8dc32aa60f9754f5bd3fb778deeb9e430",
+      "error": null,
+      "files": [
+        {
+          "filename": "UD-IQ2_XXS/Kimi-K2.7-Code-UD-IQ2_XXS-00001-of-00008.gguf",
+          "size": 6913184
+        },
+        {
+          "filename": "UD-IQ2_XXS/Kimi-K2.7-Code-UD-IQ2_XXS-00002-of-00008.gguf",
+          "size": 49679417888
+        },
+        {
+          "filename": "UD-IQ2_XXS/Kimi-K2.7-Code-UD-IQ2_XXS-00003-of-00008.gguf",
+          "size": 48247740576
+        },
+        {
+          "filename": "UD-IQ2_XXS/Kimi-K2.7-Code-UD-IQ2_XXS-00004-of-00008.gguf",
+          "size": 48873000992
+        },
+        {
+          "filename": "UD-IQ2_XXS/Kimi-K2.7-Code-UD-IQ2_XXS-00005-of-00008.gguf",
+          "size": 49722198432
+        },
+        {
+          "filename": "UD-IQ2_XXS/Kimi-K2.7-Code-UD-IQ2_XXS-00006-of-00008.gguf",
+          "size": 48873000992
+        },
+        {
+          "filename": "UD-IQ2_XXS/Kimi-K2.7-Code-UD-IQ2_XXS-00007-of-00008.gguf",
+          "size": 49722198432
+        },
+        {
+          "filename": "UD-IQ2_XXS/Kimi-K2.7-Code-UD-IQ2_XXS-00008-of-00008.gguf",
+          "size": 22701400672
+        }
+      ],
+      "gb": 317.825871168,
+      "gib": 295.99840861558914,
+      "label": "unsloth UD-IQ2_XXS",
+      "prefix": "UD-IQ2_XXS/",
+      "repo": "unsloth/Kimi-K2.7-Code-GGUF",
+      "size_bytes": 317825871168,
+      "sized_files": 8
+    },
+    {
+      "commit": "7ed3781e7af75c6553f41982df7d08fc7f77c9fb",
+      "error": null,
+      "files": [
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00001-of-00008.gguf",
+          "size": 6913184
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00002-of-00008.gguf",
+          "size": 49638722336
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00003-of-00008.gguf",
+          "size": 48368994848
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00004-of-00008.gguf",
+          "size": 48368994848
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00005-of-00008.gguf",
+          "size": 49246454080
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00006-of-00008.gguf",
+          "size": 49253143328
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00007-of-00008.gguf",
+          "size": 49885925408
+        },
+        {
+          "filename": "UD-IQ1_M/Kimi-K2.7-Code-UD-IQ1_M-00008-of-00008.gguf",
+          "size": 9140022432
+        }
+      ],
+      "gb": 303.909170464,
+      "gib": 283.0374710857868,
+      "label": "NullVoider UD-IQ1_M",
+      "prefix": "UD-IQ1_M/",
+      "repo": "NullVoider/Kimi-K2.7-Code-GGUF",
+      "size_bytes": 303909170464,
+      "sized_files": 8
+    },
+    {
+      "commit": "37776ab5c56b405453e51f65d255270f10355c98",
+      "error": null,
+      "files": [
+        {
+          "filename": "UD-IQ1_M-MXFP4/Kimi-K2.7-Code-UD-IQ1_M-00001-of-00008.gguf",
+          "size": 6913184
+        },
+        {
+          "filename": "UD-IQ1_M-MXFP4/Kimi-K2.7-Code-UD-IQ1_M-00002-of-00008.gguf",
+          "size": 49638722400
+        },
+        {
+          "filename": "UD-IQ1_M-MXFP4/Kimi-K2.7-Code-UD-IQ1_M-00003-of-00008.gguf",
+          "size": 48306145888
+        },
+        {
+          "filename": "UD-IQ1_M-MXFP4/Kimi-K2.7-Code-UD-IQ1_M-00004-of-00008.gguf",
+          "size": 48234809952
+        },
+        {
+          "filename": "UD-IQ1_M-MXFP4/Kimi-K2.7-Code-UD-IQ1_M-00005-of-00008.gguf",
+          "size": 49161699680
+        },
+        {
+          "filename": "UD-IQ1_M-MXFP4/Kimi-K2.7-Code-UD-IQ1_M-00006-of-00008.gguf",
+          "size": 49253143392
+        },
+        {
+          "filename": "UD-IQ1_M-MXFP4/Kimi-K2.7-Code-UD-IQ1_M-00007-of-00008.gguf",
+          "size": 49885925472
+        },
+        {
+          "filename": "UD-IQ1_M-MXFP4/Kimi-K2.7-Code-UD-IQ1_M-00008-of-00008.gguf",
+          "size": 9140022464
+        }
+      ],
+      "gb": 303.627382432,
+      "gib": 282.77503553032875,
+      "label": "huihui UD-IQ1_M-MXFP4",
+      "prefix": "UD-IQ1_M-MXFP4/",
+      "repo": "huihui-ai/Huihui-Kimi-K2.7-Code-abliterated-GGUF",
+      "size_bytes": 303627382432,
+      "sized_files": 8
+    },
+    {
+      "commit": "0d46813419d9678488ac96606686a408895deae5",
+      "error": null,
+      "files": [
+        {
+          "filename": "deep55/k2-merged-pruned-deep55.gguf",
+          "size": 202657355840
+        }
+      ],
+      "gb": 202.65735584,
+      "gib": 188.73937040567398,
+      "label": "deep55 pruned",
+      "prefix": "deep55/",
+      "repo": "freakyskittle/kimi-k2.75-code-GGUF",
+      "size_bytes": 202657355840,
+      "sized_files": 1
+    },
+    {
+      "commit": "0d46813419d9678488ac96606686a408895deae5",
+      "error": null,
+      "files": [
+        {
+          "filename": "pruned-compact-oxidize-q4/k2-merged-oxidize-Q4_K_M.gguf",
+          "size": 405650677344
+        }
+      ],
+      "gb": 405.650677344,
+      "gib": 377.79163321852684,
+      "label": "pruned compact oxidize q4",
+      "prefix": "pruned-compact-oxidize-q4/",
+      "repo": "freakyskittle/kimi-k2.75-code-GGUF",
+      "size_bytes": 405650677344,
+      "sized_files": 1
+    }
+  ]
+}

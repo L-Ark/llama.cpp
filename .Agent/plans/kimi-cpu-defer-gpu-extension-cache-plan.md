@@ -132,6 +132,48 @@ Decision:
   layout work reduces moved bytes or improves locality enough to change the
   bound.
 
+### 2026-07-12 Lower-Byte Asset Refresh Result
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-lowerbyte-asset-refresh/report.md`
+
+Status: completed; no deletion, download, or runtime SOTA benchmark was run.
+
+Metadata refresh:
+
+| candidate | source | size GiB | ratio vs current IQ3_S | decision |
+|---|---|---:|---:|---|
+| `i1-IQ1_S` | `mradermacher/Kimi-K2.7-Code-i1-GGUF` | `190.39` | `0.504x` | best same-model complete smoke candidate |
+| `i1-IQ1_M` | `mradermacher/Kimi-K2.7-Code-i1-GGUF` | `212.28` | `0.562x` | weaker byte reduction |
+| `i1-IQ2_XXS` | `mradermacher/Kimi-K2.7-Code-i1-GGUF` | `248.77` | `0.659x` | too large for current byte target |
+| `unsloth/NullVoider UD-IQ1_M` | GGUF mirrors | `283.04` | `0.750x` | too large |
+| `deep55 pruned` | `freakyskittle/kimi-k2.75-code-GGUF` | `188.74` | `0.500x` | model identity/quality risk |
+
+Guarded `i1-IQ1_S` dry-run:
+
+- command used `EXECUTE=0`, so it was non-destructive;
+- current free space on `/root/lfz`: `112758599680 bytes`;
+- delete candidates, if explicitly confirmed: `173736710144 bytes`;
+- projected free after candidate deletion: `286495305728 bytes`;
+- `i1-IQ1_S` required bytes: `204430872480 bytes`;
+- projected leftover after download: `82064433248 bytes`;
+- projected space gate: pass for the configured `50 GiB` reserve;
+- dry-run exit: `0`.
+
+Decision:
+
+- `i1-IQ1_S` remains the only concrete same-model complete lower-byte smoke
+  candidate for the `2 tok/s` milestone;
+- do not execute cleanup/download/smoke without explicit approval because it
+  deletes old non-SOTA packs and downloads `204430872480` bytes;
+- this complete-model path is not a `5 tok/s` solution because its byte ratio
+  is only about `0.50x`, while the long-term target needs a much smaller
+  effective ratio or additional reuse/prediction;
+- if approval is not provided, the next non-destructive work is a new
+  activation-aware/lower-byte representation screen for all roles, especially
+  up/gate.
+
 ### Immediate Plan
 
 1. Reconfirm the baseline before further runtime work.
@@ -159,6 +201,8 @@ Decision:
      `0.25x` for `5 tok/s`;
    - down-only reduction is not enough unless the end-to-end byte/wait model
      proves the endpoint target.
+   - Complete-model `i1-IQ1_S` smoke is the only current same-model asset path,
+     but it requires explicit cleanup/download approval before execution.
 
 4. Revisit RAM/VRAM layout only as explicit replacement for low-value file cache
    or as a pack-layout locality change.
