@@ -38,6 +38,63 @@ DeepSeek 那条 `CPU/defer MoE main path + GPU expert-cache extension` 路线对
   即使 dev-overfit `10GB` resident RAM，也只保存 `53.441 ms/token`，上界约
   `1.839 tok/s`，低于 `2 tok/s` 所需。
 
+### Focused Goal: DeepSeek-Style CPU/defer GPU Extension On Kimi
+
+目标不是直接照搬 DeepSeek 的 gate-hotpool SOTA，而是先确认 Kimi 当前是否仍有同类可吃掉的
+CPU/defer 慢路径。
+
+DeepSeek 的大幅提升来自：`n_cpu_moe` 让 MoE expert 由 CPU/defer backend 主调度，
+然后给这条 CPU/defer 主路径接上 GPU expert-cache extension，使 gate expert 常驻/热驻
+VRAM 并在 GPU 上计算。因此它不是“GPU backend fallback 到 CPU”，而是
+“CPU/defer 主路径调用 GPU extension”。这条思想对 Kimi 的可迁移条件是：
+
+- Kimi 仍有 gate/up/down 在 CPU/defer 慢路径计算，或 GPU extension 没有完整接住；
+- 这些慢路径位于 decode critical path，修掉后能减少 per-token exposed wait；
+- 修复不增加 prompt fallback、TTFT、RAM peak 或质量风险；
+- 提升能在 generalized dev prompts 和最终 held-out test set 上复现。
+
+当前判断：Kimi 已经有一部分对应实现，且近期 audit 显示 `up_gate` / `down` accept 基本完整。
+所以本轮计划先做严格审计和可控 A/B；只有发现真实 CPU/defer gap，才继续做
+DeepSeek-style hotpool/cache 扩展。若审计确认已经 `0 fallback` 且 gate/up/down 都被 GPU
+extension 接住，则该路线只保留为 regression gate，主攻 bytes/token、RAM/VRAM layout、
+低字节表示和更强 predictor。
+
+### Focused Plan
+
+1. 固化当前 Kimi CPU/defer GPU-extension 审计。
+   - 在当前分支 cold-start 跑 France + generalized dev prompt；
+   - 记录 `n_cpu_moe`、GPU layer/offload 配置、expert pack/alias env；
+   - 输出每层每 role 的 `calls`、`batch_accept`、CPU fallback rows、GGUF fallback rows；
+   - 明确 prompt 阶段是否仍有 fallback，decode 阶段是否仍有 fallback；
+   - 记录 RAM peak、page cache/file、pinned/RSS、VRAM、TTFT、decode token rate 和答案。
+
+2. 做 default-off 反向 A/B，量化 DeepSeek-style extension 对 Kimi 的真实贡献。
+   - 单独禁用/绕过 gate extension；
+   - 单独禁用/绕过 up extension；
+   - 单独禁用/绕过 down extension；
+   - 不把这些回退配置作为 SOTA，只用于证明当前 fast path 的收益和 critical path 位置；
+   - 如果禁用某个 role 后 token rate 明显下降，说明该 role 是必须保护的 regression gate。
+
+3. 如果发现 CPU/defer gap，先修完整 fast path，而不是先调缓存。
+   - 补齐缺失 quant type / tensor role 的 GPU batch 支持；
+   - 确保 source 优先走 expert pack / alias pack，不回到 GGUF src0 mmap；
+   - up/gate/down 的 active experts 必须尽量 batch read、batch H2D、batch compute；
+   - 修复后先过 France quality，再跑 generalized dev，不使用 held-out 调参。
+
+4. 如果 fast path 已完整，则不再期待单纯 gate-hotpool 带来 DeepSeek 级提升。
+   - 下一步收益必须来自降低 bytes/token 或减少 exposed demand wait；
+   - 优先继续 exact layout cross-prompt LOO、RAM/VRAM 分层、低字节 expert representation；
+   - 任何静态 pack layout / RAM tier 都必须证明 cross-prompt generalization，而不是同 prompt overfit。
+
+5. SOTA 接受规则。
+   - generalized dev 先提升，最终 held-out test 才能声明 SOTA；
+   - Host RAM `<16GB`，包括 page cache/RSS/pinned/RAM expert cache；
+   - TTFT 相对 paired baseline `<= +20%`；
+   - France prompt 必须语义正确、连贯；
+   - commit body 必须写清提升幅度、env、复现命令、prompt/dev/test split、
+     RAM/VRAM、TTFT、质量输出、rollback point；
+   - 符合条件后立即 commit/push；不符合则 default-off 或回退。
+
 ### Plan
 
 1. 保持 CPU/defer GPU-extension 作为每次实验的硬回归门禁。
