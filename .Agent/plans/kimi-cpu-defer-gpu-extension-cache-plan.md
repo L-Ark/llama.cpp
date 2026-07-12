@@ -146,6 +146,97 @@ Every SOTA commit body must include:
 If a result cannot be reproduced from the committed instructions, it is not a
 SOTA result and must not be used as the next baseline.
 
+### Current-HEAD Audit Result (2026-07-12 19:42 CST)
+
+Fresh cold-start audit has been rerun on current HEAD:
+
+- branch: `vendor/kimi-deepseek-41d205-additive`;
+- commit: `564b88773`;
+- source root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-active-goal-564b887-cpudefer-n96-112855`;
+- report:
+  `.Agent/runs/20260712-active-goal-564b887-cpudefer-n96-audit/report.md`;
+- reproduction:
+  `.Agent/runs/20260712-active-goal-564b887-cpudefer-n96-audit/reproduce.md`.
+
+Endpoint reference, using `COPY_PROFILE=0` with IO-batch tracing:
+
+- prompt: `Please introduce France in a short paragraph.`;
+- quality: pass;
+- output:
+  `France is a country in Western Europe known for its rich history, culture,
+  and influence on art, fashion, and cuisine. Its capital, Paris, is famous
+  for landmarks like the Eiffel Tower and the Louvre Museum. France is also
+  known for its beautiful countryside, wine regions, and historic cities such
+  as Lyon and Marseille. It plays a major role in European and global politics
+  as a founding member of the European Union.`;
+- decode: `49512.13 ms / 85`, `1.72 tok/s`;
+- TTFT: `9746.78 ms`;
+- host RAM peak: `12802686976 bytes`, about `11.92 GiB`;
+- `direct_reads=0`, `pack misses=0`, `read_failures=0`;
+- `io_uring_bytes=485993840640`, about `452.58 GiB`;
+- `io_uring_wait_us=45397310`;
+- VRAM hit rate: up/gate `44.9%`, down `61.2%`.
+
+CPU/defer GPU-extension audit:
+
+- true CPU fallback rows: `0`;
+- extension-miss runs: `0`;
+- `up_gate` accept rate: `5101 / 5101` on France endpoint;
+- `down` accept rate: `5278 / 5278` on France endpoint;
+- across the two copy-profile dev prompts plus the France endpoint, weighted
+  decode is `619.557 ms/token`, `1.614 tok/s`.
+
+Copy-profile timing, used only for decomposition because `COPY_PROFILE_H2D=1`
+adds synchronization:
+
+- France copy-profile:
+  - expert-pack miss wall: `0 ms`;
+  - expert-pack hit wall: `271907 ms` over `452.62 GiB`;
+  - runtime-load gate: `89888 ms` wall, `132.52 GiB`;
+  - runtime-load up: `80232 ms` wall, `123.20 GiB`;
+  - runtime-load down: `68341 ms` wall, `127.85 GiB`;
+  - current-down overlap: `33445 ms` wall, `69.05 GiB`.
+- Intelligence copy-profile:
+  - expert-pack miss wall: `0 ms`;
+  - expert-pack hit wall: `286726 ms` over `482.88 GiB`;
+  - runtime-load gate: `93905 ms` wall, `140.03 GiB`;
+  - runtime-load up: `84075 ms` wall, `130.03 GiB`;
+  - runtime-load down: `69072 ms` wall, `133.32 GiB`;
+  - current-down overlap: `39675 ms` wall, `79.51 GiB`.
+
+France decode-only IO-batch tracing:
+
+- batches: `15272`;
+- read jobs: `71447`;
+- average read jobs per batch: `4.678`;
+- weighted inflight average: `3.406`;
+- wait: `43111.496 ms`;
+- wall: `45064.212 ms`;
+- read batches with `<=4` jobs: `47.3%`;
+- by role:
+  - runtime-load gate wait: `14687.123 ms`;
+  - runtime-load up wait: `14323.879 ms`;
+  - runtime-load down wait: `8088.851 ms`;
+  - current-down overlap wait: `6011.644 ms`.
+
+Decision:
+
+- Broad CPU fallback or gate-only GPU port work is rejected for the next
+  implementation step. Current Kimi already has the DeepSeek-style
+  CPU/defer-owned GPU extension for this path.
+- The immediate bottleneck is exposed expert movement, especially up/gate
+  demand reads. Endpoint France `n96` needs about `7012 ms` total saving, or
+  about `82.5 ms/token`, to reach `2 tok/s`.
+- Next accepted A/B must reduce endpoint time, not just internal hit rate or
+  wait counters. The best next candidates are:
+  - lower-byte expert movement with a hard quality gate;
+  - RAM/VRAM storage redesign that replaces low-yield page cache with
+    batchable expert slabs and does not shrink SSD batches;
+  - a stronger future-expert predictor only if it meets the admission rule;
+  - a new IO scheduler only if offline traces show it preserves existing
+    up/gate and down overlap while exposing materially larger batches.
+
 ## Current Goal and Execution Plan (2026-07-12 18:43 CST)
 
 This is the active working goal for the next execution cycle. It is written

@@ -1,0 +1,6 @@
+source_root=/root/lfz/runs/vendor-kimi-token-rate/20260712-active-goal-564b887-cpudefer-n96-112855
+out=.Agent/runs/20260712-active-goal-564b887-cpudefer-n96-audit
+head=564b887736925275065ab8adf52c9bd93f33659f
+short=564b88773
+branch=vendor/kimi-deepseek-41d205-additive
+generated_utc=2026-07-12T11:34:56Z

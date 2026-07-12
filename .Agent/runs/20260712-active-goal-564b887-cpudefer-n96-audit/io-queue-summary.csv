@@ -1,0 +1,4 @@
+prompt_id,token_rate,decode_runs,decode_s,iouring_gib,iouring_gib_s,iouring_reads,direct_reads,iouring_read_ratio,direct_read_ratio,iouring_wait_s,iouring_wait_per_read_ms,iouring_inflight_avg,iouring_inflight_max,upgate_hit_rate,down_hit_rate,overlap_planned_jobs,overlap_completed_jobs,memory_peak_gib,quality
+dev_france_regression,1.56,85,54.6115,452.6170349121094,8.287943654946474,84620,0,1.0,0.0,35.230705,0.4163401678090286,4.26,8,0.449,0.612,11754,11754,11.928531646728516,pass
+dev_france_regression_iobatch,1.72,85,49.51213,452.6170349121094,9.141538344484662,84620,0,1.0,0.0,45.39731,0.5364844008508627,3.72,8,0.449,0.612,11754,11754,11.923431396484375,pass
+dev_intelligence_general,1.58,95,60.05909,482.88165283203125,8.040109379479963,90105,0,1.0,0.0,36.952091,0.41010033849397926,4.17,8,0.452,0.618,13534,13534,11.770278930664062,pass
