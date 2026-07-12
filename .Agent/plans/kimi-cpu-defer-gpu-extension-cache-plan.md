@@ -20029,3 +20029,161 @@ Next required profile before source changes:
    - residual runtime overhead.
 5. Only implement a default-off A/B if the profile gives a concrete
    `>=4.0-4.5 s` N32 endpoint-saving path toward `>=2 tok/s`.
+
+### 2026-07-12 Fresh COPY/IO Profile Result
+
+Timestamp: 2026-07-12 CST.
+
+Purpose:
+
+- Follow the CPU/defer audit with a fresh movement profile.
+- Split the already-accepted GPU-extension path into expert-pack io_uring,
+  pinned staging, H2D and queue behavior.
+- Confirm whether the remaining bottleneck is pack coverage, queue empty
+  starvation, H2D, or small layer-local demand batches.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717`
+
+Commands:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=<run-dir> N=32 PROFILE=1 COPY_PROFILE=1 \
+      PROMPT_ID=<prompt-id> PROMPT_USER_TEXT=<prompt> \
+      QUALITY_KEYWORDS=<keywords> \
+      EXTRA_RUNTIME_ENV='<io/copy trace env>' \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+```
+
+Additional profiling env:
+
+- `GGML_MOE_IO_BATCH_PROFILE_OUT`;
+- `GGML_MOE_IO_WAIT_TRACE_OUT`;
+- `GGML_MOE_IO_READ_TRACE_OUT`;
+- `GGML_MOE_IO_LOCALITY_PROFILE_OUT`;
+- `GGML_MOE_CURRENT_DOWN_OVERLAP_PROFILE_OUT`;
+- `GGML_MOE_H2D_COALESCE_PROFILE_OUT`;
+- `GGML_MOE_STAGE_GRANULARITY_PROFILE=1`.
+
+Tools:
+
+- `.Agent/run-tools/kimi_copy_profile_breakdown.py`;
+- `.Agent/run-tools/kimi_queue_scheduler_evidence.py`;
+- `.Agent/run-tools/kimi_copyio_profile_summary.py`.
+
+Verification:
+
+- `python3 -m py_compile .Agent/run-tools/kimi_copy_profile_breakdown.py`
+  passed.
+- `python3 -m py_compile .Agent/run-tools/kimi_copyio_profile_summary.py`
+  passed.
+
+Artifacts:
+
+- Summary:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/copyio-profile-summary.md`
+- Bottleneck report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/bottleneck/report.md`
+- Per-prompt queue reports:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/dev_france_regression/queue-scheduler/report.md`;
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/dev_intelligence_general/queue-scheduler/report.md`
+- Per-prompt copy reports:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/dev_france_regression/copy-profile-breakdown.md`;
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/dev_intelligence_general/copy-profile-breakdown.md`
+
+Endpoint diagnostics:
+
+`COPY_PROFILE_H2D=1` synchronizes H2D for measurement, so these token rates are
+diagnostic only and must not be compared directly against normal SOTA runs.
+
+| prompt | quality | diagnostic tok/s | decode ms/token | TTFT ms | RAM peak |
+|---|---:|---:|---:|---:|---:|
+| `dev_france_regression` | pass | `1.42` | `704.501` | `11949.34` | `11.897 GiB` |
+| `dev_intelligence_general` | pass | `1.50` | `667.341` | `10052.75` | `11.746 GiB` |
+
+Fallback and pack coverage:
+
+- true fallback rows: `0`;
+- `pack_hit=0` copy rows: `0`;
+- `pack_hit=1` copy rows: `75839`;
+- therefore current movement is not GGUF fallback and not missing expert-pack
+  coverage. It is VRAM-cache miss handling through expert-pack io_uring.
+
+Movement split from copy profile:
+
+| role | rows | payload | raw IO wait | measured H2D | wall |
+|---|---:|---:|---:|---:|---:|
+| `down` | `27737` | `176.770 GiB` | `97486.622 ms` | `9809.155 ms` | `97486.622 ms` |
+| `gate` | `24054` | `118.813 GiB` | `82817.712 ms` | `6757.908 ms` | `82817.712 ms` |
+| `up` | `24048` | `109.942 GiB` | `75362.247 ms` | `6335.061 ms` | `75362.247 ms` |
+
+Aggregate:
+
+- total profiled payload: `405.525 GiB`;
+- raw copy-profile IO wait: `255666.581 ms`;
+- measured H2D: `22902.124 ms`.
+
+Queue evidence:
+
+| prompt | all wait | all p50/p95/p99 | all low inflight | all queue empty | decode-like wait | decode p50/p95/p99 | decode low inflight | decode queue empty | decode next-job-done |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `dev_france_regression` | `16762.233 ms` | `1.272/2.564/3.635` | `0.037` | `0.000` | `11882.550 ms` | `1.263/2.509/3.317` | `0.045` | `0.000` | `1.000` |
+| `dev_intelligence_general` | `15108.997 ms` | `1.276/2.413/3.083` | `0.056` | `0.000` | `11123.981 ms` | `1.265/2.377/2.912` | `0.068` | `0.000` | `1.000` |
+
+Bottleneck report:
+
+- weighted diagnostic decode: `685.921 ms/token`, `1.458 tok/s`;
+- up/gate wall: `462.384 ms/token`;
+- down wall: `177.164 ms/token`;
+- down stage: `165.576 ms/token`;
+- iouring wait reported: `513.841 ms/token`;
+- decode fallback: `0`.
+
+Interpretation:
+
+- The queue is not literally empty: `queue_empty_ratio=0`.
+- Decode-like waits happen after the small layer-local read batch has already
+  been fully submitted: `decode next-job-done ratio=1.000`.
+- Runtime decode-like batches are too small to saturate the device like the
+  pure IO bench:
+  - France runtime decode-like `runtime_load` average read jobs: `4.545`;
+  - intelligence runtime decode-like `runtime_load` average read jobs: `4.609`;
+  - inflight average is about `4.0`, well below the pure bench saturation case.
+- H2D is measurable but not the first-order blocker in this profile. Measured
+  H2D is `22.902 s` over `405.525 GiB`, while raw IO wait is `255.667 s` across
+  overlapping demand paths.
+- Increasing `GGML_MOE_IO_DEPTH` alone is unlikely to solve the bottleneck
+  unless the runtime can create larger useful batches or predict/prefetch
+  future demand.
+
+Decision:
+
+- Do not work on broad CPU fallback hooks next.
+- Do not rebuild another prompt-specific expert pack; pack hit is already
+  `100%` in this diagnostic.
+- Do not treat this as simple queue-empty starvation. The scheduler has work,
+  but each layer's demand set is small and late-bound by routing.
+- The next valid candidates are:
+  1. increase useful demand batch size without waiting for future unknown
+     routing, for example by safe same-layer up/gate/down read scheduling or
+     batch-preserving RAM slabs;
+  2. reduce bytes per miss with a representation that passes quality gates;
+  3. use a stronger future-layer predictor only if offline recall/precision
+     clears the already documented admission gate;
+  4. re-evaluate RAM/VRAM tiering only when the RAM layout is coherent enough
+     to preserve batchable delivery and does not fragment SSD batches.
+
+Next implementation filter:
+
+- Before runtime code changes, compute a bound for each candidate against the
+  measured gap:
+  - normal SOTA needs roughly `4.0-4.5 s` N32 endpoint decode saving to reach
+    `>=2 tok/s`;
+  - a candidate that only saves H2D microseconds or improves hit rate without
+    endpoint decode reduction is rejected.
+- The most plausible next A/B is a default-off batch-preserving up/gate RAM or
+  VRAM admission screen focused on the top exposed layers (`14`, `1`, `29`,
+  `28`, `60`) and validated on France plus general prompts.

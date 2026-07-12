@@ -160,19 +160,32 @@ def write_report(run_dir: pathlib.Path, out: pathlib.Path):
         "",
         "## Interpretation",
         "",
-        "- The largest measured copy cost comes from `pack_hit=0` paths. These are",
-        "  tensors absent from the current expert pack and therefore materialized",
-        "  through the slower GGUF-backed path rather than the optimized pack path.",
-        "- This is different from a VRAM hotset miss. A tensor can miss VRAM cache",
-        "  but still be served efficiently if it exists in the expert pack. The",
-        "  current general-prompt profile shows many misses are also expert-pack",
-        "  misses, which makes fixed VRAM hotset tuning insufficient.",
-        "- A prompt-specific/dev-union pack would be useful only as a diagnostic",
-        "  bound. An accepted candidate must use prompt-independent coverage, such",
-        "  as a model-wide expert pack or a GGUF-offset direct-read pack alias.",
-        "- The next implementation should first remove or reduce the pack-miss path",
-        "  for general prompts, then rerun the strict n96 dev baseline before any",
-        "  held-out test evaluation.",
+    ])
+    if pack_miss_wall > 0:
+        lines.extend([
+            "- The largest measured copy cost may come from `pack_hit=0` paths. These",
+            "  tensors are absent from the current expert pack and therefore use the",
+            "  slower GGUF-backed materialization path rather than the optimized pack path.",
+            "- This is different from a VRAM hotset miss. A tensor can miss VRAM cache",
+            "  but still be served efficiently if it exists in the expert pack.",
+            "- A prompt-specific/dev-union pack is useful only as a diagnostic bound.",
+            "  An accepted candidate must use prompt-independent coverage, such as a",
+            "  model-wide expert pack or a GGUF-offset direct-read pack alias.",
+        ])
+    else:
+        lines.extend([
+            "- This run has no `pack_hit=0` copy rows. The profiled movement is already",
+            "  served through the expert-pack/io_uring path.",
+            "- The remaining cost is therefore not GGUF fallback or missing expert-pack",
+            "  coverage. It is VRAM-cache miss handling: expert-pack io_uring read,",
+            "  pinned staging, H2D enqueue/copy, and synchronization around demand reads.",
+            "- The next candidate should target batch depth, queue continuity, cache",
+            "  admission, RAM/VRAM tiering, or a lower-byte expert representation.",
+            "  Rebuilding another prompt-specific pack is not justified by this profile.",
+        ])
+    lines.extend([
+        "- Token rate from this diagnostic run should not be used as SOTA because",
+        "  `COPY_PROFILE_H2D=1` adds synchronization for measurement.",
         "",
     ])
 
