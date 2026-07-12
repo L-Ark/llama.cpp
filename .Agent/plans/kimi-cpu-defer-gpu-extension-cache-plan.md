@@ -107,14 +107,91 @@ decode token rate。短期硬目标是让 generalized prompts 的 cold-start 稳
 
 ### Immediate Next Step
 
-继续执行 lower-byte admission 的非破坏性实验：
+Status: completed.
+
+已执行 lower-byte admission 的非破坏性实验：
 
 - 读取并复查现有 activation-aware oracle 工具；
 - 使用已有 generalized dev activation corpus 跑小规模 screen；
 - 产出 `.Agent/runs/20260712-activation-aware-next-admission/`；
-- 在本计划文档记录结果：
-  pass/fail、理论上限、与实测 gap、下一步是否值得实现 runtime；
-- 只有当 screen 给出可解释、可部署、可泛化的收益时，才进入代码实现。
+- 结论见下一节：当前 activation-aware AW-MSE/input-correction 压缩族未通过。
+
+下一步不得实现这条 runtime path。继续推进时只保留两个方向：
+
+1. 完整 lower-bit model smoke，例如 `i1-IQ1_S`，但必须先经过显式存储清理/下载审批；
+2. predictor/prefetch admission，目标是让未来 batch 更早、更完整地进入队列，而不是再做
+   静态 RAM hotset 或已失败的 activation-aware 局部压缩。
+
+### 2026-07-12 Activation-Aware Lower-Byte Admission Result
+
+Artifact:
+
+- `.Agent/runs/20260712-activation-aware-next-admission/report.md`
+- `.Agent/runs/20260712-activation-aware-next-admission/summary.json`
+- per-prompt screens:
+  - `.Agent/runs/20260712-activation-aware-next-admission/dev_japan_factual-aw-mse-smoke48.md`
+  - `.Agent/runs/20260712-activation-aware-next-admission/dev_mixed_summary-aw-mse-smoke48.md`
+  - `.Agent/runs/20260712-activation-aware-next-admission/dev_python_reverse-aw-mse-smoke48.md`
+
+Scope:
+
+- dev-only, non-destructive offline screen;
+- no runtime change;
+- no SOTA claim;
+- no held-out/test prompt used;
+- config: `bits=1,2`, `block=256`, `scale=aw_mse`,
+  `keep_input=0.05,0.10`, `max_records=48`.
+
+Gate:
+
+- primary compressed-runtime target: `<=0.40x` moved bytes and
+  `mean rel-L2 <=0.10`;
+- short-term `2 tok/s` warning target: `<=0.50x`; still requires
+  `mean rel-L2 <=0.10` before runtime work.
+
+Result summary:
+
+| role | byte target | prompts | mean best rel-L2 | max best rel-L2 | mean ratio | pass |
+|---|---:|---:|---:|---:|---:|---|
+| `down` | `0.40x` | `3` | `0.226993` | `0.233521` | `0.3782` | no |
+| `down` | `0.50x` | `3` | `0.226993` | `0.233521` | `0.3782` | no |
+| `gate` | `0.40x` | `3` | `0.591026` | `0.592525` | `0.3808` | no |
+| `gate` | `0.50x` | `3` | `0.442266` | `0.448092` | `0.4427` | no |
+| `up` | `0.40x` | `3` | `0.511000` | `0.512534` | `0.3796` | no |
+| `up` | `0.50x` | `3` | `0.450705` | `0.452721` | `0.4122` | no |
+| `fused_up_gate` | `0.40x` | `3` | `0.673783` | `0.679132` | `0.3942` | no |
+| `fused_up_gate` | `0.50x` | `3` | `0.602443` | `0.607491` | `0.4261` | no |
+
+Decision:
+
+- reject activation-aware AW-MSE/input-correction as the next primary runtime path;
+- even at `<=0.50x`, fused up/gate remains around `0.60` mean rel-L2, far above
+  the `0.10` quality gate;
+- down is closer but still fails; down-only reduction is also insufficient for
+  `2 tok/s` by earlier byte-bound analysis;
+- this reinforces earlier rejections of exact input-channel keep, partial exact
+  contribution, output subspace, joint intermediate keep/scalar, and
+  cluster-base residual candidates.
+
+Reproduce:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+OUT=.Agent/runs/20260712-activation-aware-next-admission
+for P in dev_japan_factual dev_mixed_summary dev_python_reverse; do
+  ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/$P
+  timeout 600 python3 .Agent/run-tools/kimi_activation_output_compression_screen.py \
+    --activation-csv "$ROOT/act/activations.csv" \
+    --activation-bin "$ROOT/act/activations.f32" \
+    --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv \
+    --libggml-base build-cuda-batch/bin/libggml-base.so \
+    --out-json "$OUT/$P-aw-mse-smoke48.json" \
+    --out-md "$OUT/$P-aw-mse-smoke48.md" \
+    --bits 1,2 --blocks 256 --scale-modes aw_mse \
+    --keep-input-fracs 0.05,0.10 --max-records 48 --torch-threads 8
+done
+python3 .Agent/run-tools/kimi_activation_admission_summary.py
+```
 
 ## 2026-07-12 Current Authoritative Goal And Plan
 

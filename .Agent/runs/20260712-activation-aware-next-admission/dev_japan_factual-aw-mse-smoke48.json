@@ -1,0 +1,617 @@
+{
+  "activation_bin": "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual/act/activations.f32",
+  "activation_csv": "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual/act/activations.csv",
+  "aggregate": {
+    "down:aw_mse:bits1:block256": {
+      "max_abs_error": 1.108243703842163,
+      "max_rel_l2": 0.5024483277914633,
+      "mean_abs_error": 0.06474761836580001,
+      "mean_byte_ratio": 0.30909090909090897,
+      "mean_output_l2": 13.947060823440552,
+      "mean_rel_l2": 0.49816249519255235,
+      "rows": 16
+    },
+    "down:aw_mse:bits2:block256": {
+      "max_abs_error": 0.858394980430603,
+      "max_rel_l2": 0.45373072746405296,
+      "mean_abs_error": 0.058710254466859624,
+      "mean_byte_ratio": 0.5999999999999999,
+      "mean_output_l2": 13.947060823440552,
+      "mean_rel_l2": 0.446924451243046,
+      "rows": 16
+    },
+    "down:aw_mse_keep_input0p05:bits1:block256": {
+      "max_abs_error": 0.5556514263153076,
+      "max_rel_l2": 0.34237590083413305,
+      "mean_abs_error": 0.033266024955082685,
+      "mean_byte_ratio": 0.3436363636363637,
+      "mean_output_l2": 13.947060823440552,
+      "mean_rel_l2": 0.2824131895155533,
+      "rows": 16
+    },
+    "down:aw_mse_keep_input0p1:bits1:block256": {
+      "max_abs_error": 0.4355953335762024,
+      "max_rel_l2": 0.27377277205610323,
+      "mean_abs_error": 0.026033349815406837,
+      "mean_byte_ratio": 0.37818181818181806,
+      "mean_output_l2": 13.947060823440552,
+      "mean_rel_l2": 0.22512610818032636,
+      "rows": 16
+    },
+    "gate:aw_mse:bits1:block256": {
+      "max_abs_error": 1.3200281858444214,
+      "max_rel_l2": 0.6151544799674067,
+      "mean_abs_error": 0.15244346065446734,
+      "mean_byte_ratio": 0.3807864609258339,
+      "mean_output_l2": 14.4559887945652,
+      "mean_rel_l2": 0.5910114502008313,
+      "rows": 16
+    },
+    "gate:aw_mse:bits2:block256": {
+      "max_abs_error": 0.915012001991272,
+      "max_rel_l2": 0.4405623278516346,
+      "mean_abs_error": 0.1098636647220701,
+      "mean_byte_ratio": 0.7391737182677948,
+      "mean_output_l2": 14.4559887945652,
+      "mean_rel_l2": 0.4275958502257109,
+      "rows": 16
+    },
+    "gate:aw_mse_keep_input0p05:bits1:block256": {
+      "max_abs_error": 1.2160248756408691,
+      "max_rel_l2": 0.5198475031733008,
+      "mean_abs_error": 0.12908503715880215,
+      "mean_byte_ratio": 0.41174713787954187,
+      "mean_output_l2": 14.4559887945652,
+      "mean_rel_l2": 0.4990474724790079,
+      "rows": 16
+    },
+    "gate:aw_mse_keep_input0p1:bits1:block256": {
+      "max_abs_error": 0.9817880988121033,
+      "max_rel_l2": 0.4560740649487323,
+      "mean_abs_error": 0.11345318995881826,
+      "mean_byte_ratio": 0.4427078148332503,
+      "mean_output_l2": 14.4559887945652,
+      "mean_rel_l2": 0.4402300509252897,
+      "rows": 16
+    },
+    "up:aw_mse:bits1:block256": {
+      "max_abs_error": 1.3394711017608643,
+      "max_rel_l2": 0.6228585225668336,
+      "mean_abs_error": 0.15630063973367214,
+      "mean_byte_ratio": 0.3469387755102042,
+      "mean_output_l2": 14.670976042747498,
+      "mean_rel_l2": 0.6032814503276633,
+      "rows": 16
+    },
+    "up:aw_mse:bits2:block256": {
+      "max_abs_error": 0.9791200757026672,
+      "max_rel_l2": 0.4439536992975846,
+      "mean_abs_error": 0.11029173550195992,
+      "mean_byte_ratio": 0.6734693877551018,
+      "mean_output_l2": 14.670976042747498,
+      "mean_rel_l2": 0.42712653933622197,
+      "rows": 16
+    },
+    "up:aw_mse_keep_input0p05:bits1:block256": {
+      "max_abs_error": 1.1843568086624146,
+      "max_rel_l2": 0.523152402106554,
+      "mean_abs_error": 0.1324106666725129,
+      "mean_byte_ratio": 0.37959183673469377,
+      "mean_output_l2": 14.670976042747498,
+      "mean_rel_l2": 0.5088760882244041,
+      "rows": 16
+    },
+    "up:aw_mse_keep_input0p1:bits1:block256": {
+      "max_abs_error": 1.1813108921051025,
+      "max_rel_l2": 0.464096709189489,
+      "mean_abs_error": 0.11644089757464826,
+      "mean_byte_ratio": 0.41224489795918373,
+      "mean_output_l2": 14.670976042747498,
+      "mean_rel_l2": 0.4491286675664465,
+      "rows": 16
+    }
+  },
+  "bits": [
+    1,
+    2
+  ],
+  "blocks": [
+    256
+  ],
+  "decision": {
+    "advance_blockwise_lowbit": false,
+    "max_mean_rel_l2": 0.1,
+    "passing_fused_candidates": [],
+    "passing_matvec_candidates": [],
+    "rule": "Candidates near 0.30x-0.40x moved bytes need low activation-output error before runtime work.",
+    "runtime_overhead_note": "This tool reconstructs candidates offline. A runtime implementation would need direct compressed kernels; full reconstruction is not an acceptable runtime path.",
+    "status": "screen_only",
+    "target_byte_ratio": 0.4
+  },
+  "fused_up_gate": {
+    "fused_up_gate:aw_mse:bits1:block256": {
+      "max_abs_error": 1.7089437246322632,
+      "max_rel_l2": 0.8137600259613732,
+      "mean_abs_error": 0.04174913908354938,
+      "mean_byte_ratio": 0.362358276643991,
+      "mean_output_l2": 3.748416637070477,
+      "mean_rel_l2": 0.7816993411296927,
+      "rows": 16
+    },
+    "fused_up_gate:aw_mse:bits2:block256": {
+      "max_abs_error": 1.0136053562164307,
+      "max_rel_l2": 0.6208366562788292,
+      "mean_abs_error": 0.03170208027586341,
+      "mean_byte_ratio": 0.7034013605442174,
+      "mean_output_l2": 3.748416637070477,
+      "mean_rel_l2": 0.5850789948050481,
+      "rows": 16
+    },
+    "fused_up_gate:aw_mse_keep_input0p05:bits1:block256": {
+      "max_abs_error": 1.5338677167892456,
+      "max_rel_l2": 0.7054274943476483,
+      "mean_abs_error": 0.036706655628222506,
+      "mean_byte_ratio": 0.39424040967065777,
+      "mean_output_l2": 3.748416637070477,
+      "mean_rel_l2": 0.6791323154172207,
+      "rows": 16
+    },
+    "fused_up_gate:aw_mse_keep_input0p1:bits1:block256": {
+      "max_abs_error": 1.3019031286239624,
+      "max_rel_l2": 0.6273259559901515,
+      "mean_abs_error": 0.03285261378186988,
+      "mean_byte_ratio": 0.42612254269732447,
+      "mean_output_l2": 3.748416637070477,
+      "mean_rel_l2": 0.607490672878854,
+      "rows": 16
+    }
+  },
+  "generated_at": "2026-07-12T05:45:02+0000",
+  "inventory": ".Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv",
+  "keep_input_fracs": [
+    0.05,
+    0.1
+  ],
+  "kind": "kimi_activation_output_compression_screen",
+  "libggml_base": "build-cuda-batch/bin/libggml-base.so",
+  "records_loaded": 48,
+  "reproduce_command": ".Agent/run-tools/kimi_activation_output_compression_screen.py --activation-csv /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual/act/activations.csv --activation-bin /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_japan_factual/act/activations.f32 --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --libggml-base build-cuda-batch/bin/libggml-base.so --out-json .Agent/runs/20260712-activation-aware-next-admission/dev_japan_factual-aw-mse-smoke48.json --out-md .Agent/runs/20260712-activation-aware-next-admission/dev_japan_factual-aw-mse-smoke48.md --bits 1,2 --blocks 256 --scale-modes aw_mse --keep-input-fracs 0.05,0.10 --max-records 48 --torch-threads 8",
+  "scale_modes": [
+    "aw_mse"
+  ],
+  "tensor_experts": {
+    "blk.12.ffn_down_exps.weight:116": {
+      "dequant_s": 0.05582896003033966,
+      "expert_bytes": 6307840,
+      "expert_idx": 116,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:167": {
+      "dequant_s": 0.060867214982863516,
+      "expert_bytes": 6307840,
+      "expert_idx": 167,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:171": {
+      "dequant_s": 0.056674734980333596,
+      "expert_bytes": 6307840,
+      "expert_idx": 171,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:196": {
+      "dequant_s": 0.06243971601361409,
+      "expert_bytes": 6307840,
+      "expert_idx": 196,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:225": {
+      "dequant_s": 0.05779082397930324,
+      "expert_bytes": 6307840,
+      "expert_idx": 225,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:375": {
+      "dequant_s": 0.05655686499085277,
+      "expert_bytes": 6307840,
+      "expert_idx": 375,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:56": {
+      "dequant_s": 0.07763361901743338,
+      "expert_bytes": 6307840,
+      "expert_idx": 56,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:92": {
+      "dequant_s": 0.05721689999336377,
+      "expert_bytes": 6307840,
+      "expert_idx": 92,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:135": {
+      "dequant_s": 0.05982977896928787,
+      "expert_bytes": 6307840,
+      "expert_idx": 135,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:23": {
+      "dequant_s": 0.05615692399442196,
+      "expert_bytes": 6307840,
+      "expert_idx": 23,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:240": {
+      "dequant_s": 0.06695184699492529,
+      "expert_bytes": 6307840,
+      "expert_idx": 240,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:298": {
+      "dequant_s": 0.061536619963590056,
+      "expert_bytes": 6307840,
+      "expert_idx": 298,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:30": {
+      "dequant_s": 0.06228894495870918,
+      "expert_bytes": 6307840,
+      "expert_idx": 30,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:320": {
+      "dequant_s": 0.061954203993082047,
+      "expert_bytes": 6307840,
+      "expert_idx": 320,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:41": {
+      "dequant_s": 0.06318107096012682,
+      "expert_bytes": 6307840,
+      "expert_idx": 41,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:49": {
+      "dequant_s": 0.0626910180435516,
+      "expert_bytes": 6307840,
+      "expert_idx": 49,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_gate_exps.weight:135": {
+      "dequant_s": 0.10072093998314813,
+      "expert_bytes": 5619712,
+      "expert_idx": 135,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:23": {
+      "dequant_s": 0.09921297698747367,
+      "expert_bytes": 5619712,
+      "expert_idx": 23,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:240": {
+      "dequant_s": 0.09928959899116307,
+      "expert_bytes": 5619712,
+      "expert_idx": 240,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:298": {
+      "dequant_s": 0.10014516598312184,
+      "expert_bytes": 5619712,
+      "expert_idx": 298,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:30": {
+      "dequant_s": 0.10154193500056863,
+      "expert_bytes": 5619712,
+      "expert_idx": 30,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:320": {
+      "dequant_s": 0.09776076895650476,
+      "expert_bytes": 5619712,
+      "expert_idx": 320,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:41": {
+      "dequant_s": 0.10149474296486005,
+      "expert_bytes": 5619712,
+      "expert_idx": 41,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:49": {
+      "dequant_s": 0.10277465399121866,
+      "expert_bytes": 5619712,
+      "expert_idx": 49,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:135": {
+      "dequant_s": 0.09893755899975076,
+      "expert_bytes": 5619712,
+      "expert_idx": 135,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:23": {
+      "dequant_s": 0.10157845495268703,
+      "expert_bytes": 5619712,
+      "expert_idx": 23,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:240": {
+      "dequant_s": 0.10330268699908629,
+      "expert_bytes": 5619712,
+      "expert_idx": 240,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:298": {
+      "dequant_s": 0.13262339000357315,
+      "expert_bytes": 5619712,
+      "expert_idx": 298,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:30": {
+      "dequant_s": 0.10131936403922737,
+      "expert_bytes": 5619712,
+      "expert_idx": 30,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:320": {
+      "dequant_s": 0.11203506798483431,
+      "expert_bytes": 5619712,
+      "expert_idx": 320,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:41": {
+      "dequant_s": 0.10018861602293327,
+      "expert_bytes": 5619712,
+      "expert_idx": 41,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:49": {
+      "dequant_s": 0.0998946150066331,
+      "expert_bytes": 5619712,
+      "expert_idx": 49,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_gate_exps.weight:178": {
+      "dequant_s": 0.10047970898449421,
+      "expert_bytes": 4702208,
+      "expert_idx": 178,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:233": {
+      "dequant_s": 0.10236159397754818,
+      "expert_bytes": 4702208,
+      "expert_idx": 233,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:271": {
+      "dequant_s": 0.10300618800101802,
+      "expert_bytes": 4702208,
+      "expert_idx": 271,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:288": {
+      "dequant_s": 0.1026970450184308,
+      "expert_bytes": 4702208,
+      "expert_idx": 288,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:295": {
+      "dequant_s": 0.10219341196352616,
+      "expert_bytes": 4702208,
+      "expert_idx": 295,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:343": {
+      "dequant_s": 0.10168394900392741,
+      "expert_bytes": 4702208,
+      "expert_idx": 343,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:39": {
+      "dequant_s": 0.11397782299900427,
+      "expert_bytes": 4702208,
+      "expert_idx": 39,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:63": {
+      "dequant_s": 0.10991476400522515,
+      "expert_bytes": 4702208,
+      "expert_idx": 63,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_up_exps.weight:178": {
+      "dequant_s": 0.09938302397495136,
+      "expert_bytes": 5619712,
+      "expert_idx": 178,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:233": {
+      "dequant_s": 0.10061113198753446,
+      "expert_bytes": 5619712,
+      "expert_idx": 233,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:271": {
+      "dequant_s": 0.09893935202853754,
+      "expert_bytes": 5619712,
+      "expert_idx": 271,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:288": {
+      "dequant_s": 0.09790778398746625,
+      "expert_bytes": 5619712,
+      "expert_idx": 288,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:295": {
+      "dequant_s": 0.10027083102613688,
+      "expert_bytes": 5619712,
+      "expert_idx": 295,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:343": {
+      "dequant_s": 0.09992760000750422,
+      "expert_bytes": 5619712,
+      "expert_idx": 343,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:39": {
+      "dequant_s": 0.09887832001550123,
+      "expert_bytes": 5619712,
+      "expert_idx": 39,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:63": {
+      "dequant_s": 0.09798504499485716,
+      "expert_bytes": 5619712,
+      "expert_idx": 63,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    }
+  },
+  "unique_tensor_experts": 48
+}
