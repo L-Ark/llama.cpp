@@ -142,6 +142,46 @@ Next action:
    prefetch A/B；
 4. 如果离线不达标，转向 RAM/VRAM 显式存储重排 oracle 或新的 lower-byte 表示。
 
+### 2026-07-12 Score Predictor Offline Result
+
+Artifacts:
+
+- dev trace root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-route-score-dev-n32-035310`
+- analysis:
+  `.Agent/runs/20260712-route-score-trace-audit/dev-predictor-analysis/analysis.md`
+- script:
+  `.Agent/run-tools/kimi_route_score_predictor_analysis.py`
+
+Dev collection:
+
+- France N32: quality pass, `1.51 tok/s`, TTFT `13538.01 ms`, RAM peak
+  `12773163008` bytes, trace `1862` lines；
+- Intelligence N32: quality pass, `1.54 tok/s`, TTFT `10050.75 ms`, RAM peak
+  `12602880000` bytes, trace `1862` lines；
+- total decode route-score rows after filtering prompt rows: `3720`。
+
+Offline predictor result:
+
+- `prev_token_top8`: recall `0.3398`, precision `0.3511`, pred/actual `0.968`,
+  full-step `0.0000`；
+- `prev_layer_top8`: recall `0.0192`, precision `0.0195`, pred/actual `0.983`,
+  full-step `0.0000`；
+- `hybrid_layer8_token8`: best recall `0.3528`, but pred/actual `1.932` and
+  full-step `0.0000`；
+- margin quartiles show weak signal only: next-token same-layer recall rises from
+  about `0.3381` to `0.3758` in the highest-margin quartile。
+
+Decision:
+
+- 不从这些简单 score/history policies 构建 runtime prefetch A/B；
+- 原因是 recall 低、full-step cover 为 0、best hybrid 还会把 moved bytes 放大到
+  `1.932x`；
+- 下一步 predictor 若继续，必须引入更强信号：draft router / 小模型 / hidden-state
+  feature，而不是只靠历史 route score；
+- 若不继续 predictor，回到 RAM/VRAM 显式存储重排 oracle 或新的 lower-byte expert
+  representation。
+
 ## 2026-07-12 Active Goal: Kimi CPU/defer GPU-extension Applicability
 
 ### Goal

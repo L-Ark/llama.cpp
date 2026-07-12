@@ -105,3 +105,52 @@ offline predictor feasibility:
 
 Only if offline score-aware prediction shows at least `100 ms/token` exposed
 wait saving without excessive moved bytes should runtime prefetch A/B be built.
+
+## Dev Predictor Analysis
+
+Dev trace root:
+
+```text
+/root/lfz/runs/vendor-kimi-token-rate/20260712-route-score-dev-n32-035310
+```
+
+Prompts:
+
+- `dev_france_regression`: `Please introduce France in a short paragraph.`
+- `dev_intelligence_general`: `What is intelligence?`
+
+Trace collection results:
+
+| prompt | quality | token rate | TTFT ms | decode ms / runs | RAM peak bytes | trace lines |
+|---|---|---:|---:|---:|---:|---:|
+| France | pass | 1.51 | 13538.01 | 20513.44 / 31 | 12773163008 | 1862 |
+| Intelligence | pass | 1.54 | 10050.75 | 20072.41 / 31 | 12602880000 | 1862 |
+
+Offline analysis artifact:
+
+```text
+.Agent/runs/20260712-route-score-trace-audit/dev-predictor-analysis/analysis.md
+```
+
+Main result:
+
+| policy | recall | precision | pred/actual | full-step |
+|---|---:|---:|---:|---:|
+| `prev_token_top8` | 0.3398 | 0.3511 | 0.968 | 0.0000 |
+| `prev_layer_top8` | 0.0192 | 0.0195 | 0.983 | 0.0000 |
+| `hybrid_layer8_token8` | 0.3528 | 0.1826 | 1.932 | 0.0000 |
+
+Decision:
+
+- Simple score/history policies do not pass the runtime prefetch gate.
+- Best recall is only `0.3528`, while moved bytes would be almost `1.932x`
+  actual for the best hybrid policy.
+- Full-step cover is `0.0000`, meaning these policies almost never predict all
+  active experts for a layer.
+- Score margin is only weakly informative: highest-margin quartile improves
+  next-token same-layer recall only to `0.3758`.
+
+Do not build a runtime prefetch A/B from these simple policies. The next
+prediction route needs a stronger signal such as a draft router / small model,
+or must pivot back to RAM/VRAM storage rebalance oracle and lower-byte expert
+representation.
