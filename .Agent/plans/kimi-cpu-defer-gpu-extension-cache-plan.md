@@ -19766,3 +19766,126 @@ Decision:
   `5 tok/s` by itself. It is still a plausible step toward the nearer
   `>= 2 tok/s` milestone if it reduces exposed down wait without increasing
   TTFT/RAM beyond gates.
+
+### 2026-07-12 DeepSeek CPU/defer GPU-extension Applicability Goal
+
+Timestamp: 2026-07-12 CST.
+
+Goal:
+
+- Determine whether the DeepSeek SOTA mechanism can be transferred to Kimi
+  without changing either model's semantics or existing features.
+- The specific mechanism to test is not "generic CPU fallback acceleration".
+  It is the CPU/defer MoE path calling a GPU expert-cache extension so that
+  selected gate/up/down experts are staged into VRAM and computed by GPU
+  kernels.
+- Short-term performance goal: restore or exceed the current Kimi general
+  SOTA under the same protected constraints, then push the stable/general
+  cold-start N32 decode rate to `>= 2.0 tok/s`.
+- Long-term performance goal remains `> 5 tok/s` for random user prompts on
+  `16 GB host RAM + 32 GB RTX 5090`.
+
+Working hypothesis:
+
+- DeepSeek benefited heavily because gate in the `n_cpu_moe` CPU/defer path was
+  effectively extended onto GPU via hotpool/cache/one-stream staging.
+- Kimi already has the same broad architecture: CPU/defer remains the MoE
+  scheduler, while pack/cache/hotpool can bring experts into VRAM for GPU
+  computation.
+- Therefore the transferable part is the extension pattern:
+  route on CPU/defer, admit hot or demanded experts into a controlled
+  VRAM/RAM/SSD hierarchy, batch staging when possible, then compute on GPU.
+- The non-transferable assumption is that Kimi still has a large unhandled CPU
+  gate fallback. Current Kimi profiles show `0` prompt/decode fallback in the
+  protected SOTA path, so the main exposed bottleneck is not ordinary CPU
+  computation. It is IO/staging wait inside the GPU-extension path.
+
+Non-negotiable gates for this goal:
+
+1. Cold start only.
+2. `MemoryMax=15900000000`, `MemorySwapMax=0`; host RAM includes page cache,
+   pinned staging, mmap, allocator memory and kernel accounting.
+3. No prompt-specific hotset or France-only tuning. Dev prompts can be used for
+   design; sealed held-out prompts are only for final validation.
+4. `Please introduce France in a short paragraph.` must remain semantically
+   correct and coherent.
+5. Prompt and decode fallback must remain `0`, or every remaining fallback row
+   must be explained by layer, role, dtype, bytes and reason.
+6. TTFT must not increase by more than `20%` versus the same-commit cold-start
+   control.
+7. Every accepted SOTA must be reproducible from a written run directory,
+   commit, branch, environment, command, prompt set, outputs, RAM/VRAM profile,
+   fallback profile and rollback point.
+8. A change that only improves a profile-specific prompt, or only improves hit
+   rate while reducing endpoint token rate, must be rejected.
+
+Implementation plan:
+
+1. CPU/defer path audit.
+   - Trace Kimi gate/up/down execution for the protected SOTA configuration.
+   - Classify each routed expert operation as:
+     - VRAM resident GPU compute;
+     - SSD/RAM staged GPU compute;
+     - CPU/defer extension miss;
+     - true CPU fallback.
+   - Compare this map with the DeepSeek gate extension path, especially
+     hotpool lookup, one-stream staging, pack metadata, alias resolution and
+     fallback predicates.
+   - Output an audit table by layer, role and dtype.
+
+2. Bottleneck profile before any runtime change.
+   - Run one fresh cold-start N32 profile on France and at least one general
+     prompt.
+   - Break down per-token time into expert read, io_uring wait, pinned
+     staging, H2D, up/gate compute, down compute, CPU fallback and RAM/file
+     cache.
+   - Identify whether the biggest remaining seconds are:
+     - gate/up/down not entering the GPU extension;
+     - staged reads waiting for small demand batches;
+     - H2D/copy serialization;
+     - compute kernel time;
+     - page-cache/refault side effects.
+
+3. Minimal DeepSeek-pattern transfer A/B.
+   - Default-off only.
+   - If audit finds any Kimi gate/up/down operation still exits the GPU
+     extension path, first port the DeepSeek-style extension hook for that
+     specific role.
+   - If fallback is already `0`, do not force another fallback rewrite. Instead
+     test whether the DeepSeek hotpool/cache admission policy can reduce Kimi
+     exposed up/gate wait without hurting down overlap.
+   - The first A/B should be the smallest role/layer slice that can show a
+     clear critical-path reduction, not a global policy rewrite.
+
+4. RAM/VRAM storage policy A/B.
+   - Treat decode-stage page cache as reclaimable unless profiling proves it is
+     useful.
+   - Replace low-value file-backed pages with explicit expert storage only
+     when the replacement preserves batchable delivery to VRAM.
+   - Prefer coherent slabs or role/layer groups over scattered single-expert
+     RAM entries if mixed RAM/SSD reads fragment the runtime queue.
+   - Measure RAM tier success by endpoint decode time and exposed wait, not by
+     hit rate alone.
+
+5. Admission and rollback.
+   - A candidate must save enough endpoint time to matter:
+     - about `4.0-4.5 s` N32 decode saving for the current `>=2 tok/s`
+       milestone;
+     - otherwise reject before implementation or after a small A/B.
+   - Accepted results must include exact repro commands, env, prompt outputs,
+     TTFT, decode rate, profile breakdown, RAM peak, VRAM usage, fallback rows
+     and rollback commit.
+   - Push immediately only after the improvement passes all gates.
+   - If performance, quality, TTFT or RAM gate fails, revert to the protected
+     SOTA and record the rejection in this document.
+
+Immediate next experiment:
+
+1. Build the CPU/defer GPU-extension audit report for Kimi current SOTA.
+2. Verify whether any gate/up/down role still uses true CPU fallback or an
+   extension-miss slow path.
+3. If yes, port the minimal DeepSeek-style hook for that role.
+4. If no, skip fallback work and focus on the highest exposed wait bucket:
+   up/gate staging and demand-read queue starvation.
+5. Do not start a broad runtime rewrite until the audit shows a theoretical
+   path to at least `~4.5 s` N32 decode saving.
