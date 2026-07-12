@@ -1,0 +1,245 @@
+{
+  "baseline_decode_ms": 42527.100000000006,
+  "decode_runs": 62,
+  "interpretation": [
+    "Best leave-one-prompt-out static layout is greedy_pair with 11.371 ms/token saved and bounded 1.482 tok/s.",
+    "This is still an optimistic per-read-wait upper bound: it assumes fewer extents translate linearly to less exposed iouring wait and ignores pack rebuild overhead.",
+    "A runtime A/B is justified only if the LOO bound is comfortably above the target and a default-off pack layout can be built without prompt-specific held-out tuning."
+  ],
+  "kind": "kimi_pack_layout_loo_bound",
+  "max_gap_mib": 1.0,
+  "max_jobs": 8,
+  "reproduce_command": ".Agent/run-tools/kimi_pack_layout_loo_bound.py --input-root /root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717 --out-json .Agent/runs/20260712-gate-updown-layout-loo-bound/loo-bound-up_gate.json --out-md .Agent/runs/20260712-gate-updown-layout-loo-bound/loo-bound-up_gate.md --roles up,gate --max-jobs 8 --max-gap-mib 1.0 --baseline-decode-ms 42527.100000000006",
+  "roles": [
+    "gate",
+    "up"
+  ],
+  "rows": [
+    {
+      "bounded_decode_ms": 21798.922634240644,
+      "bounded_tok_s": 1.4220886288805288,
+      "current_extents": 15517,
+      "current_read_bytes": 80895041536,
+      "current_span_bytes": 80895041536,
+      "decode_ms": 21839.52,
+      "decode_runs": 31,
+      "iouring_reads": 38796,
+      "iouring_wait_ms": 16755.483,
+      "layout": "expert_id",
+      "layout_extents": 15423,
+      "layout_read_bytes": 80895041536,
+      "layout_span_bytes": 80895041536,
+      "missing": 0,
+      "per_read_wait_ms": 0.43188686978038976,
+      "saved_ms_upper": 40.597365759356634,
+      "saved_reads": 94,
+      "test_prompt": "dev_france_regression",
+      "train_prompts": [
+        "dev_intelligence_general"
+      ]
+    },
+    {
+      "bounded_decode_ms": 21686.63204809774,
+      "bounded_tok_s": 1.4294520205464172,
+      "current_extents": 15517,
+      "current_read_bytes": 80895041536,
+      "current_span_bytes": 80895041536,
+      "decode_ms": 21839.52,
+      "decode_runs": 31,
+      "iouring_reads": 38796,
+      "iouring_wait_ms": 16755.483,
+      "layout": "frequency",
+      "layout_extents": 15163,
+      "layout_read_bytes": 80895041536,
+      "layout_span_bytes": 80895041536,
+      "missing": 0,
+      "per_read_wait_ms": 0.43188686978038976,
+      "saved_ms_upper": 152.88795190225798,
+      "saved_reads": 354,
+      "test_prompt": "dev_france_regression",
+      "train_prompts": [
+        "dev_intelligence_general"
+      ]
+    },
+    {
+      "bounded_decode_ms": 21613.211280235075,
+      "bounded_tok_s": 1.4343079146387185,
+      "current_extents": 15517,
+      "current_read_bytes": 80895041536,
+      "current_span_bytes": 80895041536,
+      "decode_ms": 21839.52,
+      "decode_runs": 31,
+      "iouring_reads": 38796,
+      "iouring_wait_ms": 16755.483,
+      "layout": "first_use",
+      "layout_extents": 14993,
+      "layout_read_bytes": 80895041536,
+      "layout_span_bytes": 80895041536,
+      "missing": 0,
+      "per_read_wait_ms": 0.43188686978038976,
+      "saved_ms_upper": 226.30871976492423,
+      "saved_reads": 524,
+      "test_prompt": "dev_france_regression",
+      "train_prompts": [
+        "dev_intelligence_general"
+      ]
+    },
+    {
+      "bounded_decode_ms": 21532.01654871636,
+      "bounded_tok_s": 1.4397165230605433,
+      "current_extents": 15517,
+      "current_read_bytes": 80895041536,
+      "current_span_bytes": 80895041536,
+      "decode_ms": 21839.52,
+      "decode_runs": 31,
+      "iouring_reads": 38796,
+      "iouring_wait_ms": 16755.483,
+      "layout": "greedy_pair",
+      "layout_extents": 14805,
+      "layout_read_bytes": 80895041536,
+      "layout_span_bytes": 80895041536,
+      "missing": 0,
+      "per_read_wait_ms": 0.43188686978038976,
+      "saved_ms_upper": 307.5034512836375,
+      "saved_reads": 712,
+      "test_prompt": "dev_france_regression",
+      "train_prompts": [
+        "dev_intelligence_general"
+      ]
+    },
+    {
+      "bounded_decode_ms": 20574.23753956213,
+      "bounded_tok_s": 1.50673870370118,
+      "current_extents": 15850,
+      "current_read_bytes": 82261991424,
+      "current_span_bytes": 82261901312,
+      "decode_ms": 20687.58,
+      "decode_runs": 31,
+      "iouring_reads": 37043,
+      "iouring_wait_ms": 15102.679,
+      "layout": "expert_id",
+      "layout_extents": 15572,
+      "layout_read_bytes": 82261991424,
+      "layout_span_bytes": 82261991424,
+      "missing": 0,
+      "per_read_wait_ms": 0.4077066922225522,
+      "saved_ms_upper": 113.3424604378695,
+      "saved_reads": 278,
+      "test_prompt": "dev_intelligence_general",
+      "train_prompts": [
+        "dev_france_regression"
+      ]
+    },
+    {
+      "bounded_decode_ms": 20502.481161730964,
+      "bounded_tok_s": 1.5120121196776537,
+      "current_extents": 15850,
+      "current_read_bytes": 82261991424,
+      "current_span_bytes": 82261901312,
+      "decode_ms": 20687.58,
+      "decode_runs": 31,
+      "iouring_reads": 37043,
+      "iouring_wait_ms": 15102.679,
+      "layout": "frequency",
+      "layout_extents": 15396,
+      "layout_read_bytes": 82261991424,
+      "layout_span_bytes": 82261991424,
+      "missing": 0,
+      "per_read_wait_ms": 0.4077066922225522,
+      "saved_ms_upper": 185.09883826903868,
+      "saved_reads": 454,
+      "test_prompt": "dev_intelligence_general",
+      "train_prompts": [
+        "dev_france_regression"
+      ]
+    },
+    {
+      "bounded_decode_ms": 20335.321417919717,
+      "bounded_tok_s": 1.524441112235504,
+      "current_extents": 15850,
+      "current_read_bytes": 82261991424,
+      "current_span_bytes": 82261901312,
+      "decode_ms": 20687.58,
+      "decode_runs": 31,
+      "iouring_reads": 37043,
+      "iouring_wait_ms": 15102.679,
+      "layout": "first_use",
+      "layout_extents": 14986,
+      "layout_read_bytes": 82261991424,
+      "layout_span_bytes": 82261991424,
+      "missing": 0,
+      "per_read_wait_ms": 0.4077066922225522,
+      "saved_ms_upper": 352.25858208028507,
+      "saved_reads": 864,
+      "test_prompt": "dev_intelligence_general",
+      "train_prompts": [
+        "dev_france_regression"
+      ]
+    },
+    {
+      "bounded_decode_ms": 20290.065975083013,
+      "bounded_tok_s": 1.5278412617321797,
+      "current_extents": 15850,
+      "current_read_bytes": 82261991424,
+      "current_span_bytes": 82261901312,
+      "decode_ms": 20687.58,
+      "decode_runs": 31,
+      "iouring_reads": 37043,
+      "iouring_wait_ms": 15102.679,
+      "layout": "greedy_pair",
+      "layout_extents": 14875,
+      "layout_read_bytes": 82261991424,
+      "layout_span_bytes": 82261991424,
+      "missing": 0,
+      "per_read_wait_ms": 0.4077066922225522,
+      "saved_ms_upper": 397.5140249169884,
+      "saved_reads": 975,
+      "test_prompt": "dev_intelligence_general",
+      "train_prompts": [
+        "dev_france_regression"
+      ]
+    }
+  ],
+  "summary_rows": [
+    {
+      "bounded_decode_ms": 41822.08252379938,
+      "bounded_tok_s": 1.4824704141578346,
+      "layout": "greedy_pair",
+      "missing": 0,
+      "saved_ms_per_token": 11.371249616139128,
+      "saved_ms_upper": 705.0174762006259,
+      "saved_reads": 1687
+    },
+    {
+      "bounded_decode_ms": 41948.5326981548,
+      "bounded_tok_s": 1.4780016370567166,
+      "layout": "first_use",
+      "missing": 0,
+      "saved_ms_per_token": 9.33173067492273,
+      "saved_ms_upper": 578.5673018452093,
+      "saved_reads": 1388
+    },
+    {
+      "bounded_decode_ms": 42189.11320982871,
+      "bounded_tok_s": 1.469573434540833,
+      "layout": "frequency",
+      "missing": 0,
+      "saved_ms_per_token": 5.451399841472527,
+      "saved_ms_upper": 337.98679017129666,
+      "saved_reads": 808
+    },
+    {
+      "bounded_decode_ms": 42373.16017380278,
+      "bounded_tok_s": 1.4631903720584787,
+      "layout": "expert_id",
+      "missing": 0,
+      "saved_ms_per_token": 2.4829004225359053,
+      "saved_ms_upper": 153.93982619722613,
+      "saved_reads": 372
+    }
+  ],
+  "traces": [
+    "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/dev_france_regression/io-read-trace.csv",
+    "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/dev_intelligence_general/io-read-trace.csv"
+  ]
+}

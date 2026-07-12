@@ -193,6 +193,63 @@ Decision:
   4. cross-prompt RAM/VRAM storage policy only if it reduces endpoint decode time,
      not only hit rate.
 
+### 2026-07-12 Gate/Up/Down Static Layout LOO Result
+
+Status: completed and rejected as the next runtime A/B.
+
+Artifact:
+
+- `.Agent/runs/20260712-gate-updown-layout-loo-bound/report.md`
+- `.Agent/runs/20260712-gate-updown-layout-loo-bound/loo-bound.md`
+- `.Agent/runs/20260712-gate-updown-layout-loo-bound/loo-bound-up_gate.md`
+- `.Agent/runs/20260712-gate-updown-layout-loo-bound/loo-bound-down.md`
+
+Goal:
+
+- Test whether a static pack layout can reduce gate/up/down io_uring read
+  fragmentation enough to justify implementation.
+- Use leave-one-prompt-out dev evaluation so that the result is not
+  prompt-specific.
+- Do not use held-out/test prompts.
+
+Input:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717`;
+- prompts: `dev_france_regression`, `dev_intelligence_general`;
+- combined baseline decode: `42527.100 ms / 62 decode runs`;
+- roles: `up,gate,down`;
+- `max_jobs=8`, `max_gap=1.0 MiB`.
+
+Result:
+
+- all roles, best LOO static layout `greedy_pair`:
+  - saved reads `2845`;
+  - saved upper bound `1188.869 ms`;
+  - saved `19.175 ms/token`;
+  - bounded token rate `1.500 tok/s`;
+- `up,gate` only, best `greedy_pair`:
+  - saved `11.371 ms/token`;
+  - bounded token rate `1.482 tok/s`;
+- `down` only, best `greedy_pair`:
+  - saved `7.804 ms/token`;
+  - bounded token rate `1.475 tok/s`;
+- missing expert entries: `0`.
+
+Decision:
+
+- Reject static prompt-general pack relayout as next runtime A/B.
+- The best optimistic LOO result is far below the short-term `>2 tok/s` target.
+- Same-prompt layout screens may show larger bounds, but that is not enough:
+  without cross-prompt LOO/held-out evidence, it is prompt-specific overfit.
+- Do not build a new pack only to reorder experts by `expert_id`, `frequency`,
+  `first_use`, or `greedy_pair`.
+- Continue with larger-leverage directions:
+  1. lower-byte expert representation with output-error and quality gates;
+  2. exact runtime queue continuity / scheduler work that reduces exposed wait
+     without speculative overfetch;
+  3. RAM/VRAM tiering only when it replaces low-value file cache and improves
+     endpoint decode time under the 16GB RAM gate.
+
 ### Plan
 
 1. 保持 CPU/defer GPU-extension 作为每次实验的硬回归门禁。
