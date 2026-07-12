@@ -20187,3 +20187,99 @@ Next implementation filter:
 - The most plausible next A/B is a default-off batch-preserving up/gate RAM or
   VRAM admission screen focused on the top exposed layers (`14`, `1`, `29`,
   `28`, `60`) and validated on France plus general prompts.
+
+### 2026-07-12 RAM Admission Bound From COPY/IO Trace
+
+Timestamp: 2026-07-12 CST.
+
+Purpose:
+
+- Test whether replacing low-value page cache with explicit RAM expert tier is
+  strong enough to justify runtime A/B.
+- Use the fresh COPY/IO traces rather than prompt-specific hit-rate guesses.
+- Score candidates by batch dominance, not just selected bytes or hit rate.
+
+Run root:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717`
+
+Tools:
+
+- `.Agent/run-tools/kimi_ram_candidate_multidev_screen.py`;
+- `.Agent/run-tools/kimi_ram_compact_tier_bound.py`.
+
+Verification:
+
+- `python3 -m py_compile .Agent/run-tools/kimi_ram_candidate_multidev_screen.py`
+  passed.
+- `python3 -m py_compile .Agent/run-tools/kimi_ram_compact_tier_bound.py`
+  passed.
+
+Input traces:
+
+- `dev_france_regression/io-read-trace.csv`;
+- `dev_intelligence_general/io-read-trace.csv`.
+
+Current VRAM simulation excluded:
+
+- down slots: `533`;
+- upgate slots: `2015`;
+- split max: `6 MiB`.
+
+Baseline used for target bound:
+
+- Normal non-COPY baseline decode:
+  - France dev baseline: `18663.66 ms / 31`;
+  - intelligence general baseline: `20759.32 ms / 31`;
+  - combined: `39422.98 ms / 62`, `1.573 tok/s`.
+- Target `2 tok/s` requires combined decode `<=31000 ms`, so required saving
+  is `8422.98 ms`.
+
+Artifacts:
+
+- Output dir:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/ram-admission-from-copyio`
+- Up/gate 4GB:
+  `upgate-4096.json`, `upgate-4096-target2-bound.md`.
+- Up/gate 8GB:
+  `upgate-8192.json`, `upgate-8192-target2-bound.md`.
+- All-role 10GB:
+  `allroles-10240.json`, `allroles-10240-target2-bound.md`.
+
+Screen results:
+
+| candidate | resident budget | selected entries | selected weighted GiB | hit batches | RAM-dominant batches | RAM-dominant GiB | best optimistic tok/s | best RAM-dominant tok/s | decision |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| up/gate | `4096 MiB` | `844` | `18.286` | `2906 / 7321` | `17` | `0.338` | `1.642` | `1.574` | reject |
+| up/gate | `8192 MiB` | `1673` | `30.292` | `4213 / 7321` | `53` | `1.060` | `1.691` | `1.577` | reject |
+| up/gate/down | `10240 MiB` | `1768` | `47.693` | `5463 / 11036` | `84` | `2.247` | `1.767` | `1.581` | reject |
+
+Interpretation:
+
+- Static RAM tier can select many bytes, but the selected bytes rarely dominate
+  an entire runtime IO batch.
+- The optimistic bound assumes every selected byte removes exposed SSD wait;
+  even then, `10GB` all-role only reaches `1.767 tok/s`, still below the
+  `2 tok/s` milestone.
+- The scheduler-realistic RAM-dominant bound is much worse: only
+  `1.574-1.581 tok/s`, because most batches remain mixed RAM/SSD.
+- This explains prior runtime regressions from RAM tier experiments: the tier
+  reduces some SSD reads but fragments the demand path and does not remove the
+  critical wait for the remaining SSD jobs.
+
+Decision:
+
+- Reject scattered static RAM tier runtime A/B for up/gate 4GB, up/gate 8GB
+  and all-role 10GB.
+- Filling more host RAM with individual hot experts is not sufficient under
+  the current scheduler.
+- A RAM/VRAM storage candidate can proceed only if it changes batch structure:
+  - coherent layer/role slabs;
+  - contiguous group packs with RAM-dominant batches;
+  - or a scheduler that can split RAM-ready and SSD-needed jobs without making
+    the SSD batch smaller on the critical path.
+- The next optimization should move away from static RAM hotsets and toward:
+  1. reducing bytes per miss with quality-safe representation;
+  2. stronger future-layer prediction/prefetch that creates larger batches;
+  3. or a batch-structure change that can prove RAM-dominant coverage before a
+     full model run.
