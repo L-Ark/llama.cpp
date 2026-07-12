@@ -20283,3 +20283,218 @@ Decision:
   2. stronger future-layer prediction/prefetch that creates larger batches;
   3. or a batch-structure change that can prove RAM-dominant coverage before a
      full model run.
+
+## 2026-07-12 Coherent RAM Slab And Batch-Cover Oracle Goal
+
+Goal:
+
+- Keep the active Kimi optimization target aligned with the real deployment
+  task: `16GB` total host RAM including page cache, `32GB` RTX 5090 VRAM,
+  cold start, generalized user prompts, correct and coherent output, TTFT no
+  more than `+20%`, and every accepted improvement must be reproducible,
+  committed and pushed with rollback information.
+- Evaluate whether host RAM should be repurposed from low-value GGUF/file page
+  cache into explicit expert storage before implementing another runtime A/B.
+- Only proceed with a runtime RAM-tier implementation if the offline bound
+  proves that RAM-resident experts remove critical-path wait, not merely that
+  they reduce selected SSD bytes.
+
+Decision rule:
+
+- A RAM/VRAM storage candidate must first prove one of the following:
+  - it creates RAM-dominant or RAM-only runtime batches;
+  - it saves enough exposed wait to move the generalized baseline materially
+    toward the `2 tok/s` milestone;
+  - it preserves SSD batch size instead of fragmenting SSD reads into smaller
+    mixed RAM/SSD batches.
+- If the offline upper bound is below the target, reject the runtime A/B and
+  move to lower-byte expert representation, future-layer prediction/prefetch,
+  or storage/compute format changes.
+
+Reproduction context:
+
+- Branch: `vendor/kimi-deepseek-41d205-additive`.
+- Commit before this record: `13501c334`.
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717`
+- Input traces:
+  - `dev_france_regression/io-read-trace.csv`
+  - `dev_intelligence_general/io-read-trace.csv`
+- Baseline used for the bound:
+  - France decode: `18663.66 ms / 31`
+  - Intelligence decode: `20759.32 ms / 31`
+  - combined: `39422.98 ms / 62 = 1.573 tok/s`
+  - `2 tok/s` target requires `<=31000 ms`, so required saving is
+    `8422.98 ms`, or about `135.85 ms/token`.
+
+### Coherent Layer/Role Slab Screen
+
+Tool:
+
+- `.Agent/run-tools/kimi_phase5c_ram_slab_screen.py`
+
+Command:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717
+OUT=$ROOT/analysis/phase5c-coherent-slab-screen
+python3 .Agent/run-tools/kimi_phase5c_ram_slab_screen.py \
+  --input-root "$ROOT" \
+  --route-profile-root "$ROOT" \
+  --out-dir "$OUT" \
+  --roles up,gate,down \
+  --max-jobs 8 \
+  --down-slots 533 \
+  --upgate-slots 2015 \
+  --split-max-mib 6.0 \
+  --contig-window-mib 512 1024 2048 \
+  --contig-top-per-source 8
+```
+
+Artifact:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/phase5c-coherent-slab-screen/report.md`
+
+Inputs:
+
+- decode-like rows: `51596`
+- decode-like batches: `11134`
+- decode runs: `62`
+- total batch wait: `23006.531 ms`
+- total batch wait/token: `371.073 ms/token`
+- simulated current VRAM hotset entries: `2548`
+
+Best single coherent slabs:
+
+| candidate | resident MiB | wait saved ms/token | hit batches | RAM-only batches | mixed-risk batches |
+|---|---:|---:|---:|---:|---:|
+| `blk.1.upgate` | `1426.35` | `6.014` | `124` | `124` | `0` |
+| `blk.9.upgate` | `1407.88` | `5.171` | `105` | `105` | `0` |
+| `blk.29.upgate` | `1467.01` | `5.043` | `101` | `101` | `0` |
+| `blk.1.all` | `2382.84` | `7.998` | `163` | `163` | `0` |
+| `blk.9.all` | `2534.12` | `7.476` | `146` | `146` | `0` |
+| `blk.7.all` | `2215.12` | `7.285` | `159` | `159` | `0` |
+
+Greedy coherent-slab bound:
+
+| mode | budget | resident MiB | selected slabs | wait saved ms/token |
+|---|---:|---:|---:|---:|
+| layer up/gate | `2048 MiB` | `2027.3` | `2` | `9.16` |
+| layer up/gate | `4096 MiB` | `3991.8` | `4` | `17.65` |
+| layer up/gate | `8192 MiB` | `7438.5` | `7` | `32.22` |
+| layer up/gate | `10240 MiB` | `9447.8` | `9` | `40.55` |
+| layer all | `4096 MiB` | `3057.3` | `2` | `11.42` |
+| layer all | `8192 MiB` | `6616.6` | `4` | `24.18` |
+| layer all | `10240 MiB` | `8602.1` | `5` | `31.18` |
+
+Interpretation:
+
+- Coherent slabs avoid the worst mixed-batch issue and do create RAM-only
+  batches.
+- The saved critical-path wait is still too small. Even `10GB` of coherent
+  up/gate slabs saves only `40.55 ms/token`, while reaching `2 tok/s` from the
+  current generalized baseline needs about `135.85 ms/token`.
+- Full-layer `up+gate+down` slabs are larger but less efficient per GiB than
+  up/gate slabs in this trace.
+
+### Complete-Batch RAM Cover Oracle
+
+Tool:
+
+- `.Agent/run-tools/kimi_batch_cover_ram_oracle.py`
+
+Verification:
+
+```bash
+python3 -m py_compile .Agent/run-tools/kimi_batch_cover_ram_oracle.py
+```
+
+Command:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717
+OUT=$ROOT/analysis/batch-cover-ram-oracle
+mkdir -p "$OUT"
+python3 .Agent/run-tools/kimi_batch_cover_ram_oracle.py \
+  --input-root "$ROOT" \
+  --out-json "$OUT/oracle.json" \
+  --out-md "$OUT/oracle.md" \
+  --roles up,gate,down \
+  --max-jobs 8 \
+  --budgets-mib 2048,4096,8192,10240 \
+  --baseline-decode-ms 39422.98
+```
+
+Artifact:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/batch-cover-ram-oracle/oracle.md`
+
+Oracle inputs:
+
+- traces: `2`
+- prompts: `2`
+- roles: `down,gate,up`
+- batches: `11134`
+- unique expert keys: `24053`
+- decode runs: `62`
+- total wait: `23006.531 ms`
+- total wait/token: `371.073 ms/token`
+
+Greedy complete-batch cover bound:
+
+| budget | resident GiB | selected entries | covered batches | saved ms | saved ms/token | bounded tok/s |
+|---|---:|---:|---:|---:|---:|---:|
+| `2048 MiB` | `1.999` | `438` | `329` | `823.390` | `13.280` | `1.606` |
+| `4096 MiB` | `3.996` | `857` | `590` | `1367.025` | `22.049` | `1.629` |
+| `8192 MiB` | `7.996` | `1727` | `1070` | `2422.998` | `39.081` | `1.676` |
+| `10240 MiB` | `9.999` | `2176` | `1311` | `2936.075` | `47.356` | `1.699` |
+
+Interpretation:
+
+- This oracle is intentionally favorable to RAM tiering because it is allowed
+  to overfit the two dev traces and only counts complete runtime batch cover.
+- Even under this favorable bound, `10GB` RAM reaches only `1.699 tok/s`,
+  below the `2 tok/s` milestone.
+- Therefore the current bottleneck is not just "unused page cache should be
+  replaced by more expert RAM". The problem is that the runtime still needs too
+  many distinct late-bound expert bytes per token, and RAM tiering does not
+  remove enough exposed wait unless it changes the batch structure or reduces
+  bytes per miss.
+
+Decision:
+
+- Reject coherent layer slabs and complete-batch RAM cover as the next runtime
+  SOTA attempt.
+- Do not spend another implementation cycle on larger static RAM tier sizes
+  unless a new offline oracle shows at least `100 ms/token` exposed-wait saving
+  on held-out generalized prompts under the `16GB` host RAM limit.
+- Keep the current code path and continue from the CPU/defer GPU-extension
+  architecture, but optimize the accepted GPU-extension path rather than adding
+  broad CPU fallback hooks.
+
+Next plan:
+
+1. Lower-byte expert representation screen.
+   - Measure role/layer sensitivity for mixed precision or residual expert
+     forms on held-out generalized prompts.
+   - Required before implementation: theoretical byte saving, quality-risk
+     analysis, and a decode-time bound showing how much exposed wait can be
+     removed.
+2. Future-layer prediction/prefetch screen.
+   - Explore whether a small predictor can make useful next-layer or
+     next-token expert sets available early enough to form deeper IO batches.
+   - First experiment must report acceptance/coverage, wrong-prefetch byte
+     waste, quality output, TTFT, and whether queue depth actually increases.
+3. Pack/layout redesign screen.
+   - Evaluate duplicated/coalesced pack layouts that group commonly co-active
+     expert entries into larger contiguous reads without changing model
+     semantics.
+   - Any candidate must show improved complete-batch coverage and no prompt
+     overfitting before runtime A/B.
+4. Runtime A/B gate.
+   - Before every practice step, update this plan with the expected bottleneck,
+     theoretical upper bound, exact reproduction command, quality prompt set,
+     RAM/VRAM limits, rollback point and push target.
+   - Accept and push only if generalized token rate improves, quality passes,
+     TTFT is within `+20%`, cold-start conditions hold, and total host RAM
+     stays below `16GB`.
