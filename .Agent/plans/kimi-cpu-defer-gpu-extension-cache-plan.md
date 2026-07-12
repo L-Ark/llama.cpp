@@ -324,6 +324,71 @@ Next action:
   new lower-byte expert representation with prompt-level output-error evidence,
   not a retune of rejected families.
 
+### IO Scheduler-Only Closure (2026-07-12 16:55 CST)
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-io-scheduler-closure/report.md`
+
+Status: completed and rejected as the next primary runtime direction.
+
+Reason for this closure:
+
+- after CPU fallback, RAM second-tier, and known lower-byte candidates were
+  rejected, the remaining low-risk question was whether pure io_uring scheduler
+  knobs could still reduce enough exposed wait;
+- this closure uses the current N96 `io-batch-profile.csv` traces from
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-admission-ioread-n96-083914`.
+
+Current N96 batch-depth evidence:
+
+- total IO batches: `32618`;
+- avg read jobs/batch: `5.357`;
+- weighted inflight avg: `3.990`;
+- total profiled IO wait: `96770.782 ms`;
+- batches with `read_jobs <= 8`: `32264` (`98.915%`);
+- batches with `read_jobs > 8`: `354` (`1.085%`);
+- wait in `read_jobs > 8` batches: `4296.934 ms` (`4.440%`);
+- impossible upper bound from eliminating all `>8` wait:
+  `4296.934 ms / 180 tokens = 23.872 ms/token`.
+
+Comparison with required gain:
+
+- current trace is about `587.45 ms/token`, or `1.70 tok/s`;
+- reaching `2 tok/s` requires about `87.45 ms/token` saved before extra
+  overhead;
+- therefore depth above `8` cannot bridge the gap even under the optimistic
+  assumption that all `>8` wait disappears.
+
+Prior runtime A/B evidence:
+
+- GP80 N32 smoke:
+  `.Agent/runs/20260708-gp80-io-depth16-refill8-summary.md`;
+  `depth8/refill4` `1.72 tok/s`, `depth16/refill8` `1.69 tok/s`;
+- fresh pack-source control:
+  `.Agent/runs/20260712-modelsource-pack-control-dev2-n32/report.md`;
+  `depth8/refill4` `1.58 tok/s`, `depth16/refill8` `1.50 tok/s`;
+  raw iouring wait fell slightly, but endpoint decode regressed.
+
+Decision:
+
+- reject pure IO-depth/refill tuning as the next primary optimization;
+- keep `MOE_IO_DEPTH=8`, `MOE_IO_REFILL_BATCH=4`, `VRAM_MIB=15000`, and
+  `UPGATE_PCT=72` as reproduction defaults;
+- the root issue is not configured queue depth, but demand order and expert
+  byte volume: the runtime usually exposes only the current layer's routed
+  experts and cannot keep enough future independent work in flight.
+
+Next action:
+
+- do not continue scheduler-only depth/refill work;
+- further progress requires one of:
+  - explicit approval for the complete-model `i1-IQ1_S` smoke;
+  - a genuinely new lower-byte expert representation with prompt-level
+    output-error evidence;
+  - a new future-expert knowledge algorithm that creates large independent
+    batches without breaking quality.
+
 ## Current Goal and Execution Plan (2026-07-12)
 
 This is the operational header for the active Codex goal. Historical sections
