@@ -136,6 +136,105 @@ Primary directions, in order:
      - quality gate result;
      - artifact paths.
 
+### Hidden-Feature Predictor Admission Result (2026-07-12 17:09 CST)
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-hidden-feature-admission/report.md`
+- `.Agent/runs/20260712-current-goal-hidden-feature-admission/report.json`
+- `.Agent/runs/20260712-current-goal-hidden-feature-admission/metrics.csv`
+- tool:
+  `.Agent/run-tools/kimi_hidden_feature_future_expert_admission.py`
+
+Command:
+
+```bash
+cd /root/lfz/llama.cpp-vendor-kimi
+OUT=.Agent/runs/20260712-current-goal-hidden-feature-admission
+python3 .Agent/run-tools/kimi_hidden_feature_future_expert_admission.py \
+  --root /root/lfz/runs/vendor-kimi-token-rate/20260708-gp105-groupcomplete-activation-corpus-r2 \
+  --out-dir "$OUT" \
+  --horizons 1,2,3 \
+  --budgets 8,16,32 \
+  --neighbors 1,3,5
+```
+
+Purpose:
+
+- test whether activation-dump hidden/up vectors provide a stronger
+  prompt-general signal for future expert-ID prefetch than route history or
+  router scores;
+- use leave-one-dev-prompt-out only;
+- do not change runtime behavior and do not claim SOTA.
+
+Corpus:
+
+- prompts:
+  `dev_france_regression`,
+  `dev_japan_factual`,
+  `dev_photosynthesis_factual`;
+- each prompt has `178` up/gate groups and covers `60` layers;
+- all activation rows have `token_id=0`, so this screen uses execution `call`
+  order rather than true token/layer sequence labels;
+- the corpus was generated for representation/surrogate screening, not a full
+  future-prefetch admission trace.
+
+Admission gate:
+
+- recall `>=0.65`;
+- predicted/actual bytes `<=1.35x`;
+- full-step coverage `>=0.40`.
+
+Result:
+
+- passing rows: `0`;
+- best row:
+  - horizon `2`;
+  - policy `static_target_layer`;
+  - budget `32`;
+  - recall `0.631392`;
+  - precision `0.157848`;
+  - predicted/actual `4.000000x`;
+  - full-step coverage `0.109848`;
+  - samples `528`;
+- budget-constrained best rows:
+  - budget `8`: recall about `0.547`, predicted/actual `1.0x`,
+    full-step about `0.053`;
+  - budget `16`: recall about `0.601`, predicted/actual `2.0x`,
+    full-step about `0.081`;
+  - budget `32`: recall about `0.631`, predicted/actual `4.0x`,
+    full-step about `0.110`.
+
+Interpretation:
+
+- hidden KNN policies did not beat the static target-layer prior in the
+  high-recall rows;
+- the available activation vector signal does not create enough complete
+  future batches under a safe byte budget;
+- because `token_id` is not meaningful in this corpus, it is too weak as proof
+  for runtime prefetch even if a row had passed.
+
+Decision:
+
+- reject hidden-feature future-expert prefetch from the existing activation
+  corpus;
+- do not implement runtime reads from this signal;
+- the next predictor attempt must add new instrumentation or use a real
+  draft/router model:
+  - full cold-start N96 trace with explicit token/layer sequence labels;
+  - hidden vector or router-logit capture at the point where future prefetch
+    would actually be issued;
+  - same admission gates before any runtime prefetch reads.
+
+Updated next action:
+
+1. If continuing predictor work, first instrument a full N96 hidden/router trace
+   with true token/layer labels and rerun admission.
+2. If not adding new predictor instrumentation, switch to a lower-byte payload
+   direction; scheduler-only, route-history-only, route-score-only, current
+   activation-corpus hidden-feature, and broad RAM-tier paths are rejected by
+   current evidence.
+
 ## Locked Goal and Near-Term Plan (2026-07-12 16:17 CST)
 
 This section is the current working goal for the next implementation phase. It
