@@ -4,6 +4,148 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## Active Goal and Plan: Kimi CPU/defer GPU Extension Audit (2026-07-12 19:25 CST)
+
+This section is the active goal for the next Kimi cycle. If it conflicts with
+older notes below, this section wins. The purpose is to turn the DeepSeek
+`CPU/defer main path + GPU expert-cache extension` lesson into a Kimi-specific,
+reproducible execution plan instead of blindly re-porting an optimization that
+may already be present.
+
+### Goal
+
+Validate and then extend the current Kimi CPU/defer MoE path so that all
+profitable `gate`, `up` and `down` expert work is executed by the GPU
+extension, while the CPU/defer scheduler remains the owner of dispatch.
+
+Near-term target:
+
+- recover and then exceed the current generalized Kimi SOTA under the current
+  codebase;
+- reach stable generalized `>2 tok/s` decode as the next milestone;
+- keep the longer-term product target of stable random-prompt `>5 tok/s`
+  decode.
+
+Hard environment and quality gates:
+
+- one `32 GB RTX 5090`;
+- strict `<16 GB` host RAM, including RSS, pinned memory, explicit RAM expert
+  cache, Linux page cache and process-external pressure;
+- cold start only;
+- generalized prompts only; no prompt-specific pack, split, cache admission or
+  tuning result may be called SOTA;
+- held-out prompts remain unused during tuning and are used only for final
+  SOTA validation;
+- `Please introduce France in a short paragraph.` must remain coherent,
+  semantic and factually sane;
+- TTFT must be within `+20%` of the paired accepted baseline;
+- prompt and decode CPU fallback rows must remain `0` for an accepted SOTA;
+- every accepted improvement must be committed and pushed immediately with
+  full reproduction details.
+
+### Applicability Hypothesis
+
+The DeepSeek improvement is useful to Kimi as an architecture pattern, but the
+direct "move gate from CPU to GPU" trick is not assumed to be the next large
+Kimi win.
+
+Current evidence says Kimi already has the important extension shape:
+
+- the CPU/defer path schedules MoE work;
+- `gate`, `up` and `down` can be served by the GPU extension;
+- recent Kimi SOTA profiles show true CPU fallback rows at `0`;
+- the large remaining cost is exposed expert movement and wait, not ordinary
+  CPU math.
+
+Therefore the next cycle first audits whether any hidden Kimi path still
+executes `gate/up/down` on CPU. If such a path exists, port the DeepSeek-style
+GPU extension there. If it does not exist, do not spend implementation time on
+another gate-only port; move directly to reducing critical-path expert bytes,
+improving RAM/VRAM residency, and increasing useful IO batch continuity.
+
+### Execution Plan
+
+1. Lock a reproducible baseline before editing runtime code.
+   - Run a cold-start `n96` profile on one generalized dev prompt and at least
+     the France quality prompt.
+   - Record output text, decode tok/s, TTFT, prompt rate, RAM peak, page cache,
+     RSS, pinned memory, VRAM use, CPU fallback rows, expert-pack miss rows,
+     expert bytes, `io_uring` wait, staging wall, H2D wall, up/gate compute and
+     down compute.
+   - Store all commands and artifacts under `.Agent/runs/...`.
+
+2. Audit the actual Kimi execution path.
+   - For each role (`gate`, `up`, `down`) and phase (`prompt`, `decode`),
+     classify work as:
+     - GPU extension from VRAM cache;
+     - GPU extension from pack/RAM/SSD staging;
+     - CPU/defer slow math;
+     - true CPU fallback;
+     - GGUF fallback.
+   - The audit must answer whether `n_cpu_moe` is merely the scheduler owner or
+     whether it still causes any expert role to compute on CPU.
+
+3. Branch based on the audit.
+   - If any profitable role still computes on CPU, implement a default-off
+     Kimi GPU-extension patch for that role, starting with `gate`, then `up`,
+     then `down`.
+   - If CPU math remains `0`, mark direct gate-to-VRAM porting as already
+     covered and focus on movement/residency instead.
+   - Every code path must preserve the existing pack and fallback behavior when
+     the new env var is absent.
+
+4. Movement/residency work if the audit shows GPU extension is already active.
+   - Lower-byte representation:
+     - recompute the byte target for `2 tok/s` and `5 tok/s`;
+     - reject non-destructive candidates whose all-role byte ratio or
+       activation/output error cannot meet the target;
+     - do not download or replace large complete-model assets such as
+       `i1-IQ1_S` without explicit user approval.
+   - RAM/VRAM storage:
+     - identify decode-stage page-cache pages that do not help decode;
+     - replace only low-yield file cache with explicit, batchable expert data;
+     - prefer layer/role slabs or complete low-hit layers over scattered
+       per-expert RAM entries if they improve endpoint time;
+     - reject RAM tiers that increase hit rate but shrink SSD batches,
+       increase staging/H2D wall, or regress token rate.
+   - IO scheduling:
+     - use offline traces to bound any combined `up/gate/down` batch scheduler
+       before implementation;
+     - only run default-off N32 A/B when the bound can plausibly save endpoint
+       time, not just internal wait counters.
+   - Prediction/prefetch:
+     - require useful expert-byte recall `>=65%`,
+       predicted/actual bytes `<=1.35x`, and complete-step coverage `>=40%`
+       before runtime integration;
+     - reject prompt-specific predictors.
+
+5. Experiment order.
+   - N32 smoke first for every runtime change.
+   - N96 generalized dev prompt only if N32 improves endpoint token rate and
+     passes RAM/TTFT/fallback/quality gates.
+   - Held-out prompts only after a candidate passes dev.
+   - Commit and push only accepted improvements. Rejected experiments get a
+     report and no runtime-code commit unless the tooling/report itself is the
+     deliverable.
+
+### Reproducibility and Commit Rule
+
+Every SOTA commit body must include:
+
+- branch, commit, parent and rollback point;
+- exact env vars and command lines;
+- prompt split and full output text for all quality gates;
+- decode tok/s, prompt rate, TTFT, RAM/page-cache/RSS/pinned/VRAM metrics;
+- timing split for expert read, staging, H2D, compute and scheduler/IO wait;
+- CPU fallback and GGUF fallback counts;
+- improvement magnitude against the paired baseline;
+- artifact paths;
+- reason the change is accepted;
+- exact rollback command.
+
+If a result cannot be reproduced from the committed instructions, it is not a
+SOTA result and must not be used as the next baseline.
+
 ## Current Goal and Execution Plan (2026-07-12 18:43 CST)
 
 This is the active working goal for the next execution cycle. It is written
