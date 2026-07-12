@@ -95,6 +95,104 @@ extension 接住，则该路线只保留为 regression gate，主攻 bytes/token
      RAM/VRAM、TTFT、质量输出、rollback point；
    - 符合条件后立即 commit/push；不符合则 default-off 或回退。
 
+### 2026-07-12 Current-HEAD CPU/defer Audit Result
+
+Status: completed for current HEAD `97d1c177f`.
+
+Artifact:
+
+- `.Agent/runs/20260712-current-head-cpudefer-n96-audit/report.md`
+- `.Agent/runs/20260712-current-head-cpudefer-n96-audit/summary.json`
+- copy-path splits:
+  - `.Agent/runs/20260712-current-head-cpudefer-n96-audit/dev_france_regression-copy-profile-breakdown.md`
+  - `.Agent/runs/20260712-current-head-cpudefer-n96-audit/dev_intelligence_general-copy-profile-breakdown.md`
+
+Repro command shape:
+
+```bash
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/<new-root>/dev_france_regression \
+      PROMPT_ID=dev_france_regression \
+      PROMPT_USER_TEXT='Please introduce France in a short paragraph.' \
+      QUALITY_KEYWORDS='france,europe' \
+      N=96 PROFILE=1 COPY_PROFILE=1 \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+
+systemd-run --wait --collect --same-dir \
+  -p MemoryMax=15900000000 -p MemorySwapMax=0 \
+  env RUN=/root/lfz/runs/vendor-kimi-token-rate/<new-root>/dev_intelligence_general \
+      PROMPT_ID=dev_intelligence_general \
+      PROMPT_USER_TEXT='What is intelligence?' \
+      QUALITY_KEYWORDS='intelligence,reason' \
+      N=96 PROFILE=1 COPY_PROFILE=1 \
+      .Agent/run-tools/kimi-general-prompt-repro.sh
+
+python3 .Agent/run-tools/kimi_cpu_defer_gpu_extension_audit.py \
+  --input /root/lfz/runs/vendor-kimi-token-rate/<new-root> \
+  --out .Agent/runs/20260712-current-head-cpudefer-n96-audit \
+  --top-n 20
+```
+
+Result:
+
+- prompts: `dev_france_regression`, `dev_intelligence_general`;
+- both outputs passed the lightweight quality gate;
+- France answer was semantic and coherent:
+  it introduced France as a Western European country, mentioned Paris, culture,
+  landmarks, countryside, wine regions, Lyon/Marseille, and EU/global politics;
+- Host RAM peak:
+  - France: `12,809,277,440 bytes` (`11.930 GiB`);
+  - Intelligence: `12,637,085,696 bytes` (`11.769 GiB`);
+- weighted decode in this profiling run: `651.099 ms/token`, `1.536 tok/s`;
+- `COPY_PROFILE_H2D=1` synchronizes H2D for measurement, so this token rate is
+  diagnostic only and must not be declared SOTA;
+- true CPU fallback rows: `0`;
+- fallback ms: `0.000`;
+- CPU/defer extension miss runs: `0`;
+- `up_gate`:
+  - France: `5101/5101 batch_accept`, `0 batch_decline`;
+  - Intelligence: `5701/5701 batch_accept`, `0 batch_decline`;
+- `down`:
+  - France: `5278/5278 batch_accept`, `0 batch_decline`;
+  - Intelligence: `5878/5878 batch_accept`, `0 batch_decline`;
+- up/gate wall: `441.220 ms/token`;
+- up/gate exposed wait proxy: `252.286 ms/token`;
+- decode down wall: `171.086 ms/token`;
+- decode down stage: `159.704 ms/token`.
+
+Copy-path evidence:
+
+- France:
+  - total profiled copy wall `274,544 ms`;
+  - expert-pack miss wall `0 ms`;
+  - expert-pack hit bytes `452.62 GiB`;
+  - all profiled movement was `pack_hit=1`, `iouring=1`;
+  - runtime gate `90,972 ms`, up `81,705 ms`, down `68,326 ms`,
+    current-down-overlap down `33,542 ms`.
+- Intelligence:
+  - total profiled copy wall `292,344 ms`;
+  - expert-pack miss wall `0 ms`;
+  - expert-pack hit bytes `482.88 GiB`;
+  - all profiled movement was `pack_hit=1`, `iouring=1`;
+  - runtime gate `96,638 ms`, up `85,511 ms`, down `70,547 ms`,
+    current-down-overlap down `39,648 ms`.
+
+Decision:
+
+- The DeepSeek-style CPU/defer GPU-extension path is already active for Kimi on
+  current HEAD.
+- Kimi's current bottleneck is not a broad CPU fallback hook and not missing
+  expert-pack coverage for these prompts.
+- Do not spend the next cycle on another general fallback rewrite unless a
+  fresh profile shows fallback rows or batch declines.
+- Next implementation should target:
+  1. reducing up/gate demand-read exposed wait;
+  2. preserving/improving down overlap without increasing total copied bytes;
+  3. reducing expert bytes/token with a quality-gated lower-byte representation;
+  4. cross-prompt RAM/VRAM storage policy only if it reduces endpoint decode time,
+     not only hit rate.
+
 ### Plan
 
 1. 保持 CPU/defer GPU-extension 作为每次实验的硬回归门禁。
