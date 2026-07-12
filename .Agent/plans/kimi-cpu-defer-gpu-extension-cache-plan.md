@@ -205,6 +205,57 @@ Next action:
 - if working on RAM again, require a complete-batch admission saving
   `>=96 ms/token` on generalized dev traces before runtime implementation.
 
+### 2026-07-12 Predictor N96 Refresh Result
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-predictor-n96-refresh/report.md`
+- `.Agent/runs/20260712-current-goal-predictor-n96-refresh/previous-same-tensor.md`
+- `.Agent/runs/20260712-current-goal-predictor-n96-refresh/hybrid/report.md`
+
+Status: completed; no runtime behavior change and no SOTA claim.
+
+Reason for this admission:
+
+- after static RAM slabs failed to provide enough complete-batch saving, the
+  remaining RAM/prefetch value would need a predictor that makes future complete
+  batches resident before demand;
+- this refresh uses the same fresh current-HEAD `n96` route traces as the RAM
+  slab refresh, so it is aligned with the latest bottleneck evidence.
+
+Admission gate:
+
+- all-role byte recall `>=65%`;
+- predicted/actual bytes `<=1.35x`;
+- full-step coverage `>=40%`;
+- no held-out/test prompt traces.
+
+Results:
+
+| predictor | best setting | byte recall | predicted/actual bytes | full-step coverage | decision |
+|---|---|---:|---:|---:|---|
+| previous same tensor | same tensor's previous active set | `0.3260` | `0.9898x` | not enough | fail recall |
+| hybrid route history | `hybrid_recent`, horizon `3`, budget `32` | `0.6051` | `4.00x` | `3.48%` | fail recall, overfetch, complete-step |
+| hybrid route history | `hybrid_recent`, horizon `3`, budget `16` | `0.4898` | `2.00x` | `0.58%` | fail recall and complete-step |
+
+Decision:
+
+- reject route-history predictor/prefetch as the next runtime path;
+- route IDs alone do not expose enough demand-safe complete future batches;
+- high-recall settings overfetch too many false-positive bytes and would add
+  SSD/H2D work instead of removing exposed wait;
+- a future predictor attempt must use a stronger signal such as router logits,
+  hidden-state features, or a draft/router model, and must pass complete-batch
+  admission before runtime reads.
+
+Next action:
+
+- keep route-history prefetch closed as a primary route;
+- continue with lower-byte expert representation or explicit `i1-IQ1_S`
+  full-model smoke approval;
+- if trying prediction again, require complete-batch coverage, not row-level
+  recall, and account for overfetch bytes in SSD/H2D cost.
+
 ## 2026-07-12 Goal Lock: Kimi CPU/defer GPU-extension Next Step
 
 This section is the current source of truth. Later historical sections are kept

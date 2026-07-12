@@ -1,0 +1,209 @@
+{
+  "aggregate": {
+    "by_kind": {
+      "down": {
+        "actual_bytes": 645510512640,
+        "actual_events": 94497,
+        "byte_recall": 0.32522357577324307,
+        "calls": 10920,
+        "hit_bytes": 209935237120,
+        "hit_events": 30923,
+        "precision": 0.3305964484642441,
+        "predictable_call_ratio": 0.989010989010989,
+        "predictable_calls": 10800,
+        "predicted_bytes": 638950359040,
+        "predicted_events": 93537,
+        "predicted_to_actual_byte_ratio": 0.9898372629546026,
+        "recall": 0.32723790173233014
+      },
+      "gate": {
+        "actual_bytes": 500886650880,
+        "actual_events": 94497,
+        "byte_recall": 0.3283307974909471,
+        "calls": 10920,
+        "hit_bytes": 164456513536,
+        "hit_events": 30923,
+        "precision": 0.3305964484642441,
+        "predictable_call_ratio": 0.989010989010989,
+        "predictable_calls": 10800,
+        "predicted_bytes": 495800008704,
+        "predicted_events": 93537,
+        "predicted_to_actual_byte_ratio": 0.9898447240167744,
+        "recall": 0.32723790173233014
+      },
+      "up": {
+        "actual_bytes": 463025848320,
+        "actual_events": 94497,
+        "byte_recall": 0.324511519555937,
+        "calls": 10920,
+        "hit_bytes": 150257221632,
+        "hit_events": 30923,
+        "precision": 0.3305964484642441,
+        "predictable_call_ratio": 0.989010989010989,
+        "predictable_calls": 10800,
+        "predicted_bytes": 458320887808,
+        "predicted_events": 93537,
+        "predicted_to_actual_byte_ratio": 0.9898386655322353,
+        "recall": 0.32723790173233014
+      }
+    },
+    "total": {
+      "actual_bytes": 1609423011840,
+      "actual_events": 283491,
+      "byte_recall": 0.32598575292407816,
+      "calls": 32760,
+      "hit_bytes": 524648972288,
+      "hit_events": 92769,
+      "precision": 0.3305964484642441,
+      "predictable_call_ratio": 0.989010989010989,
+      "predictable_calls": 32400,
+      "predicted_bytes": 1593071255552,
+      "predicted_events": 280611,
+      "predicted_to_actual_byte_ratio": 0.9898399885128363,
+      "recall": 0.32723790173233014
+    }
+  },
+  "input_traces": [
+    "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-slab-iotrace-n96-074132/dev_france_regression/route-trace.csv",
+    "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-slab-iotrace-n96-074132/dev_intelligence_general/route-trace.csv"
+  ],
+  "predictor": "previous_call_same_tensor",
+  "results": [
+    {
+      "by_kind": {
+        "down": {
+          "actual_bytes": 308734476288,
+          "actual_events": 45199,
+          "byte_recall": 0.3216187813225426,
+          "calls": 5160,
+          "hit_bytes": 99294806016,
+          "hit_events": 14680,
+          "precision": 0.3282720991077618,
+          "predictable_call_ratio": 0.9883720930232558,
+          "predictable_calls": 5100,
+          "predicted_bytes": 305454399488,
+          "predicted_events": 44719,
+          "predicted_to_actual_byte_ratio": 0.9893757352938445,
+          "recall": 0.32478594659173876
+        },
+        "gate": {
+          "actual_bytes": 239595962368,
+          "actual_events": 45199,
+          "byte_recall": 0.3270252274771422,
+          "calls": 5160,
+          "hit_bytes": 78353924096,
+          "hit_events": 14680,
+          "precision": 0.3282720991077618,
+          "predictable_call_ratio": 0.9883720930232558,
+          "predictable_calls": 5100,
+          "predicted_bytes": 237052641280,
+          "predicted_events": 44719,
+          "predicted_to_actual_byte_ratio": 0.9893849584823401,
+          "recall": 0.32478594659173876
+        },
+        "up": {
+          "actual_bytes": 221478928384,
+          "actual_events": 45199,
+          "byte_recall": 0.3226068706460371,
+          "calls": 5160,
+          "hit_bytes": 71450624000,
+          "hit_events": 14680,
+          "precision": 0.3282720991077618,
+          "predictable_call_ratio": 0.9883720930232558,
+          "predictable_calls": 5100,
+          "predicted_bytes": 219126448128,
+          "predicted_events": 44719,
+          "predicted_to_actual_byte_ratio": 0.989378311186691,
+          "recall": 0.32478594659173876
+        }
+      },
+      "calls": 15480,
+      "prompt": "dev_france_regression",
+      "total": {
+        "actual_bytes": 769809367040,
+        "actual_events": 135597,
+        "byte_recall": 0.32358576652530724,
+        "calls": 15480,
+        "hit_bytes": 249099354112,
+        "hit_events": 44040,
+        "precision": 0.3282720991077618,
+        "predictable_call_ratio": 0.9883720930232558,
+        "predictable_calls": 15300,
+        "predicted_bytes": 761633488896,
+        "predicted_events": 134157,
+        "predicted_to_actual_byte_ratio": 0.9893793470253068,
+        "recall": 0.32478594659173876
+      },
+      "trace": "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-slab-iotrace-n96-074132/dev_france_regression/route-trace.csv",
+      "unique_tensors": 180
+    },
+    {
+      "by_kind": {
+        "down": {
+          "actual_bytes": 336776036352,
+          "actual_events": 49298,
+          "byte_recall": 0.3285282180480266,
+          "calls": 5760,
+          "hit_bytes": 110640431104,
+          "hit_events": 16243,
+          "precision": 0.33272563398746363,
+          "predictable_call_ratio": 0.9895833333333334,
+          "predictable_calls": 5700,
+          "predicted_bytes": 333495959552,
+          "predicted_events": 48818,
+          "predicted_to_actual_byte_ratio": 0.990260361647075,
+          "recall": 0.32948598320418676
+        },
+        "gate": {
+          "actual_bytes": 261290688512,
+          "actual_events": 49298,
+          "byte_recall": 0.32952796722431105,
+          "calls": 5760,
+          "hit_bytes": 86102589440,
+          "hit_events": 16243,
+          "precision": 0.33272563398746363,
+          "predictable_call_ratio": 0.9895833333333334,
+          "predictable_calls": 5700,
+          "predicted_bytes": 258747367424,
+          "predicted_events": 48818,
+          "predicted_to_actual_byte_ratio": 0.9902663156406999,
+          "recall": 0.32948598320418676
+        },
+        "up": {
+          "actual_bytes": 241546919936,
+          "actual_events": 49298,
+          "byte_recall": 0.3262579280782405,
+          "calls": 5760,
+          "hit_bytes": 78806597632,
+          "hit_events": 16243,
+          "precision": 0.33272563398746363,
+          "predictable_call_ratio": 0.9895833333333334,
+          "predictable_calls": 5700,
+          "predicted_bytes": 239194439680,
+          "predicted_events": 48818,
+          "predicted_to_actual_byte_ratio": 0.9902607731176066,
+          "recall": 0.32948598320418676
+        }
+      },
+      "calls": 17280,
+      "prompt": "dev_intelligence_general",
+      "total": {
+        "actual_bytes": 839613644800,
+        "actual_events": 147894,
+        "byte_recall": 0.32818620788569636,
+        "calls": 17280,
+        "hit_bytes": 275549618176,
+        "hit_events": 48729,
+        "precision": 0.33272563398746363,
+        "predictable_call_ratio": 0.9895833333333334,
+        "predictable_calls": 17100,
+        "predicted_bytes": 831437766656,
+        "predicted_events": 146454,
+        "predicted_to_actual_byte_ratio": 0.9902623329258214,
+        "recall": 0.32948598320418676
+      },
+      "trace": "/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-ram-slab-iotrace-n96-074132/dev_intelligence_general/route-trace.csv",
+      "unique_tensors": 180
+    }
+  ]
+}
