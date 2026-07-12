@@ -256,6 +256,55 @@ Next action:
 - if trying prediction again, require complete-batch coverage, not row-level
   recall, and account for overfetch bytes in SSD/H2D cost.
 
+### 2026-07-12 Route-Score N96 Refresh Result
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-route-score-n96-refresh/report.md`
+- `.Agent/runs/20260712-current-goal-route-score-n96-refresh/score-predictor-analysis/analysis.md`
+
+Status: completed; no runtime behavior change and no SOTA claim.
+
+Reason for this admission:
+
+- route-history prefetch failed on current N96 traces;
+- graph-side route-score tracing exists and is stronger than selected IDs alone,
+  so it needed a current-N96 refresh before closing simple prefetch routes.
+
+Trace setup:
+
+- env: `GGML_MOE_ROUTE_SCORE_TRACE_OUT=$RUN/route-score-trace.csv`;
+- prompts: `dev_france_regression`, `dev_intelligence_general`;
+- both traces were cold-start N96, quality pass, and stayed below `16 GB` RAM;
+- France: `1.85 tok/s`, TTFT `8720.75 ms`, RAM peak `11.853 GiB`;
+- Intelligence: `1.86 tok/s`, TTFT `6862.30 ms`, RAM peak `11.716 GiB`.
+
+Score-aware predictor result:
+
+| policy | recall | precision | pred/actual | full-step |
+|---|---:|---:|---:|---:|
+| `prev_token_top8` | `0.3505` | `0.3544` | `0.989x` | `0.0008` |
+| `hybrid_layer4_token4` | `0.2369` | `0.2414` | `0.981x` | `0.0000` |
+| `hybrid_layer8_token8` | `0.3637` | `0.1862` | `1.953x` | `0.0011` |
+
+Decision:
+
+- reject simple score-aware route prefetch as the next runtime path;
+- best recall is far below the `0.65` gate;
+- best-recall policy overfetches at `1.953x` actual bytes;
+- full-step coverage is effectively zero, so it cannot make complete future
+  batches RAM/VRAM resident before demand;
+- score margin is weakly informative only: highest-margin quartile reaches
+  `0.3763` next-token same-layer recall.
+
+Next action:
+
+- do not implement runtime prefetch from simple route score/history policies;
+- future prediction must use a real draft/router model or hidden-state/logit
+  features that pass complete-batch admission;
+- otherwise continue with lower-byte expert representation or explicit
+  `i1-IQ1_S` full-model smoke approval.
+
 ## 2026-07-12 Goal Lock: Kimi CPU/defer GPU-extension Next Step
 
 This section is the current source of truth. Later historical sections are kept
