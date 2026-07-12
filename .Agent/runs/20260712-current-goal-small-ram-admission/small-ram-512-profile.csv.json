@@ -1,0 +1,9 @@
+{
+  "buckets": 24,
+  "bytes": 530661376,
+  "entries": 95,
+  "mib": 506.078125,
+  "out_profile": ".Agent/runs/20260712-current-goal-small-ram-admission/small-ram-512-profile.csv",
+  "out_report": ".Agent/runs/20260712-current-goal-small-ram-admission/small-ram-512-profile.md",
+  "route_profiles": 2
+}

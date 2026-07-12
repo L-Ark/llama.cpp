@@ -47,6 +47,50 @@ rows are `0` in the protected profile. Therefore the next wins must come from
 reducing critical-path expert movement: queue starvation, io_uring wait,
 staging/H2D exposure, cache placement, or lower-byte expert representation.
 
+### 2026-07-12 Small Static RAM-Tier Admission Result
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-small-ram-admission/report.md`
+
+Status: completed and rejected as the next runtime A/B path.
+
+Inputs:
+
+- profile root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-head-cpudefer-n96-050308`;
+- dev prompts: `dev_france_regression`, `dev_intelligence_general`;
+- decode runs: `180`;
+- baseline screen: `651.099 ms/token`, `1.536 tok/s`.
+
+Generated candidates:
+
+| candidate | entries | resident MiB | layer/role buckets | route coverage | copy io/wall coverage | optimistic tok/s |
+|---|---:|---:|---:|---:|---:|---:|
+| `512MiB` | `95` | `506.08` | `24` | `2.18%` | `0.88%` | `1.604` |
+| `1024MiB` | `191` | `1018.28` | `24` | `3.57%` | `1.77%` | `1.680` |
+
+Decision:
+
+- Do not run another scattered static RAM-tier runtime A/B from these profiles.
+- Even under the favorable assumption that all selected copy-profile wall time
+  is fully exposed and removed for free, the bound is only `1.60-1.68 tok/s`,
+  below the `>2 tok/s` milestone.
+- Runtime reality would be worse because preload, RAM pressure, RAM-tier H2D,
+  staging, and fragmented residual SSD batches are not included in the bound.
+- This reinforces the previous whole-layer/role RAM-tier rejection: RAM can
+  help only when it stores batchable, latency-critical expert data that replaces
+  low-value file cache and measurably reduces exposed wait.
+
+Next action:
+
+- prioritize default-off scheduler-only same-layer up/gate/down read submission
+  that does not add host RAM pressure;
+- keep lower-byte/v2 expert representation as the only currently identified
+  path with enough headroom for `>2 tok/s`;
+- revisit explicit RAM/VRAM cache only after a stronger exposed-wait admission,
+  preferably with batchable layer/role slab layout rather than scattered entries.
+
 ### Immediate Plan
 
 1. Reconfirm the baseline before further runtime work.
