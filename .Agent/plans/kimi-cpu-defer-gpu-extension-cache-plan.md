@@ -142,7 +142,9 @@ Artifacts:
 - IQ1_S part metadata validation:
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-part-metadata-validation.log`;
 - IQ1_S cleanup safety dry-run:
-  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-safety-dry-run.log`.
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-safety-dry-run.log`;
+- IQ1_S full execute=0 dry-run:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-dry-run.log`.
 
 Byte target result:
 
@@ -185,6 +187,15 @@ Storage result:
   - projected leftover after `i1-IQ1_S` download remains above reserve at
     `82426388576 bytes`;
   - no deletion/download was executed.
+- Full execute=0 dry-run:
+  - mode:
+    `EXECUTE=0 DELETE_OLD_PACKS=1 CONFIRM_DELETE=DELETE_OLD_KIMI_NON_SOTA_PACKS DOWNLOAD=1 RUN_SMOKE=1 VALIDATE_PARTS=1`;
+  - exit code: `0`;
+  - confirms `projected_space_ready=1`, `part_total_ok bytes=204430872480`,
+    and `delete_candidate_safety_check=ok`;
+  - prints the resumable download plan and the post-download `systemd-run`
+    smoke command;
+  - no deletion/download/smoke was executed because `EXECUTE=0`.
 
 Decision:
 
@@ -206,7 +217,11 @@ Decision:
 6. The next actionable step is explicit-confirm cleanup using the updated
    `.Agent/run-tools/kimi_iq1s_prepare_full_smoke.sh`, then an `i1-IQ1_S`
    dev-only smoke. No deletion/download was executed by this planning step.
-7. No held-out prompt may be inspected until a frozen lower-byte candidate passes
+7. The exact execution shape is now captured by the full execute=0 dry-run
+   artifact. To proceed, the next run must use the same script and confirmation
+   token, then immediately run the dev-only smoke and record RAM/TTFT/quality/
+   fallback metrics.
+8. No held-out prompt may be inspected until a frozen lower-byte candidate passes
    dev gates.
 
 ## 2026-07-12 Current Goal And Execution Plan

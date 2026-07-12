@@ -30,6 +30,8 @@ behavior and does not claim SOTA.
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-part-metadata-validation.log`
 - IQ1_S cleanup safety dry-run:
   `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-prepare-safety-dry-run.log`
+- IQ1_S full execute=0 dry-run:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-dry-run.log`
 
 ## Byte Target
 
@@ -131,6 +133,26 @@ Follow-up validation:
   - projected leftover after `i1-IQ1_S` download:
     `82426388576 bytes`;
   - no deletion/download executed.
+
+Full execute=0 dry-run:
+
+- log:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-dry-run.log`;
+- exit:
+  `.Agent/runs/20260712-active-goal-lowerbyte-storage-gate/iq1s-full-execute0-dry-run.exit`;
+- command mode:
+  `EXECUTE=0 DELETE_OLD_PACKS=1 CONFIRM_DELETE=DELETE_OLD_KIMI_NON_SOTA_PACKS DOWNLOAD=1 RUN_SMOKE=1 VALIDATE_PARTS=1`;
+- result:
+  - `projected_space_ready=1`;
+  - `part_total_ok bytes=204430872480`;
+  - `delete_candidate_safety_check=ok`;
+  - prints the resumable 5-part download plan for
+    `/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF/Kimi-K2.7-Code.i1-IQ1_S.gguf`;
+  - prints the post-download smoke command using `systemd-run`,
+    `MemoryMax=15900000000`, `MemorySwapMax=0`, `N=32`,
+    `PROMPT_ID=dev_france_regression`, and
+    `MODEL_PATH=/root/lfz/models/Kimi-K2.7-Code-i1-IQ1_S-GGUF/Kimi-K2.7-Code.i1-IQ1_S.gguf`;
+  - no deletion/download/smoke was executed because `EXECUTE=0`.
 
 ## Candidate Gate
 

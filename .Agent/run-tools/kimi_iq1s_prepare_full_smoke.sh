@@ -378,6 +378,8 @@ run_smoke() {
     log "smoke step skipped"
     return
   fi
+  local run_dir
+  run_dir="$RUN_ROOT/$(date -u +%Y%m%d-%H%M%SZ)-$RUN_TAG"
   local model_size
   model_size="$(path_size_bytes "$MODEL_PATH")"
   if [ "$model_size" != "$IQ1S_BYTES" ]; then
@@ -385,11 +387,13 @@ run_smoke() {
     if [ "$EXECUTE" = "1" ]; then
       return 1
     fi
+    log "dry-run smoke command after download:"
+    printf '%s\n' \
+      "cd '$REPO'" \
+      "systemd-run --wait --collect --same-dir -p MemoryMax=$MEMORY_MAX -p MemorySwapMax=$MEMORY_SWAP_MAX env REPO='$REPO' RUN='$run_dir' N='$N' THREADS='$THREADS' PROMPT_ID=dev_france_regression PROMPT_USER_TEXT='Please introduce France in a short paragraph.' QUALITY_KEYWORDS='france,europe|paris|eiffel|louvre|riviera|bordeaux' PROFILE=1 COPY_PROFILE=0 MODEL_PATH='$MODEL_PATH' .Agent/run-tools/kimi-general-prompt-repro.sh"
     return 0
   fi
 
-  local run_dir
-  run_dir="$RUN_ROOT/$(date -u +%Y%m%d-%H%M%SZ)-$RUN_TAG"
   log "smoke_run=$run_dir"
   if [ "$EXECUTE" != "1" ]; then
     log "dry-run smoke command:"
