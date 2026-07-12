@@ -154,6 +154,21 @@ static const char * moe_next_gate_shadow_out_path() {
     return path && path[0] ? path : nullptr;
 }
 
+struct moe_route_score_trace_csv_state {
+    std::mutex mutex;
+    std::ofstream file;
+    bool initialized = false;
+    bool disabled = false;
+    uint64_t call = 0;
+};
+
+static moe_route_score_trace_csv_state g_moe_route_score_trace_csv;
+
+static const char * moe_route_score_trace_out_path() {
+    const char * path = std::getenv("GGML_MOE_ROUTE_SCORE_TRACE_OUT");
+    return path && path[0] ? path : nullptr;
+}
+
 struct moe_next_gate_prefetch_probe_state {
     std::mutex mutex;
     std::ofstream file;
@@ -180,6 +195,18 @@ static bool moe_next_gate_prefetch_probe_wants(const ggml_tensor * t) {
 
 static std::string moe_next_gate_shadow_values_csv(const std::vector<int32_t> & values) {
     std::ostringstream oss;
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (i > 0) {
+            oss << '|';
+        }
+        oss << values[i];
+    }
+    return oss.str();
+}
+
+static std::string moe_route_score_float_values_csv(const std::vector<float> & values) {
+    std::ostringstream oss;
+    oss.precision(9);
     for (size_t i = 0; i < values.size(); ++i) {
         if (i > 0) {
             oss << '|';
@@ -341,6 +368,129 @@ static void moe_next_gate_shadow_record(
             << copy.ne1 << ','
             << record_us << ','
             << moe_next_gate_shadow_values_csv(copy.values)
+            << '\n';
+    }
+}
+
+static void moe_route_score_trace_record(
+        llm_graph_result * res,
+        const llama_ubatch & ubatch,
+        ggml_backend_sched_t sched) {
+    const auto & outputs = res->get_moe_route_score_outputs();
+    if (outputs.empty()) {
+        return;
+    }
+
+    const char * path = moe_route_score_trace_out_path();
+    if (!path) {
+        return;
+    }
+
+    struct pending_route_score_copy {
+        llm_moe_route_score_output meta;
+        std::vector<int32_t> ids;
+        std::vector<float> scores;
+        std::vector<float> weights;
+        int64_t ids_ne0 = 0;
+        int64_t ids_ne1 = 0;
+        int64_t scores_ne0 = 0;
+        int64_t scores_ne1 = 0;
+        int64_t weights_ne0 = 0;
+        int64_t weights_ne1 = 0;
+    };
+
+    std::vector<pending_route_score_copy> pending;
+    pending.reserve(outputs.size());
+
+    const int64_t copy_start_us = ggml_time_us();
+    for (const auto & out : outputs) {
+        ggml_tensor * ids = out.ids;
+        ggml_tensor * scores = out.scores;
+        ggml_tensor * weights = out.weights;
+        if (ids == nullptr || scores == nullptr || weights == nullptr) {
+            continue;
+        }
+        if (ids->type != GGML_TYPE_I32 || scores->type != GGML_TYPE_F32 || weights->type != GGML_TYPE_F32) {
+            continue;
+        }
+        if (!ggml_is_contiguous(ids) || !ggml_is_contiguous(scores) || !ggml_is_contiguous(weights)) {
+            continue;
+        }
+
+        ggml_backend_t ids_backend = ggml_backend_sched_get_tensor_backend(sched, ids);
+        ggml_backend_t scores_backend = ggml_backend_sched_get_tensor_backend(sched, scores);
+        ggml_backend_t weights_backend = ggml_backend_sched_get_tensor_backend(sched, weights);
+        if (ids_backend == nullptr || scores_backend == nullptr || weights_backend == nullptr) {
+            continue;
+        }
+
+        pending_route_score_copy copy;
+        copy.meta = out;
+        copy.ids_ne0 = ids->ne[0];
+        copy.ids_ne1 = ids->ne[1];
+        copy.scores_ne0 = scores->ne[0];
+        copy.scores_ne1 = scores->ne[1];
+        copy.weights_ne0 = weights->ne[0];
+        copy.weights_ne1 = weights->ne[1];
+        copy.ids.resize((size_t) ggml_nelements(ids));
+        copy.scores.resize((size_t) ggml_nelements(scores));
+        copy.weights.resize((size_t) ggml_nelements(weights));
+
+        ggml_backend_tensor_get_async(ids_backend, ids, copy.ids.data(), 0, ggml_nbytes(ids));
+        ggml_backend_tensor_get_async(scores_backend, scores, copy.scores.data(), 0, ggml_nbytes(scores));
+        ggml_backend_tensor_get_async(weights_backend, weights, copy.weights.data(), 0, ggml_nbytes(weights));
+        pending.push_back(std::move(copy));
+    }
+
+    if (pending.empty()) {
+        return;
+    }
+
+    ggml_backend_sched_synchronize(sched);
+    const int64_t record_us = ggml_time_us() - copy_start_us;
+
+    std::lock_guard<std::mutex> lock(g_moe_route_score_trace_csv.mutex);
+    if (g_moe_route_score_trace_csv.disabled) {
+        return;
+    }
+
+    if (!g_moe_route_score_trace_csv.initialized) {
+        g_moe_route_score_trace_csv.file.open(path, std::ios::out);
+        if (!g_moe_route_score_trace_csv.file) {
+            LLAMA_LOG_ERROR("%s: failed to open GGML_MOE_ROUTE_SCORE_TRACE_OUT=%s\n", __func__, path);
+            g_moe_route_score_trace_csv.disabled = true;
+            return;
+        }
+        g_moe_route_score_trace_csv.file
+            << "call,seq_id,pos,n_tokens,n_seq_tokens,layer,topk,"
+            << "ids_ne0,ids_ne1,scores_ne0,scores_ne1,weights_ne0,weights_ne1,"
+            << "record_us,ids,scores,weights\n";
+        g_moe_route_score_trace_csv.initialized = true;
+    }
+
+    const uint64_t call = g_moe_route_score_trace_csv.call++;
+    const int seq_id = ubatch.n_tokens > 0 && ubatch.seq_id != nullptr && ubatch.seq_id[0] != nullptr ? ubatch.seq_id[0][0] : -1;
+    const int64_t pos = ubatch.n_tokens > 0 && ubatch.pos != nullptr ? ubatch.pos[0] : -1;
+
+    for (const auto & copy : pending) {
+        g_moe_route_score_trace_csv.file
+            << call << ','
+            << seq_id << ','
+            << pos << ','
+            << ubatch.n_tokens << ','
+            << ubatch.n_seq_tokens << ','
+            << copy.meta.layer << ','
+            << copy.ids.size() << ','
+            << copy.ids_ne0 << ','
+            << copy.ids_ne1 << ','
+            << copy.scores_ne0 << ','
+            << copy.scores_ne1 << ','
+            << copy.weights_ne0 << ','
+            << copy.weights_ne1 << ','
+            << record_us << ','
+            << moe_next_gate_shadow_values_csv(copy.ids) << ','
+            << moe_route_score_float_values_csv(copy.scores) << ','
+            << moe_route_score_float_values_csv(copy.weights)
             << '\n';
     }
 }
@@ -1604,6 +1754,7 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
     }
 
     moe_next_gate_shadow_record(res, ubatch, sched.get());
+    moe_route_score_trace_record(res, ubatch, sched.get());
 
     ret = GGML_STATUS_SUCCESS;
 

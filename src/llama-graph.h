@@ -82,6 +82,13 @@ struct llm_moe_next_gate_shadow_output {
     ggml_tensor * tensor = nullptr;
 };
 
+struct llm_moe_route_score_output {
+    int layer = -1;
+    ggml_tensor * ids = nullptr;
+    ggml_tensor * scores = nullptr;
+    ggml_tensor * weights = nullptr;
+};
+
 //
 // llm_graph_input
 //
@@ -654,6 +661,9 @@ public:
     const std::vector<llm_moe_next_gate_shadow_output> & get_moe_next_gate_shadow_outputs() const {
         return t_moe_next_gate_shadow;
     }
+    const std::vector<llm_moe_route_score_output> & get_moe_route_score_outputs() const {
+        return t_moe_route_score;
+    }
 
     ggml_cgraph  * get_gf()  const { return gf; }
     ggml_context * get_ctx() const { return ctx_compute.get(); }
@@ -674,6 +684,7 @@ public:
 
     llm_graph_input_i * add_input(llm_graph_input_ptr input);
     void add_moe_next_gate_shadow_output(int source_layer, int target_layer, bool predicted, ggml_tensor * tensor);
+    void add_moe_route_score_output(int layer, ggml_tensor * ids, ggml_tensor * scores, ggml_tensor * weights);
 
     void set_params(const llm_graph_params & params);
 
@@ -689,6 +700,7 @@ public:
     std::map<llama_seq_id, ggml_tensor*> t_sampled;
     std::map<llama_seq_id, ggml_tensor*> t_sampled_probs;
     std::vector<llm_moe_next_gate_shadow_output> t_moe_next_gate_shadow;
+    std::vector<llm_moe_route_score_output> t_moe_route_score;
 
     std::vector<llm_graph_input_ptr> inputs;
 

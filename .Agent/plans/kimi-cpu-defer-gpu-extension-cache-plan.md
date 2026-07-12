@@ -96,6 +96,52 @@ GPU 偶尔接住”的状态：
 4. 如果当前路径拿不到 score/weight，就写明需要新增的 graph-side trace 点和数据字段；
 5. 用结论决定 predictor/prefetch 是否值得继续，避免再用弱 route-history 方案浪费实验轮次。
 
+### 2026-07-12 Route Score Trace Result
+
+Artifact:
+
+- `.Agent/runs/20260712-route-score-trace-audit/report.md`
+- smoke run:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-route-score-trace-smoke-n2-034846`
+
+Finding:
+
+- CUDA MoE extension 当前只接收 selected expert IDs，不接收 router score/top-k
+  weight；
+- `batch_route_profile_hit()` 只能看到 tensor/expert/bytes，因此不能在 CUDA extension
+  内直接做 score-aware predictor；
+- score 信息仍然存在于 graph-side `build_moe_ffn()` 中：
+  `selection_probs -> selected_experts -> weights`；
+- 因此正确的低风险路线是 default-off graph-side trace，而不是改 CUDA fast path ABI。
+
+Implementation:
+
+- 新增 `GGML_MOE_ROUTE_SCORE_TRACE_OUT=/path/to/route-score-trace.csv`；
+- env 不设置时，不增加 graph output，不改变当前 SOTA/repro 路径；
+- env 设置时，对 Kimi/DeepSeek2 one-token MoE graph 输出：
+  selected top-k expert IDs、top-k selection scores、final weights；
+- CSV 字段包括 layer、pos、topk、ids、scores、weights、record_us。
+
+Validation:
+
+- build passed:
+  `cmake --build build-cuda-batch --target llama-cli -j 8`；
+- smoke exit `0`；
+- trace file generated: `16K`, `62` lines including header；
+- RAM peak: `12690104320` bytes；
+- smoke 用 `N=2`，输出太短导致 quality=`too_short`，这是 instrumentation smoke，
+  不是质量或 token-rate SOTA 验证。
+
+Next action:
+
+1. 用 generalized dev prompts 打开 route score trace，不能使用 held-out/test prompts；
+2. 离线评估 score-aware predictor：
+   recall、precision、pred/actual bytes、full-step cover、margin/entropy 与重复 expert
+   use 的相关性；
+3. 只有理论 saved exposed wait `>=100 ms/token` 且 moved bytes 不爆炸，才进入 runtime
+   prefetch A/B；
+4. 如果离线不达标，转向 RAM/VRAM 显式存储重排 oracle 或新的 lower-byte 表示。
+
 ## 2026-07-12 Active Goal: Kimi CPU/defer GPU-extension Applicability
 
 ### Goal

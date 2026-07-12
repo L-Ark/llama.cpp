@@ -38,6 +38,14 @@ static bool llama_moe_next_gate_shadow_enabled_env() {
     return enabled;
 }
 
+static bool llama_moe_route_score_trace_enabled_env() {
+    static const bool enabled = []() {
+        const char * path = std::getenv("GGML_MOE_ROUTE_SCORE_TRACE_OUT");
+        return path != nullptr && path[0] != '\0';
+    }();
+    return enabled;
+}
+
 static int64_t llama_moe_next_gate_shadow_topk_env(int64_t default_topk, int64_t n_expert) {
     int64_t topk = default_topk;
     if (const char * env = std::getenv("GGML_MOE_NEXT_GATE_SHADOW_TOPK")) {
@@ -855,6 +863,7 @@ void llm_graph_result::reset() {
     t_sampled_logits.clear();
     t_candidates.clear();
     t_moe_next_gate_shadow.clear();
+    t_moe_route_score.clear();
 
     params = {};
 
@@ -914,6 +923,17 @@ void llm_graph_result::set_outputs() {
             ggml_set_output(out.tensor);
         }
     }
+    for (auto & out : t_moe_route_score) {
+        if (out.ids != nullptr) {
+            ggml_set_output(out.ids);
+        }
+        if (out.scores != nullptr) {
+            ggml_set_output(out.scores);
+        }
+        if (out.weights != nullptr) {
+            ggml_set_output(out.weights);
+        }
+    }
 }
 
 bool llm_graph_result::can_reuse(const llm_graph_params & params) {
@@ -959,6 +979,14 @@ void llm_graph_result::add_moe_next_gate_shadow_output(
         bool predicted,
         ggml_tensor * tensor) {
     t_moe_next_gate_shadow.push_back({ source_layer, target_layer, predicted, tensor });
+}
+
+void llm_graph_result::add_moe_route_score_output(
+        int layer,
+        ggml_tensor * ids,
+        ggml_tensor * scores,
+        ggml_tensor * weights) {
+    t_moe_route_score.push_back({ layer, ids, scores, weights });
 }
 
 void llm_graph_result::set_params(const llm_graph_params & params) {
@@ -1607,6 +1635,18 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         : ggml_argsort_top_k(ctx0, selection_probs, n_expert_used); // [n_expert_used, n_tokens]
     cb(selected_experts->src[0], "ffn_moe_argsort", il);
     cb(selected_experts, "ffn_moe_topk", il);
+
+    ggml_tensor * route_scores = nullptr;
+    const bool route_score_trace =
+        llama_moe_route_score_trace_enabled_env() &&
+        n_tokens == 1 &&
+        (arch == LLM_ARCH_KIMI_LINEAR || arch == LLM_ARCH_DEEPSEEK2);
+    if (route_score_trace) {
+        ggml_tensor * trace_selection_probs = ggml_reshape_3d(ctx0, selection_probs, 1, n_expert, n_tokens);
+        route_scores = ggml_get_rows(ctx0, trace_selection_probs, selected_experts);
+        cb(route_scores, "ffn_moe_route_scores", il);
+        ggml_build_forward_expand(gf, route_scores);
+    }
     if (moe_next_gate_shadow_enabled()) {
         res->add_moe_next_gate_shadow_output(il, il, false, selected_experts);
     }
@@ -1649,6 +1689,10 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
     if (w_scale != 0.0f && w_scale != 1.0f) {
         weights = ggml_scale(ctx0, weights, w_scale);
         cb(weights, "ffn_moe_weights_scaled", il);
+    }
+
+    if (route_score_trace) {
+        res->add_moe_route_score_output(il, selected_experts, route_scores, weights);
     }
 
     //call early so that topk-moe can be used
