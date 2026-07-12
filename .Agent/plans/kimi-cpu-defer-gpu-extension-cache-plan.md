@@ -305,6 +305,52 @@ Next action:
 - otherwise continue with lower-byte expert representation or explicit
   `i1-IQ1_S` full-model smoke approval.
 
+### 2026-07-12 Structured Representation Closure Result
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-structured-representation-closure/report.md`
+
+Status: completed; evidence consolidation only, no runtime behavior change and
+no SOTA claim.
+
+Reason for this closure:
+
+- after blockwise quantization, RAM slabs, route-history prefetch, and
+  route-score prefetch were rejected, remaining non-destructive candidates were
+  structured projector/surrogate families;
+- these were already screened in earlier dev-only artifacts and should not be
+  revisited as runtime work without a new representation.
+
+Consolidated evidence:
+
+| family | best mean rel-L2 | memory/ratio note | decision |
+|---|---:|---|---|
+| shared down projector | `1.260756` | BF16 `4.92 GiB/60 layers` | reject |
+| slot-concat down projector | `1.252990` | BF16 `13.12 GiB/60 layers` | reject |
+| route-conditioned down surrogate | `1.253345` | BF16 `4.92-8.20 GiB/60 layers` | reject |
+| slot expert scalar down surrogate | `1.252953` | BF16 `26.25 GiB/60 layers` | reject |
+| input+route full-MoE-output surrogate | `0.885045` | memory-cheap but high error | reject |
+| layer output subspace | `1.194453` | poor LOO generalization | reject |
+| callstride output subspace | `0.555836-0.636106` | near useful byte ratios but high error | reject |
+
+Decision:
+
+- reject shared projector, small surrogate, and output-subspace families as
+  runtime implementation paths;
+- these candidates are not limited by storage only; they fail the MoE output
+  quality gate by a wide margin;
+- no runtime kernels or pack layouts should be written for them unless a new
+  representation first produces prompt-level rel-L2 near `<=0.10`.
+
+Next action:
+
+- the only concrete same-model complete lower-byte smoke remains `i1-IQ1_S`,
+  requiring explicit cleanup/download approval;
+- without that approval, the next useful work must be a genuinely new
+  lower-byte representation, not a retune of rejected blockwise/projector/
+  surrogate families.
+
 ## 2026-07-12 Goal Lock: Kimi CPU/defer GPU-extension Next Step
 
 This section is the current source of truth. Later historical sections are kept
