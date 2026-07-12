@@ -20747,3 +20747,212 @@ Next plan:
    - stronger future-layer prefetch that creates larger useful batches;
    - a new representation with fused reconstruction+matmul and measured
      activation-output error, not plain blockwise weight reconstruction.
+
+## 2026-07-12 Exact Layout And Future-Prefetch Bound
+
+Goal:
+
+- Test the two non-lossy directions left after rejecting static RAM tier and
+  blockwise low-byte expert representations:
+  - exact pack/layout reorder or duplication to reduce foreground read extents;
+  - future-layer/predictive prefetch to overlap exposed `io_uring` wait.
+- Keep the screen dev-only and prompt-general. Do not inspect held-out prompt
+  routes or activation data.
+
+Input:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717`
+- Prompts:
+  - `dev_france_regression`
+  - `dev_intelligence_general`
+- Baseline decode:
+  - combined `39422.98 ms / 62 = 1.573 tok/s`
+  - target `2 tok/s` requires about `135.85 ms/token` saving.
+
+### Same-Prompt Pack Layout Screen
+
+Tool:
+
+- `.Agent/run-tools/kimi_io_trace_pack_layout_screen.py`
+
+Command shape:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717
+OUT=$ROOT/analysis/exact-layout-prefetch-bound
+python3 .Agent/run-tools/kimi_io_trace_pack_layout_screen.py \
+  --io-read-trace "$ROOT/dev_france_regression/io-read-trace.csv" \
+  --out-json "$OUT/dev_france_regression-pack-layout.json" \
+  --out-md "$OUT/dev_france_regression-pack-layout.md" \
+  --roles up,gate,down \
+  --max-jobs 8 \
+  --max-gap-mib 1.0 \
+  --baseline-metrics "$ROOT/dev_france_regression/metrics.txt"
+```
+
+Same-prompt result:
+
+| prompt | current extents | static greedy-pair extents | saved reads | saved ms upper | bounded tok/s |
+|---|---:|---:|---:|---:|---:|
+| `dev_france_regression` | `25017` | `13034` | `11983` | `5175.30` | `1.86` |
+| `dev_intelligence_general` | `25577` | `12530` | `13047` | `5319.35` | `2.02` |
+
+Interpretation:
+
+- The same-prompt bound is tempting but unsafe: the static order is trained and
+  evaluated on the same prompt's read sequence.
+- Batch signature reuse is almost zero:
+  - France unique exact signatures `5575`, repeated exact batches `8`;
+  - Intelligence unique exact signatures `5549`, repeated exact batches `11`.
+- Therefore a leave-one-prompt-out layout check is required before runtime A/B.
+
+### Leave-One-Prompt-Out Pack Layout Screen
+
+Tool:
+
+- `.Agent/run-tools/kimi_pack_layout_loo_bound.py`
+
+Verification:
+
+```bash
+python3 -m py_compile .Agent/run-tools/kimi_pack_layout_loo_bound.py
+```
+
+Command:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717
+OUT=$ROOT/analysis/exact-layout-prefetch-bound
+.Agent/run-tools/kimi_pack_layout_loo_bound.py \
+  --input-root "$ROOT" \
+  --out-json "$OUT/pack-layout-loo.json" \
+  --out-md "$OUT/pack-layout-loo.md" \
+  --roles up,gate,down \
+  --max-jobs 8 \
+  --max-gap-mib 1.0 \
+  --baseline-decode-ms 39422.98
+```
+
+Artifact:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/exact-layout-prefetch-bound/pack-layout-loo.md`
+
+LOO result:
+
+| layout | saved reads | saved ms upper | saved ms/token | bounded tok/s |
+|---|---:|---:|---:|---:|
+| `greedy_pair` | `2845` | `1188.869` | `19.175` | `1.622` |
+| `first_use` | `2298` | `957.777` | `15.448` | `1.612` |
+| `frequency` | `1376` | `575.416` | `9.281` | `1.596` |
+| `expert_id` | `677` | `280.297` | `4.521` | `1.584` |
+
+Decision:
+
+- Reject static prompt-general pack relayout as the next runtime A/B.
+- The LOO bound is far below the `~135.85 ms/token` needed for `2 tok/s`.
+- The high same-prompt bound is mostly prompt-order overfitting, not a stable
+  generalized layout gain.
+
+### Future-Prefetch Bound
+
+Tool:
+
+- `.Agent/run-tools/kimi_layout_prefetch_bound.py`
+
+Command shape:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717
+OUT=$ROOT/analysis/exact-layout-prefetch-bound
+python3 .Agent/run-tools/kimi_layout_prefetch_bound.py \
+  --input "$ROOT/dev_france_regression" \
+  --out "$OUT/dev_france_regression-layout-prefetch" \
+  --decode-read-max-jobs 8
+```
+
+Optimistic future-window result:
+
+| prompt | current wait ms/token | window 2 saved ms/token | window 4 saved ms/token | window 16 saved ms/token |
+|---|---:|---:|---:|---:|
+| `dev_france_regression` | `383.308` | `165.778` | `260.042` | `341.415` |
+| `dev_intelligence_general` | `358.838` | `159.097` | `248.467` | `324.925` |
+
+Interpretation:
+
+- Future prefetch has a large theoretical bound if the runtime can know future
+  expert IDs early enough and overlap waits.
+- This bound is not actionable by itself; it assumes perfect future exposure.
+
+### Route-History Predictor Admission
+
+Tool:
+
+- `.Agent/run-tools/kimi_future_hybrid_predictor_admission.py`
+
+Command:
+
+```bash
+ROOT=/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717
+OUT=$ROOT/analysis/exact-layout-prefetch-bound/future-hybrid-predictor-admission
+python3 .Agent/run-tools/kimi_future_hybrid_predictor_admission.py \
+  --input-glob "$ROOT/*/route-trace.csv" \
+  --out "$OUT" \
+  --layers 60 \
+  --max-decode-experts 16 \
+  --horizons 1 2 3 \
+  --budgets 4 8 12 16 32 \
+  --bundles all,upgate,down \
+  --recent-window 4 \
+  --io-wait-ms-per-token 371.073
+```
+
+Artifact:
+
+- `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-copyio-n32-005717/analysis/exact-layout-prefetch-bound/future-hybrid-predictor-admission/report.md`
+
+Admission result:
+
+- prompts: `2`
+- decode tokens: `31 + 31`
+- admission requirement:
+  - all-role recall `>=65%`;
+  - predicted/actual bytes `<=1.35x`;
+  - full-step coverage `>=40%`.
+- passing rows: `0`.
+- best all-role predictor:
+  - `hybrid_recent`, horizon `3`, budget `32`;
+  - recall `0.6217`;
+  - precision `0.1554`;
+  - full-step coverage `3.54%`;
+  - predicted/actual bytes `4.00x`;
+  - predicted `28.943 GiB/token`;
+  - useful `4.490 GiB/token`;
+  - waste `24.453 GiB/token`;
+  - linear wait cover estimate `230.7 ms/token`.
+- lower-byte option:
+  - budget `16` rows reduce predicted/actual to `2.00x`, but recall is only
+    about `0.4980` and full-step coverage is `0.42%`.
+
+Decision:
+
+- Reject route-history-only future prefetch as the next runtime A/B.
+- The theoretical future-window bound is real, but the currently available
+  route-history predictors cannot expose useful future work without excessive
+  wrong-prefetch bytes and very low complete-step coverage.
+- A future prefetch attempt needs a stronger signal such as router logits,
+  hidden-state features, or a dedicated draft/router model. It should first run
+  as a shadow predictor and pass the same admission gates before any real reads.
+
+Next plan:
+
+1. Do not implement prompt-general static pack relayout from the current traces.
+2. Do not implement route-history-only future prefetch from the current traces.
+3. Next exact/non-lossy candidate should focus on runtime scheduler mechanics
+   that do not rely on predicting future IDs:
+   - reduce per-batch launch/submit overhead;
+   - split RAM-ready and SSD-needed jobs without shrinking SSD batches;
+   - or co-submit known same-layer `up/gate/down` misses while preserving
+     useful SSD queue depth.
+4. If returning to prefetch, first add or use a shadow signal stronger than
+   route history and require dev-only admission before runtime reads.
