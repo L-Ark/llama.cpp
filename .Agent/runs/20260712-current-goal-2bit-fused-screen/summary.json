@@ -1,0 +1,246 @@
+{
+  "aggregate": {
+    "fused_up_gate:aw_mse:bits2:block128": {
+      "max_rel": 0.6402253299957366,
+      "prompts": 3,
+      "ratio": 0.724716553287982,
+      "rel": 0.5819180773496165,
+      "rows": 48
+    },
+    "fused_up_gate:aw_mse:bits2:block256": {
+      "max_rel": 0.6454856752090571,
+      "prompts": 3,
+      "ratio": 0.7034013605442174,
+      "rel": 0.5830596413162282,
+      "rows": 48
+    },
+    "fused_up_gate:aw_mse:bits2:block64": {
+      "max_rel": 0.6406933392993579,
+      "prompts": 3,
+      "ratio": 0.7673469387755104,
+      "rel": 0.5757179109180056,
+      "rows": 48
+    },
+    "fused_up_gate:maxabs:bits2:block128": {
+      "max_rel": 1.1871582216311685,
+      "prompts": 3,
+      "ratio": 0.724716553287982,
+      "rel": 1.0846509759790255,
+      "rows": 48
+    },
+    "fused_up_gate:maxabs:bits2:block256": {
+      "max_rel": 1.2669156637694863,
+      "prompts": 3,
+      "ratio": 0.7034013605442174,
+      "rel": 1.1124937792746674,
+      "rows": 48
+    },
+    "fused_up_gate:maxabs:bits2:block64": {
+      "max_rel": 1.1255178758313829,
+      "prompts": 3,
+      "ratio": 0.7673469387755104,
+      "rel": 1.0320875610125133,
+      "rows": 48
+    }
+  },
+  "rows": [
+    {
+      "candidate": "fused_up_gate:aw_mse:bits2:block128",
+      "max_abs_error": 1.0214602947235107,
+      "max_rel_l2": 0.621643302261052,
+      "mean_abs_error": 0.03169688781053992,
+      "mean_byte_ratio": 0.724716553287982,
+      "mean_output_l2": 3.748416637070477,
+      "mean_rel_l2": 0.5849911381873576,
+      "prompt": "dev_japan_factual",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:aw_mse:bits2:block256",
+      "max_abs_error": 1.0136053562164307,
+      "max_rel_l2": 0.6208366562788292,
+      "mean_abs_error": 0.03170208027586341,
+      "mean_byte_ratio": 0.7034013605442174,
+      "mean_output_l2": 3.748416637070477,
+      "mean_rel_l2": 0.5850789948050481,
+      "prompt": "dev_japan_factual",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:aw_mse:bits2:block64",
+      "max_abs_error": 0.8440471887588501,
+      "max_rel_l2": 0.6045336871033685,
+      "mean_abs_error": 0.03127973009395646,
+      "mean_byte_ratio": 0.7673469387755104,
+      "mean_output_l2": 3.748416637070477,
+      "mean_rel_l2": 0.5759001836725433,
+      "prompt": "dev_japan_factual",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:maxabs:bits2:block128",
+      "max_abs_error": 1.7250761985778809,
+      "max_rel_l2": 1.1871582216311685,
+      "mean_abs_error": 0.05831590123125352,
+      "mean_byte_ratio": 0.724716553287982,
+      "mean_output_l2": 3.748416637070477,
+      "mean_rel_l2": 1.0983096113442166,
+      "prompt": "dev_japan_factual",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:maxabs:bits2:block256",
+      "max_abs_error": 1.9295225143432617,
+      "max_rel_l2": 1.2136441529702444,
+      "mean_abs_error": 0.060514481767313555,
+      "mean_byte_ratio": 0.7034013605442174,
+      "mean_output_l2": 3.748416637070477,
+      "mean_rel_l2": 1.1264476778629036,
+      "prompt": "dev_japan_factual",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:maxabs:bits2:block64",
+      "max_abs_error": 1.5801618099212646,
+      "max_rel_l2": 1.1250285909964326,
+      "mean_abs_error": 0.055122344521805644,
+      "mean_byte_ratio": 0.7673469387755104,
+      "mean_output_l2": 3.748416637070477,
+      "mean_rel_l2": 1.0384137407150493,
+      "prompt": "dev_japan_factual",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:aw_mse:bits2:block128",
+      "max_abs_error": 1.2991900444030762,
+      "max_rel_l2": 0.6402253299957366,
+      "mean_abs_error": 0.02823976791842142,
+      "mean_byte_ratio": 0.724716553287982,
+      "mean_output_l2": 3.383305841125548,
+      "mean_rel_l2": 0.5809512073879641,
+      "prompt": "dev_mixed_summary",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:aw_mse:bits2:block256",
+      "max_abs_error": 1.6819230318069458,
+      "max_rel_l2": 0.6454856752090571,
+      "mean_abs_error": 0.028312101487244945,
+      "mean_byte_ratio": 0.7034013605442174,
+      "mean_output_l2": 3.383305841125548,
+      "mean_rel_l2": 0.5821128334133396,
+      "prompt": "dev_mixed_summary",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:aw_mse:bits2:block64",
+      "max_abs_error": 1.015394687652588,
+      "max_rel_l2": 0.6406933392993579,
+      "mean_abs_error": 0.028074204819859006,
+      "mean_byte_ratio": 0.7673469387755104,
+      "mean_output_l2": 3.383305841125548,
+      "mean_rel_l2": 0.5753186165465602,
+      "prompt": "dev_mixed_summary",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:maxabs:bits2:block128",
+      "max_abs_error": 1.3647645711898804,
+      "max_rel_l2": 1.1683486072005977,
+      "mean_abs_error": 0.05279793388035614,
+      "mean_byte_ratio": 0.724716553287982,
+      "mean_output_l2": 3.383305841125548,
+      "mean_rel_l2": 1.0782650323489016,
+      "prompt": "dev_mixed_summary",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:maxabs:bits2:block256",
+      "max_abs_error": 1.9013774394989014,
+      "max_rel_l2": 1.2669156637694863,
+      "mean_abs_error": 0.05460008945374284,
+      "mean_byte_ratio": 0.7034013605442174,
+      "mean_output_l2": 3.383305841125548,
+      "mean_rel_l2": 1.1185181823546764,
+      "prompt": "dev_mixed_summary",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:maxabs:bits2:block64",
+      "max_abs_error": 1.313402533531189,
+      "max_rel_l2": 1.1070822340510855,
+      "mean_abs_error": 0.04972210942651145,
+      "mean_byte_ratio": 0.7673469387755104,
+      "mean_output_l2": 3.383305841125548,
+      "mean_rel_l2": 1.0295266983154778,
+      "prompt": "dev_mixed_summary",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:aw_mse:bits2:block128",
+      "max_abs_error": 1.3380370140075684,
+      "max_rel_l2": 0.6149695553290185,
+      "mean_abs_error": 0.030785901719355024,
+      "mean_byte_ratio": 0.724716553287982,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 0.5798118864735281,
+      "prompt": "dev_python_reverse",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:aw_mse:bits2:block256",
+      "max_abs_error": 1.1915628910064697,
+      "max_rel_l2": 0.6335739100734279,
+      "mean_abs_error": 0.03117982231924543,
+      "mean_byte_ratio": 0.7034013605442174,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 0.5819870957302972,
+      "prompt": "dev_python_reverse",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:aw_mse:bits2:block64",
+      "max_abs_error": 1.4503268003463745,
+      "max_rel_l2": 0.6335916967026608,
+      "mean_abs_error": 0.030770259640121367,
+      "mean_byte_ratio": 0.7673469387755104,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 0.5759349325349133,
+      "prompt": "dev_python_reverse",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:maxabs:bits2:block128",
+      "max_abs_error": 2.9298555850982666,
+      "max_rel_l2": 1.184663459481718,
+      "mean_abs_error": 0.057216714616515674,
+      "mean_byte_ratio": 0.724716553287982,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 1.0773782842439583,
+      "prompt": "dev_python_reverse",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:maxabs:bits2:block256",
+      "max_abs_error": 1.7349097728729248,
+      "max_rel_l2": 1.1841499691734185,
+      "mean_abs_error": 0.058864897044259124,
+      "mean_byte_ratio": 0.7034013605442174,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 1.0925154776064219,
+      "prompt": "dev_python_reverse",
+      "rows": 16
+    },
+    {
+      "candidate": "fused_up_gate:maxabs:bits2:block64",
+      "max_abs_error": 1.845154047012329,
+      "max_rel_l2": 1.1255178758313829,
+      "mean_abs_error": 0.0539042187447194,
+      "mean_byte_ratio": 0.7673469387755104,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 1.0283222440070126,
+      "prompt": "dev_python_reverse",
+      "rows": 16
+    }
+  ]
+}

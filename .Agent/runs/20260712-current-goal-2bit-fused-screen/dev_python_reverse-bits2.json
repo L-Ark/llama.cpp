@@ -1,0 +1,688 @@
+{
+  "activation_bin": "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse/act/activations.f32",
+  "activation_csv": "/root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse/act/activations.csv",
+  "aggregate": {
+    "down:aw_mse:bits2:block128": {
+      "max_abs_error": 0.6938498616218567,
+      "max_rel_l2": 0.45234965121376436,
+      "mean_abs_error": 0.04984016332309693,
+      "mean_byte_ratio": 0.6181818181818179,
+      "mean_output_l2": 11.828177973628044,
+      "mean_rel_l2": 0.447470273407895,
+      "rows": 16
+    },
+    "down:aw_mse:bits2:block256": {
+      "max_abs_error": 0.8096671104431152,
+      "max_rel_l2": 0.45728394660953214,
+      "mean_abs_error": 0.04999918639077805,
+      "mean_byte_ratio": 0.5999999999999999,
+      "mean_output_l2": 11.828177973628044,
+      "mean_rel_l2": 0.4488762732488994,
+      "rows": 16
+    },
+    "down:aw_mse:bits2:block64": {
+      "max_abs_error": 0.7223068475723267,
+      "max_rel_l2": 0.4528990533489876,
+      "mean_abs_error": 0.04980503104161471,
+      "mean_byte_ratio": 0.6545454545454544,
+      "mean_output_l2": 11.828177973628044,
+      "mean_rel_l2": 0.44527133733508806,
+      "rows": 16
+    },
+    "down:maxabs:bits2:block128": {
+      "max_abs_error": 1.3868038654327393,
+      "max_rel_l2": 0.7911511562805439,
+      "mean_abs_error": 0.0869792495504953,
+      "mean_byte_ratio": 0.6181818181818179,
+      "mean_output_l2": 11.828177973628044,
+      "mean_rel_l2": 0.7762152348046916,
+      "rows": 16
+    },
+    "down:maxabs:bits2:block256": {
+      "max_abs_error": 1.2849141359329224,
+      "max_rel_l2": 0.837003257511994,
+      "mean_abs_error": 0.0911219987901859,
+      "mean_byte_ratio": 0.5999999999999999,
+      "mean_output_l2": 11.828177973628044,
+      "mean_rel_l2": 0.8146478098457542,
+      "rows": 16
+    },
+    "down:maxabs:bits2:block64": {
+      "max_abs_error": 1.4681479930877686,
+      "max_rel_l2": 0.7438611545514867,
+      "mean_abs_error": 0.08154304660274647,
+      "mean_byte_ratio": 0.6545454545454544,
+      "mean_output_l2": 11.828177973628044,
+      "mean_rel_l2": 0.7309502892857926,
+      "rows": 16
+    },
+    "gate:aw_mse:bits2:block128": {
+      "max_abs_error": 1.104467749595642,
+      "max_rel_l2": 0.44295659917818325,
+      "mean_abs_error": 0.10957119055092335,
+      "mean_byte_ratio": 0.7615729218516678,
+      "mean_output_l2": 14.468005061149597,
+      "mean_rel_l2": 0.4261199735611994,
+      "rows": 16
+    },
+    "gate:aw_mse:bits2:block256": {
+      "max_abs_error": 1.0602407455444336,
+      "max_rel_l2": 0.45021115066532746,
+      "mean_abs_error": 0.11053894530050457,
+      "mean_byte_ratio": 0.7391737182677948,
+      "mean_output_l2": 14.468005061149597,
+      "mean_rel_l2": 0.42948137873150616,
+      "rows": 16
+    },
+    "gate:aw_mse:bits2:block64": {
+      "max_abs_error": 0.980082631111145,
+      "max_rel_l2": 0.4482491597263447,
+      "mean_abs_error": 0.10935793211683631,
+      "mean_byte_ratio": 0.8063713290194129,
+      "mean_output_l2": 14.468005061149597,
+      "mean_rel_l2": 0.4233951621904865,
+      "rows": 16
+    },
+    "gate:maxabs:bits2:block128": {
+      "max_abs_error": 1.6657254695892334,
+      "max_rel_l2": 0.7741884111320281,
+      "mean_abs_error": 0.19153470126911998,
+      "mean_byte_ratio": 0.7615729218516678,
+      "mean_output_l2": 14.468005061149597,
+      "mean_rel_l2": 0.7468370409537775,
+      "rows": 16
+    },
+    "gate:maxabs:bits2:block256": {
+      "max_abs_error": 1.8179733753204346,
+      "max_rel_l2": 0.8220819269812321,
+      "mean_abs_error": 0.20278411079198122,
+      "mean_byte_ratio": 0.7391737182677948,
+      "mean_output_l2": 14.468005061149597,
+      "mean_rel_l2": 0.7913467451408599,
+      "rows": 16
+    },
+    "gate:maxabs:bits2:block64": {
+      "max_abs_error": 1.487492561340332,
+      "max_rel_l2": 0.7218141136466965,
+      "mean_abs_error": 0.17759973322972655,
+      "mean_byte_ratio": 0.8063713290194129,
+      "mean_output_l2": 14.468005061149597,
+      "mean_rel_l2": 0.6940383770220361,
+      "rows": 16
+    },
+    "up:aw_mse:bits2:block128": {
+      "max_abs_error": 0.9251300692558289,
+      "max_rel_l2": 0.44439367541333663,
+      "mean_abs_error": 0.1090008111204952,
+      "mean_byte_ratio": 0.6938775510204084,
+      "mean_output_l2": 14.677393674850464,
+      "mean_rel_l2": 0.42476303151780337,
+      "rows": 16
+    },
+    "up:aw_mse:bits2:block256": {
+      "max_abs_error": 1.0364583730697632,
+      "max_rel_l2": 0.4418561468749216,
+      "mean_abs_error": 0.10957250464707613,
+      "mean_byte_ratio": 0.6734693877551018,
+      "mean_output_l2": 14.677393674850464,
+      "mean_rel_l2": 0.4271068511321702,
+      "rows": 16
+    },
+    "up:aw_mse:bits2:block64": {
+      "max_abs_error": 0.9766300916671753,
+      "max_rel_l2": 0.43595650423527427,
+      "mean_abs_error": 0.10965565219521523,
+      "mean_byte_ratio": 0.7346938775510204,
+      "mean_output_l2": 14.677393674850464,
+      "mean_rel_l2": 0.4257758631455777,
+      "rows": 16
+    },
+    "up:maxabs:bits2:block128": {
+      "max_abs_error": 1.658921241760254,
+      "max_rel_l2": 0.7852979563846602,
+      "mean_abs_error": 0.19466383871622384,
+      "mean_byte_ratio": 0.6938775510204084,
+      "mean_output_l2": 14.677393674850464,
+      "mean_rel_l2": 0.7543089887365237,
+      "rows": 16
+    },
+    "up:maxabs:bits2:block256": {
+      "max_abs_error": 1.949864387512207,
+      "max_rel_l2": 0.8363679343902187,
+      "mean_abs_error": 0.20549867977388203,
+      "mean_byte_ratio": 0.6734693877551018,
+      "mean_output_l2": 14.677393674850464,
+      "mean_rel_l2": 0.7970089497563186,
+      "rows": 16
+    },
+    "up:maxabs:bits2:block64": {
+      "max_abs_error": 1.5779849290847778,
+      "max_rel_l2": 0.7449409718253713,
+      "mean_abs_error": 0.18124149553477764,
+      "mean_byte_ratio": 0.7346938775510204,
+      "mean_output_l2": 14.677393674850464,
+      "mean_rel_l2": 0.7043993696418813,
+      "rows": 16
+    }
+  },
+  "bits": [
+    2
+  ],
+  "blocks": [
+    64,
+    128,
+    256
+  ],
+  "decision": {
+    "advance_blockwise_lowbit": false,
+    "max_mean_rel_l2": 0.1,
+    "passing_fused_candidates": [],
+    "passing_matvec_candidates": [],
+    "rule": "Candidates near 0.30x-0.40x moved bytes need low activation-output error before runtime work.",
+    "runtime_overhead_note": "This tool reconstructs candidates offline. A runtime implementation would need direct compressed kernels; full reconstruction is not an acceptable runtime path.",
+    "status": "screen_only",
+    "target_byte_ratio": 0.4
+  },
+  "fused_up_gate": {
+    "fused_up_gate:aw_mse:bits2:block128": {
+      "max_abs_error": 1.3380370140075684,
+      "max_rel_l2": 0.6149695553290185,
+      "mean_abs_error": 0.030785901719355024,
+      "mean_byte_ratio": 0.724716553287982,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 0.5798118864735281,
+      "rows": 16
+    },
+    "fused_up_gate:aw_mse:bits2:block256": {
+      "max_abs_error": 1.1915628910064697,
+      "max_rel_l2": 0.6335739100734279,
+      "mean_abs_error": 0.03117982231924543,
+      "mean_byte_ratio": 0.7034013605442174,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 0.5819870957302972,
+      "rows": 16
+    },
+    "fused_up_gate:aw_mse:bits2:block64": {
+      "max_abs_error": 1.4503268003463745,
+      "max_rel_l2": 0.6335916967026608,
+      "mean_abs_error": 0.030770259640121367,
+      "mean_byte_ratio": 0.7673469387755104,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 0.5759349325349133,
+      "rows": 16
+    },
+    "fused_up_gate:maxabs:bits2:block128": {
+      "max_abs_error": 2.9298555850982666,
+      "max_rel_l2": 1.184663459481718,
+      "mean_abs_error": 0.057216714616515674,
+      "mean_byte_ratio": 0.724716553287982,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 1.0773782842439583,
+      "rows": 16
+    },
+    "fused_up_gate:maxabs:bits2:block256": {
+      "max_abs_error": 1.7349097728729248,
+      "max_rel_l2": 1.1841499691734185,
+      "mean_abs_error": 0.058864897044259124,
+      "mean_byte_ratio": 0.7034013605442174,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 1.0925154776064219,
+      "rows": 16
+    },
+    "fused_up_gate:maxabs:bits2:block64": {
+      "max_abs_error": 1.845154047012329,
+      "max_rel_l2": 1.1255178758313829,
+      "mean_abs_error": 0.0539042187447194,
+      "mean_byte_ratio": 0.7673469387755104,
+      "mean_output_l2": 3.747076182626188,
+      "mean_rel_l2": 1.0283222440070126,
+      "rows": 16
+    }
+  },
+  "generated_at": "2026-07-12T07:21:22+0000",
+  "inventory": ".Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv",
+  "keep_input_fracs": [],
+  "kind": "kimi_activation_output_compression_screen",
+  "libggml_base": "build-cuda-batch/bin/libggml-base.so",
+  "records_loaded": 48,
+  "reproduce_command": ".Agent/run-tools/kimi_activation_output_compression_screen.py --activation-csv /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse/act/activations.csv --activation-bin /root/lfz/runs/vendor-kimi-token-rate/20260708-gp88-callstride-activation-corpus/dev_python_reverse/act/activations.f32 --inventory .Agent/runs/20260706-kimi-d2moe-phase0/kimi-iq3s-expert-inventory.tsv --libggml-base build-cuda-batch/bin/libggml-base.so --out-json .Agent/runs/20260712-current-goal-2bit-fused-screen/dev_python_reverse-bits2.json --out-md .Agent/runs/20260712-current-goal-2bit-fused-screen/dev_python_reverse-bits2.md --bits 2 --blocks 64,128,256 --scale-modes maxabs,aw_mse --max-records 48 --torch-threads 8",
+  "scale_modes": [
+    "maxabs",
+    "aw_mse"
+  ],
+  "tensor_experts": {
+    "blk.12.ffn_down_exps.weight:101": {
+      "dequant_s": 0.058595976035576314,
+      "expert_bytes": 6307840,
+      "expert_idx": 101,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:133": {
+      "dequant_s": 0.058850808010902256,
+      "expert_bytes": 6307840,
+      "expert_idx": 133,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:171": {
+      "dequant_s": 0.061406707973219454,
+      "expert_bytes": 6307840,
+      "expert_idx": 171,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:225": {
+      "dequant_s": 0.06431386095937341,
+      "expert_bytes": 6307840,
+      "expert_idx": 225,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:240": {
+      "dequant_s": 0.06676069903187454,
+      "expert_bytes": 6307840,
+      "expert_idx": 240,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:31": {
+      "dequant_s": 0.06693694199202582,
+      "expert_bytes": 6307840,
+      "expert_idx": 31,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:360": {
+      "dequant_s": 0.06017844803864136,
+      "expert_bytes": 6307840,
+      "expert_idx": 360,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.12.ffn_down_exps.weight:378": {
+      "dequant_s": 0.06222424400039017,
+      "expert_bytes": 6307840,
+      "expert_idx": 378,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.12.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:23": {
+      "dequant_s": 0.059610923985019326,
+      "expert_bytes": 6307840,
+      "expert_idx": 23,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:240": {
+      "dequant_s": 0.06155802001012489,
+      "expert_bytes": 6307840,
+      "expert_idx": 240,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:298": {
+      "dequant_s": 0.06355343398172408,
+      "expert_bytes": 6307840,
+      "expert_idx": 298,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:320": {
+      "dequant_s": 0.08623795100720599,
+      "expert_bytes": 6307840,
+      "expert_idx": 320,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:333": {
+      "dequant_s": 0.06597537396010011,
+      "expert_bytes": 6307840,
+      "expert_idx": 333,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:373": {
+      "dequant_s": 0.05915484996512532,
+      "expert_bytes": 6307840,
+      "expert_idx": 373,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:41": {
+      "dequant_s": 0.059118841018062085,
+      "expert_bytes": 6307840,
+      "expert_idx": 41,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_down_exps.weight:65": {
+      "dequant_s": 0.0667055890080519,
+      "expert_bytes": 6307840,
+      "expert_idx": 65,
+      "records": 1,
+      "role": "down",
+      "tensor": "blk.60.ffn_down_exps.weight",
+      "type": "Q3_K"
+    },
+    "blk.60.ffn_gate_exps.weight:23": {
+      "dequant_s": 0.10812385100871325,
+      "expert_bytes": 5619712,
+      "expert_idx": 23,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:240": {
+      "dequant_s": 0.10752967599546537,
+      "expert_bytes": 5619712,
+      "expert_idx": 240,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:298": {
+      "dequant_s": 0.10817815200425684,
+      "expert_bytes": 5619712,
+      "expert_idx": 298,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:320": {
+      "dequant_s": 0.10538996901595965,
+      "expert_bytes": 5619712,
+      "expert_idx": 320,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:333": {
+      "dequant_s": 0.09575441502965987,
+      "expert_bytes": 5619712,
+      "expert_idx": 333,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:373": {
+      "dequant_s": 0.10729238402564079,
+      "expert_bytes": 5619712,
+      "expert_idx": 373,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:41": {
+      "dequant_s": 0.10584676201688126,
+      "expert_bytes": 5619712,
+      "expert_idx": 41,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_gate_exps.weight:65": {
+      "dequant_s": 0.10208271397277713,
+      "expert_bytes": 5619712,
+      "expert_idx": 65,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.60.ffn_gate_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:23": {
+      "dequant_s": 0.0916358029935509,
+      "expert_bytes": 5619712,
+      "expert_idx": 23,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:240": {
+      "dequant_s": 0.0948234359966591,
+      "expert_bytes": 5619712,
+      "expert_idx": 240,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:298": {
+      "dequant_s": 0.09787788201356307,
+      "expert_bytes": 5619712,
+      "expert_idx": 298,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:320": {
+      "dequant_s": 0.09734708705218509,
+      "expert_bytes": 5619712,
+      "expert_idx": 320,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:333": {
+      "dequant_s": 0.10353573603788391,
+      "expert_bytes": 5619712,
+      "expert_idx": 333,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:373": {
+      "dequant_s": 0.12437036703340709,
+      "expert_bytes": 5619712,
+      "expert_idx": 373,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:41": {
+      "dequant_s": 0.09560134302591905,
+      "expert_bytes": 5619712,
+      "expert_idx": 41,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.60.ffn_up_exps.weight:65": {
+      "dequant_s": 0.0904329139739275,
+      "expert_bytes": 5619712,
+      "expert_idx": 65,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.60.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_gate_exps.weight:1": {
+      "dequant_s": 0.10012210800778121,
+      "expert_bytes": 4702208,
+      "expert_idx": 1,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:100": {
+      "dequant_s": 0.1140975879970938,
+      "expert_bytes": 4702208,
+      "expert_idx": 100,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:235": {
+      "dequant_s": 0.10741607594536617,
+      "expert_bytes": 4702208,
+      "expert_idx": 235,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:275": {
+      "dequant_s": 0.11816207994706929,
+      "expert_bytes": 4702208,
+      "expert_idx": 275,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:288": {
+      "dequant_s": 0.10295997001230717,
+      "expert_bytes": 4702208,
+      "expert_idx": 288,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:295": {
+      "dequant_s": 0.11000523500842974,
+      "expert_bytes": 4702208,
+      "expert_idx": 295,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:39": {
+      "dequant_s": 0.10803747997852042,
+      "expert_bytes": 4702208,
+      "expert_idx": 39,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_gate_exps.weight:84": {
+      "dequant_s": 0.10214502498274669,
+      "expert_bytes": 4702208,
+      "expert_idx": 84,
+      "records": 1,
+      "role": "gate",
+      "tensor": "blk.7.ffn_gate_exps.weight",
+      "type": "IQ2_S"
+    },
+    "blk.7.ffn_up_exps.weight:1": {
+      "dequant_s": 0.1071126339957118,
+      "expert_bytes": 5619712,
+      "expert_idx": 1,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:100": {
+      "dequant_s": 0.10915005998685956,
+      "expert_bytes": 5619712,
+      "expert_idx": 100,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:235": {
+      "dequant_s": 0.10522626899182796,
+      "expert_bytes": 5619712,
+      "expert_idx": 235,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:275": {
+      "dequant_s": 0.09692696499405429,
+      "expert_bytes": 5619712,
+      "expert_idx": 275,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:288": {
+      "dequant_s": 0.0997531859902665,
+      "expert_bytes": 5619712,
+      "expert_idx": 288,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:295": {
+      "dequant_s": 0.09608004899928346,
+      "expert_bytes": 5619712,
+      "expert_idx": 295,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:39": {
+      "dequant_s": 0.10578401299426332,
+      "expert_bytes": 5619712,
+      "expert_idx": 39,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    },
+    "blk.7.ffn_up_exps.weight:84": {
+      "dequant_s": 0.10231579601531848,
+      "expert_bytes": 5619712,
+      "expert_idx": 84,
+      "records": 1,
+      "role": "up",
+      "tensor": "blk.7.ffn_up_exps.weight",
+      "type": "IQ3_XXS"
+    }
+  },
+  "unique_tensor_experts": 48
+}

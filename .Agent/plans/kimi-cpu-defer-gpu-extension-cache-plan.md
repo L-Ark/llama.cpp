@@ -215,6 +215,46 @@ Decision:
   a genuinely new representation design/screen, not another runtime bridge for
   the rejected candidates.
 
+### 2026-07-12 2-bit Fused Up/Gate Screen Result
+
+Artifact:
+
+- `.Agent/runs/20260712-current-goal-2bit-fused-screen/report.md`
+
+Status: completed; no runtime behavior change and no SOTA claim.
+
+Purpose:
+
+- test whether increasing the existing blockwise family from 1-bit to 2-bit
+  meaningfully lowers fused up/gate output error before any runtime work.
+
+Result:
+
+| candidate | byte ratio | mean rel-L2 | max rel-L2 | decision |
+|---|---:|---:|---:|---|
+| `aw_mse:bits2:block64` | `0.7673x` | `0.575718` | `0.640693` | reject |
+| `aw_mse:bits2:block128` | `0.7247x` | `0.581918` | `0.640225` | reject |
+| `aw_mse:bits2:block256` | `0.7034x` | `0.583060` | `0.645486` | reject |
+| `maxabs:bits2:block64` | `0.7673x` | `1.032088` | `1.125518` | reject |
+| `maxabs:bits2:block128` | `0.7247x` | `1.084651` | `1.187158` | reject |
+| `maxabs:bits2:block256` | `0.7034x` | `1.112494` | `1.266916` | reject |
+
+Comparison:
+
+- previous best 1-bit fused up/gate:
+  `aw_mse_keep_input0p1:bits1:block256`, ratio `0.4326x`,
+  mean rel-L2 `0.598174`;
+- best 2-bit fused up/gate:
+  `aw_mse:bits2:block64`, ratio `0.7673x`, mean rel-L2 `0.575718`.
+
+Decision:
+
+- reject 2-bit blockwise fused up/gate compression as a runtime direction;
+- the error improvement over 1-bit is only about `0.0225` absolute, while the
+  byte ratio rises far above the `~0.50x` short-term movement target;
+- do not continue small bits/block/scale sweeps for this blockwise family unless
+  a qualitatively different objective produces much lower fused up/gate error.
+
 ### Immediate Plan
 
 1. Reconfirm the baseline before further runtime work.
@@ -246,6 +286,9 @@ Decision:
      but it requires explicit cleanup/download approval before execution.
    - Existing non-destructive candidates are closed; do not wire them into
      runtime unless a new screen produces much lower fused up/gate error.
+   - The simple blockwise family is closed for both 1-bit and 2-bit fused
+     up/gate; the next screen must change representation class, not just bits,
+     block size, or scale mode.
 
 4. Revisit RAM/VRAM layout only as explicit replacement for low-value file cache
    or as a pack-layout locality change.
