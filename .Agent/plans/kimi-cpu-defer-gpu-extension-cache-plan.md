@@ -205,17 +205,50 @@ Decision:
 
 Next implementation direction:
 
-1. First preference: lower-byte or partial-byte up/gate representation with a
-   prompt-level admission gate. It must reduce up/gate bytes materially without
-   reintroducing fallback or semantic errors.
-2. Second preference: explicit RAM second-tier cache for high-value up/gate
-   experts, but only if it preserves large batchable transfers and proves a
-   reduction in exposed wait, not merely a higher hit rate.
-3. Third preference: IO scheduler work only where it increases sustained
+1. First preference only if the candidate is a genuinely new lower-byte
+   representation or the explicitly approved complete-model `i1-IQ1_S` smoke.
+   Do not rerun or implement already rejected families: blockwise AW-MSE,
+   input-channel keep, `aw_codebook`, 2-bit fused up/gate, joint intermediate
+   keep/scalar, projector/surrogate, or simple residual/base-cluster screens.
+2. Without explicit `i1-IQ1_S` approval, the next actionable path is an
+   explicit RAM second-tier cache admission for high-value up/gate experts. It
+   must preserve large batchable transfers and prove a reduction in exposed
+   wait, not merely a higher hit rate.
+3. Second-tier RAM must be measured against the current profile:
+   - target up/gate first, because raw wait is concentrated in
+     `runtime_load gate` and `runtime_load up`;
+   - avoid whole-layer residency unless a new bound beats the measured
+     `2.2-3.0 GiB` per upgate layer for only `8-10 ms/token` ideal removal;
+   - prefer contiguous, prompt-general hot expert slabs or a dynamic admission
+     policy that keeps SSD batches large when RAM hits and SSD misses mix.
+4. Third preference: IO scheduler work only where it increases sustained
    inflight work on the current fused up/gate path. Do not retry standalone
    gate/up/down cosubmit unless a new shadow profile shows nonzero useful jobs.
-4. Keep `VRAM_MIB=15000`, `UPGATE_PCT=72` as the current reproduction default
+5. Keep `VRAM_MIB=15000`, `UPGATE_PCT=72` as the current reproduction default
    until a paired N96/generalized A/B beats it under all gates.
+
+Immediate next plan:
+
+1. Build a non-runtime RAM second-tier admission from the current N96 traces.
+   - Inputs: `copy-profile.csv`, `io-batch-profile.csv`, `route-trace.csv`,
+     and wait-weighted layer/role rows from the baseline refresh.
+   - Candidate families:
+     - top prompt-general up/gate expert slabs by wait-weighted route count;
+     - layer-local up/gate slabs for layers with high wait but bounded observed
+       footprint;
+     - mixed up/gate + small down protection set only if down regression risk is
+       estimated below the previous split/regression threshold.
+   - Output: predicted saved exposed wait, required RAM bytes, resulting
+     SSD/RAM batch fragmentation risk, TTFT preload cost, and RAM cap margin.
+2. Only if the admission predicts enough endpoint gain to approach `>2 tok/s`,
+   implement a default-off runtime A/B.
+   - Required env flag: a narrow RAM-tier flag, default off.
+   - Required tests: France plus generalized dev prompt, cold start, N96,
+     quality output, TTFT, RAM/page cache/pinned split, fallback rows, IO batch
+     profile, copy profile.
+3. If RAM second-tier admission fails, stop storage-placement work and request
+   explicit approval for the `i1-IQ1_S` complete lower-bit smoke before any
+   download or model asset replacement.
 
 ## Current Goal and Execution Plan (2026-07-12)
 
