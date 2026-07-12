@@ -4,6 +4,84 @@ Date: 2026-07-11
 Branch: `vendor/kimi-deepseek-41d205-additive`
 Parent plan: `.Agent/plans/kimi-token-rate-16gb-optimization-plan.md`
 
+## 2026-07-12 Current Goal: Kimi CPU/defer GPU-extension Port
+
+本段是当前执行目标。它把 DeepSeek SOTA 中确认有效的经验收束成 Kimi 的下一阶段
+plan。后续任何实现、实验、commit 和 SOTA 声明都必须先满足本段；若与历史段落冲突，
+以本段为准。
+
+### Goal
+
+在 `vendor/kimi-deepseek-41d205-additive` 分支上，验证并实现 Kimi 版
+`CPU/defer MoE main path + GPU expert-cache extension` 的有效增量，目标是在
+`16 GB Host RAM + 32 GB RTX 5090`、cold start、随机泛化 prompt 条件下，把稳定
+decode token rate 先推到 `>2 tok/s`，并继续向 `>5 tok/s` 推进。
+
+这条路线的核心判断是：DeepSeek 的经验对 Kimi 有用，但不能简单照搬成“把 gate 全放
+VRAM”。Kimi 当前 HEAD 已经有 gate/up/down GPU extension，且最近 audit 中 true CPU
+fallback rows 为 `0`。因此接下来要优化的是：哪些 CPU/defer 调度下的 expert payload
+仍然暴露在 critical path 上，如何让 gate/up/down 被更早、更批量、更可控地进入 VRAM，
+以及如何用显式 RAM/VRAM expert cache 替换低收益 page cache。
+
+### Hard Success Criteria
+
+- Host RAM peak 必须 `<16 GB`，统计包括 RSS、page cache、pinned staging、RAM expert
+  cache 和运行时其他 file-backed pages；
+- 必须 cold start，不能用 warm page cache、warm SSD cache 或 prompt-specific cache
+  声明 SOTA；
+- 优化必须面向 generalized/random prompt，不能根据 held-out/test prompt 调 pack、hotset、
+  cache 或 layout；
+- France 质量门禁固定为 `Please introduce France in a short paragraph.`，输出必须语义
+  正确、连贯；
+- TTFT 相对 paired baseline 不能升高超过 `20%`；
+- 新 SOTA 必须可复现：commit body 和 plan 都要写清提升幅度、env、复现命令、prompt
+  split、RAM/VRAM、TTFT、decode rate、prompt/prefill rate、质量输出和 rollback point；
+- 符合约束并有提升时立刻 commit 和 push；不符合则 default-off、记录 rejected evidence，
+  或回退。
+
+### Execution Plan
+
+1. Reproduce and profile the current Kimi baseline.
+   - 跑 generalized dev prompt，不用 held-out prompt 调参；
+   - 强制 `MemoryMax=15900000000`，cold start；
+   - 记录 per-token 分解：expert read、io_uring wait、pinned staging、H2D、up/gate
+     compute、down compute、CPU fallback、overlap、RAM/page-cache/VRAM；
+   - 明确当前离 `2 tok/s` 和 `5 tok/s` 分别差在哪些 ms/token。
+
+2. Audit Kimi vs DeepSeek GPU-extension path.
+   - 对比 DeepSeek gate SOTA 的实际机制：CPU/defer 主路径调度，GPU 作为 expert-cache
+     extension；
+   - 在 Kimi 上确认每个 role/layer 的 `batch_accept`、`calls`、fallback rows、pack miss、
+     H2D bytes 和 wait time；
+   - 如果 Kimi 已经全接住 gate/up/down，则不做重复 gate-only 改动；只针对仍在 critical
+     path 上的 read/wait/staging 做增量。
+
+3. Design default-off A/B experiments from largest bottleneck first.
+   - 若 bottleneck 是 up/gate demand-read：优先做更早的 post-routing enqueue、gate/up
+     paired admission、role-priority VRAM cache；
+   - 若 bottleneck 是 down demand-read：测试 down 与 up/gate 的 unified scheduler batch，
+     但只接受减少 critical-path wait 的版本；
+   - 若 bottleneck 是 RAM/page cache 浪费：prompt 后释放低价值 GGUF/file-backed pages，
+     把空间改成显式 RAM expert cache，要求按 layer/role slab 或大块 batch H2D，不接受把
+     SSD 随机读变成 RAM 随机拷贝；
+   - 若 byte movement 仍然是硬上限：继续 lower-byte/v2 override admission，但只在质量
+     screen 通过后实现 runtime。
+
+4. Validate every optimization before making it SOTA.
+   - 每个 A/B 必须有 paired baseline 和 paired experiment；
+   - 记录 exact command、commit、env、prompt 用途、输出文本、TTFT、decode token rate、
+     RAM peak、page cache、VRAM、iouring bytes/wait、H2D bytes、fallback rows；
+   - 只有 generalized dev 提升、France 质量通过、TTFT/RAM 通过后，才允许跑 held-out/test；
+   - held-out/test 通过后才声明 SOTA 并 push。
+
+5. Stop rules and fallback.
+   - 如果 GPU-extension audit 证明 Kimi 当前已经没有 DeepSeek-style CPU fallback 空间，
+     则停止 gate-only 方向，转向 explicit RAM/VRAM storage 或 lower-byte expert 表示；
+   - 如果 RAM cache/slab 提升 hit rate 但增加 staging/H2D 或 TTFT 导致 token rate 下降，
+     必须 reject 并保留 default-off 证据；
+   - 如果 lower-byte quality screen 未过，不实现 runtime；
+   - 任一实验不满足 16GB RAM、TTFT、质量或可复现要求，不得声明 SOTA。
+
 ## 2026-07-12 Active Goal And Next Execution Plan
 
 本段是当前最高优先级目标和执行计划。后面的历史段落只作为证据和回溯材料；
