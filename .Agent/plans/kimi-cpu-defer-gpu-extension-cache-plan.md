@@ -19889,3 +19889,143 @@ Immediate next experiment:
    up/gate staging and demand-read queue starvation.
 5. Do not start a broad runtime rewrite until the audit shows a theoretical
    path to at least `~4.5 s` N32 decode saving.
+
+### 2026-07-12 CPU/defer GPU-extension Audit Result
+
+Timestamp: 2026-07-12 CST.
+
+Purpose:
+
+- Turn the DeepSeek-transfer question into a concrete path audit.
+- Verify whether Kimi still has true CPU fallback or CPU/defer extension misses
+  in gate/up/down.
+- Decide whether the next implementation should port another DeepSeek-style
+  fallback hook or move to staging/io wait reduction.
+
+Tool:
+
+- `.Agent/run-tools/kimi_cpu_defer_gpu_extension_audit.py`
+- Verification:
+  `python3 -m py_compile .Agent/run-tools/kimi_cpu_defer_gpu_extension_audit.py`
+  passed.
+
+Input profile:
+
+- Run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009`
+- Source branch: `vendor/kimi-deepseek-41d205-additive`.
+- Source commit: `468d988e8`.
+- Prompts:
+  - `dev_france_regression`;
+  - `dev_japan_factual`;
+  - `dev_photosynthesis_factual`;
+  - `dev_linear_equation`;
+  - `dev_python_reverse`;
+  - `dev_zh_france`;
+  - `dev_mixed_summary`.
+- Config:
+  - cold start per prompt;
+  - `MemoryMax=15900000000`, `MemorySwapMax=0`;
+  - `N=32`, `PROFILE=1`;
+  - `VRAM_MIB=15000`, `UPGATE_PCT=72`;
+  - v2 full-cover down iouring enabled;
+  - current-down v2 overlap disabled;
+  - dev/general prompt set only.
+
+Artifacts:
+
+- Report:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/analysis/cpu-defer-gpu-extension-audit/report.md`
+- JSON:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/analysis/cpu-defer-gpu-extension-audit/summary.json`
+- CSV:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/analysis/cpu-defer-gpu-extension-audit/per_prompt.csv`;
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/analysis/cpu-defer-gpu-extension-audit/cpu_defer_ops.csv`;
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/analysis/cpu-defer-gpu-extension-audit/top_upgate_layers.csv`;
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-dev7-route-n32-001009/analysis/cpu-defer-gpu-extension-audit/top_down_layers.csv`.
+
+Result:
+
+| metric | value |
+|---|---:|
+| true CPU fallback rows | `0` |
+| fallback ms | `0.000` |
+| runs with CPU/defer extension miss | `0 / 7` |
+| weighted decode | `628.126 ms/token` |
+| weighted token rate | `1.592 tok/s` |
+| up/gate GPU-extension wall | `416.414 ms/token` |
+| up/gate exposed wait proxy | `267.138 ms/token` |
+| decode down GPU-extension wall | `162.923 ms/token` |
+
+CPU/defer op acceptance:
+
+- Every profiled `up_gate` op has `batch_accept == calls` and
+  `batch_decline == 0`.
+- Every profiled `down` op has `batch_accept == calls` and
+  `batch_decline == 0`.
+- The fallback CSV is header-only for all seven prompts.
+- The small `decode_fallback_ms_per_call ~= 0.001-0.003` in
+  `[kimi_cpu_moe_profile]` is the empty post-CUDA fallback-region timing, not
+  actual expert rows falling back to CPU; actual fallback rows are `0`.
+
+Endpoint recap:
+
+| prompt | quality | tok/s | decode ms/token | TTFT ms | RAM peak |
+|---|---:|---:|---:|---:|---:|
+| `dev_france_regression` | pass | `1.660` | `602.054` | `9314.350` | `11.889 GiB` |
+| `dev_japan_factual` | pass | `1.670` | `597.445` | `8651.150` | `11.893 GiB` |
+| `dev_photosynthesis_factual` | pass | `1.680` | `593.610` | `7515.700` | `11.737 GiB` |
+| `dev_linear_equation` | pass | `1.340` | `743.560` | `11290.210` | `11.887 GiB` |
+| `dev_python_reverse` | pass | `1.520` | `658.697` | `9426.130` | `11.887 GiB` |
+| `dev_zh_france` | pass | `1.740` | `576.021` | `7747.900` | `11.742 GiB` |
+| `dev_mixed_summary` | pass | `1.600` | `625.497` | `11368.970` | `11.886 GiB` |
+
+Top exposed up/gate layers by wall:
+
+| layer | calls | wall ms | wait ms | up miss/call | gate miss/call |
+|---:|---:|---:|---:|---:|---:|
+| `14` | `217` | `2269.006` | `1720.121` | `4.184` | `4.184` |
+| `1` | `217` | `2084.655` | `2032.425` | `5.429` | `5.429` |
+| `29` | `217` | `1899.290` | `1317.170` | `5.171` | `5.171` |
+| `28` | `217` | `1892.628` | `1314.835` | `5.161` | `5.171` |
+| `60` | `224` | `1857.259` | `0.000` | `5.545` | `5.545` |
+
+Top decode down layers by wall:
+
+| layer | calls | wall ms | stage ms | miss/call |
+|---:|---:|---:|---:|---:|
+| `6` | `217` | `1169.689` | `1136.871` | `6.051` |
+| `7` | `217` | `1150.061` | `1117.500` | `5.793` |
+| `24` | `217` | `1137.206` | `1103.227` | `5.728` |
+| `18` | `217` | `1130.011` | `1097.538` | `5.959` |
+| `10` | `217` | `1126.965` | `1094.231` | `6.230` |
+
+Decision:
+
+- Do not port another broad DeepSeek-style CPU fallback hook as the next Kimi
+  change. The currently profiled Kimi SOTA already routes gate/up/down through
+  the CPU/defer GPU-extension path with `0` true fallback rows.
+- The transferable DeepSeek lesson is the architecture pattern, not a missing
+  hook: CPU/defer schedules, GPU expert cache/staging computes, and cache
+  admission decides whether the GPU extension waits.
+- The next optimization target is exposed movement wait inside the already
+  accepted GPU-extension path:
+  1. up/gate demand-read queue starvation;
+  2. up/gate staging/copy serialization;
+  3. down staging after preserving current overlap;
+  4. explicit RAM/VRAM tier only if it preserves batchable delivery.
+
+Next required profile before source changes:
+
+1. Run fresh cold-start N32 France plus one held-out/general prompt.
+2. Enable `COPY_PROFILE=1`.
+3. Enable IO batch/wait/read traces if available.
+4. Produce a split of up/gate and down time into:
+   - io_uring wait;
+   - pinned host staging;
+   - H2D;
+   - GPU kernel;
+   - D2H/scatter;
+   - residual runtime overhead.
+5. Only implement a default-off A/B if the profile gives a concrete
+   `>=4.0-4.5 s` N32 endpoint-saving path toward `>=2 tok/s`.
