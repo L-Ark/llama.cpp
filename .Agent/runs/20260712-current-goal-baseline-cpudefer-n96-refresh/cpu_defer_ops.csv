@@ -1,0 +1,5 @@
+prompt,op,calls,batch_accept,batch_decline,accept_rate,decode_calls,prompt_calls,decode_total_ms_per_call,decode_cuda_ms_per_call,decode_fallback_ms_per_call,prompt_total_ms_per_call,prompt_cuda_ms_per_call,prompt_fallback_ms_per_call,extension_miss
+dev_france_regression,down,5278,5278,0,1.0,5101,177,2.946,2.918,0.001,64.965,64.519,0.002,False
+dev_france_regression,up_gate,5101,5101,0,1.0,5101,0,7.563,7.484,0.001,0.0,0.0,0.0,False
+dev_intelligence_general,down,5878,5878,0,1.0,5701,177,2.936,2.908,0.001,54.504,54.061,0.002,False
+dev_intelligence_general,up_gate,5701,5701,0,1.0,5701,0,7.653,7.567,0.001,0.0,0.0,0.0,False

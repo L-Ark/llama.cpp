@@ -97,6 +97,126 @@ bytes off the critical path.
    - Failed paths must be recorded with artifacts and left default-off or
      reverted.
 
+### Baseline Refresh Result (2026-07-12 16:21 CST)
+
+Artifacts:
+
+- run root:
+  `/root/lfz/runs/vendor-kimi-token-rate/20260712-current-goal-baseline-cpudefer-n96-082136`;
+- report root:
+  `.Agent/runs/20260712-current-goal-baseline-cpudefer-n96-refresh`;
+- CPU/defer audit:
+  `.Agent/runs/20260712-current-goal-baseline-cpudefer-n96-refresh/report.md`;
+- IO queue summary:
+  `.Agent/runs/20260712-current-goal-baseline-cpudefer-n96-refresh/io-queue-summary.md`;
+- IO batch breakdown:
+  `.Agent/runs/20260712-current-goal-baseline-cpudefer-n96-refresh/io-batch-breakdown.md`;
+- wait-weighted layer/role screen:
+  `.Agent/runs/20260712-current-goal-baseline-cpudefer-n96-refresh/wait-weighted-layer-role.md`;
+- copy-path reports:
+  `.Agent/runs/20260712-current-goal-baseline-cpudefer-n96-refresh/dev_france_regression-copy-profile-breakdown.md`,
+  `.Agent/runs/20260712-current-goal-baseline-cpudefer-n96-refresh/dev_intelligence_general-copy-profile-breakdown.md`.
+
+Setup:
+
+- branch: `vendor/kimi-deepseek-41d205-additive`;
+- commit: `2d0487c94`;
+- prompts:
+  `Please introduce France in a short paragraph.`,
+  `What is intelligence?`;
+- `N=96`, `PROFILE=1`, `COPY_PROFILE=1`,
+  `GGML_MOE_IO_BATCH_PROFILE_OUT=<run>/io-batch-profile.csv`;
+- strict cold start under `MemoryMax=15900000000`, `MemorySwapMax=0`;
+- diagnostic mode uses `COPY_PROFILE_H2D=1`, so token rate is a profiling
+  metric, not a SOTA claim.
+
+Quality and resource gates:
+
+- both prompts passed the lightweight quality gate;
+- France output is coherent and semantically correct, mentioning France as a
+  Western European country, Paris, landmarks, culture, countryside, wine
+  regions, and EU/global politics;
+- RAM peak:
+  - France: `11.933 GiB`;
+  - intelligence: `11.772 GiB`;
+- TTFT:
+  - France: `12004.970 ms`;
+  - intelligence: `9863.440 ms`.
+
+CPU/defer GPU-extension audit:
+
+- weighted diagnostic decode: `655.707 ms/token`, `1.525 tok/s`;
+- true CPU fallback rows: `0`;
+- fallback ms: `0.000`;
+- CPU/defer extension miss runs: `0`;
+- `up_gate`: `10802/10802` batch accept, `0` decline;
+- `down`: `11156/11156` batch accept, `0` decline;
+- up/gate GPU-extension wall: `448.261 ms/token`;
+- up/gate exposed wait proxy: `254.810 ms/token`;
+- decode down GPU-extension wall: `171.924 ms/token`;
+- decode down stage: about `160.932 ms/token`.
+
+IO and cache observations:
+
+- all profiled copy rows are `pack_hit=1`, `iouring=1`;
+- expert-pack miss wall: `0 ms`;
+- direct reads: `0`;
+- aggregate iouring throughput: `7.926 GiB/s`, about `77.0%` of the
+  `10.3 GiB/s` pure IO reference;
+- iouring wait/decode fraction from stderr metrics: `0.629`;
+- stderr iouring inflight avg: `4.272`;
+- IO batch profile weighted inflight avg: `4.864`;
+- IO batch avg read jobs/batch: `5.357`;
+- `47.2%` of read batches have `<=4` read jobs and `98.9%` have `<=8`;
+- by raw IO batch wait:
+  - `runtime_load gate`: `26527.255 ms`;
+  - `runtime_load up`: `24065.299 ms`;
+  - `runtime_load down`: `14654.988 ms`;
+  - `current_down_overlap down`: `9023.650 ms`;
+- VRAM hit rates:
+  - upgate: about `45%`;
+  - down: about `61-62%`.
+
+Wait-weighted N96 admission:
+
+- top wall buckets are overwhelmingly `upgate`;
+- top examples:
+  `blk54 upgate` `9.979 ms/token`,
+  `blk14 upgate` `9.928 ms/token`,
+  `blk28 upgate` `9.682 ms/token`;
+- observed footprint for one upgate layer/role bucket is typically
+  `2.2-3.0 GiB`;
+- best down buckets are lower, around `5-6 ms/token`, and earlier experiments
+  showed that starving down cache can regress endpoint token rate.
+
+Decision:
+
+- The DeepSeek-style CPU/defer gate fallback transfer is already effectively
+  present in this Kimi path. `gate/up/down` are accepted by the GPU extension
+  and fallback CSV is empty.
+- Do not spend the next cycle on broad fallback rewrites, prompt fallback work,
+  or standalone `GATE_UPDOWN_COSUBMIT`; historical runs and this profile show
+  no useful execution path there.
+- The exposed bottleneck is demand-loaded expert payload, primarily up/gate
+  read wait, with down staging as a secondary cost.
+- Whole-layer upgate RAM/VRAM residency is too expensive for the measured
+  per-layer bound. A single full upgate layer costs multiple GiB and only
+  removes about `8-10 ms/token` in this N96 screen.
+
+Next implementation direction:
+
+1. First preference: lower-byte or partial-byte up/gate representation with a
+   prompt-level admission gate. It must reduce up/gate bytes materially without
+   reintroducing fallback or semantic errors.
+2. Second preference: explicit RAM second-tier cache for high-value up/gate
+   experts, but only if it preserves large batchable transfers and proves a
+   reduction in exposed wait, not merely a higher hit rate.
+3. Third preference: IO scheduler work only where it increases sustained
+   inflight work on the current fused up/gate path. Do not retry standalone
+   gate/up/down cosubmit unless a new shadow profile shows nonzero useful jobs.
+4. Keep `VRAM_MIB=15000`, `UPGATE_PCT=72` as the current reproduction default
+   until a paired N96/generalized A/B beats it under all gates.
+
 ## Current Goal and Execution Plan (2026-07-12)
 
 This is the operational header for the active Codex goal. Historical sections
